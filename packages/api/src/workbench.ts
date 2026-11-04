@@ -1,6 +1,7 @@
-import { AttemptActivity, AttemptFiles, AttemptId, CommandId, ContentId } from "@hobbots/domain";
+import { AttemptActivity, AttemptFiles, AttemptId, CommandId, ContentId, TaskId, TreeActivity } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
+import { TaskNotFound } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /** No Attempt has the id. */
@@ -28,9 +29,23 @@ export class ActivityDetailNotFound extends Schema.TaggedError<ActivityDetailNot
 export const AttemptActivityRead = Schema.Struct({ cursor: Schema.String, activity: AttemptActivity });
 export type AttemptActivityRead = typeof AttemptActivityRead.Type;
 
+/**
+ * The records of every Attempt under a Task, with the event stream cursor taken just before the read
+ * (#899). Following `GET /api/tasks/:taskId/workbench/events` from `cursor` brings each record the
+ * tree's Attempts make since, and the output of every command running in the tree.
+ */
+export const TreeActivityRead = Schema.Struct({ cursor: Schema.String, activity: TreeActivity });
+export type TreeActivityRead = typeof TreeActivityRead.Type;
+
 /** What an Attempt ran, changed and made, as the Workbench reads it (ADR 023). Reads only. */
 export class WorkbenchGroup extends HttpApiGroup.make("workbench")
   .add(
+    // One read for a Quest's whole Workbench: every Attempt under the Task, nested Quests included.
+    HttpApiEndpoint.get("tree", "/tasks/:taskId/workbench", {
+      params: { taskId: TaskId },
+      success: TreeActivityRead,
+      error: TaskNotFound,
+    }),
     HttpApiEndpoint.get("activity", "/attempts/:attemptId/activity", {
       params: { attemptId: AttemptId },
       success: AttemptActivityRead,

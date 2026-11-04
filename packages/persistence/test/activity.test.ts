@@ -207,6 +207,49 @@ describe("Workbench records", () => {
     expect(result.journaled).toBe(2);
   });
 
+  // covers UX-002
+  it("[TC-IN-524] reads several Attempts' records at once, in the order asked, each as its own read finds it (#899)", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const tasks = yield* TaskRepository;
+        const repo = yield* ActivityRepository;
+        // A second Attempt of the same Task, sharing a folder with the first.
+        const second = AttemptId.make("a2");
+        yield* tasks.updateAttempt(attemptId, { _tag: "Ended", end: { _tag: "Failed", reason: "It broke." }, at: now });
+        const revision = Option.getOrThrow(yield* tasks.readTree(taskId)).tasks[0]?.revision ?? 0;
+        yield* tasks.startAttempt(taskId, revision, {
+          id: second,
+          runtime: "claude-code",
+          sessionId: null,
+          configVersion: 1,
+          policyVersion: null,
+          startedAt: later,
+        });
+        yield* repo.saveCommand(command("succeeded"));
+        yield* repo.saveChanges(attemptId, project, [change("a.md", true)]);
+        yield* repo.saveChanges(second, project, [{ ...change("b.md", true), sharedWith: [attemptId] }]);
+        yield* repo.saveSteps(second, [{ id: "s1", kind: "tool", label: "Reading", state: "done" }], later);
+        return {
+          many: yield* repo.readMany([second, AttemptId.make("missing"), attemptId, second]),
+          first: Option.getOrThrow(yield* repo.read(attemptId)),
+          second: Option.getOrThrow(yield* repo.read(second)),
+          none: yield* repo.readMany([]),
+        };
+      }),
+    );
+    expect(result.many).toEqual([result.second, result.first]);
+    expect(result.second).toMatchObject({
+      attempt: { id: "a2", number: 2 },
+      commands: [],
+      changes: [{ path: "b.md" }],
+      steps: [{ id: "s1" }],
+      sharedWithHobs: [{ attemptId, agentId: ALDRIC }],
+    });
+    expect(result.first).toMatchObject({ commands: [{ id: "c1" }], changes: [{ path: "a.md" }], steps: [] });
+    expect(result.none).toEqual([]);
+  });
+
   it("[TC-IN-175] writes nothing for an Attempt that is not there", async () => {
     const result = await run(
       Effect.gen(function* () {

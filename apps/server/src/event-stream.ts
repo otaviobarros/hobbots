@@ -2,7 +2,7 @@ import { ChatService, DeviceRepository } from "@hobbots/agents";
 import { type DeviceId, EventEnvelope, STREAM_FRAME, type StreamReady } from "@hobbots/domain";
 import { EventJournal, type JournalHead } from "@hobbots/persistence";
 import { type Cause, Context, Effect, Exit, Fiber, Layer, Option, PubSub, Queue, Schema, Scope, Stream } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/http";
+import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/http";
 import { forApprovedDevice } from "./devices.ts";
 import { type BusEvent, EventBus, type HubTransientEvent } from "./event-bus.ts";
 
@@ -205,6 +205,24 @@ export class EventStream extends Context.Service<
 }
 
 /**
+ * The cursor a connection resumes after: `Last-Event-ID`, which the browser's `EventSource` sends
+ * when it reconnects, else `?after=<cursor>` on a first connection.
+ */
+export const resumeCursor = (request: HttpServerRequest.HttpServerRequest): string | undefined => {
+  const cursor =
+    request.headers["last-event-id"] ?? new URL(request.url, "http://localhost").searchParams.get("after") ?? undefined;
+  return cursor === "" ? undefined : cursor;
+};
+
+/** Encoded frames as an SSE response. */
+export const sseResponse = (frames: Stream.Stream<string>) =>
+  // Browsers wait a second before reconnecting.
+  HttpServerResponse.stream(Stream.succeed("retry: 1000\n\n").pipe(Stream.concat(frames), Stream.encodeText), {
+    contentType: "text/event-stream",
+    headers: { "cache-control": "no-cache", "x-accel-buffering": "no" },
+  });
+
+/**
  * `GET /api/events`: the event stream over SSE. The browser's `EventSource` sends `Last-Event-ID`
  * when it reconnects; a first connection may pass `?after=<cursor>`, and the header wins. Only an
  * approved device connects: the stream carries what approvals ask, so it is a confidentiality boundary.
@@ -215,19 +233,7 @@ export const EventStreamRoute = HttpRouter.add(
   forApprovedDevice((request, device) =>
     Effect.gen(function* () {
       const events = yield* EventStream;
-      const cursor =
-        request.headers["last-event-id"] ??
-        new URL(request.url, "http://localhost").searchParams.get("after") ??
-        undefined;
-      const frames = events.connect(cursor === "" ? undefined : cursor, device.id).pipe(Stream.map(encodeFrame));
-      // Browsers wait a second before reconnecting.
-      return HttpServerResponse.stream(
-        Stream.succeed("retry: 1000\n\n").pipe(Stream.concat(frames), Stream.encodeText),
-        {
-          contentType: "text/event-stream",
-          headers: { "cache-control": "no-cache", "x-accel-buffering": "no" },
-        },
-      );
+      return sseResponse(events.connect(resumeCursor(request), device.id).pipe(Stream.map(encodeFrame)));
     }),
   ),
 );

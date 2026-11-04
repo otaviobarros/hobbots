@@ -18,12 +18,15 @@ import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { makeJournaled } from "./journal.ts";
 import { byteOrder, oldestFirst } from "./order.ts";
-import { int, json, makeTaskReads, type Row } from "./task-rows.ts";
+import { decodeRows, int, json, makeTaskReads, type Row } from "./task-rows.ts";
 
 // The Workbench's records (migration 0036_attempt_activity, ADR 023). Each write names an Attempt,
 // takes its Task from the stored Attempt and commits with its journal event (ADR 013).
 
 const bool = (value: unknown) => Number(value) === 1;
+
+/** The most Attempts one read asks for at once, so a large tree never makes one huge query. */
+const READ_BATCH = 200;
 
 const encodeOutput = Schema.encodeSync(Schema.fromJsonString(ToolOutput));
 const encodeVersion = Schema.encodeSync(Schema.fromJsonString(FileVersion));
@@ -260,46 +263,96 @@ export const ActivityRepositoryLive = Layer.effect(
       Effect.orDie,
     );
 
-    const read = (attemptId: AttemptId) =>
+    /** Rows of `rows` by their Attempt, each Attempt's in the order they came. */
+    const byAttempt = <A extends { readonly attemptId: AttemptId }>(rows: ReadonlyArray<A>) => {
+      const grouped = new Map<AttemptId, Array<A>>();
+      for (const row of rows) grouped.set(row.attemptId, [...(grouped.get(row.attemptId) ?? []), row]);
+      return (attemptId: AttemptId): ReadonlyArray<A> => grouped.get(attemptId) ?? [];
+    };
+
+    /** The records of up to a batch of Attempts, a query per kind of record, in the order of `ids`. */
+    const readBatch = (ids: ReadonlyArray<AttemptId>) =>
       Effect.gen(function* () {
-        const [attempt] = yield* reads.attempt(attemptId);
-        if (attempt === undefined) return Option.none();
-        const commands = yield* commandRows(attemptId);
-        const changes = yield* sql<Row>`SELECT * FROM attempt_file_changes WHERE attempt_id = ${attemptId}
+        const these = sql.in("attempt_id", ids);
+        const attempts = yield* sql<Row>`SELECT * FROM attempts WHERE ${sql.in("id", ids)}`.pipe(
+          Effect.flatMap(decodeRows("attempt")),
+        );
+        const commands = byAttempt(
+          yield* sql<Row>`SELECT * FROM attempt_commands WHERE ${these}
+            ORDER BY ${byteOrder(sql, ["started_at", "id"])}`.pipe(Effect.flatMap(commandsIn)),
+        );
+        const allChanges = yield* sql<Row>`SELECT * FROM attempt_file_changes WHERE ${these}
           ORDER BY ${byteOrder(sql, ["folder", "path", "id"])}`.pipe(
           Effect.map((rows) => rows.map(changeFromRow)),
           Effect.flatMap(decoded(decodeChanges)),
         );
-        const scans = yield* sql<Row>`SELECT * FROM attempt_folder_scans WHERE attempt_id = ${attemptId}
-          ORDER BY ${byteOrder(sql, ["started_at", "id"])}`.pipe(
-          Effect.map((rows) => rows.map(scanFromRow)),
-          Effect.flatMap(decoded(decodeScans)),
+        const changes = byAttempt(allChanges);
+        const scans = byAttempt(
+          yield* sql<Row>`SELECT * FROM attempt_folder_scans WHERE ${these}
+            ORDER BY ${byteOrder(sql, ["started_at", "id"])}`.pipe(
+            Effect.map((rows) => rows.map(scanFromRow)),
+            Effect.flatMap(decoded(decodeScans)),
+          ),
         );
-        const artifacts = yield* sql<Row>`SELECT * FROM artifact_refs WHERE attempt_id = ${attemptId}
-          ORDER BY ${oldestFirst(sql)}`.pipe(Effect.flatMap(decoded(decodeArtifacts)));
-        const steps = yield* stepsOf(attemptId);
-        const sharing = [...new Set(changes.flatMap((each) => each.sharedWith))];
-        const sharedWithHobs =
-          sharing.length === 0
+        const artifacts = byAttempt(
+          yield* sql<Row>`SELECT * FROM artifact_refs WHERE ${these} ORDER BY ${oldestFirst(sql)}`.pipe(
+            Effect.flatMap(decoded(decodeArtifacts)),
+          ),
+        );
+        const steps = new Map<AttemptId, ReadonlyArray<ReplyStep>>();
+        for (const row of yield* sql<Row>`SELECT attempt_id, steps FROM attempt_steps WHERE ${these}`) {
+          steps.set(row.attemptId as AttemptId, yield* Effect.orDie(decodeSteps(json(row.steps))));
+        }
+        const sharing = [...new Set(allChanges.flatMap((each) => each.sharedWith))];
+        const hobs = new Map(
+          (sharing.length === 0
             ? []
             : yield* sql<{ readonly attemptId: AttemptId; readonly agentId: AgentId }>`SELECT id AS attempt_id,
-                agent_id FROM attempts WHERE ${sql.in("id", sharing)} ORDER BY ${byteOrder(sql, ["id"])}`;
-        const [cleared] = yield* sql<{ readonly at: string | null }>`SELECT MAX(at) AS at FROM (
-            SELECT details_cleared_at AS at FROM attempt_commands WHERE attempt_id = ${attemptId}
-            UNION ALL SELECT details_cleared_at AS at FROM attempt_file_changes WHERE attempt_id = ${attemptId}
-          ) cleared`;
-        return Option.some(
-          new AttemptActivity({
-            attempt,
-            commands,
-            changes,
-            scans,
-            artifacts,
-            steps,
-            sharedWithHobs: sharedWithHobs.map(({ attemptId, agentId }) => ({ attemptId, agentId })),
-            detailsClearedAt: cleared?.at ?? null,
-          }),
+                agent_id FROM attempts WHERE ${sql.in("id", sharing)} ORDER BY ${byteOrder(sql, ["id"])}`
+          ).map(({ attemptId, agentId }) => [attemptId, agentId] as const),
         );
+        const cleared = new Map(
+          (yield* sql<{ readonly attemptId: AttemptId; readonly at: string | null }>`SELECT attempt_id,
+              MAX(at) AS at FROM (
+                SELECT attempt_id, details_cleared_at AS at FROM attempt_commands WHERE ${these}
+                UNION ALL SELECT attempt_id, details_cleared_at AS at FROM attempt_file_changes WHERE ${these}
+              ) cleared GROUP BY attempt_id`).map(({ attemptId, at }) => [attemptId, at] as const),
+        );
+        const stored = new Map(attempts.map((attempt) => [attempt.id, attempt] as const));
+        return ids.flatMap((attemptId) => {
+          const attempt = stored.get(attemptId);
+          if (attempt === undefined) return [];
+          const its = changes(attemptId);
+          const shared = [...new Set(its.flatMap((each) => each.sharedWith))].sort((a, b) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          );
+          return [
+            new AttemptActivity({
+              attempt,
+              commands: commands(attemptId),
+              changes: its,
+              scans: scans(attemptId),
+              artifacts: artifacts(attemptId),
+              steps: steps.get(attemptId) ?? [],
+              sharedWithHobs: shared.flatMap((id) => {
+                const agentId = hobs.get(id);
+                return agentId === undefined ? [] : [{ attemptId: id, agentId }];
+              }),
+              detailsClearedAt: cleared.get(attemptId) ?? null,
+            }),
+          ];
+        });
+      });
+
+    /** The records of every Attempt in `ids` that is stored, in their order, a batch of Attempts at a time. */
+    const readMany = (ids: ReadonlyArray<AttemptId>) =>
+      Effect.gen(function* () {
+        const unique = [...new Set(ids)];
+        const read: Array<AttemptActivity> = [];
+        for (let from = 0; from < unique.length; from += READ_BATCH) {
+          read.push(...(yield* readBatch(unique.slice(from, from + READ_BATCH))));
+        }
+        return read;
       });
 
     const names = (attemptId: AttemptId, contentId: ContentId) =>
@@ -355,7 +408,8 @@ export const ActivityRepositoryLive = Layer.effect(
       saveSteps,
       readSteps: stepsOf,
       openSteps,
-      read: (attemptId) => Effect.orDie(read(attemptId)),
+      read: (attemptId) => Effect.orDie(Effect.map(readMany([attemptId]), (read) => Option.fromUndefinedOr(read[0]))),
+      readMany: (attemptIds) => Effect.orDie(readMany(attemptIds)),
       names: (attemptId, contentId) => Effect.orDie(names(attemptId, contentId)),
       findCommand: (attemptId, commandId) => Effect.orDie(findCommand(attemptId, commandId)),
       unfinishedCommands: Effect.orDie(unfinishedCommands),

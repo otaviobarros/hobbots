@@ -117,6 +117,11 @@ export interface ActivityRepositoryShape {
     at: string,
   ) => Effect.Effect<Option.Option<Committed<ReadonlyArray<ReplyStep>>>>;
   readonly read: (attemptId: AttemptId) => Effect.Effect<Option.Option<AttemptActivity>>;
+  /**
+   * The records of each Attempt in `attemptIds` that is stored, in their order, read a batch of
+   * Attempts at a time rather than one by one (#899). An id that is not stored is left out.
+   */
+  readonly readMany: (attemptIds: ReadonlyArray<AttemptId>) => Effect.Effect<ReadonlyArray<AttemptActivity>>;
   /** The steps stored for the Attempt's turns outside any chat; none when there are none. */
   readonly readSteps: (attemptId: AttemptId) => Effect.Effect<ReadonlyArray<ReplyStep>>;
   /** Every Attempt whose stored steps still have one under way: after a restart, none of them still runs. */

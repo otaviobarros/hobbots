@@ -1,7 +1,17 @@
-import { ActivityDetailNotFound, AttemptNotFound } from "@hobbots/api";
-import type { AttemptActivity, AttemptId, CommandId, ContentId } from "@hobbots/domain";
+import { ActivityDetailNotFound, AttemptNotFound, TaskNotFound } from "@hobbots/api";
+import {
+  type AttemptActivity,
+  type AttemptId,
+  type CommandId,
+  type ContentId,
+  type TaskFile,
+  type TaskId,
+  TreeActivity,
+  TreeAttempt,
+} from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import type { ActivityRepository, ActivityStore } from "./activity.ts";
+import type { TaskRepository } from "./tasks.ts";
 
 /** The Workbench's reads of an Attempt's records and their details (ADR 023). */
 
@@ -15,6 +25,44 @@ export const readAttemptActivity = (
       onSome: Effect.succeed,
     }),
   );
+
+/** How many Attempts' files are looked at in the hob's folders at once, on top of each listing's own. */
+const FILES_CONCURRENCY = 4;
+
+/**
+ * What every Attempt under a Task ran, changed and made, in one read for the Quest's Workbench
+ * (#899): the Task's tree as `GET /api/tasks/:taskId` reads it, then the records of all its Attempts
+ * at once, each with the files it made or touched as `filesOf` finds them now. The records follow
+ * the per-Attempt reads' rules: redacted when recorded, cut to their start and end, and their details
+ * said cleared past the retention window.
+ */
+export const readTreeActivity = (
+  tasks: TaskRepository["Service"],
+  repo: ActivityRepository["Service"],
+  filesOf: (activity: AttemptActivity) => Effect.Effect<ReadonlyArray<TaskFile>>,
+  taskId: TaskId,
+): Effect.Effect<TreeActivity, TaskNotFound> =>
+  Effect.gen(function* () {
+    const tree = yield* tasks.readTree(taskId);
+    if (Option.isNone(tree)) return yield* new TaskNotFound({ taskId });
+    const owners = new Map(tree.value.tasks.map((task) => [task.id, task.ownerId] as const));
+    const activities = yield* repo.readMany(tree.value.attempts.map((attempt) => attempt.id));
+    const attempts = yield* Effect.forEach(
+      activities,
+      (activity) =>
+        Effect.map(
+          filesOf(activity),
+          (files) =>
+            new TreeAttempt({
+              ownerId: owners.get(activity.attempt.taskId) ?? activity.attempt.agentId,
+              activity,
+              files,
+            }),
+        ),
+      { concurrency: FILES_CONCURRENCY },
+    );
+    return new TreeActivity({ taskId, attempts });
+  });
 
 const keptBytes = (store: ActivityStore["Service"], attemptId: AttemptId, contentId: ContentId) =>
   Effect.flatMap(store.get(contentId), (bytes) =>

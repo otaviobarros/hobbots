@@ -80,6 +80,8 @@ export class TaskFiles extends Context.Service<
   {
     /** The files an Attempt made or touched, as they are now. */
     readonly list: (attemptId: AttemptId) => Effect.Effect<AttemptFiles, AttemptNotFound>;
+    /** The files of an Attempt whose records were already read, as they are now. */
+    readonly filesOf: (activity: AttemptActivity) => Effect.Effect<ReadonlyArray<TaskFile>>;
     /**
      * One listed file's contents. A preview serves only the kinds the Files tab previews, text
      * redacted and cut to its first MiB; a download serves the file as it is. A file whose name
@@ -138,12 +140,13 @@ export class TaskFiles extends Context.Service<
           taskFile(candidate, Option.getOrNull(found)),
         );
 
+      const filesOf = (activity: AttemptActivity) =>
+        Effect.flatMap(candidatesOf(activity), (candidates) => Effect.forEach(candidates, fileOf, { concurrency: 8 }));
+
       const list = (attemptId: AttemptId) =>
         Effect.gen(function* () {
           const activity = yield* readAttemptActivity(activities, attemptId);
-          const candidates = yield* candidatesOf(activity);
-          const listed = yield* Effect.forEach(candidates, fileOf, { concurrency: 8 });
-          return new AttemptFiles({ attemptId, files: listed });
+          return new AttemptFiles({ attemptId, files: yield* filesOf(activity) });
         });
 
       const serve = (attemptId: AttemptId, fileId: TaskFileId, purpose: FilePurpose) =>
@@ -173,7 +176,7 @@ export class TaskFiles extends Context.Service<
           return { file, bytes: encoder.encode(previewText(redactor.text(decoder.decode(bytes.value)))), mediaType };
         });
 
-      return TaskFiles.of({ list, serve });
+      return TaskFiles.of({ list, filesOf, serve });
     }),
   );
 }

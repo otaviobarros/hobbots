@@ -106,6 +106,7 @@ import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
 import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
+import { WorkbenchStreamRoute } from "./workbench-stream.ts";
 
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -384,6 +385,7 @@ const ServerLive = Layer.unwrap(
           Layer.mergeAll(
             ApiRoutes,
             EventStreamRoute,
+            WorkbenchStreamRoute,
             TaskFileRoute,
             HobGitHubAppPages,
             WebClientRoutes(config.webDir),
