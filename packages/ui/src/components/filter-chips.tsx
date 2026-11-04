@@ -1,6 +1,6 @@
-import { cn } from "cn";
 import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // A row of filter chips: each chip is a pill with a label and, for a filter, a count. Exactly one is picked.
 // The picked chip is inverted. Built on the Radix toggle group, so the row is one tab stop, arrow

@@ -6,7 +6,6 @@ import { useId, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { addFolder, folderName, PRESETS, removeFolder } from "../../api/safety.ts";
 import { useUpdateSetup } from "../../api/setup.ts";
-import { focusWithin } from "../hob-form/hob-form.tsx";
 import { messages } from "../messages.ts";
 
 const copy = messages.safety;
@@ -42,7 +41,7 @@ export function PresetPicker({
               className={cn(
                 "flex cursor-pointer flex-col gap-2 rounded-card bg-card p-4 transition-colors hover:bg-hover",
                 on && "shadow-[inset_0_0_0_2px_var(--color-moonlight)]",
-                focusWithin,
+                "focus-ring-within",
               )}
             >
               <input

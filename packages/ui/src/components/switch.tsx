@@ -1,6 +1,6 @@
-import { cn } from "cn";
 import { Switch as SwitchPrimitive } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // The Hobbots switch from the component sheet: 46×24 with the skin's edge and dot corner, so it is
 // round with a 1px edge in Lamplight and square with a 2px edge in Workshop. The track is line when

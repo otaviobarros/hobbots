@@ -64,7 +64,7 @@ export function ChatRow({
           to="/hobs/$hobId/threads/$threadId"
           params={{ hobId: hob.id, threadId: thread.id }}
           aria-label={copy.open({ title: thread.title })}
-          className="absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+          className="absolute inset-0 focus-ring focus-inset"
         />
       )}
       <span className="flex h-[22px] items-center justify-center text-label">

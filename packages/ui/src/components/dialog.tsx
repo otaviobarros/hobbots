@@ -1,7 +1,7 @@
-import { cn } from "cn";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type * as React from "react";
 import { useRestoreFocus } from "../lib/restore-focus.ts";
+import { cn } from "../lib/utils.ts";
 
 // A Hobbots modal: a panel with pixel corners over a dimmed page. Radix keeps focus inside while it
 // is open and hides the page behind it from assistive technology. When it closes, focus goes back to

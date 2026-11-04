@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
 import { Slot } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // Hobbots buttons (docs/design/ui-ux.md). Corners, focus ring and press come from the theme's skin.
 const buttonVariants = cva(

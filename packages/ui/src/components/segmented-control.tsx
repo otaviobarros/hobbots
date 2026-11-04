@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
 import { ToggleGroup } from "radix-ui";
 import * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // A segmented control (docs/design/ui-ux.md): one choice from a few, on a sunken track. Built from
 // the shadcn Toggle Group, kept to a single choice so one segment is always on.

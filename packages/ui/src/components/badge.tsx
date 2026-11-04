@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
 import { Slot } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // Status tags from the Hobbots component sheet, one family per state: Needs you is the only filled
 // lantern tag, and Failed the only filled rose one, so the loud ones stay loud.

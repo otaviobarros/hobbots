@@ -1,5 +1,5 @@
-import { cn } from "cn";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "./input-group.tsx";
 
@@ -18,10 +18,9 @@ type SearchFieldProps = Omit<React.ComponentProps<"input">, "type" | "value" | "
 
 // Corners, edge width and easing read the theme's skin variables (docs/design/themes.md).
 const frame =
-  "h-auto rounded-control border-[length:var(--edge)] border-line-2 bg-deep transition-colors duration-150 ease-[var(--ease-ui)] hover:border-control dark:bg-deep has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-3 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/20";
+  "h-auto rounded-control border-[length:var(--edge)] border-line-2 bg-deep transition-colors duration-150 ease-[var(--ease-ui)] hover:border-control dark:bg-deep";
 
-const input =
-  "h-auto py-2 text-sm leading-5 text-text placeholder:text-label md:text-sm [&::-webkit-search-cancel-button]:appearance-none";
+const input = "h-auto py-2 text-ui text-text placeholder:text-label [&::-webkit-search-cancel-button]:appearance-none";
 
 const clear = "size-hit-min rounded-control text-label [clip-path:none] hover:bg-hover hover:text-text-strong";
 

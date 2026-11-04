@@ -1,6 +1,6 @@
-import { cn } from "cn";
 import { ContextMenu as ContextMenuPrimitive, DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // Hobbots menus (docs/design/ui-ux.md): a card with pixel corners and the line-2 border, opened from
 // a ⋯ button (DropdownMenu) or by right-click, Shift+F10 or the context-menu key (ContextMenu).
