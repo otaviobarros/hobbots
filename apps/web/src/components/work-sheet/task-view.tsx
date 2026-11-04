@@ -8,7 +8,7 @@ import { TaskBackpack } from "../backpack/quest-backpack.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { attemptCount, roomStatus, roomStatusLabel, roomTone } from "../quest/control-room.ts";
 import { NoteBox, type NoteDrafts } from "../quest/note-box.tsx";
-import { AnswerForm } from "../quest/question-card.tsx";
+import { AnswerForm, answerRoute } from "../quest/question-card.tsx";
 import { TaskControlsFor } from "../quest/room-controls.tsx";
 import { StatusTag } from "../quest/status-dot.tsx";
 import { notAnAnswer, TaskDetail } from "../quest/task-detail.tsx";
@@ -144,8 +144,7 @@ function AskedYou({ question, hobs }: { question: Question; hobs: HobLookup }) {
           </span>
         </span>
       </span>
-      <p className="m-0 text-meta text-label">{copy.question.goesTo({ name: asker.name })}</p>
-      <AnswerForm question={question} askerName={asker.name} via="task" />
+      <AnswerForm question={question} askerName={asker.name} via="task" route={answerRoute(question, hobs)} />
     </section>
   );
 }

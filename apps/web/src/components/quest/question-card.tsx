@@ -65,20 +65,32 @@ export function QuestionCard({
 }
 
 /**
+ * Where your answer to a question goes: back down the leads it climbed, so to the top one, who
+ * passes it on (ADR 018), or straight to the hob that asked when no lead passed it up.
+ */
+export const answerRoute = (question: Question, hobs: HobLookup): string => {
+  const asker = hobs(question.askerId).name;
+  const lead = question.chain.at(-1);
+  return lead === undefined ? copy.goesStraight({ asker }) : copy.goesThrough({ lead: hobs(lead).name, asker });
+};
+
+/**
  * The answer box, wherever a question waits for you; `via` names that place, which your answer
- * records (#671). With `hint`, it is one composer card: the box, then the hint on where the answer
- * goes beside Send answer, as in the Inbox.
+ * records (#671). `route` says where the answer goes, beside Send answer. With `hint`, it is one
+ * composer card: the box, then the hint beside Send answer, as in the Inbox.
  */
 export function AnswerForm({
   question,
   askerName,
   via,
   hint,
+  route,
 }: {
   question: Question;
   askerName: string;
   via: QuestionSurface;
   hint?: string;
+  route?: string;
 }) {
   const [answer, setAnswer] = useState("");
   const send = useAnswerQuestion(via);
@@ -89,6 +101,7 @@ export function AnswerForm({
   };
   const closed = send.error instanceof ApiError && send.error.tag === "QuestionClosed";
   const composer = hint !== undefined;
+  const line = hint ?? route;
   return (
     <form
       className={cn(
@@ -102,7 +115,7 @@ export function AnswerForm({
     >
       <Textarea
         aria-label={copy.answerLabel({ name: askerName })}
-        placeholder={composer ? copy.answerTo({ name: askerName }) : copy.answerPlaceholder}
+        placeholder={copy.answerTo({ name: askerName })}
         value={answer}
         onChange={(event) => setAnswer(event.target.value)}
         onKeyDown={enterSends(submit)}
@@ -110,13 +123,13 @@ export function AnswerForm({
         className={composer ? "min-h-14" : "min-h-10"}
       />
       <span className="flex flex-wrap items-center gap-2">
-        {composer && <span className="min-w-0 flex-1 text-meta text-label">{hint}</span>}
+        {line !== undefined && <span className="min-w-0 flex-1 text-meta text-label">{line}</span>}
         {send.isError && (
           <span role="alert" className={cn("text-ui text-rose", !composer && "order-last")}>
             {closed ? copy.closed : copy.failed}
           </span>
         )}
-        <Button type="submit" size={composer ? "default" : "sm"} disabled={text === "" || send.isPending}>
+        <Button type="submit" size={line === undefined ? "sm" : "default"} disabled={text === "" || send.isPending}>
           {send.isPending ? copy.sending : copy.send}
         </Button>
       </span>

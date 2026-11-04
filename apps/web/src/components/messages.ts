@@ -366,6 +366,10 @@ export const messages = {
     hint: "Enter sends · Shift+Enter adds a line · ↑ brings back your last message",
   },
   reply: {
+    /** Over your message: who sent it and when. */
+    you: ({ time }: { time: string }) => `You · ${time}`,
+    /** The tag beside the name on a reply: the thread's hob leads its work. */
+    lead: "Lead",
     thinking: ({ name }: { name: string }) => `${name} is thinking`,
     writing: "writing…",
     stopping: "Stopping this reply…",

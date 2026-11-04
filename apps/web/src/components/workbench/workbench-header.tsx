@@ -1,14 +1,13 @@
-import { HOB_COLORS } from "@hobbots/art/look";
 import { type Attempt, type AttemptId, isLiveAttempt, policySandbox, type Task, type TaskTree } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import type { CSSProperties, ReactNode, RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import { agentsQuery, runtimesQuery } from "../../api/queries.ts";
 import { formatCount } from "../../lib/format.ts";
-import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { useBrainLabel } from "../providers/brain-picker.tsx";
 import { folderName, memberFolders } from "../quest/member-folders.ts";
 import type { HobLookup } from "../quest/use-work.ts";
@@ -63,13 +62,7 @@ export function WorkbenchHeader({
   return (
     <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-6 py-3">
       {back}
-      <span
-        aria-hidden
-        className="flex size-hob-tile shrink-0 items-center justify-center rounded-tile bg-[color-mix(in_srgb,var(--hob)_30%,var(--color-card))]"
-        style={{ "--hob": HOB_COLORS[owner.lookColor].hat } as CSSProperties}
-      >
-        <HobSprite hob={owner} size={27} state={running ? "working" : "idle"} />
-      </span>
+      <HobTile hob={owner} tile="lg" state={running ? "working" : "idle"} />
       <span className="flex min-w-[12rem] flex-1 flex-col">
         <h2
           ref={headingRef}

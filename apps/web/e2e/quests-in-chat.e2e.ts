@@ -12,10 +12,10 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
 
-  // The card sits under the request, with the party and the rows that matter.
+  // The card sits under the request, with every Task as a row under its owner.
   const card = page.getByRole("region", { name: "Aldric's work on Plan the Black Friday campaign" });
-  await expect(card).toContainText("Aldric is on it");
-  await expect(card).toContainText("Aldric's party: Quill and Ada");
+  await expect(card).toContainText("Aldric's quest · 2 tasks");
+  await expect(card.getByRole("button", { name: "Look inside Draft the landing copy" })).toContainText("Quill");
   await expect(card.getByRole("button", { name: "Look inside Build the campaign" })).toContainText("waiting on Quill");
 
   // The quest button in the header keeps it in view; a lead's answer shows as one line; a question for you asks.
@@ -67,7 +67,7 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(page.getByText("The Black Friday campaign is ready.")).toBeVisible();
 
   // Once it ends, the card still opens the quest, and the lead's own Task shows its output.
-  await card.getByRole("button", { name: "Show all" }).click();
+  await card.getByRole("button", { name: "Open the quest" }).click();
   await quest.getByRole("button", { name: /^Aldric · Plan the Black Friday campaign/ }).click();
   await expect(page.getByRole("dialog", { name: "Plan the Black Friday campaign, task details" })).toContainText(
     "Black Friday campaign ready",

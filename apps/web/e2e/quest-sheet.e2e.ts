@@ -160,7 +160,8 @@ test("[TC-CH-192] the task sheet cancels a Task, retries a failed one and gives 
   await expect(signs).toContainText("Running", { timeout: 15_000 });
   await expect(banner).toContainText("Failed");
   await expect(email).toContainText("Ada");
-  await expect(page.getByText("Aldric's party: Quill and Ada")).toBeVisible();
+  const card = page.getByRole("region", { name: `Aldric's work on ${quest}` });
+  await expect(card.getByRole("button", { name: "Look inside Schedule the sale email" })).toContainText("Ada");
 
   // Cancel task asks first, then the Task confirms it stopped; the sheet and the row follow.
   await signs.click();
@@ -202,7 +203,7 @@ test("[TC-CH-192] the task sheet cancels a Task, retries a failed one and gives 
   await expect(emailControls.getByRole("alert")).toHaveCount(0);
   await backTo(taskSheet(page, "Schedule the sale email"), quest);
   await expect(room.getByRole("button", { name: /Quill · Schedule the sale email/ })).toBeVisible();
-  await expect(page.getByText("Aldric's party: Quill", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Look inside Schedule the sale email" })).toContainText("Quill");
 });
 
 // covers CH-005, OR-004

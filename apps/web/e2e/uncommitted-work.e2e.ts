@@ -47,7 +47,7 @@ test("[TC-OR-462] a Quest whose lead left a file uncommitted shows it under Stil
   // Aldric brings nobody in, so Details on his card opens his own Task.
   const card = page.getByRole("region", { name: "Aldric's work on Wrap up the spec" });
   await expect(card).toContainText("Aldric finished this", { timeout: 15_000 });
-  await card.getByRole("button", { name: "Show details" }).click();
+  await card.getByRole("button", { name: "Open the task" }).click();
   await taskSheet(page, "Wrap up the spec").getByRole("button", { name: "Open Workbench" }).click();
 
   const bench = page.getByRole("region", { name: "Workbench for Wrap up the spec" });

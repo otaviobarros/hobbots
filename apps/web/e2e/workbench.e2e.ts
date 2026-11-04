@@ -92,7 +92,7 @@ test("[TC-UX-022] the Workbench opens from the task sheet, also reached from the
   await expect(card).toBeVisible({ timeout: 20_000 });
 
   // From the drawer, Back to the task reopens the drawer with its unsent note.
-  await card.getByRole("button", { name: "Show details" }).click();
+  await card.getByRole("button", { name: "Open the task" }).click();
   const drawer = page.getByRole("dialog", { name: "Tidy the notes, task details" });
   const note = drawer.getByRole("textbox", { name: "Tell Aldric about this task" });
   await note.fill("Keep the headings short");

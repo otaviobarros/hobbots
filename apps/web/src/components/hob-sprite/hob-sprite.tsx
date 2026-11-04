@@ -1,7 +1,8 @@
-import { hobLook } from "@hobbots/art/look";
+import { HOB_COLORS, hobLook } from "@hobbots/art/look";
 import type { Agent } from "@hobbots/domain";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
+import type { CSSProperties } from "react";
 import type { HobState } from "../../lib/hob-state.ts";
 import { SigilBadge } from "../roles/role-sigil.tsx";
 
@@ -65,6 +66,41 @@ export function HobSprite({
           {mark.text}
         </span>
       )}
+    </span>
+  );
+}
+
+/** The tile sizes a hob sits on, with the sprite each holds: a work row, a reply, a header or Home row. */
+const TILES = {
+  sm: { className: "size-6", sprite: 18 },
+  md: { className: "size-7.5", sprite: 21 },
+  lg: { className: "size-hob-tile", sprite: 27 },
+} as const;
+
+/**
+ * A hob on a tile tinted in its hat color: on a work row, beside its replies, and on the Workbench
+ * header and Home's rows. Decorative: its name is always beside it.
+ */
+export function HobTile({
+  hob,
+  tile,
+  state = "idle",
+}: {
+  hob: Pick<Agent, "lookSeed" | "lookColor"> & Partial<Pick<Agent, "hat" | "tool" | "sigil">>;
+  tile: keyof typeof TILES;
+  state?: HobState;
+}) {
+  const { className, sprite } = TILES[tile];
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-tile bg-[color-mix(in_srgb,var(--hob)_30%,var(--color-card))]",
+        className,
+      )}
+      style={{ "--hob": HOB_COLORS[hob.lookColor].hat } as CSSProperties}
+    >
+      <HobSprite hob={hob} size={sprite} state={state} />
     </span>
   );
 }
