@@ -1,3 +1,4 @@
+import type { RuntimeHealth } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Stepper } from "@hobbots/ui/components/stepper";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -15,6 +16,7 @@ import {
   submitDraft,
 } from "../../api/first-hob.ts";
 import { agentsQuery, modelsQuery, runtimesQuery, useCreateHob } from "../../api/queries.ts";
+import { signInProblem } from "../../api/runtime-health.ts";
 import { presetInfo } from "../../api/safety.ts";
 import { setupQuery } from "../../api/setup.ts";
 import { openSummonDraft, summonProblem } from "../../api/summon.ts";
@@ -63,6 +65,8 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
   const locked = draft.submitted !== null;
   const name = draft.name.trim() || shared.onboarding.firstHob.yourHob;
   const health = runtimes.data?.find((r) => r.runtime === draft.runtime);
+  // The AI it would think with is signed out: Ready leads with how to fix it.
+  const signedOut = signedOutHealth(health);
   const model = models.data?.models.find((m) => m.id === draft.model);
   const rejected = create.error instanceof ApiError && create.error.tag === "InvalidHob" ? create.error : undefined;
   const problem = summonProblem(
@@ -125,7 +129,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
               <legend className="sr-only">{copy.steps[index]}</legend>
               <div className="flex flex-col gap-1">
                 <h2 className="m-0 font-heading text-[26px] leading-8 font-(--heading-weight)">
-                  {stepTitle(step, name)}
+                  {stepTitle(step, name, signedOut !== undefined)}
                 </h2>
                 <span className="text-text-secondary">{stepIntro(step, name)}</span>
               </div>
@@ -137,6 +141,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
                   name={name}
                   preset={setup.data && presetInfo(setup.data.safetyPreset)}
                   runtimes={runtimes}
+                  signedOut={signedOut}
                   models={models}
                   onStep={onStep}
                 />
@@ -160,8 +165,11 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
   );
 }
 
-const stepTitle = (step: SummonStep, name: string) =>
-  step === "role" ? copy.role.title : step === "look" ? copy.look.title({ name }) : copy.ready.title({ name });
+const stepTitle = (step: SummonStep, name: string, blocked: boolean) => {
+  if (step === "role") return copy.role.title;
+  if (step === "look") return copy.look.title({ name });
+  return blocked ? copy.ready.blockedTitle({ name }) : copy.ready.title({ name });
+};
 
 const stepIntro = (step: SummonStep, name: string) =>
   step === "role" ? copy.role.intro : step === "look" ? copy.look.intro : copy.ready.intro({ name });
@@ -286,3 +294,6 @@ function SummonFooter({
     </footer>
   );
 }
+
+const signedOutHealth = (health: RuntimeHealth | undefined): RuntimeHealth | undefined =>
+  signInProblem(health) === null ? undefined : health;

@@ -266,3 +266,27 @@ test("[TC-UX-084] connecting a second provider waits for the first, so both stay
     connectedProviders: ["claude-code", "codex"],
   });
 });
+
+// covers AG-001, AG-005
+test("[TC-AG-105] Summon's Ready leads with a signed-out Claude and how to sign in, and Check again recovers once it is", async ({
+  page,
+}) => {
+  hub = await finishedHub({ HOBBOTS_RUNTIME: "claude", HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir) });
+  await page.goto(`${hub.url}/#/summon?step=ready`);
+
+  const blocker = page.getByRole("alert", { name: "Claude is signed out" });
+  await expect(page.getByRole("heading", { name: /can't be summoned yet$/ })).toBeVisible();
+  await expect(blocker.getByText("Needs a fix")).toBeVisible();
+  await expect(blocker.getByText(/Everything you picked is kept/)).toBeVisible();
+  await expect(blocker.getByText(/installed but not signed in/)).toBeVisible();
+  await expect(blocker.getByRole("button", { name: "Copy claude" })).toBeVisible();
+  await expect(blocker.getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", /settings\/connections$/);
+  await expect(page.getByRole("button", { name: /^Summon / })).toHaveAttribute("aria-disabled", "true");
+
+  // Signing in needs no restart: Check again finds Claude ready, and the hob can be summoned.
+  signedInClaudeCode(dataDir);
+  await blocker.getByRole("button", { name: "Check again" }).click();
+  await expect(blocker).toBeHidden();
+  await expect(page.getByRole("heading", { name: /^Ready to summon / })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Summon / })).toHaveAttribute("aria-disabled", "false");
+});
