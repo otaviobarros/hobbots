@@ -238,6 +238,14 @@
     "provider-ink": {
       "use": "The letter on an AI provider's tile. The tiles are fixed pastels, so the ink is fixed too.",
       "value": "#141228"
+    },
+    "shadow-segment": {
+      "use": "The lift under the picked segment of a segmented control.",
+      "value": "0 1px 2px rgb(0 0 0 / 0.18)"
+    },
+    "stand-shadow": {
+      "use": "The soft shadow under a standing hob.",
+      "value": "rgb(0 0 0 / 0.28)"
     }
   },
   "skin": {
@@ -255,6 +263,18 @@
       "edge": "1px",
       "button-weight": 600,
       "hop": "none",
+      "selected": "card",
+      "show-line-icon": "inline-flex",
+      "show-pixel-icon": "none",
+      "cut": "none",
+      "focus-outline": "2px solid focus-ring",
+      "control-focus-outline": "focus-outline",
+      "control-focus-ring": "none",
+      "press-edge": "0px",
+      "press-edge-down": "0px",
+      "press-move": "1px",
+      "press-dim": "brightness(0.94)",
+      "ease-press": "ease-ui",
       "focus": "2px outline, 2px outside",
       "primary-press": "darkens and moves down 1px",
       "clip": "none"
@@ -273,6 +293,18 @@
       "edge": "2px",
       "button-weight": 700,
       "hop": "hb-hop 700ms steps(6) once",
+      "selected": "line",
+      "show-line-icon": "none",
+      "show-pixel-icon": "inline-flex",
+      "cut": "4px cut corners",
+      "focus-outline": "2px solid focus-ring",
+      "control-focus-outline": "none",
+      "control-focus-ring": "inset 2px focus-ring, then a 2px ground gap",
+      "press-edge": "4px",
+      "press-edge-down": "2px",
+      "press-move": "2px",
+      "press-dim": "none",
+      "ease-press": "steps(2)",
       "focus": "2px ring drawn inset with a 2px ground gap",
       "primary-press": "4px lantern-press edge that shrinks to 2px",
       "clip": "4px cut corners on cards and buttons"
@@ -299,6 +331,13 @@
       "family": "sans",
       "use": "UI text: rows, fields, menus, cards. Buttons use it at the skin's button-weight."
     },
+    "ui": {
+      "size": "14px",
+      "lineHeight": "20px",
+      "weight": 400,
+      "family": "sans",
+      "use": "Dense UI text beside body: rows, menus, search fields and tabs."
+    },
     "detail": {
       "size": "13px",
       "lineHeight": "18px",
@@ -311,7 +350,7 @@
       "lineHeight": "16px",
       "weight": 400,
       "family": "sans",
-      "use": "Timestamps, counts, key hints. The floor: no text below 12px (replaces the 11px --text-meta)."
+      "use": "Timestamps, counts, key hints. The floor: no text below 12px anywhere, key hints and tags included (replaces the 11px --text-meta)."
     },
     "display": {
       "size": "32px",
@@ -360,6 +399,12 @@
     "space-8": "32px",
     "space-12": "48px"
   },
+  "space-inset": {
+    "use": "A 2px half step for padding inside controls and rows only. Layout gaps and page padding stay on space.",
+    "space-1.5": "6px",
+    "space-2.5": "10px",
+    "space-3.5": "14px"
+  },
   "radius": {
     "radius-none": "0",
     "radius-cut": "4px",
@@ -390,6 +435,15 @@
     "dur-shake": "450ms",
     "dur-hop": "700ms",
     "dur-loop-cap": "10s"
+  },
+  "motion": {
+    "loop-cap": "Nothing loops past dur-loop-cap (10s) or 3 cycles without new input, in any theme. A state that needs to show uses a still frame."
+  },
+  "gradient": {
+    "use": "Gradients in the hob's color, on the hob hero, card doors and the pixel ground strip. Nothing else uses a gradient."
+  },
+  "shape": {
+    "filter-chip": "Filter chips are pills (radius-round) in every theme, Workshop included. They do not read corner-control."
   },
   "contrast": {
     "$comment": "The floors every theme meets, as WCAG contrast ratios. Each pair is a text color on the color behind it. apps/web/type-and-contrast.test.ts checks every pair in every theme.",
