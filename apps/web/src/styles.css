@@ -97,6 +97,8 @@
   --text-reading--line-height: 26px;
   --text-body: 15px;
   --text-body--line-height: 23px;
+  --text-ui: 14px;
+  --text-ui--line-height: 20px;
   --text-detail: 13px;
   --text-detail--line-height: 18px;
   --text-meta: 12px;
@@ -123,6 +125,18 @@
   --spacing-row-min: 36px;
   /* From this width the expanded sidebar pushes the page aside; below it, it opens over the page. */
   --breakpoint-wide: 1100px;
+
+  /*
+   * Durations, the same in every theme (`duration` in themes.json). Nothing loops past
+   * --dur-loop-cap or 3 cycles without new input.
+   */
+  --dur-press: 75ms;
+  --dur-fade: 150ms;
+  --dur-enter: 200ms;
+  --dur-sheet: 220ms;
+  --dur-shake: 450ms;
+  --dur-hop: 700ms;
+  --dur-loop-cap: 10s;
 
   /* UI motion reads --ease-ui from the skin; scene and hob art always step, like pixel art. */
   --default-transition-timing-function: var(--ease-ui);
