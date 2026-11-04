@@ -13,6 +13,7 @@ import {
 import { Button } from "@hobbots/ui/components/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@hobbots/ui/components/popover";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Switch } from "@hobbots/ui/components/switch";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -73,7 +74,7 @@ export const useThreadBrain = (hob: Agent, thread: Thread | undefined) => {
   const runtimes = useQuery(runtimesQuery);
   const health = runtimes.data?.find((h) => h.runtime === brain.runtime);
   const state = runtimes.isPending ? "checking" : health ? STATE_WORDS[health.availability] : "unknown";
-  return { brain, label, state, ready: health?.availability === "ready" };
+  return { brain, label, state, checking: runtimes.isPending, ready: health?.availability === "ready" };
 };
 
 /**
@@ -128,6 +129,7 @@ export function BrainPicker({
         }}
       >
         <span className="lbl text-meta text-label">{copy.title}</span>
+        {runtimes.isPending && <RuntimeWaiting runtime={brain.runtime} />}
         {runtimes.data?.map((health) => (
           <RuntimeChoices
             key={health.runtime}
@@ -190,6 +192,8 @@ function RuntimeChoices({
       </span>
       {reason !== null ? (
         <span className="text-meta text-lantern">{reason}</span>
+      ) : models.isPending ? (
+        <ChoicesWaiting />
       ) : (
         choices.map((choice) => {
           const brain = pickedBrain(models.data, health.runtime, choice.model, keepEffort);
@@ -214,6 +218,42 @@ function RuntimeChoices({
         })
       )}
     </section>
+  );
+}
+
+/**
+ * A runtime while the hub checks it: its tile and name, a block where its state goes, and its
+ * models as name blocks, so the picker does not move when the check lands.
+ */
+function RuntimeWaiting({ runtime }: { runtime: RuntimeKind }) {
+  return (
+    <section aria-label={RUNTIME_NAMES[runtime]} aria-busy="true" className="flex flex-col gap-1">
+      <span className="flex items-center gap-2 text-ui">
+        <RuntimeTile runtime={runtime} />
+        <b className="flex-1">{RUNTIME_NAMES[runtime]}</b>
+        <span className="text-meta">
+          <Skeleton width="7ch" />
+        </span>
+      </span>
+      <ChoicesWaiting />
+    </section>
+  );
+}
+
+/** The likely length of each model's name while the runtime lists them. */
+const WAITING_MODELS = ["9ch", "7ch", "8ch"] as const;
+
+/** A runtime's model choices as name blocks, in the rows the buttons take. */
+function ChoicesWaiting() {
+  return (
+    <span aria-busy="true" className="flex flex-col">
+      {WAITING_MODELS.map((width) => (
+        <span key={width} className="flex items-center gap-1.5 px-2 py-1 text-detail">
+          <span aria-hidden className="w-3" />
+          <Skeleton width={width} />
+        </span>
+      ))}
+    </span>
   );
 }
 

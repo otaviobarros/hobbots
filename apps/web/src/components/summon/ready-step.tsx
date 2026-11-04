@@ -1,5 +1,7 @@
 import { lengthChoice, type RuntimeHealth, type RuntimeModels, voiceChoice } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton, WaitNote } from "@hobbots/ui/components/skeleton";
+import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -8,7 +10,7 @@ import type { PresetInfo } from "../../api/safety.ts";
 import { ModelsBrain } from "../hob-form/hob-form.tsx";
 import { messages as shared } from "../messages.ts";
 import { messages } from "./messages.ts";
-import { ProviderCards } from "./provider-cards.tsx";
+import { ProviderCards, ProviderCardsWaiting } from "./provider-cards.tsx";
 import { SignedOutCard } from "./signed-out-card.tsx";
 import type { SummonStep } from "./summon-model.ts";
 
@@ -25,6 +27,7 @@ export function ReadyStep({
   onChange,
   name,
   preset,
+  presetPending,
   runtimes,
   models,
   signedOut,
@@ -34,6 +37,8 @@ export function ReadyStep({
   onChange: Update;
   name: string;
   preset: PresetInfo | undefined;
+  /** Whether the safety level is still being read, so its row holds its place. */
+  presetPending: boolean;
   runtimes: UseQueryResult<ReadonlyArray<RuntimeHealth>>;
   models: UseQueryResult<RuntimeModels>;
   /** The signed-out AI the hob would think with, which Ready leads with until it is signed in. */
@@ -58,11 +63,11 @@ export function ReadyStep({
           note={copy.soundsLike({ sample: messages.look.samples[draft.voice] })}
           action={<ChangeButton label={copy.changeTalk({ name })} onClick={() => onGo("look")} />}
         />
-        {preset && (
+        {(preset || presetPending) && (
           <Row
             term={copy.canDo}
-            value={copy.preset({ preset: preset.label })}
-            note={preset.note}
+            value={preset ? copy.preset({ preset: preset.label }) : null}
+            note={preset?.note ?? null}
             action={
               <Link
                 to="/settings/$section"
@@ -96,8 +101,10 @@ function Row({
   last = false,
 }: {
   term: string;
-  value: string;
-  note?: string | undefined;
+  /** The row's value, or null while it loads. */
+  value: string | null;
+  /** The line under the value; null holds its place while it loads. */
+  note?: string | null | undefined;
   action?: React.ReactNode;
   last?: boolean;
 }) {
@@ -105,10 +112,16 @@ function Row({
     <div className={`flex items-start gap-4 py-3 max-[720px]:flex-wrap ${last ? "" : "border-b border-line"}`}>
       <dt className="lbl w-[140px] flex-none pt-0.5 text-label">{term}</dt>
       <dd className="m-0 flex min-w-0 flex-1 flex-col">
-        <strong title={value} className="truncate">
-          {value}
+        <strong title={value ?? undefined} className="truncate">
+          {value ?? <Skeleton width="24ch" surface="card" />}
         </strong>
-        {note && <span className="line-clamp-2 text-detail text-text-secondary">{note}</span>}
+        {note === null ? (
+          <span className="text-detail">
+            <Skeleton width="36ch" surface="card" />
+          </span>
+        ) : (
+          note && <span className="line-clamp-2 text-detail text-text-secondary">{note}</span>
+        )}
       </dd>
       {action}
     </div>
@@ -136,11 +149,24 @@ function Thinks({
   models: UseQueryResult<RuntimeModels>;
 }) {
   const [brainOpen, setBrainOpen] = useState(false);
+  const wait = useWaitStage(runtimes.isPending);
   if (runtimes.isPending) {
     return (
-      <span className="py-1 text-ui text-lantern">
-        {shared.summon.checkingProviders} <span className="animate-hb-blink">•••</span>
-      </span>
+      <div aria-busy="true" className="flex flex-col gap-2">
+        <ProviderCardsWaiting />
+        <span className="flex flex-wrap items-center gap-3">
+          <ConnectAnother />
+        </span>
+        <WaitNote
+          wait={wait}
+          detail={shared.summon.waitingProviders}
+          outside={{
+            note: shared.summon.checkSlow,
+            retryLabel: shared.summon.tryAgain,
+            onRetry: () => void runtimes.refetch(),
+          }}
+        />
+      </div>
     );
   }
   if (!runtimes.data) {
@@ -166,13 +192,7 @@ function Thinks({
     <>
       <ProviderCards runtimes={runtimes.data} draft={draft} onChange={set} />
       <span className="flex flex-wrap items-center gap-3">
-        <Link
-          to="/settings/$section"
-          params={{ section: "connections" }}
-          className="flex-1 text-detail text-link underline underline-offset-3"
-        >
-          {copy.connectAnother}
-        </Link>
+        <ConnectAnother />
         {ready && (
           <Button
             type="button"
@@ -191,5 +211,18 @@ function Thinks({
         </div>
       )}
     </>
+  );
+}
+
+/** The way to Settings › Connections, beside the brain's button. */
+function ConnectAnother() {
+  return (
+    <Link
+      to="/settings/$section"
+      params={{ section: "connections" }}
+      className="flex-1 text-detail text-link underline underline-offset-3"
+    >
+      {copy.connectAnother}
+    </Link>
   );
 }

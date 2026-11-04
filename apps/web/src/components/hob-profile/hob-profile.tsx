@@ -38,7 +38,7 @@ import {
 import { type HobState, hobState } from "../../lib/hob-state.ts";
 import { ExportDialog } from "../export/export-dialog.tsx";
 import { messages as exportCopy } from "../export/messages.ts";
-import { ModelsBrain } from "../hob-form/hob-form.tsx";
+import { ModelsBrain, ModelsWaiting } from "../hob-form/hob-form.tsx";
 import { stateTag } from "../hob-page/hob-page-model.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
@@ -483,7 +483,12 @@ function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
           >
             {copy.connectAnother}
           </Link>
-          {draftReady && <ModelsBrain models={draftModels} draft={draft} onChange={setDraft} />}
+          {/* While the providers are checked, the models wait in place too. */}
+          {runtimes.isPending ? (
+            <ModelsWaiting runtime={draft.runtime} onRetry={() => void runtimes.refetch()} surface="card" />
+          ) : (
+            draftReady && <ModelsBrain models={draftModels} draft={draft} onChange={setDraft} surface="card" />
+          )}
         </fieldset>
       </section>
 

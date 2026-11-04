@@ -1,6 +1,7 @@
 import { HOB_COLORS } from "@hobbots/art/look";
 import type { Agent, AgentId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate } from "@tanstack/react-router";
 import { writeDraft } from "../../api/drafts.ts";
@@ -23,7 +24,7 @@ const TWINKLES = [
 export function ArrivedPage({ hobId }: { hobId: AgentId }) {
   const hobs = useQuery(agentsQuery);
   const hob = hobs.data?.find((h) => h.id === hobId);
-  if (hobs.isPending) return null;
+  if (hobs.isPending) return <ArrivedWaiting />;
   if (!hob) return <Navigate to="/hobs/$hobId" params={{ hobId }} replace />;
   return <Arrived hob={hob} />;
 }
@@ -39,33 +40,7 @@ function Arrived({ hob }: { hob: Agent }) {
   return (
     <main aria-label={copy.title({ name })} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <div className="mx-auto flex w-full max-w-[640px] animate-hb-in flex-col items-center gap-4 px-6 py-14 text-center">
-        <span
-          className="relative flex h-45 w-80 max-w-full items-end justify-center overflow-hidden rounded-card bg-[linear-gradient(180deg,color-mix(in_srgb,var(--hob)_26%,var(--color-ground))_0%,color-mix(in_srgb,var(--hob)_10%,var(--color-ground))_100%)]"
-          style={{ "--hob": HOB_COLORS[hob.lookColor].hat } as React.CSSProperties}
-        >
-          <span
-            aria-hidden
-            // standards-allow STD-I18N-004: left-1/2 with -translate-x-1/2 centers the box, and translate has no logical form
-            className="absolute -top-8 left-1/2 size-65 -translate-x-1/2 rounded-full bg-[radial-gradient(circle,color-mix(in_srgb,var(--hob)_34%,transparent)_0%,transparent_65%)]"
-          />
-          {TWINKLES.map((spot) => (
-            <svg
-              key={spot}
-              aria-hidden
-              viewBox="0 0 10 10"
-              className={`absolute z-10 animate-hb-twinkle fill-current text-lantern ${spot}`}
-            >
-              <path d="M5 0 6 4 10 5 6 6 5 10 4 6 0 5 4 4Z" />
-            </svg>
-          ))}
-          <span className="relative z-[1] mb-2.5 animate-hb-hop">
-            <HobSprite hob={hob} size={112} />
-          </span>
-          <span
-            aria-hidden
-            className="absolute inset-x-0 bottom-0 h-3.5 bg-[repeating-linear-gradient(90deg,color-mix(in_srgb,var(--hob)_55%,var(--color-deep))_0_8px,color-mix(in_srgb,var(--hob)_40%,var(--color-deep))_8px_16px)] shadow-[inset_0_2px_0_color-mix(in_srgb,var(--hob)_70%,var(--color-card))]"
-          />
-        </span>
+        <Stage hob={hob} />
         <h1 className="m-0 max-w-full font-heading text-display font-(--heading-weight) break-words">
           {copy.title({ name })}
         </h1>
@@ -84,21 +59,7 @@ function Arrived({ hob }: { hob: Agent }) {
                   onClick={() => writeDraft(place, question)}
                   className="flex items-center gap-3 px-3.5 py-3 text-text-strong no-underline transition-colors duration-(--dur-fade) hover:bg-hover focus-ring focus-inset"
                 >
-                  <span
-                    aria-hidden
-                    className="grid size-7 flex-none place-items-center rounded-control bg-[color-mix(in_srgb,var(--color-star)_18%,transparent)] text-star"
-                  >
-                    <svg
-                      aria-hidden
-                      viewBox="0 0 16 16"
-                      className="size-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    >
-                      <path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" strokeLinejoin="round" />
-                    </svg>
-                  </span>
+                  <AskIcon />
                   <span className="min-w-0 flex-1">{question}</span>
                   <span aria-hidden className="text-text-secondary">
                     →
@@ -120,11 +81,117 @@ function Arrived({ hob }: { hob: Agent }) {
               <span className="truncate">{copy.profile({ name })}</span>
             </Link>
           </Button>
-          <Button asChild variant="ghost" className="text-text-secondary">
-            <Link to="/summon">{copy.another}</Link>
-          </Button>
+          <SummonAnother />
         </div>
       </div>
     </main>
   );
 }
+
+/**
+ * The little stage the hob stands on, lit in its hat color. Before the hob is read, the stage is lit
+ * in the line color, with a tile where the hob stands.
+ */
+function Stage({ hob }: { hob: Agent | undefined }) {
+  const hobColor = hob === undefined ? "var(--color-line)" : HOB_COLORS[hob.lookColor].hat;
+  return (
+    <span
+      className="relative flex h-45 w-80 max-w-full items-end justify-center overflow-hidden rounded-card bg-[linear-gradient(180deg,color-mix(in_srgb,var(--hob)_26%,var(--color-ground))_0%,color-mix(in_srgb,var(--hob)_10%,var(--color-ground))_100%)]"
+      style={{ "--hob": hobColor } as React.CSSProperties}
+    >
+      <span
+        aria-hidden
+        // standards-allow STD-I18N-004: left-1/2 with -translate-x-1/2 centers the box, and translate has no logical form
+        className="absolute -top-8 left-1/2 size-65 -translate-x-1/2 rounded-full bg-[radial-gradient(circle,color-mix(in_srgb,var(--hob)_34%,transparent)_0%,transparent_65%)]"
+      />
+      {TWINKLES.map((spot) => (
+        <svg
+          key={spot}
+          aria-hidden
+          viewBox="0 0 10 10"
+          className={`absolute z-10 animate-hb-twinkle fill-current text-lantern ${spot}`}
+        >
+          <path d="M5 0 6 4 10 5 6 6 5 10 4 6 0 5 4 4Z" />
+        </svg>
+      ))}
+      {hob === undefined ? (
+        <span className="relative z-[1] mb-2.5">
+          <Skeleton shape="tile" className="size-28" />
+        </span>
+      ) : (
+        <span className="relative z-[1] mb-2.5 animate-hb-hop">
+          <HobSprite hob={hob} size={112} />
+        </span>
+      )}
+      <span
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-3.5 bg-[repeating-linear-gradient(90deg,color-mix(in_srgb,var(--hob)_55%,var(--color-deep))_0_8px,color-mix(in_srgb,var(--hob)_40%,var(--color-deep))_8px_16px)] shadow-[inset_0_2px_0_color-mix(in_srgb,var(--hob)_70%,var(--color-card))]"
+      />
+    </span>
+  );
+}
+
+/** The speech mark before each first question. */
+function AskIcon() {
+  return (
+    <span
+      aria-hidden
+      className="grid size-7 flex-none place-items-center rounded-control bg-[color-mix(in_srgb,var(--color-star)_18%,transparent)] text-star"
+    >
+      <svg aria-hidden viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
+/**
+ * Arrived while the hobs are read, as after a reload: the stage, the title and the three questions
+ * as blocks in their places, so nothing moves when the hob is read. Reads from the hub add no wait line.
+ */
+export function ArrivedWaiting() {
+  return (
+    <main aria-busy="true" className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-[640px] flex-col items-center gap-4 px-6 py-14 text-center">
+        <Stage hob={undefined} />
+        <span className="font-heading text-display">
+          <Skeleton width="14ch" />
+        </span>
+        <span className="flex w-full flex-col items-center">
+          <Skeleton width="44ch" className="max-w-full" />
+          <Skeleton width="30ch" className="max-w-full" />
+        </span>
+        <div className="flex w-full flex-col gap-2 pt-2 text-start">
+          <span className="lbl text-label">{copy.tryAsking}</span>
+          <span className="m-0 flex flex-col overflow-hidden rounded-card bg-card">
+            {WAITING_QUESTIONS.map((width) => (
+              <span key={width} className="flex items-center gap-3 border-line px-3.5 py-3 not-first:border-t">
+                <AskIcon />
+                <span className="min-w-0 flex-1">
+                  <Skeleton width={width} surface="card" className="max-w-full" />
+                </span>
+              </span>
+            ))}
+          </span>
+        </div>
+        <div className="flex max-w-full flex-wrap justify-center gap-2 pt-2">
+          <Skeleton shape="tile" className="h-9 w-56" />
+          <Skeleton shape="tile" className="h-9 w-44" />
+          <SummonAnother />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/** The quiet way back to Summon, for one more hob. */
+function SummonAnother() {
+  return (
+    <Button asChild variant="ghost" className="text-text-secondary">
+      <Link to="/summon">{copy.another}</Link>
+    </Button>
+  );
+}
+
+/** The likely length of each first question while the hob is read. */
+const WAITING_QUESTIONS = ["30ch", "36ch", "24ch"] as const;
