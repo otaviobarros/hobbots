@@ -10,7 +10,7 @@ import { HobJump } from "./hob-jump.tsx";
 import { useOpenRequests } from "./inbox/use-open-requests.ts";
 import { messages } from "./messages.ts";
 import { DevicePrompt } from "./pairing/device-prompt.tsx";
-import { Rail } from "./rail.tsx";
+import { Sidebar } from "./sidebar/sidebar.tsx";
 
 const copy = messages.deviceAccess;
 
@@ -26,7 +26,7 @@ const reconnectingText = (unreachable: boolean) => {
   return hub === null ? copy.unreachableNoName : copy.unreachable({ hub });
 };
 
-/** The window: its title bar and whichever page fills it, with or without the rail. */
+/** The window: its title bar and whichever page fills it, with or without the sidebar. */
 export function AppWindow() {
   // A revoked device sees only that it was removed, whichever page it was on.
   const removed = useDeviceAccess() === "removed";
@@ -41,7 +41,7 @@ export function AppWindow() {
   );
 }
 
-/** The app once setup is done: live events, the rail and the current page. */
+/** The app once setup is done: live events, the sidebar and the current page. */
 export function AppShell() {
   const connection = useHobbotsEvents();
   const unreachable = useDeviceAccess() === "unreachable";
@@ -73,7 +73,7 @@ export function AppShell() {
         </div>
       )}
       <div className="flex min-h-0 flex-1">
-        <Rail />
+        <Sidebar />
         <Outlet />
       </div>
       <HobJump />
