@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { THEMES } from "./src/lib/theme.ts";
 
 type PerTheme = Readonly<Record<string, string>>;
 
@@ -38,6 +39,10 @@ describe("themes", () => {
     for (const [token, perTheme] of Object.entries(themes.shadow)) {
       expect(values.get(`--${token}`), token).toBe(perTheme[theme.id]);
     }
+  });
+
+  it("are the themes the app can save", () => {
+    expect([...THEMES]).toEqual(themes.themes.map(({ id }) => id));
   });
 
   it("sets each look's skin in full", () => {

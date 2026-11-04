@@ -50,7 +50,7 @@ Every theme meets these floors against `ground`:
 
 ## In the code
 
-`apps/web/src/styles.css` holds the themes. Its `@theme` block and `:root` rule carry Lamplight Dusk, the default when no theme is set, and a `:root[data-theme="…"]` rule per other theme overrides every color and shadow. Two more rules set the skin: Lamplight on `:root`, Workshop on `[data-theme^="workshop-"]`. A unit test checks the file against themes.json. The app opens in Workshop Night (`apps/web/index.html`) until the saved choice lands (#480).
+`apps/web/src/styles.css` holds the themes. Its `@theme` block and `:root` rule carry Lamplight Dusk, the default when no theme is set, and a `:root[data-theme="…"]` rule per other theme overrides every color and shadow. Two more rules set the skin: Lamplight on `:root`, Workshop on `[data-theme^="workshop-"]`. A unit test checks the file against themes.json. The app opens in Workshop Night on first run: `apps/web/index.html` and `apps/web/local.html` set it. `apps/web/src/lib/theme.ts` then applies the theme saved on this device before the first render, and follows a theme picked in another window. Like Reduce motion, the theme belongs to the device it is picked on, not to the hub. A missing or unknown value means Workshop Night.
 
 Shadows are plain custom properties with their own `shadow-menu` and `shadow-sheet` utilities, so each theme can change their shape. shadcn's `dark:` variant follows the mode: every theme but Lamplight Paper and Workshop Daylight is dark.
 

@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { noteRefusal, retryUnlessRefused } from "./api/live.ts";
 import { followMotionChoice } from "./lib/motion.ts";
+import { followThemeChoice } from "./lib/theme.ts";
 import { followWindowFocus } from "./lib/window-focus.ts";
 import { createAppRouter } from "./router.tsx";
 import "./styles.css";
@@ -24,6 +25,7 @@ const queryClient: QueryClient = new QueryClient({
 const router = createAppRouter(queryClient);
 followWindowFocus();
 followMotionChoice();
+followThemeChoice();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
