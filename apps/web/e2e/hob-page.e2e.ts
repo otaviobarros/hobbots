@@ -63,6 +63,8 @@ test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a Hi
   await expect(hero).toContainText("Resting");
   await expect(hero).toContainText("Writer · 1 chat · with you since");
   await expect(main.getByRole("complementary", { name: "About Pip" })).toContainText("Claude Code");
+  // Each chat shows its last line under its title.
+  await expect(main.getByRole("tabpanel", { name: /^Chats/ })).toContainText("Echo: first");
 
   // History is a tab in the URL, so Back returns to Chats.
   await main.getByRole("tab", { name: "History" }).click();

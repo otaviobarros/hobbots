@@ -82,10 +82,17 @@ export function ChatRow({
             {title ? <Marked parts={title} /> : thread.title}
           </span>
         )}
-        {snippet && (
+        {/* While searching, where the words matched; otherwise the chat's last line. */}
+        {snippet ? (
           <span className="truncate text-sm leading-5 text-text-secondary">
             <Marked parts={snippet} />
           </span>
+        ) : (
+          thread.lastLine && (
+            <span title={thread.lastLine} className="truncate text-sm leading-5 text-text-secondary">
+              {thread.lastLine}
+            </span>
+          )
         )}
         {needs > 0 && (
           <span className="flex min-w-0 gap-1.5 pt-1">
