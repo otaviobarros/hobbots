@@ -1,17 +1,16 @@
 import type { PlanMeter, PlanUsage, RuntimeKind } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
-import { usageQuery } from "../../api/queries.ts";
-import { leftOf, localDay, type PlanLevel, planLevel, refillOf } from "../../lib/usage.ts";
+import { plansQuery } from "../../api/queries.ts";
+import { leftOf, type PlanLevel, planLevel, refillOf } from "../../lib/usage.ts";
 import { messages } from "./messages.ts";
 
 // One source for a plan's numbers (#554). The Usage screen, Home's plan line and a chat reply the
-// limit stopped all read the plan the hub reported with the Usage report, and say it in the same words.
+// limit stopped all read the plans the hub reported, and say them in the same words.
 
 const copy = messages.plans;
 
-/** Every provider's plan, from the Usage report for the last 7 days: the same request the Usage screen makes. */
-export const usePlans = (): ReadonlyArray<PlanUsage> | undefined =>
-  useQuery({ ...usageQuery("7", localDay(new Date())), select: (report) => report.plans }).data;
+/** Every provider's plan: the same request the Usage screen makes. */
+export const usePlans = (): ReadonlyArray<PlanUsage> | undefined => useQuery(plansQuery).data;
 
 /** A window's name in words: This session, This week. */
 export const windowName = (meter: PlanMeter): string => {

@@ -1,15 +1,16 @@
-import type { Agent, AgentId, PlanUsage, QuestUsage, RuntimeHealth, UsagePeriod, UsageReport } from "@hobbots/domain";
+import type { Agent, AgentId, QuestUsage, UsagePeriod, UsageReport } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
+import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
-import { agentsQuery, archivedAgentsQuery, runtimesQuery, usageQuery } from "../../api/queries.ts";
+import { agentsQuery, archivedAgentsQuery, plansQuery, runtimesQuery, usageQuery } from "../../api/queries.ts";
 import { dailyUsage, type HobShare, hobShares, localDay, questShares, type UsageSplit } from "../../lib/usage.ts";
 import { Page } from "../shell/pages.tsx";
 import { DailyChart, HobBreakdown, QuestBreakdown } from "./hob-breakdown.tsx";
 import { messages } from "./messages.ts";
-import { alarmOf, ManageProviders, PlanBanner, PlanShelf, planViews } from "./plan-card.tsx";
+import { alarmOf, ManageProviders, PlanBanner, PlanCardWaiting, PlanShelf, planViews } from "./plan-card.tsx";
 import { WaysToSave } from "./ways-to-save.tsx";
 
 const PERIODS = ["7", "30"] as const satisfies ReadonlyArray<UsagePeriod>;
@@ -124,19 +125,22 @@ function DailyLegend({ total }: { total: string | null }) {
 /** Who used what, by hob or by quest, with what the shares count. */
 function WhoUsedWhat({
   days,
+  counted,
   by,
   hobs,
   quests,
   looks,
 }: {
   days: UsagePeriod;
+  /** The period the shown report counts, which trails `days` while a new period loads. */
+  counted: UsagePeriod;
   by: UsageSplit;
   /** Undefined until the report arrives. */
   hobs: ReadonlyArray<HobShare> | undefined;
   quests: ReadonlyArray<QuestUsage> | undefined;
   looks: ReadonlyMap<AgentId, Agent>;
 }) {
-  const period = messages.period.last[days];
+  const period = messages.period.last[counted];
   return (
     <Section label={messages.hobs.label} icon="hobs" extra={<SplitPicker days={days} by={by} />}>
       {by === "quest"
@@ -147,25 +151,29 @@ function WhoUsedWhat({
   );
 }
 
-/** The banner when a plan is low or used up, then Your AI with each provider's plan. */
-function YourAi({
-  runtimes,
-  plans,
-  now,
-  onSave,
-}: {
-  runtimes: ReadonlyArray<RuntimeHealth> | undefined;
-  plans: ReadonlyArray<PlanUsage> | undefined;
-  now: Date;
-  onSave: () => void;
-}) {
-  const views = runtimes && planViews(runtimes, plans, now);
+/**
+ * The banner when a plan is low or used up, then Your AI with each provider's plan. The plans come
+ * from the providers and can take seconds, so until they arrive Claude Code's card waits at its full
+ * size, apart from the hub's own numbers below it.
+ */
+function YourAi({ onSave }: { onSave: () => void }) {
+  const runtimes = useQuery(runtimesQuery);
+  const plans = useQuery(plansQuery);
+  const waiting = runtimes.isPending || plans.isPending || plans.isError;
+  // A failed read says so until Try again asks again; then the wait line is back.
+  const failed = plans.isError && !plans.isFetching;
+  const wait = useWaitStage(waiting && !failed);
+  const views = waiting ? undefined : planViews(runtimes.data ?? [], plans.data, new Date());
   const alarm = views && alarmOf(views);
   return (
     <>
       {alarm && <PlanBanner state={alarm} onSave={onSave} />}
       <Section label={messages.plans.label} extra={<ManageProviders />}>
-        {views ? <PlanShelf views={views} /> : <span className="text-text-secondary">{messages.plans.checking}</span>}
+        {views ? (
+          <PlanShelf views={views} />
+        ) : (
+          <PlanCardWaiting runtimes={runtimes.data} wait={wait} failed={failed} onRetry={() => void plans.refetch()} />
+        )}
       </Section>
     </>
   );
@@ -186,7 +194,8 @@ function DayByDay({ report, days }: { report: UsageReport | undefined; days: Usa
 /** Screen 12, Usage: what's left of each AI plan and who used it, over 7 or 30 days (OP-002). */
 export function UsagePage({ days, by }: { days: UsagePeriod; by: UsageSplit }) {
   const report = useQuery(usageQuery(days, localDay(new Date())));
-  const runtimes = useQuery(runtimesQuery);
+  // While a new period loads, the last report stays on screen, named by the period it counts.
+  const shown = report.data?.days ?? days;
   const active = useQuery(agentsQuery);
   const retired = useQuery(archivedAgentsQuery);
   const tips = useRef<HTMLHeadingElement>(null);
@@ -211,14 +220,9 @@ export function UsagePage({ days, by }: { days: UsagePeriod; by: UsageSplit }) {
         </div>
       ) : (
         <>
-          <YourAi
-            runtimes={runtimes.data}
-            plans={report.data?.plans}
-            now={new Date(report.data?.until ?? Date.now())}
-            onSave={showTips}
-          />
-          <DayByDay report={report.data} days={days} />
-          <WhoUsedWhat days={days} by={by} hobs={hobs} quests={report.data?.quests} looks={looks} />
+          <YourAi onSave={showTips} />
+          <DayByDay report={report.data} days={shown} />
+          <WhoUsedWhat days={days} counted={shown} by={by} hobs={hobs} quests={report.data?.quests} looks={looks} />
           <Section label={messages.tips.label} icon="tips" headingRef={tips}>
             <WaysToSave busiest={hobs?.[0]} />
           </Section>

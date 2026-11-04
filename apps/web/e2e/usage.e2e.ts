@@ -127,17 +127,111 @@ test("[TC-OP-074] a hub where no hob has replied says so", async ({ page }) => {
   await expect(page.getByRole("region", { name: "Day by day" })).toContainText("0 replies in the last 30 days");
 });
 
-/** Answers the Usage report with the fake Claude Code plan's windows at these percents. */
+/** Answers the plans with the fake Claude Code plan's windows at these percents. */
 const planAt = async (page: Page, session: number, week: number) => {
-  await page.route("**/api/usage**", async (route) => {
+  await page.route("**/api/usage/plans", async (route) => {
     const response = await route.fetch();
-    const report = (await response.json()) as { plans: Array<{ runtime: string; meters: Array<{ percent: number }> }> };
-    const claude = report.plans.find((plan) => plan.runtime === "claude-code");
+    const plans = (await response.json()) as Array<{ runtime: string; meters: Array<{ percent: number }> }>;
+    const claude = plans.find((plan) => plan.runtime === "claude-code");
     if (claude?.meters[0]) claude.meters[0].percent = session;
     if (claude?.meters[1]) claude.meters[1].percent = week;
-    await route.fulfill({ response, json: report });
+    await route.fulfill({ response, json: plans });
   });
 };
+
+/** The Usage report's own request, not the plans beside it. */
+const isReport = (url: URL) => url.pathname === "/api/usage";
+
+/** Holds the plans until `release` is called, as a slow provider would. */
+const holdPlans = async (page: Page) => {
+  let release = () => {};
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/usage/plans", async (route) => {
+    await released;
+    await route.continue();
+  });
+  return release;
+};
+
+/** Where a region sits on the page, rounded to whole pixels. */
+const boxOf = async (locator: ReturnType<Page["locator"]>) => {
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error("the region is not on the page");
+  return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
+};
+
+// covers OP-002
+test("[TC-OP-092] Usage and Home keep their places while Claude Code is asked for the plan", async ({ page }) => {
+  hub = await startHub(dataDir);
+  await api(hub, "PATCH", "/setup", { completed: true });
+
+  let release = await holdPlans(page);
+  await page.goto(`${hub.url}/#/usage`);
+  // Day by day reads the hub and does not wait for the plan.
+  const daily = page.getByRole("region", { name: "Day by day" });
+  await expect(daily).toContainText("0 replies in the last 7 days");
+  // Claude Code's card waits at its full size, and after a second says what it waits on.
+  const card = page.getByRole("region", { name: "Your AI" }).getByRole("region", { name: "Claude Code plan" });
+  await expect(card).toHaveAttribute("aria-busy", "true");
+  await expect(card.getByRole("status")).toHaveText("Asking Claude Code for your plan…");
+  const waitingCard = await boxOf(card);
+  const waitingDaily = await boxOf(daily);
+
+  release();
+  await expect(card.getByRole("listitem").nth(0)).toContainText("This session62% left");
+  await expect(card).toContainText("Numbers from Claude Code, checked");
+  expect(await boxOf(card)).toEqual(waitingCard);
+  expect(await boxOf(daily)).toEqual(waitingDaily);
+
+  // Home's plan line keeps its tile, title and empty bar, with the wait line where the numbers go.
+  await page.unrouteAll();
+  release = await holdPlans(page);
+  await page.goto(`${hub.url}/#/`);
+  await page.reload();
+  const line = page.getByRole("main").getByRole("link", { name: /^Claude Code plan/ });
+  await expect(line.getByRole("status")).toHaveText("Asking Claude Code for your plan…");
+  await expect(line).not.toContainText("Claude Code reports them");
+  const waitingLine = await boxOf(line);
+  release();
+  await expect(line).toContainText(/62% left · This session · refills \d/);
+  expect(await boxOf(line)).toEqual(waitingLine);
+});
+
+// covers OP-002
+test("[TC-OP-093] switching the period keeps the last numbers until the new ones arrive", async ({ page }) => {
+  hub = await startHub(dataDir);
+  const current = hub;
+  await api(current, "PATCH", "/setup", { completed: true });
+  const pip = await summon(current, "Pip", 7);
+  await chat(current, pip.id, "Plan my week");
+
+  await page.goto(`${current.url}/#/usage`);
+  const daily = page.getByRole("region", { name: "Day by day" });
+  await expect(daily).toContainText("1 reply in the last 7 days");
+  const hobs = page.getByRole("region", { name: "Who used what" }).getByRole("listitem");
+  await expect(hobs).toHaveCount(1);
+
+  // The 30-day report is held, so the 7-day numbers stay on screen, named by their own period.
+  let release = () => {};
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let asked = false;
+  await page.route(isReport, async (route) => {
+    asked = true;
+    await released;
+    await route.continue();
+  });
+  await page.getByRole("radiogroup", { name: "Period" }).getByRole("radio", { name: "30 days" }).click();
+  await expect.poll(() => asked).toBe(true);
+  await expect(daily).toContainText("1 reply in the last 7 days");
+  await expect(hobs).toHaveCount(1);
+  release();
+  await expect(daily).toContainText("1 reply in the last 30 days");
+  await expect(hobs).toHaveCount(1);
+});
 
 // covers OP-002
 test("[TC-OP-077] a plan warns when it runs low and says when paused hobs come back", async ({ page }) => {
@@ -182,7 +276,7 @@ test("[TC-OP-077] a plan warns when it runs low and says when paused hobs come b
 test("[TC-OP-091] Who used what splits the period by quest, with the chats outside a quest last", async ({ page }) => {
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
-  await page.route("**/api/usage**", async (route) => {
+  await page.route(isReport, async (route) => {
     const response = await route.fetch();
     const report = (await response.json()) as Record<string, unknown>;
     const quest = { party: 0, chats: 1, replies: 2, unreported: 0 };

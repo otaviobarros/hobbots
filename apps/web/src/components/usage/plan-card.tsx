@@ -9,7 +9,9 @@ import {
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Progress } from "@hobbots/ui/components/progress";
+import { Skeleton, WaitNote } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
+import type { Wait } from "@hobbots/ui/lib/wait-stage";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { formatAgo, formatMoney } from "../../lib/format.ts";
@@ -128,10 +130,14 @@ const stateOf = (plan: PlanUsage, name: string, now: Date): PlanState | null => 
 
 const KIND = { subscription: copy.subscription, apiKey: copy.apiKey, unknown: copy.connected } as const;
 
+/** How a provider's plan bills, in words, or Not connected. */
+const kindOf = (health: RuntimeHealth): string =>
+  health.availability === "ready" ? KIND[billingOf(health.billing)] : copy.unavailable;
+
 /** What a provider's card shows, from its health and the plan it reported. */
 const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView => {
   const name = RUNTIME_NAMES[health.runtime];
-  const kind = health.availability === "ready" ? KIND[billingOf(health.billing)] : copy.unavailable;
+  const kind = kindOf(health);
   // The big number follows the window that sets the plan's level; the potion shows the week.
   const meter = planLevel(plan)?.meter;
   const week = potionMeter(plan);
@@ -196,13 +202,15 @@ function Window({ window }: { window: PlanWindow }) {
   );
 }
 
-/** One provider's plan: its potion beside each window in words, or why it shows none. */
-function PlanCard({ view }: { view: PlanView }) {
+const CARD = "cut flex flex-wrap items-stretch gap-7 bg-card px-6 py-[22px] shadow-[inset_0_0_0_1px_var(--color-line)]";
+
+/**
+ * One provider's plan: its potion beside each window in words, or why it shows none. It rises in
+ * only when picked from the tiles: the first card takes the waiting card's place without moving.
+ */
+function PlanCard({ view, picked }: { view: PlanView; picked: boolean }) {
   return (
-    <section
-      aria-label={copy.plan({ name: view.name })}
-      className="cut flex animate-hb-in flex-wrap items-stretch gap-7 bg-card px-6 py-[22px] shadow-[inset_0_0_0_1px_var(--color-line)]"
-    >
+    <section aria-label={copy.plan({ name: view.name })} className={cn(CARD, picked && "animate-hb-in")}>
       <div className="flex w-[88px] shrink-0 flex-col items-center gap-2" aria-hidden>
         <PotionBottle fill={view.potion} />
         {view.caption !== null && <span className="text-meta text-label">{view.caption}</span>}
@@ -300,17 +308,19 @@ function ProviderTile({ view, on, onPick }: { view: PlanView; on: boolean; onPic
   );
 }
 
+/** The providers with a card: Claude Code always, another provider once it is connected. */
+const withCards = (runtimes: ReadonlyArray<RuntimeHealth>): ReadonlyArray<RuntimeHealth> =>
+  runtimes.filter((health) => health.runtime === "claude-code" || health.availability === "ready");
+
 /** Each connected provider's card. Claude Code always has one; another provider once it is connected. */
 export const planViews = (
   runtimes: ReadonlyArray<RuntimeHealth>,
   plans: ReadonlyArray<PlanUsage> | undefined,
   now: Date,
 ): ReadonlyArray<PlanView> =>
-  runtimes
-    .filter((health) => health.runtime === "claude-code" || health.availability === "ready")
-    .map((health) =>
-      planView(health, plans?.find((plan) => plan.runtime === health.runtime) ?? unreportedPlan(health.runtime), now),
-    );
+  withCards(runtimes).map((health) =>
+    planView(health, plans?.find((plan) => plan.runtime === health.runtime) ?? unreportedPlan(health.runtime), now),
+  );
 
 /** The plan whose banner the page shows: one used up first, else one running low. */
 export const alarmOf = (views: ReadonlyArray<PlanView>): PlanState | undefined =>
@@ -342,7 +352,127 @@ export function PlanShelf({ views }: { views: ReadonlyArray<PlanView> }) {
           ))}
         </fieldset>
       )}
-      <PlanCard key={current.runtime} view={current} />
+      <PlanCard key={current.runtime} view={current} picked={picked !== null} />
+    </>
+  );
+}
+
+/** A window's place while the plan is asked for: its label, what is left, the empty track and the refill line. */
+function WindowWaiting({ label, refill }: { label: string; refill: string }) {
+  return (
+    <li className="flex flex-col gap-1.5">
+      <span className="flex items-baseline gap-2">
+        <span className="flex-1">
+          <Skeleton surface="card" width={label} />
+        </span>
+        <strong>
+          <Skeleton surface="card" width="7ch" />
+        </strong>
+      </span>
+      <Skeleton shape="bar" />
+      <span className="text-detail">
+        <Skeleton surface="card" width={refill} />
+      </span>
+    </li>
+  );
+}
+
+/** A provider's tile while the plans are asked for: its mark and name, an empty vial and two blocks. */
+function ProviderTileWaiting({ health, on }: { health: RuntimeHealth; on: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex min-w-0 flex-col items-stretch gap-2 rounded-control bg-card p-3 text-text-strong",
+        on && "shadow-[inset_0_0_0_2px_var(--color-focus-ring)]",
+      )}
+    >
+      <span className="flex items-center gap-2">
+        <RuntimeTile runtime={health.runtime} />
+        <span className="truncate font-semibold">{RUNTIME_NAMES[health.runtime]}</span>
+      </span>
+      <span aria-hidden className="flex items-end gap-2.5">
+        <PotionVial fill={null} />
+        <span className="flex min-w-0 flex-col">
+          <strong className="text-body">
+            <Skeleton surface="card" width="8ch" />
+          </strong>
+          <span className="text-meta">
+            <Skeleton surface="card" width="14ch" />
+          </span>
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Claude Code's card while its plan is asked for (Patterns › Loading), drawn at the loaded card's
+ * size so nothing moves when the plan lands: the empty potion, the provider's mark and name, a tag
+ * block and two windows of blocks, under a row of waiting tiles when several providers are connected. Its wait line stands where the loaded card says when the numbers
+ * were checked. A failed read says so in the same place, with Try again.
+ */
+export function PlanCardWaiting({
+  runtimes,
+  wait,
+  failed,
+  onRetry,
+}: {
+  /** The providers' health, once it is known: it names how Claude Code bills and which tiles show. */
+  runtimes: ReadonlyArray<RuntimeHealth> | undefined;
+  wait: Wait;
+  failed: boolean;
+  onRetry: () => void;
+}) {
+  const name = RUNTIME_NAMES["claude-code"];
+  const shown = runtimes === undefined ? [] : withCards(runtimes);
+  const claude = shown.find((health) => health.runtime === "claude-code");
+  const kind = claude === undefined ? null : kindOf(claude);
+  return (
+    <>
+      {shown.length > 1 && (
+        <div aria-hidden className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2.5">
+          {shown.map((health, index) => (
+            <ProviderTileWaiting key={health.runtime} health={health} on={index === 0} />
+          ))}
+        </div>
+      )}
+      <section aria-label={copy.plan({ name })} aria-busy={!failed} className={CARD}>
+        <div className="flex w-[88px] shrink-0 flex-col items-center gap-2" aria-hidden>
+          <PotionBottle fill={null} />
+          <span className="text-meta">
+            <Skeleton surface="card" width="9ch" />
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-1 basis-[260px] flex-col gap-3.5">
+          <span className="flex items-center gap-2.5">
+            <RuntimeTile runtime="claude-code" />
+            <strong className="flex-1 text-text-strong">
+              {name}
+              {kind !== null && ` · ${kind}`}
+            </strong>
+            <Skeleton shape="block" surface="card" width="11ch" />
+          </span>
+          <ul aria-hidden className="m-0 flex list-none flex-col gap-3.5 p-0">
+            <WindowWaiting label="12ch" refill="30ch" />
+            <WindowWaiting label="9ch" refill="26ch" />
+          </ul>
+          {failed ? (
+            <span className="flex min-h-lh flex-wrap items-center gap-x-2 text-detail">
+              <span className="text-rose">{copy.failed({ name })}</span>
+              <Button variant="ghost" size="xs" onClick={onRetry}>
+                {messages.retry}
+              </Button>
+            </span>
+          ) : (
+            <WaitNote
+              className="min-h-lh"
+              wait={wait}
+              detail={copy.asking({ name })}
+              outside={{ note: copy.slow({ name }), retryLabel: messages.retry, onRetry }}
+            />
+          )}
+        </div>
+      </section>
     </>
   );
 }

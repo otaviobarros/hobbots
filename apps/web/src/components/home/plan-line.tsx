@@ -1,7 +1,11 @@
+import { WaitNote } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
+import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { plansQuery } from "../../api/queries.ts";
 import type { PlanLevel } from "../../lib/usage.ts";
-import { planOf, planSummary, usePlans } from "../usage/plan-summary.ts";
+import { planOf, planSummary } from "../usage/plan-summary.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.plan;
@@ -10,14 +14,19 @@ const barTone: Record<PlanLevel, string> = { ok: "bg-mint", low: "bg-lantern", o
 
 /**
  * One line at the foot of Home on what is left of the Claude Code plan, in the Usage screen's own
- * numbers and words, with a bar of what is left. It opens Usage.
+ * numbers and words, with a bar of what is left. It opens Usage. While Claude Code is asked for its
+ * plan the tile, the title and the empty bar stay, and the wait line stands where the numbers go:
+ * Not reported only once Claude Code has answered without a plan.
  */
 export function PlanLine() {
   // The same plan, and the same words, as the Usage screen.
-  const summary = planSummary(planOf(usePlans(), "claude-code"), new Date());
+  const plans = useQuery(plansQuery);
+  const wait = useWaitStage(plans.isPending);
+  const summary = planSummary(planOf(plans.data, "claude-code"), new Date());
   return (
     <Link
       to="/usage"
+      aria-busy={plans.isPending}
       className="flex items-center gap-3.5 rounded-card bg-card py-3 ps-3 pe-3.5 text-inherit no-underline transition-colors hover:bg-hover"
     >
       <span
@@ -35,16 +44,20 @@ export function PlanLine() {
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-semibold text-text-strong">{copy.title}</span>
-          <span className="text-detail text-text-secondary">{summary?.line ?? copy.notReported}</span>
+          {plans.isPending ? (
+            <WaitNote wait={wait} detail={copy.asking} />
+          ) : (
+            <span className="text-detail text-text-secondary">{summary?.line ?? copy.notReported}</span>
+          )}
         </span>
-        {summary !== null && (
-          <span aria-hidden className="block h-1.5 overflow-hidden rounded-dot bg-line-2">
+        <span aria-hidden className="block h-1.5 overflow-hidden rounded-dot bg-line-2">
+          {summary !== null && (
             <span
               className={cn("block h-full rounded-dot", barTone[summary.level])}
               style={{ width: `${Math.round(summary.left * 100)}%` }}
             />
-          </span>
-        )}
+          )}
+        </span>
       </span>
       <span className="inline-flex items-center gap-1 px-2 text-detail text-link">
         {copy.usage}
