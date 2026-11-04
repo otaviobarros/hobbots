@@ -9,8 +9,8 @@ import {
 } from "@hobbots/ui/components/empty";
 import { type ErrorComponentProps, Link, useRouter } from "@tanstack/react-router";
 import { useId, useState } from "react";
-import { WindowFrame } from "../app-shell.tsx";
-import { ChiefMark } from "../chief-mark.tsx";
+import { ChiefMark } from "../chief/chief-mark.tsx";
+import { WindowFrame } from "../shell/app-shell.tsx";
 import { messages as copy } from "./messages.ts";
 import { failureOf, WAY_OUT_PATHS, type WayOut } from "./route-error-model.ts";
 

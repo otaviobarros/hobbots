@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate } from "@tanstack/react-router";
 import { writeDraft } from "../../api/drafts.ts";
 import { agentsQuery } from "../../api/queries.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { startersFor } from "./summon-model.ts";
 
@@ -44,6 +44,7 @@ function Arrived({ hob }: { hob: Agent }) {
         >
           <span
             aria-hidden
+            // standards-allow STD-I18N-004: left-1/2 with -translate-x-1/2 centers the box, and translate has no logical form
             className="absolute -top-8 left-1/2 size-65 -translate-x-1/2 rounded-full bg-[radial-gradient(circle,color-mix(in_srgb,var(--hob)_34%,transparent)_0%,transparent_65%)]"
           />
           {TWINKLES.map((spot) => (
@@ -64,7 +65,7 @@ function Arrived({ hob }: { hob: Agent }) {
         </h1>
         <p className="m-0 max-w-full text-text-secondary break-words">{copy.body({ name, role: hob.roleTitle })}</p>
 
-        <section aria-labelledby="arrived-ask" className="flex w-full flex-col gap-2 pt-2 text-left">
+        <section aria-labelledby="arrived-ask" className="flex w-full flex-col gap-2 pt-2 text-start">
           <h2 id="arrived-ask" className="lbl m-0 text-label">
             {copy.tryAsking}
           </h2>

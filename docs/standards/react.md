@@ -2,7 +2,7 @@
 
 Rules for React code in the web client and the UI package. The client uses React 19, TanStack Router, TanStack Query, Effect Schema, and shadcn on Radix and Tailwind.
 
-Every rule names the tool that enforces it. A rule says "review" only when it needs judgment that a tool cannot make. Where a rule allows an exception, the exception is a comment in the form of [STD-REACT-020](#std-react-020-every-opt-out-names-its-rule-and-a-reason). Checks that match one pattern in the code run in Biome, through its rules and the GritQL plugins in `scripts/biome/`, so they show in the editor. Checks that look at whole files run in `scripts/check-frontend.mjs`, called "the frontend check" below. Both run in `pnpm check`. The checks not wired yet are tracked in [#803](https://github.com/otaviobarros/hobbots/issues/803); until they land, review enforces those rules.
+Every rule names the tool that enforces it. A rule says "review" only when it needs judgment that a tool cannot make. Where a rule allows an exception, the exception is a comment in the form of [STD-REACT-020](#std-react-020-every-opt-out-names-its-rule-and-a-reason). Checks that match one pattern in the code run in Biome, through its rules and the GritQL plugins in `scripts/biome/`, so they show in the editor. Checks that look at whole files run in `scripts/check-frontend.mjs`, called "the frontend check" below. Both run in `pnpm check`. The checks not wired yet are tracked in [#803](https://github.com/otaviobarros/hobbots/issues/803); until they land, review enforces those rules. When a check is turned on with problems already on `main`, `scripts/frontend-baseline.json` lists them per rule and file: they pass until fixed, a new one fails, and the list only shrinks (`node scripts/check-frontend.mjs --shrink-baseline`).
 
 ## State
 
@@ -63,7 +63,7 @@ Put every web component in a folder per feature, for example `components/hob-pro
 A `.tsx` file has at most 250 lines, and its JSX nests at most 6 elements deep. Split a file that grows past either limit. Small private subcomponents may stay in the file of the component that uses them. A file that must stay longer carries an opt-out with its reason (STD-REACT-020).
 
 - **Why:** a small, shallow file is easy to read, review and test.
-- **Enforced by:** the frontend check in `pnpm check`.
+- **Enforced by:** the frontend check in `pnpm check`, which counts the lines of each `.tsx` file and the depth of its JSX elements, including JSX passed as a prop. Files that were over a limit when the check was turned on sit in the frontend baseline until they are split.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-REACT-007 Kebab-case files and named exports

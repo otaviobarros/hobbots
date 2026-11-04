@@ -12,6 +12,7 @@ import {
   starterRole,
   type Voice,
 } from "@hobbots/domain";
+import { formatMonthDay } from "../lib/format.ts";
 import { type BrainChoice, settleBrain } from "./first-hob.ts";
 
 /** A hob's role as the profile edits it: a starter role, or a title in the user's own words. */
@@ -203,8 +204,7 @@ export const aboutLine = (hob: Pick<Agent, "createdAt" | "configVersion">): stri
   `Works on the hub · ${summonedLine(hob.createdAt)} · Version ${hob.configVersion}`;
 
 /** When the hob was summoned, as "Summoned Oct 2". */
-const summonedLine = (createdAt: string): string =>
-  `Summoned ${new Date(createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}`;
+const summonedLine = (createdAt: string): string => `Summoned ${formatMonthDay(new Date(createdAt))}`;
 
 /** The choices Retire offers for the hob's running replies, in the order shown. */
 export const RETIRE_OPTIONS: ReadonlyArray<{

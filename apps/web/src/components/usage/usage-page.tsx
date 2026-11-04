@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { agentsQuery, archivedAgentsQuery, runtimesQuery, usageQuery } from "../../api/queries.ts";
 import { dailyUsage, hobShares, localDay } from "../../lib/usage.ts";
-import { Page } from "../pages.tsx";
+import { Page } from "../shell/pages.tsx";
 import { DailyChart, HobBreakdown } from "./hob-breakdown.tsx";
 import { messages } from "./messages.ts";
 import { ManageProviders, PlanShelf } from "./plan-card.tsx";

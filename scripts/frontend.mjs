@@ -1,6 +1,8 @@
 // The frontend checks that look at whole files rather than one pattern in the code.
 // Pattern checks run in Biome, through its rules and the GritQL plugins in scripts/biome.
 
+import { checkSource } from "./frontend-source.mjs";
+
 const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+)*\.(?:ts|tsx)$/;
 const EXPECT_ERROR = /@ts-expect-error(.*)$/;
 const ALLOW = /standards-allow(.*)$/;
@@ -89,5 +91,57 @@ const routes = (file, text) => {
 export const check = (files, read) =>
   files.flatMap((file) => {
     const text = read(file);
-    return [...fileName(file), ...optOuts(file, text), ...routes(file, text)];
+    return [...fileName(file), ...optOuts(file, text), ...routes(file, text), ...checkSource(file, text)];
   });
+
+const RULE = /\((STD-[A-Z0-9]+-\d{3})\)$/;
+const fileOf = (message) => message.slice(0, message.search(/:(?:\d+:)? /));
+
+/** How many problems each file has for each rule, as `{ rule: { file: count } }`. */
+export const countByRule = (errors) => {
+  const counts = {};
+  for (const error of errors) {
+    const rule = error.match(RULE)?.[1];
+    if (rule === undefined) continue;
+    counts[rule] ??= {};
+    counts[rule][fileOf(error)] = (counts[rule][fileOf(error)] ?? 0) + 1;
+  }
+  return counts;
+};
+
+/**
+ * Drops the problems that the baseline lists, `{ rule: { file: count } }`, while a file has no more
+ * of them than it lists. A file that gains one reports them all. A file that has fewer asks for the
+ * baseline to shrink, so a fixed problem cannot come back unnoticed.
+ */
+export const applyBaseline = (errors, baseline) => {
+  const counts = countByRule(errors);
+  const kept = errors.filter((error) => {
+    const rule = error.match(RULE)?.[1];
+    const allowed = rule === undefined ? undefined : baseline[rule]?.[fileOf(error)];
+    return allowed === undefined || counts[rule][fileOf(error)] > allowed;
+  });
+  const shrunk = Object.entries(baseline).flatMap(([rule, files]) =>
+    Object.entries(files)
+      .filter(([file, allowed]) => (counts[rule]?.[file] ?? 0) < allowed)
+      .map(
+        ([file, allowed]) =>
+          `${file}: ${counts[rule]?.[file] ?? 0} of ${allowed} baselined ${rule} problems are left, run "node scripts/check-frontend.mjs --shrink-baseline"`,
+      ),
+  );
+  return [...kept, ...shrunk];
+};
+
+/** The baseline lowered to the current counts. It never grows and drops a file with none left. */
+export const shrinkBaseline = (errors, baseline) => {
+  const counts = countByRule(errors);
+  const shrunk = {};
+  for (const [rule, files] of Object.entries(baseline))
+    for (const [file, allowed] of Object.entries(files)) {
+      const count = Math.min(allowed, counts[rule]?.[file] ?? 0);
+      if (count === 0) continue;
+      shrunk[rule] ??= {};
+      shrunk[rule][file] = count;
+    }
+  return shrunk;
+};

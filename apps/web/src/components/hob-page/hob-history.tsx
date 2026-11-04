@@ -167,9 +167,9 @@ function EventRow({ row }: { row: HistoryRow }) {
       {/* The day's line runs from one mark to the next. */}
       <span
         aria-hidden
-        className="absolute top-9 -bottom-2 left-[81.5px] w-px bg-line-2 group-last/ev:hidden max-[640px]:left-[73.5px]"
+        className="absolute top-9 -bottom-2 start-[81.5px] w-px bg-line-2 group-last/ev:hidden max-[640px]:start-[73.5px]"
       />
-      <time dateTime={row.at} className="text-right text-xs leading-6 text-label tabular-nums">
+      <time dateTime={row.at} className="text-end text-xs leading-6 text-label tabular-nums">
         {formatTime(row.at)}
       </time>
       <span

@@ -2,7 +2,7 @@ import type { BackpackItem } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { formatWhen } from "../../lib/time.ts";
 import { BlockerChoices } from "../blockers/blocker-choices.tsx";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { StatusDot, StatusTag } from "../quest/status-dot.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { type WaitingView, waitingState, waitingTone, waitingWhat } from "./backpack-model.ts";

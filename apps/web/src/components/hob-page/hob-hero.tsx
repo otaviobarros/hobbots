@@ -6,7 +6,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
 import type { HobState } from "../../lib/hob-state.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { type Doing, stateTag } from "./hob-page-model.ts";
 import { messages } from "./messages.ts";
 

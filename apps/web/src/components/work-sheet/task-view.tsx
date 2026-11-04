@@ -5,7 +5,7 @@ import { SheetCloseButton, SheetDescription, SheetFooter, SheetHeader, SheetTitl
 import type { CSSProperties } from "react";
 import { formatWhen } from "../../lib/time.ts";
 import { TaskBackpack } from "../backpack/quest-backpack.tsx";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { attemptCount, roomStatus, roomStatusLabel, roomTone } from "../quest/control-room.ts";
 import { NoteBox, type NoteDrafts } from "../quest/note-box.tsx";
 import { AnswerForm } from "../quest/question-card.tsx";

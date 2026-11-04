@@ -3,8 +3,8 @@ import { lengthChoice, starterRole, voiceChoice } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import type { CSSProperties } from "react";
 import { type FirstHobDraft, gearOf, roleTitleOf } from "../../api/first-hob.ts";
-import { HobSprite } from "../hob-sprite.tsx";
-import { RoleSigil } from "../role-sigil.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { RoleSigil } from "../roles/role-sigil.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.preview;
@@ -39,7 +39,7 @@ export function SummonPreview({ draft, name, last }: { draft: FirstHobDraft; nam
         <HobSprite hob={{ lookSeed: draft.lookSeed, lookColor: draft.lookColor, ...gearOf(draft) }} size={98} />
         <span
           aria-hidden
-          className="absolute -bottom-2 -left-2 grid size-[34px] place-items-center rounded-control bg-tile"
+          className="absolute -bottom-2 -start-2 grid size-[34px] place-items-center rounded-control bg-tile"
         >
           <RoleSigil sigil={sigil} size={26} />
         </span>

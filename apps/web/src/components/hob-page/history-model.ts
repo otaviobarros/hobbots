@@ -1,5 +1,5 @@
 import { type Agent, type AgentId, type HistoryEvent, historyNeedsYou, type ThreadId } from "@hobbots/domain";
-import { firstLine, formatList } from "../../lib/format.ts";
+import { firstLine, formatList, formatWeekdayDate } from "../../lib/format.ts";
 import { localDay } from "../../lib/usage.ts";
 import { messages } from "./messages.ts";
 
@@ -125,11 +125,5 @@ export const dayLabel = (day: string, now: Date = new Date(), locale?: string): 
   if (day === localDay(now)) return copy.today;
   if (day === localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))) return copy.yesterday;
   const [year = 0, month = 1, date = 1] = day.split("-").map(Number);
-  const at = new Date(year, month - 1, date);
-  return new Intl.DateTimeFormat(locale, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    ...(year === now.getFullYear() ? {} : { year: "numeric" }),
-  }).format(at);
+  return formatWeekdayDate(new Date(year, month - 1, date), year !== now.getFullYear(), locale);
 };

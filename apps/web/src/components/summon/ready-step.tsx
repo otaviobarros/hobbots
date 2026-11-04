@@ -5,7 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { type FirstHobDraft, roleTitleOf, thinksWith } from "../../api/first-hob.ts";
 import type { PresetInfo } from "../../api/safety.ts";
-import { ModelsBrain } from "../hob-form.tsx";
+import { ModelsBrain } from "../hob-form/hob-form.tsx";
 import { messages as shared } from "../messages.ts";
 import { messages } from "./messages.ts";
 import { ProviderCards } from "./provider-cards.tsx";

@@ -16,7 +16,7 @@ import { ARCHIVE_CHEST, archiveChestPalette } from "../../art/icons.ts";
 import { formatCount } from "../../lib/format.ts";
 import { formatDay } from "../../lib/time.ts";
 import { isMac } from "../archive/archive-rules.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import {
   type ArchivedChat,
   type ArchiveTab,
@@ -333,7 +333,7 @@ function RetiredCard({ hob }: { hob: Agent }) {
       <span aria-hidden className="relative flex h-[104px] items-end justify-center" style={doorStyle}>
         <HobSprite hob={hob} size={72} state="asleep" className="mb-2.5 opacity-65 grayscale-85" />
         <span className="absolute inset-x-0 bottom-0 h-2.5" style={stripStyle} />
-        <Badge variant="resting" className="absolute top-2.5 right-2.5">
+        <Badge variant="resting" className="absolute top-2.5 end-2.5">
           <MoonIcon />
           {copy.hobs.tag}
         </Badge>

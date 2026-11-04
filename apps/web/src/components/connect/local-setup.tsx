@@ -2,8 +2,8 @@ import type { AddressRefusal, ConnectEnd, WaitingView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { useEffect, useRef, useState } from "react";
 import { messages as appMessages } from "../messages.ts";
-import { WelcomeVillage, welcomeActionClass } from "../welcome-village.tsx";
-import { ConnectChoice, choiceOpenClass, RunHereChoice, WhereLayout } from "../where-hobbots-runs.tsx";
+import { WelcomeVillage, welcomeActionClass } from "../onboarding/welcome-village.tsx";
+import { ConnectChoice, choiceOpenClass, RunHereChoice, WhereLayout } from "../onboarding/where-hobbots-runs.tsx";
 import { endedSpeech, type SetupBridge } from "./connect-model.ts";
 import { ConnectAllowed, ConnectEnded, ConnectForm, ConnectWaiting } from "./connect-screens.tsx";
 

@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useId } from "react";
 import { PRESETS, presetInfo, type RuleAnswer } from "../../api/safety.ts";
 import { setupQuery, useUpdateSetup } from "../../api/setup.ts";
-import { FolderPicker, LockedSwitch } from "../safety-and-folders.tsx";
+import { FolderPicker, LockedSwitch } from "../safety/safety-and-folders.tsx";
 import { StandingRuleSettings } from "../standing-rules/standing-rules.tsx";
 import { messages } from "./messages.ts";
 import { SettingsGroup } from "./settings-group.tsx";

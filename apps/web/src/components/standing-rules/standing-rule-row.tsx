@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useRevokeGrant } from "../../api/grants.ts";
 import { ruleText } from "../approvals/approval-rules.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { ruleMeta } from "./standing-rules.ts";
 

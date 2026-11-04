@@ -2,7 +2,7 @@ import { isTerminalTask, type Question, type Task, type TaskTree } from "@hobbot
 import { Button } from "@hobbots/ui/components/button";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { formatTime } from "../../lib/time.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages as questMessages } from "../quest/messages.ts";
 import { NoteBox, type NoteDrafts } from "../quest/note-box.tsx";
 import { AnswerForm } from "../quest/question-card.tsx";

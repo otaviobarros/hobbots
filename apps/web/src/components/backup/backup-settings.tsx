@@ -14,8 +14,7 @@ import {
   useStartBackup,
 } from "../../api/backup.ts";
 import { ApiError } from "../../api/client.ts";
-import { formatAgo, formatMoment } from "../../lib/format.ts";
-import { formatBytes } from "../../lib/reply-steps.ts";
+import { formatAgo, formatBytes, formatMoment } from "../../lib/format.ts";
 import { ExportSettings } from "../export/export-settings.tsx";
 import { messages as exportMessages } from "../export/messages.ts";
 import { FolderField } from "./folder-field.tsx";

@@ -1,5 +1,5 @@
 import { cn } from "@hobbots/ui/lib/utils";
-import { RadioLabel, type RadioLabelProps } from "../hob-form.tsx";
+import { RadioLabel, type RadioLabelProps } from "../hob-form/hob-form.tsx";
 
 /**
  * Summon's two kinds of option: a card and a small chip. Each is a label over a native radio, so a

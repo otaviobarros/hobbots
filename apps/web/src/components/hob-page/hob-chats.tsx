@@ -148,7 +148,7 @@ function ShowMore({ onClick, children }: { onClick: () => void; children: ReactN
       <button
         type="button"
         onClick={onClick}
-        className="w-full cursor-pointer bg-transparent px-3.5 py-2.5 text-left text-sm text-link underline decoration-line-2 underline-offset-3 hover:bg-hover"
+        className="w-full cursor-pointer bg-transparent px-3.5 py-2.5 text-start text-sm text-link underline decoration-line-2 underline-offset-3 hover:bg-hover"
       >
         {children}
       </button>

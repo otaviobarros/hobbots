@@ -3,7 +3,7 @@ import { qrRows } from "@hobbots/ui/components/qr-code";
 import { describe, expect, it } from "vitest";
 import { connectionCalls } from "../../api/connected-desktop.ts";
 import { approvedDevices } from "../../api/devices.ts";
-import { tailnetName, tailscaleNotReady } from "../remote-access-settings.tsx";
+import { tailnetName, tailscaleNotReady } from "../remote-access/remote-access-settings.tsx";
 import { versionsLine } from "./connected-hub.tsx";
 import { deviceMeta, deviceName } from "./device-meta.ts";
 import { typedPort } from "./port-field.tsx";

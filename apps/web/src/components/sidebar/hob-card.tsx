@@ -14,7 +14,7 @@ import { waitingCount, waitingView } from "../backpack/backpack-model.ts";
 import { useOpenItem } from "../backpack/use-open-item.ts";
 import { WaitingList } from "../backpack/waiting-list.tsx";
 import { doingOf, stateTag } from "../hob-page/hob-page-model.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
 import { useHobLookup } from "../quest/use-work.ts";
 import { HobQuestWork } from "../quest-work/quest-work.tsx";

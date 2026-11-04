@@ -1,7 +1,7 @@
 import type { FoundHubView, HubListView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { useEffect, useEffectEvent, useState } from "react";
-import { TailscaleNotReady } from "../tailscale-not-ready.tsx";
+import { TailscaleNotReady } from "../remote-access/tailscale-not-ready.tsx";
 import type { SetupBridge } from "./connect-model.ts";
 import { messages } from "./messages.ts";
 
