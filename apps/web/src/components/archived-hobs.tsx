@@ -1,5 +1,4 @@
 import type { Agent, AgentId, ThreadId } from "@hobbots/domain";
-import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -11,53 +10,6 @@ import { MessageRow } from "./message-row.tsx";
 
 const retiredLabel = (hob: Agent) => (hob.retiredAt ? `retired ${formatDay(hob.retiredAt)}` : "retired");
 
-const chatsLabel = (count: number) => (count === 1 ? "1 chat kept" : `${count} chats kept`);
-
-/** Settings › Archived hobs: every retired hob, asleep, with its chats one click away (AG-006). */
-export function ArchivedHobs() {
-  const hobs = useQuery(archivedAgentsQuery);
-  if (hobs.isError) {
-    return <p className="m-0 text-sm text-rose">Hobbots could not read your archived hobs. Try again in a moment.</p>;
-  }
-  if (!hobs.data) return <p className="m-0 text-sm text-label">Loading archived hobs…</p>;
-  return (
-    <>
-      <p className="m-0 text-text-secondary">
-        Hobs you retired. They are asleep: they take no new work, and their chats stay here to read.
-      </p>
-      {hobs.data.length === 0 ? (
-        <p className="m-0 text-sm text-text-secondary">No retired hobs.</p>
-      ) : (
-        <ul aria-label="Archived hobs" className="m-0 flex list-none flex-col p-0">
-          {hobs.data.map((hob) => (
-            <ArchivedHobRow key={hob.id} hob={hob} />
-          ))}
-        </ul>
-      )}
-      <p className="m-0 text-[13px] text-label">To retire a hob, open its profile and choose Retire.</p>
-    </>
-  );
-}
-
-function ArchivedHobRow({ hob }: { hob: Agent }) {
-  const threads = useQuery(threadsQuery(hob.id));
-  const meta = [hob.roleTitle, retiredLabel(hob), threads.data && chatsLabel(threads.data.length)].filter(Boolean);
-  return (
-    <li className="flex items-center gap-4 border-b-2 border-line py-3.5">
-      <HobSprite hob={hob} size={40} state="asleep" className="grayscale-60 brightness-80" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="font-heading text-[17px] font-bold">{hob.name}</span>
-        <span className="text-[13px] text-text-secondary">{meta.join(" · ")}</span>
-      </div>
-      <Button asChild variant="outline" size="xs">
-        <Link to="/settings/archived/$hobId" params={{ hobId: hob.id }} aria-label={`Read ${hob.name}'s chats`}>
-          Read chats
-        </Link>
-      </Button>
-    </li>
-  );
-}
-
 /**
  * A retired hob's threads, read-only: the thread list and the chosen thread, with no composer.
  * Without a thread id it shows that the hob left no chats.
@@ -67,7 +19,7 @@ export function ArchivedHobView({ hobId, threadId }: { hobId: AgentId; threadId?
   const threads = useQuery(threadsQuery(hobId));
   const hob = hobs.data?.find((h) => h.id === hobId);
 
-  if (hobs.data && !hob) return <ArchivedNotice>This hob is not in Archived hobs.</ArchivedNotice>;
+  if (hobs.data && !hob) return <ArchivedNotice>This hob is not in the Archive.</ArchivedNotice>;
   if (hobs.isError || threads.isError) {
     return <ArchivedNotice>Hobbots could not read this hob's chats. Try again in a moment.</ArchivedNotice>;
   }
@@ -80,8 +32,8 @@ export function ArchivedHobView({ hobId, threadId }: { hobId: AgentId; threadId?
         aria-label={`${hob.name}'s chats`}
         className="flex w-64 flex-none flex-col gap-2.5 border-r-4 border-line bg-panel px-2.5 py-3"
       >
-        <Link to="/settings/archived" className="px-2 text-sm text-lantern no-underline hover:underline">
-          ‹ Archived hobs
+        <Link to="/archive" search={{ tab: "hobs" }} className="px-2 text-sm text-lantern no-underline hover:underline">
+          ‹ Retired hobs
         </Link>
         <div className="flex items-center gap-2.5 px-2 py-[7px]">
           <span className="bg-line p-0.5">
