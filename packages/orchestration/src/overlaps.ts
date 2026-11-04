@@ -1,6 +1,7 @@
 import { ActivityRepository, EventPublisher, HobbotsRepository, TaskRepository } from "@hobbots/agents";
 import {
   type AgentId,
+  ancestorsOf,
   CheckpointId,
   type FileChange,
   isTerminalTask,
@@ -62,22 +63,33 @@ export const othersAtWork = (tree: TaskTree, writer: Task): ReadonlyArray<Task> 
 const bothAtWork = (first: Task, later: string) => !isTerminalTask(first.state) || first.updatedAt >= later;
 
 /**
+ * The changes `lead` made before it delegated `task`, or a Task above it, are its own work handed
+ * down, not a clash, even while its Attempt stays open for its whole Quest (#658): left out.
+ */
+const handedDown = (lead: Task, changes: ReadonlyArray<FileChange>, task: Task, tasks: ReadonlyArray<Task>) =>
+  ancestorsOf(task, tasks).some((above) => above.id === lead.id)
+    ? changes.filter((change) => change.recordedAt > task.createdAt)
+    : changes;
+
+/**
  * The overlaps `recorded` makes with what other Tasks changed in their current Attempts: one per
  * other Task and file, in the order the recorded changes list them. The writer is the Task whose
  * change was recorded last, so a change heard late is still pinned on the hob that made it. A pair
- * that both ended has no one left to tell, so it is none.
+ * that both ended has no one left to tell, so it is none. `tasks` is the tree, to tell who leads whom.
  */
 export const overlapsOf = (
   task: Task,
   recorded: RecordedChanges,
   others: ReadonlyArray<{ readonly task: Task; readonly changes: ReadonlyArray<FileChange> }>,
+  tasks: ReadonlyArray<Task>,
 ): ReadonlyArray<Overlap> => {
   const found: Array<Overlap> = [];
   for (const other of others) {
     if (isTerminalTask(task.state) && isTerminalTask(other.task.state)) continue;
-    for (const change of recorded.changes) {
+    const theirChanges = handedDown(other.task, other.changes, task, tasks);
+    for (const change of handedDown(task, recorded.changes, other.task, tasks)) {
       const mine = new Set(touched({ ...change, folder: recorded.folder }));
-      const theirs = other.changes.find((each) => touched(each).some((path) => mine.has(path)));
+      const theirs = theirChanges.find((each) => touched(each).some((path) => mine.has(path)));
       if (theirs === undefined) continue;
       const [later, overlap] =
         theirs.recordedAt > change.recordedAt
@@ -124,7 +136,7 @@ const findingsFor = (recorded: RecordedChanges, at: string) =>
         .pipe(Effect.map((read) => ({ task, changes: Option.isSome(read) ? read.value.changes : [] }))),
     );
     const known = new Set(tree.value.checkpoints.map((checkpoint) => checkpoint.id));
-    const fresh = overlapsOf(writer, recorded, others).filter((overlap) => {
+    const fresh = overlapsOf(writer, recorded, others, tree.value.tasks).filter((overlap) => {
       const id = overlapCheckpointId(overlap);
       if (known.has(id)) return false;
       known.add(id);

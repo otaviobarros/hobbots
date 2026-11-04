@@ -100,18 +100,23 @@ export const makeWrapUp = Effect.gen(function* () {
 
 /**
  * Records now what the live turn on a Task's current Attempt changed so far, before
- * `complete_task` reads it in its transaction: a file tool's change is scanned a moment after the
- * call ends, and the call may come first. It runs outside the call's transaction, since recording
- * writes records of its own. A hub without the Workbench's recorder has nothing to wait for.
+ * `complete_task` or `delegate_task` reads or adds to the tree in its transaction: a file tool's
+ * change is scanned a moment after the call ends, and the call may come first. The Task is the
+ * one the call names, else the caller's own; a caller with none yet, such as a chat turn whose
+ * call starts its Task, has the turns whose Attempt is not known yet recorded. It runs outside the
+ * call's transaction, since recording writes records of its own. A hub without the Workbench's
+ * recorder has nothing to wait for.
  */
 export const makeSettle = Effect.gen(function* () {
   const recorder = yield* Effect.serviceOption(ActivityRecorder);
   const tasks = yield* TaskRepository;
-  return (input: unknown): Effect.Effect<void> =>
+  return (input: unknown, caller: TaskId | null): Effect.Effect<void> =>
     Effect.gen(function* () {
+      if (Option.isNone(recorder)) return;
       const named = (input as { readonly task_id?: unknown } | null)?.task_id;
-      if (Option.isNone(recorder) || typeof named !== "string") return;
-      const tree = yield* tasks.readTree(TaskId.make(named));
+      const taskId = typeof named === "string" ? TaskId.make(named) : caller;
+      if (taskId === null) return yield* recorder.value.settle(null);
+      const tree = yield* tasks.readTree(taskId);
       const attemptId = Option.isSome(tree) ? tree.value.tasks[0]?.currentAttemptId : null;
       if (attemptId) yield* recorder.value.settle(attemptId);
     });

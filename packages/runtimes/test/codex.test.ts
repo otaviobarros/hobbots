@@ -5,7 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import type { RuntimeAdapterShape } from "@hobbots/agents";
 import { policySandbox } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { type Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
+import { type Duration, Effect, Exit, Fiber, Layer, Schedule, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { binaryLocator } from "../src/binary.ts";
 import { codexEnforcement, makeCodex } from "../src/codex/adapter.ts";
@@ -141,6 +141,14 @@ describe("the App Server client", () => {
             },
           );
           const account = yield* server.request("account/read", { refreshToken: false });
+          // The answers to Codex's own requests go out on their own: the process keeps running
+          // until the stand-in has read both, or ending the scope would stop it first.
+          yield* Effect.sync(() => fakeCodexLog(dir).map((message) => message.id)).pipe(
+            Effect.flatMap((ids) =>
+              ids.includes("ask-1") && ids.includes("ask-2") ? Effect.void : Effect.fail("not yet" as const),
+            ),
+            Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 300 }),
+          );
           return { account, init: server.initialized };
         }),
       ),

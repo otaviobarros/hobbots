@@ -37,9 +37,10 @@ import { EventBus } from "./event-bus.ts";
  * Quill's banner and Ada's email have failed, so they can be retried or given to another hob, and
  * Quill's signs are under way, so they can be cancelled. Asking for the shop badge has Quill make
  * it while Ada reviews the shop, and both change the badge's file while both are at work, so the
- * hub's finding on the two Tasks can be followed (#570); Quill then finishes with the badge left
- * uncommitted (#586). Asking to wrap up the spec has the lead edit the spec itself and complete
- * the Quest leaving it uncommitted on purpose, as its hold on the top Task lets it (#665). Only `HOBBOTS_FAKE_QUEST=black-friday`
+ * hub's finding on the two Tasks can be followed (#570), while Aldric's clearing of the badge before
+ * he delegated is none (#658); Quill then finishes with the badge left uncommitted (#586). Asking
+ * to wrap up the spec has the lead edit the spec itself and complete the Quest leaving it
+ * uncommitted on purpose, as its hold on the top Task lets it (#665). Only `HOBBOTS_FAKE_QUEST=black-friday`
  * with the fake runtime turns any of them on.
  */
 
@@ -65,8 +66,11 @@ const BRIEFS: Record<Script, { readonly title: string; readonly goal: string }> 
 /** The folder the shop badge's play says its files are in. */
 const SHOP = "/fake/shop";
 
-/** Records that a played Task's Attempt changed `path` in the shop, as its turn's scan would. */
-const changeInShop = (attempt: AttemptId, path: string, hash: string, bus: EventBus["Service"]) =>
+/**
+ * Records that a played Task's Attempt changed `path` in the shop, as its turn's scan would; with no
+ * `hash`, that it deleted it.
+ */
+const changeInShop = (attempt: AttemptId, path: string, hash: string | null, bus: EventBus["Service"]) =>
   Effect.gen(function* () {
     const activity = yield* Effect.serviceOption(ActivityRepository);
     if (Option.isNone(activity)) return;
@@ -81,10 +85,10 @@ const changeInShop = (attempt: AttemptId, path: string, hash: string, bus: Event
       {
         id: FileChangeId.make(`${attempt}-${path}`),
         path,
-        kind: "edited",
+        kind: hash === null ? "deleted" : "edited",
         movedFrom: null,
         before: version("grey"),
-        after: version(hash),
+        after: hash === null ? null : version(hash),
         sharedWith: [],
         settled: true,
         recordedAt: yield* iso,
@@ -348,6 +352,10 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
     }
     // The shop badge stops with Quill and Ada both at work, after both changed the badge.
     if (script === "shop-badge") {
+      // Aldric clears the last run's badge before he delegates: his Attempt keeps that change while
+      // Quill and Ada work, and it is no overlap with theirs (#658).
+      yield* changeInShop(AttemptId.make(id("a-campaign")), "web/badge.png", null, bus);
+      yield* pause;
       // Each member works only in the folders its lead gave it (#582): Quill the shop's web folder.
       const badge = yield* member(
         "badge",

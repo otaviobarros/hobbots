@@ -733,8 +733,11 @@ describe("the Black Friday Quest end to end", () => {
     });
 
     // Cancel Quest stops Quill's turn and confirms every Task still open; nothing starts after it.
+    // Aldric's turn on what earlier ended, such as Rook's cancelled Task, runs first: one that was
+    // still to come would otherwise start beside the cancel and be counted as after it.
     const quest = built.quests[0];
     if (quest === undefined) throw new Error("no Quest");
+    await run(settledFor(ALDRIC));
     await controls((each) => each.cancelQuest(quest.id));
     const ended = await run(settledTree((tree) => tree.tasks[0]?.state === "cancelled"));
     expect(ended.quests.map((each) => each.state)).toEqual(["cancelled", "cancelled"]);

@@ -176,8 +176,9 @@ export class TaskTools extends Context.Service<
               Effect.mapError((error) => new TaskToolRefused({ reason: "invalid-input", message: describe(error) })),
             );
             const { key, ...rest } = input;
-            // What the turn changed is on the record before the completion reads it (#586).
-            if (name === "complete_task") yield* settle(rest);
+            // What the turn changed is on the record before the completion reads it (#586), and
+            // before a delegation, so a lead's earlier changes are not taken for its member's (#658).
+            if (name === "complete_task" || name === "delegate_task") yield* settle(rest, source.taskId());
             const at = DateTime.formatIso(yield* DateTime.now);
             const outcome = yield* ledger.once(
               {
