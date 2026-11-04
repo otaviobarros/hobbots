@@ -1003,8 +1003,13 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               status: "unverified",
               evidence: `Claude Code starts inside ${sandbox.evidence}, not yet verified on this platform.`,
             },
-      // Coordination tools are served when a turn carries them, which no turn does yet (#272, #273).
-      hubTools: { status: "unsupported", evidence: "Charms and coordination tools are not served yet." },
+      // A turn that carries hub tools serves them as an in-process MCP server (withHubTools). They are
+      // covered with the fake runtime but not yet checked end to end with an installed Claude Code.
+      hubTools: {
+        status: "unverified",
+        evidence:
+          "Charms and coordination tools are served as an MCP server on Claude Code's control channel and decided by the hub, not yet verified with an installed Claude Code.",
+      },
       toolEvents: {
         status: "verified",
         evidence: "PreToolUse, PostToolUse and PostToolUseFailure hooks report each call.",
