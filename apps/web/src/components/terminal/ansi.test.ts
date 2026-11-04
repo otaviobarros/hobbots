@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { link, printable, visible } from "./ansi.ts";
+import { link, literal, printable, visible } from "./ansi.ts";
 
 const ESC = "\u001b";
 
@@ -28,5 +28,15 @@ describe("what a command printed, written to the terminal", () => {
 
   it("measures a line as it shows, without its escapes", () => {
     expect(visible(`${ESC}[32mok${ESC}[0m ${link("/log", "log")}`)).toBe("ok log");
+  });
+});
+
+describe("text the app writes as typed", () => {
+  it("shows each control character but tab as its picture, so none of them reaches the terminal", () => {
+    expect(literal("a\u001b[2Jb\u0007c\rd\be\u007ff\tg")).toBe("a␛[2Jb␇c␍d␈e␡f\tg");
+  });
+
+  it("leaves text without controls as it is", () => {
+    expect(literal("pnpm test -- --run ✓")).toBe("pnpm test -- --run ✓");
   });
 });

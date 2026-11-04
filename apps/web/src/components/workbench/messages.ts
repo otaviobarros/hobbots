@@ -74,6 +74,12 @@ export const messages = {
       ].join(" · "),
     readOnly: "A record of what ran. You cannot type here.",
     none: "No commands yet. They show here as they run.",
+    /** Another Task's records could not be read, so its hob's commands are missing here. */
+    unread: ({ count }: { count: number }) =>
+      plural(count, {
+        one: "The commands of another task in this quest could not be loaded, so they are missing here.",
+        other: `The commands of ${formatCount(count)} other tasks in this quest could not be loaded, so they are missing here.`,
+      }),
     state: {
       running: ({ time }: { time: string }) => `Running · ${time}`,
       failed: "Failed",

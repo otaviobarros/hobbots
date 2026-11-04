@@ -69,6 +69,29 @@ describe("a hob's scrollback", () => {
     );
   });
 
+  it("shows control characters in a command line, a hob's name and a folder as typed, never as escapes", () => {
+    const text = transcript(
+      {
+        name: "Quill\u001b[2J",
+        commands: [
+          command("a", {
+            command: "printf '\u001b[2J\u001b[H'\necho \u001b]0;title\u0007",
+            folder: "/tmp/\u001b[31mred",
+          }),
+        ],
+        live: {},
+      },
+      logUrl,
+      now,
+    );
+    for (const sequence of ["\u001b[2J", "\u001b[H", "\u001b]0;", "\u0007", "\u001b[31mred"])
+      expect(text).not.toContain(sequence);
+    const [prompt, more, , end] = visible(text).split("\n");
+    expect(prompt).toBe("quill\u241b[2j@\u241b[31mred $ printf '\u241b[2J\u241b[H'");
+    expect(more).toBe("> echo \u241b]0;title\u2407");
+    expect(end).toContain("ran in /tmp/\u241b[31mred · ");
+  });
+
   it("goes on a command of more than one line after a dim >", () => {
     expect(lines([command("a", { command: "cat <<EOF\nhi\nEOF" })]).slice(0, 3)).toEqual([
       "quill@site $ cat <<EOF",

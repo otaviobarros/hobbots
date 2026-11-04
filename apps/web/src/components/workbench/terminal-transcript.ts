@@ -2,7 +2,7 @@ import { type CommandRecord, runsInSequence } from "@hobbots/domain";
 import type { LiveOutput } from "../../api/workbench.ts";
 import { formatBytes, formatDuration } from "../../lib/format.ts";
 import { formatTime } from "../../lib/time.ts";
-import { link, printable, RESET, style } from "../terminal/ansi.ts";
+import { link, literal, printable, RESET, style } from "../terminal/ansi.ts";
 import { messages } from "./messages.ts";
 import { commandDuration, wholeOutput } from "./terminal-model.ts";
 
@@ -20,15 +20,21 @@ export interface Scrollback {
 /** Where a folded command's whole log is, by its Attempt and id. */
 export type LogUrl = (command: CommandRecord) => string;
 
+/*
+ * A command line, a hob's name and a folder are written through `literal`, so a control character
+ * in them, such as an escape in a quoted argument, shows as typed and cannot rewrite the record.
+ * Only what a command printed keeps its colors, through `printable`.
+ */
+
 /** The prompt's user: the hob's name in lower case, with a dash for each run of spaces. */
-const promptUser = (name: string) => name.trim().toLowerCase().replace(/\s+/g, "-") || "hob";
+const promptUser = (name: string) => literal(name.trim().toLowerCase().replace(/\s+/g, "-")) || "hob";
 
 /** The prompt's host: the last name in the folder's path, as a shell's `\W` shows it. */
-const promptFolder = (folder: string) => folder.split("/").filter(Boolean).at(-1) ?? "/";
+const promptFolder = (folder: string) => literal(folder.split("/").filter(Boolean).at(-1) ?? "/");
 
 /** `quill@site $ pnpm build`, a command of more than one line going on after a dim `>`. */
 const promptLines = (name: string, command: CommandRecord): ReadonlyArray<string> => {
-  const [first = "", ...rest] = command.command.split("\n");
+  const [first = "", ...rest] = command.command.split("\n").map(literal);
   const prompt = `${style.green(`${promptUser(name)}@${promptFolder(command.folder)}`)} ${style.dim("$")} `;
   return [prompt + style.bold(first), ...rest.map((line) => `${style.dim(">")} ${style.bold(line)}`)];
 };
@@ -73,7 +79,7 @@ const outputLines = (command: CommandRecord, live: LiveOutput | undefined, logUr
 const endLine = (command: CommandRecord, now: Date): string => {
   const duration = commandDuration(command, now);
   const where = [
-    copy.ranIn({ folder: command.folder }),
+    copy.ranIn({ folder: literal(command.folder) }),
     command.sandboxed ? messages.inSandboxLower : style.red(copy.unsandboxed),
     copy.started({ time: formatTime(command.startedAt) }),
     ...(duration === null ? [] : [copy.took({ time: formatDuration(duration) })]),

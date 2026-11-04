@@ -62,7 +62,8 @@ const touchedFiles = (activity: AttemptActivity): number =>
  * ends, a tab with no record reads Not used in this task. A folder whose tracking stopped makes
  * Changes Unavailable with why, and details cleared past the window make Changes and Terminal
  * Unavailable while their lists stay. `elsewhere` counts the commands the other hobs in the tree
- * ran, which the Terminal replays beside the Task's own (#908).
+ * ran, which the Terminal replays beside the Task's own (#908), and each other Task whose records
+ * could not be read, since the Terminal says which are missing.
  */
 export const tabStates = (attempt: Attempt | null, read: ActivityRead, elsewhere = 0): TabStates => {
   const running = attempt !== null && isLiveAttempt(attempt.state);

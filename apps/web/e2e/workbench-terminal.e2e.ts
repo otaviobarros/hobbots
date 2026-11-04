@@ -228,6 +228,53 @@ test("[TC-UX-184] a Quest's Terminal has a tab per hob, the Task's own first, an
   await expect(panel.getByRole("button", { name: "◫ Split" })).toHaveAttribute("aria-pressed", "false");
 });
 
+// covers UX-002
+test("[TC-UX-186] a Quest's Terminal says when another Task's commands could not be read, and Try again brings them", async ({
+  page,
+}) => {
+  const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);
+  await api("PATCH", `/agents/${members[0]}/permissions`, { ownFolders: [folder] });
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await send(page, [
+    "Write the launch copy",
+    run({ command: "git status --short", output: " M notes.md\n", exitCode: 0 }),
+    script("start_quest", { key: "quest", goal: "Write the launch copy" }),
+    script("delegate_task", {
+      key: "copy",
+      hob: "Quill",
+      brief: [
+        "Check the copy",
+        run({ command: "pnpm copy:check", output: "no issues found\n", exitCode: 0 }),
+        script("complete_task", { key: "checked", summary: "No issues." }),
+      ].join("\n"),
+    }),
+  ]);
+  await settled(page);
+
+  // Reading Quill's Task fails while Aldric's own reads as usual.
+  const activity = "**/attempts/*/activity";
+  await page.route(activity, async (route) => {
+    const response = await route.fetch();
+    if ((await response.text()).includes("pnpm copy:check")) await route.fulfill({ status: 500, body: "" });
+    else await route.fulfill({ response });
+  });
+  const { panel } = await openTerminal(page, "Write the launch copy");
+  await expect(rows(hobTerminal(panel, "Aldric"))).toContainText("$ git status --short", { timeout: 30_000 });
+  // The client asks again a few times before it gives up.
+  const missing = panel.getByRole("alert");
+  await expect(missing).toContainText("The commands of another task in this quest could not be loaded", {
+    timeout: 20_000,
+  });
+  await expect(panel.getByRole("tab", { name: "Quill" })).toHaveCount(0);
+  await expect(panel).toContainText("1 command");
+
+  await page.unroute(activity);
+  await missing.getByRole("button", { name: "Try again" }).click();
+  await expect(missing).toBeHidden();
+  await expect(panel.getByRole("tablist", { name: "Terminals" }).getByRole("tab")).toHaveText(["Aldric", "Quill"]);
+  await expect(panel).toContainText("2 commands");
+});
+
 // covers UX-006
 test("[TC-UX-185] the terminal stays dark, with its own palette, in the light themes", async ({ page }) => {
   const { url, aldric } = await aldricHub();

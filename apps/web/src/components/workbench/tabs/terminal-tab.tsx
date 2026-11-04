@@ -1,3 +1,4 @@
+import { Button } from "@hobbots/ui/components/button";
 import { lazy, Suspense, useState } from "react";
 import { commandLogUrl } from "../../../api/client.ts";
 import { formatBytes } from "../../../lib/format.ts";
@@ -35,16 +36,22 @@ export function TerminalTab({ tree, task, attempt, activity, hobs, shown }: Work
         {commands.length > 0 && <span className="text-text-strong">{copy.tally(tallyCommands(commands))}</span>}
         <span className="text-label">{copy.readOnly}</span>
       </p>
-      {commands.length === 0 ? (
-        <p className="m-0 text-detail text-text-secondary">{copy.none}</p>
-      ) : (
-        opened && (
-          // Until it has loaded, the space stays empty, so nothing flashes.
-          <Suspense fallback={<div className="min-h-0 flex-1" />}>
-            <TerminalPanes terminals={terminals} live={read.live} hobs={hobs} now={now} />
-          </Suspense>
-        )
+      {read.unread > 0 && (
+        <p role="alert" className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-detail text-text-secondary">
+          <span>{copy.unread({ count: read.unread })}</span>
+          <Button variant="chip" size="xs" onClick={read.retry}>
+            {messages.tryAgain}
+          </Button>
+        </p>
       )}
+      {commands.length === 0
+        ? read.unread === 0 && <p className="m-0 text-detail text-text-secondary">{copy.none}</p>
+        : opened && (
+            // Until it has loaded, the space stays empty, so nothing flashes.
+            <Suspense fallback={<div className="min-h-0 flex-1" />}>
+              <TerminalPanes terminals={terminals} live={read.live} hobs={hobs} now={now} />
+            </Suspense>
+          )}
       {folded.length > 0 && (
         <p className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-meta text-label">
           <span>{copy.fullLogs}</span>

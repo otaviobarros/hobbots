@@ -195,10 +195,13 @@ function Bench({
     enabled: attempt !== null,
   });
   const activity: ActivityRead = attempt === null ? "none" : (read.data ?? (read.isError ? "failed" : "loading"));
-  // The Terminal replays every hob's commands in the tree, so the others' count toward its label.
-  const elsewhere = useTerminalActivity(tree, task, attempt)
-    .activities.filter((each) => each.attempt.id !== attempt?.id)
-    .reduce((sum, each) => sum + each.commands.length, 0);
+  // The Terminal replays every hob's commands in the tree, so the others' count toward its label,
+  // and so does each other Task that could not be read, so the Terminal stays open to say so.
+  const terminal = useTerminalActivity(tree, task, attempt);
+  const elsewhere =
+    terminal.activities
+      .filter((each) => each.attempt.id !== attempt?.id)
+      .reduce((sum, each) => sum + each.commands.length, 0) + terminal.unread;
   const states = tabStates(attempt, activity, elsewhere);
   // Opening a Task's Workbench moves focus to its title, so a keyboard user lands in it.
   useEffect(() => {

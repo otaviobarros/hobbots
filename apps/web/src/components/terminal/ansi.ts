@@ -95,3 +95,23 @@ export const printable = (text: string): string => filtered(text, styles);
 
 /** The text a line shows, without its escape sequences, as a terminal would lay it out. */
 export const visible = (text: string): string => filtered(text, () => false);
+
+/** Unicode's picture of each C0 control starts here: ␀ for NUL, ␛ for ESC; DEL has ␡. */
+const CONTROL_PICTURES = 0x2400;
+const DEL = 0x7f;
+
+/**
+ * Text the app writes itself, such as a command line, a hob's name or a folder, shown as typed:
+ * each control character but tab, an escape among them, shows as its picture (`␛[2J`), so it
+ * reads as text and never moves the cursor, clears the screen or restyles the line.
+ */
+export const literal = (text: string): string => {
+  let out = "";
+  for (const char of text) {
+    const code = char.charCodeAt(0);
+    if (code === DEL) out += "\u2421";
+    else if (code < 0x20 && code !== 0x09) out += String.fromCharCode(CONTROL_PICTURES + code);
+    else out += char;
+  }
+  return out;
+};
