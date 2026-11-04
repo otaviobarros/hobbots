@@ -13,7 +13,7 @@ const labels = { added: messages.added, removed: messages.removed } as const;
 export function DocumentView({ before, after }: { before: string | null; after: string | null }) {
   const versions = documentDiff(before, after);
   return (
-    <div className="grid min-w-0 gap-3 @2xl:grid-cols-2">
+    <div className="grid min-w-0 gap-3 @min-[720px]:grid-cols-2">
       {versions.before !== null && <Version title={messages.before} version={versions.before} />}
       {versions.after !== null && <Version title={messages.after} version={versions.after} />}
     </div>
