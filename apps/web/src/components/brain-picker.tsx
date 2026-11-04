@@ -12,6 +12,7 @@ import {
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@hobbots/ui/components/popover";
+import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { Switch } from "@hobbots/ui/components/switch";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -264,27 +265,22 @@ function EffortChoices({
   return (
     <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
       <legend className="lbl mb-1 p-0 text-xs text-label">{copy.effort}</legend>
-      <div className="flex flex-wrap border-2 border-control">
-        {model.efforts.map((effort: Effort) => {
-          const on = effort === current.effort;
-          return (
-            <button
-              key={effort}
-              type="button"
-              aria-pressed={on}
-              disabled={pending}
-              className={cn(
-                "cursor-pointer border-0 px-2 py-1 text-xs whitespace-nowrap",
-                on ? "bg-lantern text-ground" : "bg-transparent text-text hover:bg-line",
-              )}
-              // Picking the current effort again changes nothing, unless it is to become the hob's default.
-              onClick={() => (on && !makeDefault ? undefined : onPick({ ...current, effort }))}
-            >
-              {effortWords(effort).label}
-            </button>
-          );
-        })}
-      </div>
+      <SegmentedControl
+        size="sm"
+        aria-label={copy.effort}
+        value={current.effort}
+        disabled={pending}
+        // Picking the current effort again changes nothing, unless it is to become the hob's default.
+        onValueChange={(effort: Effort) =>
+          effort === current.effort && !makeDefault ? undefined : onPick({ ...current, effort })
+        }
+      >
+        {model.efforts.map((effort: Effort) => (
+          <SegmentedControlItem key={effort} value={effort}>
+            {effortWords(effort).label}
+          </SegmentedControlItem>
+        ))}
+      </SegmentedControl>
     </fieldset>
   );
 }

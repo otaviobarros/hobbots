@@ -484,9 +484,9 @@ test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the w
   // With no Attempt chosen, the Workbench settles on the first, which changed the notes.
   await controls.getByRole("button", { name: "Open in Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes file" });
-  const attempts = bench.getByRole("group", { name: "Attempts" });
-  await expect(attempts.getByRole("button", { name: "Attempt 1" })).toHaveAttribute("aria-pressed", "true");
-  await expect(attempts.getByRole("button", { name: "Attempt 2" })).toHaveAttribute("aria-pressed", "false");
+  const attempts = bench.getByRole("radiogroup", { name: "Attempts" });
+  await expect(attempts.getByRole("radio", { name: "Attempt 1" })).toBeChecked();
+  await expect(attempts.getByRole("radio", { name: "Attempt 2" })).not.toBeChecked();
   const summary = bench.getByRole("tabpanel", { name: /^Summary/ });
   const made = summary.getByRole("region", { name: "What it made" });
   await expect(made.getByRole("button", { name: "See the change to notes.md in Changes" })).toBeVisible();
@@ -494,11 +494,11 @@ test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the w
   await expect(page).not.toHaveURL(/attempt=/);
 
   // Choosing the retry shows it, with nothing made, and the choice stays in the address.
-  await attempts.getByRole("button", { name: "Attempt 2" }).click();
-  await expect(attempts.getByRole("button", { name: "Attempt 2" })).toHaveAttribute("aria-pressed", "true");
+  await attempts.getByRole("radio", { name: "Attempt 2" }).click();
+  await expect(attempts.getByRole("radio", { name: "Attempt 2" })).toBeChecked();
   await expect(page).toHaveURL(/attempt=/);
   await expect(made).toContainText("Aldric did not make or change anything in this attempt.");
   await page.reload();
-  await expect(attempts.getByRole("button", { name: "Attempt 2" })).toHaveAttribute("aria-pressed", "true");
+  await expect(attempts.getByRole("radio", { name: "Attempt 2" })).toBeChecked();
   await expect(made).toContainText("Aldric did not make or change anything in this attempt.");
 });
