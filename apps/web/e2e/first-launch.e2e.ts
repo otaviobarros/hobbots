@@ -55,7 +55,7 @@ test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home
 
   await expect(page.getByRole("heading", { name: "Ready to summon" })).toBeVisible();
   await page.getByRole("button", { name: "Summon Pip" }).click();
-  await expect(page.getByRole("heading", { name: "Pip has arrived!" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pip is here!" })).toBeVisible();
   await page.getByRole("link", { name: "Go to Home" }).click();
 
   await expect(page).toHaveURL(atHome);

@@ -32,6 +32,7 @@ import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
 import { type ConnectionsTab, isConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
 import { SettingsPage } from "./components/settings/settings-page.tsx";
 import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
+import { ArrivedPage } from "./components/summon/arrived.tsx";
 import { Summon } from "./components/summon/summon.tsx";
 import { parseStep, type SummonStep } from "./components/summon/summon-model.ts";
 import { UsagePage } from "./components/usage/usage-page.tsx";
@@ -250,6 +251,17 @@ const profileRoute = createRoute({
   },
 });
 
+// A hob just summoned, on its own stage with three first questions. A reload keeps it.
+const arrivedRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "hobs/$hobId/arrived",
+  beforeLoad: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
+  component: function ArrivedRoute() {
+    const params = arrivedRoute.useParams();
+    return <ArrivedPage hobId={AgentId.make(params.hobId)} />;
+  },
+});
+
 // Summon names the new hob apart from the hobs already there, so it loads them first. `?step=` is
 // the step on screen, so Back and a reload keep it; the first step needs none.
 const summonRoute = createRoute({
@@ -395,6 +407,7 @@ const routeTree = rootRoute.addChildren([
     threadRoute,
     profileRoute,
     summonRoute,
+    arrivedRoute,
     inboxRoute,
     usageRoute,
     settingsRoute,
