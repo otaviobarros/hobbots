@@ -6,6 +6,7 @@ import { useState } from "react";
 import { attemptFilesQuery, taskFileUrl } from "../../../api/workbench.ts";
 import { formatBytes } from "../../../lib/reply-steps.ts";
 import { changePath, leavesFile } from "../changes/changes-model.ts";
+import { FilePicker } from "../file-picker.tsx";
 import { FilePreview } from "../files/file-preview.tsx";
 import { canDownload, fileDirectory, fileName, filesStamp, shownFile } from "../files/files-model.ts";
 import { messages } from "../files/messages.ts";
@@ -67,8 +68,36 @@ function Files({
   const made = files.filter((file) => file.origin === "made");
   const touched = files.filter((file) => file.origin !== "made");
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3.5 md:flex-row md:items-start">
-      <nav aria-label={messages.list} className={cn(LIST_CARD, "gap-2 md:sticky md:top-0 md:w-58")}>
+    <div className="flex min-h-0 flex-1 flex-col gap-3.5 @min-[720px]:flex-row @min-[720px]:items-start">
+      <FilePicker
+        label={messages.list}
+        items={[...made, ...touched]}
+        shown={Math.max(
+          0,
+          [...made, ...touched].findIndex((file) => file.id === shown.id),
+        )}
+        current={
+          <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-text-strong">
+            {shown.label ?? fileName(shown)}
+          </span>
+        }
+        row={(file) => (
+          <span className="flex min-w-0 flex-col items-start gap-px">
+            <RowContent file={file} />
+          </span>
+        )}
+        onPick={(index) => {
+          const file = [...made, ...touched][index];
+          if (file !== undefined) setPicked(file.id);
+        }}
+      />
+      <nav
+        aria-label={messages.list}
+        className={cn(
+          LIST_CARD,
+          "hidden gap-2 @min-[720px]:sticky @min-[720px]:top-0 @min-[720px]:flex @min-[720px]:w-58",
+        )}
+      >
         <FileGroup title={messages.made} files={made} shown={shown} onPick={setPicked} />
         <FileGroup title={messages.touched} files={touched} shown={shown} onPick={setPicked} />
       </nav>
@@ -109,10 +138,19 @@ function FileGroup({
 }
 
 function FileRow({ file, on, onPick }: { file: TaskFile; on: boolean; onPick: () => void }) {
+  return (
+    <button type="button" aria-pressed={on} onClick={onPick} className={cn(listRow(on), "flex-col items-start gap-px")}>
+      <RowContent file={file} />
+    </button>
+  );
+}
+
+/** A file as the list and the picker's menu show it: its name, where it is and its status note. */
+function RowContent({ file }: { file: TaskFile }) {
   const folder = fileDirectory(file);
   const note = messages.now[file.now];
   return (
-    <button type="button" aria-pressed={on} onClick={onPick} className={cn(listRow(on), "flex-col items-start gap-px")}>
+    <>
       <span className="w-full truncate font-mono text-[13px] leading-[18px] text-text-strong">
         {file.label ?? fileName(file)}
       </span>
@@ -128,7 +166,7 @@ function FileRow({ file, on, onPick }: { file: TaskFile; on: boolean; onPick: ()
       {note !== null && (
         <span className={cn("text-xs font-semibold", file.now === "gone" ? "text-rose" : "text-lantern")}>{note}</span>
       )}
-    </button>
+    </>
   );
 }
 

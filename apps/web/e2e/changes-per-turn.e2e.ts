@@ -7,6 +7,9 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
+// Wide enough that the Changes list sits beside the file; under 720px a picker takes its place.
+test.use({ viewport: { width: 1600, height: 900 } });
+
 /** A reply the fake writes back word by word, keeping its step's turn running a few seconds after its work. */
 const REPLY = Array.from({ length: 100 }, (_, i) => `word${i + 1}`).join(" ");
 

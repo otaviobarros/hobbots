@@ -224,7 +224,7 @@ function Bench({
                 value={tab}
                 forceMount
                 inert={!on}
-                className={cn("absolute inset-0 overflow-y-auto", !on && "invisible")}
+                className={cn("@container absolute inset-0 overflow-y-auto", !on && "invisible")}
               >
                 <TabNotice
                   tab={tab}

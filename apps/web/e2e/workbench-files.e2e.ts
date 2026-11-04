@@ -6,6 +6,9 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
+// Wide enough that the Changes and Files lists sit beside the file; under 720px a picker takes their place.
+test.use({ viewport: { width: 1600, height: 900 } });
+
 /** A one-pixel PNG. */
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",

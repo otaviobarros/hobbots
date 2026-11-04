@@ -6,6 +6,9 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
+// Wide enough that the Changes and Files lists sit beside the file; under 720px a picker takes their place.
+test.use({ viewport: { width: 1600, height: 900 } });
+
 /** A PNG of one pixel, as small as an image gets. */
 const PIXEL = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z/C/HgAGgwJ/lK3Q6wAAAABJRU5ErkJggg==",
@@ -232,4 +235,48 @@ test("[TC-UX-038] past the retention window a Task's Changes keep their list and
   } finally {
     await again.stop();
   }
+});
+
+// covers UX-002, UX-006
+test("[TC-UX-140] at 1024 wide with the task chat open, Changes and Files swap their lists for a picker", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 800 });
+  const { url, aldric } = await aldricHub({ "a.txt": "one\n", "b.txt": "two\n" });
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await playTurn(page, [
+    "Touch two files",
+    run("npm run touch", { "a.txt": "one!\n", "b.txt": "two!\n", "c.txt": "three\n" }),
+    script("start_quest", { key: "quest", goal: "Touch two files" }),
+    script("complete_task", { key: "done", summary: "Touched." }),
+  ]);
+  const { bench, panel } = await openChanges(page, "Touch two files");
+  await bench.getByRole("button", { name: "Talk to Aldric" }).click();
+
+  // The list gives way to one line: previous, the file shown with "1 of 3", and next.
+  await expect(panel.getByRole("navigation", { name: "Changed files" })).toBeHidden();
+  const picker = panel.getByRole("button", { name: "Changed files: pick a file" });
+  await expect(picker).toContainText("a.txtEdited1 of 3");
+  await panel.getByRole("button", { name: "Next file" }).click();
+  await expect(picker).toContainText("2 of 3");
+  await expect(panel.getByRole("article", { name: "b.txt" })).toBeVisible();
+  await panel.getByRole("button", { name: "Previous file" }).click();
+  await panel.getByRole("button", { name: "Previous file" }).click();
+  await expect(panel.getByRole("article", { name: "c.txt" })).toBeVisible();
+
+  // The name opens the whole list as a menu.
+  await picker.click();
+  await page
+    .getByRole("menu", { name: "Changed files" })
+    .getByRole("menuitem", { name: /^a\.txt/ })
+    .click();
+  await expect(panel.getByRole("article", { name: "a.txt" })).toBeVisible();
+
+  // Files does the same.
+  await bench.getByRole("tab", { name: /^Files/ }).click();
+  const files = bench.getByRole("tabpanel", { name: /^Files/ });
+  await expect(files.getByRole("navigation", { name: "Files from this task" })).toBeHidden();
+  await expect(files.getByRole("button", { name: "Files from this task: pick a file" })).toContainText("1 of 3");
+  await files.getByRole("button", { name: "Next file" }).click();
+  await expect(files.getByRole("region", { name: "b.txt" })).toBeVisible();
 });
