@@ -34,19 +34,20 @@ test("[TC-UX-021] a finished Task's Workbench opens on Summary, greys out the Te
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   await expect(bench.getByRole("heading", { name: "Tidy the notes" })).toBeFocused();
-  await expect(bench).toContainText("Done");
-  await expect(bench).toContainText("Aldricasked by You");
+  // One History tag for the finished Attempt, in the header.
+  await expect(bench.locator("header").first()).toContainText("History");
+  await expect(bench).toContainText("Aldric·asked by You");
   await expect(bench).toContainText("Claude Code");
   await expect(composer).toBeHidden();
 
   // Summary opens first; a tab the Task did not use is greyed out but opens and says so.
   const tabs = bench.getByRole("tablist", { name: "Workbench views" });
   await expect(tabs.getByRole("tab")).toHaveText([
-    "SummaryHistory",
-    "ChangesHistory",
-    "FilesHistory",
-    "TerminalNot used in this Task",
-    "BrowserComing soon",
+    "Summary",
+    "Changes",
+    "Files",
+    "TerminalNot used in this task",
+    "BrowserSoon",
   ]);
   const summary = tabs.getByRole("tab", { name: /^Summary/ });
   await expect(summary).toHaveAttribute("aria-selected", "true");
