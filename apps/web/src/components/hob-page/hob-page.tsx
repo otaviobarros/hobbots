@@ -24,7 +24,12 @@ const copy = messages;
  * A hob's own page, in the middle of the chat workspace: its hero, then the Chats and History tabs
  * beside a side column. The tab lives in the URL, so a link or Back opens the same one.
  */
-export function HobPage({ tab, show, ...props }: WorkspaceMainProps & { tab: HobPageTab; show: HistoryFilter }) {
+export function HobPage({
+  tab,
+  show,
+  query,
+  ...props
+}: WorkspaceMainProps & { tab: HobPageTab; show: HistoryFilter; query: string }) {
   const hob = useQuery({ ...agentsQuery, select: (hobs) => hobs.find((h) => h.id === props.hobId) });
 
   return (
@@ -40,7 +45,7 @@ export function HobPage({ tab, show, ...props }: WorkspaceMainProps & { tab: Hob
         </div>
       )}
       {hob.data ? (
-        <Page hob={hob.data} tab={tab} show={show} />
+        <Page hob={hob.data} tab={tab} show={show} query={query} />
       ) : (
         <p role={hob.isPending ? "status" : "alert"} className="m-auto text-text-secondary">
           {hob.isPending ? copy.loading : copy.missing}
@@ -54,7 +59,7 @@ export function HobPage({ tab, show, ...props }: WorkspaceMainProps & { tab: Hob
   );
 }
 
-function Page({ hob, tab, show }: { hob: Agent; tab: HobPageTab; show: HistoryFilter }) {
+function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: HistoryFilter; query: string }) {
   const threads = useQuery(threadsQuery(hob.id));
   const activity = useActivity();
   const waiting = useWaitingHobs().has(hob.id);
@@ -116,7 +121,7 @@ function Page({ hob, tab, show }: { hob: Agent; tab: HobPageTab; show: HistoryFi
             {threads.isPending ? null : list.length === 0 ? (
               <NewHob hob={hob} />
             ) : (
-              <HobChats hob={hob} threads={list} activity={activity} />
+              <HobChats hob={hob} threads={list} activity={activity} initialQuery={query} />
             )}
           </TabsContent>
           <TabsContent value="history">
