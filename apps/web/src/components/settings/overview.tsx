@@ -98,7 +98,7 @@ function AreaCard({ card }: { card: OverviewCard }) {
       params={{ section: card.section }}
       search={card.tab ? { tab: card.tab } : {}}
       className={cn(
-        "group flex min-h-28 w-full flex-col items-start gap-1.5 rounded-card bg-card p-4 text-text-strong no-underline transition duration-150 hover:-translate-y-px hover:bg-hover hover:text-text-strong motion-reduce:hover:translate-y-0",
+        "group flex min-h-28 w-full flex-col items-start gap-1.5 rounded-card bg-card p-4 text-text-strong no-underline transition duration-(--dur-fade) hover:-translate-y-px hover:bg-hover hover:text-text-strong motion-reduce:hover:translate-y-0",
         card.tone === "broken" && "ring-2 ring-rose ring-inset",
       )}
     >

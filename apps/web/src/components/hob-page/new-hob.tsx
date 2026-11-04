@@ -30,7 +30,7 @@ export function NewHob({ hob }: { hob: Agent }) {
               params={{ hobId: hob.id }}
               aria-label={copy.start({ prompt })}
               onClick={() => writeDraft(`new-${hob.id}`, prompt)}
-              className="flex min-h-[76px] w-full flex-col justify-between gap-1.5 rounded-control bg-deep px-3 py-2.5 text-sm leading-5 text-text-strong no-underline transition-colors duration-150 ease-(--ease-ui) hover:bg-hover hover:text-text-strong"
+              className="flex min-h-[76px] w-full flex-col justify-between gap-1.5 rounded-control bg-deep px-3 py-2.5 text-sm leading-5 text-text-strong no-underline transition-colors duration-(--dur-fade) ease-(--ease-ui) hover:bg-hover hover:text-text-strong"
             >
               {prompt}
               <span aria-hidden className="text-label">

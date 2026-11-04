@@ -148,9 +148,9 @@
   /* UI motion reads --ease-ui from the skin; scene and hob art always step, like pixel art. */
   --default-transition-timing-function: var(--ease-ui);
   --animate-hb-bob: hb-bob 1.2s steps(2) infinite;
-  --animate-hb-hop: hb-hop 0.7s steps(6) 1;
-  --animate-hb-shake: hb-shake 0.45s steps(5) 1;
-  --animate-hb-in: hb-in 0.35s var(--ease-ui) both;
+  --animate-hb-hop: hb-hop var(--dur-hop) steps(6) 1;
+  --animate-hb-shake: hb-shake var(--dur-shake) steps(5) 1;
+  --animate-hb-in: hb-in var(--dur-enter) var(--ease-ui) both;
   --animate-hb-pop: hb-pop 0.45s var(--ease-ui) both;
   --animate-hb-blink: hb-blink 1.2s steps(2) infinite;
   --animate-hb-twinkle: hb-twinkle 3s steps(3) infinite;
@@ -177,7 +177,96 @@
   --animate-hb-reveal: hb-reveal 1.4s steps(14) 0.3s both;
   --animate-hb-sparkle: hb-sparkle 1.1s steps(6) both;
   --animate-hb-glow: hb-glow 1.4s steps(4) infinite;
+  /* The chief looks around once, 3 s: a glance left with a lean, back, a glance right with a lean,
+     back, and a blink. Frames switch on whole steps, like a sprite sheet. */
+  --animate-hb-chief-sway: hb-chief-sway 3s step-end;
+  --animate-hb-chief-left: hb-chief-left 3s step-end;
+  --animate-hb-chief-right: hb-chief-right 3s step-end;
+  --animate-hb-chief-blink: hb-chief-blink 3s step-end;
+  /* A hob is working: the chief's lantern burns brighter with a slow flicker. */
+  --animate-hb-chief-glow: hb-chief-glow 3.2s steps(4) infinite;
+  /* Something needs you: the chief's raised lantern pulses. */
+  --animate-hb-chief-beacon: hb-chief-beacon 1.2s step-end infinite;
+  /* Waiting on the server: the ring turns an eighth at a time. */
+  --animate-hb-spin: hb-spin 1s steps(8) infinite;
 
+  @keyframes hb-chief-sway {
+    0%,
+    100% {
+      transform: none;
+    }
+    12% {
+      transform: translateX(-2px);
+    }
+    36% {
+      transform: none;
+    }
+    48% {
+      transform: translateX(2px);
+    }
+    72% {
+      transform: none;
+    }
+  }
+  @keyframes hb-chief-left {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    36% {
+      opacity: 0;
+    }
+  }
+  @keyframes hb-chief-right {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    46% {
+      opacity: 1;
+    }
+    72% {
+      opacity: 0;
+    }
+  }
+  @keyframes hb-chief-blink {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    84% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 0;
+    }
+  }
+  @keyframes hb-chief-glow {
+    0%,
+    100% {
+      opacity: 0.85;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+  @keyframes hb-chief-beacon {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+  @keyframes hb-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
   @keyframes hb-bob {
     0%,
     100% {
@@ -194,10 +283,10 @@
       transform: translateY(0);
     }
     35% {
-      transform: translateY(-12px);
+      transform: translateY(-6px);
     }
     85% {
-      transform: translateY(-3px);
+      transform: translateY(-2px);
     }
   }
   @keyframes hb-shake {
@@ -880,117 +969,20 @@ body {
   white-space: nowrap;
   opacity: 0;
   transition:
-    opacity 100ms var(--ease-ui),
-    max-width 0s linear 220ms;
+    opacity var(--dur-press) var(--ease-ui),
+    max-width 0s linear var(--dur-sheet);
 }
 [data-open="true"] .sidebar-label {
   max-width: 200px;
   opacity: 1;
   transition:
-    opacity 150ms var(--ease-ui) 120ms,
+    opacity var(--dur-fade) var(--ease-ui) var(--dur-fade),
     max-width 0s;
 }
 
 /* Hover a hob and it hops, in the looks that hop. */
 .hop-on-hover:hover .sprite {
   animation: var(--hop);
-}
-
-/*
- * The chief looks around once, 3 s: a glance left with a lean, back, a glance right with a lean,
- * back, and a blink. Frames switch on whole steps, like a sprite sheet.
- */
-.chief-sway {
-  animation: chief-sway 3s step-end;
-}
-.chief-left {
-  animation: chief-left 3s step-end;
-}
-.chief-right {
-  animation: chief-right 3s step-end;
-}
-.chief-blink {
-  animation: chief-blink 3s step-end;
-}
-/* A hob is working: the lantern burns brighter with a slow flicker. */
-.chief-glow {
-  animation: chief-glow 3.2s steps(4) infinite;
-}
-/* Something needs you: the raised lantern pulses. */
-.chief-beacon {
-  animation: chief-beacon 1.2s step-end infinite;
-}
-@keyframes chief-sway {
-  0%,
-  100% {
-    transform: none;
-  }
-  12% {
-    transform: translateX(-2px);
-  }
-  36% {
-    transform: none;
-  }
-  48% {
-    transform: translateX(2px);
-  }
-  72% {
-    transform: none;
-  }
-}
-@keyframes chief-left {
-  0%,
-  100% {
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-  }
-  36% {
-    opacity: 0;
-  }
-}
-@keyframes chief-right {
-  0%,
-  100% {
-    opacity: 0;
-  }
-  46% {
-    opacity: 1;
-  }
-  72% {
-    opacity: 0;
-  }
-}
-@keyframes chief-blink {
-  0%,
-  100% {
-    opacity: 0;
-  }
-  84% {
-    opacity: 1;
-  }
-  90% {
-    opacity: 0;
-  }
-}
-@keyframes chief-glow {
-  0%,
-  100% {
-    opacity: 0.85;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-@keyframes chief-beacon {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
 }
 
 /* The caret of a reply being written follows its last line of text, or the code still arriving. */

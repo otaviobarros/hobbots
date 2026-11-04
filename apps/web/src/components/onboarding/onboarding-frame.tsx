@@ -104,7 +104,7 @@ function PreviewScene({ preview }: { preview: Preview }) {
       {fence > 0 && (
         <span
           aria-hidden
-          className="absolute bottom-[30px] start-[102px] w-28 bg-[repeating-linear-gradient(90deg,var(--color-wood)_0_5px,transparent_5px_11px)] transition-[height] duration-300 ease-(--ease-ui)"
+          className="absolute bottom-[30px] start-[102px] w-28 bg-[repeating-linear-gradient(90deg,var(--color-wood)_0_5px,transparent_5px_11px)] transition-[height] duration-(--dur-sheet) ease-(--ease-ui)"
           style={{ height: Math.round(12 + fence * 22) }}
         />
       )}

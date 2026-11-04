@@ -82,7 +82,7 @@ function Arrived({ hob }: { hob: Agent }) {
                   to="/hobs/$hobId/new"
                   params={{ hobId: hob.id }}
                   onClick={() => writeDraft(place, question)}
-                  className="flex items-center gap-3 px-3.5 py-3 text-text-strong no-underline transition-colors duration-150 hover:bg-hover focus-ring focus-inset"
+                  className="flex items-center gap-3 px-3.5 py-3 text-text-strong no-underline transition-colors duration-(--dur-fade) hover:bg-hover focus-ring focus-inset"
                 >
                   <span
                     aria-hidden

@@ -58,7 +58,7 @@ function PresetChoice({ value }: { value: SafetyPreset }) {
             <label
               key={preset.id}
               className={cn(
-                "flex cursor-pointer flex-col gap-1.5 rounded-card bg-card p-3.5 transition-colors duration-150 hover:bg-hover focus-ring-within",
+                "flex cursor-pointer flex-col gap-1.5 rounded-card bg-card p-3.5 transition-colors duration-(--dur-fade) hover:bg-hover focus-ring-within",
                 on && "ring-2 ring-focus-ring ring-inset",
               )}
             >

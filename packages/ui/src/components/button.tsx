@@ -5,7 +5,7 @@ import { cn } from "../lib/utils.ts";
 
 // Hobbots buttons (docs/design/ui-ux.md). Corners, focus ring and press come from the theme's skin.
 const buttonVariants = cva(
-  "cut-control inline-flex no-underline shrink-0 cursor-pointer items-center justify-center gap-2 border-0 whitespace-nowrap transition-transform duration-75 ease-(--ease-press) select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "cut-control inline-flex no-underline shrink-0 cursor-pointer items-center justify-center gap-2 border-0 whitespace-nowrap transition-transform duration-(--dur-press) ease-(--ease-press) select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

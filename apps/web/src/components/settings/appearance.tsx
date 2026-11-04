@@ -46,7 +46,7 @@ export function AppearanceGroup() {
             <label
               key={option}
               className={cn(
-                "flex cursor-pointer flex-col gap-2.5 rounded-card bg-card p-3 transition-colors duration-150 hover:bg-hover focus-ring-within",
+                "flex cursor-pointer flex-col gap-2.5 rounded-card bg-card p-3 transition-colors duration-(--dur-fade) hover:bg-hover focus-ring-within",
                 on && "ring-2 ring-focus-ring ring-inset",
               )}
             >
