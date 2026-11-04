@@ -57,8 +57,7 @@ describe("tabRequests", () => {
     expect(tabRequests(all, "needs", "c").map((r) => r.id)).toEqual(["b", "c", "d"]);
   });
 
-  it("lists everything newest first in All, and only closed requests in History", () => {
-    expect(tabRequests(all, "all").map((r) => r.id)).toEqual(["d", "c", "b", "a"]);
+  it("lists only closed requests in History", () => {
     expect(tabRequests(all, "history").map((r) => r.id)).toEqual(["c", "a"]);
   });
 });
@@ -97,7 +96,7 @@ describe("selectedRequest and isInboxTab", () => {
     expect(selectedRequest([], "a")).toBeUndefined();
   });
 
-  it("accepts only the three tabs", () => {
-    expect(["needs", "all", "history", "other", 3].map(isInboxTab)).toEqual([true, true, true, false, false]);
+  it("accepts only the two tabs, so an old link to All opens Needs you", () => {
+    expect(["needs", "history", "all", "other", 3].map(isInboxTab)).toEqual([true, true, false, false, false]);
   });
 });

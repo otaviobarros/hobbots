@@ -32,18 +32,18 @@ describe("withShown", () => {
     const closed = Array.from({ length: INBOX_HISTORY }, (_, n) => request(n, "denied"));
     const pending = request(500, "pending");
     const oldest = closed[0];
-    // The user opens the oldest closed request in All.
+    // The user opens the oldest closed request from a link, which keeps it in Needs you.
     const before = inboxWindow([...closed, pending]);
-    expect(selectedRequest(tabRequests(before, "all"), oldest?.id)).toBe(oldest);
+    expect(selectedRequest(tabRequests(before, "needs", oldest?.id), oldest?.id)).toBe(oldest);
 
     // Another request is decided elsewhere: the window drops the oldest closed one.
     const after = inboxWindow([...closed, new ApprovalRequest({ ...pending, state: "approved", decidedAt: at(600) })]);
     expect(after.some((r) => r.id === oldest?.id)).toBe(false);
 
     const shown = withShown(after, oldest, oldest?.id);
-    const all = tabRequests(shown, "all");
-    expect(selectedRequest(all, oldest?.id)).toBe(oldest);
-    expect(all.at(-1)).toBe(oldest);
+    const needs = tabRequests(shown, "needs", oldest?.id);
+    expect(selectedRequest(needs, oldest?.id)).toBe(oldest);
+    expect(needs[0]).toBe(oldest);
   });
 
   it("[TC-IN-009] shows the request as the hub has it now when a fresh snapshot leaves it out", () => {
@@ -58,7 +58,7 @@ describe("withShown", () => {
     expect(snapshot.some((r) => r.id === selected.id)).toBe(false);
 
     const fresh = new ApprovalRequest({ ...selected, state: "approved", decidedAt: at(600), revision: 2 });
-    const shown = tabRequests(withShown(snapshot, fresh, selected.id), "all", selected.id);
+    const shown = tabRequests(withShown(snapshot, fresh, selected.id), "needs", selected.id);
     expect(selectedRequest(shown, selected.id)).toBe(fresh);
     expect(shown.some((r) => r.state === "pending")).toBe(false);
   });

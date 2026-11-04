@@ -4,31 +4,29 @@ import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockersQuery } from "../../api/blockers.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
+import { readStored, writeStored } from "../../lib/storage.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
 import { Stars } from "../scene.tsx";
 import { EntryDetail, InboxDetail } from "./inbox-detail.tsx";
-import { approvalEntry, type InboxEntry, namesRequest, needsEntries, selectedEntry } from "./inbox-entries.ts";
+import { type InboxEntry, namesRequest, needsEntries, selectedEntry } from "./inbox-entries.ts";
 import { Empty, InboxHistory } from "./inbox-history.tsx";
-import { type InboxTab, pendingCount, tabRequests } from "./inbox-items.ts";
-import { InboxList, InboxTabs } from "./inbox-list.tsx";
+import { type InboxTab, type InboxView, isInboxView, pendingCount, tabRequests } from "./inbox-items.ts";
+import { InboxList, InboxTabs, InboxViewPicker } from "./inbox-list.tsx";
 import { messages } from "./messages.ts";
 import { type ShownHold, useWithShown } from "./shown-request.ts";
-import { type InboxDirectory, useInboxDirectory } from "./use-inbox-directory.ts";
+import { type InboxDirectory, useEntryQuests, useInboxDirectory } from "./use-inbox-directory.ts";
 import { useNow } from "./use-now.ts";
 
 const copy = messages;
 
 const NONE: ReadonlyArray<ApprovalRequest> = [];
 
-const EMPTY: Record<Exclude<InboxTab, "history">, { readonly title: string; readonly hint: string }> = {
-  needs: { title: copy.allClear, hint: copy.allClearHint },
-  all: { title: copy.emptyAll, hint: copy.emptyAllHint },
-};
+const ALL_CLEAR = { title: copy.allClear, hint: copy.allClearHint };
 
 const NO_ITEMS: ReadonlyArray<BackpackItem> = [];
 const NO_QUESTIONS: ReadonlyArray<WaitingQuestion> = [];
@@ -56,8 +54,8 @@ const emptyState = (
   questions: QuestionsRead,
 ) => {
   if (tab === "history" || !read || entries.length > 0) return undefined;
-  if (tab === "needs" && !(readEmpty(blockers) && readEmpty(questions))) return undefined;
-  return EMPTY[tab];
+  if (!(readEmpty(blockers) && readEmpty(questions))) return undefined;
+  return ALL_CLEAR;
 };
 
 /** Everything the Inbox reads, and what the open tab lists and shows from it. */
@@ -75,7 +73,9 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
   const questions = useWaitingQuestionsQuery();
   const devices = usePromptedDevices();
   const entries = tabEntries(tab, requests, devices, questions.data ?? NO_QUESTIONS, blockers.data ?? NO_ITEMS);
+  const questOf = useEntryQuests(entries);
   return {
+    questOf,
     inbox,
     shown,
     directory,
@@ -96,10 +96,9 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
  * chat has. It follows the journal, so an entry decided in the chat updates here, and the reverse.
  */
 export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string | undefined }) {
-  const { inbox, shown, directory, requests, blockers, questions, entries, selected, waiting, empty } = useInbox(
-    tab,
-    requestId,
-  );
+  const { inbox, shown, directory, requests, blockers, questions, entries, questOf, selected, waiting, empty } =
+    useInbox(tab, requestId);
+  const [view, setView] = useInboxView();
   const now = useNow();
   const navigate = useNavigate();
   // The entry shown goes into the address as soon as it shows, so it stays in view while it is
@@ -125,8 +124,17 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
             <ReadState read={blockers} loading={blockerCopy.loading} failed={blockerCopy.loadFailed} />
           )}
           {empty !== undefined && <Empty {...empty} />}
+          {tab === "needs" && entries.length > 0 && <InboxViewPicker view={view} onChange={setView} />}
           {tab !== "history" && (
-            <InboxList tab={tab} entries={entries} selectedKey={selected?.key} directory={directory} now={now} />
+            <InboxList
+              tab={tab}
+              view={view}
+              entries={entries}
+              questOf={questOf}
+              selectedKey={selected?.key}
+              directory={directory}
+              now={now}
+            />
           )}
         </InboxTabs>
       </aside>
@@ -148,7 +156,22 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
   );
 }
 
-/** The tab's entries: everything waiting in Needs you, every request in All, and none in History. */
+const VIEW_KEY = "inbox.view";
+
+/** By quest or By urgency, remembered on this device. */
+const useInboxView = () => {
+  const [view, setView] = useState<InboxView>(() => {
+    const stored = readStored<unknown>(VIEW_KEY, "quest");
+    return isInboxView(stored) ? stored : "quest";
+  });
+  const choose = (next: InboxView) => {
+    setView(next);
+    writeStored(VIEW_KEY, next);
+  };
+  return [view, choose] as const;
+};
+
+/** The tab's entries: everything waiting in Needs you, and none in History, which lists decisions. */
 const tabEntries = (
   tab: InboxTab,
   requests: ReadonlyArray<ApprovalRequest>,
@@ -156,8 +179,7 @@ const tabEntries = (
   questions: ReadonlyArray<WaitingQuestion>,
   blockers: ReadonlyArray<BackpackItem>,
 ): ReadonlyArray<InboxEntry> => {
-  if (tab === "needs") return needsEntries({ devices, questions, blockers, requests });
-  return tab === "all" ? requests.map(approvalEntry) : [];
+  return tab === "needs" ? needsEntries({ devices, questions, blockers, requests }) : [];
 };
 
 function Selected({

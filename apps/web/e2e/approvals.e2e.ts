@@ -278,7 +278,7 @@ test("[TC-PE-125] an Always rule shows in Inbox History and Settings, and removi
   const history = page.getByRole("region", { name: "Standing rules" });
   await expect(history.getByRole("listitem")).toContainText(rule);
   await history.getByRole("link", { name: `See the request that saved: ${rule}` }).click();
-  await expect(page).toHaveURL(/tab=all&request=/);
+  await expect(page).toHaveURL(/tab=needs&request=/);
   await expect(page.getByRole("article", { name: /^Request from Pip/ })).toBeVisible();
   await page.goBack();
 
