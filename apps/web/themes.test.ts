@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 type PerTheme = Readonly<Record<string, string>>;
@@ -47,5 +47,26 @@ describe("themes", () => {
     expect(skin(workshop)).toEqual(skin(lamplight));
     expect(workshop.get("--corner-card")).toBe("0");
     expect(lamplight.get("--corner-card")).toBe("16px");
+  });
+});
+
+/** Token names the themes renamed (docs/design/themes.md); a new use would read nothing. */
+const RENAMED = /(secondary-text|lantern-shadow|shadow-drawer)(?![\w-])/;
+
+/** Every style or component source under a folder, as a path and its text. */
+const sources = (folder: URL): [string, string][] =>
+  readdirSync(folder, { recursive: true, encoding: "utf8" })
+    .filter((path) => /\.(tsx?|css)$/.test(path))
+    .map((path) => [path, readFileSync(new URL(path, folder), "utf8")]);
+
+describe("renamed tokens", () => {
+  it.each([
+    ["apps/web/src", new URL("./src/", import.meta.url)],
+    ["packages/ui/src", new URL("../../packages/ui/src/", import.meta.url)],
+  ])("%s uses none of the old names", (_, folder) => {
+    const stale = sources(folder)
+      .filter(([, text]) => RENAMED.test(text))
+      .map(([path, text]) => `${path}: ${text.match(RENAMED)?.[1]}`);
+    expect(stale).toEqual([]);
   });
 });
