@@ -4,7 +4,7 @@ import { type HastNode, hasImage, hastText } from "./hast-text.ts";
 import { shownUrl, showsItsUrl, urlHost } from "./links.ts";
 import { messages } from "./messages.ts";
 
-const linkStyle = "text-lantern underline underline-offset-2 hover:text-lantern-hover";
+const linkStyle = "text-link underline underline-offset-2 hover:decoration-lantern";
 
 /**
  * A link in a reply. It opens in the browser, outside the app, and shows its address beside its

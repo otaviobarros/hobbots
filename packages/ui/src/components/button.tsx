@@ -5,7 +5,7 @@ import { cn } from "../lib/utils.ts";
 
 // Hobbots buttons (docs/design/ui-ux.md). Corners, focus ring and press come from the theme's skin.
 const buttonVariants = cva(
-  "cut-control inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 border-0 whitespace-nowrap transition-transform duration-75 ease-(--ease-press) select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "cut-control inline-flex no-underline shrink-0 cursor-pointer items-center justify-center gap-2 border-0 whitespace-nowrap transition-transform duration-75 ease-(--ease-press) select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -17,7 +17,10 @@ const buttonVariants = cva(
         chip: "border-2 border-solid border-control bg-transparent text-detail text-text-strong hover:bg-line",
         ghost: "bg-transparent text-text-strong hover:bg-hover",
         icon: "border-2 border-solid border-line-2 bg-transparent text-text-secondary [clip-path:none] hover:bg-line hover:text-text-strong",
-        link: "bg-transparent text-lantern [clip-path:none] hover:underline",
+        // A link that acts: `link`, underlined, and the underline turns lantern on hover.
+        link: "bg-transparent text-link underline underline-offset-2 [clip-path:none] hover:decoration-lantern",
+        // A text action beside other content, such as Show all: secondary text, underlined.
+        text: "bg-transparent text-text-secondary underline underline-offset-2 [clip-path:none] hover:text-text-strong",
       },
       size: {
         default: "px-4 py-[9px]",

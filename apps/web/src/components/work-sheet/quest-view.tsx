@@ -121,7 +121,7 @@ export function QuestView({
           {folded > 0 && (
             <p className="m-0 flex items-center gap-2 text-detail text-label">
               {copy.doneFolded({ count: folded })}
-              <Button variant="link" size="xs" onClick={() => setUnfolded(true)}>
+              <Button variant="text" size="xs" onClick={() => setUnfolded(true)}>
                 {copy.showDone}
               </Button>
             </p>
@@ -231,7 +231,7 @@ function Elsewhere({ top, threadId }: { top: Task; threadId: ThreadId }) {
       <Link
         to="/hobs/$hobId/threads/$threadId"
         params={{ hobId: top.ownerId, threadId: top.threadId }}
-        className="text-lantern"
+        className="text-link"
       >
         {room.openThread}
       </Link>

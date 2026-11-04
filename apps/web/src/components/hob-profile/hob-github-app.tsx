@@ -343,7 +343,7 @@ function ConnectedApp({
               href={app.htmlUrl}
               target="_blank"
               rel="noreferrer"
-              className="font-mono text-ui font-bold text-text-strong no-underline hover:text-lantern hover:underline"
+              className="font-mono text-ui font-bold text-text-strong no-underline hover:underline hover:decoration-lantern"
             >
               {hobAppBot(app)}
             </a>

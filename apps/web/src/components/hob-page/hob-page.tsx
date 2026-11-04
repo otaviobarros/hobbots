@@ -17,6 +17,7 @@ import { HobHistory } from "./hob-history.tsx";
 import { doingOf, type HobPageTab, isHobPageTab, statsLine } from "./hob-page-model.ts";
 import { messages } from "./messages.ts";
 import { NewHob } from "./new-hob.tsx";
+import { useNeedLine } from "./use-need-line.ts";
 
 const copy = messages;
 
@@ -56,6 +57,7 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
   const threads = useQuery(threadsQuery(hob.id));
   const activity = useActivity();
   const waiting = useWaitingHobs().has(hob.id);
+  const need = useNeedLine(hob.id);
   const navigate = useNavigate();
   const list = threads.data ?? [];
   const state = withRequests(hobState(hob, list, activity), waiting);
@@ -85,7 +87,7 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
         >
           {copy.yourHobs}
         </Link>
-        <span aria-hidden className="opacity-60">
+        <span aria-hidden className="text-label">
           /
         </span>
         <span aria-current="page" title={hob.name} className="truncate text-text-strong">
@@ -96,7 +98,7 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
         hob={hob}
         state={state}
         stats={statsLine(hob, list.length)}
-        doing={doingOf(state, list, activity)}
+        doing={doingOf(state, list, activity, need)}
         fresh={fresh}
       />
       <div className="grid items-start gap-7 min-[1120px]:grid-cols-[minmax(0,1fr)_300px]">

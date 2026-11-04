@@ -32,7 +32,8 @@ const previewMood = (): ChiefMood | null => {
 /**
  * The one navigation column, on every screen after setup. It collapses to 72px but never hides;
  * expanded it is 256px. From 1100px wide it pushes the page aside; below that it stays 72px in place
- * and, expanded, opens over the page, which keeps its width.
+ * and, expanded, opens over the page, which keeps its width. Only the hob list scrolls, so the chief,
+ * the sections and the chevron stay on screen however many hobs there are.
  */
 export function Sidebar() {
   const [open, toggle] = useSidebarOpen();
@@ -48,7 +49,7 @@ export function Sidebar() {
         <nav
           aria-label={copy.label}
           data-open={open}
-          className="group/side flex h-full w-sidebar flex-col gap-0.5 overflow-x-hidden overflow-y-auto bg-panel p-3 transition-[width] duration-220 data-[open=true]:w-sidebar-open max-wide:absolute max-wide:inset-y-0 max-wide:start-0 max-wide:z-30 max-wide:data-[open=true]:shadow-sheet"
+          className="group/side flex h-full w-sidebar flex-col gap-0.5 overflow-hidden bg-panel p-3 transition-[width] duration-220 data-[open=true]:w-sidebar-open max-wide:absolute max-wide:inset-y-0 max-wide:start-0 max-wide:z-30 max-wide:data-[open=true]:shadow-sheet"
         >
           <Chief waiting={waiting} />
           {ITEMS.map((item) => (

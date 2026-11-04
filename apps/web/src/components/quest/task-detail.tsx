@@ -207,7 +207,7 @@ function Artifacts({ artifacts }: { artifacts: ReturnType<typeof taskDetail>["ou
         <li key={artifact.id} className="flex flex-col gap-0.5 border-2 border-line bg-card px-2.5 py-1.5">
           <span className="font-bold">{artifact.label}</span>
           {artifact.kind === "link" ? (
-            <a href={artifact.value} target="_blank" rel="noreferrer" className="break-all text-lantern">
+            <a href={artifact.value} target="_blank" rel="noreferrer" className="break-all text-link">
               {artifact.value}
             </a>
           ) : (

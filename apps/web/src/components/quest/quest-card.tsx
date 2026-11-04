@@ -102,12 +102,12 @@ export function QuestCard({
       <div className="flex items-center gap-2 text-detail text-label">
         {card.more > 0 && <span>{copy.moreCount({ count: card.more })}</span>}
         {card.done > 0 && <span>{copy.doneCount({ count: card.done })}</span>}
-        <Button variant="link" size="xs" className="ms-auto" onClick={() => onWorkbench(card.top.id)}>
+        <Button variant="text" size="xs" className="ms-auto" onClick={() => onWorkbench(card.top.id)}>
           {copy.workbench}
         </Button>
         {/* With no Task under it there is nothing to list: Details opens the Task itself. */}
         <Button
-          variant="link"
+          variant="text"
           size="xs"
           onClick={() => (tree.tasks.length === 1 ? onOpen(card.top.id) : onQuest(card.top.id))}
         >

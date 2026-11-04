@@ -52,12 +52,7 @@ export function OutputBlock({
 /** The link that opens a whole log as plain text in a new tab. */
 export function LogLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-lantern underline-offset-2 hover:underline"
-    >
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-link">
       {children}
     </a>
   );

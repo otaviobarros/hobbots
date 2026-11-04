@@ -1,5 +1,6 @@
+import { AgentId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { hobState, sceneOrder, threadState, withRequests } from "./hob-state.ts";
+import { hobNeeds, hobState, sceneOrder, threadState, withRequests } from "./hob-state.ts";
 
 describe("hobState", () => {
   const hob = { status: "active" } as const;
@@ -46,4 +47,38 @@ describe("withRequests", () => {
     expect(withRequests("working", false)).toBe("working");
   });
   it("keeps a paused hob paused", () => expect(withRequests("paused", true)).toBe("paused"));
+});
+
+describe("hobNeeds", () => {
+  const ada = AgentId.make("ada");
+  const aldric = AgentId.make("aldric");
+  const pip = AgentId.make("pip");
+  const asks = (text: string, askerId: AgentId, chain: ReadonlyArray<AgentId>) => ({
+    question: { askerId, chain, text },
+  });
+
+  it("marks a member that asks you, and the lead whose chat holds its question", () => {
+    const needs = hobNeeds({ approvals: [], blockers: [], questions: [asks("Which store?", ada, [aldric])] });
+    expect(needs.get(ada)).toEqual({ kind: "question", text: "Which store?", askerId: ada });
+    expect(needs.get(aldric)).toEqual({ kind: "question", text: "Which store?", askerId: ada });
+    expect(withRequests("idle", needs.has(ada))).toBe("needs-you");
+  });
+
+  it("marks a hob that asks you straight, with nobody leading it", () => {
+    const needs = hobNeeds({ approvals: [], blockers: [], questions: [asks("Which store?", ada, [])] });
+    expect([...needs.keys()]).toEqual([ada]);
+  });
+
+  it("puts a pending request before a question, and leaves decided requests out", () => {
+    const needs = hobNeeds({
+      approvals: [
+        { agentId: ada, operation: "push", state: "pending" },
+        { agentId: pip, operation: "push", state: "approved" },
+      ],
+      blockers: [],
+      questions: [asks("Which store?", ada, [aldric])],
+    });
+    expect(needs.get(ada)).toEqual({ kind: "approval", operation: "push" });
+    expect(needs.has(pip)).toBe(false);
+  });
 });

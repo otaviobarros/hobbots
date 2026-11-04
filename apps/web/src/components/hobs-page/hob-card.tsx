@@ -9,6 +9,7 @@ import type { HobState } from "../../lib/hob-state.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { HobStateTag } from "../hob-page/hob-hero.tsx";
 import { doingOf, stateTag } from "../hob-page/hob-page-model.ts";
+import { useNeedLine } from "../hob-page/use-need-line.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { cardLine, lastChat } from "./hobs-page-model.ts";
 import { messages } from "./messages.ts";
@@ -39,7 +40,7 @@ export function HobCard({
   threads: ReadonlyArray<Thread>;
   activity: ActivityMap;
 }) {
-  const doing = doingOf(state, threads, activity);
+  const doing = doingOf(state, threads, activity, useNeedLine(hob.id));
   const last = lastChat(threads);
   const needs = doing?.kind === "needs-you";
   const fresh = useIsNewHob(hob.id, threads.length);

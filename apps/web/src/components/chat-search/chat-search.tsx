@@ -112,7 +112,12 @@ export function ChatSearch({
           ) : (
             <p className="m-0 px-2.5 py-2 text-ui leading-5 text-text-secondary">
               {copy.nothing({ query: query.trim() })}{" "}
-              <Link to="/hobs/$hobId" params={{ hobId: hob.id }} search={{ q: query.trim() }} className="text-lantern">
+              <Link
+                to="/hobs/$hobId"
+                params={{ hobId: hob.id }}
+                search={{ q: query.trim() }}
+                className="text-text-secondary hover:text-text-strong hover:decoration-current"
+              >
                 {copy.everywhere({ name: hob.name })}
               </Link>
             </p>

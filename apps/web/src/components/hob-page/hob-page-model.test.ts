@@ -1,6 +1,6 @@
-import { ThreadId } from "@hobbots/domain";
+import { AgentId, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { doingOf, helloOf, isHobPageTab, startersOf, stateTag, statsLine } from "./hob-page-model.ts";
+import { doingOf, helloOf, isHobPageTab, needLine, startersOf, stateTag, statsLine } from "./hob-page-model.ts";
 
 const plan = { id: ThreadId.make("t-plan"), title: "Plan the spring launch" };
 const notes = { id: ThreadId.make("t-notes"), title: "Meeting notes" };
@@ -77,4 +77,22 @@ describe("a new hob", () => {
     expect(startersOf({ role: "backend" })).toEqual(startersOf({ role: "frontend" }));
     expect(startersOf({ role: null })).toHaveLength(3);
   });
+});
+
+describe("needLine", () => {
+  const ada = AgentId.make("ada");
+  const aldric = AgentId.make("aldric");
+  const nameOf = (id: AgentId) => (id === ada ? "Ada" : "Aldric");
+
+  it("says what a request asks to do", () =>
+    expect(needLine({ kind: "approval", operation: "push" }, ada, nameOf)).toMatch(/^Asks to /));
+
+  it("gives the question's first line, naming the member when a lead holds it", () => {
+    const need = { kind: "question", text: "Which store?\nThe old one is closed.", askerId: ada } as const;
+    expect(needLine(need, ada, nameOf)).toBe("Asks you: Which store?");
+    expect(needLine(need, aldric, nameOf)).toBe("Ada asks you: Which store?");
+  });
+
+  it("feeds what the hob asks into the bubble", () =>
+    expect(doingOf("needs-you", [plan], {}, "Asks you: Which store?")?.text).toBe("Asks you: Which store?"));
 });

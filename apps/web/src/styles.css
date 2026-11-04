@@ -626,7 +626,7 @@
   /* Where a card's ring sits: outside it here, inside it where the cut clip would hide it. */
   --cut-focus-offset: 2px;
   --control-focus-outline: var(--focus-outline);
-  --control-focus-ring: 0 0 #0000;
+  --control-focus-ring: 0 0 transparent;
   --press-edge: 0px;
   --press-edge-down: 0px;
   --press-move: 1px;
@@ -747,12 +747,15 @@ body {
 
 /* Base layer, so utility classes on a link still win. */
 @layer base {
+  /* Links read in `link`, underlined; the underline turns lantern on hover (docs/design/themes.md). */
   a {
-    color: var(--color-lantern);
+    color: var(--color-link);
+    text-decoration-line: underline;
+    text-underline-offset: 2px;
   }
 
   a:hover {
-    color: #ffc477;
+    text-decoration-color: var(--color-lantern);
   }
 
   :focus-visible {
@@ -817,7 +820,7 @@ body {
   &:focus-visible {
     outline: var(--control-focus-outline);
     outline-offset: 2px;
-    box-shadow: var(--control-focus-ring), var(--press-shadow, 0 0 #0000);
+    box-shadow: var(--control-focus-ring), var(--press-shadow, 0 0 transparent);
   }
 }
 

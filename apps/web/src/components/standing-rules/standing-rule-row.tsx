@@ -57,7 +57,7 @@ export function StandingRuleRow({ grant, hob }: { grant: Grant; hob: Agent | und
                 to="/inbox"
                 search={{ tab: "needs", request: grant.approvalId }}
                 aria-label={copy.requestLabel({ rule })}
-                className="text-lantern no-underline hover:underline"
+                className="text-link"
               >
                 {copy.request}
               </Link>

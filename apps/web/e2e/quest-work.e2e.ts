@@ -133,7 +133,7 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
   await expect(page).toHaveURL(questThread("campaign"));
   await expect(drawer("Brief for campaign")).toBeVisible();
 
-  // Each member's card in the sidebar names the Quest it works on and opens it.
+  // Each member's card in the sidebar names the Quest it works on by its goal and opens it.
   await page.goto(`${hub.url}/#/hobs/${ids.quill}`);
   const card = async (name: string) => {
     await page
@@ -143,7 +143,9 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
     return page.getByRole("dialog", { name });
   };
   await expect(
-    (await card("Ada")).getByRole("link", { name: "Ada is on Aldric's quest, Not started. Open the quest" }),
+    (await card("Ada")).getByRole("link", {
+      name: "Ada is on Aldric's quest “Black Friday campaign”, Not started. Open the quest",
+    }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   // Aldric leads it, so it is not his work as a member.
@@ -152,13 +154,15 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
   // Quill's work is not one of her threads.
   expect(await call<ReadonlyArray<unknown>>("GET", `/agents/${ids.quill}/threads`)).toEqual([]);
   await (await card("Quill"))
-    .getByRole("link", { name: "Quill is on Aldric's quest, Working. Open the quest" })
+    .getByRole("link", { name: "Quill is on Aldric's quest “Black Friday campaign”, Working. Open the quest" })
     .click();
   await expect(page).toHaveURL(questThread("copy"));
   await expect(drawer("Brief for copy")).toBeVisible();
 
   // Ada leads Pip's nested Quest, but it is followed in Aldric's thread, so the link opens his chat.
-  await (await card("Pip")).getByRole("link", { name: "Pip is on Ada's quest, Working. Open the quest" }).click();
+  await (await card("Pip"))
+    .getByRole("link", { name: "Pip is on Ada's quest “Landing page keywords”, Working. Open the quest" })
+    .click();
   await expect(page).toHaveURL(questThread("keywords"));
   await expect(drawer("Brief for keywords")).toBeVisible();
   await expect(page.getByRole("main", { name: "Chat" }).locator("header")).toContainText("Aldric");

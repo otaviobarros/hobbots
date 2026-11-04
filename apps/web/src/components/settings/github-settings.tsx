@@ -175,7 +175,7 @@ function AppReach({ login }: { login: string }) {
           target="_blank"
           rel="noreferrer"
           onClick={() => setWatch({ until: Date.now() + REPOSITORY_WATCH.forMs, seen: names })}
-          className="text-detail text-lantern no-underline hover:underline"
+          className="text-detail text-link"
         >
           {copy.chooseRepositories}
         </a>
@@ -239,7 +239,7 @@ function Disconnected({
       {justDisconnected && (
         <span className="text-detail text-text-secondary">
           {copy.disconnected}{" "}
-          <a href={GITHUB_AUTHORIZED_APPS} target="_blank" rel="noreferrer" className="text-lantern">
+          <a href={GITHUB_AUTHORIZED_APPS} target="_blank" rel="noreferrer" className="text-link">
             {copy.authorizedApps}
           </a>
         </span>

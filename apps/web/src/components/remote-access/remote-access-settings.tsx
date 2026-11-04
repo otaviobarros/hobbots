@@ -146,7 +146,12 @@ export function RemoteAccessSettings() {
           <span>
             {notReady}{" "}
             {status?.tailscale?.state === "notInstalled" && (
-              <a href={TAILSCALE_DOWNLOAD} target="_blank" rel="noreferrer" className="text-lantern">
+              <a
+                href={TAILSCALE_DOWNLOAD}
+                target="_blank"
+                rel="noreferrer"
+                className="text-text-secondary hover:text-text-strong hover:decoration-current"
+              >
                 {copy.getTailscale}
               </a>
             )}
