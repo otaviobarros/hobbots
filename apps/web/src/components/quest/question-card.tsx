@@ -45,7 +45,7 @@ export function QuestionCard({
         <HobSprite hob={asker} size={20} state={open ? "needs-you" : "idle"} />
         <span className="lbl text-lantern">{copy.asks({ name: asker.name })}</span>
         {task !== undefined && (
-          <Button variant="link" size="xs" onClick={() => onOpen(task.id)}>
+          <Button variant="text" size="xs" onClick={() => onOpen(task.id)}>
             {copy.about({ title: taskTitle(task) })}
           </Button>
         )}

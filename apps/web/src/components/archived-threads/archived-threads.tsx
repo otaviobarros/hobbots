@@ -209,7 +209,7 @@ function ReadOnlyFooter({ hobId, children }: { hobId: AgentId; children: ReactNo
   return (
     <p role="note" className="m-0 flex-none border-t-4 border-line px-6 py-3.5 text-sm text-text-secondary">
       {children} ·{" "}
-      <Link to="/archive" search={{ hob: hobId }} className="text-lantern underline">
+      <Link to="/archive" search={{ hob: hobId }} className="text-link">
         {messages.backToArchived}
       </Link>
     </p>

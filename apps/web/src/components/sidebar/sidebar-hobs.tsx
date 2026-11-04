@@ -55,7 +55,7 @@ export function SidebarHobs({ expanded }: { expanded: boolean }) {
         />
       ))}
       <SidebarTip label={copy.summonLabel} expanded={expanded}>
-        <Link to="/summon" className={cn(sidebarItem, "text-lantern hover:text-lantern")}>
+        <Link to="/summon" className={sidebarItem}>
           <span aria-hidden className={cn(sidebarIcon, "text-xl leading-none")}>
             +
           </span>
