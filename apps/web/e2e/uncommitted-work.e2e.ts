@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { laneHead, openRoom, showInWorkbench, taskSummary, ticket } from "./quest-room.ts";
+import { laneHead, openRoom, taskSummary, ticket } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
