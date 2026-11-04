@@ -137,12 +137,12 @@ export function RetiredHobPage({ hobId }: { hobId: AgentId }) {
               <Link
                 to="/archive/hobs/$hobId/$threadId"
                 params={{ hobId: hob.id, threadId: thread.id }}
-                aria-label={copy.retired.open({ title: thread.title })}
+                aria-label={copy.retired.open({ title: thread.title, when: formatWhen(thread.updatedAt) })}
                 className="flex items-center gap-3 px-3.5 py-3 text-text-strong no-underline hover:bg-hover hover:text-text-strong"
               >
                 <span title={thread.title} className="min-w-0 flex-1 truncate font-semibold">
                   {thread.title}
-                </span>
+                </span>{" "}
                 <span className="flex flex-none items-center gap-1.5 text-xs text-label">
                   {formatWhen(thread.updatedAt)}
                   <LockIcon label={copy.retired.readOnly} />

@@ -104,7 +104,7 @@ export const messages = {
     note: ({ name }: Named) =>
       `${name} is retired, so these chats are read-only until you bring it back. They still show up in search.`,
     chats: ({ name }: Named) => `${name}'s chats`,
-    open: ({ title }: Titled) => `Read ${title}`,
+    open: ({ title, when }: Titled & { when: string }) => `Read ${title}, ${when}`,
     readOnly: "Read-only",
     none: ({ name }: Named) => `${name} left no chats.`,
     chatNote: ({ name }: Named) => `${name} is retired, so this chat is read-only. It still shows up in search.`,
