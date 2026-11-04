@@ -181,6 +181,28 @@ test("[TC-UX-161] with many hobs only the hob list scrolls: the sections and the
   await expect(nav.getByRole("button", { name: "Expand the sidebar" })).toBeInViewport();
 });
 
+// covers UX-001
+test("[TC-UX-164] in the collapsed sidebar a hob's row is as wide as a section's and centered on its tile", async ({
+  page,
+}) => {
+  const { url } = await hubWithHobs(Array.from({ length: 22 }, (_, i) => `Hob ${i + 3}`));
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(url);
+  const nav = sidebar(page);
+  const section = await nav.getByRole("link", { name: "Home", exact: true }).boundingBox();
+  const row = nav.getByRole("button", { name: /^Ada, / });
+  const rowBox = await row.boundingBox();
+  const tile = await row.locator(".size-hob-tile").boundingBox();
+  if (!section || !rowBox || !tile) throw new Error("the sidebar rows did not render");
+
+  // The hover, focus and selected background is the row, so it frames the tile evenly, even while
+  // the hob list scrolls and keeps its scrollbar gutter.
+  expect(rowBox.x).toBe(section.x);
+  expect(rowBox.width).toBe(section.width);
+  expect(tile.x - rowBox.x).toBeCloseTo(rowBox.x + rowBox.width - (tile.x + tile.width), 0);
+  expect(tile.y - rowBox.y).toBeCloseTo(rowBox.y + rowBox.height - (tile.y + tile.height), 0);
+});
+
 test("[TC-UX-162] a browser tab shows no window title strip, which belongs to the desktop app", async ({ page }) => {
   const { url } = await hubWithHobs();
   await page.goto(url);
