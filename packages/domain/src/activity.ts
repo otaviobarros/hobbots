@@ -94,7 +94,7 @@ const sequenceAt = (line: string, i: number) => {
 
 /**
  * The text of the quoted part of a word that opens at `j`, quotes removed, and the index past it.
- * Inside double quotes a backslash still escapes `$`, a backtick, `"` and `\\`, and joins the next line.
+ * Inside double quotes a backslash still escapes `$`, a backtick, `"` and a backslash, and joins the next line.
  */
 const quotedPart = (line: string, j: number) => {
   const quote = line[j];
