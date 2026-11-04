@@ -20,7 +20,7 @@ export function TailscaleNotReady({
   return (
     <section
       aria-label={copy.missing[state]}
-      className="cut flex max-w-[720px] flex-col gap-2.5 border-2 border-lantern bg-card px-[18px] py-4"
+      className="cut flex max-w-[720px] flex-col gap-2.5 border-(length:--edge) border-lantern bg-card px-[18px] py-4"
     >
       <span className="font-bold">{copy.missing[state]}</span>
       <span className="text-ui leading-normal text-text-secondary">{copy.missingBody}</span>

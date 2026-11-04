@@ -35,7 +35,7 @@ function QuestButton({ tree, onOpen }: { tree: TaskTree; onOpen: (taskId: TaskId
     <button
       type="button"
       onClick={() => onOpen(card.top.id)}
-      className="flex h-9 min-w-0 cursor-pointer items-center gap-2.5 rounded-dot border-2 border-line bg-card ps-3 pe-1.5 text-detail text-text-strong hover:bg-hover"
+      className="flex h-9 min-w-0 cursor-pointer items-center gap-2.5 rounded-dot border-(length:--edge) border-line bg-card ps-3 pe-1.5 text-detail text-text-strong hover:bg-hover"
     >
       <FlagIcon size={16} className="text-star" />
       {/* A narrow header keeps the strip and the chip, and says the rest to a screen reader only. */}

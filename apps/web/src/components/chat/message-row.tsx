@@ -86,7 +86,7 @@ function ReplyRow({
   const streaming = isInProgress(message.status);
   const writing = message.status === "streaming";
   return (
-    <div id={id} className={cn("flex max-w-[640px] animate-hb-in gap-2.5", focused && focusRing)}>
+    <div id={id} className={cn("flex animate-hb-in gap-2.5", focused && focusRing)}>
       <HobSprite hob={hob} size={26} state={streaming ? "working" : message.status === "failed" ? "failed" : "idle"} />
       <div className="flex min-w-0 flex-col gap-[3px]">
         <span className="text-meta text-label">

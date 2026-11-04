@@ -58,7 +58,7 @@ export function NeedsTray({
     <section
       aria-label={copy.label({ index: index + 1, count })}
       className={cn(
-        "cut flex animate-hb-in gap-3 border-2 bg-card p-4",
+        "cut flex animate-hb-in gap-3 border-(length:--edge) bg-card p-4",
         risky || stuck ? "border-rose" : "border-lantern",
         className,
       )}

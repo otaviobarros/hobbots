@@ -19,8 +19,11 @@ export function CodeBlock({
   const onCopy = () => copyText(text);
   const label = language === null ? copy.plain : copy.label({ language });
   return (
-    <figure aria-label={label} className="m-0 flex min-w-0 flex-col border-2 border-line bg-deep">
-      <figcaption className="flex items-center justify-between gap-3 border-b-2 border-line py-1 ps-3 pe-1">
+    <figure
+      aria-label={label}
+      className="m-0 flex min-w-0 flex-col overflow-hidden rounded-card border-(length:--edge) border-line bg-deep"
+    >
+      <figcaption className="flex items-center justify-between gap-3 border-b-(length:--edge) border-line py-1 ps-3 pe-1">
         <span className="text-meta text-label">{language ?? copy.plain}</span>
         <Button variant="ghost" size="xs" onClick={onCopy}>
           {state === "idle" ? copy.copy : state === "copied" ? copy.copied : copy.copyFailed}

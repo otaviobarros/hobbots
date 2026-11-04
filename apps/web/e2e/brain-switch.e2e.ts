@@ -63,20 +63,31 @@ test("[TC-CH-184] the picker switches the thread's brain, the chat shows it, and
   await send(page, "My cat is called Miso.");
   await expect(page.getByText("Echo: My cat is called Miso.")).toBeVisible();
 
-  // The chip names the brain and opens the picker, by keyboard.
-  const chip = page.getByRole("button", { name: /^Thinking with Claude Code · Fake Thinker/ });
-  await chip.focus();
+  // The ⋯ menu names the brain, and its item opens the picker beside ⋯, by keyboard.
+  const menu = page.getByRole("main", { name: "Chat" }).getByRole("button", { name: "More for this chat" });
+  const brainItem = async (name: RegExp) => {
+    await menu.click();
+    const item = page.getByRole("menuitem", { name });
+    await expect(item).toBeVisible();
+    return item;
+  };
+  const thinksWith = async (name: RegExp) => {
+    await brainItem(name);
+    await page.keyboard.press("Escape");
+  };
+  await (await brainItem(/^Thinking with Claude Code · Fake Thinker/)).focus();
   await page.keyboard.press("Enter");
   const picker = page.getByRole("dialog", { name: "Think with" });
   await picker.getByRole("region", { name: "Codex" }).getByRole("button", { name: "Fake Coder" }).click();
   await expect(picker).toBeHidden();
-  await expect(page.getByRole("button", { name: /^Thinking with Codex · Fake Coder/ })).toBeVisible();
+  await expect(menu).toBeFocused();
+  await thinksWith(/^Thinking with Codex · Fake Coder/);
   await expect(page.getByRole("note")).toContainText("The next reply thinks with Codex · Fake Coder");
 
   // Effort changes for the thread too, keeping its runtime and model.
-  await page.getByRole("button", { name: /^Thinking with Codex · Fake Coder · Medium/ }).click();
+  await (await brainItem(/^Thinking with Codex · Fake Coder · Medium/)).click();
   await page.getByRole("dialog", { name: "Think with" }).getByRole("radio", { name: "High" }).click();
-  await expect(page.getByRole("button", { name: /^Thinking with Codex · Fake Coder · High, ready/ })).toBeVisible();
+  await thinksWith(/^Thinking with Codex · Fake Coder · High, ready/);
 
   await send(page, "What is my cat called?");
   await expect(page.getByRole("note")).toContainText("Now thinking with Codex · Fake Coder");
@@ -89,17 +100,14 @@ test("[TC-CH-184] the picker switches the thread's brain, the chat shows it, and
   });
 
   // Back on Claude Code, a limited reply offers to continue on Codex.
-  await page.getByRole("button", { name: /^Thinking with Codex/ }).click();
+  await (await brainItem(/^Thinking with Codex/)).click();
   await page.getByRole("button", { name: /^Back to Pip's default/ }).click();
   await send(page, "fake:limit write a poem");
   await expect(page.getByRole("button", { name: "Continue from here" })).toBeVisible();
   await page.getByRole("button", { name: "Continue with Codex" }).click();
   await expect(page.getByText(/Your previous reply was cut off/)).toBeVisible();
-  const onCodex = page.getByRole("button", { name: /^Thinking with Codex, ready\. Change brain/ });
-  await expect(onCodex).toBeVisible();
-
   // The brain the thread already uses can still become the hob's default.
-  await onCodex.click();
+  await (await brainItem(/^Thinking with Codex, ready\. Change brain/)).click();
   const again = page.getByRole("dialog", { name: "Think with" });
   await again.getByRole("switch", { name: "Also make it Pip's default" }).click();
   await again.getByRole("region", { name: "Codex" }).getByRole("button", { name: "Default model" }).click();

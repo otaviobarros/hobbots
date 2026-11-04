@@ -19,7 +19,10 @@ function Saved({ result }: { result: ExportResult }) {
     [copy.held.files, result.files],
   ] as const;
   return (
-    <div role="status" className="cut flex flex-col gap-1.5 border-2 border-mint bg-card px-3.5 py-3 text-ui">
+    <div
+      role="status"
+      className="cut flex flex-col gap-1.5 border-(length:--edge) border-mint bg-card px-3.5 py-3 text-ui"
+    >
       <span className="font-bold break-all text-mint">{copy.saved({ folder: result.folder })}</span>
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
         {rows.map(([label, count]) => (
@@ -77,7 +80,7 @@ export function ExportForm({ scope, disabled = false }: { scope: ExportScope | n
           spellCheck={false}
           autoCapitalize="off"
           autoComplete="off"
-          className="min-w-[260px] flex-1 border-2 border-control bg-deep px-[11px] py-[7px] font-mono text-ui text-text-strong"
+          className="min-w-[260px] flex-1 border-(length:--edge) border-control bg-deep px-[11px] py-[7px] font-mono text-ui text-text-strong"
         />
         <Button type="submit" disabled={disabled || scope === null || destination.trim() === "" || pending}>
           {pending ? copy.exporting : copy.export}

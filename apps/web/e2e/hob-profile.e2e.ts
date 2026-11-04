@@ -76,6 +76,12 @@ const send = async (page: Page, content: string) => {
   await expect(page.getByText(`Echo: ${content}`)).toBeVisible();
 };
 
+// Edit hob sits in the chat header's ⋯ menu.
+const editHob = async (page: Page) => {
+  await page.getByRole("main", { name: "Chat" }).getByRole("button", { name: "More for this chat" }).click();
+  await page.getByRole("menuitem", { name: "Edit hob" }).click();
+};
+
 // covers AG-002
 test("[TC-AG-070] editing instructions in the profile changes the next reply", async ({ page }) => {
   const { current, pip } = await hubWithPip();
@@ -83,7 +89,7 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(page, "first");
 
-  await page.getByRole("link", { name: "Edit hob" }).click();
+  await editHob(page);
   await expect(page.getByRole("heading", { name: "Pip", exact: true })).toBeVisible();
   const instructions = page.getByRole("textbox", { name: "What Pip should do" });
   await expect(instructions).toHaveValue("Write short answers.");
@@ -128,7 +134,7 @@ test("[TC-AG-104] renaming a hob and changing its look in the profile shows them
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(page, "first");
 
-  await page.getByRole("link", { name: "Edit hob" }).click();
+  await editHob(page);
   const profile = page.getByRole("main", { name: "Pip's profile" });
   const look = profile.getByRole("region", { name: "Name and look" });
   await look.getByRole("button", { name: "Change name or look" }).click();
@@ -205,13 +211,12 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
 });
 
 // covers AG-002, UX-005
-test("[TC-AG-075] changing the role in the profile updates the hob's card, chat header and profile at once", async ({
+test("[TC-AG-075] changing the role in the profile updates the hob's card, page and profile at once", async ({
   page,
 }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
-  const header = page.getByRole("main", { name: "Chat" }).locator("header");
   // The hob's card, opened from its tile in the sidebar, shows its role.
   const cardRole = async (role: string) => {
     await page
@@ -222,9 +227,8 @@ test("[TC-AG-075] changing the role in the profile updates the hob's card, chat 
     await page.keyboard.press("Escape");
   };
   await cardRole("Writer");
-  await expect(header).toContainText("Writer");
 
-  await page.getByRole("link", { name: "Edit hob" }).click();
+  await editHob(page);
   const profile = page.getByRole("main", { name: "Pip's profile" });
   const chip = profile.locator("header").getByText(/^(Writer|QA engineer|Bug hunter)$/);
   await expect(chip).toHaveText("Writer");
@@ -251,8 +255,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob's card, chat 
   await cardRole("QA engineer");
   await expect(page.getByRole("region", { name: "Pip", exact: true })).toContainText("QA engineer");
   await page.getByRole("link", { name: "New chat with Pip" }).click();
-  await expect(header).toContainText("QA engineer");
-  await page.getByRole("link", { name: "Edit hob" }).click();
+  await editHob(page);
 
   // A title in the user's own words keeps the QA sigil, hat and tool.
   await profile.getByRole("button", { name: "Change role" }).click();
@@ -266,7 +269,6 @@ test("[TC-AG-075] changing the role in the profile updates the hob's card, chat 
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await cardRole("Bug hunter");
   await page.getByRole("link", { name: "New chat with Pip" }).click();
-  await expect(header).toContainText("Bug hunter");
   const [saved] = await api<ReadonlyArray<Hob & { role: string | null; roleTitle: string; sigil: string }>>(
     current,
     "GET",

@@ -15,7 +15,7 @@ export function ReduceMotionRow() {
   const note = followsSystem ? copy.followsSystem : motion.systemReduces ? copy.setHereSystemOn : copy.setHereSystemOff;
 
   return (
-    <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+    <div className="flex items-center gap-4 border-b-(length:--edge) border-line py-2.5">
       <Switch
         aria-labelledby={labelId}
         aria-describedby={noteId}

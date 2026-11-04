@@ -71,7 +71,7 @@ export function Choice({
       onPick={onPick}
       label={label}
       className={cn(
-        "cut flex cursor-pointer items-center gap-2 border-2 px-3 py-[7px] text-ui",
+        "cut flex cursor-pointer items-center gap-2 border-(length:--edge) px-3 py-[7px] text-ui",
         checked ? "border-text-strong bg-selected text-text-strong" : "border-control text-text-strong hover:bg-line",
         "focus-ring-within",
         className,
@@ -181,7 +181,7 @@ export function OwnRole({
   onSigil: (sigil: RoleId) => void;
 }) {
   return (
-    <div className="flex animate-hb-in flex-col gap-2.5 border-2 border-line p-2.5">
+    <div className="flex animate-hb-in flex-col gap-2.5 border-(length:--edge) border-line p-2.5">
       <input
         // biome-ignore lint/a11y/noAutofocus: choosing "Your own" asks for the title right away.
         autoFocus={autoFocus}
@@ -190,14 +190,14 @@ export function OwnRole({
         onChange={(e) => onTitle(e.target.value)}
         placeholder={messages.hobForm.ownTitlePlaceholder}
         aria-label={messages.hobForm.ownTitle}
-        className="border-2 border-lantern bg-deep px-[11px] py-[9px] text-[15px] text-text-strong"
+        className="border-(length:--edge) border-lantern bg-deep px-[11px] py-[9px] text-[15px] text-text-strong"
       />
       <SigilPicker
         value={value.ownSigil}
         onPick={onSigil}
         legend={<legend className="mb-1.5 text-detail text-text-secondary">{messages.hobForm.sigil}</legend>}
         className="flex flex-wrap gap-1"
-        tileClassName="size-8 border-2 border-line bg-deep hover:border-control data-on:border-text-strong data-on:hover:border-text-strong"
+        tileClassName="size-8 border-(length:--edge) border-line bg-deep hover:border-control data-on:border-text-strong data-on:hover:border-text-strong"
       />
     </div>
   );
@@ -319,7 +319,10 @@ function Brain<D extends BrainChoice>({
             <span className="text-detail">{more.length}</span>
           </button>
           {moreOpen && (
-            <fieldset id={moreId} className="m-0 flex min-w-0 animate-hb-in flex-col border-2 border-line p-1">
+            <fieldset
+              id={moreId}
+              className="m-0 flex min-w-0 animate-hb-in flex-col border-(length:--edge) border-line p-1"
+            >
               <legend className="sr-only">{messages.models.more}</legend>
               {more.map((m) => {
                 const on = m.id === draft.model;
@@ -341,7 +344,10 @@ function Brain<D extends BrainChoice>({
                     />
                     <span
                       aria-hidden
-                      className={cn("size-2.5 border-2", on ? "border-moonlight bg-moonlight" : "border-control")}
+                      className={cn(
+                        "size-2.5 border-(length:--edge)",
+                        on ? "border-moonlight bg-moonlight" : "border-control",
+                      )}
                     />
                     <span className={cn("w-24 shrink-0 font-bold", on ? "text-moonlight" : "text-text-strong")}>
                       {m.displayName}

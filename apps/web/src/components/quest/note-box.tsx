@@ -123,7 +123,7 @@ export function NoteBox({
     send.error instanceof ApiError && send.error.tag === "NoteRefused" && send.error.fields.reason === "task-ended";
   return (
     <form
-      className="flex flex-col gap-1.5 border-t-2 border-line px-3.5 pt-2.5 pb-3"
+      className="flex flex-col gap-1.5 border-t-(length:--edge) border-line px-3.5 pt-2.5 pb-3"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -157,7 +157,7 @@ export function NoteBox({
             setDraft({ ...emptyNote(), text: event.target.value });
           }}
           onKeyDown={enterSends(submit)}
-          className="min-h-9 flex-1 rounded-control border-2 border-control bg-deep text-ui text-text-strong"
+          className="min-h-9 flex-1 rounded-control border-(length:--edge) border-control bg-deep text-ui text-text-strong"
         />
         <Button type="submit" size="sm" disabled={text === "" || send.isPending}>
           {copy.send}

@@ -33,7 +33,7 @@ export function TaskDetail({
     <div className="flex flex-col gap-3.5">
       <WaitingApprovals approvals={detail.approvals} />
       <Section title={detail.from === null ? copy.brief : copy.from({ name: hobs(detail.from).name })}>
-        <div className="flex flex-col gap-1 border-2 border-line bg-card px-2.5 py-2 text-detail leading-snug">
+        <div className="flex flex-col gap-1 border-(length:--edge) border-line bg-card px-2.5 py-2 text-detail leading-snug">
           <span className="whitespace-pre-wrap">{detail.brief}</span>
           {detail.expected !== null && <span className="text-label">{copy.expected({ text: detail.expected })}</span>}
         </div>
@@ -204,7 +204,10 @@ function Artifacts({ artifacts }: { artifacts: ReturnType<typeof taskDetail>["ou
   return (
     <ul className="m-0 flex list-none flex-col gap-1 p-0 text-detail">
       {artifacts.map((artifact) => (
-        <li key={artifact.id} className="flex flex-col gap-0.5 border-2 border-line bg-card px-2.5 py-1.5">
+        <li
+          key={artifact.id}
+          className="flex flex-col gap-0.5 border-(length:--edge) border-line bg-card px-2.5 py-1.5"
+        >
           <span className="font-bold">{artifact.label}</span>
           {artifact.kind === "link" ? (
             <a href={artifact.value} target="_blank" rel="noreferrer" className="break-all text-link">

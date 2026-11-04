@@ -377,7 +377,7 @@ function Made({
 }
 
 function Artifact({ artifact, onTab }: { artifact: ArtifactRef; onTab: (tab: WorkbenchTab, focus?: string) => void }) {
-  const box = "flex flex-col gap-0.5 border-2 border-line bg-card px-3 py-2 text-detail";
+  const box = "flex flex-col gap-0.5 border-(length:--edge) border-line bg-card px-3 py-2 text-detail";
   if (artifact.kind === "file") {
     return (
       <button
@@ -550,7 +550,7 @@ function OpenRow({
   onAction: () => void;
 }) {
   return (
-    <div className="flex items-start gap-2.5 border-2 border-line bg-card px-3 py-2 text-detail leading-snug">
+    <div className="flex items-start gap-2.5 border-(length:--edge) border-line bg-card px-3 py-2 text-detail leading-snug">
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-meta font-bold text-lantern">{label}</span>
         <span className="whitespace-pre-wrap">{text}</span>

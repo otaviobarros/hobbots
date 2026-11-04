@@ -188,7 +188,7 @@ function RuleForm({
   return (
     <form
       aria-labelledby={headingId}
-      className="flex flex-col gap-2 border-2 border-line-2 bg-deep px-3 py-2.5"
+      className="flex flex-col gap-2 border-(length:--edge) border-line-2 bg-deep px-3 py-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         onSave(rules);
@@ -292,7 +292,7 @@ function DenyForm({
           value={reason}
           maxLength={2000}
           onChange={(event) => onReason(event.target.value)}
-          className="min-w-[200px] flex-1 border-2 border-control bg-deep px-3 py-1.5 text-text-strong"
+          className="min-w-[200px] flex-1 border-(length:--edge) border-control bg-deep px-3 py-1.5 text-text-strong"
         />
         <Button type="submit" variant="deny">
           {copy.confirmDeny}

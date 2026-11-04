@@ -44,7 +44,7 @@ function HubRow({ hub, disabled, onConnect }: { hub: FoundHubView; disabled: boo
   const details = [hub.address, copy.version({ version: hub.version })];
   if (hub.hubName !== null && hub.hubName !== hub.computer) details.push(copy.calledItself({ name: hub.hubName }));
   return (
-    <li className="cut flex items-center gap-3 border-2 border-line-2 bg-card px-3.5 py-3">
+    <li className="cut flex items-center gap-3 border-(length:--edge) border-line-2 bg-card px-3.5 py-3">
       <span aria-hidden className={`size-2.5 flex-none ${usable ? "bg-mint" : "bg-lantern"}`} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="font-bold">{hub.computer}</span>

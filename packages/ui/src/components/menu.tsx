@@ -46,6 +46,17 @@ function DropdownMenuItem({ className, ...props }: React.ComponentProps<typeof D
   return <DropdownMenuPrimitive.Item data-slot="dropdown-menu-item" className={cn(itemClass, className)} {...props} />;
 }
 
+/** A hairline between groups of items, such as before the one that takes something away. */
+function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+  return (
+    <DropdownMenuPrimitive.Separator
+      data-slot="dropdown-menu-separator"
+      className={cn("mx-0.5 my-1 h-px bg-line", className)}
+      {...props}
+    />
+  );
+}
+
 function ContextMenu(props: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
 }
@@ -86,6 +97,7 @@ export {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   MenuShortcut,
 };

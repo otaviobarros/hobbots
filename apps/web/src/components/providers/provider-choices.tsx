@@ -84,7 +84,7 @@ export function ProviderChoices<D extends BrainChoice>({
               health={health}
               name="hob-provider"
               className={cn(
-                "cut flex cursor-not-allowed items-center gap-2 border-2 border-dashed border-line-2 px-3 py-[7px] text-ui text-label",
+                "cut flex cursor-not-allowed items-center gap-2 border-(length:--edge) border-dashed border-line-2 px-3 py-[7px] text-ui text-label",
                 chipClassName,
               )}
             >

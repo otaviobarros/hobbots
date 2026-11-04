@@ -39,7 +39,7 @@ function TaskRow({ row, hobName }: { row: TraceRow; hobName: HobName }) {
   const { task, delegation } = row;
   return (
     <li
-      className="flex flex-col gap-1 border-b-2 border-line py-2"
+      className="flex flex-col gap-1 border-b-(length:--edge) border-line py-2"
       style={{ paddingInlineStart: `${row.depth * 20}px` }}
     >
       <span className="flex items-center gap-2">
@@ -87,7 +87,7 @@ function TaskRow({ row, hobName }: { row: TraceRow; hobName: HobName }) {
 
 function EventRow({ entry, hobName }: { entry: TraceEntry; hobName: HobName }) {
   return (
-    <li className="flex items-center gap-3 border-b-2 border-line py-1.5 text-ui">
+    <li className="flex items-center gap-3 border-b-(length:--edge) border-line py-1.5 text-ui">
       <time dateTime={entry.occurredAt} className="w-[72px] shrink-0 font-mono text-meta text-label">
         {formatTime(entry.occurredAt)}
       </time>

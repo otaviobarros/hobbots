@@ -48,7 +48,7 @@ export function ReplySteps({
   return (
     <ol
       aria-label={copy.list}
-      className="m-0 flex list-none flex-col gap-[3px] border-2 border-line bg-panel px-2.5 py-2 text-detail"
+      className="m-0 flex list-none flex-col gap-[3px] rounded-card border-(length:--edge) border-line bg-panel px-2.5 py-2 text-detail"
     >
       {shown.map((step) => (
         <li key={step.id} data-state={step.state}>

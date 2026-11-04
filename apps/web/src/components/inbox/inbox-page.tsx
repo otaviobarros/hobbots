@@ -338,7 +338,7 @@ function AllClear() {
           aria-hidden
           className="relative flex h-37.5 w-110 max-w-full items-end justify-center overflow-hidden rounded-card bg-panel"
         >
-          <span className="absolute inset-x-0 bottom-0 h-3 border-t-2 border-line-2 bg-line" />
+          <span className="absolute inset-x-0 bottom-0 h-3 border-t-(length:--edge) border-line-2 bg-line" />
           <span className="relative mb-3">
             {hob === undefined ? <ChiefMark size={72} /> : <HobSprite hob={hob} size={72} />}
           </span>

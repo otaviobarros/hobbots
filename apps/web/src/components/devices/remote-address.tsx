@@ -16,7 +16,7 @@ export function RemoteAddress({ address, label, children }: { address: string; l
     <div className="flex flex-wrap items-start gap-5">
       <div className="flex min-w-[260px] flex-1 flex-col gap-2">
         <span className="lbl text-meta text-label">{label}</span>
-        <div className="cut flex items-center gap-2.5 border-2 border-control bg-deep px-3 py-2">
+        <div className="cut flex items-center gap-2.5 border-(length:--edge) border-control bg-deep px-3 py-2">
           <span className="min-w-0 flex-1 font-mono text-base font-bold text-moonlight wrap-anywhere">{address}</span>
           <Button variant="outline" size="xs" onClick={() => copyText(address)}>
             {copied === "idle" ? copy.copy : copied === "copied" ? copy.copied : copy.copyFailed}

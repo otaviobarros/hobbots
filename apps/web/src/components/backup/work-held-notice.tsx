@@ -11,7 +11,7 @@ export function WorkHeldNotice({ className }: { className?: string }) {
   return (
     <section
       aria-label={messages.latest.held}
-      className={`cut flex flex-col gap-1.5 border-2 border-lantern bg-deep px-4 py-3 ${className ?? ""}`}
+      className={`cut flex flex-col gap-1.5 border-(length:--edge) border-lantern bg-deep px-4 py-3 ${className ?? ""}`}
     >
       <span className="font-bold text-lantern">{messages.latest.held}</span>
       <span className="text-ui text-text-secondary">{messages.latest.heldNote}</span>

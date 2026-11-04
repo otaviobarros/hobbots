@@ -11,7 +11,7 @@ const copy = messages.now;
 function RuntimeRow({ health }: { health: RuntimeHealth }) {
   const fix = runtimeFix(health);
   return (
-    <li className="flex flex-col gap-1 border-b-2 border-line py-2">
+    <li className="flex flex-col gap-1 border-b-(length:--edge) border-line py-2">
       <span className="flex items-center gap-2">
         <span className="flex-1">{RUNTIME_NAMES[health.runtime]}</span>
         {health.version !== null && <span className="text-meta text-label">{health.version}</span>}
@@ -35,7 +35,7 @@ function StalledRow({
 }) {
   const { questId } = stalled;
   return (
-    <li className="flex flex-wrap items-center gap-2 border-b-2 border-line py-2">
+    <li className="flex flex-wrap items-center gap-2 border-b-(length:--edge) border-line py-2">
       <span className="min-w-0 flex-1 text-ui">{stalledText(stalled, hobName)}</span>
       {questId !== null && (
         <Button variant="outline" size="sm" onClick={() => onFollow(questId)}>

@@ -130,7 +130,7 @@ function AskedYou({ question, hobs }: { question: Question; hobs: HobLookup }) {
   return (
     <section
       aria-label={copy.question.asks({ name: asker.name })}
-      className="flex flex-col gap-2 rounded-card border-2 border-lantern bg-card p-3"
+      className="flex flex-col gap-2 rounded-card border-(length:--edge) border-lantern bg-card p-3"
     >
       <span className="flex items-start gap-2.5">
         <span className="flex size-7 shrink-0 items-center justify-center rounded-tile bg-tile">

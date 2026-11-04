@@ -198,7 +198,8 @@ test("[TC-UX-082] the profile moves a hob to Codex with its model and effort, an
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
   await expect(page.getByText("Echo: hello")).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Thinking with Codex · Fake Coder/ })).toBeVisible();
+  await page.getByRole("main", { name: "Chat" }).getByRole("button", { name: "More for this chat" }).click();
+  await expect(page.getByRole("menuitem", { name: /^Thinking with Codex · Fake Coder/ })).toBeVisible();
 });
 
 // covers AG-002, AG-005

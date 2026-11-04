@@ -48,7 +48,7 @@ export function PotionVial({ fill }: { fill: PotionFill | null }) {
   return (
     <span
       aria-hidden
-      className="relative box-border h-9 w-[26px] shrink-0 overflow-hidden rounded-[9px_9px_7px_7px] border-2 border-line-2 bg-deep"
+      className="relative box-border h-9 w-[26px] shrink-0 overflow-hidden rounded-[9px_9px_7px_7px] border-(length:--edge) border-line-2 bg-deep"
     >
       {fill !== null && (
         <span className={cn("absolute inset-x-0 bottom-0", LIQUID[fill.level])} style={{ height: height(fill) }} />

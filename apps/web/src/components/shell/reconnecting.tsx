@@ -49,7 +49,7 @@ export function ReconnectingCard({ className }: { className?: string }) {
     >
       <span
         aria-hidden
-        className="size-3.5 flex-none animate-hb-spin rounded-dot border-2 border-lantern/30 border-t-lantern motion-reduce:animate-none"
+        className="size-3.5 flex-none animate-hb-spin rounded-dot border-(length:--edge) border-lantern/30 border-t-lantern motion-reduce:animate-none"
       />
       <span className="flex-1">{reconnectingText(unreachable)}</span>
       <Button variant="outline" size="xs" onClick={retry}>

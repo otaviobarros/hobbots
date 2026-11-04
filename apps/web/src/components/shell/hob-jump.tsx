@@ -43,7 +43,7 @@ export function HobJump() {
         // A click on the backdrop lands on the dialog itself; inside it lands on its content.
         if (event.target === event.currentTarget) setOpen(false);
       }}
-      className="cut mx-auto mt-[14vh] w-[440px] max-w-[calc(100vw-32px)] border-2 border-control bg-panel p-0 text-text-strong backdrop:bg-deep/70"
+      className="cut mx-auto mt-[14vh] w-[440px] max-w-[calc(100vw-32px)] border-(length:--edge) border-control bg-panel p-0 text-text-strong backdrop:bg-deep/70"
     >
       {open && <JumpList onDone={() => setOpen(false)} />}
     </dialog>
@@ -103,7 +103,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
             go(options[current]);
           }
         }}
-        className="border-2 border-control bg-deep px-2.5 py-2 text-[15px] text-text-strong placeholder:text-label"
+        className="border-(length:--edge) border-control bg-deep px-2.5 py-2 text-[15px] text-text-strong placeholder:text-label"
       />
       <div
         id="hob-jump-list"

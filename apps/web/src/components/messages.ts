@@ -322,6 +322,8 @@ export const messages = {
     askWhat: "What are we making?",
     newThread: "New thread",
     openHob: ({ name }: { name: string }) => `Open ${name}'s page`,
+    /** After the hob's name under the chat title: the hob leads this chat, and what it is doing now. */
+    leadLine: ({ doing }: { doing: string }) => ` · lead · ${doing}`,
     hello: ({ name }: { name: string }) => `Hello, I'm ${name}!`,
     freshPage: "A fresh page",
     helloBody: "Tell me my first chore. I keep working even if you switch to another thread.",
@@ -380,6 +382,7 @@ export const messages = {
   },
   brain: {
     trigger: ({ brain, state }: { brain: string; state: string }) => `Thinking with ${brain}, ${state}. Change brain`,
+    change: "Change brain",
     continueFailed: ({ name }: { name: string }) => `Hobbots could not switch ${name}'s brain. Try again.`,
     title: "Think with",
     scope: "Changes this thread from its next reply.",

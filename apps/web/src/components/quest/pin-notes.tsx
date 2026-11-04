@@ -13,7 +13,7 @@ export function PinNotes({ threadId, pins }: { threadId: ThreadId; pins: Pins })
   const { missing, failed } = useFollowedTrees(threadId, pins.pinned);
   if (missing.length + failed.length === 0) return null;
   return (
-    <div className="flex flex-col border-b-2 border-line">
+    <div className="flex flex-col border-b-(length:--edge) border-line">
       {missing.map((id) => (
         <PinNote key={id} text={copy.missing} action={copy.unpin} onAction={() => pins.toggle(id)} />
       ))}

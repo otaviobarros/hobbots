@@ -80,7 +80,7 @@ export function StandingRuleRow({ grant, hob }: { grant: Grant; hob: Agent | und
         <fieldset
           aria-label={copy.removeLabel({ rule })}
           disabled={revoke.isPending}
-          className="cut m-0 flex animate-hb-in flex-col gap-2 border-2 border-solid border-rose bg-deep px-3 py-2.5"
+          className="cut m-0 flex animate-hb-in flex-col gap-2 border-(length:--edge) border-solid border-rose bg-deep px-3 py-2.5"
         >
           <span className="text-ui">{copy.confirm.question({ name })}</span>
           {grant.rule._tag === "Host" && (
