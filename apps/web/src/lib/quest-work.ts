@@ -41,9 +41,3 @@ export const workTone: Record<TaskState, WorkTone> = {
   failed: "problem",
   cancelled: "idle",
 };
-
-/** The hobs on a Quest's card: its lead first, then its party in the order they joined. */
-export const portraitIds = (group: QuestInProgress): ReadonlyArray<AgentId> => [
-  group.quest.leadId,
-  ...new Set(group.members.map((each) => each.task.ownerId)),
-];

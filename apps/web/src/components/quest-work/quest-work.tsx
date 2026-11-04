@@ -1,9 +1,9 @@
-import type { Agent, AgentId, MemberWork } from "@hobbots/domain";
+import type { Agent } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { agentsQuery } from "../../api/queries.ts";
 import { useHobQuestWork } from "../../api/quest-work.ts";
-import { portraitIds, type QuestInProgress, type WorkTone, workTone } from "../../lib/quest-work.ts";
+import { type WorkTone, workTone } from "../../lib/quest-work.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { QuestLink } from "./quest-link.tsx";
@@ -15,15 +15,6 @@ const toneText: Record<WorkTone, string> = {
   done: "text-mint",
   problem: "text-rose",
   idle: "text-text-secondary",
-};
-
-const toneBar: Record<WorkTone, string> = {
-  needs: "bg-lantern",
-  working: "bg-mint-deep",
-  waiting: "bg-control",
-  done: "bg-mint",
-  problem: "bg-rose",
-  idle: "bg-line-2",
 };
 
 const useHobs = () => {
@@ -62,73 +53,5 @@ export function HobQuestWork({ hob }: { hob: Agent }) {
         );
       })}
     </ul>
-  );
-}
-
-/**
- * Home's Quests in progress: one entry per Quest with its party's portraits, how far its members
- * got, and each member's line "On Aldric's quest" with its Task's state. Each entry opens the Quest.
- */
-export function QuestsInProgress({ quests }: { quests: ReadonlyArray<QuestInProgress> }) {
-  const hobs = useHobs();
-  if (quests.length === 0)
-    return <p className="m-0 text-sm leading-normal text-text-secondary">{messages.home.empty}</p>;
-  return (
-    <ul className="m-0 flex list-none flex-col gap-3 p-0">
-      {quests.map((group) => (
-        <li key={group.quest.id}>
-          <QuestEntry group={group} hobs={hobs} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function QuestEntry({ group, hobs }: { group: QuestInProgress; hobs: ReadonlyMap<AgentId, Agent> }) {
-  const lead = hobs.get(group.quest.leadId)?.name ?? "";
-  const done = group.members.filter((each) => each.task.state === "completed").length;
-  const total = group.members.length;
-  const portraits = portraitIds(group).flatMap((id) => {
-    const hob = hobs.get(id);
-    return hob ? [hob] : [];
-  });
-  return (
-    <QuestLink
-      quest={group.quest}
-      threadAgentId={group.threadAgentId}
-      taskId={group.quest.taskId}
-      className="flex flex-col gap-1.5 text-text-strong no-underline hover:text-moonlight"
-    >
-      <span className="flex items-center gap-2 text-sm">
-        <span aria-hidden className="flex">
-          {portraits.map((hob) => (
-            <HobSprite key={hob.id} hob={hob} size={20} className="-me-1" />
-          ))}
-        </span>
-        <span className="min-w-0 flex-1 truncate ps-1.5 font-bold">{group.quest.goal}</span>
-        <span className="text-xs whitespace-nowrap text-label">{messages.home.progress({ done, total })}</span>
-      </span>
-      <span aria-hidden className="flex gap-[3px]">
-        {group.members.map((each) => (
-          <span key={each.task.id} className={cn("h-1.5 flex-1", toneBar[workTone[each.task.state]])} />
-        ))}
-      </span>
-      {group.members.map((each) => (
-        <MemberLine key={each.task.id} work={each} hob={hobs.get(each.task.ownerId)} lead={lead} />
-      ))}
-    </QuestLink>
-  );
-}
-
-function MemberLine({ work, hob, lead }: { work: MemberWork; hob: Agent | undefined; lead: string }) {
-  return (
-    <span className="flex items-center gap-2 text-[13px] leading-snug">
-      {hob && <HobSprite hob={hob} size={18} />}
-      <span className="w-16 flex-none truncate font-heading font-semibold text-moonlight">{hob?.name}</span>
-      <span className="min-w-0 flex-1 truncate text-text-secondary">{messages.onQuest({ lead })}</span>
-      <span className={cn("whitespace-nowrap text-xs", toneText[workTone[work.task.state]])}>
-        {messages.state[work.task.state]}
-      </span>
-    </span>
   );
 }
