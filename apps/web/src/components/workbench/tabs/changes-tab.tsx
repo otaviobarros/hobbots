@@ -14,6 +14,7 @@ import {
 import { KindTag } from "../changes/kind-tag.tsx";
 import { messages } from "../changes/messages.ts";
 import { useLineCounts } from "../changes/use-line-counts.ts";
+import { LIST_CARD, listRow } from "../list-row.ts";
 import type { WorkbenchTabProps } from "./tab-props.ts";
 
 const KINDS: ReadonlyArray<FileChangeKind> = ["added", "edited", "deleted", "moved", "link"];
@@ -52,10 +53,7 @@ export function ChangesTab({ activity, state, hobs, focus, onTab }: WorkbenchTab
         })}
       </p>
       <div className="flex min-w-0 flex-col gap-4 @3xl:flex-row @3xl:items-start">
-        <nav
-          aria-label={messages.files}
-          className="flex shrink-0 flex-col gap-0.5 rounded-card border border-line bg-card p-1.5 @3xl:sticky @3xl:top-0 @3xl:w-58"
-        >
+        <nav aria-label={messages.files} className={cn(LIST_CARD, "@3xl:sticky @3xl:top-0 @3xl:w-58")}>
           {changes.map((change) => (
             <FileRow
               key={change.id}
@@ -104,15 +102,7 @@ function FileRow({
   const { name } = splitPath(change.path);
   const counts = useLineCounts(change, activity);
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onPick}
-      className={cn(
-        "flex w-full cursor-pointer items-center gap-2 rounded-control border-0 px-2 py-[7px] text-start text-text transition-colors duration-150",
-        on ? "bg-line" : "bg-transparent hover:bg-hover",
-      )}
-    >
+    <button type="button" aria-pressed={on} onClick={onPick} className={cn(listRow(on), "items-center")}>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate font-mono text-[13px] leading-[18px] text-text-strong">{name}</span>
         {dir !== "" && <span className="truncate font-mono text-[11px] leading-[15px] text-label">{dir}</span>}

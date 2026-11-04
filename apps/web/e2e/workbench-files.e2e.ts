@@ -122,7 +122,11 @@ test("[TC-UX-041] the Files tab previews images, PDF and text, with each kind an
 
   await list.getByRole("button", { name: /^sales\.csv/ }).click();
   const sales = files.getByRole("region", { name: "sales.csv" });
-  await expect(sales.getByRole("document", { name: "Preview of sales.csv" })).toHaveText("day,sales\nmon,3\n");
+  // Plain text shows each line with its number.
+  await expect(sales.getByRole("document", { name: "Preview of sales.csv" }).getByRole("row")).toHaveText([
+    "1day,sales",
+    "2mon,3",
+  ]);
   await expect(sales).toContainText("Text · 16 byte");
 });
 
