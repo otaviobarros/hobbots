@@ -22,9 +22,6 @@ export const messages = {
   tryAgain: "Try again",
   showInWorkbench: "Show in the Workbench",
   details: "Everything in this task",
-  asks: ({ name }: { name: string }) => `${name} asks you`,
-  passedUp: ({ chain, when }: { chain: ReadonlyArray<string>; when: string }) =>
-    `Passed up by ${[...chain, "you"].join(" → ")} · asked ${when}`,
   /** A Task's line in its lane: which try it is on and when it started. */
   taskMeta: ({ attempt, age }: { attempt: number; age: string }) =>
     attempt === 0 ? `not started · ${age}` : `attempt ${formatCount(attempt)} · ${age}`,

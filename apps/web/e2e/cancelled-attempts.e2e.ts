@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, laneTask, openRoom, showInWorkbench } from "./quest-room.ts";
+import { lane, laneHead, laneMenu, laneTask, openRoom, showInWorkbench } from "./quest-room.ts";
 
 // Issues #669 and #674 in the browser: a member's Task and a step cancelled while their turns run
 // each end with a cancelled Attempt, and their Workbench says so. The decision is tested in
@@ -86,13 +86,15 @@ test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in the Workb
     ["Frodo", "Run the long job"],
     ["Pip", "Check the build"],
   ] as const) {
-    // You cancel it from its lane while its turn runs.
+    // You cancel it from its hob's lane while its turn runs: Frodo's step stays in his lane, so
+    // his menu cancels it on its own, apart from his Quest.
     const sheet = laneTask(page, title);
     await expect(name === "Pip" ? laneHead(page, name) : sheet).toContainText("Running", { timeout: 30_000 });
-    const controls = sheet.getByRole("region", { name: `Controls for ${title}` });
-    await controls.getByRole("button", { name: "Cancel task" }).click();
-    await controls.getByRole("button", { name: "Yes, cancel" }).click();
-    await expect(controls.getByRole("status")).toHaveText("Cancelled: the task confirmed it stopped.", {
+    const menu = await laneMenu(page, name);
+    await menu.getByRole("menuitem", { name: name === "Frodo" ? "Cancel a step…" : "Cancel task…" }).click();
+    const its = lane(page, name);
+    await its.getByRole("button", { name: "Yes, cancel" }).click();
+    await expect(its.getByRole("status").filter({ hasText: "Cancelled: the task confirmed it stopped." })).toBeVisible({
       timeout: 30_000,
     });
 

@@ -58,3 +58,23 @@ export const roomMenu = async (page: Page, title: string): Promise<void> => {
     .getByRole("button", { name: `${title} menu` })
     .click();
 };
+
+/** Opens the ⋯ menu on a hob's lane, and gives back the menu. */
+export const laneMenu = async (page: Page, name: string): Promise<Locator> => {
+  await lane(page, name)
+    .getByRole("button", { name: `${name}'s task menu` })
+    .click();
+  return page.getByRole("menu", { name: `${name}'s task` });
+};
+
+/**
+ * Cancels the Task a hob's lane names from its ⋯ menu, saying Yes to the question it asks in the
+ * lane, and gives back the lane.
+ */
+export const cancelInLane = async (page: Page, name: string): Promise<Locator> => {
+  const menu = await laneMenu(page, name);
+  await menu.getByRole("menuitem", { name: "Cancel task…" }).click();
+  const the = lane(page, name);
+  await the.getByRole("button", { name: "Yes, cancel" }).click();
+  return the;
+};

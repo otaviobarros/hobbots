@@ -83,6 +83,15 @@ export const useRoomMoves = (hobId: AgentId, threadId: ThreadId, top: TaskId | u
     /** Opens the dock on a tab, with a file to show first, or folds it. */
     tab: (tab: WorkbenchTab | undefined, file?: string) =>
       void navigate({ from: to, to, params, search: (prev) => ({ ...prev, tab, file }), replace: true }),
+    /** Lights a lane on one of its Task's tries, so the lane and the Workbench show what it did. */
+    pick: (taskId: TaskId, attemptId: AttemptId) =>
+      void navigate({
+        from: to,
+        to,
+        params,
+        search: (prev) => ({ room: top ?? prev.room, lane: taskId, tab: prev.tab, attempt: attemptId }),
+        replace: true,
+      }),
     attempt: (attemptId: AttemptId) =>
       void navigate({ from: to, to, params, search: (prev) => ({ ...prev, attempt: attemptId }), replace: true }),
     /** Gives the chat its full width again, at the same place. */

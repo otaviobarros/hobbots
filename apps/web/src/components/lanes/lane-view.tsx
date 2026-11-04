@@ -94,7 +94,7 @@ export function LaneView({
         flashing && "animate-hb-flash",
       )}
     >
-      <div className="flex items-center">
+      <div className="flex items-center gap-1 pe-2">
         <button
           type="button"
           aria-pressed={picked}

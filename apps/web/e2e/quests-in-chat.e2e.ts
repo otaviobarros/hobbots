@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { laneHead, laneTask, openRoom, questRoom, taskDetails } from "./quest-room.ts";
+import { cancelInLane, laneHead, laneTask, openRoom, questRoom, taskDetails } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -115,10 +115,8 @@ test("[TC-IN-154] cancelling the work a question waits on withdraws it from the 
   // You cancel Ada's Task from her lane before answering her.
   await openRoom(page, "Plan the Black Friday campaign");
   const drawer = await taskDetails(page, "Build the campaign");
-  const controls = drawer.getByRole("region", { name: "Controls for Build the campaign" });
-  await controls.getByRole("button", { name: "Cancel task" }).click();
-  await controls.getByRole("button", { name: "Yes, cancel" }).click();
-  await expect(controls.getByRole("status")).toHaveText("Cancelled: the task confirmed it stopped.", {
+  const ada = await cancelInLane(page, "Ada");
+  await expect(ada.getByRole("status").filter({ hasText: "Cancelled: the task confirmed it stopped." })).toBeVisible({
     timeout: 15_000,
   });
 

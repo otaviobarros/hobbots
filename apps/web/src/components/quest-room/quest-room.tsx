@@ -4,6 +4,7 @@ import { focusElement } from "@hobbots/ui/lib/restore-focus";
 import { useQuery } from "@tanstack/react-query";
 import { type RefObject, useEffect, useRef } from "react";
 import { threadTasksQuery } from "../../api/tasks.ts";
+import { useLaneSlots } from "../lane-actions/lane-slots.tsx";
 import { LaneLineup } from "../lanes/lane-lineup.tsx";
 import { QuestLanes } from "../lanes/quest-lanes.tsx";
 import { useLaneJump } from "../lanes/use-lane-jump.ts";
@@ -13,7 +14,7 @@ import { type HobLookup, type Pins, useFollowedTrees, useHobLookup } from "../qu
 import { findTask, taskTitle } from "../quest/work-model.ts";
 import { LaneNotes } from "../steer-receipt/lane-notes.tsx";
 import { WorkbenchDock } from "../workbench/workbench-dock.tsx";
-import { LaneCards } from "./lane-task.tsx";
+import { TaskCards } from "./lane-task.tsx";
 import { messages } from "./messages.ts";
 import { RoomHeader } from "./room-header.tsx";
 import { litTask } from "./room-model.ts";
@@ -126,6 +127,7 @@ function OpenRoom({
   const pick = (hobId: AgentId | null) =>
     moves.lane(hobId === null ? undefined : room.order.find((lane) => lane.hobId === hobId)?.task.id);
   const lanes = useLaneJump(pick);
+  const actOn = useLaneSlots({ hobs, pins, view, moves });
   return (
     <section
       aria-label={messages.label({ title: taskTitle(top) })}
@@ -148,20 +150,27 @@ function OpenRoom({
         flashing={lanes.flashing}
         onFlashed={lanes.flashed}
         reads={reads}
-        slots={(lane) => ({
-          cards: (
-            <>
-              <LaneCards
-                tree={tree}
-                lane={lane}
-                hobs={hobs}
-                onOpen={(taskId) => moves.lane(taskId)}
-                onWorkbench={(taskId) => moves.show(taskId, "summary")}
-              />
-              <LaneNotes tree={tree} ownerId={lane.hobId} hobs={hobs} />
-            </>
-          ),
-        })}
+        slots={(lane) => {
+          const acted = actOn(tree, lane);
+          return {
+            actions: acted.actions,
+            tries: acted.tries,
+            cards: (
+              <>
+                <TaskCards
+                  tree={tree}
+                  lane={lane}
+                  tried={acted.tried}
+                  hobs={hobs}
+                  onOpen={(taskId) => moves.lane(taskId)}
+                  onWorkbench={(taskId) => moves.show(taskId, "summary")}
+                />
+                <LaneNotes tree={tree} ownerId={lane.hobId} hobs={hobs} />
+                {acted.cards}
+              </>
+            ),
+          };
+        }}
       />
       <WorkbenchDock tree={tree} taskId={lit ?? top.id} view={view} hobs={hobs} moves={moves} />
     </section>
