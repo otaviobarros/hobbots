@@ -44,20 +44,25 @@ function DropdownMenuContent({
 }
 
 // `deny` marks the item that takes something away, such as Cancel quest…, in rose.
+// `inset` indents an item under a label, such as each hob a Reassign… view lists, with what leads it on one line.
 const dropdownItemVariants = cva(itemClass, {
-  variants: { variant: { default: "", deny: "text-rose" } },
-  defaultVariants: { variant: "default" },
+  variants: {
+    variant: { default: "", deny: "text-rose" },
+    inset: { true: "flex-row items-center gap-2 ps-5", false: "" },
+  },
+  defaultVariants: { variant: "default", inset: false },
 });
 
 function DropdownMenuItem({
   className,
   variant = "default",
+  inset = false,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & VariantProps<typeof dropdownItemVariants>) {
   return (
     <DropdownMenuPrimitive.Item
       data-slot="dropdown-menu-item"
-      className={cn(dropdownItemVariants({ variant }), className)}
+      className={cn(dropdownItemVariants({ variant, inset }), className)}
       {...props}
     />
   );
@@ -69,6 +74,17 @@ function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typ
     <DropdownMenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
       className={cn("mx-0.5 my-1 h-px bg-line", className)}
+      {...props}
+    />
+  );
+}
+
+/** A line of text in a menu that is not an item, such as what an item below it does. */
+function DropdownMenuLabel({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Label>) {
+  return (
+    <DropdownMenuPrimitive.Label
+      data-slot="dropdown-menu-label"
+      className={cn("px-2.5 pt-0.5 pb-1.5 text-meta text-label", className)}
       {...props}
     />
   );
@@ -114,6 +130,7 @@ export {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   MenuShortcut,

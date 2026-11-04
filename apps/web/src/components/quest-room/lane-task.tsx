@@ -1,29 +1,28 @@
-import type { Question, TaskId, TaskTree } from "@hobbots/domain";
+import type { TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { formatWhen } from "../../lib/time.ts";
 import { TaskBackpack } from "../backpack/quest-backpack.tsx";
-import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import type { PickedTry } from "../lane-actions/lane-actions-model.ts";
 import { attemptCount, type RoomRow, roomStatusLabel, roomTone, waitingNames } from "../quest/control-room.ts";
 import { messages as questCopy } from "../quest/messages.ts";
-import { AnswerForm, answerRoute } from "../quest/question-card.tsx";
-import { TaskControlsFor } from "../quest/room-controls.tsx";
 import { StatusTag } from "../quest/status-dot.tsx";
 import { TaskDetail } from "../quest/task-detail.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
-import { latestOf, questionForYou, taskTitle } from "../quest/work-model.ts";
+import { latestOf, taskTitle } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
 
 const room = questCopy.room;
 
 /**
- * One of a hob's Tasks in its lane: where it stands in a line, a question that waits for you with
- * its answer box, Show in the Workbench, Retry, Reassign and Cancel, what its hob waits on and
- * everything else it holds behind a disclosure. The lane's own beats, marks and menu replace these
+ * One of a hob's Tasks in its lane: where it stands in a line, Show in the Workbench, what its hob
+ * waits on and everything else it holds behind a disclosure. A question for you, a failure and the
+ * controls are the lane's own (lane-actions). The lane's own beats, marks and menu replace these
  * parts as the room grows (ADR 027).
  */
 export function LaneTask({
   tree,
   row,
+  tried,
   titled,
   hobs,
   onOpen,
@@ -31,6 +30,8 @@ export function LaneTask({
 }: {
   tree: TaskTree;
   row: RoomRow;
+  /** An earlier try picked in the lane, which the Task shows in place of its latest. */
+  tried: PickedTry | null;
   /** Whether the lane holds more than one Task, so each says which it is. */
   titled: boolean;
   hobs: HobLookup;
@@ -38,10 +39,8 @@ export function LaneTask({
   onWorkbench: (taskId: TaskId) => void;
 }) {
   const { task } = row;
-  const top = task.id === tree.tasks[0]?.id;
-  const question = questionForYou(tree, task);
   const waits = waitingNames(row, (id) => hobs(id).name);
-  const line = task.result?.summary ?? latestOf(tree, task);
+  const line = tried === null ? (task.result?.summary ?? latestOf(tree, task)) : tried.line;
   return (
     <section aria-label={taskTitle(task)} className="flex min-w-0 flex-col gap-2 text-detail wrap-anywhere">
       {titled && (
@@ -51,20 +50,18 @@ export function LaneTask({
         </span>
       )}
       <p className="m-0 text-meta text-label">
-        {messages.taskMeta({ attempt: attemptCount(tree, task), age: formatWhen(task.createdAt) })}
+        {messages.taskMeta({ attempt: tried?.number ?? attemptCount(tree, task), age: formatWhen(task.createdAt) })}
       </p>
       {waits.length > 0 && (
         <p className="m-0 text-lantern">{questCopy.card.waitingOn({ names: questCopy.names(waits) })}</p>
       )}
       {line !== null && <p className="m-0 line-clamp-3 whitespace-pre-wrap text-text">{line}</p>}
       <Flags row={row} hobs={hobs} />
-      {question !== null && <AsksYou question={question} hobs={hobs} />}
       <span className="flex">
         <Button variant="outline" size="xs" onClick={() => onWorkbench(task.id)}>
           {messages.showInWorkbench}
         </Button>
       </span>
-      {!top && <TaskControlsFor tree={tree} task={task} hobs={hobs} />}
       <TaskBackpack tree={tree} task={task} hobs={hobs} onOpen={onOpen} />
       <details>
         <summary className="cursor-pointer text-label">{messages.details}</summary>
@@ -89,32 +86,5 @@ function Flags({ row, hobs }: { row: RoomRow; hobs: HobLookup }) {
       {nobody && <span className="text-lantern">{room.nobodyYet}</span>}
       {sameFile.length > 0 && <span className="text-rose">{room.sameFile({ names: questCopy.names(sameFile) })}</span>}
     </span>
-  );
-}
-
-/**
- * A question the hob asked that climbed every lead to you: who asks, the question, who passed it up
- * and when, and the answer box. Your answer is a real answer, the same as in the Inbox.
- */
-function AsksYou({ question, hobs }: { question: Question; hobs: HobLookup }) {
-  const asker = hobs(question.askerId);
-  const chain = [asker.name, ...question.chain.map((id) => hobs(id).name)];
-  return (
-    <section
-      aria-label={messages.asks({ name: asker.name })}
-      className="flex flex-col gap-2 rounded-control border-(length:--edge) border-lantern bg-card p-2.5"
-    >
-      <span className="flex items-start gap-2">
-        <HobSprite hob={asker} size={18} state="needs-you" />
-        <span className="flex min-w-0 flex-col gap-1">
-          <span className="font-bold text-lantern">{messages.asks({ name: asker.name })}</span>
-          <span className="whitespace-pre-wrap text-ui text-text-strong">{question.text}</span>
-          <span className="text-meta text-label">
-            {messages.passedUp({ chain, when: formatWhen(question.createdAt) })}
-          </span>
-        </span>
-      </span>
-      <AnswerForm question={question} askerName={asker.name} via="task" route={answerRoute(question, hobs)} />
-    </section>
   );
 }

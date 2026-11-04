@@ -361,6 +361,8 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
             .pipe(Effect.flatMap(announce));
           yield* tasks.moveTask(started.id, ended.task.revision, "failed", yield* iso).pipe(Effect.flatMap(announce));
         });
+      // Quill's signs come first, so his lane names them while his later banner Task has failed.
+      yield* member("signs", cast.quill, "Order the sale signs\nOrder window signs for the shop.", [], []);
       yield* failed(
         "banner",
         cast.quill,
@@ -373,7 +375,6 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
         "Schedule the sale email\nSchedule the spring sale email for Monday.",
         "The mailing tool rejected the sign-in.",
       );
-      yield* member("signs", cast.quill, "Order the sale signs\nOrder window signs for the shop.", [], []);
       return;
     }
     // The lead edits the spec after the last commit and completes the Quest, leaving it on purpose (#665).

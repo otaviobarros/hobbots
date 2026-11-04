@@ -321,8 +321,8 @@ test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the w
   await openRoom(page, "Tidy the notes");
   const sheet = laneTask(page, "Tidy the notes file");
   await expect(sheet).toContainText("Failed", { timeout: 30_000 });
-  await sheet
-    .getByRole("region", { name: "Controls for Tidy the notes file" })
+  await lane(page, "Aldric")
+    .getByRole("region", { name: "Aldric's task failed" })
     .getByRole("button", { name: "Retry" })
     .click();
   await expect(sheet).toContainText("attempt 2", { timeout: 15_000 });

@@ -28,9 +28,6 @@ export const messages = {
   lead: "Lead",
   showInWorkbench: "Show in the Workbench",
   details: "Everything in this task",
-  asks: ({ name }: { name: string }) => `${name} asks you`,
-  passedUp: ({ chain, when }: { chain: ReadonlyArray<string>; when: string }) =>
-    `Passed up by ${[...chain, "you"].join(" → ")} · asked ${when}`,
   ended: "The work has ended. The room stays as a recap.",
   chat: {
     fold: "Fold the chat",
