@@ -129,7 +129,7 @@ function Who({ hob, message }: { hob: Agent; message: Message }) {
   return (
     <span className="flex items-center gap-2 text-xs text-label">
       {mine ? (
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-[6px] bg-lantern/35 text-[11px] font-bold text-text-strong">
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-[6px] bg-lantern/35 text-meta font-bold text-text-strong">
           {copy.you[0]}
         </span>
       ) : (
