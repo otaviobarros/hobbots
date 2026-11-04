@@ -205,7 +205,7 @@ describe("Claude Code health before the runtime starts", () => {
     const declared = await Effect.runPromise(adapter.enforcement);
     expect(declared.processSandbox).toEqual({ status: "unsupported", evidence: "not needed for chat-only turns" });
     expect(declared.toolInterception.status).toBe("verified");
-    expect(declared.hubTools.status).toBe("unverified");
+    expect(declared.hubTools.status).toBe("verified");
     // Health carries the same declaration whatever the runtime's availability.
     expect((await Effect.runPromise(adapter.health)).enforcement).toEqual(declared);
     // Tools are then decided as without the sandbox: commands, local Git and the web are blocked.

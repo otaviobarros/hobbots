@@ -1000,12 +1000,12 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               status: "unverified",
               evidence: `Claude Code starts inside ${sandbox.evidence}, not yet verified on this platform.`,
             },
-      // A turn that carries hub tools serves them as an in-process MCP server (withHubTools). They are
-      // covered with the fake runtime but not yet checked end to end with an installed Claude Code.
+      // A turn that carries hub tools serves them as an in-process MCP server (withHubTools), verified
+      // with Claude Code 2.1.316 on macOS (#893).
       hubTools: {
-        status: "unverified",
+        status: "verified",
         evidence:
-          "Charms and coordination tools are served as an MCP server on Claude Code's control channel and decided by the hub, not yet verified with an installed Claude Code.",
+          "Charms and coordination tools are served as an MCP server on Claude Code's control channel and decided by the hub.",
       },
       toolEvents: {
         status: "verified",
