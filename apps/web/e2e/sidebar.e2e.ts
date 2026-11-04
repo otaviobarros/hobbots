@@ -107,3 +107,18 @@ test("[TC-UX-141] every hob shows in the sidebar from any page, and the open hob
 
   await expect(nav.getByRole("link", { name: "Summon a hob" })).toBeVisible();
 });
+
+// covers UX-001
+test("[TC-UX-142] the Hobs label above the sidebar's hobs opens Your hobs", async ({ page }) => {
+  const { url } = await hubWithHobs();
+  await page.goto(`${url}/#/usage`);
+  const nav = sidebar(page);
+  // Collapsed, the label is hidden; expanded, it links to Your hobs.
+  await expect(nav.getByRole("link", { name: "Hobs: open Your hobs" })).toBeHidden();
+  await nav.getByRole("button", { name: "Expand the sidebar" }).click();
+  const label = nav.getByRole("link", { name: "Hobs: open Your hobs" });
+  await expect(label).toHaveAttribute("href", /#\/hobs$/);
+  await label.click();
+  await expect(page).toHaveURL(/#\/hobs$/);
+  await expect(page.getByRole("main", { name: "Your hobs" })).toBeVisible();
+});

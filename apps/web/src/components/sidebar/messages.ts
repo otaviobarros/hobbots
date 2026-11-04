@@ -7,6 +7,7 @@ export const messages = {
   collapseLabel: "Collapse the sidebar",
   expandLabel: "Expand the sidebar",
   hobs: "Hobs",
+  allHobs: "Hobs: open Your hobs",
   hobsLoadFailed: "Could not load your hobs.",
   summonLabel: "Summon a hob",
   state: {

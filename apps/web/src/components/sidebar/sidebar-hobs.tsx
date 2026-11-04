@@ -32,7 +32,13 @@ export function SidebarHobs({ expanded }: { expanded: boolean }) {
   return (
     <>
       <div aria-hidden className="mx-1.5 my-2 h-px flex-none bg-line" />
-      <span className="lbl hidden flex-none px-3 pb-1 text-label group-data-[open=true]/side:block">{copy.hobs}</span>
+      <Link
+        to="/hobs"
+        aria-label={copy.allHobs}
+        className="lbl hidden flex-none self-start rounded-control px-3 pb-1 text-label no-underline hover:text-text-strong group-data-[open=true]/side:block"
+      >
+        {copy.hobs}
+      </Link>
       {agents.isError && <p className="sidebar-label px-3 text-detail text-rose">{copy.hobsLoadFailed}</p>}
       {agents.data?.map((hob) => (
         <SidebarHob
