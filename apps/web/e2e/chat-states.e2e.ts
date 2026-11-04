@@ -74,12 +74,12 @@ test("[TC-CH-090] a streaming reply shows the steps the runtime reports and says
   const steps = page.getByRole("list", { name: "Reply steps" });
   await expect(steps.getByRole("listitem")).toHaveText(/Thinking/);
   // While it writes, the reply says so where its time goes, and shows its time once done.
-  await expect(page.getByText("Pip writing…")).toBeVisible();
+  await expect(page.getByText("writing…", { exact: true })).toBeVisible();
   await expect(steps.getByRole("listitem")).toHaveAttribute("data-state", "done");
   // A finished reply keeps its tool calls only, and this one made none.
   await expect(page.getByText(`Echo: ${LONG_PROMPT}`)).toBeVisible();
   await expect(steps).toBeHidden();
-  await expect(page.getByText("Pip writing…")).toHaveCount(0);
+  await expect(page.getByText("writing…", { exact: true })).toHaveCount(0);
 });
 
 // covers CH-004, PE-002

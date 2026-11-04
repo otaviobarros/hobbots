@@ -1,10 +1,11 @@
+import { HOB_COLORS } from "@hobbots/art/look";
 import { type Agent, isInProgress, type Message } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { toolLogUrl } from "../../api/client.ts";
 import { formatTime } from "../../lib/time.ts";
-import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import { messages } from "../messages.ts";
 import { limitRefill, planOf, usePlans } from "../usage/plan-summary.ts";
@@ -18,6 +19,13 @@ export const messageElementId = (id: string) => `message-${id}`;
 
 // A message opened from search wears a lantern outline, so the eye finds it.
 const focusRing = "outline-2 outline-offset-4 outline-lantern";
+
+/** Your bubble: a card tinted with star, its corner by the time tucked in (A2-05). */
+const bubble =
+  "rounded-card rounded-ee-tag bg-[color-mix(in_srgb,var(--color-star)_13%,var(--color-card))] px-4 py-2.5 leading-[1.45] whitespace-pre-wrap text-text-strong";
+
+/** Your words on the right, under who sent them and when. */
+const yourColumn = "flex max-w-bubble-max animate-hb-in flex-col items-end gap-1 self-end";
 
 /**
  * Continuing a reply that was cut off: offered on the thread's latest reply only, on its brain or,
@@ -49,14 +57,9 @@ export function MessageRow({
   const id = messageElementId(message.id);
   if (message.role === "user") {
     return (
-      <div
-        id={id}
-        className={cn(
-          "max-w-bubble-max animate-hb-in self-end bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap",
-          focused && focusRing,
-        )}
-      >
-        {message.content}
+      <div id={id} className={cn(yourColumn, focused && focusRing)}>
+        <span className="text-meta text-label">{copy.you({ time: formatTime(message.createdAt) })}</span>
+        <div className={bubble}>{message.content}</div>
       </div>
     );
   }
@@ -86,13 +89,21 @@ function ReplyRow({
   const streaming = isInProgress(message.status);
   const writing = message.status === "streaming";
   return (
-    <div id={id} className={cn("flex animate-hb-in gap-2.5", focused && focusRing)}>
-      <HobSprite hob={hob} size={26} state={streaming ? "working" : message.status === "failed" ? "failed" : "idle"} />
-      <div className="flex min-w-0 flex-col gap-[3px]">
-        <span className="text-meta text-label">
-          <b className="font-heading text-ui text-moonlight">{hob.name}</b>{" "}
-          {writing ? copy.writing : formatTime(message.createdAt)}
+    <article
+      id={id}
+      className={cn("flex animate-hb-in flex-col gap-2.5", focused && focusRing)}
+      style={{ "--hob": HOB_COLORS[hob.lookColor].hat } as CSSProperties}
+    >
+      {/* The tile, the name, the role and the time; the reply sits under the name, past the tile. */}
+      <span className="flex items-center gap-2.5">
+        <HobTile hob={hob} tile="md" state={streaming ? "working" : message.status === "failed" ? "failed" : "idle"} />
+        <b className="font-heading text-ui font-(--heading-weight) text-moonlight">{hob.name}</b>
+        <span className="rounded-tag bg-[color-mix(in_srgb,var(--hob)_22%,transparent)] px-1.75 text-meta font-semibold text-text-strong">
+          {copy.lead}
         </span>
+        <span className="text-meta text-label">{writing ? copy.writing : formatTime(message.createdAt)}</span>
+      </span>
+      <div className="ms-10 flex min-w-0 flex-col gap-[3px]">
         <ReplySteps
           steps={message.steps}
           inProgress={streaming}
@@ -127,7 +138,7 @@ function ReplyRow({
           <span className="animate-hb-in text-detail text-rose">{copy.failed({ error: message.error })}</span>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -187,11 +198,8 @@ export function QueuedRow({
 }) {
   const paused = hob.status !== "active";
   return (
-    <section
-      aria-label={messages.queued.label}
-      className="flex max-w-bubble-max animate-hb-in flex-col items-end gap-1.5 self-end"
-    >
-      <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
+    <section aria-label={messages.queued.label} className={cn(yourColumn, "gap-1.5")}>
+      <div className={cn(bubble, "opacity-80")}>{message.content}</div>
       <span className="text-meta text-label">
         {paused ? messages.queued.waitsForWake({ name: hob.name }) : messages.queued.readsNext({ name: hob.name })}
       </span>
@@ -231,11 +239,8 @@ export function WaitingRow({
 }) {
   const chat = messages.chat;
   return (
-    <section
-      aria-label={chat.waiting}
-      className="flex max-w-bubble-max animate-hb-in flex-col items-end gap-1.5 self-end"
-    >
-      <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-60">{message.content}</div>
+    <section aria-label={chat.waiting} className={cn(yourColumn, "gap-1.5")}>
+      <div className={cn(bubble, "opacity-60")}>{message.content}</div>
       <span className={cn("text-detail leading-[18px]", refused ? "text-rose" : "text-label")}>
         {refused ? chat.waitingRefused : live ? chat.waitingSending : chat.waitingOffline}
       </span>

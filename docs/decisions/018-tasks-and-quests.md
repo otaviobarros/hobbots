@@ -169,7 +169,7 @@ On every call the server checks:
 
 ### Screens
 
-- **The card under your request.** It is the Task card, and the Quest card once a party joins. A Task shows "Aldric is on it" with a progress line and its steps; a Quest adds the party's portraits. It shows at most four rows, ordered by needs you, blocked, running and waiting. Done rows collapse into a count, and Show all opens the drawer. A Task with steps shows only its current step and "step 3 of 7".
+- **The card under your request.** It is the Task card, and the Quest card once a party joins. It names its lead and how many Tasks it has, with a progress line, a strip with one segment per Task and every Task as a row under its owner, ordered by needs you, blocked, running, waiting and done ([#832](https://github.com/otaviobarros/hobbots/issues/832)). Open the quest opens the drawer. A Task with steps shows only its current step and "step 3 of 7".
 - **The strip under the chat header** keeps the work in view while you scroll, with portraits and counts, never rows.
 - **The drawer** opens a Task or step: its brief, checkpoints and output.
 - **The Quest tab** is the control room: the full tree with Retry, Reassign, Cancel Task and Cancel Quest.

@@ -32,9 +32,6 @@ export type RowStatus = "needs-you" | "failed" | "blocked" | "running" | "waitin
 
 const RANK: Record<RowStatus, number> = { "needs-you": 0, failed: 1, blocked: 2, running: 3, waiting: 4, done: 5 };
 
-/** The card shows at most this many rows; the rest open in the drawer. */
-const CARD_ROWS = 4;
-
 export interface WorkRow {
   /** The Task the row opens: a member's Task, or the current step of a Task with steps. */
   readonly task: Task;
@@ -55,12 +52,8 @@ export interface WorkCard {
   /** The hob you asked: the Task's owner, the Quest's lead. */
   readonly leadId: AgentId;
   readonly party: ReadonlyArray<AgentId>;
-  /** The rows the card shows, at most `CARD_ROWS`, in the order of `RowStatus`. */
+  /** Every row, in the order of `RowStatus`: what needs you first, done last. */
   readonly rows: ReadonlyArray<WorkRow>;
-  /** Unfinished rows past `CARD_ROWS`. */
-  readonly more: number;
-  /** Rows that are done, folded into a count. */
-  readonly done: number;
   /** Done Tasks and all Tasks under the top one, for the progress line. */
   readonly progress: { readonly done: number; readonly total: number };
   readonly status: RowStatus;
@@ -174,17 +167,13 @@ export const workCard = (tree: TaskTree): WorkCard | null => {
   const top = tree.tasks[0];
   if (top === undefined) return null;
   const quest = tree.quests.find((each) => each.taskId === top.id) ?? null;
-  const rows = workRows(tree, top);
-  const open = rows.filter((row) => row.status !== "done");
   const under = tree.tasks.filter((task) => task.id !== top.id);
   return {
     top,
     quest,
     leadId: top.ownerId,
     party: quest === null ? [] : partyOf(quest, tree.delegations),
-    rows: open.slice(0, CARD_ROWS),
-    more: Math.max(0, open.length - CARD_ROWS),
-    done: rows.length - open.length,
+    rows: workRows(tree, top),
     progress: {
       done: under.filter((task) => task.state === "completed").length,
       total: under.length,

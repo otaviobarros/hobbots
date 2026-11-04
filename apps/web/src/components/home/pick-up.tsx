@@ -1,13 +1,12 @@
-import { HOB_COLORS } from "@hobbots/art/look";
 import type { Agent, AgentId, Thread } from "@hobbots/domain";
 import { Empty } from "@hobbots/ui/components/empty";
 import { Progress } from "@hobbots/ui/components/progress";
 import { Link } from "@tanstack/react-router";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { ActivityMap } from "../../api/activity.ts";
 import type { QuestInProgress } from "../../lib/quest-work.ts";
 import { formatWhen } from "../../lib/time.ts";
-import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { QuestLink } from "../quest-work/quest-link.tsx";
 import { type PickUpRow, pickUpRows, questProgress } from "./home-model.ts";
 import { messages } from "./messages.ts";
@@ -79,7 +78,7 @@ function Row({
     const now = activity[thread.id];
     return (
       <Link to="/hobs/$hobId/threads/$threadId" params={{ hobId: hob.id, threadId: thread.id }} className={rowClass}>
-        <Tile hob={hob} />
+        <HobTile hob={hob} tile="lg" />
         <Body title={thread.title} who={hob.name}>
           {now === undefined ? thread.lastLine : now === "working" ? copy.writing : copy.thinking}
         </Body>
@@ -92,7 +91,7 @@ function Row({
   const { done, total, needs } = questProgress(group);
   return (
     <QuestLink quest={group.quest} threadAgentId={group.threadAgentId} taskId={group.quest.taskId} className={rowClass}>
-      {lead ? <Tile hob={lead} /> : <span />}
+      {lead ? <HobTile hob={lead} tile="lg" /> : <span />}
       <span className="flex min-w-0 flex-col gap-0.5">
         <Body title={group.quest.goal} who={lead?.name ?? ""}>
           {copy.progress({ done, total })}
@@ -108,19 +107,6 @@ function Row({
       </span>
       <Age at={row.at} />
     </QuestLink>
-  );
-}
-
-/** The row's hob on a tile in its hat color, as on the Workbench header. */
-function Tile({ hob }: { hob: Agent }) {
-  return (
-    <span
-      aria-hidden
-      className="flex size-hob-tile items-center justify-center rounded-tile bg-[color-mix(in_srgb,var(--hob)_30%,var(--color-card))]"
-      style={{ "--hob": HOB_COLORS[hob.lookColor].hat } as CSSProperties}
-    >
-      <HobSprite hob={hob} size={27} />
-    </span>
   );
 }
 

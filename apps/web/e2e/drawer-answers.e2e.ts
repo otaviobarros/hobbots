@@ -28,9 +28,9 @@ test("[TC-UX-085] a question waiting for you is answered in the Task drawer, goe
 }) => {
   const { url, drawer } = await openAdasTask(page);
 
-  // The drawer offers the same answer box as the chat, right under the question.
+  // The drawer offers the same answer box as the chat, right under the question, saying how the answer travels.
   await expect(drawer.getByRole("region", { name: "Ada asks you" })).toContainText(
-    "Your answer goes straight back to Ada.",
+    "Goes to Aldric, who passes it to Ada.",
   );
   const answer = drawer.getByRole("textbox", { name: "Your answer to Ada" });
   await answer.fill("Yes, Dec 12 for international orders.");

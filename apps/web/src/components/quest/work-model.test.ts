@@ -74,7 +74,6 @@ describe("workCard", () => {
       tree({ tasks: [task(CAMPAIGN), task(TaskId.make("draft"), { state: "failed", second: 1 })] }),
     );
     expect(only?.rows.map((row) => [row.task.id, row.status])).toEqual([["draft", "failed"]]);
-    expect(only?.done).toBe(0);
 
     const steps = [
       task(TaskId.make("outline"), { state: "failed", second: 1 }),
@@ -86,7 +85,7 @@ describe("workCard", () => {
     ]);
   });
 
-  it("folds done rows into a count and keeps at most four", () => {
+  it("lists every row, the done ones last", () => {
     const members = ["a", "b", "c", "d", "e", "f"].map((id, index) =>
       task(TaskId.make(id), { ownerId: QUILL, state: index === 0 ? "completed" : "active", second: index + 1 }),
     );
@@ -96,9 +95,14 @@ describe("workCard", () => {
         delegations: members.map((member) => delegation(QUILL, member.id, member.brief)),
       }),
     );
-    expect(card?.rows.map((row) => row.task.id)).toEqual(["b", "c", "d", "e"]);
-    expect(card?.more).toBe(1);
-    expect(card?.done).toBe(1);
+    expect(card?.rows.map((row) => [row.task.id, row.status])).toEqual([
+      ["b", "running"],
+      ["c", "running"],
+      ["d", "running"],
+      ["e", "running"],
+      ["f", "running"],
+      ["a", "done"],
+    ]);
   });
 });
 

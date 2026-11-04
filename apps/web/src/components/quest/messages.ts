@@ -5,23 +5,25 @@ import type { RowStatus } from "./work-model.ts";
 /** Copy for the Task and Quest card, strip and drawer in the chat (STD-I18N-001). */
 export const messages = {
   card: {
-    onIt: ({ name }: { name: string }) => `${name} is on it`,
+    quest: ({ name, count }: { name: string; count: number }) =>
+      `${name}'s quest · ${plural(count, { one: "1 task", other: `${formatCount(count)} tasks` })}`,
+    task: ({ name }: { name: string }) => `${name}'s task`,
     finished: ({ name }: { name: string }) => `${name} finished this`,
     failed: ({ name }: { name: string }) => `${name} could not finish this`,
     cancelled: ({ name }: { name: string }) => `${name} stopped this`,
-    party: ({ lead, members }: { lead: string; members: string }) => `${lead}'s party: ${members}`,
     label: ({ name, title }: { name: string; title: string }) => `${name}'s work on ${title}`,
     progress: ({ done, total }: { done: number; total: number }) =>
       `${formatCount(done)} of ${formatCount(total)} done`,
+    owner: ({ name }: { name: string }) => `· ${name}`,
     step: ({ index, total }: { index: number; total: number }) => `step ${formatCount(index)} of ${formatCount(total)}`,
     waitingOn: ({ names }: { names: string }) => `waiting on ${names}`,
     /** A Task whose turn waits on you to approve an action, named as the request names it (#698). */
     waitingApproval: ({ action }: { action: string }) => `waiting on your approval: ${action}`,
-    doneCount: ({ count }: { count: number }) => plural(count, { one: "1 done", other: `${formatCount(count)} done` }),
-    moreCount: ({ count }: { count: number }) => plural(count, { one: "1 more", other: `${formatCount(count)} more` }),
-    rowDetail: ({ name, detail }: { name: string; detail: string }) => `${name} · ${detail}`,
-    showAll: "Show all",
-    details: "Show details",
+    /** Work about the request ran out of tries and waits for you in the Inbox (IN-007). */
+    stuck: "Stuck",
+    started: ({ ago }: { ago: string }) => `Started ${ago}`,
+    openQuest: "Open the quest",
+    openTask: "Open the task",
     open: ({ title }: { title: string }) => `Look inside ${title}`,
     workbench: "Open in Workbench",
   },
@@ -45,8 +47,10 @@ export const messages = {
     asks: ({ name }: { name: string }) => `${name} asks you`,
     about: ({ title }: { title: string }) => `for ${title}`,
     answerLabel: ({ name }: { name: string }) => `Your answer to ${name}`,
-    answerPlaceholder: "Type your answer",
-    answerTo: ({ name }: { name: string }) => `Answer ${name}…`,
+    answerTo: ({ name }: { name: string }) => `Answer ${name}`,
+    /** Where your answer goes, beside Send answer: as it travels, down the leads the question climbed. */
+    goesStraight: ({ asker }: { asker: string }) => `Goes straight to ${asker}.`,
+    goesThrough: ({ lead, asker }: { lead: string; asker: string }) => `Goes to ${lead}, who passes it to ${asker}.`,
     send: "Send answer",
     sending: "Sending…",
     youAnswered: ({ answer }: { answer: string }) => `You answered: ${answer}`,

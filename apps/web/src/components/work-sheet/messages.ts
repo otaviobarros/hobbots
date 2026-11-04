@@ -30,7 +30,6 @@ export const messages = {
     asks: ({ name }: { name: string }) => `${name} asks you`,
     passedUp: ({ chain, when }: { chain: ReadonlyArray<string>; when: string }) =>
       `Passed up by ${[...chain, "you"].join(" → ")} · asked ${when}`,
-    goesTo: ({ name }: { name: string }) => `Your answer goes straight back to ${name}.`,
   },
   notFound: "This task is not in this thread.",
 } as const;
