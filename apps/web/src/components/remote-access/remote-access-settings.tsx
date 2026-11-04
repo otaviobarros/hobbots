@@ -1,6 +1,8 @@
 import { httpsAddress, type RemoteAccessStatus } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton, WaitNote } from "@hobbots/ui/components/skeleton";
 import { Switch } from "@hobbots/ui/components/switch";
+import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
 import { useQuery } from "@tanstack/react-query";
 import { useId } from "react";
 import { remoteAccessQuery, useUpdateRemoteAccess } from "../../api/remote-access.ts";
@@ -111,16 +113,40 @@ export const useRemoteAccessSwitch = ({ watchTailscale = false }: { readonly wat
   return { access, change, status, on } as const;
 };
 
+/** What the switch means, or a still block while the hub first asks Tailscale. */
+function SwitchNote({ asking, on }: { asking: boolean; on: boolean }) {
+  if (asking) return <Skeleton width="36ch" className="max-w-full" />;
+  return on ? copy.onNote : copy.offNote;
+}
+
+/** A still block where the address line goes; after a second it names Tailscale, after ten it offers Try again. */
+function AskingTailscale({ onRetry }: { onRetry: () => void }) {
+  const wait = useWaitStage(true);
+  return (
+    <div aria-busy className="flex flex-col gap-2">
+      <p className="m-0 text-ui">
+        <Skeleton width="32ch" className="max-w-full" />
+      </p>
+      <WaitNote wait={wait} detail={copy.waiting} outside={{ note: copy.slow, retryLabel: copy.tryAgain, onRetry }} />
+    </div>
+  );
+}
+
 /** What Settings says while remote access is off and Tailscale is not ready to carry it; null when it is. */
 export const tailscaleNotReady = (status: RemoteAccessStatus): string | null => {
   const state = status.tailscale?.state;
   return state === undefined || state === "running" ? null : copy.notReady[state];
 };
 
-/** Settings › Devices: remote access over Tailscale, and why the hub is not on the tailnet when it is not (ADR 021). */
+/**
+ * Settings › Devices: remote access over Tailscale, and why the hub is not on the tailnet when it is
+ * not (ADR 021). While the hub first asks Tailscale, the switch stays in place, disabled, with a still
+ * block for the address line, and after a second it says so.
+ */
 export function RemoteAccessSettings() {
   const labelId = useId();
   const { access, change, status, on } = useRemoteAccessSwitch();
+  const asking = access.isPending;
   const notReady = status !== undefined && !status.enabled ? tailscaleNotReady(status) : null;
 
   return (
@@ -137,9 +163,12 @@ export function RemoteAccessSettings() {
           <span id={labelId} className="font-bold">
             {copy.switchLabel}
           </span>
-          <span className="text-detail text-text-secondary">{on ? copy.onNote : copy.offNote}</span>
+          <span className="text-detail text-text-secondary">
+            <SwitchNote asking={asking} on={on} />
+          </span>
         </div>
       </div>
+      {asking && <AskingTailscale onRetry={() => void access.refetch()} />}
       {notReady !== null && (
         <p className="m-0 flex items-start gap-2 text-ui">
           <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />

@@ -87,3 +87,18 @@ describe("the plain check", () => {
     expect(lines.map((each) => each.key)).toEqual(["claude-code", "sandbox", "github"]);
   });
 });
+
+describe("the plain check while it runs", () => {
+  it("names each line and the read it comes from, so a line can say it is checking", () => {
+    const lines = checkLines(input());
+    expect(lines.map((each) => [each.key, each.name, each.source])).toEqual([
+      ["claude-code", "Claude", "runtimes"],
+      ["sandbox", "Sandbox", "runtimes"],
+      ["folders", "Folders", "setup"],
+      ["github", "GitHub", "github"],
+      ["remote", "Other devices", "remote"],
+      ["stuck", "Stuck work", "blockers"],
+    ]);
+    expect(line(checkLines(input({ connected: [] })), "ai")).toMatchObject({ name: "AI", source: "setup" });
+  });
+});

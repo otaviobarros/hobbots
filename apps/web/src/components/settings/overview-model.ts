@@ -229,6 +229,43 @@ export const overviewOf = (input: OverviewInput): Overview => {
   };
 };
 
+/** Which of the overview's reads are still on their first load. */
+export interface OverviewReads {
+  readonly runtimes: boolean;
+  readonly setup: boolean;
+  readonly github: boolean;
+  /** False on a connected desktop, which does not ask for remote access. */
+  readonly remote: boolean;
+  readonly devices: boolean;
+  readonly backup: boolean;
+  /** Whether remote access is on, once known: the device count only matters then. */
+  readonly remoteOn: boolean;
+}
+
+/**
+ * The cards whose state is not known yet. They keep their icon and name, with a still block where
+ * the state goes (Patterns › Loading), so the overview never calls an area off while it is asking.
+ */
+export const pendingCards = (reads: OverviewReads): ReadonlySet<OverviewCard["id"]> => {
+  const pending: Array<OverviewCard["id"]> = [];
+  if (reads.setup || reads.runtimes) pending.push("ai");
+  if (reads.setup) pending.push("safety");
+  if (reads.github) pending.push("github");
+  if (reads.remote || (reads.remoteOn && reads.devices)) pending.push("devices");
+  if (reads.backup) pending.push("backups");
+  return new Set(pending);
+};
+
+/** The outside check the overview names while it waits: providers first, then GitHub, then Tailscale. */
+export type OutsideSource = "providers" | "github" | "tailscale";
+
+export const waitingOn = (reads: OverviewReads): OutsideSource | null => {
+  if (reads.runtimes) return "providers";
+  if (reads.github) return "github";
+  if (reads.remote) return "tailscale";
+  return null;
+};
+
 /** The overview's title: everything works, or how many things need fixing. */
 export const overviewTitle = (problems: number): { readonly title: string; readonly line: string } => {
   if (problems === 0) return { title: copy.allWell, line: copy.allWellLine };

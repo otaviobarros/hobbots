@@ -2,6 +2,7 @@ import type { DiagnosticsNow, StalledWork } from "@hobbots/api";
 import { RUNTIME_NAMES, type RuntimeHealth } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { formatAgo } from "../../lib/format.ts";
 import { messages } from "./messages.ts";
 import { type HobName, recoveryText, runtimeFix, stalledText } from "./model.ts";
@@ -86,6 +87,20 @@ export function DiagnosticsNowView({
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/** What is wrong now, before the hub answers: the heading, then a still line for each list. */
+export function DiagnosticsNowWaiting() {
+  return (
+    <section aria-label={copy.heading} aria-busy className="flex flex-col gap-2">
+      <span className="lbl pt-2 text-label">{copy.heading}</span>
+      {["28ch", "22ch", "32ch"].map((width) => (
+        <p key={width} className="m-0 text-ui">
+          <Skeleton width={width} className="max-w-full" />
+        </p>
+      ))}
     </section>
   );
 }

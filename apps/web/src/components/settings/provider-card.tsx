@@ -1,6 +1,8 @@
 import { RUNTIME_NAMES, type RuntimeHealth, type RuntimeKind } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton, WaitNote } from "@hobbots/ui/components/skeleton";
+import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { agentsQuery, runtimesQuery } from "../../api/queries.ts";
@@ -35,23 +37,44 @@ function ProviderFacts({ health }: { health: RuntimeHealth }) {
   );
 }
 
+/** The provider's state as a tag, or a still block the tag's size while the first check runs. */
+function ProviderTag({ checking, availability }: { checking: boolean; availability: RuntimeHealth["availability"] }) {
+  if (checking) return <Skeleton shape="block" surface="card" width="9ch" />;
+  return <Badge variant={availability === "ready" ? "working" : "waiting"}>{copy.availability[availability]}</Badge>;
+}
+
+/** Names the provider after a second; after ten, says it is slow and offers Try again. */
+function ProviderWait({ name, onRetry }: { name: string; onRetry: () => void }) {
+  const wait = useWaitStage(true);
+  return (
+    <WaitNote
+      wait={wait}
+      detail={messages.wait.provider({ name })}
+      outside={{ note: messages.wait.providerSlow({ name }), retryLabel: messages.wait.tryAgain, onRetry }}
+    />
+  );
+}
+
 /**
  * One provider's health in Settings › AI providers: how it is signed in and on which plan, how many
  * hobs think with it, a quiet way to its plan usage, and how to fix it when it cannot think.
- * Detail is never shown: it can carry account names.
+ * Detail is never shown: it can carry account names. While the first check runs, the card keeps its
+ * logo and name, with a still block where the state goes, and names the provider after a second.
  */
 export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
   const runtimes = useQuery(runtimesQuery);
   const hobs = useQuery(agentsQuery);
+  const checking = runtimes.isPending;
   const health = runtimes.data?.find((entry) => entry.runtime === runtime);
   const name = RUNTIME_NAMES[runtime];
   const look = PROVIDER_MARKS[runtime];
-  const hint = providerFix(runtime, health);
+  // No fix is offered for a provider that has not answered yet.
+  const hint = checking ? null : providerFix(runtime, health);
   const availability = health?.availability ?? "unavailable";
   const account = accountLine(health);
 
   return (
-    <section aria-label={name} className="flex flex-col gap-2.5 rounded-card bg-card p-4">
+    <section aria-label={name} aria-busy={checking} className="flex flex-col gap-2.5 rounded-card bg-card p-4">
       <div className="flex items-center gap-2.5">
         <span
           aria-hidden
@@ -63,11 +86,15 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
           <span className="font-semibold text-text-strong">{name}</span>
           {account !== null && <span className="text-detail text-text-secondary">{account}</span>}
         </span>
-        <Badge variant={availability === "ready" ? "working" : "waiting"}>
-          {runtimes.isPending ? copy.checking : copy.availability[availability]}
-        </Badge>
+        <ProviderTag checking={checking} availability={availability} />
       </div>
       {hobs.data && <p className="m-0 text-ui text-text">{hobsLine(runtime, name, hobs.data)}</p>}
+      {hobs.isPending && (
+        <p className="m-0 text-ui">
+          <Skeleton surface="card" width="46ch" className="max-w-full" />
+        </p>
+      )}
+      {checking && <ProviderWait name={name} onRetry={() => void runtimes.refetch()} />}
       {hint && <p className="m-0 text-ui text-lantern">{hint}</p>}
       {hint && <ProviderFixActions runtime={runtime} notFound={health?.version === null} className="mt-0" />}
       {billsElsewhere(health) && <p className="m-0 text-ui text-lantern">{copy["claude-code"].billingWarning}</p>}

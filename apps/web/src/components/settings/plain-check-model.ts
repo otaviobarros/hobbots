@@ -6,13 +6,20 @@ import { messages } from "./messages.ts";
 import { providerState, unreachable } from "./overview-model.ts";
 
 const copy = messages.check.lines;
+const names = messages.check.names;
 
 /** How a check came out: it works, it is off by choice, it needs a look, or it is broken. */
 export type CheckTone = "ok" | "off" | "warn" | "broken";
 
+/** The read a line comes from, so the line can say it is checking while that read runs. */
+export type CheckSource = "runtimes" | "setup" | "github" | "remote" | "blockers";
+
 /** One line of the plain check, and where to go when it needs you. */
 export interface CheckLine {
   readonly key: string;
+  /** What the line checks, shown with "Checking…" while its read runs. */
+  readonly name: string;
+  readonly source: CheckSource;
   readonly tone: CheckTone;
   readonly text: string;
   /** The Inbox, for stuck work you retry or dismiss there. */
@@ -33,13 +40,14 @@ export interface CheckInput {
 
 const providerLines = (input: CheckInput): ReadonlyArray<CheckLine> => {
   const connected = PROVIDERS.filter((runtime) => input.connected?.includes(runtime));
-  if (connected.length === 0) return [{ key: "ai", tone: "broken", text: copy.noAi }];
+  if (connected.length === 0) return [{ key: "ai", name: names.ai, source: "setup", tone: "broken", text: copy.noAi }];
   return connected.map((runtime): CheckLine => {
     const name = PROVIDER_NAMES[runtime];
     const state = providerState(input.runtimes?.find((entry) => entry.runtime === runtime));
+    const base = { key: runtime, name, source: "runtimes" } as const;
     return state === null
-      ? { key: runtime, tone: "ok", text: copy.answers({ name }) }
-      : { key: runtime, tone: "broken", text: copy.cannotThink({ name, state }) };
+      ? { ...base, tone: "ok", text: copy.answers({ name }) }
+      : { ...base, tone: "broken", text: copy.cannotThink({ name, state }) };
   });
 };
 
@@ -49,37 +57,43 @@ const sandboxLine = (input: CheckInput): CheckLine => {
     (health) => input.connected?.includes(health.runtime) && health.availability === "ready",
   );
   const verified = ready.some((health) => health.enforcement.processSandbox.status === "verified");
-  return verified
-    ? { key: "sandbox", tone: "ok", text: copy.sandbox }
-    : { key: "sandbox", tone: "warn", text: copy.noSandbox };
+  const base = { key: "sandbox", name: names.sandbox, source: "runtimes" } as const;
+  return verified ? { ...base, tone: "ok", text: copy.sandbox } : { ...base, tone: "warn", text: copy.noSandbox };
 };
 
 const foldersLine = (folders: number): CheckLine =>
   folders === 0
-    ? { key: "folders", tone: "off", text: copy.noFolders }
+    ? { key: "folders", name: names.folders, source: "setup", tone: "off", text: copy.noFolders }
     : {
         key: "folders",
+        name: names.folders,
+        source: "setup",
         tone: "ok",
         text: plural(folders, { one: copy.oneFolder, other: copy.folders({ count: formatCount(folders) }) }),
       };
 
-const githubLine = (status: GitHubStatus | undefined): CheckLine =>
-  status?._tag === "Connected" || status?._tag === "Environment"
-    ? { key: "github", tone: "ok", text: copy.github }
-    : { key: "github", tone: "off", text: copy.noGithub };
+const githubLine = (status: GitHubStatus | undefined): CheckLine => {
+  const base = { key: "github", name: names.github, source: "github" } as const;
+  return status?._tag === "Connected" || status?._tag === "Environment"
+    ? { ...base, tone: "ok", text: copy.github }
+    : { ...base, tone: "off", text: copy.noGithub };
+};
 
 const remoteLine = (remote: RemoteAccessStatus | undefined): CheckLine => {
-  if (remote === undefined || !remote.enabled) return { key: "remote", tone: "off", text: copy.remoteOff };
-  if (remote.paused) return { key: "remote", tone: "warn", text: copy.remotePaused };
-  if (unreachable(remote)) return { key: "remote", tone: "broken", text: copy.remoteUnreachable };
-  return { key: "remote", tone: "ok", text: copy.remoteOn };
+  const base = { key: "remote", name: names.remote, source: "remote" } as const;
+  if (remote === undefined || !remote.enabled) return { ...base, tone: "off", text: copy.remoteOff };
+  if (remote.paused) return { ...base, tone: "warn", text: copy.remotePaused };
+  if (unreachable(remote)) return { ...base, tone: "broken", text: copy.remoteUnreachable };
+  return { ...base, tone: "ok", text: copy.remoteOn };
 };
 
 const stuckLine = (stuck: number): CheckLine =>
   stuck === 0
-    ? { key: "stuck", tone: "ok", text: copy.nothingStuck }
+    ? { key: "stuck", name: names.stuck, source: "blockers", tone: "ok", text: copy.nothingStuck }
     : {
         key: "stuck",
+        name: names.stuck,
+        source: "blockers",
         tone: "broken",
         text: plural(stuck, { one: copy.oneStuck, other: copy.stuck({ count: formatCount(stuck) }) }),
         inbox: true,
