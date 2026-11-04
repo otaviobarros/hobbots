@@ -44,7 +44,7 @@ const stepUnder = (tree: TaskTree, parent: Task) => tree.tasks.find((task) => ta
 
 describe("member and step sessions offer git_init", () => {
   // covers OR-002, PE-005
-  it("[TC-OR-487] a member's and a step's session list git_init when their authority opens it, and not when it doesn't", async () => {
+  it("[TC-OR-495] a member's and a step's session list git_init when their authority opens it, and not when it doesn't", async () => {
     const { run, requests } = await startHub(await sharedDatabase());
     const withStep = (brief: string, key: string) =>
       [brief, hub("plan_steps", { key, steps: [{ brief: `${brief}, step one` }] })].join("\n");
@@ -88,7 +88,7 @@ describe("member and step sessions offer git_init", () => {
   }, 30_000);
 
   // covers PE-005, OR-007
-  it("[TC-OR-488] a member's git_init creates the repository and is recorded on its Task, as is one refused", async () => {
+  it("[TC-OR-496] a member's git_init creates the repository and is recorded on its Task, as is one refused", async () => {
     const { run } = await startHub(await sharedDatabase());
     const folder = join(project, "rook-app");
     await run(

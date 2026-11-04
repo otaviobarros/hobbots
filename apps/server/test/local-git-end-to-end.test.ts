@@ -405,7 +405,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     );
   });
   // covers PE-005, OR-002
-  it("[TC-PE-445] a party member creates a repository with git_init and commits, and its lead never steps in", async () => {
+  it("[TC-PE-450] a party member creates a repository with git_init and commits, and its lead never steps in", async () => {
     await request("PATCH", "/api/setup", {
       completed: true,
       safetyPreset: "balanced",
