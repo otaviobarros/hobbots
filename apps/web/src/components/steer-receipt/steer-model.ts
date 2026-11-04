@@ -1,6 +1,7 @@
 import {
   type AgentId,
   type ApprovalRequest,
+  type AttemptState,
   isInProgress,
   isTerminalTask,
   type Message,
@@ -60,13 +61,30 @@ const toHop = (passed: PassedNote, approvals: ReadonlyArray<ApprovalRequest>): R
   };
 };
 
-/** Whether the work of `tree` was under way at `at`: its top Task had started and had not ended. */
+/** How a try ends the whole Task, until a retry starts another one (EX-001). */
+const ENDS_TASK: ReadonlyArray<AttemptState> = ["failed", "cancelled", "unresolved"];
+
+/**
+ * Whether the work of `tree` was under way at `at`: its top Task had started, and had neither
+ * ended for good nor stopped on a try that ended it and was not retried yet. The top Task's tries
+ * keep when each started and ended, so a message sent while it lay failed stays outside the work
+ * even once a retry brings it back.
+ */
 export const runningAt = (tree: TaskTree, at: string): boolean => {
   const top = tree.tasks[0];
   if (top === undefined) return false;
   const when = Date.parse(at);
   if (Date.parse(top.createdAt) >= when) return false;
-  return !isTerminalTask(top.state) || Date.parse(top.updatedAt) > when;
+  if (isTerminalTask(top.state) && Date.parse(top.updatedAt) <= when) return false;
+  const latest = tree.attempts
+    .filter((attempt) => attempt.taskId === top.id && Date.parse(attempt.startedAt) <= when)
+    .reduce<(typeof tree.attempts)[number] | undefined>(
+      (last, attempt) =>
+        last === undefined || Date.parse(attempt.startedAt) > Date.parse(last.startedAt) ? attempt : last,
+      undefined,
+    );
+  const stopped = latest?.endedAt != null && Date.parse(latest.endedAt) <= when && ENDS_TASK.includes(latest.state);
+  return !stopped;
 };
 
 /** Whether the work of `tree` runs now. */

@@ -148,6 +148,43 @@ describe("the steer receipt under a message of yours", () => {
   });
 });
 
+describe("whether work ran when you sent a message", () => {
+  const tryOn = (number: number, state: Attempt["state"], started: number, ended: number | null) =>
+    new Attempt({
+      id: AttemptId.make(`try-${number}`),
+      taskId: CAMPAIGN,
+      number,
+      agentId: ALDRIC,
+      runtime: "claude-code",
+      sessionId: null,
+      configVersion: 1,
+      policyVersion: null,
+      state,
+      outcome: null,
+      startedAt: at(started),
+      endedAt: ended === null ? null : at(ended),
+    });
+
+  it("leaves out a message sent while the work lay failed, even once a retry brings it back", () => {
+    // Failed at :05, your message at :06, retried at :10: the Task is active again now.
+    const retried = work({
+      tasks: [new Task({ ...task(CAMPAIGN), state: "active", updatedAt: at(10) })],
+      attempts: [tryOn(1, "failed", 1, 5), tryOn(2, "running", 10, null)],
+    });
+    expect(runningAt(retried, at(3))).toBe(true);
+    expect(runningAt(retried, at(6))).toBe(false);
+    expect(runningAt(retried, at(12))).toBe(true);
+    const between = message("between", "user", 6);
+    expect(steerReceiptOf(between, [between], [retried], ALDRIC)).toBeNull();
+    expect(laneNoteChips(retried, [between]).get(ALDRIC)).toBeUndefined();
+  });
+
+  it("counts a try that was cut off and resumed as work that kept running", () => {
+    const resumed = work({ attempts: [tryOn(1, "interrupted", 1, 5), tryOn(2, "running", 8, null)] });
+    expect(runningAt(resumed, at(6))).toBe(true);
+  });
+});
+
 describe("your notes in the lanes", () => {
   it("shows your message in the lead's lane, whom it passed it to, and the note in each lane it reached", () => {
     const trees = work({ notes: [note("n1", BUILD, ADA, picked), note("n2", COPY, QUILL)] });

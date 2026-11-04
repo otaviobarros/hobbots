@@ -172,6 +172,8 @@ test("[TC-UX-260] a message the lead passes to one hob reads got it, then picked
   await expect(receipt(page)).toContainText("Aldric got it →");
   await expect(receipt(page)).toContainText("Ada picked it up", { timeout: 45_000 });
   await expect(said(page)).toHaveText("Aldric got your message. Ada picked it up.");
+  // Each step is its own sentence in a live region that is not atomic, so only a changed step is read.
+  await expect(said(page)).toHaveAttribute("aria-atomic", "false");
 
   // The room's chat column shows the same receipt, and the lanes show your note where it went.
   await openRoom(page, "Build the site");

@@ -106,7 +106,8 @@ function SteerReceiptLine({ receipt, hobs }: { receipt: SteerReceipt; hobs: HobL
         </Step>
         <Hops hops={receipt.hops} hobs={hobs} />
       </span>
-      <span role="status" className="sr-only">
+      {/* A status is atomic by default and would read every step again; each sentence is its own node, so only the step that changed is read. */}
+      <span role="status" aria-atomic={false} className="sr-only">
         {sentences(receipt, hobs).map((each) => (
           <span key={each.key}>{each.text} </span>
         ))}
