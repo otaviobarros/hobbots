@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { type ChoiceEnvironment, createChoiceStore } from "./device-choice.ts";
 import { readStored, writeStored } from "./storage.ts";
 
 /**
@@ -14,48 +15,11 @@ const STORAGE_KEY = "hobbots.text-size";
 const isTextSize = (value: unknown): value is TextSize => TEXT_SIZES.some((size) => size === value);
 
 /** Where the text size store reads and keeps the choice; each part may be missing or fail. */
-export interface TextSizeEnvironment {
-  /** The saved size, or null; it answers null when storage cannot be read. */
-  readonly read: () => unknown;
-  /** Saves the size; best effort, so a failure changes nothing on the page. */
-  readonly write: (size: TextSize) => void;
-  /** Sets the size on the page, so every screen scales at once. */
-  readonly mark: (size: TextSize) => void;
-}
+export type TextSizeEnvironment = ChoiceEnvironment<TextSize>;
 
-/**
- * This device's text size, held in memory so the page and the picker agree. A saved value that is
- * missing or unknown means Standard, and a read or write that fails leaves the size as it is.
- */
-export const createTextSizeStore = (environment: TextSizeEnvironment) => {
-  const stored = (): TextSize => {
-    const value = environment.read();
-    return isTextSize(value) ? value : "standard";
-  };
-  let size = stored();
-  const listeners = new Set<() => void>();
-  const apply = (next: TextSize) => {
-    size = next;
-    environment.mark(next);
-    for (const listener of listeners) listener();
-  };
-  environment.mark(size);
-  return {
-    size: (): TextSize => size,
-    set: (next: TextSize) => {
-      environment.write(next);
-      apply(next);
-    },
-    /** Another window on this device saved a size. */
-    storageChanged: () => apply(stored()),
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
-};
+/** This device's text size: a saved value that is missing or unknown means Standard. */
+export const createTextSizeStore = (environment: TextSizeEnvironment) =>
+  createChoiceStore(environment, (saved) => (isTextSize(saved) ? saved : "standard"));
 
 const pageEnvironment: TextSizeEnvironment = {
   read: () => readStored<unknown>(STORAGE_KEY, null),
@@ -82,4 +46,4 @@ export const followTextSizeChoice = () => {
 };
 
 /** This device's text size, kept in step with every change, here or in another window. */
-export const useTextSize = (): TextSize => useSyncExternalStore(store.subscribe, store.size, store.size);
+export const useTextSize = (): TextSize => useSyncExternalStore(store.subscribe, store.get, store.get);

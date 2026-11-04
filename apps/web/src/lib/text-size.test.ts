@@ -10,13 +10,13 @@ const environment = (read: () => unknown = () => null) => {
 
 describe("text size", () => {
   it("starts at Standard when nothing, or something unknown, is saved", () => {
-    expect(createTextSizeStore(environment().env).size()).toBe("standard");
-    expect(createTextSizeStore(environment(() => "huge").env).size()).toBe("standard");
+    expect(createTextSizeStore(environment().env).get()).toBe("standard");
+    expect(createTextSizeStore(environment(() => "huge").env).get()).toBe("standard");
   });
 
   it("marks the page with the saved size before anything renders", () => {
     const { env, marks } = environment(() => "larger");
-    expect(createTextSizeStore(env).size()).toBe("larger");
+    expect(createTextSizeStore(env).get()).toBe("larger");
     expect(marks).toEqual(["larger"]);
   });
 
@@ -28,7 +28,7 @@ describe("text size", () => {
       heard++;
     });
     store.set("larger");
-    expect(store.size()).toBe("larger");
+    expect(store.get()).toBe("larger");
     expect(writes).toEqual(["larger"]);
     expect(marks).toEqual(["standard", "larger"]);
     expect(heard).toBe(1);
@@ -39,6 +39,6 @@ describe("text size", () => {
     const store = createTextSizeStore(environment(() => saved).env);
     saved = "larger";
     store.storageChanged();
-    expect(store.size()).toBe("larger");
+    expect(store.get()).toBe("larger");
   });
 });

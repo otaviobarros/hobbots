@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { type ChoiceEnvironment, createChoiceStore } from "./device-choice.ts";
 import { readStored, writeStored } from "./storage.ts";
 
 /** The four themes, by their `data-theme` value (docs/design/themes.md). */
@@ -40,14 +41,7 @@ const STORAGE_KEY = "hobbots.theme";
 const isTheme = (value: unknown): value is Theme => THEMES.some((theme) => theme === value);
 
 /** Where the theme store reads and keeps the choice; each part may be missing or fail. */
-export interface ThemeEnvironment {
-  /** The saved theme, or null; it answers null when storage cannot be read. */
-  readonly read: () => unknown;
-  /** Saves the theme; best effort, so a failure changes nothing on the page. */
-  readonly write: (theme: Theme) => void;
-  /** Sets the theme on the page, so every screen restyles at once. */
-  readonly mark: (theme: Theme) => void;
-}
+export type ThemeEnvironment = ChoiceEnvironment<Theme>;
 
 /**
  * This device's theme, held in memory so the page and the picker always agree. Like Reduce motion
@@ -56,26 +50,10 @@ export interface ThemeEnvironment {
  * fails leaves the theme in memory as it is.
  */
 export const createThemeStore = (environment: ThemeEnvironment) => {
-  const stored = (): Theme => {
-    const value = environment.read();
-    return isTheme(value) ? value : FIRST_RUN_THEME;
-  };
-  let theme = stored();
-  const listeners = new Set<() => void>();
-
-  const apply = (next: Theme) => {
-    theme = next;
-    environment.mark(next);
-    for (const listener of listeners) listener();
-  };
-
-  environment.mark(theme);
+  const choice = createChoiceStore(environment, (saved) => (isTheme(saved) ? saved : FIRST_RUN_THEME));
   return {
-    theme: (): Theme => theme,
-    set: (next: Theme) => {
-      environment.write(next);
-      apply(next);
-    },
+    theme: choice.get,
+    set: choice.set,
     /**
      * First run finished on this device: with no theme saved yet, it keeps Lamplight Dusk from the
      * next start. This window stays as it is, so first run shows Workshop Night to the end.
@@ -83,14 +61,8 @@ export const createThemeStore = (environment: ThemeEnvironment) => {
     firstRunFinished: () => {
       if (!isTheme(environment.read())) environment.write(NEW_DEVICE_THEME);
     },
-    /** Another window on this device saved a theme. */
-    storageChanged: () => apply(stored()),
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    storageChanged: choice.storageChanged,
+    subscribe: choice.subscribe,
   };
 };
 
