@@ -43,7 +43,7 @@ export function GitHubSettings() {
     change.mutate(next, { onSuccess: () => setJustDisconnected(next.kind === "disconnect") });
 
   return (
-    <div className="flex items-start gap-3.5 border-b-2 border-line py-2.5">
+    <div className="flex items-start gap-3.5 border-b-(length:--edge) border-line py-2.5">
       <span aria-hidden className="cut grid size-[30px] flex-none place-items-center bg-line font-bold text-moonlight">
         {/* biome-ignore lint/style/noJsxLiterals: a decorative GitHub monogram, hidden from screen readers and never translated. */}
         GH
@@ -183,7 +183,10 @@ function AppReach({ login }: { login: string }) {
       <span className="lbl pt-1 text-meta text-label">{copy.permissionsLabel}</span>
       <ul aria-label={copy.permissionsLabel} className="m-0 flex list-none flex-wrap gap-1.5 p-0">
         {GITHUB_APP_PERMISSIONS.map((permission) => (
-          <li key={permission.name} className="border-2 border-line px-2 py-0.5 text-detail text-text-secondary">
+          <li
+            key={permission.name}
+            className="border-(length:--edge) border-line px-2 py-0.5 text-detail text-text-secondary"
+          >
             {copy.permission(permission)}
           </li>
         ))}
@@ -202,7 +205,7 @@ function Connecting({
   onCancel: () => void;
 }) {
   return (
-    <div className="cut flex flex-col gap-2 border-2 border-lantern bg-notice px-3 py-2.5" role="status">
+    <div className="cut flex flex-col gap-2 border-(length:--edge) border-lantern bg-notice px-3 py-2.5" role="status">
       <span className="text-ui">{copy.enterCode}</span>
       <span className="select-all font-heading text-[28px] font-bold tracking-widest text-moonlight">
         {status.userCode}

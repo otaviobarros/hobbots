@@ -105,7 +105,7 @@ export function SetupRemoteAccess() {
         )}
         {status !== undefined && ready && (
           <div className="flex max-w-form-max flex-col gap-3.5">
-            <div className="cut flex items-center gap-3.5 border-2 border-mint-deep bg-card px-4 py-3">
+            <div className="cut flex items-center gap-3.5 border-(length:--edge) border-mint-deep bg-card px-4 py-3">
               <span aria-hidden className="size-2.5 flex-none bg-mint" />
               <span className="flex flex-col gap-0.5">
                 <span className="font-bold">{copy.connected}</span>
@@ -114,7 +114,7 @@ export function SetupRemoteAccess() {
                 </span>
               </span>
             </div>
-            <div className="flex items-center gap-4 border-b-2 border-line py-3">
+            <div className="flex items-center gap-4 border-b-(length:--edge) border-line py-3">
               <Switch
                 aria-labelledby={labelId}
                 aria-describedby={noteId}

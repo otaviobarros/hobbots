@@ -3,6 +3,7 @@ import { type KeyboardEvent, useEffect, useRef } from "react";
 import { sendable, useDraft, writeDraft } from "../../api/drafts.ts";
 import type { WaitingPlace } from "../../api/outbox.ts";
 import { messages } from "../messages.ts";
+import { SendIcon } from "./chat-icons.tsx";
 
 const copy = messages.composer;
 
@@ -89,38 +90,59 @@ export function Composer({
     }
   };
 
+  // A card in the skin's corners and edge, with the hint and an icon Send inside it (A2-03).
   return (
-    <div data-composer="" className="flex flex-none flex-col gap-1.5 px-6 pt-2 pb-3.5">
-      <div className="flex items-end gap-2.5">
-        <textarea
-          ref={input}
-          aria-label={placeholder}
-          value={draft}
-          rows={1}
-          spellCheck
-          disabled={closed}
-          placeholder={paused && closed ? copy.pausedPlaceholder(paused) : placeholder}
-          onChange={(event) => writeDraft(place, event.target.value)}
-          onKeyDown={onKeyDown}
-          className="field-sizing-content max-h-40 min-h-[47px] flex-1 resize-none overflow-y-auto border-2 border-control bg-deep px-3.5 py-[11px] [overflow-wrap:anywhere] whitespace-pre-wrap text-text-strong [tab-size:4] placeholder:text-label disabled:cursor-not-allowed disabled:border-line disabled:opacity-70"
-        />
+    <div
+      data-composer=""
+      className="cut focus-ring-within flex flex-none flex-col gap-1 border-(length:--edge) border-line-2 bg-card py-2 ps-4 pe-2.5 focus-within:border-focus-ring has-[textarea:disabled]:border-line has-[textarea:disabled]:opacity-70"
+    >
+      <textarea
+        ref={input}
+        aria-label={placeholder}
+        value={draft}
+        rows={2}
+        spellCheck
+        disabled={closed}
+        placeholder={paused && closed ? copy.pausedPlaceholder(paused) : placeholder}
+        onChange={(event) => writeDraft(place, event.target.value)}
+        onKeyDown={onKeyDown}
+        className="field-sizing-content max-h-40 min-h-12 resize-none overflow-y-auto border-0 bg-transparent py-0.5 [overflow-wrap:anywhere] whitespace-pre-wrap text-text-strong outline-none [tab-size:4] placeholder:text-label disabled:cursor-not-allowed"
+      />
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 text-end text-meta text-label">{hintFor(busy, stopping, paused)}</span>
         {busy && (
-          <Button variant="deny" onClick={onStop} disabled={stopping} className="px-4 py-[9px]">
+          <Button variant="deny" size="sm" onClick={onStop} disabled={stopping}>
             {stopping ? copy.stopping : copy.stop}
           </Button>
         )}
         {paused && (
-          <Button variant={paused.canQueue ? "outline" : "default"} onClick={paused.onWake} disabled={paused.waking}>
+          <Button
+            variant={paused.canQueue ? "outline" : "default"}
+            size="sm"
+            onClick={paused.onWake}
+            disabled={paused.waking}
+          >
             {copy.wake(paused)}
           </Button>
         )}
-        {!closed && (
-          <Button onClick={submit} disabled={!content || sending}>
-            {paused ? copy.queue : copy.send}
-          </Button>
-        )}
+        {!closed &&
+          (paused ? (
+            <Button size="sm" onClick={submit} disabled={!content || sending}>
+              {copy.queue}
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              aria-label={copy.send}
+              title={copy.send}
+              onClick={submit}
+              disabled={!content || sending}
+              className="size-[34px]"
+            >
+              <SendIcon />
+            </Button>
+          ))}
       </div>
-      <span className="text-meta text-label">{hintFor(busy, stopping, paused)}</span>
     </div>
   );
 }

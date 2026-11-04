@@ -59,7 +59,7 @@ export function ExportSettings() {
                 id={selectId}
                 value={hobId ?? ""}
                 onChange={(event) => setPicked(event.target.value as AgentId)}
-                className="min-w-0 border-2 border-control bg-deep px-2 py-1 text-detail text-text-strong"
+                className="min-w-0 border-(length:--edge) border-control bg-deep px-2 py-1 text-detail text-text-strong"
               >
                 {(hobs.data ?? []).map((hob) => (
                   <option key={hob.id} value={hob.id}>

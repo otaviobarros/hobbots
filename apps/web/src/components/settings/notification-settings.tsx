@@ -26,7 +26,7 @@ function ChoiceRow({
 }) {
   const labelId = useId();
   return (
-    <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+    <div className="flex items-center gap-4 border-b-(length:--edge) border-line py-2.5">
       <Switch aria-labelledby={labelId} checked={checked} disabled={disabled} onCheckedChange={onChange} />
       <div className="flex flex-1 flex-col gap-0.5">
         <span id={labelId} className="font-bold">

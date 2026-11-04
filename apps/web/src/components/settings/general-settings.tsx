@@ -36,7 +36,7 @@ function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) 
 
   return (
     <>
-      <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+      <div className="flex items-center gap-4 border-b-(length:--edge) border-line py-2.5">
         <Switch
           aria-labelledby={labelId}
           checked={change.isPending ? change.variables : (state.data?.openAtLogin ?? false)}
@@ -53,7 +53,7 @@ function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) 
       {notice && (
         <div
           role="status"
-          className={`cut flex items-center gap-3 border-2 bg-notice px-3 py-2.5 text-ui ${
+          className={`cut flex items-center gap-3 border-(length:--edge) bg-notice px-3 py-2.5 text-ui ${
             notice.tone === "problem" ? "border-rose" : "border-lantern"
           }`}
         >
@@ -88,7 +88,7 @@ function KeepRunningRow({ keepRunning }: { keepRunning: NonNullable<typeof keepR
 
   return (
     <>
-      <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+      <div className="flex items-center gap-4 border-b-(length:--edge) border-line py-2.5">
         <Switch
           aria-labelledby={labelId}
           checked={on}
@@ -103,7 +103,10 @@ function KeepRunningRow({ keepRunning }: { keepRunning: NonNullable<typeof keepR
         </div>
       </div>
       {state.data !== undefined && !on && (
-        <p role="status" className="cut m-0 border-2 border-lantern bg-notice px-3 py-2.5 text-ui leading-[1.45]">
+        <p
+          role="status"
+          className="cut m-0 border-(length:--edge) border-lantern bg-notice px-3 py-2.5 text-ui leading-[1.45]"
+        >
           {copy.closeQuits}
         </p>
       )}

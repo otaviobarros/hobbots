@@ -64,7 +64,7 @@ function DisconnectQuestion({ run, hub }: { readonly run: Disconnect; readonly h
           keep();
         }
       }}
-      className="cut m-0 flex basis-full animate-hb-in flex-wrap items-center gap-2 border-2 border-solid border-rose bg-deep px-3 py-2.5"
+      className="cut m-0 flex basis-full animate-hb-in flex-wrap items-center gap-2 border-(length:--edge) border-solid border-rose bg-deep px-3 py-2.5"
     >
       <span className="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
         <span className="text-ui font-bold text-rose">{copy.confirm({ hub })}</span>
@@ -103,7 +103,7 @@ export function ConnectedHubSettings({ bridge }: { readonly bridge: ConnectionBr
       )}
       {view && (
         <>
-          <div className="cut flex flex-wrap items-center gap-x-3.5 gap-y-2.5 border-2 border-mint-deep bg-card px-3.5 py-3">
+          <div className="cut flex flex-wrap items-center gap-x-3.5 gap-y-2.5 border-(length:--edge) border-mint-deep bg-card px-3.5 py-3">
             <span
               aria-hidden
               className={`size-2.5 flex-none ${view.state === "connected" ? "bg-mint" : "bg-lantern"}`}

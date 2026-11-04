@@ -11,12 +11,12 @@ import {
   type Thread,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@hobbots/ui/components/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "@hobbots/ui/components/popover";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { Switch } from "@hobbots/ui/components/switch";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import { effortWords } from "../../api/first-hob.ts";
 import { modelsQuery, runtimesQuery, threadBrain, useSetBrain } from "../../api/queries.ts";
 import { modelName, pickedBrain } from "../../lib/brains.ts";
@@ -65,65 +65,38 @@ const unavailableReason = (health: RuntimeHealth) => {
   );
 };
 
-/**
- * The brain chip in the chat header: what the thread thinks with, and whether it is ready. In a
- * thread it opens the picker, which switches the thread's brain from its next reply (ADR 017).
- */
-export function BrainPicker({ hob, thread }: { hob: Agent; thread: Thread | undefined }) {
+/** What the thread thinks with, and whether it is ready, as the chat's ⋯ menu names it. */
+export const useThreadBrain = (hob: Agent, thread: Thread | undefined) => {
   const brain = threadBrain(hob, thread);
   const modelLabel = useBrainLabel(brain);
   const label = brain.effort === null ? modelLabel : `${modelLabel} · ${effortWords(brain.effort).label}`;
   const runtimes = useQuery(runtimesQuery);
   const health = runtimes.data?.find((h) => h.runtime === brain.runtime);
   const state = runtimes.isPending ? "checking" : health ? STATE_WORDS[health.availability] : "unknown";
-  const chip = (
-    <>
-      <RuntimeTile runtime={brain.runtime} />
-      <span className="font-bold">{label}</span>
-      <span className={health?.availability === "ready" ? "text-mint" : "text-lantern"}>{state}</span>
-    </>
-  );
-  const chipClass = "flex flex-none items-center gap-2 border-2 border-line-2 px-2 py-1 text-meta whitespace-nowrap";
-  if (thread === undefined) {
-    return (
-      <span className={chipClass} title={copy.freshPage}>
-        {chip}
-      </span>
-    );
-  }
-  return (
-    <ThreadBrainPicker
-      hob={hob}
-      thread={thread}
-      brain={brain}
-      label={label}
-      state={state}
-      chip={chip}
-      chipClass={chipClass}
-    />
-  );
-}
+  return { brain, label, state, ready: health?.availability === "ready" };
+};
 
-function ThreadBrainPicker({
+/**
+ * The brain picker, opened from the chat's ⋯ menu beside `children`: it switches the thread's brain
+ * from its next reply (ADR 017). Closing it hands focus back to the first button in `children`.
+ */
+export function BrainPicker({
   hob,
   thread,
-  brain,
-  label,
-  state,
-  chip,
-  chipClass,
+  open,
+  onOpenChange,
+  children,
 }: {
   hob: Agent;
   thread: Thread;
-  brain: Brain;
-  label: string;
-  state: string;
-  chip: ReactNode;
-  chipClass: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const { brain } = useThreadBrain(hob, thread);
   const [makeDefault, setMakeDefault] = useState(false);
   const switchId = useId();
+  const anchor = useRef<HTMLSpanElement>(null);
   const runtimes = useQuery(runtimesQuery);
   const setBrain = useSetBrain(hob.id, thread.id);
   const hobBrain = { runtime: hob.runtime, model: hob.model, effort: hob.effort };
@@ -133,27 +106,27 @@ function ThreadBrainPicker({
       { brain: next, ...(makeDefault && next !== null ? { makeDefault: true } : {}) },
       {
         onSuccess: () => {
-          setOpen(false);
+          onOpenChange(false);
           setMakeDefault(false);
         },
       },
     );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(chipClass, "cursor-pointer bg-transparent text-text-strong hover:bg-line")}
-          aria-label={copy.trigger({ brain: label, state })}
-        >
-          {chip}
-          <span aria-hidden className="text-label">
-            ▾
-          </span>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent aria-label={copy.title} className="flex flex-col gap-3">
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverAnchor asChild>
+        <span ref={anchor} className="flex">
+          {children}
+        </span>
+      </PopoverAnchor>
+      <PopoverContent
+        aria-label={copy.title}
+        className="flex flex-col gap-3"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          anchor.current?.querySelector("button")?.focus();
+        }}
+      >
         <span className="lbl text-meta text-label">{copy.title}</span>
         {runtimes.data?.map((health) => (
           <RuntimeChoices

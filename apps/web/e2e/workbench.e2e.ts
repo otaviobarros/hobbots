@@ -105,6 +105,9 @@ test("[TC-UX-022] the Workbench opens from the task sheet, also reached from the
   await expect(note).toHaveValue("Keep the headings short");
 
   // From the quest button in the header, the quest sheet's row opens the Task, and its Workbench.
+  // The drawer sits over the header's end, so it closes first.
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
   await page
     .getByRole("region", { name: "Work in progress" })
     .getByRole("button", { name: /Tidy the notes/ })

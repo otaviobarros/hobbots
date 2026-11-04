@@ -221,43 +221,35 @@ export function ChatView({
 
   return (
     <main aria-label={copy.landmark} className="flex min-w-chat-min flex-1 flex-col">
-      <header className="@container/header flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
+      {/* The tile, then the chat's title over who leads it and what they are doing (A2-02). */}
+      <header className="@container/header flex items-center gap-3 border-b-(length:--edge) border-line px-6 pt-3.5 pb-3">
         {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
         <Link to="/hobs/$hobId" params={{ hobId }} tabIndex={-1} aria-hidden className="shrink-0 no-underline">
-          <HobSprite hob={current} size={36} state={state} badge />
+          <HobSprite hob={current} size={40} state={state} badge />
         </Link>
-        {/* The hob's name keeps its room when the quest button and the brain picker crowd the header. */}
+        {/* The title keeps its room when the quest button crowds the header. */}
         <div className="flex min-w-[120px] flex-1 flex-col overflow-hidden">
-          <span className="flex min-w-0 items-baseline gap-2">
+          <ChatTitle thread={thread.data} title={title} renaming={renaming} onDone={() => setRenaming(false)} />
+          <span className="truncate text-detail text-text-secondary">
             <Link
               to="/hobs/$hobId"
               params={{ hobId }}
               title={copy.openHob({ name: current.name })}
-              className="font-heading text-title font-semibold whitespace-nowrap text-text-strong no-underline hover:underline"
+              className="font-semibold text-text no-underline hover:underline"
             >
               {current.name}
             </Link>
-            <span className="text-ui font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
-            <ChatTitle thread={thread.data} title={title} renaming={renaming} onDone={() => setRenaming(false)} />
+            {copy.leadLine({ doing: stateLabel[state] })}
           </span>
-          <span className="text-meta text-label">{stateLabel[state]}</span>
         </div>
         {threadId && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
-        <BrainPicker hob={current} thread={thread.data} />
         {thread.data && <ChatSearchButton open={finding} onToggle={() => setFinding(!finding)} />}
-        {thread.data && (
-          <ThreadHeaderMenu
-            hob={current}
-            thread={thread.data}
-            onRename={() => setRenaming(true)}
-            onSearch={() => setFinding(true)}
-          />
-        )}
-        <Button asChild variant="outline">
-          <Link to="/hobs/$hobId/profile" params={{ hobId }}>
-            {copy.editHob}
-          </Link>
-        </Button>
+        <HeaderMenu
+          hob={current}
+          thread={thread.data}
+          onRename={() => setRenaming(true)}
+          onSearch={() => setFinding(true)}
+        />
       </header>
       <ReconnectingCard className="mx-6 mt-2.5" />
       {threadId && finding && (
@@ -276,122 +268,161 @@ export function ChatView({
           if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
         }}
         ref={stayAtEnd}
-        className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-[18px]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px]"
       >
-        {threadId && messages.isPending && <p className="text-label">{copy.loadingMessages}</p>}
-        {empty && !messages.isLoading && (
-          <EmptyThread hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
-        )}
-        {transcript && (
-          <Transcript
-            transcript={transcript}
-            hob={current}
-            threadId={threadId}
-            thread={thread.data}
-            focusMessageId={focusMessageId}
-            streaming={streaming}
-            resume={(message) =>
-              message.id === resumable?.id
-                ? {
-                    pending: resume.isPending || continueOn.isPending,
-                    onContinue: () => resume.mutate(message.id),
-                    alternatives: continueOn.alternatives(message.id),
-                  }
+        {/* The transcript, the tray and the composer share one centered column (A2-01). */}
+        <div className="mx-auto flex w-full max-w-measure flex-1 flex-col gap-3.5">
+          {threadId && messages.isPending && <p className="text-label">{copy.loadingMessages}</p>}
+          {empty && !messages.isLoading && (
+            <EmptyThread hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
+          )}
+          {transcript && (
+            <Transcript
+              transcript={transcript}
+              hob={current}
+              threadId={threadId}
+              thread={thread.data}
+              focusMessageId={focusMessageId}
+              streaming={streaming}
+              resume={(message) =>
+                message.id === resumable?.id
+                  ? {
+                      pending: resume.isPending || continueOn.isPending,
+                      onContinue: () => resume.mutate(message.id),
+                      alternatives: continueOn.alternatives(message.id),
+                    }
+                  : undefined
+              }
+            />
+          )}
+          {queued.map((message) => (
+            <QueuedRow
+              key={message.id}
+              message={message}
+              hob={current}
+              replying={streaming}
+              pending={remove.isPending || sendNow.isPending}
+              onRemove={() => remove.mutate(message.id)}
+              onSendNow={() => sendNow.mutate(message.id)}
+            />
+          ))}
+          {waiting.map((message, index) => (
+            <WaitingRow
+              key={message.id}
+              message={message}
+              refused={outbox.refused && index === 0}
+              live={connection === "live"}
+              sending={outbox.sending === message.id}
+              onEdit={() => {
+                const content = takeBack(place, message.id);
+                if (content !== undefined) appendDraft(place, content);
+              }}
+              onTryAgain={() => tryAgain(place)}
+            />
+          ))}
+          {continueOn.isError && (
+            <p role="alert" className="text-ui text-rose">
+              {brainCopy.continueFailed({ name: current.name })}
+            </p>
+          )}
+          {resume.isError && (
+            <p role="alert" className="text-ui text-rose">
+              {copy.continueFailed({ name: current.name, why: sendErrorText(resume.error, current) })}
+            </p>
+          )}
+          {queueError && (
+            <p role="alert" className="text-ui text-rose">
+              {copy.queueGone}
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="text-ui text-rose">
+              {sendErrorText(error, current)}
+            </p>
+          )}
+          {pause.isError && (
+            <p role="alert" className="text-ui text-rose">
+              {copy.wakeFailed(current)}
+            </p>
+          )}
+          <div ref={bottom} />
+        </div>
+      </div>
+
+      <ArchiveToastViewport />
+      <div className="flex-none px-6 pt-2 pb-5">
+        <div className="mx-auto flex w-full max-w-measure flex-col gap-2.5">
+          {brainProblem !== null && (
+            <section
+              aria-label={copy.brainUnavailable}
+              className="flex flex-wrap items-center gap-2.5 rounded-card bg-card px-3.5 py-2.5 text-ui"
+            >
+              <span className="flex-1 text-lantern">
+                {copy.brainProblem({
+                  name: current.name,
+                  runtime: RUNTIME_NAMES[runtime],
+                  problem: copy.brain[brainProblem],
+                })}
+              </span>
+              <Button asChild variant="outline" size="xs">
+                <Link to="/settings/$section" params={{ section: "connections" }}>
+                  {copy.fixInSettings}
+                </Link>
+              </Button>
+            </section>
+          )}
+          <WorkHeldNotice />
+          <NeedsTray entries={needs} />
+          <Composer
+            placeholder={copy.placeholder({ name: current.name, title })}
+            place={place}
+            lastSent={lastSent}
+            busy={streaming}
+            stopping={stopping}
+            sending={start.isPending || send.isPending}
+            onSend={sendDraft}
+            onStop={() => interrupt.mutate()}
+            paused={
+              paused
+                ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: threadId !== undefined }
                 : undefined
             }
           />
-        )}
-        {queued.map((message) => (
-          <QueuedRow
-            key={message.id}
-            message={message}
-            hob={current}
-            replying={streaming}
-            pending={remove.isPending || sendNow.isPending}
-            onRemove={() => remove.mutate(message.id)}
-            onSendNow={() => sendNow.mutate(message.id)}
-          />
-        ))}
-        {waiting.map((message, index) => (
-          <WaitingRow
-            key={message.id}
-            message={message}
-            refused={outbox.refused && index === 0}
-            live={connection === "live"}
-            sending={outbox.sending === message.id}
-            onEdit={() => {
-              const content = takeBack(place, message.id);
-              if (content !== undefined) appendDraft(place, content);
-            }}
-            onTryAgain={() => tryAgain(place)}
-          />
-        ))}
-        {continueOn.isError && (
-          <p role="alert" className="text-ui text-rose">
-            {brainCopy.continueFailed({ name: current.name })}
-          </p>
-        )}
-        {resume.isError && (
-          <p role="alert" className="text-ui text-rose">
-            {copy.continueFailed({ name: current.name, why: sendErrorText(resume.error, current) })}
-          </p>
-        )}
-        {queueError && (
-          <p role="alert" className="text-ui text-rose">
-            {copy.queueGone}
-          </p>
-        )}
-        {error && (
-          <p role="alert" className="text-ui text-rose">
-            {sendErrorText(error, current)}
-          </p>
-        )}
-        {pause.isError && (
-          <p role="alert" className="text-ui text-rose">
-            {copy.wakeFailed(current)}
-          </p>
-        )}
-        <div ref={bottom} />
+        </div>
       </div>
-
-      {brainProblem !== null && (
-        <section
-          aria-label={copy.brainUnavailable}
-          className="mx-4 mb-2 flex flex-wrap items-center gap-2.5 bg-card px-3.5 py-2.5 text-ui"
-        >
-          <span className="flex-1 text-lantern">
-            {copy.brainProblem({
-              name: current.name,
-              runtime: RUNTIME_NAMES[runtime],
-              problem: copy.brain[brainProblem],
-            })}
-          </span>
-          <Button asChild variant="outline" size="xs">
-            <Link to="/settings/$section" params={{ section: "connections" }}>
-              {copy.fixInSettings}
-            </Link>
-          </Button>
-        </section>
-      )}
-      <ArchiveToastViewport />
-      <WorkHeldNotice className="mx-6 mb-2" />
-      <NeedsTray entries={needs} className="mx-6 mb-2" />
-      <Composer
-        placeholder={copy.placeholder({ name: current.name, title })}
-        place={place}
-        lastSent={lastSent}
-        busy={streaming}
-        stopping={stopping}
-        sending={start.isPending || send.isPending}
-        onSend={sendDraft}
-        onStop={() => interrupt.mutate()}
-        paused={
-          paused
-            ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: threadId !== undefined }
-            : undefined
-        }
-      />
     </main>
+  );
+}
+
+/**
+ * The header's ⋯ menu, with the brain picker it opens beside it once the thread exists (A2-02).
+ */
+function HeaderMenu({
+  hob,
+  thread,
+  onRename,
+  onSearch,
+}: {
+  hob: Agent;
+  thread: Thread | undefined;
+  onRename: () => void;
+  onSearch: () => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const menu = (
+    <ThreadHeaderMenu
+      hob={hob}
+      thread={thread}
+      onRename={onRename}
+      onSearch={onSearch}
+      onBrain={() => setPicking(true)}
+    />
+  );
+  if (thread === undefined) return menu;
+  return (
+    <BrainPicker hob={hob} thread={thread} open={picking} onOpenChange={setPicking}>
+      {menu}
+    </BrainPicker>
   );
 }
 

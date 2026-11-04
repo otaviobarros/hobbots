@@ -18,7 +18,10 @@ export function DeviceFacts({ device, now }: { device: WaitingDevice; now: Date 
   return (
     <dl className="m-0 flex flex-col">
       {rows.map(([label, value]) => (
-        <div key={label} className="grid grid-cols-[110px_1fr] gap-3 border-b-2 border-line py-1.5 text-ui">
+        <div
+          key={label}
+          className="grid grid-cols-[110px_1fr] gap-3 border-b-(length:--edge) border-line py-1.5 text-ui"
+        >
           <dt className="text-label">{label}</dt>
           <dd className="m-0 break-words">{value}</dd>
         </div>
@@ -90,7 +93,7 @@ export function DeviceRequestCard({ device, now, canDefer }: { device: WaitingDe
   return (
     <section
       aria-label={copy.label({ name: device.request.name })}
-      className="cut flex flex-col gap-2.5 border-2 border-lantern bg-card px-3 py-2.5"
+      className="cut flex flex-col gap-2.5 border-(length:--edge) border-lantern bg-card px-3 py-2.5"
     >
       <span className="lbl text-meta text-lantern">{copy.kicker}</span>
       <DeviceFacts device={device} now={now} />

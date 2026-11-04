@@ -107,7 +107,10 @@ function SidebarHob({
                   {mark && (
                     <span
                       aria-hidden
-                      className={cn("absolute -end-[3px] -bottom-[3px] size-3 rounded-dot border-2 border-panel", mark)}
+                      className={cn(
+                        "absolute -end-[3px] -bottom-[3px] size-3 rounded-dot border-(length:--edge) border-panel",
+                        mark,
+                      )}
                     />
                   )}
                 </span>

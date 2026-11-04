@@ -40,7 +40,6 @@
     "apps/web/src/components/archive/thread-menu.tsx": 1,
     "apps/web/src/components/backpack/waiting-list.tsx": 1,
     "apps/web/src/components/backup/work-held-notice.tsx": 1,
-    "apps/web/src/components/chat/composer.tsx": 1,
     "apps/web/src/components/chat/message-row.tsx": 1,
     "apps/web/src/components/chat/reply-steps.tsx": 2,
     "apps/web/src/components/chat/tool-output.tsx": 1,

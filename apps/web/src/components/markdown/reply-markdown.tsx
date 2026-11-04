@@ -33,7 +33,7 @@ const components: Components = {
   ol: ({ node: _, ...props }) => <ol className="flex list-decimal flex-col gap-1 ps-6 marker:text-label" {...props} />,
   input: ({ node: _, ...props }) => (
     <input
-      className="me-2 size-3.5 cursor-default appearance-none border-2 border-control align-[-2px] checked:border-mint checked:bg-mint"
+      className="me-2 size-3.5 cursor-default appearance-none border-(length:--edge) border-control align-[-2px] checked:border-mint checked:bg-mint"
       {...props}
     />
   ),
@@ -48,12 +48,12 @@ const components: Components = {
   ),
   th: ({ node: _, style, ...props }) => (
     <th
-      className="border-2 border-line bg-panel px-3 py-1.5 text-start font-bold text-label"
+      className="border-(length:--edge) border-line bg-panel px-3 py-1.5 text-start font-bold text-label"
       style={style}
       {...props}
     />
   ),
-  td: ({ node: _, ...props }) => <td className="border-2 border-line px-3 py-1.5 align-top" {...props} />,
+  td: ({ node: _, ...props }) => <td className="border-(length:--edge) border-line px-3 py-1.5 align-top" {...props} />,
   del: ({ node: _, ...props }) => <del className="text-label" {...props} />,
   strong: ({ node: _, ...props }) => <strong className="font-bold" {...props} />,
   code: ({ node: _, className, ...props }) => (

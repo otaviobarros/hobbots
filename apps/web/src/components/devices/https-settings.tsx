@@ -60,7 +60,7 @@ function ServeCommand({ ask, status }: { ask: ServeAsk; status: RemoteAccessStat
         <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
         <span>{ask === "forward" ? copy.notServing : copy.leftOver}</span>
       </p>
-      <div className="cut flex flex-wrap items-center gap-2.5 border-2 border-control bg-deep px-3 py-2">
+      <div className="cut flex flex-wrap items-center gap-2.5 border-(length:--edge) border-control bg-deep px-3 py-2">
         <code className="min-w-0 flex-1 font-mono text-ui text-moonlight wrap-anywhere">{command}</code>
         <Button variant="outline" size="xs" onClick={() => copyText(command)}>
           {copied === "idle"
@@ -86,7 +86,7 @@ function ServeCommand({ ask, status }: { ask: ServeAsk; status: RemoteAccessStat
         <fieldset
           aria-label={consent}
           disabled={serve.isPending}
-          className="cut m-0 flex animate-hb-in flex-wrap items-center gap-2 border-2 border-solid border-lantern bg-deep px-3 py-2.5"
+          className="cut m-0 flex animate-hb-in flex-wrap items-center gap-2 border-(length:--edge) border-solid border-lantern bg-deep px-3 py-2.5"
           onKeyDown={(event) => {
             if (event.key === "Escape" && !serve.isPending) {
               event.stopPropagation();
@@ -131,7 +131,7 @@ export function HttpsSettings({ status }: { status: RemoteAccessStatus }) {
   const ask = serveAsk(status);
   return (
     <>
-      <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+      <div className="flex items-center gap-4 border-b-(length:--edge) border-line py-2.5">
         <Switch
           aria-labelledby={labelId}
           checked={on}

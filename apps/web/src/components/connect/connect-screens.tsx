@@ -88,7 +88,7 @@ export function ConnectForm({
           aria-invalid={refusal !== undefined}
           aria-describedby={refusal === undefined ? undefined : errorId}
           onChange={(event) => onAddress(event.target.value)}
-          className="max-w-[700px] border-2 border-control bg-ground px-3 py-[11px] font-mono text-[17px] text-text-strong"
+          className="max-w-[700px] border-(length:--edge) border-control bg-ground px-3 py-[11px] font-mono text-[17px] text-text-strong"
         />
         {refusal !== undefined && (
           <p id={errorId} role="alert" className="m-0 max-w-[700px] text-ui text-rose">

@@ -14,7 +14,7 @@ const tone: Record<FileChangeKind, string> = {
 /** How a file changed: Added, Edited, Deleted, Moved or Link, one color each. */
 export function KindTag({ kind }: { kind: FileChangeKind }) {
   return (
-    <span className={cn("shrink-0 rounded-full px-1.5 py-px text-meta font-bold whitespace-nowrap", tone[kind])}>
+    <span className={cn("shrink-0 rounded-tag px-1.5 py-px text-meta font-bold whitespace-nowrap", tone[kind])}>
       {messages.kind[kind]}
     </span>
   );

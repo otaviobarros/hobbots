@@ -37,7 +37,7 @@ export function QuestionCard({
     <section
       aria-label={copy.asks({ name: asker.name })}
       className={cn(
-        "cut ms-9 flex max-w-work-max animate-hb-in flex-col gap-2.5 border-2 bg-card px-3.5 py-3",
+        "cut ms-9 flex max-w-work-max animate-hb-in flex-col gap-2.5 border-(length:--edge) bg-card px-3.5 py-3",
         open ? "border-lantern" : question.state === "withdrawn" ? "border-control" : "border-mint-deep",
       )}
     >

@@ -44,7 +44,7 @@ function QuestPicker({
         id={id}
         value={value ?? ""}
         onChange={(event) => onPick(event.target.value === "" ? null : (event.target.value as QuestId))}
-        className="cut max-w-full border-2 border-line bg-card px-2 py-1.5 text-text-strong"
+        className="cut max-w-full border-(length:--edge) border-line bg-card px-2 py-1.5 text-text-strong"
       >
         <option value="">{copy.choose}</option>
         {quests.map((quest) => (

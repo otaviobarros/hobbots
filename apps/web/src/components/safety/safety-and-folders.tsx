@@ -94,7 +94,7 @@ function FenceArt({ height }: { height: number }) {
       aria-hidden
       className="relative block h-[46px] overflow-hidden rounded-control bg-[linear-gradient(180deg,var(--color-deep),var(--color-ground))]"
     >
-      <span className="absolute inset-x-0 bottom-0 h-2 border-t-2 border-scene-chimney bg-scene-ground" />
+      <span className="absolute inset-x-0 bottom-0 h-2 border-t-(length:--edge) border-scene-chimney bg-scene-ground" />
       <span
         className="absolute inset-x-2.5 bottom-2 bg-[repeating-linear-gradient(90deg,var(--color-wood)_0_5px,transparent_5px_11px)] transition-[height] duration-(--dur-sheet)"
         style={{ height }}
@@ -149,7 +149,7 @@ export function LockedSwitch({
   const labelId = useId();
   const noteId = useId();
   return (
-    <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+    <div className="flex items-center gap-4 border-b-(length:--edge) border-line py-2.5">
       <Switch aria-labelledby={labelId} aria-describedby={noteId} checked={checked} disabled />
       <div className="flex flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-2">
@@ -191,7 +191,7 @@ type FolderLook = "setup" | "settings";
 const FOLDER_ROW: Readonly<Record<FolderLook, { readonly list: string; readonly row: string }>> = {
   setup: {
     list: "lg:grid-cols-2",
-    row: "cut animate-hb-in gap-3 border-2 border-mint bg-card px-3.5 py-3",
+    row: "cut animate-hb-in gap-3 border-(length:--edge) border-mint bg-card px-3.5 py-3",
   },
   settings: { list: "", row: "gap-3 rounded-control bg-card px-3 py-2.5" },
 };
@@ -245,7 +245,7 @@ export function FolderList({
               {look === "setup" ? (
                 <span
                   aria-hidden
-                  className="grid size-[22px] flex-none animate-hb-pop place-items-center border-2 border-control bg-mint font-bold text-ground"
+                  className="grid size-[22px] flex-none animate-hb-pop place-items-center border-(length:--edge) border-control bg-mint font-bold text-ground"
                 >
                   ✓
                 </span>
@@ -309,7 +309,7 @@ export function FolderList({
             spellCheck={false}
             autoCapitalize="off"
             autoComplete="off"
-            className="min-w-[260px] flex-1 border-2 border-control bg-deep px-[11px] py-[7px] font-mono text-ui text-text-strong placeholder:text-label"
+            className="min-w-[260px] flex-1 border-(length:--edge) border-control bg-deep px-[11px] py-[7px] font-mono text-ui text-text-strong placeholder:text-label"
           />
           <Button type="submit" variant="outline" disabled={typed.trim() === "" || pending}>
             {copy.addFolder}

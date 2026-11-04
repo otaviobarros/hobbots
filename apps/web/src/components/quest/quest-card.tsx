@@ -66,7 +66,7 @@ export function QuestCard({
     <section
       aria-label={copy.label({ name: lead.name, title })}
       className={cn(
-        "cut ms-9 flex max-w-work-max animate-hb-in flex-col gap-2.5 border-2 bg-card px-3.5 py-3",
+        "cut ms-9 flex max-w-work-max animate-hb-in flex-col gap-2.5 border-(length:--edge) bg-card px-3.5 py-3",
         ring(card, stuck.length > 0),
       )}
     >

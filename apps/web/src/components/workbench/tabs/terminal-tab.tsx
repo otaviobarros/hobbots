@@ -67,7 +67,10 @@ function CommandEntry({ command, now, live }: { command: CommandRecord; now: Dat
   const mark = MARK[command.state];
   const duration = commandDuration(command, now);
   return (
-    <Collapsible defaultOpen className="flex flex-col gap-1.5 border-2 border-line bg-panel px-3 py-2">
+    <Collapsible
+      defaultOpen
+      className="flex flex-col gap-1.5 rounded-card border-(length:--edge) border-line bg-panel px-3 py-2"
+    >
       <CollapsibleTrigger className="group flex min-w-0 items-start gap-2 border-0 bg-transparent p-0 text-start text-detail text-text-strong hover:text-moonlight focus-visible:outline-2 focus-visible:outline-focus-ring">
         <span aria-hidden className={cn("w-3.5 shrink-0 text-center", mark.className)}>
           {mark.glyph}
@@ -152,9 +155,16 @@ function Printed({ command, live }: { command: CommandRecord; live: LiveOutput |
 /** A running command's output as it comes, kept scrolled to its last line. */
 function LiveOutputBlock({ live }: { live: LiveOutput | undefined }) {
   return (
-    <figure aria-label={copy.liveOutput} className="m-0 ms-5.5 flex min-w-0 flex-col border-2 border-line bg-deep">
-      <figcaption className="border-b-2 border-line px-2.5 py-1 text-meta text-label">{copy.liveOutput}</figcaption>
-      {live?.missed && <p className="m-0 border-b-2 border-line px-2.5 py-1 text-meta text-label">{copy.missed}</p>}
+    <figure
+      aria-label={copy.liveOutput}
+      className="m-0 ms-5.5 flex min-w-0 flex-col overflow-hidden rounded-card border-(length:--edge) border-line bg-deep"
+    >
+      <figcaption className="border-b-(length:--edge) border-line px-2.5 py-1 text-meta text-label">
+        {copy.liveOutput}
+      </figcaption>
+      {live?.missed && (
+        <p className="m-0 border-b-(length:--edge) border-line px-2.5 py-1 text-meta text-label">{copy.missed}</p>
+      )}
       {/* Reversed, so the newest line shows and the rest scrolls up. */}
       <div className="flex max-h-60 flex-col-reverse overflow-auto">
         <pre role="log" aria-live="polite" className={cn(OUTPUT_TEXT, "max-h-none overflow-visible")}>

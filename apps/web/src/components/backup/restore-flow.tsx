@@ -84,7 +84,7 @@ export function RestoreFlow({ onCancel }: { onCancel?: () => void }) {
         </p>
       )}
       {summary ? (
-        <div className="cut flex flex-col gap-3 border-2 border-lantern bg-deep px-4 py-3">
+        <div className="cut flex flex-col gap-3 border-(length:--edge) border-lantern bg-deep px-4 py-3">
           <Summary summary={summary} />
           {restore.isError && (
             <p role="alert" className="m-0 text-ui text-rose">

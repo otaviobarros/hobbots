@@ -11,7 +11,7 @@ export function InboxKeyHints() {
           {keys.map((key) => (
             <kbd
               key={key}
-              className="min-w-4.5 rounded-tag border border-b-2 border-line-2 bg-card px-1 text-center font-sans text-meta text-text-secondary"
+              className="min-w-4.5 rounded-tag border border-b-(length:--edge) border-line-2 bg-card px-1 text-center font-sans text-meta text-text-secondary"
             >
               {key}
             </kbd>

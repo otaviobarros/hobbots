@@ -38,7 +38,7 @@ function DeviceRow({ device, now, context }: { device: Device; now: Date; contex
   return (
     <li
       data-device={device.id}
-      className="flex flex-col gap-2 border-b-2 border-line py-2.5 last:border-b-0"
+      className="flex flex-col gap-2 border-b-(length:--edge) border-line py-2.5 last:border-b-0"
       onKeyDown={(event) => {
         if (asking && event.key === "Escape" && !revoke.isPending) {
           event.stopPropagation();
@@ -67,7 +67,7 @@ function DeviceRow({ device, now, context }: { device: Device; now: Date; contex
         <fieldset
           aria-label={copy.confirm({ name })}
           disabled={revoke.isPending}
-          className="cut m-0 flex animate-hb-in flex-wrap items-center gap-2 border-2 border-solid border-rose bg-deep px-3 py-2.5"
+          className="cut m-0 flex animate-hb-in flex-wrap items-center gap-2 border-(length:--edge) border-solid border-rose bg-deep px-3 py-2.5"
         >
           <span className="flex-1 text-ui text-rose">{copy.confirm({ name })}</span>
           {revoke.isError && (
@@ -96,7 +96,10 @@ function RevokedByRestore({ devices }: { devices: ReadonlyArray<Device> }) {
       <span className="lbl text-meta text-label">{copy.revokedByRestore}</span>
       <ul className="m-0 flex list-none flex-col p-0">
         {revoked.map((device) => (
-          <li key={device.id} className="flex flex-col gap-0.5 border-b-2 border-line py-2 opacity-70 last:border-b-0">
+          <li
+            key={device.id}
+            className="flex flex-col gap-0.5 border-b-(length:--edge) border-line py-2 opacity-70 last:border-b-0"
+          >
             <span className="font-bold wrap-anywhere">{deviceName(device)}</span>
             <span className="text-detail text-text-secondary">{copy.pairAgain}</span>
           </li>
