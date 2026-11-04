@@ -2,12 +2,12 @@ import { expect, test } from "./hub.ts";
 import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #509: the magnifier in the chat header searches this chat, marks each match, scrolls the
-// chat to the one you pick and closes on Escape; with nothing found it offers all of the hob's chats, searching for the same words.
+// chat to the one you pick, clears on the first Escape and closes on the next; with nothing found it offers all of the hob's chats, searching for the same words.
 
 test.afterEach(stopAldricHub);
 
 // covers CH-001, UX-001
-test("[TC-CH-261] Search this chat lists the messages that match, opens the one you pick, and closes on Escape", async ({
+test("[TC-CH-261] Search this chat lists the messages that match, opens the one you pick, and clears then closes on Escape", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -48,7 +48,11 @@ test("[TC-CH-261] Search this chat lists the messages that match, opens the one 
   const everywhere = page.getByRole("link", { name: "Search all of Aldric's chats" });
   await expect(everywhere).toHaveAttribute("href", `/#/hobs/${aldric}?q=lighthouse`);
 
-  // Escape closes it and gives focus back to the magnifier.
+  // The first Escape clears the words and keeps the box open; the next closes it and gives focus
+  // back to the magnifier.
+  await box.press("Escape");
+  await expect(box).toHaveValue("");
+  await expect(box).toBeFocused();
   await box.press("Escape");
   await expect(box).toBeHidden();
   await expect(toggle).toBeFocused();
