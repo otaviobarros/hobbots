@@ -12,7 +12,7 @@ const contentClass =
   "cut z-50 flex min-w-[220px] max-w-[300px] flex-col border-2 border-solid border-line-2 bg-card p-1 text-text-strong outline-none";
 
 const itemClass =
-  "flex cursor-pointer flex-col gap-0.5 px-2.5 py-2 text-sm outline-none select-none data-highlighted:bg-hover data-highlighted:outline-2 data-highlighted:outline-solid data-highlighted:-outline-offset-2 data-highlighted:outline-focus-ring data-disabled:cursor-default data-disabled:text-label";
+  "flex cursor-pointer flex-col gap-0.5 px-2.5 py-2 text-ui outline-none select-none data-highlighted:bg-hover data-highlighted:outline-2 data-highlighted:outline-solid data-highlighted:-outline-offset-2 data-highlighted:outline-focus-ring data-disabled:cursor-default data-disabled:text-label";
 
 function DropdownMenu(props: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
@@ -73,7 +73,9 @@ function ContextMenuItem({ className, ...props }: React.ComponentProps<typeof Co
 
 /** An item's shortcut, shown at the end of its first line. */
 function MenuShortcut({ className, ...props }: React.ComponentProps<"kbd">) {
-  return <kbd data-slot="menu-shortcut" className={cn("ms-auto font-sans text-xs text-label", className)} {...props} />;
+  return (
+    <kbd data-slot="menu-shortcut" className={cn("ms-auto font-sans text-meta text-label", className)} {...props} />
+  );
 }
 
 export {

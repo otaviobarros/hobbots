@@ -54,10 +54,10 @@ export function QuestionCard({
       {open ? (
         <AnswerForm question={question} askerName={asker.name} via="chat" />
       ) : question.state === "withdrawn" ? (
-        <p className="m-0 animate-hb-in text-sm text-text-secondary">{copy.withdrawn}</p>
+        <p className="m-0 animate-hb-in text-ui text-text-secondary">{copy.withdrawn}</p>
       ) : (
         question.answer !== null && (
-          <p className="m-0 animate-hb-in text-sm text-mint">{yourAnswer(question, "chat")}</p>
+          <p className="m-0 animate-hb-in text-ui text-mint">{yourAnswer(question, "chat")}</p>
         )
       )}
     </section>
@@ -103,7 +103,7 @@ export function AnswerForm({
           {send.isPending ? copy.sending : copy.send}
         </Button>
         {send.isError && (
-          <span role="alert" className="text-sm text-rose">
+          <span role="alert" className="text-ui text-rose">
             {closed ? copy.closed : copy.failed}
           </span>
         )}

@@ -307,7 +307,7 @@ function SummonFooter({
       <span
         id="summon-hint"
         role={failed ? "alert" : undefined}
-        className={cn("min-h-5 text-sm", failed ? "text-rose" : warn ? "text-lantern" : "text-text-secondary")}
+        className={cn("min-h-5 text-ui", failed ? "text-rose" : warn ? "text-lantern" : "text-text-secondary")}
       >
         {hint}
       </span>

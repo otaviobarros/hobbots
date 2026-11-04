@@ -43,7 +43,7 @@ export function StageHob({
       {doing?.kind === "live" && (
         <span
           title={doing.text}
-          className="max-w-[150px] truncate rounded-control bg-card px-2 py-1 text-xs text-text shadow-menu"
+          className="max-w-[150px] truncate rounded-control bg-card px-2 py-1 text-meta text-text shadow-menu"
         >
           {doing.text}
         </span>
@@ -54,7 +54,7 @@ export function StageHob({
           className="hop-on-hover flex cursor-pointer flex-col items-center gap-1 border-0 bg-transparent p-0"
         >
           <HobSprite hob={hob} size={size} state={state} badge />
-          <span className="rounded-tag bg-card px-2 py-px text-xs font-semibold whitespace-nowrap text-text-strong">
+          <span className="rounded-tag bg-card px-2 py-px text-meta font-semibold whitespace-nowrap text-text-strong">
             {hob.name}
           </span>
         </PopoverTrigger>
@@ -91,8 +91,8 @@ function HobPeek({
           {tag.word}
         </Badge>
       </div>
-      <span className="-mt-1.5 truncate text-[13px] text-text-secondary">{hob.roleTitle}</span>
-      <span className="text-sm text-text">{doingOf(state, threads, activity)?.text ?? copy.peekResting}</span>
+      <span className="-mt-1.5 truncate text-detail text-text-secondary">{hob.roleTitle}</span>
+      <span className="text-ui text-text">{doingOf(state, threads, activity)?.text ?? copy.peekResting}</span>
       <div className="flex flex-wrap gap-1.5">
         <Button asChild variant="outline" size="xs">
           {thread === null ? (

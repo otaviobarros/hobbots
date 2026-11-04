@@ -27,7 +27,7 @@ createRoot(root).render(
   <StrictMode>
     <div className="flex h-screen min-h-[610px] flex-col bg-ground text-text-strong">
       {/* Window chrome: macOS draws the traffic lights over the left of this bar. */}
-      <header className="flex h-title-strip flex-none items-center justify-center bg-deep text-[13px] text-label [-webkit-app-region:drag]">
+      <header className="flex h-title-strip flex-none items-center justify-center bg-deep text-detail text-label [-webkit-app-region:drag]">
         Hobbots
       </header>
       {bridge === undefined ? (

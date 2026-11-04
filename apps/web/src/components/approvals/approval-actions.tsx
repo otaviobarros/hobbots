@@ -124,7 +124,7 @@ export function ApprovalActions({
           {copy.deny}
         </Button>
       </div>
-      {noRule && <p className="m-0 text-xs text-label">{copy.noRule}</p>}
+      {noRule && <p className="m-0 text-meta text-label">{copy.noRule}</p>}
     </div>
   );
 }
@@ -144,7 +144,7 @@ function ConfirmBox({
   tray: boolean;
 }) {
   const box = (
-    <label className="flex cursor-pointer items-center gap-2 text-sm">
+    <label className="flex cursor-pointer items-center gap-2 text-ui">
       <input
         ref={ref}
         type="checkbox"
@@ -200,20 +200,20 @@ function RuleForm({
         onCancel();
       }}
     >
-      <span id={headingId} className="lbl text-xs text-label">
+      <span id={headingId} className="lbl text-meta text-label">
         {scope === "always" ? copy.always : copy.forWork[scope]}
       </span>
-      <p className="m-0 text-sm">
+      <p className="m-0 text-ui">
         {scope === "always" ? copy.alwaysIntro({ name }) : copy.forWorkIntro[scope]({ name })}
       </p>
       <ul aria-label={copy.rulesLabel} className="m-0 flex list-none flex-col gap-1 p-0">
         {rules.map((rule) => (
-          <li key={ruleText(rule, name, scope)} className="font-mono text-[13px] break-all text-moonlight">
+          <li key={ruleText(rule, name, scope)} className="font-mono text-code break-all text-moonlight">
             {ruleText(rule, name, scope)}
           </li>
         ))}
       </ul>
-      {note !== null && <p className="m-0 text-xs text-label">{note}</p>}
+      {note !== null && <p className="m-0 text-meta text-label">{note}</p>}
       {canNarrow(approval) && <NarrowChoice narrow={narrow} onChange={setNarrow} />}
       <span className="flex flex-wrap gap-2">
         <Button ref={focusOnMount} type="submit" variant="approve">
@@ -236,9 +236,9 @@ function NarrowChoice({ narrow, onChange }: { narrow: boolean; onChange: (narrow
   ];
   return (
     <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-      <legend className="mb-1 p-0 text-xs text-label">{copy.narrowLabel}</legend>
+      <legend className="mb-1 p-0 text-meta text-label">{copy.narrowLabel}</legend>
       {options.map((option) => (
-        <label key={option.label} className="flex cursor-pointer items-center gap-2 text-sm">
+        <label key={option.label} className="flex cursor-pointer items-center gap-2 text-ui">
           <input
             type="radio"
             name={name}
@@ -282,7 +282,7 @@ function DenyForm({
         onCancel();
       }}
     >
-      <label htmlFor={inputId} className="text-xs text-label">
+      <label htmlFor={inputId} className="text-meta text-label">
         {copy.reasonLabel({ name })}
       </label>
       <span className="flex flex-wrap gap-2">

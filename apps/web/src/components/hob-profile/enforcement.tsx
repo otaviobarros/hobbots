@@ -20,10 +20,10 @@ export function EnforcementList({ enforcement }: { enforcement: RuntimeEnforceme
       {ENFORCEMENT_CAPABILITIES.map((capability) => {
         const { status, evidence } = enforcement[capability];
         return (
-          <li key={capability} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+          <li key={capability} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-ui">
             <Badge variant={STATUS_VARIANT[status]}>{copy.status[status]}</Badge>
             <span className="font-bold">{copy.capability[capability]}</span>
-            <span className="basis-full text-[13px] text-text-secondary">{evidence}</span>
+            <span className="basis-full text-detail text-text-secondary">{evidence}</span>
           </li>
         );
       })}

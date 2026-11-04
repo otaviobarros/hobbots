@@ -77,7 +77,7 @@ function Files({
           [...made, ...touched].findIndex((file) => file.id === shown.id),
         )}
         current={
-          <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-text-strong">
+          <span className="min-w-0 flex-1 truncate font-mono text-code text-text-strong">
             {shown.label ?? fileName(shown)}
           </span>
         }
@@ -125,7 +125,7 @@ function FileGroup({
   if (files.length === 0) return null;
   return (
     <section aria-label={title} className="flex flex-col">
-      <h3 className="lbl m-0 px-2 pt-2 pb-1 text-xs font-bold text-label">{title}</h3>
+      <h3 className="lbl m-0 px-2 pt-2 pb-1 text-meta font-bold text-label">{title}</h3>
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         {files.map((file) => (
           <li key={file.id}>
@@ -151,10 +151,10 @@ function RowContent({ file }: { file: TaskFile }) {
   const note = messages.now[file.now];
   return (
     <>
-      <span className="w-full truncate font-mono text-[13px] leading-[18px] text-text-strong">
+      <span className="w-full truncate font-mono text-code leading-[18px] text-text-strong">
         {file.label ?? fileName(file)}
       </span>
-      <span className="w-full truncate text-xs text-label">
+      <span className="w-full truncate text-meta text-label">
         {[
           messages.origin[file.origin],
           folder === "" ? null : `${folder}/`,
@@ -164,7 +164,9 @@ function RowContent({ file }: { file: TaskFile }) {
           .join(" · ")}
       </span>
       {note !== null && (
-        <span className={cn("text-xs font-semibold", file.now === "gone" ? "text-rose" : "text-lantern")}>{note}</span>
+        <span className={cn("text-meta font-semibold", file.now === "gone" ? "text-rose" : "text-lantern")}>
+          {note}
+        </span>
       )}
     </>
   );
@@ -200,7 +202,7 @@ function FileDetail({
           >
             {name}
           </h3>
-          <span className="text-xs text-label">{meta}</span>
+          <span className="text-meta text-label">{meta}</span>
         </div>
         {onSeeChanges !== null && (
           <Button variant="ghost" size="xs" onClick={onSeeChanges}>
@@ -233,7 +235,7 @@ function FileActions({
   if (showFile !== undefined) {
     return (
       <span className="flex items-center gap-2">
-        {missed && <span className="text-xs text-lantern">{messages.notShown}</span>}
+        {missed && <span className="text-meta text-lantern">{messages.notShown}</span>}
         <Button
           variant="chip"
           size="xs"

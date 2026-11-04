@@ -3,7 +3,7 @@ export function QuestChip({ label }: { label: string }) {
   return (
     <span
       title={label}
-      className="inline-flex h-[22px] max-w-full min-w-0 items-center gap-1 rounded-tag bg-[color-mix(in_srgb,var(--color-star)_16%,transparent)] px-2 text-xs leading-[22px] font-semibold whitespace-nowrap text-star"
+      className="inline-flex h-[22px] max-w-full min-w-0 items-center gap-1 rounded-tag bg-[color-mix(in_srgb,var(--color-star)_16%,transparent)] px-2 text-meta leading-[22px] font-semibold whitespace-nowrap text-star"
     >
       <svg
         viewBox="0 0 16 16"

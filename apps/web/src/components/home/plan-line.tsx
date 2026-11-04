@@ -35,7 +35,7 @@ export function PlanLine() {
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-semibold text-text-strong">{copy.title}</span>
-          <span className="text-[13px] text-text-secondary">{summary?.line ?? copy.notReported}</span>
+          <span className="text-detail text-text-secondary">{summary?.line ?? copy.notReported}</span>
         </span>
         {summary !== null && (
           <span aria-hidden className="block h-1.5 overflow-hidden rounded-dot bg-line-2">
@@ -46,7 +46,7 @@ export function PlanLine() {
           </span>
         )}
       </span>
-      <span className="inline-flex items-center gap-1 px-2 text-[13px] text-link">
+      <span className="inline-flex items-center gap-1 px-2 text-detail text-link">
         {copy.usage}
         <span aria-hidden>→</span>
       </span>

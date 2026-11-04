@@ -16,10 +16,10 @@ const copy = messages;
 function StandingRuleList() {
   const grants = useQuery(grantsQuery);
   const hobs = useQuery(agentsQuery);
-  if (grants.isPending) return <p className="m-0 text-sm text-label">{copy.loading}</p>;
+  if (grants.isPending) return <p className="m-0 text-ui text-label">{copy.loading}</p>;
   if (grants.isError) {
     return (
-      <div role="alert" className="flex flex-col items-start gap-2 text-sm text-rose">
+      <div role="alert" className="flex flex-col items-start gap-2 text-ui text-rose">
         {copy.failed}
         <Button variant="outline" onClick={() => void grants.refetch()}>
           {copy.retry}
@@ -32,7 +32,7 @@ function StandingRuleList() {
     return (
       <div className="flex flex-col gap-0.5">
         <span className="font-bold">{copy.empty}</span>
-        <span className="text-sm text-text-secondary">{copy.emptyHint}</span>
+        <span className="text-ui text-text-secondary">{copy.emptyHint}</span>
       </div>
     );
   }
@@ -51,11 +51,11 @@ export function StandingRules() {
   const count = grants.data === undefined ? undefined : standingRules(grants.data).length;
   return (
     <section aria-label={copy.heading} className="flex flex-col gap-2.5">
-      <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-text-strong">
+      <h2 className="m-0 flex items-center gap-2 text-ui font-semibold text-text-strong">
         {copy.history.title}
-        {count !== undefined && <span className="text-xs font-normal text-label">{count}</span>}
+        {count !== undefined && <span className="text-meta font-normal text-label">{count}</span>}
       </h2>
-      <p className="m-0 text-sm text-text-secondary">{copy.history.intro}</p>
+      <p className="m-0 text-ui text-text-secondary">{copy.history.intro}</p>
       <div className="rounded-card bg-card px-3.5 py-1">
         <StandingRuleList />
       </div>
@@ -68,7 +68,7 @@ export function StandingRuleSettings() {
   return (
     <section aria-label={copy.settings.heading} className="flex flex-col gap-3">
       <h3 className="lbl m-0 text-label">{copy.settings.heading}</h3>
-      <p className="m-0 text-sm text-text-secondary">{copy.settings.intro}</p>
+      <p className="m-0 text-ui text-text-secondary">{copy.settings.intro}</p>
       <StandingRuleList />
     </section>
   );

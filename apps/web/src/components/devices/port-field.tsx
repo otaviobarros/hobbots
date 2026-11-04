@@ -44,7 +44,7 @@ export function PortField({ port }: { port: number }) {
       }}
     >
       <div className="flex flex-wrap items-center gap-2.5">
-        <label htmlFor={id} className="text-sm font-bold">
+        <label htmlFor={id} className="text-ui font-bold">
           {copy.label}
         </label>
         <input
@@ -59,7 +59,7 @@ export function PortField({ port }: { port: number }) {
             change.reset();
             setDraft(event.target.value.replace(/\D/g, ""));
           }}
-          className="w-20 border-2 border-control bg-deep px-2 py-1 font-mono text-sm text-text-strong focus-ring"
+          className="w-20 border-2 border-control bg-deep px-2 py-1 font-mono text-ui text-text-strong focus-ring"
         />
         {next !== null && next !== port && (
           <Button type="submit" variant="outline" size="xs" disabled={change.isPending}>
@@ -67,11 +67,11 @@ export function PortField({ port }: { port: number }) {
           </Button>
         )}
       </div>
-      <span id={`${id}-note`} className="text-[13px] text-label">
+      <span id={`${id}-note`} className="text-detail text-label">
         {copy.note({ fallback: DEFAULT_HUB_PORT })}
       </span>
       {(invalid || change.isError) && (
-        <span role="alert" className="text-sm text-rose">
+        <span role="alert" className="text-ui text-rose">
           {invalid ? copy.invalid : failure(change.error, next ?? port)}
         </span>
       )}

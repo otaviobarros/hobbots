@@ -88,7 +88,7 @@ export function HobCard({ hob, state, threads }: { hob: Agent; state: HobState; 
           <span className="truncate text-detail text-text-secondary">{hob.roleTitle}</span>
         </span>
         {doing && (
-          <span className="flex min-w-0 items-center gap-2 text-sm text-text">
+          <span className="flex min-w-0 items-center gap-2 text-ui text-text">
             <span aria-hidden className={cn("size-2 flex-none rounded-dot", DOT[doing.kind])} />
             <span className="truncate">{doing.text}</span>
           </span>
@@ -128,7 +128,7 @@ function CardBackpack({ hob }: { hob: Agent }) {
   return (
     <section aria-label={copy.backpack} className="cut flex flex-col gap-2 bg-deep px-3.5 py-3">
       <span className="flex items-center gap-2">
-        <span className="lbl flex-1 text-xs text-label">{copy.backpack}</span>
+        <span className="lbl flex-1 text-meta text-label">{copy.backpack}</span>
         <span className="min-w-5 rounded-tag bg-line px-1.5 text-center text-meta font-semibold text-text-secondary">
           {count}
         </span>

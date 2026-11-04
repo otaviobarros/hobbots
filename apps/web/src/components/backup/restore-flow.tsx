@@ -15,8 +15,8 @@ const reasonOf = (error: Error | null) =>
 
 function Summary({ summary }: { summary: RestoreSummary }) {
   return (
-    <div className="flex flex-col gap-2 text-sm">
-      <span className="lbl text-xs text-label">{copy.summaryTitle}</span>
+    <div className="flex flex-col gap-2 text-ui">
+      <span className="lbl text-meta text-label">{copy.summaryTitle}</span>
       <span className="font-bold">
         {copy.made({ when: formatMoment(summary.createdAt), version: summary.hobbotsVersion })}
       </span>
@@ -26,7 +26,7 @@ function Summary({ summary }: { summary: RestoreSummary }) {
           <span className="text-lantern">{copy.missing}</span>
           <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {summary.missingFolders.map((folder) => (
-              <li key={folder} className="font-mono text-[13px] break-all text-text-secondary">
+              <li key={folder} className="font-mono text-code break-all text-text-secondary">
                 {folder}
               </li>
             ))}
@@ -58,7 +58,7 @@ export function RestoreFlow({ onCancel }: { onCancel?: () => void }) {
 
   if (restore.isPending) {
     return (
-      <p role="status" className="m-0 text-sm text-mint">
+      <p role="status" className="m-0 text-ui text-mint">
         {copy.restoring}
       </p>
     );
@@ -79,7 +79,7 @@ export function RestoreFlow({ onCancel }: { onCancel?: () => void }) {
         }}
       />
       {inspect.isError && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {reasonOf(inspect.error)}
         </p>
       )}
@@ -87,7 +87,7 @@ export function RestoreFlow({ onCancel }: { onCancel?: () => void }) {
         <div className="cut flex flex-col gap-3 border-2 border-lantern bg-deep px-4 py-3">
           <Summary summary={summary} />
           {restore.isError && (
-            <p role="alert" className="m-0 text-sm text-rose">
+            <p role="alert" className="m-0 text-ui text-rose">
               {copy.failed({ reason: reasonOf(restore.error) ?? "" })}
             </p>
           )}

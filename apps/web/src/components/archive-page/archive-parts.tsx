@@ -28,7 +28,7 @@ export type Crumb = { readonly label: string } & (
 /** Your hobs, then the steps given, then the current page. */
 export function Crumbs({ trail, current }: { trail: ReadonlyArray<Crumb>; current: string }) {
   return (
-    <nav aria-label={copy.crumbs} className="flex min-w-0 items-center gap-2 text-sm text-text-secondary">
+    <nav aria-label={copy.crumbs} className="flex min-w-0 items-center gap-2 text-ui text-text-secondary">
       <Link to="/hobs" className={crumbLink}>
         {copy.yourHobs}
       </Link>
@@ -156,7 +156,7 @@ export function ArchiveNote({ icon, children }: { icon: ReactNode; children: Rea
   return (
     <div
       role="note"
-      className="flex items-start gap-2.5 rounded-card bg-notice px-3.5 py-3 text-sm leading-5 text-text [&>svg]:mt-0.5 [&>svg]:text-label"
+      className="flex items-start gap-2.5 rounded-card bg-notice px-3.5 py-3 text-ui leading-5 text-text [&>svg]:mt-0.5 [&>svg]:text-label"
     >
       {icon}
       <span className="min-w-0">{children}</span>

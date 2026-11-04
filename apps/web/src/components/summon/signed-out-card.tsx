@@ -30,7 +30,7 @@ export function SignedOutCard({ health, name }: { health: RuntimeHealth; name: s
         <strong className="min-w-0 flex-1">{copy.signedOut({ provider })}</strong>
         <Badge variant="failed">{copy.needsFix}</Badge>
       </span>
-      <p className="m-0 text-sm leading-5">{copy.signedOutWhy({ provider, name })}</p>
+      <p className="m-0 text-ui leading-5">{copy.signedOutWhy({ provider, name })}</p>
       <p className="m-0 text-detail text-text-secondary [&_code]:font-mono [&_code]:text-text-strong">
         {providerFix(health.runtime, health)}
       </p>
@@ -56,7 +56,7 @@ function SignInCommand({ command }: { command: string }) {
   const [state, copyText] = useCopy();
   return (
     <span className="flex items-center gap-2 self-start rounded-control bg-deep py-1 ps-3 pe-1">
-      <code className="font-mono text-sm text-text-strong">{command}</code>
+      <code className="font-mono text-ui text-text-strong">{command}</code>
       <Button
         type="button"
         variant="ghost"

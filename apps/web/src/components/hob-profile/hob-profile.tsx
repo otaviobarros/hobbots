@@ -227,7 +227,7 @@ function ProfileHero({
       </span>
       <span className="flex min-w-0 flex-[1_1_240px] flex-col gap-0.5">
         <h1 className="m-0 truncate font-heading text-[26px] leading-8 font-bold">{hob.name}</h1>
-        <span className="flex min-w-0 items-center gap-2 text-sm text-text-secondary">
+        <span className="flex min-w-0 items-center gap-2 text-ui text-text-secondary">
           <span className="flex-none">{hob.roleTitle}</span>
           <Badge variant={tag.variant}>
             <span aria-hidden data-slot="badge-glyph">
@@ -274,7 +274,7 @@ function TakeABreak({
     >
       <span className="lbl text-label">{copy.heading}</span>
       <span className="flex items-center gap-3">
-        <span className="flex-1 text-sm text-text-secondary">
+        <span className="flex-1 text-ui text-text-secondary">
           {paused ? copy.pausedLine({ name }) : copy.pauseLine({ name })}
         </span>
         <Button
@@ -293,7 +293,7 @@ function TakeABreak({
         </span>
       )}
       <span className="flex items-center gap-3 border-t border-line pt-2">
-        <span className="flex-1 text-sm text-text-secondary">{copy.retireLine({ name })}</span>
+        <span className="flex-1 text-ui text-text-secondary">{copy.retireLine({ name })}</span>
         <Button type="button" variant="deny" disabled={disabled} onClick={onRetire}>
           {copy.retire({ name })}
         </Button>
@@ -432,7 +432,7 @@ function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
               draft={draft}
               onChange={setDraft}
               chipClassName="px-2.5 py-[5px]"
-              markClassName="size-[18px] text-xs"
+              markClassName="size-[18px] text-meta"
             />
           )}
           <Link
@@ -448,7 +448,7 @@ function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
 
       {rest}
 
-      <p className="m-0 text-xs text-label">{aboutLine(hob)}</p>
+      <p className="m-0 text-meta text-label">{aboutLine(hob)}</p>
 
       <SaveBar
         name={name}
@@ -545,7 +545,7 @@ function SaveBar({
         <span aria-hidden className="font-bold">
           ✓
         </span>
-        <span className="text-sm">{copy.savedNow({ name })}</span>
+        <span className="text-ui">{copy.savedNow({ name })}</span>
       </div>
     ) : null;
   }
@@ -625,7 +625,7 @@ function MoreActions({ name, disabled, onExport }: { name: string; disabled: boo
               setOpen(false);
               onExport();
             }}
-            className="cursor-pointer rounded-control border-0 bg-transparent px-3 py-2 text-start text-sm text-text-strong hover:bg-hover"
+            className="cursor-pointer rounded-control border-0 bg-transparent px-3 py-2 text-start text-ui text-text-strong hover:bg-hover"
           >
             {exportCopy.menuHob}
           </button>
@@ -683,7 +683,7 @@ function RetireDialog({
         {retired ? (
           <>
             <DialogTitle className="m-0 font-heading text-xl font-bold">{copy.done({ name })}</DialogTitle>
-            <p role="status" className="m-0 text-sm text-text-secondary">
+            <p role="status" className="m-0 text-ui text-text-secondary">
               {retiredSummary(name, retired.work, retired.busy)} {copy.find({ name })}
             </p>
             <div className="flex justify-end gap-2">
@@ -698,9 +698,9 @@ function RetireDialog({
         ) : (
           <>
             <DialogTitle className="m-0 font-heading text-xl font-bold">{copy.title({ name })}</DialogTitle>
-            <span className="text-sm text-text-secondary">{busy ? copy.busy({ name }) : copy.idle({ name })}</span>
+            <span className="text-ui text-text-secondary">{busy ? copy.busy({ name }) : copy.idle({ name })}</span>
             {busy && (
-              <ul className="m-0 flex list-none flex-col gap-1 rounded-control bg-deep px-3 py-2 text-sm">
+              <ul className="m-0 flex list-none flex-col gap-1 rounded-control bg-deep px-3 py-2 text-ui">
                 {running.map((title, i) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: two running threads may share a title.
                   <li key={i} className="truncate">
@@ -723,7 +723,7 @@ function RetireDialog({
             </fieldset>
             <span className="text-detail text-label">{copy.kept}</span>
             {retire.isError && (
-              <span role="alert" className="text-sm text-rose">
+              <span role="alert" className="text-ui text-rose">
                 {copy.failed({ name })}
               </span>
             )}
@@ -763,7 +763,7 @@ function RetireChoice({
       )}
     >
       <input type="radio" name="retire-work" checked={checked} onChange={onPick} className="sr-only" />
-      <strong className="text-sm">{title}</strong>
+      <strong className="text-ui">{title}</strong>
       <span className="text-detail text-text-secondary">{note}</span>
     </label>
   );

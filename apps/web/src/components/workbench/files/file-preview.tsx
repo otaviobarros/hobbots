@@ -64,7 +64,7 @@ function TextPreview({ attemptId, file, markdown }: { attemptId: AttemptId; file
       className="min-h-0 flex-1 overflow-auto"
     >
       {cut && (
-        <p className="m-0 px-4 pt-3 text-xs text-label">{messages.cut({ size: formatBytes(PREVIEW_TEXT_BYTES) })}</p>
+        <p className="m-0 px-4 pt-3 text-meta text-label">{messages.cut({ size: formatBytes(PREVIEW_TEXT_BYTES) })}</p>
       )}
       {markdown ? (
         <div className="max-w-[620px] px-[22px] py-[18px]">

@@ -31,7 +31,7 @@ export const RuntimeTile = ({ runtime }: { runtime: RuntimeKind }) => (
   <span
     aria-hidden
     className={cn(
-      "grid size-5 flex-none place-items-center text-xs font-bold text-provider-ink",
+      "grid size-5 flex-none place-items-center text-meta font-bold text-provider-ink",
       PROVIDER_MARKS[runtime].tile,
     )}
   >
@@ -83,7 +83,7 @@ export function BrainPicker({ hob, thread }: { hob: Agent; thread: Thread | unde
       <span className={health?.availability === "ready" ? "text-mint" : "text-lantern"}>{state}</span>
     </>
   );
-  const chipClass = "flex flex-none items-center gap-2 border-2 border-line-2 px-2 py-1 text-xs whitespace-nowrap";
+  const chipClass = "flex flex-none items-center gap-2 border-2 border-line-2 px-2 py-1 text-meta whitespace-nowrap";
   if (thread === undefined) {
     return (
       <span className={chipClass} title={copy.freshPage}>
@@ -154,7 +154,7 @@ function ThreadBrainPicker({
         </button>
       </PopoverTrigger>
       <PopoverContent aria-label={copy.title} className="flex flex-col gap-3">
-        <span className="lbl text-xs text-label">{copy.title}</span>
+        <span className="lbl text-meta text-label">{copy.title}</span>
         {runtimes.data?.map((health) => (
           <RuntimeChoices
             key={health.runtime}
@@ -167,7 +167,7 @@ function ThreadBrainPicker({
           />
         ))}
         <EffortChoices current={brain} pending={setBrain.isPending} makeDefault={makeDefault} onPick={pick} />
-        <span className="flex items-center gap-2 text-sm">
+        <span className="flex items-center gap-2 text-ui">
           <Switch id={switchId} checked={makeDefault} onCheckedChange={setMakeDefault} />
           <label htmlFor={switchId}>{copy.makeDefault({ name: hob.name })}</label>
         </span>
@@ -176,9 +176,9 @@ function ThreadBrainPicker({
             {copy.backToDefault({ name: hob.name, brain: hobLabel })}
           </Button>
         )}
-        <span className="text-xs text-label">{copy.scope}</span>
+        <span className="text-meta text-label">{copy.scope}</span>
         {setBrain.isError && (
-          <span role="alert" className="text-sm text-rose">
+          <span role="alert" className="text-ui text-rose">
             {copy.failed}
           </span>
         )}
@@ -208,15 +208,15 @@ function RuntimeChoices({
   const choices = modelChoices(models.data, current, health.runtime);
   return (
     <section aria-label={RUNTIME_NAMES[health.runtime]} className="flex flex-col gap-1">
-      <span className="flex items-center gap-2 text-sm">
+      <span className="flex items-center gap-2 text-ui">
         <RuntimeTile runtime={health.runtime} />
         <b className="flex-1">{RUNTIME_NAMES[health.runtime]}</b>
-        <span className={reason === null ? "text-xs text-mint" : "text-xs text-lantern"}>
+        <span className={reason === null ? "text-meta text-mint" : "text-meta text-lantern"}>
           {STATE_WORDS[health.availability]}
         </span>
       </span>
       {reason !== null ? (
-        <span className="text-xs text-lantern">{reason}</span>
+        <span className="text-meta text-lantern">{reason}</span>
       ) : (
         choices.map((choice) => {
           const brain = pickedBrain(models.data, health.runtime, choice.model, keepEffort);
@@ -260,11 +260,11 @@ function EffortChoices({
   const model = models.data?.models.find((m) => m.id === (current.model ?? "default"));
   if (model === undefined) return null;
   if (model.efforts.length === 0) {
-    return <span className="text-xs text-label">{copy.noEffort({ model: model.displayName })}</span>;
+    return <span className="text-meta text-label">{copy.noEffort({ model: model.displayName })}</span>;
   }
   return (
     <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-      <legend className="lbl mb-1 p-0 text-xs text-label">{copy.effort}</legend>
+      <legend className="lbl mb-1 p-0 text-meta text-label">{copy.effort}</legend>
       <SegmentedControl
         size="sm"
         aria-label={copy.effort}
@@ -312,7 +312,7 @@ export function BrainSwitchNote({
 }) {
   const label = useBrainLabel(brain);
   return (
-    <p role="note" className="m-0 flex animate-hb-in items-center gap-2.5 text-xs text-label">
+    <p role="note" className="m-0 flex animate-hb-in items-center gap-2.5 text-meta text-label">
       <span aria-hidden className="h-0.5 flex-1 bg-line" />
       <RuntimeTile runtime={brain.runtime} />
       {next ? copy.next({ brain: label }) : copy.now({ brain: label })}

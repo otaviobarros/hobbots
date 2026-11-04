@@ -137,14 +137,14 @@ function Thinks({
   const [brainOpen, setBrainOpen] = useState(false);
   if (runtimes.isPending) {
     return (
-      <span className="py-1 text-sm text-lantern">
+      <span className="py-1 text-ui text-lantern">
         {shared.summon.checkingProviders} <span className="animate-hb-blink">•••</span>
       </span>
     );
   }
   if (!runtimes.data) {
     return (
-      <span role="alert" className="flex items-center gap-3 text-sm text-rose">
+      <span role="alert" className="flex items-center gap-3 text-ui text-rose">
         {shared.summon.checkFailed}
         <Button
           type="button"

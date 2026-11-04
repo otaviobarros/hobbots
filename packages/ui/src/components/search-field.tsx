@@ -31,7 +31,7 @@ const input = "h-auto py-2 text-ui text-text placeholder:text-label [&::-webkit-
 
 const clear = "size-hit-min rounded-control text-label [clip-path:none] hover:bg-hover hover:text-text-strong";
 
-const keycap = "rounded-[4px] border border-line-2 px-[5px] font-sans text-xs leading-4 text-label";
+const keycap = "rounded-[4px] border border-line-2 px-[5px] font-sans text-meta leading-4 text-label";
 
 const SLASH = "/";
 

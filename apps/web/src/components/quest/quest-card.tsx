@@ -152,7 +152,7 @@ function Row({ row, hobs, onOpen }: { row: WorkRow; hobs: HobLookup; onOpen: (ta
       <StatusDot status={row.status} />
       <HobSprite hob={owner} size={18} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm font-bold">{title}</span>
+        <span className="truncate text-ui font-bold">{title}</span>
         <span className={cn("truncate text-detail", row.approval === null ? "text-text-secondary" : "text-lantern")}>
           {detail === null ? owner.name : copy.rowDetail({ name: owner.name, detail })}
         </span>

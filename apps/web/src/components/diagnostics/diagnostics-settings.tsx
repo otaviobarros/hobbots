@@ -36,9 +36,9 @@ function QuestPicker({
   onPick: (questId: QuestId | null) => void;
 }) {
   const id = useId();
-  if (quests.length === 0) return <p className="m-0 text-sm text-text-secondary">{copy.none}</p>;
+  if (quests.length === 0) return <p className="m-0 text-ui text-text-secondary">{copy.none}</p>;
   return (
-    <label htmlFor={id} className="flex flex-col gap-1 text-sm">
+    <label htmlFor={id} className="flex flex-col gap-1 text-ui">
       <span className="text-label">{copy.pick}</span>
       <select
         id={id}
@@ -65,9 +65,9 @@ function FollowedQuest({ questId, hobName }: { questId: QuestId; hobName: HobNam
   const trace = useQuery(questTraceQuery(questId));
   if (trace.isError) {
     const gone = trace.error instanceof ApiError && trace.error.tag === "QuestNotFound";
-    return <p className="m-0 text-sm text-rose">{gone ? copy.gone : messages.failed}</p>;
+    return <p className="m-0 text-ui text-rose">{gone ? copy.gone : messages.failed}</p>;
   }
-  if (!trace.data) return <p className="m-0 text-sm text-text-secondary">{copy.loading}</p>;
+  if (!trace.data) return <p className="m-0 text-ui text-text-secondary">{copy.loading}</p>;
   return <QuestTraceView trace={trace.data} hobName={hobName} />;
 }
 
@@ -80,7 +80,7 @@ export function DiagnosticsSettings() {
   const quests = useQuery(diagnosticsQuestsQuery);
   const hobName = useHobName();
   const [followed, setFollowed] = useState<QuestId | null>(null);
-  if (now.isError || quests.isError) return <p className="m-0 text-sm text-rose">{messages.failed}</p>;
+  if (now.isError || quests.isError) return <p className="m-0 text-ui text-rose">{messages.failed}</p>;
   if (!now.data || !quests.data) return null;
   return (
     <>

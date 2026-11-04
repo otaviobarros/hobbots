@@ -14,7 +14,7 @@ const buttonVariants = cva(
         approve: "press bg-mint font-bold text-ground [--press-color:var(--color-mint-deep)]",
         outline: "border-2 border-solid border-control bg-transparent text-text-strong hover:bg-line",
         deny: "border-2 border-solid border-rose bg-transparent text-rose hover:bg-line",
-        chip: "border-2 border-solid border-control bg-transparent text-[13px] text-text-strong hover:bg-line",
+        chip: "border-2 border-solid border-control bg-transparent text-detail text-text-strong hover:bg-line",
         ghost: "bg-transparent text-text-strong hover:bg-hover",
         icon: "border-2 border-solid border-line-2 bg-transparent text-text-secondary [clip-path:none] hover:bg-line hover:text-text-strong aria-pressed:bg-line aria-pressed:text-text-strong",
         // A link that acts: `link`, underlined, and the underline turns lantern on hover.
@@ -24,9 +24,9 @@ const buttonVariants = cva(
       },
       size: {
         default: "px-4 py-[9px]",
-        sm: "px-3 py-1.5 text-sm",
-        xs: "px-2 py-1 text-[13px]",
-        icon: "size-[30px] p-0 text-sm",
+        sm: "px-3 py-1.5 text-ui",
+        xs: "px-2 py-1 text-detail",
+        icon: "size-[30px] p-0 text-ui",
       },
     },
     compoundVariants: [

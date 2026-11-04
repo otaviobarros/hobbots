@@ -23,13 +23,13 @@ const billsElsewhere = (health: RuntimeHealth | undefined) =>
 function ProviderFacts({ health }: { health: RuntimeHealth }) {
   return (
     <>
-      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ui">
         <dt className="text-label">{copy.billing}</dt>
         <dd className={billsElsewhere(health) ? "m-0 text-lantern" : "m-0"}>{health.billing ?? "—"}</dd>
         <dt className="text-label">{copy.version}</dt>
         <dd className="m-0">{health.version ?? "—"}</dd>
       </dl>
-      <h4 className="lbl mt-3 mb-1.5 text-xs text-label">{sharedMessages.enforcement.providerHeading}</h4>
+      <h4 className="lbl mt-3 mb-1.5 text-meta text-label">{sharedMessages.enforcement.providerHeading}</h4>
       <EnforcementList enforcement={health.enforcement} />
     </>
   );
@@ -67,10 +67,10 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
           {runtimes.isPending ? copy.checking : copy.availability[availability]}
         </Badge>
       </div>
-      {hobs.data && <p className="m-0 text-sm text-text">{hobsLine(runtime, name, hobs.data)}</p>}
-      {hint && <p className="m-0 text-sm text-lantern">{hint}</p>}
+      {hobs.data && <p className="m-0 text-ui text-text">{hobsLine(runtime, name, hobs.data)}</p>}
+      {hint && <p className="m-0 text-ui text-lantern">{hint}</p>}
       {hint && <ProviderFixActions runtime={runtime} notFound={health?.version === null} className="mt-0" />}
-      {billsElsewhere(health) && <p className="m-0 text-sm text-lantern">{copy["claude-code"].billingWarning}</p>}
+      {billsElsewhere(health) && <p className="m-0 text-ui text-lantern">{copy["claude-code"].billingWarning}</p>}
       {availability === "ready" && (
         <div className="flex">
           <Button asChild variant="ghost" size="sm">

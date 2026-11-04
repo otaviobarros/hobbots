@@ -21,7 +21,7 @@ function RemoteAccessOn({ status }: { status: RemoteAccessStatus }) {
   const address = remoteAddress(status);
   if (why !== null) {
     return (
-      <p role="status" className="m-0 flex items-start gap-2 text-sm">
+      <p role="status" className="m-0 flex items-start gap-2 text-ui">
         <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
         <span>{why}</span>
       </p>
@@ -31,8 +31,8 @@ function RemoteAccessOn({ status }: { status: RemoteAccessStatus }) {
   return (
     <div className="animate-hb-in">
       <RemoteAddress address={address} label={copy.address}>
-        <span className="text-[13px] leading-normal text-text-secondary">{copy.addressNote}</span>
-        <span className="text-[13px] text-label">{copy.portNote}</span>
+        <span className="text-detail leading-normal text-text-secondary">{copy.addressNote}</span>
+        <span className="text-detail text-label">{copy.portNote}</span>
       </RemoteAddress>
     </div>
   );
@@ -80,7 +80,7 @@ export function SetupRemoteAccess() {
       })}
       footer={
         <>
-          <span className="flex-1 text-sm text-text-secondary">{on ? copy.hintOn : copy.hintOff}</span>
+          <span className="flex-1 text-ui text-text-secondary">{on ? copy.hintOn : copy.hintOff}</span>
           <Button variant="outline" onClick={back} disabled={change.isPending}>
             {copy.back}
           </Button>
@@ -109,7 +109,7 @@ export function SetupRemoteAccess() {
               <span aria-hidden className="size-2.5 flex-none bg-mint" />
               <span className="flex flex-col gap-0.5">
                 <span className="font-bold">{copy.connected}</span>
-                <span className="text-[13px] text-text-secondary">
+                <span className="text-detail text-text-secondary">
                   {copy.thisComputer({ name: tailnetName(status) })}
                 </span>
               </span>
@@ -126,7 +126,7 @@ export function SetupRemoteAccess() {
                 <span id={labelId} className="font-bold">
                   {copy.switchLabel}
                 </span>
-                <span id={noteId} className="text-[13px] text-text-secondary">
+                <span id={noteId} className="text-detail text-text-secondary">
                   {copy.switchNote}
                 </span>
               </span>
@@ -135,7 +135,7 @@ export function SetupRemoteAccess() {
           </div>
         )}
         {(access.isError || change.isError) && (
-          <p role="alert" className="m-0 text-sm text-rose">
+          <p role="alert" className="m-0 text-ui text-rose">
             {messages.remoteAccess.failed}
           </p>
         )}

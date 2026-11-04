@@ -189,7 +189,7 @@ function ApprovalBody({
         look="tray"
       />
       {decide.isError && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {decisionErrorText(decide.error)}
         </p>
       )}

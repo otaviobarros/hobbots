@@ -157,13 +157,13 @@ export function NoteBox({
             setDraft({ ...emptyNote(), text: event.target.value });
           }}
           onKeyDown={enterSends(submit)}
-          className="min-h-9 flex-1 rounded-control border-2 border-control bg-deep text-sm text-text-strong"
+          className="min-h-9 flex-1 rounded-control border-2 border-control bg-deep text-ui text-text-strong"
         />
         <Button type="submit" size="sm" disabled={text === "" || send.isPending}>
           {copy.send}
         </Button>
       </span>
-      <span role="status" className="text-xs text-label">
+      <span role="status" className="text-meta text-label">
         {send.isError
           ? ended
             ? copy.noteRefused({ name: lead.name })

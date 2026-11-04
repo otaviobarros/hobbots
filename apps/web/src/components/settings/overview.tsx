@@ -132,7 +132,7 @@ function AreaCard({ card }: { card: OverviewCard }) {
           </svg>
         </span>
       </span>
-      <span className={cn("text-sm font-semibold", tone.color)}>{card.state}</span>
+      <span className={cn("text-ui font-semibold", tone.color)}>{card.state}</span>
       <span className="text-detail text-text-secondary">{card.hint}</span>
     </Link>
   );
@@ -179,7 +179,7 @@ function ProviderProblem({ runtime }: { runtime: RuntimeKind }) {
   return (
     <>
       <p className="m-0 text-text">{copy.ai.fixBody}</p>
-      <p className="m-0 text-sm text-text">{providerFix(runtime, health)}</p>
+      <p className="m-0 text-ui text-text">{providerFix(runtime, health)}</p>
       <ProviderFixActions runtime={runtime} notFound={health?.version === null} className="mt-0" />
     </>
   );

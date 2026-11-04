@@ -114,7 +114,7 @@ function SharedWarning({ children }: { children: string }) {
     <p className="m-0 flex items-start gap-2.5 rounded-control bg-lantern/13 px-3 py-2 text-detail text-text">
       <span
         aria-hidden
-        className="grid size-[18px] shrink-0 place-items-center rounded-full bg-lantern text-xs font-bold text-on-lantern"
+        className="grid size-[18px] shrink-0 place-items-center rounded-full bg-lantern text-meta font-bold text-on-lantern"
       >
         !
       </span>

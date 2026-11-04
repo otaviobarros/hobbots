@@ -111,7 +111,7 @@ export function Choice({
       onPick={onPick}
       label={label}
       className={cn(
-        "cut flex cursor-pointer items-center gap-2 border-2 px-3 py-[7px] text-sm",
+        "cut flex cursor-pointer items-center gap-2 border-2 px-3 py-[7px] text-ui",
         checked ? "border-text-strong bg-selected text-text-strong" : "border-control text-text-strong hover:bg-line",
         "focus-ring-within",
         className,
@@ -182,7 +182,7 @@ export function ChoresField<D extends FirstHobDraft>({
         placeholder={messages.hobForm.choresPlaceholder}
         className={cn("resize-none leading-normal", FIELD)}
       />
-      <span id="hob-chores-note" className="text-[13px] text-label">
+      <span id="hob-chores-note" className="text-detail text-label">
         {draft.choresEdited
           ? "In your words. Hobbots adds them to the hob's instructions."
           : draft.role === null
@@ -226,14 +226,14 @@ function RoleOption({
       ) : (
         <span
           aria-hidden
-          className="mt-0.5 grid size-5 flex-none place-items-center border-2 border-dashed border-control text-xs text-label"
+          className="mt-0.5 grid size-5 flex-none place-items-center border-2 border-dashed border-control text-meta text-label"
         >
           +
         </span>
       )}
       <span className="flex min-w-0 flex-col gap-0.5">
-        <span className={cn("text-sm font-bold", checked ? "text-moonlight" : "text-text-strong")}>{title}</span>
-        <span className="text-xs leading-snug text-text-secondary">{note}</span>
+        <span className={cn("text-ui font-bold", checked ? "text-moonlight" : "text-text-strong")}>{title}</span>
+        <span className="text-meta leading-snug text-text-secondary">{note}</span>
       </span>
     </label>
   );
@@ -292,19 +292,19 @@ export function RolePicker({
         aria-expanded={moreOpen}
         aria-controls={moreId}
         onClick={() => setMoreShown(!moreOpen)}
-        className="flex items-center gap-2 self-start bg-transparent py-1 text-sm text-label hover:text-text-strong"
+        className="flex items-center gap-2 self-start bg-transparent py-1 text-ui text-label hover:text-text-strong"
       >
         <span aria-hidden className="w-2.5">
           {moreOpen ? "▾" : "▸"}
         </span>
         {messages.hobForm.moreRoles}
-        <span className="text-[13px]">{moreCount}</span>
+        <span className="text-detail">{moreCount}</span>
       </button>
       {moreOpen && (
         <div id={moreId} className="flex animate-hb-in flex-col gap-3 border-2 border-line p-2.5">
           {MORE_ROLES.map((group) => (
             <fieldset key={group.family} className="m-0 flex flex-col gap-1.5 border-0 p-0">
-              <legend className="lbl mb-1.5 text-xs text-label">{group.title}</legend>
+              <legend className="lbl mb-1.5 text-meta text-label">{group.title}</legend>
               <div className={cn("grid gap-1.5", grid)}>
                 {group.roles.map((id) => (
                   <RoleOption
@@ -337,7 +337,7 @@ export function RolePicker({
         href={roleRequestUrl(own ? draft.ownTitle : "")}
         target="_blank"
         rel="noreferrer"
-        className="self-start text-[13px]"
+        className="self-start text-detail"
       >
         {messages.hobForm.suggestRole}
       </a>
@@ -387,7 +387,7 @@ export function OwnRole({
       <SigilPicker
         value={value.ownSigil}
         onPick={onSigil}
-        legend={<legend className="mb-1.5 text-[13px] text-text-secondary">{messages.hobForm.sigil}</legend>}
+        legend={<legend className="mb-1.5 text-detail text-text-secondary">{messages.hobForm.sigil}</legend>}
         className="flex flex-wrap gap-1"
         tileClassName="size-8 border-2 border-line bg-deep hover:border-control data-on:border-text-strong data-on:hover:border-text-strong"
       />
@@ -459,10 +459,10 @@ export function GearPicker<D extends FirstHobDraft>({
   onChange: (update: (draft: D) => D) => void;
   className?: string | undefined;
 }) {
-  const select = "min-w-0 flex-1 border-2 border-control bg-deep px-2 py-1 text-[13px] text-text-strong";
+  const select = "min-w-0 flex-1 border-2 border-control bg-deep px-2 py-1 text-detail text-text-strong";
   return (
     <div className={cn("flex gap-2", className)}>
-      <label className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-label">
+      <label className="flex min-w-0 flex-1 items-center gap-1.5 text-detail text-label">
         {messages.hobForm.hat}
         <select
           value={draft.hat ?? ""}
@@ -480,7 +480,7 @@ export function GearPicker<D extends FirstHobDraft>({
           ))}
         </select>
       </label>
-      <label className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-label">
+      <label className="flex min-w-0 flex-1 items-center gap-1.5 text-detail text-label">
         {messages.hobForm.tool}
         <select
           value={draft.tool ?? ""}
@@ -560,7 +560,7 @@ export function NearbyLooks({
 }) {
   return (
     <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-      <legend className="lbl mb-1.5 text-xs text-label">{messages.hobForm.moreLikeThis}</legend>
+      <legend className="lbl mb-1.5 text-meta text-label">{messages.hobForm.moreLikeThis}</legend>
       <div className={className}>
         {nearbySeeds(draft.lookBase)
           .slice(0, count)
@@ -603,7 +603,7 @@ export function HobSummary({
   const note = draft.role === null ? undefined : starterRole(draft.role).note;
   const [before, after] = messages.models.thinksWith.split("{brain}");
   return (
-    <div className={cn("flex flex-col gap-[3px] text-[13px] text-text-secondary", className)}>
+    <div className={cn("flex flex-col gap-[3px] text-detail text-text-secondary", className)}>
       <span>
         {before}
         <b className="text-text-strong">{thinksWith(draft, model)}</b>
@@ -662,7 +662,7 @@ function Brain<D extends BrainChoice>({
             className="flex-col items-start gap-px py-[5px]"
           >
             <span className="font-bold">{m.displayName}</span>
-            <span className="max-w-[220px] text-xs opacity-85">{m.description}</span>
+            <span className="max-w-[220px] text-meta opacity-85">{m.description}</span>
           </Choice>
         ))}
       </fieldset>
@@ -673,13 +673,13 @@ function Brain<D extends BrainChoice>({
             aria-expanded={moreOpen}
             aria-controls={moreId}
             onClick={() => setMoreShown(!moreOpen)}
-            className="flex items-center gap-2 self-start bg-transparent py-1 text-sm text-label hover:text-text-strong"
+            className="flex items-center gap-2 self-start bg-transparent py-1 text-ui text-label hover:text-text-strong"
           >
             <span aria-hidden className="w-2.5">
               {moreOpen ? "▾" : "▸"}
             </span>
             {messages.models.more}
-            <span className="text-[13px]">{more.length}</span>
+            <span className="text-detail">{more.length}</span>
           </button>
           {moreOpen && (
             <fieldset id={moreId} className="m-0 flex min-w-0 animate-hb-in flex-col border-2 border-line p-1">
@@ -690,7 +690,7 @@ function Brain<D extends BrainChoice>({
                   <label
                     key={m.id}
                     className={cn(
-                      "flex cursor-pointer items-center gap-2.5 px-2.5 py-1.5 text-sm",
+                      "flex cursor-pointer items-center gap-2.5 px-2.5 py-1.5 text-ui",
                       on ? "bg-selected" : "hover:bg-hover",
                       "focus-ring-within focus-inset",
                     )}
@@ -709,7 +709,7 @@ function Brain<D extends BrainChoice>({
                     <span className={cn("w-24 shrink-0 font-bold", on ? "text-moonlight" : "text-text-strong")}>
                       {m.displayName}
                     </span>
-                    <span className="min-w-0 text-xs text-label">{m.description}</span>
+                    <span className="min-w-0 text-meta text-label">{m.description}</span>
                   </label>
                 );
               })}
@@ -720,7 +720,7 @@ function Brain<D extends BrainChoice>({
       {efforts.length > 0 ? (
         <div className="flex flex-wrap items-center gap-3">
           {/* The control carries the name; the visible label only repeats it. */}
-          <span aria-hidden className="text-sm font-bold">
+          <span aria-hidden className="text-ui font-bold">
             {messages.models.effort}
           </span>
           <SegmentedControl
@@ -736,14 +736,14 @@ function Brain<D extends BrainChoice>({
             ))}
           </SegmentedControl>
           {draft.effort && (
-            <span key={draft.effort} className="animate-hb-in text-[13px] text-text-secondary">
+            <span key={draft.effort} className="animate-hb-in text-detail text-text-secondary">
               {effortWords(draft.effort).note}
             </span>
           )}
         </div>
       ) : (
         model && (
-          <span className="text-[13px] text-label">{messages.models.noEffort({ model: model.displayName })}</span>
+          <span className="text-detail text-label">{messages.models.noEffort({ model: model.displayName })}</span>
         )
       )}
     </>
@@ -764,7 +764,7 @@ export function ModelsBrain<D extends BrainChoice>({
 }) {
   if (models.isPending) {
     return (
-      <span className={cn("text-sm text-lantern", waitingClassName)}>
+      <span className={cn("text-ui text-lantern", waitingClassName)}>
         {messages.models.loading({ runtime: RUNTIME_NAMES[draft.runtime] })}{" "}
         <span className="animate-hb-blink">•••</span>
       </span>
@@ -772,7 +772,7 @@ export function ModelsBrain<D extends BrainChoice>({
   }
   if (models.isError) {
     return (
-      <span role="alert" className="flex items-center gap-3 text-sm text-rose">
+      <span role="alert" className="flex items-center gap-3 text-ui text-rose">
         {messages.models.failed({ runtime: RUNTIME_NAMES[draft.runtime] })}
         <Button type="button" variant="outline" size="xs" onClick={() => void models.refetch()}>
           {messages.models.retry}

@@ -10,6 +10,9 @@ interface ThemeFile {
   readonly type: Readonly<Record<string, { readonly size: string; readonly lineHeight: string }>>;
   readonly space: Readonly<Record<string, string>>;
   readonly duration: Readonly<Record<string, string>>;
+  readonly font: Readonly<Record<string, string>>;
+  readonly fixed: Readonly<Record<string, { readonly value: string }>>;
+  readonly skin: Readonly<Record<string, Readonly<Record<string, string | number>>>>;
   readonly size: Readonly<Record<string, string>>;
 }
 
@@ -85,6 +88,20 @@ describe("type scale and spacing", () => {
 
   it.each(Object.entries(themes.duration))("%s is set in @theme", (token, value) => {
     expect(theme).toContain(`--${token}: ${value};`);
+  });
+
+  it.each(["sans", "pixel", "mono"])("sets the %s font stack from themes.json", (family) => {
+    expect(theme).toContain(`--font-${family}: ${themes.font[family]};`);
+  });
+
+  it("sets the fixed segment shadow in @theme", () => {
+    expect(theme).toContain(`--shadow-segment: ${themes.fixed["shadow-segment"]?.value};`);
+  });
+
+  it("draws a 2px focus ring in every look", () => {
+    for (const look of Object.values(themes.skin)) expect(look["focus-outline"]).toBe("2px solid focus-ring");
+    const widths = [...css.matchAll(/--focus-width:\s*([^;]+);/g)].map(([, value]) => value);
+    expect(widths).toEqual(["2px", "2px"]);
   });
 
   it.each(Object.entries(themes.size))("%s is set in @theme", (size, value) => {

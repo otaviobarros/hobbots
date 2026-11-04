@@ -71,7 +71,7 @@ function StepperStep({
       >
         {state === "done" ? "✓" : number}
       </span>
-      <span className="min-w-0 truncate text-sm">
+      <span className="min-w-0 truncate text-ui">
         {label}
         {state === "done" && <span className="sr-only"> {doneLabel}</span>}
       </span>

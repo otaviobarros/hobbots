@@ -8,7 +8,7 @@ const copy = messages.steps;
 
 /** Monospace output on the deep ground, each part scrolling past 240px. */
 export const OUTPUT_TEXT =
-  "m-0 max-h-60 overflow-auto px-2.5 py-2 font-mono text-xs leading-normal whitespace-pre-wrap break-all";
+  "m-0 max-h-60 overflow-auto px-2.5 py-2 font-mono text-meta leading-normal whitespace-pre-wrap break-all";
 
 /**
  * What a tool call or command printed, already redacted. Long output shows its start and its end,
@@ -31,18 +31,18 @@ export function OutputBlock({
       aria-label={copy.output}
       className={cn("m-0 flex min-w-0 flex-col border-2 border-line bg-deep", className)}
     >
-      <figcaption className="border-b-2 border-line px-2.5 py-1 text-xs text-label">{copy.output}</figcaption>
+      <figcaption className="border-b-2 border-line px-2.5 py-1 text-meta text-label">{copy.output}</figcaption>
       <pre className={OUTPUT_TEXT}>{output.head}</pre>
       {cut && (
         <>
-          <p className="m-0 border-y-2 border-dashed border-line px-2.5 py-1 text-center text-xs text-label">
+          <p className="m-0 border-y-2 border-dashed border-line px-2.5 py-1 text-center text-meta text-label">
             {copy.omitted({ size: formatBytes(output.omittedBytes) })}
           </p>
           {/* Reversed, so the end, where an error usually is, shows first and the rest scrolls up. */}
           <div className="flex max-h-60 flex-col-reverse overflow-auto">
             <pre className={cn(OUTPUT_TEXT, "max-h-none overflow-visible")}>{output.tail}</pre>
           </div>
-          <p className="m-0 border-t-2 border-line px-2.5 py-1 text-xs">{whole}</p>
+          <p className="m-0 border-t-2 border-line px-2.5 py-1 text-meta">{whole}</p>
         </>
       )}
     </figure>

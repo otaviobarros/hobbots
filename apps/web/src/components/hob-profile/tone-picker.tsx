@@ -25,10 +25,12 @@ export function TonePicker({
         <legend className="mb-2.5 font-bold">{messages.tone.voice}</legend>
         {VOICE_GROUPS.map((group) => (
           <fieldset key={group.id} className="m-0 flex flex-col gap-1.5 border-0 p-0">
-            <legend className="mb-1.5 flex items-center gap-2.5 text-[13px] font-bold text-text-secondary">
+            <legend className="mb-1.5 flex items-center gap-2.5 text-detail font-bold text-text-secondary">
               {group.title}
               {group.id === "themed" && (
-                <span className="bg-deep px-2 py-0.5 text-xs font-normal text-label">{messages.tone.wordingOnly}</span>
+                <span className="bg-deep px-2 py-0.5 text-meta font-normal text-label">
+                  {messages.tone.wordingOnly}
+                </span>
               )}
             </legend>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -41,14 +43,14 @@ export function TonePicker({
                   className="min-h-11 flex-col items-start gap-0.5 px-2.5"
                 >
                   <span className="font-bold">{v.title}</span>
-                  <span className="text-xs opacity-85">{v.description}</span>
+                  <span className="text-meta opacity-85">{v.description}</span>
                 </Choice>
               ))}
             </div>
           </fieldset>
         ))}
         {voiceChoice(voice).group === "themed" && (
-          <span className="text-[13px] text-label">{messages.tone.themedNote({ name })}</span>
+          <span className="text-detail text-label">{messages.tone.themedNote({ name })}</span>
         )}
       </fieldset>
       <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
@@ -63,7 +65,7 @@ export function TonePicker({
               className="min-h-11 min-w-[150px] flex-col items-start gap-0.5 px-2.5"
             >
               <span className="font-bold">{l.title}</span>
-              <span className="text-xs opacity-85">{l.description}</span>
+              <span className="text-meta opacity-85">{l.description}</span>
             </Choice>
           ))}
         </div>

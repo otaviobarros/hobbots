@@ -198,7 +198,7 @@ function HallDoor({ count, peek, filter }: { count: number; peek: Agent | undefi
           <HobSprite hob={peek} size={24} />
         </span>
       )}
-      <span className="absolute top-2 -end-1.5 rounded-tag bg-text-strong px-[7px] py-[3px] text-xs font-bold text-ground">
+      <span className="absolute top-2 -end-1.5 rounded-tag bg-text-strong px-[7px] py-[3px] text-meta font-bold text-ground">
         {messages.home.hall.tag({ count })}
       </span>
     </Link>

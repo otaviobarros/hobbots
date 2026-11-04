@@ -94,7 +94,7 @@ function LookPreview({
       <div aria-hidden className="absolute inset-x-[54px] top-[268px] h-3.5 bg-line-2" />
       <div className="absolute inset-x-0 top-4 flex flex-col items-center gap-0.5 px-4">
         <span className="max-w-full truncate font-heading text-[26px] font-bold text-moonlight">{name}</span>
-        <span className="max-w-full truncate text-sm text-text-secondary">{roleLine}</span>
+        <span className="max-w-full truncate text-ui text-text-secondary">{roleLine}</span>
       </div>
       <button
         type="button"
@@ -117,7 +117,7 @@ function LookPreview({
       )}
       <div className="absolute inset-x-4 top-[296px] flex flex-col gap-2.5">
         <div className="flex items-center gap-2">
-          <span aria-live="polite" className="min-w-0 flex-1 text-[13px] text-text-secondary">
+          <span aria-live="polite" className="min-w-0 flex-1 text-detail text-text-secondary">
             {copy.look({ seed: draft.lookSeed, recipe: look.recipe })}
           </span>
           <Button variant="outline" size="xs" onClick={onRoll}>
@@ -208,7 +208,7 @@ export function OnboardingFirstHob() {
         <>
           <span
             id="first-hob-hint"
-            className={cn("flex-1 text-sm", problem && tried ? "text-lantern" : "text-text-secondary")}
+            className={cn("flex-1 text-ui", problem && tried ? "text-lantern" : "text-text-secondary")}
           >
             {hint}
           </span>
@@ -221,7 +221,7 @@ export function OnboardingFirstHob() {
             aria-describedby="first-hob-hint"
             className={
               problem
-                ? "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_color-mix(in_srgb,var(--color-line-2)_60%,black)] hover:bg-line-2"
+                ? "cursor-not-allowed bg-line-2 text-label [--press-color:transparent] hover:bg-line-2"
                 : undefined
             }
           >
@@ -295,7 +295,7 @@ export function OnboardingFirstHob() {
                 draft={draft}
                 onChange={setDraft}
                 only={connected ?? []}
-                markClassName="size-5 text-[13px]"
+                markClassName="size-5 text-detail"
               />
             )}
             {ready.includes(draft.runtime) && (

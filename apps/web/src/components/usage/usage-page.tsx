@@ -82,7 +82,7 @@ export function UsagePage({ days }: { days: UsagePeriod }) {
               label={messages.daily.label}
               extra={
                 report.data && (
-                  <span className="text-sm text-text-secondary">
+                  <span className="text-ui text-text-secondary">
                     {messages.daily.total({ count: replies, period })}
                   </span>
                 )

@@ -110,7 +110,7 @@ function ProviderMark({ mark, tile, small = false }: { mark: string; tile: strin
       aria-hidden
       className={cn(
         "grid flex-none place-items-center rounded-control font-bold text-provider-ink",
-        small ? "size-[26px] text-[13px]" : "size-9",
+        small ? "size-[26px] text-detail" : "size-9",
         tile,
       )}
     >
@@ -122,7 +122,7 @@ function ProviderMark({ mark, tile, small = false }: { mark: string; tile: strin
 /** A wait the card is in: looking for the provider, or saving the user's Connect or Disconnect. */
 function Busy({ children }: { children: ReactNode }) {
   return (
-    <span className="flex items-center gap-2 text-sm text-text-secondary">
+    <span className="flex items-center gap-2 text-ui text-text-secondary">
       <span
         aria-hidden
         className="size-3.5 animate-hb-spin rounded-full border-2 border-line-2 border-t-moonlight motion-reduce:animate-none"
@@ -152,7 +152,7 @@ function FixActions({
   return (
     <div className="flex flex-col gap-2">
       {state === "outdated" && runtime === "claude-code" && (
-        <span className="text-sm text-text-secondary">
+        <span className="text-ui text-text-secondary">
           <WithCommand text={copy.claude.update} command={copy.claude.updateCommand} />
         </span>
       )}
@@ -167,7 +167,7 @@ function FixActions({
             </a>
           </Button>
         )}
-        <span className="text-[13px] text-label">{copy.checksItself}</span>
+        <span className="text-detail text-label">{copy.checksItself}</span>
       </span>
     </div>
   );
@@ -208,7 +208,7 @@ function ProviderStatus({ runtime, state, checking, saving, locked, onConnect, o
   if (state === "connected") {
     return (
       <span className="flex flex-none items-center gap-2">
-        <span className="animate-hb-pop rounded-tag bg-mint px-2 py-0.5 text-[13px] font-bold text-ground">
+        <span className="animate-hb-pop rounded-tag bg-mint px-2 py-0.5 text-detail font-bold text-ground">
           {copy.connected}
         </span>
         <Button
@@ -225,7 +225,7 @@ function ProviderStatus({ runtime, state, checking, saving, locked, onConnect, o
   }
   const tag = TAG[state];
   return tag ? (
-    <span className={cn("rounded-tag px-2 py-0.5 text-[13px] font-bold", tag.className)}>{tag.label}</span>
+    <span className={cn("rounded-tag px-2 py-0.5 text-detail font-bold", tag.className)}>{tag.label}</span>
   ) : null;
 }
 
@@ -237,7 +237,7 @@ function ProviderBody(props: ProviderCardProps) {
   const fixing = state !== "found" && state !== "connected";
   return (
     <div className="flex flex-col gap-2.5">
-      <span className="text-sm leading-5 text-text-secondary">
+      <span className="text-ui leading-5 text-text-secondary">
         {how(runtime, state, health)}
         {plan && <span className="block">{plan}</span>}
       </span>
@@ -259,7 +259,7 @@ function ProviderCard(props: ProviderCardProps) {
           <h2 id={headingId} className="m-0 text-[17px] font-bold">
             {PROVIDER_NAMES[runtime]}
           </h2>
-          <span className="text-[13px] text-text-secondary">{PROVIDER_MAKERS[runtime]}</span>
+          <span className="text-detail text-text-secondary">{PROVIDER_MAKERS[runtime]}</span>
         </div>
         <ProviderStatus {...props} />
       </div>
@@ -373,7 +373,7 @@ export function OnboardingProviders() {
           <span
             id="providers-hint"
             role={failed ? "alert" : undefined}
-            className={`flex-1 text-[13px] ${failed ? "text-rose" : ready ? "text-text-secondary" : "text-label"}`}
+            className={`flex-1 text-detail ${failed ? "text-rose" : ready ? "text-text-secondary" : "text-label"}`}
           >
             {failed ? copy.saveFailed : ready ? messages.providers.connectedCount({ count }) : copy.connectOne}
           </span>
@@ -386,9 +386,7 @@ export function OnboardingProviders() {
             aria-describedby="providers-hint"
             disabled={providers.isPending}
             className={
-              ready
-                ? undefined
-                : "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_color-mix(in_srgb,var(--color-line-2)_60%,black)] hover:bg-line-2"
+              ready ? undefined : "cursor-not-allowed bg-line-2 text-label [--press-color:transparent] hover:bg-line-2"
             }
           >
             {shared.continue}
@@ -426,15 +424,15 @@ export function OnboardingProviders() {
               <ProviderMark mark={p.mark} tile={p.tile} small />
               <span className="flex min-w-0 flex-1 flex-col">
                 <strong className="text-[15px]">{p.name}</strong>
-                <span className="truncate text-[13px] text-text-secondary">{p.how}</span>
+                <span className="truncate text-detail text-text-secondary">{p.how}</span>
               </span>
-              <span className="flex-none rounded-tag bg-line-2 px-2 py-0.5 text-[13px] font-bold">
+              <span className="flex-none rounded-tag bg-line-2 px-2 py-0.5 text-detail font-bold">
                 {copy.later.tag}
               </span>
             </section>
           ))}
         </div>
-        <p className="m-0 text-[13px] text-label">{copy.privacy}</p>
+        <p className="m-0 text-detail text-label">{copy.privacy}</p>
       </div>
     </OnboardingFrame>
   );

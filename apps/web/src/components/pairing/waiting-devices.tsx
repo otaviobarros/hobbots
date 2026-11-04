@@ -20,13 +20,13 @@ export function WaitingDevices() {
   if (devices.length === 0) return null;
   return (
     <section aria-label={copy.heading} className="flex flex-col gap-2 pt-2">
-      <span className="lbl text-xs text-label">{copy.heading}</span>
+      <span className="lbl text-meta text-label">{copy.heading}</span>
       {devices.map((device) => {
         const deferred = pairingDeferred(device.request);
         return (
           <div key={device.request.id} className="flex flex-col gap-1">
             {deferred && (
-              <span className="text-xs text-label">
+              <span className="text-meta text-label">
                 {copy.deferred} · {copy.expires({ time: formatTime(device.request.expiresAt) })}
               </span>
             )}

@@ -153,7 +153,7 @@ function StuckDetail({
       chat={chatLink(item.recipientId, item.threadId, null)}
     >
       {choice.blocker.diagnostic !== null && (
-        <p className="m-0 text-xs break-words text-label">
+        <p className="m-0 text-meta break-words text-label">
           {blockerCopy.diagnostic} <span className="font-mono">{choice.blocker.diagnostic}</span>
         </p>
       )}
@@ -165,7 +165,7 @@ function StuckDetail({
           [copy.detail.tries, row.when],
         ]}
       />
-      <p className="m-0 text-sm font-bold text-lantern">{blockerCopy.next[choice.next]}</p>
+      <p className="m-0 text-ui font-bold text-lantern">{blockerCopy.next[choice.next]}</p>
       <div className="flex flex-col gap-2">
         <BlockerChoices item={item} hob={hob} />
       </div>
@@ -224,7 +224,7 @@ function DetailFrame({
       </header>
       {children}
       {(chat !== undefined || foot !== "") && (
-        <div className="flex flex-wrap items-center gap-4 pt-1 text-sm">
+        <div className="flex flex-wrap items-center gap-4 pt-1 text-ui">
           {chat}
           {foot !== "" && <span className="text-detail text-label">{foot}</span>}
         </div>
@@ -260,7 +260,7 @@ function Chain({ names }: { names: ReadonlyArray<string> }) {
 /** The entry's facts as a card of term and value; a row with no value is left out. */
 function Facts({ rows }: { rows: ReadonlyArray<readonly [string, string | undefined]> }) {
   return (
-    <dl className="m-0 grid grid-cols-[minmax(0,140px)_1fr] rounded-card bg-card px-4 py-1 text-sm">
+    <dl className="m-0 grid grid-cols-[minmax(0,140px)_1fr] rounded-card bg-card px-4 py-1 text-ui">
       {rows
         .filter((pair): pair is readonly [string, string] => pair[1] !== undefined && pair[1] !== "")
         .map(([term, value]) => (

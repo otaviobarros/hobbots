@@ -88,12 +88,12 @@ export function ChatRow({
         )}
         {/* While searching, where the words matched; otherwise the chat's last line. */}
         {snippet ? (
-          <span className="truncate text-sm leading-5 text-text-secondary">
+          <span className="truncate text-ui leading-5 text-text-secondary">
             <Marked parts={snippet} />
           </span>
         ) : (
           thread.lastLine && (
-            <span title={thread.lastLine} className="truncate text-sm leading-5 text-text-secondary">
+            <span title={thread.lastLine} className="truncate text-ui leading-5 text-text-secondary">
               {thread.lastLine}
             </span>
           )
@@ -101,7 +101,7 @@ export function ChatRow({
         {(needs > 0 || quests.length > 0) && (
           <span className="flex min-w-0 flex-wrap gap-1.5 pt-1">
             {needs > 0 && (
-              <span className="rounded-tag bg-lantern px-2 py-px text-xs leading-[18px] font-semibold whitespace-nowrap text-on-lantern">
+              <span className="rounded-tag bg-lantern px-2 py-px text-meta leading-[18px] font-semibold whitespace-nowrap text-on-lantern">
                 {copy.needs({ count: needs })}
               </span>
             )}
@@ -113,7 +113,7 @@ export function ChatRow({
       </span>
       <span
         className={cn(
-          "pointer-events-none text-xs leading-[22px] whitespace-nowrap text-label group-focus-within/row:invisible group-hover/row:invisible",
+          "pointer-events-none text-meta leading-[22px] whitespace-nowrap text-label group-focus-within/row:invisible group-hover/row:invisible",
           menuOpen && "invisible",
         )}
       >

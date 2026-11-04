@@ -56,11 +56,11 @@ export function PresetPicker({
               <span className="flex flex-wrap items-center gap-1.5">
                 <strong className="text-[17px]">{preset.label}</strong>
                 {preset.recommended && (
-                  <span className="rounded-tag bg-line-2 px-2 py-0.5 text-[13px] font-bold">{copy.recommended}</span>
+                  <span className="rounded-tag bg-line-2 px-2 py-0.5 text-detail font-bold">{copy.recommended}</span>
                 )}
               </span>
-              <span className="text-sm leading-5">{preset.brief}</span>
-              <span className="text-[13px] leading-[18px] text-label">{preset.who}</span>
+              <span className="text-ui leading-5">{preset.brief}</span>
+              <span className="text-detail leading-[18px] text-label">{preset.who}</span>
             </label>
           );
         })}
@@ -74,9 +74,9 @@ export function PresetPicker({
           later="Off for now. Running without the sandbox arrives in a later update."
         />
       )}
-      <p className="m-0 text-[13px] text-label">{copy.changeLater}</p>
+      <p className="m-0 text-detail text-label">{copy.changeLater}</p>
       {update.isError && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {copy.presetFailed}
         </p>
       )}
@@ -118,12 +118,12 @@ function PresetRules({ preset }: { preset: SafetyPreset }) {
       <span className="lbl text-label">{copy.presetRules({ preset: info.label })}</span>
       <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
         {info.rules.map(([rule, answer]) => (
-          <li key={rule} className="flex gap-2.5 text-sm leading-5">
+          <li key={rule} className="flex gap-2.5 text-ui leading-5">
             <span aria-hidden className={cn("w-4 font-bold", RULE_GLYPH[answer].c)}>
               {RULE_GLYPH[answer].g}
             </span>
             <span className="flex-1">{rule}</span>
-            <span className="text-[13px] text-text-secondary">{answer}</span>
+            <span className="text-detail text-text-secondary">{answer}</span>
           </li>
         ))}
       </ul>
@@ -156,9 +156,9 @@ export function LockedSwitch({
           <span id={labelId} className="font-bold">
             {label}
           </span>
-          <span className="bg-lantern px-1.5 text-xs text-ground">{copy.later}</span>
+          <span className="bg-lantern px-1.5 text-meta text-ground">{copy.later}</span>
         </span>
-        <span id={noteId} className="text-[13px] text-text-secondary">
+        <span id={noteId} className="text-detail text-text-secondary">
           {note} {later}
         </span>
       </div>
@@ -259,7 +259,7 @@ export function FolderList({
                 <span
                   className={cn(
                     "truncate text-text-secondary",
-                    look === "setup" ? "text-[13px]" : "font-mono text-meta text-label",
+                    look === "setup" ? "text-detail" : "font-mono text-meta text-label",
                   )}
                   title={folder}
                 >
@@ -309,22 +309,22 @@ export function FolderList({
             spellCheck={false}
             autoCapitalize="off"
             autoComplete="off"
-            className="min-w-[260px] flex-1 border-2 border-control bg-deep px-[11px] py-[7px] font-mono text-sm text-text-strong placeholder:text-label"
+            className="min-w-[260px] flex-1 border-2 border-control bg-deep px-[11px] py-[7px] font-mono text-ui text-text-strong placeholder:text-label"
           />
           <Button type="submit" variant="outline" disabled={typed.trim() === "" || pending}>
             {copy.addFolder}
           </Button>
-          <span className="w-full text-[13px] text-label">{copy.pathNote}</span>
+          <span className="w-full text-detail text-label">{copy.pathNote}</span>
         </form>
       )}
 
       {refused ? (
-        <p id={errorId} role="alert" className="m-0 text-sm text-rose">
+        <p id={errorId} role="alert" className="m-0 text-ui text-rose">
           {refused.message}
         </p>
       ) : (
         error && (
-          <p role="alert" className="m-0 text-sm text-rose">
+          <p role="alert" className="m-0 text-ui text-rose">
             {copy.foldersFailed}
           </p>
         )

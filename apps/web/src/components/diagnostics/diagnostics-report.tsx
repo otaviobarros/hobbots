@@ -75,29 +75,29 @@ export function DiagnosticsReportMaker({ questId }: { questId: QuestId | null })
   return (
     <section aria-label={copy.heading} className="flex flex-col gap-2">
       <span className="lbl pt-2 text-label">{copy.heading}</span>
-      <p className="m-0 text-sm text-text-secondary">{copy.note}</p>
+      <p className="m-0 text-ui text-text-secondary">{copy.note}</p>
       <div className="flex items-center gap-3">
         <Switch aria-labelledby={titlesId} checked={includeTitles} onCheckedChange={changeTitles} />
         <span className="flex flex-1 flex-col">
           <span id={titlesId}>{copy.includeTitles}</span>
-          <span className="text-xs text-text-secondary">{copy.includeTitlesNote}</span>
+          <span className="text-meta text-text-secondary">{copy.includeTitlesNote}</span>
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={make} disabled={making}>
           {making ? copy.making : copy.make}
         </Button>
-        {questId !== null && <span className="text-xs text-label">{copy.forQuest}</span>}
+        {questId !== null && <span className="text-meta text-label">{copy.forQuest}</span>}
       </div>
       {error !== null && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {error}
         </p>
       )}
       {report !== null && (
         <>
           <section aria-label={copy.view} className="cut max-h-[360px] overflow-auto bg-card p-3">
-            <pre className="m-0 font-mono text-xs break-all whitespace-pre-wrap">{reportText(report)}</pre>
+            <pre className="m-0 font-mono text-meta break-all whitespace-pre-wrap">{reportText(report)}</pre>
           </section>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => copyReport(reportText(report))}>

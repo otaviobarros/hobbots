@@ -50,7 +50,7 @@ export function ArchiveItem({
         <span>{copy.archive}</span>
         {current && <MenuShortcut>{copy.archiveShortcut({ mac: isMac() })}</MenuShortcut>}
       </span>
-      {block !== null && <span className="text-xs">{copy.blocked[block]({ name: hob.name })}</span>}
+      {block !== null && <span className="text-meta">{copy.blocked[block]({ name: hob.name })}</span>}
     </Item>
   );
 }

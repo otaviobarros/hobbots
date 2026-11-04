@@ -25,7 +25,7 @@ const ANSWER_MARKS: Readonly<Record<RuleAnswer, { readonly glyph: string; readon
  */
 export function SafetySection() {
   const setup = useQuery(setupQuery);
-  if (setup.isError) return <p className="m-0 text-sm text-rose">{copy.failed}</p>;
+  if (setup.isError) return <p className="m-0 text-ui text-rose">{copy.failed}</p>;
   if (!setup.data) return null;
   return (
     <>
@@ -33,8 +33,8 @@ export function SafetySection() {
         <PresetChoice value={setup.data.safetyPreset} />
       </SettingsGroup>
       <SettingsGroup label={copy.folders}>
-        <p className="m-0 text-sm text-text-secondary">{copy.foldersIntro}</p>
-        {setup.data.approvedFolders.length === 0 && <p className="m-0 text-sm text-text-secondary">{copy.noFolders}</p>}
+        <p className="m-0 text-ui text-text-secondary">{copy.foldersIntro}</p>
+        {setup.data.approvedFolders.length === 0 && <p className="m-0 text-ui text-text-secondary">{copy.noFolders}</p>}
         <FolderPicker folders={setup.data.approvedFolders} look="settings" />
       </SettingsGroup>
       <StandingRuleSettings />
@@ -79,7 +79,7 @@ function PresetChoice({ value }: { value: SafetyPreset }) {
           );
         })}
       </fieldset>
-      <div className="flex flex-col gap-1 rounded-control bg-card px-3.5 py-3 text-sm">
+      <div className="flex flex-col gap-1 rounded-control bg-card px-3.5 py-3 text-ui">
         <span className="font-semibold text-text-strong">{copy.withPreset({ preset: chosen.label })}</span>
         <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
           {chosen.rules.map(([rule, answer]) => (
@@ -101,7 +101,7 @@ function PresetChoice({ value }: { value: SafetyPreset }) {
         />
       )}
       {update.isError && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {copy.saveFailed}
         </p>
       )}

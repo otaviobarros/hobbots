@@ -22,7 +22,7 @@ const CHAT_PATH = /^\/hobs\/[^/]+\/(new|threads\/[^/]+)$/;
 function TitleStrip() {
   if (window.hobbots === undefined) return null;
   return (
-    <header className="flex h-title-strip flex-none items-center justify-center bg-deep text-[13px] text-label [-webkit-app-region:drag]">
+    <header className="flex h-title-strip flex-none items-center justify-center bg-deep text-detail text-label [-webkit-app-region:drag]">
       Hobbots
     </header>
   );

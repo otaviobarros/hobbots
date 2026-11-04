@@ -90,7 +90,7 @@ function SaveReport() {
         {state === "saving" ? copy.saving : copy.save}
       </Button>
       {state === "failed" && (
-        <p role="alert" className="m-0 basis-full text-sm text-rose">
+        <p role="alert" className="m-0 basis-full text-ui text-rose">
           {copy.saveFailed}
         </p>
       )}
@@ -113,12 +113,12 @@ export function PlainCheck() {
   return (
     <section aria-label={copy.title} className="flex flex-col gap-2.5 rounded-card bg-card p-4">
       <strong className="text-text-strong">{copy.title}</strong>
-      <p className="m-0 text-sm text-text-secondary">{copy.intro}</p>
+      <p className="m-0 text-ui text-text-secondary">{copy.intro}</p>
       {checked && (
         <ul
           aria-label={copy.title}
           aria-busy={check.checking}
-          className="m-0 flex animate-hb-in list-none flex-col gap-1 p-0 text-sm"
+          className="m-0 flex animate-hb-in list-none flex-col gap-1 p-0 text-ui"
         >
           {check.lines.map((line) => (
             <Line key={line.key} line={line} />

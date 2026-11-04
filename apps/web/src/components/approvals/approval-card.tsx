@@ -76,7 +76,7 @@ export function ApprovalCard({
       <header className="flex flex-wrap items-center gap-2">
         <HobSprite hob={hob} size={22} state={pending ? "needs-you" : "idle"} />
         <span className={cn("lbl flex-1", tone.text)}>{copy.asks({ name: hob.name })}</span>
-        {pending && <span className="text-xs text-label">{expiryText(approval)}</span>}
+        {pending && <span className="text-meta text-label">{expiryText(approval)}</span>}
       </header>
       <ApprovalDetails approval={approval} hob={hob} />
       {pending && (
@@ -93,12 +93,12 @@ export function ApprovalCard({
         ref={status}
         role="status"
         tabIndex={-1}
-        className={cn("origin-left text-sm empty:sr-only", pending ? "text-xs text-label" : tone.text)}
+        className={cn("origin-left text-ui empty:sr-only", pending ? "text-meta text-label" : tone.text)}
       >
         {statusText}
       </span>
       {pending && decide.isError && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {decisionErrorText(decide.error)}
         </p>
       )}
@@ -109,11 +109,11 @@ export function ApprovalCard({
 function ApprovalDetails({ approval, hob }: { approval: ApprovalRequest; hob: Agent }) {
   const action = exactAction(approval);
   return (
-    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ui">
       <dt className="text-label">{copy.action}</dt>
       <dd className="m-0 flex flex-col gap-0.5">
         <span>{operationLabel(approval.operation)}</span>
-        <code className="bg-deep px-2 py-1 font-mono text-[13px] break-all whitespace-pre-wrap">{action}</code>
+        <code className="bg-deep px-2 py-1 font-mono text-code break-all whitespace-pre-wrap">{action}</code>
       </dd>
       <dt className="text-label">{copy.target}</dt>
       <dd className="m-0 break-all">{approval.targets.length === 0 ? copy.noTarget : approval.targets.join(", ")}</dd>

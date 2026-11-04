@@ -76,12 +76,12 @@ export function BlockerChoices({
         {children}
       </div>
       {showHeld && (
-        <p id={held} className="m-0 text-xs text-label">
+        <p id={held} className="m-0 text-meta text-label">
           {copy.reassignHeld}
         </p>
       )}
       {decide.isError && (
-        <p role="alert" className="m-0 text-xs text-rose">
+        <p role="alert" className="m-0 text-meta text-rose">
           {decide.error instanceof ApiError && decide.error.tag === "HobUnavailable"
             ? copy.retired({ name: hob.name })
             : copy.failed}

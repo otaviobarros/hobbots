@@ -39,7 +39,7 @@ const hint = (tab: (typeof WORKBENCH_TABS)[number], state: TabState): string =>
 
 /** What sets a tab apart, if anything: Soon, Unavailable or Not used. */
 function Mark({ state }: { state: TabState }) {
-  if (state.kind === "coming-soon") return <span className="text-xs font-normal text-label">{messages.soon}</span>;
+  if (state.kind === "coming-soon") return <span className="text-meta font-normal text-label">{messages.soon}</span>;
   if (state.kind === "unavailable") {
     return (
       <span className="flex items-center">

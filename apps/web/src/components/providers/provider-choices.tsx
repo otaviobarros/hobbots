@@ -84,13 +84,13 @@ export function ProviderChoices<D extends BrainChoice>({
               health={health}
               name="hob-provider"
               className={cn(
-                "cut flex cursor-not-allowed items-center gap-2 border-2 border-dashed border-line-2 px-3 py-[7px] text-sm text-label",
+                "cut flex cursor-not-allowed items-center gap-2 border-2 border-dashed border-line-2 px-3 py-[7px] text-ui text-label",
                 chipClassName,
               )}
             >
               <ProviderMark runtime={health.runtime} className={cn("opacity-60", markClassName)} />
               {name}
-              <span className="text-xs text-lantern">{STATES[health.availability]}</span>
+              <span className="text-meta text-lantern">{STATES[health.availability]}</span>
             </UnavailableProvider>
           );
         })}
@@ -145,7 +145,7 @@ export function BlockedProviders({
       key={health.runtime}
       role="status"
       aria-label={copy.status({ provider: PROVIDER_NAMES[health.runtime], state: STATES[health.availability] })}
-      className={cn("flex flex-col text-[13px] leading-snug", className)}
+      className={cn("flex flex-col text-detail leading-snug", className)}
     >
       <span>
         <b>{PROVIDER_NAMES[health.runtime]}</b> · {whyNot(health)}

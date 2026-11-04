@@ -48,9 +48,9 @@ function HubRow({ hub, disabled, onConnect }: { hub: FoundHubView; disabled: boo
       <span aria-hidden className={`size-2.5 flex-none ${usable ? "bg-mint" : "bg-lantern"}`} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="font-bold">{hub.computer}</span>
-        <span className="truncate font-mono text-[13px] text-text-secondary">{details.join(" · ")}</span>
+        <span className="truncate font-mono text-code text-text-secondary">{details.join(" · ")}</span>
         {!usable && (
-          <span className="text-[13px] text-lantern">
+          <span className="text-detail text-lantern">
             {hub.support === "hubOlder"
               ? copy.hubOlder({ computer: hub.computer })
               : copy.appOlder({ computer: hub.computer })}
@@ -92,7 +92,7 @@ export function FoundHubs({
   return (
     <section aria-labelledby="found-hubs" className="flex max-w-[700px] flex-col gap-2 pt-4">
       <span className="flex items-center gap-3">
-        <span id="found-hubs" className="lbl flex-1 text-xs text-label">
+        <span id="found-hubs" className="lbl flex-1 text-meta text-label">
           {copy.found}
         </span>
         <Button size="sm" variant="ghost" disabled={checking} onClick={() => void look()}>
@@ -100,17 +100,17 @@ export function FoundHubs({
         </Button>
       </span>
       {scan.kind === "looking" && (
-        <p role="status" className="m-0 text-sm text-text-secondary">
+        <p role="status" className="m-0 text-ui text-text-secondary">
           {copy.looking}
         </p>
       )}
       {scan.kind === "failed" && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {copy.scanFailed}
         </p>
       )}
       {scan.kind === "hubs" && scan.hubs.length === 0 && (
-        <p role="status" className="m-0 text-sm text-text-secondary">
+        <p role="status" className="m-0 text-ui text-text-secondary">
           {copy.none}
         </p>
       )}
@@ -121,7 +121,7 @@ export function FoundHubs({
           ))}
         </ul>
       )}
-      <span className="text-[13px] leading-normal text-label">{copy.notListed}</span>
+      <span className="text-detail leading-normal text-label">{copy.notListed}</span>
     </section>
   );
 }

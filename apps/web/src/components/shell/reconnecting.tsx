@@ -43,7 +43,7 @@ export function ReconnectingCard({ className }: { className?: string }) {
     <div
       role="status"
       className={cn(
-        "flex flex-none animate-hb-in items-center gap-3 rounded-card border border-[color-mix(in_srgb,var(--color-lantern)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-lantern)_12%,var(--color-card))] py-2.5 ps-3.5 pe-3 text-sm text-text-strong",
+        "flex flex-none animate-hb-in items-center gap-3 rounded-card border border-[color-mix(in_srgb,var(--color-lantern)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-lantern)_12%,var(--color-card))] py-2.5 ps-3.5 pe-3 text-ui text-text-strong",
         className,
       )}
     >

@@ -7,7 +7,7 @@ import { useHomeNeeds } from "./use-home-needs.ts";
 const copy = messages.needsYou;
 
 const moreLink =
-  "inline-flex items-center gap-1 rounded-control px-2 py-[3px] text-[13px] text-link no-underline hover:bg-hover";
+  "inline-flex items-center gap-1 rounded-control px-2 py-[3px] text-detail text-link no-underline hover:bg-hover";
 
 /**
  * Needs you, under the scene: the same tray as in the chat, holding what waits on you in every
@@ -24,7 +24,7 @@ export function NeedsYou() {
         />
         <h2 className="lbl m-0 text-lantern">{copy.title}</h2>
         {entries.length > 0 && (
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-tag bg-line px-1.5 text-xs font-semibold text-text-secondary">
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-tag bg-line px-1.5 text-meta font-semibold text-text-secondary">
             {formatCount(entries.length)}
           </span>
         )}
@@ -52,7 +52,7 @@ function AllClear() {
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="font-semibold text-text-strong">{copy.clear}</span>
-        <span className="text-sm text-text-secondary">{copy.clearLine}</span>
+        <span className="text-ui text-text-secondary">{copy.clearLine}</span>
       </span>
       <Link to="/inbox" search={{ tab: "history" }} className={moreLink}>
         {copy.history}

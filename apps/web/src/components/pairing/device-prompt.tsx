@@ -93,7 +93,7 @@ function AskingPrompt({
   return (
     <>
       <div className="flex flex-col gap-0.5">
-        <span className="lbl flex items-center gap-1.5 text-xs text-lantern">
+        <span className="lbl flex items-center gap-1.5 text-meta text-lantern">
           <span aria-hidden className="inline-block size-2 animate-hb-blink rounded-dot bg-lantern" />
           {copy.kicker}
         </span>
@@ -106,7 +106,7 @@ function AskingPrompt({
       </div>
       <DeviceFacts device={device} now={now} />
       <MatchingCode device={device} />
-      <p className="m-0 text-[13px] leading-normal text-text-secondary">{copy.grants}</p>
+      <p className="m-0 text-detail leading-normal text-text-secondary">{copy.grants}</p>
       <PairingActions device={device} canDefer onDecided={onDecided} />
     </>
   );

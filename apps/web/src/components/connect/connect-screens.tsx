@@ -67,7 +67,7 @@ export function ConnectForm({
             <Button type="button" variant="outline" onClick={onBack}>
               {copy.back}
             </Button>
-            <span className="flex-1 text-end text-sm text-text-secondary">{typed ? "" : copy.hint}</span>
+            <span className="flex-1 text-end text-ui text-text-secondary">{typed ? "" : copy.hint}</span>
             <Button type="submit" disabled={!typed || busy}>
               {busy ? copy.connecting : copy.connect}
             </Button>
@@ -91,7 +91,7 @@ export function ConnectForm({
           className="max-w-[700px] border-2 border-control bg-ground px-3 py-[11px] font-mono text-[17px] text-text-strong"
         />
         {refusal !== undefined && (
-          <p id={errorId} role="alert" className="m-0 max-w-[700px] text-sm text-rose">
+          <p id={errorId} role="alert" className="m-0 max-w-[700px] text-ui text-rose">
             {refusalText(refusal)}
           </p>
         )}
@@ -120,12 +120,12 @@ export function ConnectWaiting({ waiting, onCancel }: { waiting: WaitingView; on
       <div role="status" className="flex flex-col items-center gap-2.5 pt-6 text-center">
         <h1 className="m-0 font-heading text-[32px] font-bold text-moonlight">{copy.waiting.title({ computer })}</h1>
         <p className="m-0 max-w-column-max text-text-secondary">{copy.waiting.intro({ computer })}</p>
-        <p className="m-0 text-[13px] text-label">
+        <p className="m-0 text-detail text-label">
           {copy.waiting.who({ computer, owner: waiting.owner })}
           {waiting.hubName !== computer && ` · ${copy.form.calledItself({ name: waiting.hubName })}`}
         </p>
         <div className="cut my-3 flex flex-col items-center gap-1 bg-text-strong px-[34px] py-[18px] text-ground">
-          <span className="lbl text-xs text-ground/70">{copy.waiting.codeLabel}</span>
+          <span className="lbl text-meta text-ground/70">{copy.waiting.codeLabel}</span>
           <span className="font-heading text-[44px] font-bold tracking-[0.12em]">{groupedCode(waiting.code)}</span>
         </div>
         <span className="font-bold text-lantern">
@@ -136,8 +136,8 @@ export function ConnectWaiting({ waiting, onCancel }: { waiting: WaitingView; on
             <span className="animate-hb-blink [animation-delay:.4s]">•</span>
           </span>
         </span>
-        <p className="m-0 text-[13px] text-label">{copy.waiting.expires({ time: formatTime(waiting.expiresAt) })}</p>
-        <p className="m-0 max-w-column-max pt-2 text-[13px] text-text-secondary">
+        <p className="m-0 text-detail text-label">{copy.waiting.expires({ time: formatTime(waiting.expiresAt) })}</p>
+        <p className="m-0 max-w-column-max pt-2 text-detail text-text-secondary">
           {copy.waiting.warning({ computer })}
         </p>
       </div>

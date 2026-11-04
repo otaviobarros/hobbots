@@ -45,7 +45,7 @@ export function TaskDetail({
           ) : (
             <ul aria-label={copy.folders} className="m-0 flex list-none flex-col gap-1 p-0 text-detail">
               {detail.folders.map((folder) => (
-                <li key={folder} className="break-all font-mono text-xs">
+                <li key={folder} className="break-all font-mono text-meta">
                   {folder}
                 </li>
               ))}
@@ -100,7 +100,7 @@ export function TaskDetail({
                 <time dateTime={checkpoint.createdAt} className="w-14 shrink-0 text-label">
                   {formatTime(checkpoint.createdAt)}
                 </time>
-                <span className="h-fit shrink-0 bg-line px-1.5 text-xs font-bold text-moonlight">
+                <span className="h-fit shrink-0 bg-line px-1.5 text-meta font-bold text-moonlight">
                   {messages.checkpoint[checkpoint.kind]}
                 </span>
                 {saysMore(checkpoint) && <span>{checkpoint.summary}</span>}
@@ -135,7 +135,7 @@ export function TaskDetail({
             {detail.notes.map((note) => (
               <li key={note.id} className="flex flex-col gap-0.5 bg-deep px-2 py-1.5">
                 <span className="whitespace-pre-wrap">{note.text}</span>
-                <span className="text-xs text-label">
+                <span className="text-meta text-label">
                   {copy.noteTo({ name: hobs(note.recipientId).name, time: formatTime(note.createdAt) })}
                 </span>
               </li>
@@ -224,7 +224,7 @@ function Artifacts({ artifacts }: { artifacts: ReturnType<typeof taskDetail>["ou
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-1.5">
-      <h3 className="lbl m-0 text-xs text-label">{title}</h3>
+      <h3 className="lbl m-0 text-meta text-label">{title}</h3>
       {children}
     </section>
   );

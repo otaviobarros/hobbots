@@ -45,7 +45,7 @@ export function PairingScreen() {
         <span
           key={speechFor(status.data)}
           aria-live="polite"
-          className="mb-[52px] animate-hb-in rounded-[12px_12px_12px_2px] bg-text-strong px-3 py-2.5 text-sm leading-5 text-ground"
+          className="mb-[52px] animate-hb-in rounded-[12px_12px_12px_2px] bg-text-strong px-3 py-2.5 text-ui leading-5 text-ground"
         >
           {speechFor(status.data)}
         </span>
@@ -124,14 +124,14 @@ function AskForm({ hub, failed = false }: { hub: string; failed?: boolean }) {
         onChange={(event) => setName(event.target.value)}
         className="rounded-control border-2 border-line-2 bg-deep px-3 py-2 text-text-strong focus-ring"
       />
-      <span id={hintId} className="-mt-2 text-[13px] text-label">
+      <span id={hintId} className="-mt-2 text-detail text-label">
         {copy.ask.nameHint}
       </span>
       <Button type="submit" className="w-full" disabled={ask.isPending || name.trim() === ""}>
         {ask.isPending ? copy.ask.asking : copy.ask.submit}
       </Button>
       {(failed || ask.isError) && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {copy.ask.failed}
         </p>
       )}
@@ -142,7 +142,7 @@ function AskForm({ hub, failed = false }: { hub: string; failed?: boolean }) {
 function Waiting({ code, expiresAt, hub }: { code: string; expiresAt: string; hub: string }) {
   return (
     <div role="status" className="flex flex-col gap-3.5">
-      <span className="lbl flex items-center gap-1.5 text-xs text-lantern">
+      <span className="lbl flex items-center gap-1.5 text-meta text-lantern">
         <span aria-hidden className="inline-block size-2 animate-hb-blink rounded-dot bg-lantern" />
         {copy.waiting.codeLabel}
       </span>
@@ -151,7 +151,7 @@ function Waiting({ code, expiresAt, hub }: { code: string; expiresAt: string; hu
         {groupedCode(code)}
       </span>
       <p className="m-0 text-text-secondary">{copy.waiting.intro({ hub })}</p>
-      <p className="m-0 text-[13px] text-label">{copy.waiting.expires({ time: formatTime(expiresAt) })}</p>
+      <p className="m-0 text-detail text-label">{copy.waiting.expires({ time: formatTime(expiresAt) })}</p>
     </div>
   );
 }

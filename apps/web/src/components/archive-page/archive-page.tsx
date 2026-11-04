@@ -35,7 +35,7 @@ import { useFocusAfterRestore } from "./use-focus-after-restore.ts";
 
 const copy = messages;
 
-const countPill = "rounded-full bg-line px-[7px] py-px text-xs font-semibold text-text-secondary";
+const countPill = "rounded-full bg-line px-[7px] py-px text-meta font-semibold text-text-secondary";
 
 /**
  * The Archive: archived chats across every hob and retired hobs, on two tabs. The tab and the hob
@@ -96,11 +96,11 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
         </TabsList>
         <TabsContent value="chats" className="flex flex-col gap-4">
           {hobs.isError || archived.error ? (
-            <p role="alert" className="m-0 text-sm text-rose">
+            <p role="alert" className="m-0 text-ui text-rose">
               {copy.chats.loadFailed}
             </p>
           ) : hobs.isPending || archived.pending ? (
-            <p role="status" className="m-0 text-sm text-label">
+            <p role="status" className="m-0 text-ui text-label">
               {copy.chats.loading}
             </p>
           ) : (
@@ -108,13 +108,13 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
           )}
         </TabsContent>
         <TabsContent value="hobs" className="flex flex-col gap-4">
-          <p className="m-0 text-sm text-text-secondary">{copy.hobs.intro}</p>
+          <p className="m-0 text-ui text-text-secondary">{copy.hobs.intro}</p>
           {retired.isError ? (
-            <p role="alert" className="m-0 text-sm text-rose">
+            <p role="alert" className="m-0 text-ui text-rose">
               {copy.hobs.loadFailed}
             </p>
           ) : retired.isPending ? (
-            <p role="status" className="m-0 text-sm text-label">
+            <p role="status" className="m-0 text-ui text-label">
               {copy.hobs.loading}
             </p>
           ) : (
@@ -217,9 +217,9 @@ function ArchivedChats({
 function MoreHobs({ more, onPick }: { more: ReadonlyArray<ScopeChip<Agent>>; onPick: (hobId: string) => void }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex h-8.5 shrink-0 cursor-pointer items-center gap-2 rounded-full border-(length:--edge) border-dashed border-line-2 bg-transparent px-3.5 text-sm whitespace-nowrap text-text-secondary outline-none hover:border-control hover:text-text-strong focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-ground">
+      <DropdownMenuTrigger className="inline-flex h-8.5 shrink-0 cursor-pointer items-center gap-2 rounded-full border-(length:--edge) border-dashed border-line-2 bg-transparent px-3.5 text-ui whitespace-nowrap text-text-secondary outline-none hover:border-control hover:text-text-strong focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-ground">
         {copy.scope.more}
-        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-text-strong/11 px-1.5 text-xs font-semibold tabular-nums">
+        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-text-strong/11 px-1.5 text-meta font-semibold tabular-nums">
           {formatCount(more.length)}
         </span>
       </DropdownMenuTrigger>
@@ -229,7 +229,7 @@ function MoreHobs({ more, onPick }: { more: ReadonlyArray<ScopeChip<Agent>>; onP
             <span className="min-w-0 flex-1 truncate" title={hob.name}>
               {hob.name}
             </span>
-            <span className="flex-none text-xs text-label tabular-nums">{formatCount(count)}</span>
+            <span className="flex-none text-meta text-label tabular-nums">{formatCount(count)}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -276,11 +276,11 @@ function ChatRow({ chat: { hob, thread }, focus }: { chat: ArchivedChat; focus: 
             {thread.title}
           </Link>
           {thread.lastLine && (
-            <span title={thread.lastLine} className="truncate text-sm text-text-secondary">
+            <span title={thread.lastLine} className="truncate text-ui text-text-secondary">
               {thread.lastLine}
             </span>
           )}
-          <span className="truncate text-xs text-label">
+          <span className="truncate text-meta text-label">
             {copy.chats.meta({ name: hob.name, day: formatDay(thread.archivedAt ?? thread.updatedAt) })}
           </span>
         </span>
@@ -357,14 +357,14 @@ function RetiredCard({ hob }: { hob: Agent }) {
           >
             {hob.name}
           </Link>
-          <span title={hob.roleTitle} className="truncate text-xs text-label">
+          <span title={hob.roleTitle} className="truncate text-meta text-label">
             {hob.roleTitle}
           </span>
         </span>
         <span className="flex min-w-0 flex-wrap items-end justify-between gap-x-3 gap-y-2">
-          <span className="flex min-w-0 flex-col text-sm">
+          <span className="flex min-w-0 flex-col text-ui">
             <span className="truncate">{threads.data ? copy.hobs.kept({ count: threads.data.length }) : " "}</span>
-            <span className="truncate text-xs text-label">
+            <span className="truncate text-meta text-label">
               {hob.retiredAt ? copy.hobs.retired({ day: formatDay(hob.retiredAt) }) : copy.hobs.retiredUnknown}
             </span>
           </span>

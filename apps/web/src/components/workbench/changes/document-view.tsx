@@ -26,7 +26,7 @@ function Version({ title, version }: { title: string; version: MarkedDocument })
       aria-label={title}
       className="flex min-w-0 flex-col gap-2 rounded-card border border-line bg-card px-4 pt-3 pb-3.5"
     >
-      <h4 className="lbl m-0 text-xs font-bold text-label">{title}</h4>
+      <h4 className="lbl m-0 text-meta font-bold text-label">{title}</h4>
       <ReplyMarkdown
         content={version.text}
         streaming={false}

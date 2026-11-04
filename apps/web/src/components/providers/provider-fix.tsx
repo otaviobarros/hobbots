@@ -86,7 +86,7 @@ export function ProviderFixActions({
       >
         {runtimes.isFetching ? copy.lookingAgain : copy.checkAgain}
       </Button>
-      <span className="text-xs text-label">{copy.noRestart}</span>
+      <span className="text-meta text-label">{copy.noRestart}</span>
     </div>
   );
 }

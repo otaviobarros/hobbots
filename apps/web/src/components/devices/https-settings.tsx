@@ -56,12 +56,12 @@ function ServeCommand({ ask, status }: { ask: ServeAsk; status: RemoteAccessStat
 
   return (
     <div className="flex animate-hb-in flex-col gap-2">
-      <p className="m-0 flex items-start gap-2 text-sm">
+      <p className="m-0 flex items-start gap-2 text-ui">
         <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
         <span>{ask === "forward" ? copy.notServing : copy.leftOver}</span>
       </p>
       <div className="cut flex flex-wrap items-center gap-2.5 border-2 border-control bg-deep px-3 py-2">
-        <code className="min-w-0 flex-1 font-mono text-sm text-moonlight wrap-anywhere">{command}</code>
+        <code className="min-w-0 flex-1 font-mono text-ui text-moonlight wrap-anywhere">{command}</code>
         <Button variant="outline" size="xs" onClick={() => copyText(command)}>
           {copied === "idle"
             ? messages.remoteAccess.copy
@@ -94,9 +94,9 @@ function ServeCommand({ ask, status }: { ask: ServeAsk; status: RemoteAccessStat
             }
           }}
         >
-          <span className="flex-1 text-sm">{consent}</span>
+          <span className="flex-1 text-ui">{consent}</span>
           {serve.isError && (
-            <span role="alert" className="basis-full text-sm text-rose wrap-anywhere">
+            <span role="alert" className="basis-full text-ui text-rose wrap-anywhere">
               {serveFailure(serve.error)}
             </span>
           )}
@@ -142,24 +142,24 @@ export function HttpsSettings({ status }: { status: RemoteAccessStatus }) {
           <span id={labelId} className="font-bold">
             {copy.switchLabel}
           </span>
-          <span className="text-[13px] text-text-secondary">{copy.note}</span>
+          <span className="text-detail text-text-secondary">{copy.note}</span>
         </div>
       </div>
       {status.https.enabled && status.https.detail !== null && (
-        <p className="m-0 flex items-start gap-2 text-sm">
+        <p className="m-0 flex items-start gap-2 text-ui">
           <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
           <span>{copy.cannotListen({ detail: status.https.detail })}</span>
         </p>
       )}
       {status.https.enabled && status.https.listening && status.https.forwarding === true && (
-        <p className="m-0 flex animate-hb-in items-center gap-2 text-sm">
+        <p className="m-0 flex animate-hb-in items-center gap-2 text-ui">
           <span aria-hidden className="size-2 flex-none bg-mint" />
           <span>{copy.serving}</span>
         </p>
       )}
       {ask !== null && <ServeCommand key={ask} ask={ask} status={status} />}
       {change.isError && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {messages.remoteAccess.failed}
         </p>
       )}

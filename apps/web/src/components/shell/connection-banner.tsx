@@ -57,7 +57,7 @@ function ChangeAddress({ address, onDone }: { address: string; onDone: () => voi
           change.reset();
           setText(event.target.value);
         }}
-        className="min-w-0 flex-1 border-2 border-ground bg-deep px-2 py-0.5 font-mono text-xs font-normal text-text-strong focus-ring"
+        className="min-w-0 flex-1 border-2 border-ground bg-deep px-2 py-0.5 font-mono text-meta font-normal text-text-strong focus-ring"
       />
       <Button type="submit" variant="outline" size="xs" className={BUTTON} disabled={change.isPending}>
         {change.isPending ? copy.connecting : copy.connect}
@@ -87,7 +87,7 @@ export function ConnectionBanner({ view, onRetry }: { view: ConnectionReason; on
   return (
     <div
       role="status"
-      className="flex flex-none flex-wrap items-center gap-x-2 gap-y-1 bg-lantern px-3 py-1.5 text-xs font-bold text-ground"
+      className="flex flex-none flex-wrap items-center gap-x-2 gap-y-1 bg-lantern px-3 py-1.5 text-meta font-bold text-ground"
     >
       <span aria-hidden className="animate-hb-blink">
         ●

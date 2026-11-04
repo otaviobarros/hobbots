@@ -98,11 +98,11 @@ function ArchivedHeader({
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-baseline gap-2">
             <span className="font-heading text-xl font-semibold whitespace-nowrap">{hob.name}</span>
-            <span className="text-sm font-bold whitespace-nowrap text-moonlight">{hob.roleTitle}</span>
+            <span className="text-ui font-bold whitespace-nowrap text-moonlight">{hob.roleTitle}</span>
             <span className="truncate text-text-secondary">{title}</span>
             {tagged && <Badge variant="archived">{messages.tag}</Badge>}
           </span>
-          <span className="text-xs text-label">{detail}</span>
+          <span className="text-meta text-label">{detail}</span>
         </div>
         <Button asChild variant="outline">
           <Link to="/hobs/$hobId/profile" params={{ hobId: hob.id }}>
@@ -142,7 +142,7 @@ function RestoreButton({
 
 function RestoreError({ text, onRetry }: { text: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="flex items-center gap-3 border-2 border-rose px-3 py-2 text-sm">
+    <div role="alert" className="flex items-center gap-3 border-2 border-rose px-3 py-2 text-ui">
       <span className="flex-1">{text}</span>
       <Button variant="outline" size="xs" onClick={onRetry}>
         {messages.tryAgain}
@@ -178,7 +178,7 @@ function ArchivedThreadView({ thread, ...props }: ChatProps & { thread: Thread }
       <ArchivedHeader hob={current} props={props} title={thread.title} detail={messages.readOnly} tagged />
       <section
         aria-label={messages.tag}
-        className="flex flex-wrap items-center gap-3 border-b-4 border-line bg-card px-4 py-2.5 text-sm"
+        className="flex flex-wrap items-center gap-3 border-b-4 border-line bg-card px-4 py-2.5 text-ui"
       >
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span>{messages.banner({ name: current.name, date })}</span>
@@ -192,7 +192,7 @@ function ArchivedThreadView({ thread, ...props }: ChatProps & { thread: Thread }
       </section>
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-4">
         {transcript.isPending && <p className="text-label">{messages.loadingMessages}</p>}
-        {transcript.isError && <p className="text-sm text-rose">{messages.loadMessagesFailed}</p>}
+        {transcript.isError && <p className="text-ui text-rose">{messages.loadMessagesFailed}</p>}
         {transcript.data?.map((message) => (
           <MessageRow key={message.id} message={message} hob={current} focused={message.id === props.focusMessageId} />
         ))}
@@ -207,7 +207,7 @@ function ArchivedThreadView({ thread, ...props }: ChatProps & { thread: Thread }
 
 function ReadOnlyFooter({ hobId, children }: { hobId: AgentId; children: ReactNode }) {
   return (
-    <p role="note" className="m-0 flex-none border-t-4 border-line px-6 py-3.5 text-sm text-text-secondary">
+    <p role="note" className="m-0 flex-none border-t-4 border-line px-6 py-3.5 text-ui text-text-secondary">
       {children} ·{" "}
       <Link to="/archive" search={{ hob: hobId }} className="text-link">
         {messages.backToArchived}

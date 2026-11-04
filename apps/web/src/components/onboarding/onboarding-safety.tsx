@@ -86,7 +86,7 @@ export function OnboardingFolders() {
       })}
       footer={
         <>
-          <span className="flex-1 text-sm text-text-secondary">
+          <span className="flex-1 text-ui text-text-secondary">
             {folders.length === 0 ? shared.folders.none : foldersShared(folders.length)}
           </span>
           <Button variant="outline" onClick={back} disabled={saving}>
@@ -113,7 +113,7 @@ export function OnboardingFolders() {
 
 function SetupUnread({ onRetry }: { onRetry: () => void }) {
   return (
-    <p role="alert" className="m-0 flex items-center gap-3 text-sm text-rose">
+    <p role="alert" className="m-0 flex items-center gap-3 text-ui text-rose">
       {messages.setup.failed}
       <Button variant="outline" size="xs" onClick={onRetry}>
         {messages.setup.retry}

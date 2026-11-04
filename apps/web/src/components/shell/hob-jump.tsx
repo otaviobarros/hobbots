@@ -126,25 +126,25 @@ function JumpList({ onDone }: { onDone: () => void }) {
             <HobSprite hob={option.hob} size={24} state={option.hob.status === "paused" ? "paused" : "idle"} badge />
             {option.kind === "hob" ? (
               <>
-                <span className="font-heading text-sm font-semibold">{option.hob.name}</span>
-                <span className="min-w-0 flex-1 truncate text-[13px] text-label">{option.hob.roleTitle}</span>
+                <span className="font-heading text-ui font-semibold">{option.hob.name}</span>
+                <span className="min-w-0 flex-1 truncate text-detail text-label">{option.hob.roleTitle}</span>
               </>
             ) : (
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="flex min-w-0 items-center gap-1.5 text-sm font-bold">
+                <span className="flex min-w-0 items-center gap-1.5 text-ui font-bold">
                   <span className="truncate">{option.hit.thread.title}</span>
                   <ArchivedTag result={option} />
                 </span>
-                <span className="truncate text-[13px] text-text-secondary">
+                <span className="truncate text-detail text-text-secondary">
                   <ResultDetail result={option} />
                 </span>
               </span>
             )}
-            {index === current && <span className="text-xs text-label">{copy.open}</span>}
+            {index === current && <span className="text-meta text-label">{copy.open}</span>}
           </div>
         ))}
         {query.trim() !== "" && !found.pending && options.length === 0 && (
-          <p className="m-0 px-2 py-1.5 text-sm text-text-secondary">
+          <p className="m-0 px-2 py-1.5 text-ui text-text-secondary">
             {messages.search.nothing({ query: query.trim() })}
           </p>
         )}

@@ -48,7 +48,7 @@ export function ReplySteps({
   return (
     <ol
       aria-label={copy.list}
-      className="m-0 flex list-none flex-col gap-[3px] border-2 border-line bg-panel px-2.5 py-2 text-[13px]"
+      className="m-0 flex list-none flex-col gap-[3px] border-2 border-line bg-panel px-2.5 py-2 text-detail"
     >
       {shown.map((step) => (
         <li key={step.id} data-state={step.state}>
@@ -64,7 +64,7 @@ export function ReplySteps({
             <>
               <StepLine step={step} outcome={step.state} />
               {step.state === "failed" && step.output !== undefined && (
-                <span className="block ps-5.5 text-xs text-rose">{copy.refused({ why: step.output.head })}</span>
+                <span className="block ps-5.5 text-meta text-rose">{copy.refused({ why: step.output.head })}</span>
               )}
             </>
           )}
@@ -126,7 +126,7 @@ function ToolStep({
   const note = stepNote(step, outcome);
   return (
     <Collapsible className="flex flex-col gap-0.5">
-      <CollapsibleTrigger className="group flex items-center gap-2 border-0 bg-transparent p-0 text-start text-[13px] text-text-secondary hover:text-text-strong focus-visible:outline-2 focus-visible:outline-focus-ring">
+      <CollapsibleTrigger className="group flex items-center gap-2 border-0 bg-transparent p-0 text-start text-detail text-text-secondary hover:text-text-strong focus-visible:outline-2 focus-visible:outline-focus-ring">
         <StepLine step={step} outcome={outcome} />
         <span aria-hidden className="text-label group-data-[state=open]:rotate-90">
           ›
@@ -134,14 +134,17 @@ function ToolStep({
       </CollapsibleTrigger>
       {note !== null && (
         <span
-          className={cn("ps-5.5 text-xs", outcome === "denied" || outcome === "failed" ? "text-rose" : "text-lantern")}
+          className={cn(
+            "ps-5.5 text-meta",
+            outcome === "denied" || outcome === "failed" ? "text-rose" : "text-lantern",
+          )}
         >
           {note}
         </span>
       )}
       {settle}
       <CollapsibleContent>
-        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 pt-0.5 text-xs text-text-secondary">
+        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 pt-0.5 text-meta text-text-secondary">
           <dt className="text-label">{copy.tool}</dt>
           <dd className="m-0">{call.tool}</dd>
           <dt className="text-label">{copy.operation}</dt>

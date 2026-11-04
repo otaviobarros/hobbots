@@ -82,7 +82,7 @@ function PreviewScene({ preview }: { preview: Preview }) {
         <span
           className={cn(
             // standards-allow STD-I18N-004: left-1/2 with -translate-x-1/2 centers the box, and translate has no logical form
-            "absolute top-3 left-1/2 inline-flex -translate-x-1/2 animate-hb-pop items-center gap-1.5 rounded-full border border-scene-chimney bg-deep px-2.5 py-0.5 text-xs whitespace-nowrap text-text-strong",
+            "absolute top-3 left-1/2 inline-flex -translate-x-1/2 animate-hb-pop items-center gap-1.5 rounded-full border border-scene-chimney bg-deep px-2.5 py-0.5 text-meta whitespace-nowrap text-text-strong",
             connected && "shadow-[0_0_12px_color-mix(in_srgb,var(--color-lantern)_45%,transparent)]",
           )}
         >
@@ -151,12 +151,12 @@ function PreviewPanel({ preview }: { preview: Preview }) {
     >
       <span className="lbl text-center text-label">{copy.preview}</span>
       <PreviewScene preview={preview} />
-      {preview.caption && <span className="text-center text-[13px] text-text-secondary">{preview.caption}</span>}
+      {preview.caption && <span className="text-center text-detail text-text-secondary">{preview.caption}</span>}
       {hob && (
         <span className="flex flex-col items-center gap-1 text-center">
           <strong className="max-w-full truncate font-heading text-xl font-bold text-moonlight">{hob.name}</strong>
           {hob.title && (
-            <span className="max-w-full truncate rounded-tag bg-line-2 px-2 py-0.5 text-[13px] font-bold">
+            <span className="max-w-full truncate rounded-tag bg-line-2 px-2 py-0.5 text-detail font-bold">
               {hob.title}
             </span>
           )}
@@ -167,11 +167,11 @@ function PreviewPanel({ preview }: { preview: Preview }) {
           <ChiefMark size={30} />
         </span>
         <span className="flex min-w-0 flex-col gap-1">
-          <span className="text-xs text-label">{copy.chief}</span>
+          <span className="text-meta text-label">{copy.chief}</span>
           <span
             key={preview.speech}
             aria-live="polite"
-            className="animate-hb-in rounded-[2px_12px_12px_12px] bg-text-strong px-3 py-2.5 text-sm leading-5 text-ground"
+            className="animate-hb-in rounded-[2px_12px_12px_12px] bg-text-strong px-3 py-2.5 text-ui leading-5 text-ground"
           >
             {preview.speech}
           </span>
@@ -180,7 +180,7 @@ function PreviewPanel({ preview }: { preview: Preview }) {
       {preview.summary && (
         <ul aria-label={copy.soFar} className="m-0 flex list-none flex-col gap-1 border-line border-t pt-2.5 ps-0">
           {preview.summary.map((line) => (
-            <li key={line.label} className="flex gap-2 text-[13px] leading-[18px]">
+            <li key={line.label} className="flex gap-2 text-detail leading-[18px]">
               <span aria-hidden className={cn("w-3", line.value ? "text-mint" : "text-label")}>
                 {line.value ? "✓" : "·"}
               </span>
@@ -219,14 +219,14 @@ function Stepper({ step }: { step: number }) {
             <span
               aria-current={current ? "step" : undefined}
               className={cn(
-                "flex min-w-0 items-center gap-2 px-2 py-1.5 text-sm",
+                "flex min-w-0 items-center gap-2 px-2 py-1.5 text-ui",
                 current || done ? "text-text-strong" : "text-text-secondary",
               )}
             >
               <span
                 aria-hidden
                 className={cn(
-                  "grid size-[22px] flex-none place-items-center rounded-full text-xs font-bold",
+                  "grid size-[22px] flex-none place-items-center rounded-full text-meta font-bold",
                   done ? "bg-moonlight text-ground" : current ? "bg-lantern text-on-lantern" : "bg-line-2",
                 )}
               >
