@@ -33,19 +33,19 @@ test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home
   await expect(page).toHaveURL(/#\/welcome$/);
   await page.getByRole("link", { name: "Get started" }).click();
 
-  await expect(page.getByRole("heading", { name: "Where should Hobbots run?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Where should your hobs live?" })).toBeVisible();
   await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
 
-  await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
   await page.getByRole("button", { name: "Connect Claude" }).click();
   await expect(page.getByText("✓ Connected")).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  await expect(page.getByRole("heading", { name: "Meet your first hob" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Who should help you first?" })).toBeVisible();
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Pip");
   await page.getByRole("button", { name: "Continue" }).click();
 
-  await expect(page.getByRole("heading", { name: "How much should Pip ask first?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How careful should your hobs be?" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "Where can hobs work?" })).toBeVisible();
@@ -55,8 +55,8 @@ test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home
   await expect(page.getByRole("heading", { name: "Use Hobbots on your phone too?" })).toBeVisible();
   await page.getByRole("button", { name: "Skip for now" }).click();
 
-  await expect(page.getByRole("heading", { name: "Ready to summon" })).toBeVisible();
-  await page.getByRole("button", { name: "Summon Pip" }).click();
+  await expect(page.getByRole("heading", { name: "Everything is ready" })).toBeVisible();
+  await page.getByRole("button", { name: "Light the circle" }).click();
   await expect(page.getByRole("heading", { name: "Pip is here!" })).toBeVisible();
   await page.getByRole("link", { name: "Go to Home" }).click();
 
@@ -86,7 +86,7 @@ const openProviders = async (page: Page, current: Hub) => {
   await openApp(page, current);
   await page.getByRole("link", { name: "Get started" }).click();
   await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
-  await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
 };
 
 /** Setup stays on the providers step: Continue is marked unavailable and only asks for a provider. */
@@ -97,7 +97,7 @@ const expectBlocked = async (page: Page) => {
   // aria-disabled leaves the button clickable, so a user can still press it and read why.
   await next.click({ force: true });
   await expect(page.getByText("Connect one provider first", { exact: false })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
 };
 
 // covers AG-005, OP-001
@@ -132,4 +132,30 @@ test("[TC-AG-010] a signed-out Claude Code blocks onboarding and shows how to si
   await expect(claude.getByText(/installed but not signed in/)).toBeVisible();
   await expect(claude.getByRole("button", { name: "Check again" })).toBeVisible();
   await expectBlocked(page);
+});
+
+// covers OP-001
+test("[TC-OP-076] first run shows Workshop Night whatever theme is saved, and the saved theme comes back after it", async ({
+  page,
+}) => {
+  hub = await startHub(dataDir);
+  await openApp(page, hub);
+  await page.evaluate(() => localStorage.setItem("hobbots.theme", JSON.stringify("lamplight-paper")));
+  await page.reload();
+
+  const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
+  await expect(page).toHaveURL(/#\/welcome$/);
+  expect(await theme()).toBe("workshop-night");
+  await page.getByRole("link", { name: "Get started" }).click();
+  await expect(page.getByRole("heading", { name: "Where should your hobs live?" })).toBeVisible();
+  expect(await theme()).toBe("workshop-night");
+  await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
+  await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
+  expect(await theme()).toBe("workshop-night");
+
+  // "I already use Hobbots" skips setup and opens Home in the theme picked on this device.
+  await page.goto(`${hub.url}/#/welcome`);
+  await page.getByRole("button", { name: "I already use Hobbots" }).click();
+  await expect(page).toHaveURL(atHome);
+  await expect.poll(theme).toBe("lamplight-paper");
 });

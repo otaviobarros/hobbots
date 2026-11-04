@@ -59,10 +59,10 @@ test("[TC-UX-089] Your hobs shows every hob as a card, filters by state, finds b
   await expect(main).toContainText("0 need you · 0 working · 24 resting");
 
   // Every hob is a card, followed by the Summon card.
-  const cards = main.getByRole("link", { name: /, Resting$/ });
+  const cards = main.getByRole("link", { name: /, New$/ });
   await expect(cards).toHaveCount(24);
-  await expect(main.getByRole("link", { name: "Wick, Resting" })).toContainText("Cartographer");
-  await expect(main.getByRole("link", { name: "Wick, Resting" })).toContainText("No chats yet");
+  await expect(main.getByRole("link", { name: "Wick, New" })).toContainText("Cartographer");
+  await expect(main.getByRole("link", { name: "Wick, New" })).toContainText("No chats yet");
   await expect(main.getByRole("link", { name: /^Summon a hob/ })).toHaveCount(2);
 
   // The chips count each state; a filter lives in the URL.
@@ -85,7 +85,7 @@ test("[TC-UX-089] Your hobs shows every hob as a card, filters by state, finds b
   await expect(cards).toHaveCount(24);
 
   // A card opens the hob's page, and its breadcrumb comes back.
-  await main.getByRole("link", { name: "Wick, Resting" }).click();
+  await main.getByRole("link", { name: "Wick, New" }).click();
   await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Wick}$`));
   await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Your hobs" }).click();
   await expect(page).toHaveURL(/#\/hobs$/);

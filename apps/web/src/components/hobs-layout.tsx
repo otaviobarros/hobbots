@@ -9,9 +9,9 @@ import { ArchiveProvider } from "./archive/archive-context.tsx";
 import { ThreadMain, type WorkspaceMainProps } from "./archived-threads/archived-threads.tsx";
 import { HobList } from "./hob-list.tsx";
 import { useNoteDrafts } from "./quest/note-box.tsx";
-import { TaskDrawer } from "./quest/task-drawer.tsx";
 import { usePins } from "./quest/use-work.ts";
 import { SidePanel } from "./side-panel.tsx";
+import { WorkSheet } from "./work-sheet/work-sheet.tsx";
 import type { WorkbenchView } from "./workbench/use-workbench.ts";
 import { Workbench } from "./workbench/workbench.tsx";
 
@@ -29,8 +29,10 @@ interface WorkspaceProps {
   threadId?: ThreadId | undefined;
   /** A message to scroll to and mark, such as a search match. */
   focusMessageId?: string | undefined;
-  /** A Task to show in the drawer beside the chat. */
+  /** A Task to show in the work sheet over the chat. */
   taskId?: TaskId | undefined;
+  /** A request's Quest, by its top Task, to show in the work sheet. */
+  questId?: TaskId | undefined;
   main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
   /** A Task's Workbench to show in the chat's place (ADR 023). */
   workbench?: WorkbenchView | undefined;
@@ -56,6 +58,7 @@ function Workspace({
   threadId,
   focusMessageId,
   taskId,
+  questId,
   main = (props) => <ThreadMain {...props} />,
   workbench,
   aside,
@@ -72,7 +75,6 @@ function Workspace({
   return (
     <div className="flex min-w-0 flex-1">
       {navOpen && <HobList hobId={hobId} threadId={threadId} onHide={() => setNavOpen(false)} />}
-      {/* The drawer opens over the end of the chat, so the conversation keeps its width. */}
       <div className="relative flex min-w-0 flex-1">
         {/* The Workbench covers the chat without unmounting it, so going back finds the same scroll
             position and unsent message; meanwhile the chat is hidden from sight and focus. */}
@@ -87,18 +89,17 @@ function Workspace({
             onTogglePanel: () => setPanelOpen(!panelOpen),
           })}
         </div>
-        {/* The drawer also stays mounted under the Workbench, so Back to the task finds its unsent notes. */}
-        {threadId !== undefined && taskId !== undefined && (
-          <div className={cn(benchOpen && "invisible")} inert={benchOpen}>
-            <TaskDrawer
-              key={threadId}
-              hobId={hobId}
-              threadId={threadId}
-              taskId={taskId}
-              pinned={pins.pinned}
-              drafts={drafts}
-            />
-          </div>
+        {/* The sheet closes while the Workbench covers the chat; Back to the task opens it again. */}
+        {threadId !== undefined && !benchOpen && (
+          <WorkSheet
+            key={threadId}
+            hobId={hobId}
+            threadId={threadId}
+            questId={questId}
+            taskId={taskId}
+            pins={pins}
+            drafts={drafts}
+          />
         )}
         {threadId !== undefined && workbench !== undefined && (
           <Workbench hobId={hobId} threadId={threadId} view={workbench} pinned={pins.pinned} drafts={drafts} />

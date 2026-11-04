@@ -13,8 +13,6 @@ export const messages = {
   providers: {
     names: { "claude-code": "Claude", codex: "Codex" },
     makers: { "claude-code": "Anthropic · Claude Code", codex: "OpenAI · ChatGPT plan" },
-    /** The providers the user connected, already joined as a list in the reader's locale. */
-    connected: ({ names }: { names: string }) => `${names} connected`,
     connectedCount: ({ count }: { count: number }) =>
       pluralForm(count, { one: "1 provider connected", other: `${formatCount(count)} providers connected` }),
     plan: { "claude-code": "Your Claude plan", codex: "Your ChatGPT plan" },
@@ -25,18 +23,44 @@ export const messages = {
     /** The first hob in the summary of the steps so far, such as "Pip the Writer on Claude". */
     hobOn: ({ hob, provider }: { hob: string; provider: string }) => `${hob} on ${provider}`,
     presetSafety: ({ preset }: { preset: string }) => `${preset} safety`,
+    frame: {
+      stage: "Set up Hobbots",
+      stageStep: ({ step, of }: { step: number; of: number }) => `Set up Hobbots · Step ${step} of ${of}`,
+      stageExtra: "Set up Hobbots · Optional extra",
+      steps: "Setup steps",
+      stepNames: ["Your AI", "First hob", "Safety", "Folders", "Ready"],
+      preview: "Preview",
+      chief: "The Chief",
+      soFar: "So far",
+      notYet: "Not yet",
+      summaryNames: ["Your AI", "First hob", "Safety", "Folders", "Other devices"],
+      yourHob: "Your hob",
+      folders: ({ count }: { count: number }) =>
+        pluralForm(count, { one: "1 folder", other: `${formatCount(count)} folders` }),
+      noFolders: "No folders",
+      devicesOn: "On",
+      devicesLater: "Later",
+    },
     providers: {
       guide: {
-        looking: "Welcome, friend! Let me peek around your Mac for an AI helper you already use.",
+        looking: "Let me peek around this Mac for an AI you already use…",
         found: ({ provider }: { provider: string }) =>
-          `There it is! ${provider} is ready on this Mac. Connect it, and your hobs will think with it.`,
+          `There it is! ${provider} is on this Mac. Connect it and my lantern will light up.`,
         connected: "Splendid! That door is open, so your hobs can think with it. Continue when you like.",
         fix: "Your hobs need an AI to think with. Each one here needs a little fix first; follow the steps, then check again.",
         nudge: "Connect one provider first, otherwise the hobs have nothing to think with!",
       },
-      heading: "Which AI do you already use?",
-      intro:
-        "Hobs think with your own subscription or key. Either one is enough, and you can change this any time in Settings.",
+      heading: "Which AI should your hobs think with?",
+      intro: "Hobbots works with the AI plan you already pay for. Nothing new to buy.",
+      checksItself: "Hobbots also checks by itself every few seconds.",
+      preview: {
+        looking: "Looking…",
+        lookingCaption: "Looking for an AI…",
+        found: ({ provider }: { provider: string }) => `${provider} found`,
+        fix: "Needs a fix",
+        connected: "Connected, so your hobs can think",
+        notYet: "Not connected yet",
+      },
       privacy: "Hobbots never sees your password. It reuses the tool already signed in on this Mac.",
       tags: {
         found: "Found",
@@ -86,8 +110,8 @@ export const messages = {
       saveFailed: "Hobbots could not save that. Try again in a moment.",
       connectOne: "Connect at least one to continue",
       later: {
+        heading: "Or connect another",
         tag: "Later",
-        arrives: "Arrives in a later version",
         label: ({ provider }: { provider: string }) => `${provider}, coming later`,
         gemini: { name: "Gemini", maker: "Google", how: "Sign in with your Google account." },
         grok: { name: "Grok", maker: "xAI", how: "Paste an API key from your xAI account." },
@@ -96,9 +120,9 @@ export const messages = {
       },
     },
     firstHob: {
-      guide: "Now the fun part. Every hob has a role on your team. Pick one, a name and a cloak.",
-      heading: "Meet your first hob",
-      intro: "Pick a role or name your own. Every hob looks different.",
+      guide: "Now the fun part. Who should help you first? Watch them take shape here.",
+      heading: "Who should help you first?",
+      intro: "Pick the closest one. You can summon more hobs any time.",
       legend: "Your first hob",
       legendSent: ({ name }: { name: string }) => `${name}, as sent`,
       role: "Role",
@@ -119,28 +143,28 @@ export const messages = {
     },
     safety: {
       guide: "A good hob always asks before doing something you cannot undo. How careful should yours be?",
-      heading: ({ name }: { name: string }) => `How much should ${name} ask first?`,
-      intro: "Hobs read, edit, run and browse inside the folders you pick next. Pick how often they ask you first.",
+      heading: "How careful should your hobs be?",
+      intro: "Whatever you pick, hobs never leave the folders you give them.",
       preset: "Safety preset",
     },
     folders: {
       guide: "Pick the folders your hobs share. You can give one hob more of its own later, from its profile.",
       heading: "Where can hobs work?",
-      intro:
-        "Every hob can work in these folders, and nowhere else on this computer. You can give one hob more folders of its own from its profile.",
+      intro: "Pick the folders your hobs may read and change. Everything else on this computer stays closed to them.",
       none: "No folders is fine, hobs can still chat",
     },
     ready: {
-      guide: "Everything is ready. Light the circle and your first hob will appear.",
-      doneGuide: "There it is! Say hello. I will be in the corner of Home if you need me.",
-      heading: "Ready to summon",
-      thinksWith: ({ hob, provider, model }: { hob: string; provider: string; model: string }) =>
-        `${hob} · thinks with ${provider} ${model}`,
+      guide: ({ name }: { name: string }) => `All set. Light the circle and I'll call ${name}.`,
+      heading: "Everything is ready",
+      intro: "Here's what you picked. Light the circle and the Chief will call your first hob.",
+      change: ({ step }: { step: string }) => `Change ${step}`,
+      changeShort: "Change",
+      devicesLater: "Later, in Settings",
       rejected: ({ name, reason }: { name: string; reason: string }) =>
         `Hobbots could not create ${name}: ${reason}. Go back to change it.`,
       failed: ({ name }: { name: string }) => `Hobbots could not finish summoning ${name}. Try again in a moment.`,
       tryAgain: "Try again",
-      summon: ({ name }: { name: string }) => `Summon ${name}`,
+      summon: "Light the circle",
       calling: ({ name }: { name: string }) => `The Chief is calling ${name}…`,
       here: ({ name }: { name: string }) => `${name} is here!`,
       chiefWelcome: ({ name }: { name: string }) => `Welcome, ${name}! I'll be in the corner of Home if you need me.`,
@@ -830,11 +854,11 @@ export const messages = {
   where: {
     stage: "Getting started",
     elder: "Elder Hob",
-    speech:
-      "Hello again! First, where should your hobs live? They need one home computer. Your other devices can visit it.",
-    title: "Where should Hobbots run?",
+    speech: "Hello, I'm the Chief. First things first: your hobs need one home computer. This one?",
+    caption: "This computer becomes the hub",
+    title: "Where should your hobs live?",
     intro:
-      "Your hobs live on one computer, the hub. It keeps working in the background, even with the window closed. Hobs always work on the hub, and your other devices can open it over Tailscale.",
+      "Hobs live on one computer, your hub. It keeps working in the background, even with the window closed. Your other devices can visit it.",
     here: {
       title: "Run Hobbots on this computer",
       body: "This computer becomes the hub. Hobs, chats and files live here, and hobs work with this computer's folders and apps.",
@@ -854,7 +878,6 @@ export const messages = {
     saveFailed: "Hobbots could not save that. Try again in a moment.",
   },
   remoteSetup: {
-    eyebrow: "Optional extra",
     title: "Use Hobbots on your phone too?",
     intro:
       "Open your hobs from your laptop or phone, over your own private network. Nothing is open to the internet. You can skip this and turn it on later.",
@@ -883,8 +906,11 @@ export const messages = {
     continue: "Continue",
     hintOn: "Other devices can connect after you allow them",
     hintOff: "You can turn this on later",
+    captionOff: "Only this computer, for now",
+    captionOn: "Your phone can visit",
     elder: {
-      ready: "Want your hobs on your laptop or phone too? Tailscale makes a private path between your own devices.",
+      on: "Lovely. Your phone can visit now. It asks you once, the first time.",
+      ready: "Want your hobs on your phone too? This part is optional.",
       missing: "Tailscale is not ready on this computer yet. You can skip this and turn it on later in Settings.",
     },
   },

@@ -62,6 +62,11 @@ export const messages = {
     list: "Items waiting",
     heading: "Waiting on",
   },
+  task: {
+    label: ({ title }: { title: string }) => `Backpack for ${title}`,
+    list: "Items in the backpack",
+    heading: "Backpack",
+  },
   workspace: {
     label: "What every hob is waiting on",
     list: "Every hob's items",

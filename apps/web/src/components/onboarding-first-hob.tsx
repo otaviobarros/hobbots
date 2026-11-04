@@ -20,7 +20,7 @@ import {
 } from "../api/first-hob.ts";
 import { modelsQuery, runtimesQuery } from "../api/queries.ts";
 import { setupQuery } from "../api/setup.ts";
-import { connectedLines, readyProviders } from "../lib/providers.ts";
+import { readyProviders } from "../lib/providers.ts";
 import {
   ChoresField,
   ColorSwatches,
@@ -39,6 +39,7 @@ import {
 import { HobSprite } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
+import { connectedChip, previewHob, setupSummary } from "./onboarding-preview.ts";
 import { ProviderChoices } from "./provider-choices.tsx";
 
 const shared = messages.onboarding;
@@ -197,19 +198,23 @@ export function OnboardingFirstHob() {
   return (
     <OnboardingFrame
       step={1}
-      guide={copy.guide}
-      sofar={connectedLines(connected)}
+      preview={{
+        chip: connectedChip(setup.data),
+        hob: previewHob(draft),
+        speech: copy.guide,
+        summary: setupSummary(1, setup.data, draft),
+      }}
       footer={
         <>
-          <Button variant="outline" onClick={back}>
-            {shared.back}
-          </Button>
           <span
             id="first-hob-hint"
-            className={cn("flex-1 text-right text-sm", problem && tried ? "text-lantern" : "text-text-secondary")}
+            className={cn("flex-1 text-sm", problem && tried ? "text-lantern" : "text-text-secondary")}
           >
             {hint}
           </span>
+          <Button variant="outline" onClick={back}>
+            {shared.back}
+          </Button>
           <Button
             onClick={next}
             aria-disabled={problem !== undefined}
@@ -226,7 +231,7 @@ export function OnboardingFirstHob() {
       }
     >
       {/* Disabled once sent: the hob may already exist with exactly these choices. */}
-      <fieldset disabled={locked} className="m-0 flex min-w-0 animate-hb-in gap-6 border-0 p-0 disabled:opacity-85">
+      <fieldset disabled={locked} className="m-0 flex min-w-0 flex-col gap-6 border-0 p-0 disabled:opacity-85">
         <legend className="sr-only">{locked ? copy.legendSent({ name: draft.name.trim() }) : copy.legend}</legend>
         <div className="flex min-w-0 flex-1 flex-col gap-3.5">
           <div>

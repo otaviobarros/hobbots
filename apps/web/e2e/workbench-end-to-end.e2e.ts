@@ -9,6 +9,9 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
+// Wide enough that the Changes and Files lists sit beside the file; under 720px a picker takes their place.
+test.use({ viewport: { width: 1600, height: 900 } });
+
 /** A fake command that really changes Aldric's folder: text to write, null to delete. */
 const run = (input: object) => `fake:run ${JSON.stringify(input)}`;
 

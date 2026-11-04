@@ -7,9 +7,10 @@ import { type ReactNode, useState } from "react";
 import { runtimesQuery } from "../api/queries.ts";
 import { canContinueSetup, claudeInstallGuide, codexInstallGuide, runtimeProblem } from "../api/runtime-health.ts";
 import { useUpdateSetup, watchedSetupQuery } from "../api/setup.ts";
-import { connectedLines, PROVIDER_MAKERS, PROVIDER_MARKS, PROVIDER_NAMES, PROVIDERS } from "../lib/providers.ts";
+import { PROVIDER_MAKERS, PROVIDER_MARKS, PROVIDER_NAMES, PROVIDERS } from "../lib/providers.ts";
 import { messages } from "./messages.ts";
-import { OnboardingFrame } from "./onboarding-frame.tsx";
+import { OnboardingFrame, type PreviewChip } from "./onboarding-frame.tsx";
+import { setupSummary } from "./onboarding-preview.ts";
 import { providerFix, WithCommand } from "./provider-fix.tsx";
 
 const shared = messages.onboarding;
@@ -19,6 +20,8 @@ const INSTALL_GUIDES: Readonly<Record<RuntimeKind, string>> = {
   "claude-code": claudeInstallGuide,
   codex: codexInstallGuide,
 };
+
+const RECHECK_MS = 5000;
 
 // Providers from the Hobbots design that arrive in a later slice.
 const LATER = [
@@ -61,17 +64,6 @@ const TAG: Record<ProviderState, { label: string; className: string } | null> = 
   unknown: { label: copy.tags.unknown, className: "bg-line-2 text-text-strong" },
 };
 
-const BORDER: Record<ProviderState, string> = {
-  checking: "border-lantern",
-  found: "border-control",
-  connected: "border-mint",
-  notFound: "border-line-2",
-  notStarted: "border-rose",
-  outdated: "border-rose",
-  signedOut: "border-control",
-  unknown: "border-line-2",
-};
-
 const claudeHow = (state: ProviderState, claude: RuntimeHealth | undefined): ReactNode => {
   const words = copy.claude;
   const version = claude?.version ?? null;
@@ -112,30 +104,30 @@ const codexHow = (state: ProviderState, codex: RuntimeHealth | undefined): React
 const how = (runtime: RuntimeKind, state: ProviderState, health: RuntimeHealth | undefined): ReactNode =>
   runtime === "codex" ? codexHow(state, health) : claudeHow(state, health);
 
-function ProviderMark({ mark, tile }: { mark: string; tile: string }) {
+function ProviderMark({ mark, tile, small = false }: { mark: string; tile: string; small?: boolean }) {
   return (
     <span
       aria-hidden
-      className={cn("cut grid size-9 flex-none place-items-center text-[19px] font-bold text-provider-ink", tile)}
+      className={cn(
+        "grid flex-none place-items-center rounded-control font-bold text-provider-ink",
+        small ? "size-[26px] text-[13px]" : "size-9",
+        tile,
+      )}
     >
       {mark}
     </span>
   );
 }
 
-/** The bottom of a provider card: what the provider's state is and what the user can do about it. */
-function CardFooter({ children }: { children: ReactNode }) {
-  return (
-    <div className="mt-auto flex min-h-11 items-center justify-between gap-2.5 border-line border-t-2 pt-2.5">
-      {children}
-    </div>
-  );
-}
-
+/** A wait the card is in: looking for the provider, or saving the user's Connect or Disconnect. */
 function Busy({ children }: { children: ReactNode }) {
   return (
-    <span className="text-sm text-lantern">
-      {children} <span className="animate-hb-blink">•••</span>
+    <span className="flex items-center gap-2 text-sm text-text-secondary">
+      <span
+        aria-hidden
+        className="size-3.5 animate-spin rounded-full border-2 border-line-2 border-t-moonlight motion-reduce:animate-none"
+      />
+      {children}…
     </span>
   );
 }
@@ -147,8 +139,8 @@ const planLine = (runtime: RuntimeKind, health: RuntimeHealth | undefined) => {
   return messages.providers.plan[runtime];
 };
 
-/** The card's footer for a provider that needs a fix: its install guide when missing, and Check again. */
-function FixFooter({
+/** Under a provider that needs a fix: its install guide when missing, Check again, and that it checks by itself. */
+function FixActions({
   runtime,
   state,
   onCheckAgain,
@@ -158,15 +150,16 @@ function FixFooter({
   onCheckAgain: () => void;
 }) {
   return (
-    <>
-      <span className="text-xs text-label">
-        {state === "outdated" && runtime === "claude-code" ? (
+    <div className="flex flex-col gap-2">
+      {state === "outdated" && runtime === "claude-code" && (
+        <span className="text-sm text-text-secondary">
           <WithCommand text={copy.claude.update} command={copy.claude.updateCommand} />
-        ) : (
-          copy.noRestart
-        )}
-      </span>
-      <CardFooter>
+        </span>
+      )}
+      <span className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={onCheckAgain}>
+          {copy.checkAgain}
+        </Button>
         {state === "notFound" && (
           <Button asChild variant="outline" size="sm">
             <a href={INSTALL_GUIDES[runtime]} target="_blank" rel="noreferrer">
@@ -174,11 +167,9 @@ function FixFooter({
             </a>
           </Button>
         )}
-        <Button variant="outline" size="sm" className="ml-auto border-lantern" onClick={onCheckAgain}>
-          {copy.checkAgain}
-        </Button>
-      </CardFooter>
-    </>
+        <span className="text-[13px] text-label">{copy.checksItself}</span>
+      </span>
+    </div>
   );
 }
 
@@ -196,98 +187,83 @@ interface ProviderCardProps {
   onDisconnect: () => void;
 }
 
-/** What a provider card's footer shows: the wait, Connect, Connected with Disconnect, or the fix. */
-function ProviderFooter({
-  runtime,
-  state,
-  health,
-  checking,
-  saving,
-  locked,
-  onCheckAgain,
-  onConnect,
-  onDisconnect,
-}: ProviderCardProps) {
+/** The right of a card's header: the wait, Connect, Connected with Disconnect, or the problem's tag. */
+function ProviderStatus({ runtime, state, checking, saving, locked, onConnect, onDisconnect }: ProviderCardProps) {
   const name = PROVIDER_NAMES[runtime];
   const ready = state === "found" || state === "connected";
-  if (saving) {
-    return (
-      <CardFooter>
-        <Busy>{saving === "connect" ? copy.connecting : copy.disconnecting}</Busy>
-      </CardFooter>
-    );
-  }
-  if (state === "checking" || (checking && !ready)) {
-    return (
-      <CardFooter>
-        <Busy>{copy.looking}</Busy>
-      </CardFooter>
-    );
-  }
+  if (saving) return <Busy>{saving === "connect" ? copy.connecting : copy.disconnecting}</Busy>;
+  if (state === "checking" || (checking && !ready)) return <Busy>{copy.looking}</Busy>;
   if (state === "found") {
     return (
-      <CardFooter>
-        <span className="text-[13px] text-label">{copy.notConnected}</span>
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-none"
-          aria-label={copy.connectLabel({ provider: name })}
-          disabled={locked}
-          onClick={onConnect}
-        >
-          {copy.connect}
-        </Button>
-      </CardFooter>
+      <Button
+        className="flex-none"
+        aria-label={copy.connectLabel({ provider: name })}
+        disabled={locked}
+        onClick={onConnect}
+      >
+        {copy.connect}
+      </Button>
     );
   }
   if (state === "connected") {
-    const plan = planLine(runtime, health);
     return (
-      <CardFooter>
-        <span className="flex min-w-0 flex-col leading-tight">
-          <span className="animate-hb-pop truncate text-sm font-bold text-mint">{copy.connected}</span>
-          {plan && <span className="truncate text-[13px] text-text-secondary">{plan}</span>}
+      <span className="flex flex-none items-center gap-2">
+        <span className="animate-hb-pop rounded-tag bg-mint px-2 py-0.5 text-[13px] font-bold text-ground">
+          {copy.connected}
         </span>
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="flex-none"
           aria-label={copy.disconnectLabel({ provider: name })}
           disabled={locked}
           onClick={onDisconnect}
         >
           {copy.disconnect}
         </Button>
-      </CardFooter>
+      </span>
     );
   }
-  return <FixFooter runtime={runtime} state={state} onCheckAgain={onCheckAgain} />;
+  const tag = TAG[state];
+  return tag ? (
+    <span className={cn("rounded-tag px-2 py-0.5 text-[13px] font-bold", tag.className)}>{tag.label}</span>
+  ) : null;
+}
+
+/** What a card says under its header: why it is ready, which plan it bills, or the fix. */
+function ProviderBody(props: ProviderCardProps) {
+  const { runtime, state, health, checking, saving, onCheckAgain } = props;
+  if (state === "checking" || (checking && state !== "found" && state !== "connected" && !saving)) return null;
+  const plan = state === "connected" ? planLine(runtime, health) : undefined;
+  const fixing = state !== "found" && state !== "connected";
+  return (
+    <div className="flex flex-col gap-2.5">
+      <span className="text-sm leading-5 text-text-secondary">
+        {how(runtime, state, health)}
+        {plan && <span className="block">{plan}</span>}
+      </span>
+      {fixing && <FixActions runtime={runtime} state={state} onCheckAgain={onCheckAgain} />}
+    </div>
+  );
 }
 
 /** One provider found, or not, on this computer: its state, what it means and what to do. */
 function ProviderCard(props: ProviderCardProps) {
-  const { runtime, state, health, saving } = props;
-  const tag = TAG[state];
+  const { runtime } = props;
   const look = PROVIDER_MARKS[runtime];
   const headingId = `provider-${runtime}`;
   return (
-    <section
-      aria-labelledby={headingId}
-      className={`cut flex flex-col gap-2.5 border-2 bg-card p-3.5 ${saving ? "border-lantern" : BORDER[state]}`}
-    >
-      <div className="flex items-center gap-2.5">
+    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-card bg-card p-[18px]">
+      <div className="flex items-center gap-3">
         <ProviderMark mark={look.mark} tile={look.tile} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <h2 id={headingId} className="m-0 text-base font-bold">
+          <h2 id={headingId} className="m-0 text-[17px] font-bold">
             {PROVIDER_NAMES[runtime]}
           </h2>
           <span className="text-[13px] text-text-secondary">{PROVIDER_MAKERS[runtime]}</span>
         </div>
-        {tag && <span className={`px-[7px] py-0.5 text-xs font-bold ${tag.className}`}>{tag.label}</span>}
+        <ProviderStatus {...props} />
       </div>
-      <span className="min-h-9 text-[13px] leading-snug text-text-secondary">{how(runtime, state, health)}</span>
-      <ProviderFooter {...props} />
+      <ProviderBody {...props} />
     </section>
   );
 }
@@ -305,6 +281,25 @@ const guideFor = (
   return found ? copy.guide.found({ provider: PROVIDER_NAMES[found[0]] }) : copy.guide.fix;
 };
 
+type States = ReadonlyArray<readonly [RuntimeKind, ProviderState]>;
+
+/** The AI tag over the preview's sky: looking, the provider found or connected, or that it needs a fix. */
+const previewChip = (states: States): PreviewChip => {
+  const connected = states.find(([, state]) => state === "connected");
+  if (connected) return { label: PROVIDER_NAMES[connected[0]], tone: "connected" };
+  if (states.some(([, state]) => state === "checking")) return { label: copy.preview.looking, tone: "looking" };
+  const found = states.find(([, state]) => state === "found");
+  if (found) return { label: copy.preview.found({ provider: PROVIDER_NAMES[found[0]] }), tone: "found" };
+  const first = states[0]?.[1];
+  return { label: first && TAG[first] ? (TAG[first]?.label ?? "") : copy.preview.fix, tone: "problem" };
+};
+
+const captionFor = (states: States): string => {
+  if (states.some(([, state]) => state === "connected")) return copy.preview.connected;
+  if (states.some(([, state]) => state === "checking")) return copy.preview.lookingCaption;
+  return copy.preview.notYet;
+};
+
 /**
  * Onboarding step 1: the providers found on this computer, Claude Code and Codex. A ready provider
  * shows as found until the user connects it; the choice is stored on the hub, and setup continues
@@ -316,7 +311,11 @@ export function OnboardingProviders() {
   const router = useRouter();
   const canGoBack = useCanGoBack();
   const providers = useUpdateSetup();
-  const runtimes = useQuery(runtimesQuery);
+  // While no provider is ready, it checks again every few seconds, so a fix in a terminal shows by itself.
+  const runtimes = useQuery({
+    ...runtimesQuery,
+    refetchInterval: (query) => (query.state.data?.some((h) => h.availability === "ready") ? false : RECHECK_MS),
+  });
   // Another window or device may connect or disconnect a provider while this step is open.
   const setup = useQuery(watchedSetupQuery);
   const connected = setup.data?.connectedProviders ?? [];
@@ -362,20 +361,25 @@ export function OnboardingProviders() {
   return (
     <OnboardingFrame
       step={0}
-      guide={guide}
-      sofar={connectedLines(readyConnected)}
+      preview={{
+        chip: previewChip(states),
+        hob: "ghost",
+        caption: captionFor(states),
+        speech: guide,
+        summary: setupSummary(0, undefined, null),
+      }}
       footer={
         <>
-          <Button variant="outline" onClick={back}>
-            {shared.back}
-          </Button>
           <span
             id="providers-hint"
             role={failed ? "alert" : undefined}
-            className={`flex-1 text-right text-sm ${failed ? "text-rose" : ready ? "text-text-secondary" : "text-lantern"}`}
+            className={`flex-1 text-[13px] ${failed ? "text-rose" : ready ? "text-text-secondary" : "text-label"}`}
           >
             {failed ? copy.saveFailed : ready ? messages.providers.connectedCount({ count }) : copy.connectOne}
           </span>
+          <Button variant="outline" onClick={back}>
+            {shared.back}
+          </Button>
           <Button
             onClick={next}
             aria-disabled={!ready}
@@ -392,46 +396,45 @@ export function OnboardingProviders() {
         </>
       }
     >
-      <div className="flex animate-hb-in flex-col gap-1.5">
-        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.heading}</h1>
-        <p className="m-0 mb-3.5 text-text-secondary">{copy.intro}</p>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
-          {states.map(([runtime, state]) => (
-            <ProviderCard
-              key={runtime}
-              runtime={runtime}
-              state={state}
-              health={healthOf(runtime)}
-              checking={runtimes.isFetching}
-              saving={savingFor(runtime)}
-              locked={providers.isPending}
-              onCheckAgain={() => void runtimes.refetch()}
-              onConnect={() => change(runtime, true)}
-              onDisconnect={() => change(runtime, false)}
-            />
-          ))}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.heading}</h1>
+          <p className="m-0 text-text-secondary">{copy.intro}</p>
+        </div>
+        {states.map(([runtime, state]) => (
+          <ProviderCard
+            key={runtime}
+            runtime={runtime}
+            state={state}
+            health={healthOf(runtime)}
+            checking={runtimes.isFetching && state === "checking"}
+            saving={savingFor(runtime)}
+            locked={providers.isPending}
+            onCheckAgain={() => void runtimes.refetch()}
+            onConnect={() => change(runtime, true)}
+            onDisconnect={() => change(runtime, false)}
+          />
+        ))}
+        <span className="lbl text-label">{copy.later.heading}</span>
+        <div className="flex flex-col gap-1.5">
           {LATER.map((p) => (
             <section
               key={p.name}
               aria-label={copy.later.label({ provider: p.name })}
-              className="cut flex flex-col gap-2.5 border-2 border-line-2 bg-card p-3.5"
+              className="flex items-center gap-3 rounded-control bg-card px-3.5 py-2.5"
             >
-              <div className="flex items-center gap-2.5">
-                <ProviderMark mark={p.mark} tile={p.tile} />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-base font-bold">{p.name}</span>
-                  <span className="text-[13px] text-text-secondary">{p.maker}</span>
-                </div>
-                <span className="bg-lantern px-[7px] py-0.5 text-xs font-bold text-ground">{copy.later.tag}</span>
-              </div>
-              <span className="min-h-9 text-[13px] leading-snug text-text-secondary">{p.how}</span>
-              <CardFooter>
-                <span className="text-[13px] text-label">{copy.later.arrives}</span>
-              </CardFooter>
+              <ProviderMark mark={p.mark} tile={p.tile} small />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <strong className="text-[15px]">{p.name}</strong>
+                <span className="truncate text-[13px] text-text-secondary">{p.how}</span>
+              </span>
+              <span className="flex-none rounded-tag bg-line-2 px-2 py-0.5 text-[13px] font-bold">
+                {copy.later.tag}
+              </span>
             </section>
           ))}
         </div>
-        <p className="mt-3 mb-0 text-[13px] text-label">{copy.privacy}</p>
+        <p className="m-0 text-[13px] text-label">{copy.privacy}</p>
       </div>
     </OnboardingFrame>
   );

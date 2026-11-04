@@ -8,8 +8,8 @@ import { setupQuery } from "../api/setup.ts";
 import { RemoteAddress } from "./devices/remote-address.tsx";
 import { messages } from "./messages.ts";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
+import { builtPreview } from "./onboarding-preview.ts";
 import { useFirstHobDraft } from "./onboarding-safety.tsx";
-import { soFar } from "./onboarding-summon.tsx";
 import { remoteAccessWhy, remoteAddress, tailnetName, useRemoteAccessSwitch } from "./remote-access-settings.tsx";
 import { TailscaleNotReady } from "./tailscale-not-ready.tsx";
 
@@ -37,6 +37,12 @@ function RemoteAccessOn({ status }: { status: RemoteAccessStatus }) {
     </div>
   );
 }
+
+/** What the Chief says on Other devices: pleased once it is on, else whether Tailscale is ready. */
+const devicesSpeech = (on: boolean, tailscale: RemoteAccessStatus["tailscale"] | null) => {
+  if (on) return copy.elder.on;
+  return tailscale === null || tailscale.state === "running" ? copy.elder.ready : copy.elder.missing;
+};
 
 /**
  * Setup's optional step after Folders (ADR 021): use Hobbots from your other devices over
@@ -67,14 +73,17 @@ export function SetupRemoteAccess() {
   return (
     <OnboardingFrame
       step={3}
-      guide={tailscale === null || ready ? copy.elder.ready : copy.elder.missing}
-      sofar={soFar(setup.data, draft)}
+      extra
+      preview={builtPreview(setup.data, draft, 4, devicesSpeech(on, tailscale), {
+        caption: on ? copy.captionOn : copy.captionOff,
+        remoteOn: on,
+      })}
       footer={
         <>
+          <span className="flex-1 text-sm text-text-secondary">{on ? copy.hintOn : copy.hintOff}</span>
           <Button variant="outline" onClick={back} disabled={change.isPending}>
             {copy.back}
           </Button>
-          <span className="flex-1 text-end text-sm text-text-secondary">{on ? copy.hintOn : copy.hintOff}</span>
           <Button variant="outline" disabled={change.isPending} onClick={skip}>
             {copy.skip}
           </Button>
@@ -85,7 +94,6 @@ export function SetupRemoteAccess() {
       }
     >
       <div className="flex animate-hb-in flex-col gap-1.5">
-        <span className="lbl text-label">{copy.eyebrow}</span>
         <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.title}</h1>
         <p className="m-0 mb-3.5 max-w-[660px] text-text-secondary">{copy.intro}</p>
         {tailscale !== null && tailscale.state !== "running" && (

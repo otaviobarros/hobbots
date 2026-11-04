@@ -46,6 +46,12 @@ export const messages = {
     "coming-soon": "Coming soon",
   },
   soon: "Soon",
+  picker: {
+    previous: "Previous file",
+    next: "Next file",
+    open: ({ label }: { label: string }) => `${label}: pick a file`,
+    of: ({ index, total }: { index: number; total: number }) => `${formatCount(index)} of ${formatCount(total)}`,
+  },
   unavailable: {
     cleared: "Details were cleared after 30 days.",
     "too-many-files": "This folder is too big to track changes.",

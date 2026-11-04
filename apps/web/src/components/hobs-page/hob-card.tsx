@@ -45,7 +45,7 @@ export function HobCard({
     <Link
       to="/hobs/$hobId"
       params={{ hobId: hob.id }}
-      aria-label={copy.card.open({ name: hob.name, state: stateTag(state).word })}
+      aria-label={copy.card.open({ name: hob.name, state: stateTag(state, threads.length === 0).word })}
       style={tint(hob)}
       className={cn(
         "hop-on-hover cut relative flex min-w-0 flex-col overflow-hidden bg-card text-text-strong no-underline transition-[translate,box-shadow,background-color] duration-150 hover:-translate-y-0.5 hover:bg-hover hover:text-text-strong hover:shadow-menu focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0",
@@ -57,7 +57,7 @@ export function HobCard({
         <HobSprite hob={hob} size={64} state={state} className="z-[1] -mb-0.5" />
         <span aria-hidden className={ground} />
         <span className="absolute top-3 right-3">
-          <HobStateTag state={state} />
+          <HobStateTag state={state} fresh={threads.length === 0} />
         </span>
       </span>
       <span className="flex min-w-0 flex-col gap-2 px-4 pt-3 pb-3.5">

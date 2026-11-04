@@ -28,7 +28,7 @@ export const useHobLookup = (): HobLookup => {
   return (id) => hobs.find((hob) => hob.id === id) ?? unknownHob;
 };
 
-/** Opens a Task in the drawer beside the chat, or closes the drawer, through the address. */
+/** Opens a Task in the work sheet over the chat, or closes the sheet, through the address. */
 export const useOpenTask = (hobId: AgentId, threadId: ThreadId) => {
   const navigate = useNavigate();
   return (taskId: TaskId | undefined) =>
@@ -37,6 +37,13 @@ export const useOpenTask = (hobId: AgentId, threadId: ThreadId) => {
       params: { hobId, threadId },
       search: taskId === undefined ? {} : { task: taskId },
     });
+};
+
+/** Opens a request's Quest, by its top Task, in the work sheet over the chat, through the address. */
+export const useOpenQuest = (hobId: AgentId, threadId: ThreadId) => {
+  const navigate = useNavigate();
+  return (topId: TaskId) =>
+    void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId }, search: { quest: topId } });
 };
 
 const PINS_KEY = "quest.pinned";

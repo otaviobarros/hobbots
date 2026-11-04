@@ -1,7 +1,7 @@
 import type { AgentId, Message, MessageId, ThreadId } from "@hobbots/domain";
 import { useOpenWorkbench } from "../workbench/use-workbench.ts";
 import { QuestStrip } from "./quest-strip.tsx";
-import { useHobLookup, useOpenTask, useThreadTrees } from "./use-work.ts";
+import { useHobLookup, useOpenQuest, useOpenTask, useThreadTrees } from "./use-work.ts";
 import { BEFORE_ALL, placeMoments } from "./work-model.ts";
 import { WorkMoments } from "./work-moments.tsx";
 
@@ -9,7 +9,7 @@ import { WorkMoments } from "./work-moments.tsx";
 export function ThreadWorkStrip({ hobId, threadId }: { hobId: AgentId; threadId: ThreadId }) {
   const trees = useThreadTrees(threadId);
   const hobs = useHobLookup();
-  const open = useOpenTask(hobId, threadId);
+  const open = useOpenQuest(hobId, threadId);
   return <QuestStrip trees={trees} hobs={hobs} onOpen={open} />;
 }
 
@@ -21,12 +21,13 @@ export const useWorkMoments = (hobId: AgentId, threadId: ThreadId | undefined, t
   const trees = useThreadTrees(threadId);
   const hobs = useHobLookup();
   const open = useOpenTask(hobId, threadId ?? ("" as ThreadId));
+  const openQuest = useOpenQuest(hobId, threadId ?? ("" as ThreadId));
   const openWorkbench = useOpenWorkbench(hobId, threadId ?? ("" as ThreadId));
   const placed = placeMoments(transcript, trees);
   const at = (key: MessageId | typeof BEFORE_ALL) => {
     const moments = placed.get(key);
     return moments === undefined ? null : (
-      <WorkMoments moments={moments} hobs={hobs} onOpen={open} onWorkbench={openWorkbench} />
+      <WorkMoments moments={moments} hobs={hobs} onOpen={open} onQuest={openQuest} onWorkbench={openWorkbench} />
     );
   };
   return { before: at(BEFORE_ALL), after: (messageId: MessageId) => at(messageId) };

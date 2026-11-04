@@ -37,6 +37,17 @@ describe("the theme store", () => {
     expect(marks).toEqual(["workshop-night"]);
   });
 
+  it("shows Workshop Night on a first run screen whatever is saved, and gives the page its theme back after", () => {
+    const { env, marks, writes } = environment({ read: () => "lamplight-paper" });
+    const store = createThemeStore(env);
+    const release = store.holdFirstRun();
+    expect(marks.at(-1)).toBe("workshop-night");
+    release();
+    expect(marks.at(-1)).toBe("lamplight-paper");
+    expect(store.theme()).toBe("lamplight-paper");
+    expect(writes).toEqual([]);
+  });
+
   it("starts from the saved theme and marks the page with it", () => {
     const { env, marks } = environment({ read: () => "lamplight-paper" });
     expect(createThemeStore(env).theme()).toBe("lamplight-paper");

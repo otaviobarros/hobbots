@@ -2,12 +2,12 @@ import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { type FirstHobDraft, hobLine, keptDraftOrStored, restoreDraft } from "../api/first-hob.ts";
+import { type FirstHobDraft, keptDraftOrStored, restoreDraft } from "../api/first-hob.ts";
 import { foldersShared, presetInfo } from "../api/safety.ts";
 import { setupQuery, useSavingSetup } from "../api/setup.ts";
-import { connectedLines, PROVIDER_NAMES } from "../lib/providers.ts";
 import { messages } from "./messages.ts";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
+import { builtPreview } from "./onboarding-preview.ts";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
 
 const shared = messages.onboarding;
@@ -33,30 +33,27 @@ export function OnboardingSafety() {
   const setup = useQuery(setupQuery);
   const saving = useSavingSetup();
   const [guide, setGuide] = useState<string>(shared.safety.guide);
-  const name = draft.name.trim() || shared.firstHob.yourHob;
 
   return (
     <OnboardingFrame
       step={2}
-      guide={guide}
-      sofar={[
-        ...connectedLines(setup.data?.connectedProviders),
-        shared.hobOn({ hob: hobLine(draft), provider: PROVIDER_NAMES[draft.runtime] }),
-      ]}
+      preview={builtPreview(setup.data, draft, 2, guide, {
+        caption: setup.data && presetInfo(setup.data.safetyPreset).brief,
+      })}
       footer={
         <>
+          <span className="flex-1" />
           <Button variant="outline" onClick={back} disabled={saving}>
             {shared.back}
           </Button>
-          <span className="flex-1" />
           <Button onClick={() => void navigate({ to: "/setup/folders" })} disabled={!setup.data || saving}>
             {shared.continue}
           </Button>
         </>
       }
     >
-      <div className="flex animate-hb-in flex-col gap-1.5">
-        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{shared.safety.heading({ name })}</h1>
+      <div className="flex flex-col gap-1.5">
+        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{shared.safety.heading}</h1>
         <p className="m-0 mb-3.5 text-text-secondary">{shared.safety.intro}</p>
         {setup.data ? (
           <PresetPicker
@@ -84,27 +81,24 @@ export function OnboardingFolders() {
   return (
     <OnboardingFrame
       step={3}
-      guide={shared.folders.guide}
-      sofar={[
-        ...connectedLines(setup.data?.connectedProviders),
-        shared.hobOn({ hob: hobLine(draft), provider: PROVIDER_NAMES[draft.runtime] }),
-        ...(setup.data ? [shared.presetSafety({ preset: presetInfo(setup.data.safetyPreset).label })] : []),
-      ]}
+      preview={builtPreview(setup.data, draft, 3, shared.folders.guide, {
+        caption: folders.length === 0 ? shared.folders.none : foldersShared(folders.length),
+      })}
       footer={
         <>
+          <span className="flex-1 text-sm text-text-secondary">
+            {folders.length === 0 ? shared.folders.none : foldersShared(folders.length)}
+          </span>
           <Button variant="outline" onClick={back} disabled={saving}>
             {shared.back}
           </Button>
-          <span className="flex-1 text-right text-sm text-text-secondary">
-            {folders.length === 0 ? shared.folders.none : foldersShared(folders.length)}
-          </span>
           <Button onClick={() => void navigate({ to: "/setup/remote" })} disabled={!setup.data || saving}>
             {shared.continue}
           </Button>
         </>
       }
     >
-      <div className="flex max-w-[780px] animate-hb-in flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5">
         <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{shared.folders.heading}</h1>
         <p className="m-0 mb-2.5 text-text-secondary">{shared.folders.intro}</p>
         {setup.data ? (

@@ -66,7 +66,7 @@ const openRemoteStep = async (page: Page, current: Hub) => {
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Pip");
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "How much should Pip ask first?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How careful should your hobs be?" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "Where can hobs work?" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -74,7 +74,7 @@ const openRemoteStep = async (page: Page, current: Hub) => {
 };
 
 /** Other devices goes on to the last step of setup. */
-const atReady = (page: Page) => expect(page.getByRole("heading", { name: "Ready to summon" })).toBeVisible();
+const atReady = (page: Page) => expect(page.getByRole("heading", { name: "Everything is ready" })).toBeVisible();
 
 // covers DP-001, DP-004
 test("[TC-DP-123] setup turns remote access on and shows the address and its QR code", async ({ page }) => {

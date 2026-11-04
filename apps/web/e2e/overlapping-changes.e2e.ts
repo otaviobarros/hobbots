@@ -32,7 +32,7 @@ test("[TC-OR-283] two members changing the same file show the hub's finding on b
     [badge, "Make the shop badge"],
   ] as const) {
     await row.click();
-    const drawer = page.getByRole("complementary", { name: `${title}, Task details` });
+    const drawer = page.getByRole("dialog", { name: `${title}, Task details` });
     await expect(drawer).toContainText("Finding");
     await expect(drawer).toContainText("Ada changed web/badge.png");
     await expect(drawer).toContainText("Quill's Task");

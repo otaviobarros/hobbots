@@ -138,3 +138,32 @@ test("[TC-UX-130] a hob's chats are grouped, searched inside messages, renamed, 
   await expect(today.getByRole("link", { name: /^Open / })).toHaveCount(2);
   await expect(main.getByRole("link", { name: /^Archived chats/ })).toHaveCount(0);
 });
+
+// covers UX-001, UX-005
+test("[TC-UX-143] a new hob's page says hello and offers three starters, and one opens a new chat with its words", async ({
+  page,
+}) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  await page.goto(`${current.url}/#/hobs/${pip.id}`);
+  const main = page.getByRole("main", { name: "Pip's page" });
+  await expect(main.getByRole("region", { name: "Pip" })).toContainText("New");
+
+  // The tabs come first; Chats says hello in the hob's role and offers its starters.
+  const hello = main.getByRole("tabpanel", { name: "Chats" }).getByRole("region", { name: "No chats yet" });
+  await expect(hello).toContainText("Hi! I'm Pip. Drafts emails, posts and documents with you. Where shall we start?");
+  const starters = hello.getByRole("link", { name: /^Start a chat: / });
+  await expect(starters).toHaveCount(3);
+
+  // History has nothing yet, so it shows no filters.
+  await main.getByRole("tab", { name: "History" }).click();
+  await expect(main.getByRole("tabpanel", { name: "History" })).toContainText("Nothing yet.");
+  await expect(main.getByRole("group", { name: "Show" })).toHaveCount(0);
+  await main.getByRole("tab", { name: "Chats" }).click();
+
+  await hello.getByRole("link", { name: "Start a chat: Turn my bullet points into a friendly email" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/new$`));
+  await expect(page.getByRole("textbox", { name: /^Message Pip/ })).toHaveValue(
+    "Turn my bullet points into a friendly email",
+  );
+});

@@ -16,6 +16,15 @@ export const messages = {
     paused: "Paused",
     resting: "Resting",
   },
+  card: {
+    close: "Close",
+    openPage: "Open page",
+    profile: "Profile",
+    backpack: "Backpack",
+    backpackEmpty: "Nothing to deal with right now.",
+    /** The backpack's list, for screen readers. */
+    backpackList: ({ name }: { name: string }) => `What ${name} still has to deal with`,
+  },
   /** A hob's accessible name, such as "Ada, needs you". */
   hob: ({ name, state }: { name: string; state: string }) => `${name}, ${state.toLowerCase()}`,
   /** A hob's tooltip while the sidebar is collapsed, such as "Ada · needs you". */
