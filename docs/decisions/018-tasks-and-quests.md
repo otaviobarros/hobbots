@@ -1,6 +1,6 @@
 # ADR 018 — Tasks and Quests
 
-Status: **Accepted.** Refines [orchestration](../architecture/orchestration.md), the [agent model](../architecture/agent-model.md), the [screen inventory](../design/screens-and-flows.md) and the This Quest lifetime of [ADR 015](015-approval-lifetimes-and-grants.md) for Slice 9 ([#10](https://github.com/otaviobarros/hobbots/issues/10)).
+Status: **Accepted.** Its screens are amended by [ADR 027](027-quest-room.md): the card, the strip's drawer, the quest and task sheets and the Quest tab give way to the Quest room. Refines [orchestration](../architecture/orchestration.md), the [agent model](../architecture/agent-model.md), the [screen inventory](../design/screens-and-flows.md) and the This Quest lifetime of [ADR 015](015-approval-lifetimes-and-grants.md) for Slice 9 ([#10](https://github.com/otaviobarros/hobbots/issues/10)).
 
 ## Context
 
@@ -34,10 +34,10 @@ Example: you ask Aldric, the chief of marketing, for a Black Friday campaign. Al
 
 ### Rules
 
-- **You talk only to the lead.** Everything you say about a Quest goes to the lead, who passes it on with its own context. A note you leave on a member's Task reaches the lead as a message about that Task. The drawer and the Quest tab still show everything a member does. Talking to a member directly is out of scope.
+- **You talk only to the lead.** Everything you say about a Quest goes to the lead, who passes it on with its own context. A note you leave on a member's Task reaches the lead as a message about that Task. The Quest room shows everything a member does, in its lane ([ADR 027](027-quest-room.md)). Talking to a member directly is out of scope.
 - **Controls act directly.** Cancel, Retry and Reassign act on a Task without going through the lead, under the orchestration contract's cancellation rules.
 - **A member's approvals come straight to you.** When a member's tool call needs approval, it reaches you as on any other turn. A lead never approves on your behalf (PE-006).
-- **Questions go up.** A member's question goes to its nearest lead, who answers it or escalates it. It reaches you only when no lead can answer, on the card and in the Inbox. Your answer goes back down the same chain to the hob that asked.
+- **Questions go up.** A member's question goes to its nearest lead, who answers it or escalates it. It reaches you only when no lead can answer, in the asking hob's lane in the Quest room, in the chat and in the Inbox. Your answer goes back down the same chain to the hob that asked.
 - **A dependent Task waits.** A Task delegated with `depends_on` starts no turn until every Task it depends on has completed, as a step does. If one of them fails or is cancelled, its lead hears of that, and the dependent stays queued, showing that it cannot start, until the failed Task is retried or reassigned and completes, or the dependent is cancelled.
 - **Members never talk to each other.** A member whose Task depends on others starts with what each of them returned: its result and artifacts. Anything else moves from one member to another only as a hand-off through the lead.
 - **Nested Quests.** A member can bring in a hob of its own and lead that subtree under the same rules. The lead of a subtree is the nearest lead for its own members.
@@ -72,7 +72,7 @@ Milestones, findings, blockers, questions, done and failed reach the lead's cont
 A party shares its lead's folders, and no Task owns a path, so one member can overwrite a file another member is still working on ([#570](https://github.com/otaviobarros/hobbots/issues/570)). Of the three ways to handle it (report it, narrow each member's folders, or let a Task claim paths that others must ask for), the hub reports it, the smallest:
 
 - When a turn records a change to a file that another Task in the same tree, owned by another hob, also changed in its current Attempt, while both were at work, the hub records an automatic finding. Both were at work when the Task that changed the file first had not ended by the time of the other change. A turn often completes its Task before its last scan records what it changed, so that change still counts.
-- The finding goes on the Task whose change was recorded last, or on the other one when that Task has already ended. It names the other Task too, so the Quest tab, the card and both drawers show it. If both Tasks have ended, nobody is left at work, and nothing is recorded.
+- The finding goes on the Task whose change was recorded last, or on the other one when that Task has already ended. It names the other Task too, so the Quest room shows it in both lanes. If both Tasks have ended, nobody is left at work, and nothing is recorded.
 - A finding that fails to record is tried again. When the hub starts, it looks over the changes already recorded in work still going on, so a finding it stopped before recording is recorded then.
 - It reaches the nearest lead like any finding, once per pair of Tasks and file, however often their scans record the change. The lead decides which version stays.
 - A file compares by its full path, so two folders, one inside the other, still match. A write that leaves a file's bytes as they were is not a change, so nothing reports it.
@@ -83,7 +83,7 @@ A party shares its lead's folders, and no Task owns a path, so one member can ov
 The completion gate checks the responsibility ledger, not the workspace, so a Task could complete with files it changed in a Git repository still uncommitted ([#586](https://github.com/otaviobarros/hobbots/issues/586)).
 
 - When `complete_task` succeeds, the hub compares the files the Task's Attempts changed, as the Workbench recorded them, with their repository's last commit. A file tool's change is scanned a moment after the call ends, so the live turn's pending scan is recorded first. A file that is staged, unstaged, new or deleted counts. The hub reads the repository's files itself and runs no Git command, hook or filter. A linked worktree is read with its own HEAD and index, and the branches and objects it shares with its main repository.
-- Anything left uncommitted is a warning in the tool's answer, except on the top Task of a Quest (below). The Task also keeps an automatic `uncommitted` checkpoint, which the Workbench Summary shows under Still open and which reaches the lead.
+- Anything left uncommitted is a warning in the tool's answer, except on the top Task of a Quest (below). The Task also keeps an automatic `uncommitted` checkpoint, which the Task's lane in the Quest room shows and which reaches the lead.
 - The top Task of a Quest is held on what it leaves uncommitted, since its result is the user's: `complete_task` is refused with `uncommitted-changes`, naming the files, until its lead commits them or calls again with `leave_uncommitted` saying why. That reason is kept in the Task's `uncommitted` checkpoint, which its Summary shows under Still open. Every other Task only warns its hob ([#665](https://github.com/otaviobarros/hobbots/issues/665)).
 - A hob without its own GitHub App commits as the user. Its commands get the user's configured email below any setting of the repository's own. No name is given: Git takes it from config, the repository's own `user.name` or else the user's global one, which the sandbox opens for reading. Git has no place for a name below a repository's config that a command's environment can reach (Claude Code's scrub removes `GIT_CONFIG_GLOBAL`), and `GIT_AUTHOR_NAME` or a command-level `user.name` would override every repository's own, however deep. So each field is settled by the repository the commit lands in: one that sets both keeps both, one that sets only an email gets the user's name with its own email. Where neither sets a name, as when the user's config stays closed because a file looks like it holds a secret, Git takes the account's full name, and fails when that is empty. With no email configured, Git is told to take an identity from config only, so a commit fails instead of using a name made up from the computer's, and the hob is told to ask the user first. Routine progress only updates the screens and never wakes the lead (IN-005), and it may be coalesced before it is journaled ([ADR 013](013-event-journal.md)).
 
@@ -93,7 +93,7 @@ A lead that named no folders gave its member every folder it could reach, unrela
 
 - With `authority.folders` left out, the member gets the folders its brief names that are the lead's or inside one, as the hub stores them. A path in quotes is read to its closing quote on the same line, so a folder with a space in its name is named whole; any other path ends at the first space. The brief is read in one pass, whatever its length or shape (STD-SEC-005). If the brief names none, it gets the folder the lead's own Task works in, the first of the lead's folders, where its turns start.
 - `"all"` gives every folder the lead has on the Task, as leaving it out used to. A list still has to be within the lead's folders, or it is refused.
-- The member also keeps only the folders its own policy reaches, so a folder of the lead's own, or a shared folder the member hides, drops out of the list. That is why one member's list can differ from another's under the same lead. The Task drawer and the Workbench header now show each member's folders, so a difference shows.
+- The member also keeps only the folders its own policy reaches, so a folder of the lead's own, or a shared folder the member hides, drops out of the list. That is why one member's list can differ from another's under the same lead. Each member's lane in the Quest room shows its folders, so a difference shows.
 
 ### Records
 
@@ -155,7 +155,7 @@ On every call the server checks:
 - **No cycles:** a hob cannot be given a Task whose lineage it already leads.
 - **Authority only narrows:** a child's permissions and limits are the intersection of its own and its parent's. A brief cannot widen them.
 - **Idempotency:** each call carries a key, so a retried call returns the first result and never creates a second Task, Question or hand-off.
-- **Refusals are recorded:** a refused call writes none of its records, but the refusal itself is kept and journaled, with its reason and message, and shows as a failed step in the reply and in the Workbench Summary ([#575](https://github.com/otaviobarros/hobbots/issues/575)). Its key stays free, so a retry is decided again; a refusal is never replayed as a result.
+- **Refusals are recorded:** a refused call writes none of its records, but the refusal itself is kept and journaled, with its reason and message, and shows as a failed step in the reply and in the hob's lane ([#575](https://github.com/otaviobarros/hobbots/issues/575)). Its key stays free, so a retry is decided again; a refusal is never replayed as a result.
 
 ### What you can do
 
@@ -165,16 +165,16 @@ On every call the server checks:
 | Answer an escalated question | Goes back down the chain to the hob that asked |
 | Approve or deny a member's tool call | Goes straight to that member |
 | Cancel a Task or the Quest | Cancels with confirmed outcomes |
-| Retry or Reassign, from the Quest tab | A new Attempt, or a new owner with history kept |
+| Retry or Reassign, from the Task's lane in the Quest room | A new Attempt, or a new owner with history kept |
 
 ### Screens
 
-- **The card under your request.** It is the Task card, and the Quest card once a party joins. It names its lead and how many Tasks it has, with a progress line, a strip with one segment per Task and every Task as a row under its owner, ordered by needs you, blocked, running, waiting and done ([#832](https://github.com/otaviobarros/hobbots/issues/832)). Open the quest opens the drawer. A Task with steps shows only its current step and "step 3 of 7".
-- **The strip under the chat header** keeps the work in view while you scroll, with portraits and counts, never rows.
-- **The drawer** opens a Task or step: its brief, checkpoints and output.
-- **The Quest tab** is the control room: the full tree with Retry, Reassign, Cancel Task and Cancel Quest.
+[ADR 027](027-quest-room.md) replaces the screens this ADR first decided: the Task and Quest card, the drawer, the quest and task sheets and the Quest tab's control room. In short:
+
+- **A ticket under your request** names the Quest, its party and its progress, and opens the Quest room. Every Task opens a room, with one lane until a party joins.
+- **The Quest room** opens beside the chat: a lane per hob with its checkpoints, actions, hand-offs, questions and controls, one Workbench for the whole Quest docked under the lanes, and the thread as a column on the right.
 - **Party members** show "On Aldric's quest" on Home and in their hob panel, linking to the Quest. A member's work never shows as a separate chat thread.
-- **The chat** only gets the moments that matter: questions that reach you, approvals and the lead's wrap-up.
+- **The chat** only gets the moments that matter: the lead's plan, a question no lead can answer, approvals and the finish.
 - **A hob's History** is read from these records and the approval requests, never from the journal, which may drop entries older than 7 days once it holds more than the latest 10,000 ([ADR 013](013-event-journal.md)). It adds no record of its own. It shows the Tasks you asked the hob for, the Tasks its leads gave it, when each ended, the Quests it led, its approval requests and the questions that reached you. A lead's History adds its party's Tasks and their requests. Steps are left out, since their work shows on the Task they serve. Each event is the record as it is now: a failed Task that is retried leaves History until it ends again. The hub pages it by whole days in the reader's time zone.
 
 ## Rationale
@@ -191,7 +191,7 @@ Checking every rule in the server, not in the prompt, is what makes a recursive 
 - The orchestration contract's tool list becomes the table above. `send_agent_message` reaches only between a lead and its own members, for example to pass on your note; members never message each other. `list_tasks`, `get_task` and `get_quest_status` stay as read tools, scoped to the caller's subtree.
 - ADR 015's grant table binds This Quest grants to the top Task instead of a Quest, and the approval card offers the lifetime from Slice 9 on.
 - The depth limit default is 2. Concurrency, per-hob active Task and timeout defaults stay open and configurable.
-- The chat gets a card, a strip and a drawer; the Quest tab becomes the control room; Home and the hob panel show a member's Quest work.
+- The chat gets a card, a strip and a drawer; the Quest tab becomes the control room; Home and the hob panel show a member's Quest work. [ADR 027](027-quest-room.md) later replaces the card, the drawer, the sheets and the control room with the Quest room.
 - Continuation after a turn ends is decided in [ADR 019](019-hob-backpack-and-continuations.md) for Slice 10: results, questions and hand-offs reach the lead through its backpack, and one dispatcher wakes it. Different runtimes in one Quest (Slice 11) are out of scope.
 
 ## Validation
