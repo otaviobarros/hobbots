@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { readStored, writeStored } from "./storage.ts";
 
 /** The four themes, by their `data-theme` value (docs/design/themes.md). */
@@ -97,3 +98,6 @@ export const followThemeChoice = () => {
     if (event.key === STORAGE_KEY || event.key === null) store.storageChanged();
   });
 };
+
+/** This device's theme, kept in step with every change, here or in another window. */
+export const useTheme = (): Theme => useSyncExternalStore(store.subscribe, store.theme, store.theme);

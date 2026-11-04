@@ -108,7 +108,7 @@ test("[TC-CH-160] an archived thread opens read-only from the Archive and comes 
 });
 
 // covers CH-009
-test("[TC-CH-216] Undo after a Restore in the Archive archives the chat again", async ({ page }) => {
+test("[TC-CH-218] Undo after a Restore in the Archive archives the chat again", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
   await page.goto(`${current.url}/#/archive`);
   const archive = page.getByRole("main", { name: "Archive" });
@@ -126,7 +126,7 @@ test("[TC-CH-216] Undo after a Restore in the Archive archives the chat again", 
 });
 
 // covers CH-009
-test("[TC-CH-217] an archived chat's address shows when it is no longer archived", async ({ page }) => {
+test("[TC-CH-219] an archived chat's address shows when it is no longer archived", async ({ page }) => {
   const { current, hob, live } = await hubWithArchive();
   await page.goto(`${current.url}/#/archive/chats/${hob.id}/${live.id}`);
   await expect(page.getByText("This chat is no longer archived.")).toBeVisible();
