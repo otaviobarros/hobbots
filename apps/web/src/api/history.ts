@@ -4,7 +4,7 @@ import { DateTime } from "effect";
 import { call } from "./client.ts";
 
 /** Each hob's History, one list per filter, under a shared prefix so any change can refetch them all. */
-export const historyKeys = {
+const historyKeys = {
   all: ["history"] as const,
   of: (agentId: AgentId, filter: HistoryFilter) => ["history", agentId, filter] as const,
 };

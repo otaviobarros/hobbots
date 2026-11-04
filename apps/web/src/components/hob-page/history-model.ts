@@ -9,7 +9,7 @@ const copy = messages.history;
 export type HistoryMark = "done" | "fail" | "ask" | "quest" | "you" | "quiet";
 
 /** Where an event's Chat or Workbench opens. */
-export interface HistoryPlace {
+interface HistoryPlace {
   readonly hobId: AgentId;
   readonly threadId: ThreadId;
 }
@@ -111,12 +111,6 @@ export const historyRow = (event: HistoryEvent, hob: Agent, hobs: ReadonlyMap<Ag
         : row("you", copy.question.answered({ answer: firstLine(event.answer) }), { who: you });
   }
 };
-
-export interface HistoryDayGroup {
-  readonly day: string;
-  readonly label: string;
-  readonly rows: ReadonlyArray<HistoryRow>;
-}
 
 /** A day's heading: Today, Yesterday, or the weekday and date where you are. */
 export const dayLabel = (day: string, now: Date = new Date(), locale?: string): string => {
