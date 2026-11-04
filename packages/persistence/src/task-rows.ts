@@ -291,6 +291,57 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
       });
     });
 
+  /**
+   * The records of a hob's History: the Tasks you asked it for and those its leads gave it, the Tasks
+   * it gave its party, their Delegations, Quests and latest Attempts, its own approval requests and its
+   * party's, and the questions about those Tasks that reached you. Steps are left out: their work
+   * shows on the Task they serve.
+   */
+  const historyRecords = (agentId: string) =>
+    Effect.gen(function* () {
+      const tasks = yield* sql<Row>`SELECT * FROM tasks WHERE
+        (owner_id = ${agentId} AND (parent_id IS NULL
+          OR id IN (SELECT child_task_id FROM delegations WHERE member_id = ${agentId})))
+        OR id IN (SELECT child_task_id FROM delegations WHERE lead_id = ${agentId})
+        ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("task")));
+      const ids = tasks.map((each) => each.id);
+      const delegations =
+        ids.length === 0
+          ? []
+          : yield* sql<Row>`SELECT * FROM delegations WHERE ${sql.in("child_task_id", ids)} ORDER BY ${oldest}`.pipe(
+              Effect.flatMap(decodeRows("delegation")),
+            );
+      const approvals = yield* sql<Row>`SELECT * FROM approval_requests WHERE agent_id = ${agentId}
+        OR task_id IN (SELECT child_task_id FROM delegations WHERE lead_id = ${agentId})
+        ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("approval")));
+      const roots = [
+        ...new Set([
+          ...tasks.map((each) => each.rootId),
+          ...approvals.flatMap((each) => (each.rootTaskId === null ? [] : [each.rootTaskId])),
+        ]),
+      ];
+      const questIds = [...new Set(delegations.map((each) => each.questId))];
+      const quests = yield* sql<Row>`SELECT * FROM quests WHERE lead_id = ${agentId}
+        ${roots.length === 0 ? sql`` : sql`OR ${sql.in("task_id", roots)}`}
+        ${questIds.length === 0 ? sql`` : sql`OR ${sql.in("id", questIds)}`}
+        ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("quest")));
+      const ended = tasks.flatMap((each) =>
+        isTerminalTask(each.state) && each.currentAttemptId !== null ? [each.currentAttemptId] : [],
+      );
+      const attempts =
+        ended.length === 0
+          ? []
+          : yield* sql<Row>`SELECT * FROM attempts WHERE ${sql.in("id", ended)}`.pipe(
+              Effect.flatMap(decodeRows("attempt")),
+            );
+      const questions =
+        ids.length === 0
+          ? []
+          : yield* sql<Row>`SELECT * FROM questions WHERE recipient_id IS NULL AND ${sql.in("task_id", ids)}
+              ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("question")));
+      return { tasks, delegations, quests, attempts, approvals, questions };
+    });
+
   /** Steps waiting to start: queued Tasks whose parent has the same owner and has not ended, oldest first. */
   const queuedSteps = sql<Row>`SELECT t.* FROM tasks t JOIN tasks p ON p.id = t.parent_id
     WHERE t.state = 'queued' AND p.owner_id = t.owner_id
@@ -332,6 +383,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     readTree,
     threadTrees,
     memberWork,
+    historyRecords,
     queuedSteps,
     strandedSteps,
     cancelling,

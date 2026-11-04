@@ -13,7 +13,7 @@ test.afterEach(async () => {
   removeDataDir(dataDir);
 });
 
-/** A hub past setup with 20 resting hobs; Wick is the only Cartographer. */
+/** A hub past setup with `count` resting hobs; the 14th, Wick, is the only Cartographer. */
 const hubWithHobs = async (count: number) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
@@ -51,55 +51,39 @@ const hubWithHobs = async (count: number) => {
 };
 
 // covers UX-001
-test("[TC-UX-001] with 20 hobs the scene shows six, the hall holds 14 and the filter finds a hob by role title", async ({
-  page,
-}) => {
+test("[TC-UX-001] with 20 hobs the scene shows five and the hall door opens Your hobs", async ({ page }) => {
   const { url } = await hubWithHobs(20);
   await page.goto(url);
 
   const scene = page.getByRole("region", { name: "Your hobs right now" });
-  await expect(scene.getByRole("button", { name: stageHob })).toHaveCount(6);
-  await expect(scene.getByRole("button", { name: "Open the hall: 14 more hobs" })).toContainText("14 in the hall");
+  await expect(scene.getByRole("button", { name: stageHob })).toHaveCount(5);
+  const door = scene.getByRole("link", { name: "Open Your hobs: 15 more hobs wait in the hall" });
+  await expect(door).toContainText("+15 in the hall");
+  // Home no longer unfolds the hall into a list of its own.
+  await expect(page.getByRole("region", { name: "All hobs" })).toHaveCount(0);
 
-  // Past 12 hobs, Resting starts folded; its count chip unfolds it.
-  const all = page.getByRole("region", { name: "All hobs" });
-  const tiles = all.getByRole("link", { name: /^Open .+'s page,/ });
-  await expect(all.getByRole("button", { name: /^Resting/ })).toHaveAttribute("aria-expanded", "false");
-  await expect(tiles).toHaveCount(0);
-  await scene.getByRole("button", { name: "20 resting" }).click();
-  await expect(all.getByRole("button", { name: /^Resting/ })).toHaveAttribute("aria-expanded", "true");
-  await expect(tiles).toHaveCount(20);
-
-  await all.getByRole("searchbox", { name: "Find a hob by name or role" }).fill("carto");
-  await expect(tiles).toHaveCount(1);
-  await expect(all.getByRole("link", { name: /^Open Wick's page, Cartographer/ })).toBeVisible();
+  await door.click();
+  await expect(page).toHaveURL(/#\/hobs$/);
+  await expect(page.getByRole("main", { name: "Your hobs" })).toBeVisible();
 });
 
 // covers UX-001
-test("[TC-UX-004] Home tiles show each hob's sigil and role, and the filter finds hobs by role", async ({ page }) => {
+test("[TC-UX-004] the hall door opens Your hobs on the family a count chip picked", async ({ page }) => {
   const { url } = await hubWithHobs(20);
   await page.goto(url);
-  const all = page.getByRole("region", { name: "All hobs" });
-  await page.getByRole("region", { name: "Your hobs right now" }).getByRole("button", { name: "20 resting" }).click();
-
-  await all.getByRole("searchbox", { name: "Find a hob by name or role" }).fill("QA");
-  const tiles = all.getByRole("link", { name: /^Open .+'s page,/ });
-  await expect(tiles).toHaveCount(2);
-  for (const name of ["Hob 5", "Hob 10"]) {
-    const tile = all.getByRole("link", { name: `Open ${name}'s page, QA engineer, ready` });
-    await expect(tile).toContainText("QA engineer · ready");
-    // The sigil is decorative: the role is read once, from its title in words.
-    await expect(tile.locator('[data-slot="sigil-badge"]')).toHaveAttribute("aria-hidden", "true");
-  }
+  const scene = page.getByRole("region", { name: "Your hobs right now" });
+  await scene.getByRole("radio", { name: "Resting 20" }).click();
+  await scene.getByRole("link", { name: /^Open Your hobs:/ }).click();
+  await expect(page).toHaveURL(/#\/hobs\?show=resting$/);
 });
 
 // covers UX-001
-test("[TC-UX-005] with six or fewer hobs the Home scene shows each hob's sigil and role", async ({ page }) => {
+test("[TC-UX-005] with five or fewer hobs the Home scene shows each hob's sigil and role", async ({ page }) => {
   const { url } = await hubWithHobs(5);
   await page.goto(url);
   const scene = page.getByRole("region", { name: "Your hobs right now" });
   await expect(scene.getByRole("button", { name: stageHob })).toHaveCount(5);
-  await expect(page.getByRole("region", { name: "All hobs" })).toHaveCount(0);
+  await expect(scene.getByRole("link", { name: /^Open Your hobs:/ })).toHaveCount(0);
 
   const qa = scene.getByRole("button", { name: "Hob 5, QA engineer, ready" });
   await expect(qa).toContainText("Hob 5");
@@ -108,7 +92,7 @@ test("[TC-UX-005] with six or fewer hobs the Home scene shows each hob's sigil a
 });
 
 // covers UX-001
-test("[TC-UX-089] clicking a hob in the Home scene opens a peek whose Open chat starts its chat", async ({ page }) => {
+test("[TC-UX-091] clicking a hob in the Home scene opens a peek whose Open chat starts its chat", async ({ page }) => {
   const { url, ids } = await hubWithHobs(3);
   await page.goto(url);
   const scene = page.getByRole("region", { name: "Your hobs right now" });
@@ -151,7 +135,7 @@ test("[TC-UX-002] ⌘K opens a hob's page from any page", async ({ page }) => {
 test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", async ({ page }) => {
   const { url } = await hubWithHobs(20);
   await page.goto(url);
-  await expect(page.getByRole("region", { name: "All hobs" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Your hobs right now" })).toBeVisible();
 
   await page.keyboard.press("ControlOrMeta+k");
   const finder = page.getByRole("dialog", { name: "Jump anywhere" });

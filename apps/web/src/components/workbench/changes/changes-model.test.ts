@@ -180,7 +180,7 @@ describe("a code diff", () => {
     const started = performance.now();
     const rows = foldLines([...same, ...added], 3);
     expect(performance.now() - started).toBeLessThan(1_000);
-    expect(rows[0]).toEqual({ kind: "folded", lines: 99_997 });
+    expect(rows[0]).toMatchObject({ kind: "folded", lines: 99_997 });
     expect(rows).toHaveLength(1 + 3 + 100_000);
   });
 });

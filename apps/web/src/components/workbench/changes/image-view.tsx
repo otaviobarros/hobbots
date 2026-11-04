@@ -67,9 +67,9 @@ function Side({
   const [failed, setFailed] = useState(false);
   const contentId = cleared ? null : version.contentId;
   return (
-    <figure className="cut m-0 flex min-w-0 flex-col gap-2 bg-panel px-4 py-3">
-      <figcaption className="flex items-baseline gap-2">
-        <span className="font-heading text-xs font-bold tracking-widest text-label uppercase">{title}</span>
+    <figure className="m-0 flex min-w-0 flex-col gap-2 rounded-card border border-line bg-card px-4 pt-3 pb-3.5">
+      <figcaption className="flex items-baseline justify-between gap-2">
+        <span className="lbl text-xs font-bold text-label">{title}</span>
         <span className="text-meta text-label">{formatBytes(version.size)}</span>
       </figcaption>
       {contentId === null ? (

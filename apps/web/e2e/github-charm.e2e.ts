@@ -89,7 +89,7 @@ test("[TC-GEN-024] connects GitHub in Settings and grants it per hob on the Char
   await expect(grant).toBeChecked();
 
   // Disconnecting points at GitHub, where the app stays authorized until it is revoked there.
-  await page.goto(`${current.url}/#/settings/connections`);
+  await page.goto(`${current.url}/#/settings/connections?tab=charms`);
   await charms.getByRole("button", { name: "Disconnect" }).click();
   await expect(charms.getByRole("link", { name: "Open authorized apps on GitHub" })).toBeVisible();
   await expect(charms.getByRole("button", { name: "Connect with Hobbots" })).toBeVisible();
@@ -111,7 +111,7 @@ test("[TC-GEN-040] shows a repository added on GitHub while Hobbots stays open b
   // GitHub itself is not reached: the page it opens is empty.
   await context.route("https://github.com/**", (route) => route.fulfill({ body: "" }));
 
-  await page.goto(`${current.url}/#/settings/connections`);
+  await page.goto(`${current.url}/#/settings/connections?tab=charms`);
   const charms = page.getByRole("region", { name: "Charms" });
   await charms.getByRole("button", { name: "Connect with Hobbots" }).click();
   const reached = charms.getByRole("list", { name: "Repositories it reaches" });

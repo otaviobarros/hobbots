@@ -1,20 +1,24 @@
 import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useState } from "react";
-import { type CodeDiff, codeDiff, type DiffRow } from "./changes-model.ts";
+import { type CodeDiff, codeDiff, type DiffLine } from "./changes-model.ts";
 import { messages } from "./messages.ts";
 
-const rowTone: Record<Exclude<DiffRow["kind"], "folded">, string> = {
-  added: "bg-mint/12 text-text-strong",
-  removed: "bg-rose/14 text-text-strong",
+const rowTone: Record<DiffLine["kind"], string> = {
+  added: "bg-mint/15 text-text",
+  removed: "bg-rose/15 text-text",
   same: "text-text-secondary",
 };
 
-const sign: Record<Exclude<DiffRow["kind"], "folded">, string> = { added: "+", removed: "−", same: " " };
+const signTone: Record<DiffLine["kind"], string> = { added: "text-mint", removed: "text-rose", same: "text-label" };
+
+const sign: Record<DiffLine["kind"], string> = { added: "+", removed: "−", same: " " };
 
 /**
  * A text file's change as a line diff: each added and removed line marked, with its numbers before
- * and after, and long unchanged runs folded until the whole file is asked for. With one side only,
- * as when the earlier version was not kept, it shows that side whole and unmarked.
+ * and after. Long unchanged runs fold to "Show N unchanged lines", each opening on its own, and
+ * "Show the whole file" opens them all. With one side only, as when the earlier version was not
+ * kept, it shows that side whole and unmarked.
  */
 export function CodeDiffView({
   path,
@@ -28,21 +32,24 @@ export function CodeDiffView({
   /** Only one version could be read, so the other is not compared against. */
   onlyOneSide: boolean;
 }) {
-  const [whole, setWhole] = useState(false);
+  // The folds opened, by their place among the diff's rows.
+  const [opened, setOpened] = useState<ReadonlySet<number>>(new Set());
   const text = after ?? before ?? "";
-  const diff: CodeDiff = onlyOneSide
-    ? codeDiff(text, text, Number.POSITIVE_INFINITY)
-    : codeDiff(before, after, whole ? Number.POSITIVE_INFINITY : 3);
-  const folded = diff.rows.some((row) => row.kind === "folded");
+  const diff: CodeDiff = onlyOneSide ? codeDiff(text, text, Number.POSITIVE_INFINITY) : codeDiff(before, after, 3);
+  const folds = diff.rows.flatMap((row, index) => (row.kind === "folded" ? [index] : []));
+  const allOpen = folds.length > 0 && folds.every((index) => opened.has(index));
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {!onlyOneSide && (
-        <div className="flex flex-wrap items-center gap-3 text-detail text-label">
+        <div className="flex flex-wrap items-center gap-2 text-detail text-label">
           <span>{messages.lines({ added: diff.added, removed: diff.removed })}</span>
-          {folded && (
-            <Button variant="link" size="xs" onClick={() => setWhole(true)}>
-              {messages.whole}
-            </Button>
+          {folds.length > 0 && (
+            <>
+              <span aria-hidden>·</span>
+              <Button variant="link" size="xs" onClick={() => setOpened(new Set(allOpen ? [] : folds))}>
+                {allOpen ? messages.fold : messages.whole}
+              </Button>
+            </>
           )}
         </div>
       )}
@@ -51,14 +58,26 @@ export function CodeDiffView({
       ) : (
         <section
           aria-label={messages.diff({ path })}
-          className="cut min-w-0 overflow-x-auto border-2 border-line bg-deep py-2 font-mono text-detail leading-relaxed"
+          className="min-w-0 overflow-x-auto rounded-card border border-line bg-panel py-1.5 font-mono text-[12.5px] leading-5"
         >
           <table className="w-full border-collapse">
             <tbody>
-              {diff.rows.map((row, index) => (
-                // A folded run has no line numbers of its own, so its place in the diff names it.
-                <Row key={row.kind === "folded" ? `folded-${index}` : `${row.before}:${row.after}`} row={row} />
-              ))}
+              {diff.rows.map((row, index) =>
+                row.kind === "folded" ? (
+                  opened.has(index) ? (
+                    row.hidden.map((line) => <Row key={key(line)} row={line} />)
+                  ) : (
+                    // A fold is named by the first line it hides.
+                    <Fold
+                      key={`folded-${key(row.hidden[0])}`}
+                      lines={row.lines}
+                      onOpen={() => setOpened(new Set([...opened, index]))}
+                    />
+                  )
+                ) : (
+                  <Row key={key(row)} row={row} />
+                ),
+              )}
             </tbody>
           </table>
         </section>
@@ -67,27 +86,37 @@ export function CodeDiffView({
   );
 }
 
-function Row({ row }: { row: DiffRow }) {
-  if (row.kind === "folded") {
-    return (
-      <tr className="bg-card text-label">
-        <td colSpan={4} className="px-3 py-0.5 font-sans">
-          {messages.folded(row.lines)}
-        </td>
-      </tr>
-    );
-  }
+const key = (row: DiffLine | undefined) => (row === undefined ? "" : `${row.before}:${row.after}`);
+
+function Fold({ lines, onOpen }: { lines: number; onOpen: () => void }) {
+  return (
+    <tr>
+      <td colSpan={4} className="py-0.5">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-[color-mix(in_srgb,var(--color-star)_9%,transparent)] py-0.5 ps-[60px] text-start font-sans text-label hover:bg-hover hover:text-text-strong"
+        >
+          <span aria-hidden>⋯</span>
+          {messages.folded(lines)}
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function Row({ row }: { row: DiffLine }) {
   return (
     <tr className={rowTone[row.kind]}>
-      <td className="w-10 pe-2 text-end align-top text-label select-none">{row.before ?? ""}</td>
-      <td className="w-10 pe-2 text-end align-top text-label select-none">{row.after ?? ""}</td>
-      <td className="w-4 align-top select-none">
+      <td className="w-[38px] pe-2 text-end align-top text-label select-none">{row.before ?? ""}</td>
+      <td className="w-[38px] pe-2 text-end align-top text-label select-none">{row.after ?? ""}</td>
+      <td className={cn("w-[18px] text-center align-top select-none", signTone[row.kind])}>
         <span aria-hidden="true">{sign[row.kind]}</span>
         {row.kind !== "same" && (
           <span className="sr-only">{row.kind === "added" ? messages.added : messages.removed}</span>
         )}
       </td>
-      <td className="pe-3 align-top whitespace-pre-wrap break-all">{row.text}</td>
+      <td className="pe-4 align-top whitespace-pre-wrap break-all">{row.text}</td>
     </tr>
   );
 }

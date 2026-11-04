@@ -92,7 +92,7 @@ test("[TC-IN-489] an answer given in the Inbox says so in the Task drawer and on
   const thread = page.url();
 
   await page.goto(`${url}/#/inbox?tab=needs`);
-  const asked = page.getByRole("region", { name: "Question from Ada" });
+  const asked = page.getByRole("article", { name: "Question from Ada" });
   await asked.getByRole("textbox", { name: "Your answer to Ada" }).fill("Yes, Dec 12.");
   await asked.getByRole("button", { name: "Send answer" }).click();
   await expect(page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Question/ })).toHaveCount(0);
