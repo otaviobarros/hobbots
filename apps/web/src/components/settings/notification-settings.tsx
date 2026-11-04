@@ -9,7 +9,10 @@ const copy = messages.notifications;
 const bridge = globalThis.window?.hobbots?.notifications;
 const choicesKey = ["desktop", "notifications"] as const;
 
-const ROWS: ReadonlyArray<keyof NotificationChoices> = ["requests", "devices", "sound"];
+const ROWS: ReadonlyArray<keyof NotificationChoices> = ["requests", "finishes", "devices", "sound"];
+
+/** Whether any kind of notification is on, so the sound has something to play with. */
+const anyOn = (choices: NotificationChoices) => choices.requests || choices.finishes || choices.devices;
 
 function ChoiceRow({
   label,
@@ -57,7 +60,7 @@ function NotificationRows({ notifications }: { notifications: NonNullable<typeof
           label={copy[key].label}
           note={copy[key].note}
           checked={shown?.[key] ?? true}
-          disabled={!shown || change.isPending || (key === "sound" && !shown.requests && !shown.devices)}
+          disabled={!shown || change.isPending || (key === "sound" && !anyOn(shown))}
           onChange={(on) => change.mutate({ [key]: on })}
         />
       ))}

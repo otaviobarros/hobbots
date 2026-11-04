@@ -1,5 +1,5 @@
 import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
-import type { ApprovalRequest, BackpackItem, Quest, TaskId } from "@hobbots/domain";
+import type { ApprovalRequest, BackpackItem, FailedTask, Quest, TaskId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import {
   Empty,
@@ -15,6 +15,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockersQuery } from "../../api/blockers.ts";
+import { useFailedTasksQuery } from "../../api/failed-tasks.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
 import { agentsQuery } from "../../api/queries.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
@@ -54,14 +55,26 @@ const ALL_CLEAR = { title: copy.allClear, hint: copy.allClearHint };
 
 const NO_ITEMS: ReadonlyArray<BackpackItem> = [];
 const NO_QUESTIONS: ReadonlyArray<WaitingQuestion> = [];
+const NO_FAILED: ReadonlyArray<FailedTask> = [];
 
 type BlockersRead = ReturnType<typeof useBlockersQuery>;
 type QuestionsRead = ReturnType<typeof useWaitingQuestionsQuery>;
+type FailedRead = ReturnType<typeof useFailedTasksQuery>;
+
+/** The reads besides the requests that Needs you lists from. */
+interface WaitReads {
+  readonly blockers: BlockersRead;
+  readonly questions: QuestionsRead;
+  readonly failed: FailedRead;
+}
 type InboxRead = ReturnType<typeof useQuery<ReadonlyArray<ApprovalRequest>>>;
 
-/** How many things wait for you: pending requests, questions for you and stuck work. */
-const waitingCount = (approvals: ReadonlyArray<ApprovalRequest>, blockers: BlockersRead, questions: QuestionsRead) =>
-  pendingCount(approvals) + (blockers.data ?? NO_ITEMS).length + (questions.data ?? NO_QUESTIONS).length;
+/** How many things wait for you: pending requests, questions for you, stuck work and failed Tasks. */
+const waitingCount = (approvals: ReadonlyArray<ApprovalRequest>, { blockers, questions, failed }: WaitReads) =>
+  pendingCount(approvals) +
+  (blockers.data ?? NO_ITEMS).length +
+  (questions.data ?? NO_QUESTIONS).length +
+  (failed.data ?? NO_FAILED).length;
 
 /** Whether a read has finished and holds nothing. */
 const readEmpty = (read: { readonly isSuccess: boolean; readonly data?: ReadonlyArray<unknown> | undefined }) =>
@@ -71,15 +84,9 @@ const readEmpty = (read: { readonly isSuccess: boolean; readonly data?: Readonly
  * What an empty tab says once it lists nothing. Needs you waits for every read: while one loads,
  * or after it failed, it never says nothing waits. History says nothing here.
  */
-const emptyState = (
-  tab: InboxTab,
-  read: boolean,
-  entries: ReadonlyArray<InboxEntry>,
-  blockers: BlockersRead,
-  questions: QuestionsRead,
-) => {
+const emptyState = (tab: InboxTab, read: boolean, entries: ReadonlyArray<InboxEntry>, reads: WaitReads) => {
   if (tab === "history" || !read || entries.length > 0) return undefined;
-  if (!(readEmpty(blockers) && readEmpty(questions))) return undefined;
+  if (!(readEmpty(reads.blockers) && readEmpty(reads.questions) && readEmpty(reads.failed))) return undefined;
   return ALL_CLEAR;
 };
 
@@ -96,8 +103,10 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
   const requests = tabRequests(approvals, tab, requestId);
   const blockers = useBlockersQuery();
   const questions = useWaitingQuestionsQuery();
+  const failed = useFailedTasksQuery();
+  const reads: WaitReads = { blockers, questions, failed };
   const devices = usePromptedDevices();
-  const entries = tabEntries(tab, requests, devices, questions.data ?? NO_QUESTIONS, blockers.data ?? NO_ITEMS);
+  const entries = tabEntries(tab, requests, devices, reads);
   const questOf = useEntryQuests(entries);
   return {
     questOf,
@@ -105,12 +114,11 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
     shown,
     directory,
     requests,
-    blockers,
-    questions,
+    reads,
     entries,
     selected: tab === "history" || shown.hold !== undefined ? undefined : selectedEntry(entries, requestId),
-    waiting: waitingCount(approvals, blockers, questions) + devices.length,
-    empty: emptyState(tab, inbox.isSuccess, entries, blockers, questions),
+    waiting: waitingCount(approvals, reads) + devices.length,
+    empty: emptyState(tab, inbox.isSuccess, entries, reads),
   };
 };
 
@@ -121,8 +129,10 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
  * chat has. It follows the journal, so an entry decided in the chat updates here, and the reverse.
  */
 export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string | undefined }) {
-  const { inbox, shown, directory, requests, blockers, questions, entries, questOf, selected, waiting, empty } =
-    useInbox(tab, requestId);
+  const { inbox, shown, directory, requests, reads, entries, questOf, selected, waiting, empty } = useInbox(
+    tab,
+    requestId,
+  );
   const [view, setView] = useInboxView();
   const now = useNow();
   const navigate = useNavigate();
@@ -155,8 +165,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
         {list && (
           <NeedsList
             inbox={inbox}
-            questions={questions}
-            blockers={blockers}
+            reads={reads}
             entries={entries}
             view={view}
             onView={setView}
@@ -210,8 +219,7 @@ const headLine = (waiting: number, soonest: SoonestExpiry | undefined, now: Date
  */
 function NeedsList({
   inbox,
-  questions,
-  blockers,
+  reads,
   entries,
   view,
   onView,
@@ -222,8 +230,7 @@ function NeedsList({
   listRef,
 }: {
   inbox: InboxRead;
-  questions: QuestionsRead;
-  blockers: BlockersRead;
+  reads: WaitReads;
   entries: ReadonlyArray<InboxEntry>;
   view: InboxView;
   onView: (view: InboxView) => void;
@@ -234,13 +241,16 @@ function NeedsList({
   listRef: RefObject<HTMLUListElement | null>;
 }) {
   // Until the reads land, the list holds three rows in skeleton, never a line in their place.
-  const reading = entries.length === 0 && (inbox.isPending || questions.isPending || blockers.isPending);
+  const { questions, blockers, failed } = reads;
+  const reading =
+    entries.length === 0 && (inbox.isPending || questions.isPending || blockers.isPending || failed.isPending);
   return (
     <aside aria-label={copy.title} className="flex w-95 flex-none flex-col border-e border-line bg-panel">
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
         {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
         <ReadState read={questions} failed={copy.question.loadFailed} />
         <ReadState read={blockers} failed={blockerCopy.loadFailed} />
+        <ReadState read={failed} failed={copy.failedTask.loadFailed} />
         {reading && (
           <div aria-busy="true" className="flex flex-col gap-2 px-2.5 py-1">
             <InboxRowsSkeleton />
@@ -250,6 +260,7 @@ function NeedsList({
                 void inbox.refetch();
                 void questions.refetch();
                 void blockers.refetch();
+                void failed.refetch();
               }}
             />
           </div>
@@ -291,11 +302,17 @@ const tabEntries = (
   tab: InboxTab,
   requests: ReadonlyArray<ApprovalRequest>,
   devices: ReadonlyArray<WaitingDevice>,
-  questions: ReadonlyArray<WaitingQuestion>,
-  blockers: ReadonlyArray<BackpackItem>,
-): ReadonlyArray<InboxEntry> => {
-  return tab === "needs" ? needsEntries({ devices, questions, blockers, requests }) : [];
-};
+  { questions, blockers, failed }: WaitReads,
+): ReadonlyArray<InboxEntry> =>
+  tab === "needs"
+    ? needsEntries({
+        devices,
+        questions: questions.data ?? NO_QUESTIONS,
+        blockers: blockers.data ?? NO_ITEMS,
+        failed: failed.data ?? NO_FAILED,
+        requests,
+      })
+    : [];
 
 function Selected({
   entry,
@@ -336,7 +353,7 @@ function Selected({
  * A read Needs you lists from besides the requests, when it failed: a way to read it again. While
  * it is read the list's skeleton rows stand in. A read again that failed keeps what was read before.
  */
-function ReadState({ read, failed }: { read: BlockersRead | QuestionsRead; failed: string }) {
+function ReadState({ read, failed }: { read: BlockersRead | QuestionsRead | FailedRead; failed: string }) {
   return read.isError ? <LoadFailed message={failed} onRetry={() => void read.refetch()} /> : null;
 }
 

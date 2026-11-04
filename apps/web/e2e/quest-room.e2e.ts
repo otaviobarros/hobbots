@@ -87,7 +87,7 @@ test("[TC-UX-201] the card, the header's quest button and the Inbox each open th
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-202] the chat column folds to a rail that marks a new message from the lead, and the device keeps the fold", async ({
+test("[TC-UX-202] the chat column folds to a rail that marks a new message from the lead, which stays unread until the chat opens, and the device keeps the fold", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
@@ -110,13 +110,18 @@ test("[TC-UX-202] the chat column folds to a rail that marks a new message from 
   // Aldric writes again while the chat is folded: the rail marks it.
   await expect(rail.getByRole("button", { name: "Open the chat, new from Aldric" })).toBeVisible({ timeout: 30_000 });
   await expect(rail).toContainText("New from Aldric");
+  // Folded away, the chat reads nothing: the hub keeps the thread unread, so Aldric's tile says so.
+  const tile = page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Aldric, / });
+  await expect(tile).toHaveAccessibleName(/, new messages$/);
 
   // The fold is kept on this device across a reload, and opening the chat clears the mark.
   await page.reload();
   await expect(page.getByRole("complementary", { name: "Chat, folded" })).toBeVisible();
+  await expect(tile).toHaveAccessibleName(/, new messages$/);
   await rail.getByRole("button", { name: "Open the chat", exact: true }).click();
   await expect(rail).toBeHidden();
   await expect(composer).toBeVisible();
+  await expect(tile).not.toHaveAccessibleName(/, new messages$/);
   await page.reload();
   await expect(chat(page)).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Chat, folded" })).toBeHidden();

@@ -1,13 +1,23 @@
 import { BrowserWindow, Notification, type BrowserWindow as Window } from "electron";
+import type { HubChange } from "./hub-events-model.ts";
 import type { LoginItem } from "./login-item.ts";
 import { notificationChoices, notifyWhenOn } from "./notification-choices.ts";
-import { openRequestIn } from "./open-request.ts";
-import { deviceNotices, type RequestNoticesOptions, requestNotices } from "./request-notices.ts";
+import { openRequestIn, openTaskIn } from "./open-request.ts";
+import {
+  deviceNotices,
+  failedTaskNotices,
+  finishedNotices,
+  questionNotices,
+  type RequestNoticesOptions,
+  requestNotices,
+} from "./request-notices.ts";
+import type { TaskLink } from "./request-notices-model.ts";
 import type { SettingsStore } from "./settings.ts";
 import { onSecondLaunch } from "./single-instance.ts";
 
 /**
- * Sends a system notification for each new request, and each device asking to pair (ADR 021), while
+ * Sends a system notification for each new request, question that reached you and failed Task of a
+ * party member, each Quest that finished (ADR 027), and each device asking to pair (ADR 021), while
  * no Hobbots window is focused, from the main process so it works with every window closed. `fetch`
  * reads a hub route as this app: with the window key on the hub, with the device token on a
  * connected desktop (PE-006).
@@ -27,6 +37,10 @@ export const systemNotices = (options: {
     const window = await options.showWindow();
     if (window && requestId !== "") openRequestIn(window, requestId);
   };
+  const openTask = async (link: TaskLink | null) => {
+    const window = await options.showWindow();
+    if (window && link !== null) openTaskIn(window, link);
+  };
   const choices = () => notificationChoices(options.settings);
   const notices: RequestNoticesOptions = {
     read: async (path) => {
@@ -40,15 +54,36 @@ export const systemNotices = (options: {
     isFocused: () => BrowserWindow.getFocusedWindow() !== null,
     notify: notifyWhenOn("requests", choices, show),
     open: (requestId) => void open(requestId),
+    openTask: (link) => void openTask(link),
   };
   const requests = requestNotices(notices);
+  // A question or a failed Task needs you as a request does, under the same switch (ADR 027).
+  const questions = questionNotices(notices);
+  const failed = failedTaskNotices(notices);
+  const finishes = finishedNotices({ ...notices, notify: notifyWhenOn("finishes", choices, show) });
   // A device's prompt shows over the window, so its notification only needs to bring the window forward.
   const devices = deviceNotices({
     ...notices,
     notify: notifyWhenOn("devices", choices, show),
     open: () => void open(""),
   });
-  return { requests, devices };
+  return {
+    /** The event stream connected: anything may have changed while it was away, so every list is read. */
+    connected: () => {
+      void requests.check();
+      void questions.check();
+      void failed.check();
+      void devices.check();
+    },
+    /** Reads again the list a change makes stale, or announces a finished Quest. */
+    changed: (change: HubChange) => {
+      if (change._tag === "Approvals") void requests.check();
+      else if (change._tag === "Questions") void questions.check();
+      else if (change._tag === "Tasks") void failed.check();
+      else if (change._tag === "Pairing") void devices.check();
+      else if (change._tag === "QuestFinished") void finishes.finished(change.quest);
+    },
+  };
 };
 export type SystemNotices = ReturnType<typeof systemNotices>;
 

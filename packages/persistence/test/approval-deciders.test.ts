@@ -150,9 +150,10 @@ describe("ApprovalRepository deciders", () => {
 describe("0040_approval_deciders", () => {
   // covers DP-003, PE-003
   it("[TC-IN-202] keeps every request closed before it, with no decider recorded", async () => {
-    // Keeps 0047, 0049 and 0051 too: the repository that seeds the hob writes its name with each
-    // version, seeds the thread with its pin, and writes the reply with the prompt it answers.
-    const kept = new Set(["0047_versioned_name", "0049_thread_pinned_at", "0051_steer_receipts"]);
+    // Keeps 0047, 0049, 0051 and 0053 too: the repository that seeds the hob writes its name with
+    // each version, seeds the thread with its pin, writes the reply with the prompt it answers and
+    // reads the thread with how far you read it.
+    const kept = new Set(["0047_versioned_name", "0049_thread_pinned_at", "0051_steer_receipts", "0053_thread_reads"]);
     const earlier = Object.fromEntries(
       Object.entries(migrations).filter(([key]) => key < "0040" || kept.has(key)),
     ) as typeof migrations;

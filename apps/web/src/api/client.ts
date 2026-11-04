@@ -13,8 +13,11 @@ export interface LoginItemState {
 
 /** Which system notifications the desktop app sends, each on until turned off. */
 export interface NotificationChoices {
+  /** A hob needs you: an approval, a question that reached you or a member's failed Task (ADR 027). */
   readonly requests: boolean;
   readonly devices: boolean;
+  /** A Quest finished (ADR 027). */
+  readonly finishes: boolean;
   readonly sound: boolean;
 }
 
@@ -80,6 +83,13 @@ declare global {
        * notification is clicked; answers a function that stops listening.
        */
       readonly onOpenRequest?: (listener: (requestId: string) => void) => () => void;
+      /**
+       * Calls `listener` with each Task the desktop app asks to open in its lead's chat, as when a
+       * notification about a question, a failed Task or a finished Quest is clicked (ADR 027).
+       */
+      readonly onOpenTask?: (
+        listener: (link: { readonly hobId: string; readonly threadId: string; readonly taskId: string }) => void,
+      ) => () => void;
       /**
        * Only on a connected desktop (ADR 025): the hub it uses, where the connection stands, and
        * Disconnect, which revokes this computer on the hub, forgets the hub here and starts the app

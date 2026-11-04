@@ -4,6 +4,7 @@ import {
   type ApprovalRequest,
   type BackpackBlocker,
   type BackpackItem,
+  type FailedTask,
   openBlocker,
   type Quest,
   type TaskId,
@@ -12,6 +13,7 @@ import {
 } from "@hobbots/domain";
 import { firstLine } from "../../lib/format.ts";
 import { blockerTries, blockerWhat } from "../blockers/blocker-model.ts";
+import { taskTitle } from "../quest/work-model.ts";
 import { expiryText, requestTitle, statusText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
 
@@ -19,14 +21,15 @@ const copy = messages;
 
 /**
  * One thing in the Inbox list. Every kind shows as the same row and opens beside the list: a
- * request to approve, a question no lead could answer, work that is stuck, or a device asking to
- * pair. `key` names it in the address: a request by its own id, so links from Home and the chat
+ * request to approve, a question no lead could answer, work that is stuck, a party member's Task
+ * that failed while its Quest goes on (ADR 027), or a device asking to pair. `key` names it in the address: a request by its own id, so links from Home and the chat
  * still open it, and the other kinds by their kind and id.
  */
 export type InboxEntry =
   | { readonly kind: "approval"; readonly key: string; readonly request: ApprovalRequest }
   | { readonly kind: "question"; readonly key: string; readonly waiting: WaitingQuestion }
   | { readonly kind: "stuck"; readonly key: string; readonly item: BackpackItem }
+  | { readonly kind: "failed"; readonly key: string; readonly failed: FailedTask }
   | { readonly kind: "device"; readonly key: string; readonly device: WaitingDevice };
 
 export const approvalEntry = (request: ApprovalRequest): InboxEntry => ({ kind: "approval", key: request.id, request });
@@ -39,6 +42,12 @@ export const questionEntry = (waiting: WaitingQuestion): InboxEntry => ({
 
 export const stuckEntry = (item: BackpackItem): InboxEntry => ({ kind: "stuck", key: `stuck:${item.id}`, item });
 
+export const failedEntry = (failed: FailedTask): InboxEntry => ({
+  kind: "failed",
+  key: `failed:${failed.task.id}`,
+  failed,
+});
+
 export const deviceEntry = (device: WaitingDevice): InboxEntry => ({
   kind: "device",
   key: `device:${device.request.id}`,
@@ -49,23 +58,26 @@ export const deviceEntry = (device: WaitingDevice): InboxEntry => ({
 export const namesRequest = (key: string): boolean => !key.includes(":");
 
 /**
- * What Needs you lists, in one list: devices asking, questions for you, stuck work, then the
- * requests.
+ * What Needs you lists, in one list: devices asking, questions for you, stuck work, failed Tasks,
+ * then the requests.
  */
 export const needsEntries = ({
   devices,
   questions,
   blockers,
+  failed,
   requests,
 }: {
   readonly devices: ReadonlyArray<WaitingDevice>;
   readonly questions: ReadonlyArray<WaitingQuestion>;
   readonly blockers: ReadonlyArray<BackpackItem>;
+  readonly failed: ReadonlyArray<FailedTask>;
   readonly requests: ReadonlyArray<ApprovalRequest>;
 }): Array<InboxEntry> => [
   ...devices.map(deviceEntry),
   ...questions.map(questionEntry),
   ...blockers.filter((item) => openBlocker(item) !== undefined).map(stuckEntry),
+  ...failed.map(failedEntry),
   ...requests.map(approvalEntry),
 ];
 
@@ -78,12 +90,14 @@ export const entryThread = (entry: InboxEntry): ThreadId | null => {
       return entry.waiting.task.threadId;
     case "stuck":
       return entry.item.threadId;
+    case "failed":
+      return entry.failed.task.threadId;
     default:
       return null;
   }
 };
 
-/** The hob an entry comes from: the hob that asked, or whose work is stuck. None for a device. */
+/** The hob an entry comes from: the hob that asked, or whose work is stuck or failed. None for a device. */
 export const entryAsker = (entry: InboxEntry): AgentId | undefined => {
   switch (entry.kind) {
     case "approval":
@@ -92,6 +106,8 @@ export const entryAsker = (entry: InboxEntry): AgentId | undefined => {
       return entry.waiting.question.askerId;
     case "stuck":
       return entry.item.recipientId;
+    case "failed":
+      return entry.failed.task.ownerId;
     default:
       return undefined;
   }
@@ -106,6 +122,8 @@ const entryTask = (entry: InboxEntry): TaskId | null => {
       return entry.waiting.task.id;
     case "stuck":
       return entry.item.taskId;
+    case "failed":
+      return entry.failed.task.id;
     default:
       return null;
   }
@@ -178,6 +196,8 @@ const urgency = (entry: InboxEntry) => {
         expiresAt: null,
         since: openBlocker(entry.item)?.raisedAt ?? entry.item.updatedAt,
       };
+    case "failed":
+      return { closed: false, risky: false, expiresAt: null, since: entry.failed.task.updatedAt };
     default:
       return {
         closed: false,
@@ -303,6 +323,19 @@ const stuckRow = (item: BackpackItem, names: HobName, lead: AgentId | undefined)
   };
 };
 
+const failedRow = ({ task, leadId }: FailedTask, names: HobName, lead: AgentId | undefined): InboxRow => {
+  const by = leadId ?? lead;
+  const chain = by !== undefined && by !== task.ownerId ? [by, task.ownerId] : [task.ownerId];
+  return {
+    chain: chain.map(names),
+    kind: copy.kind.failed,
+    tag: "failed",
+    what: taskTitle(task),
+    when: copy.row.failed({ name: names(task.ownerId) }),
+    tone: "stuck",
+  };
+};
+
 const deviceRow = ({ request }: WaitingDevice, now: Date): InboxRow => ({
   chain: [request.name, copy.row.youEnd],
   kind: copy.kind.device,
@@ -324,6 +357,8 @@ export const entryRow = (entry: InboxEntry, names: HobName, lead: AgentId | unde
       return questionRow(entry.waiting, names);
     case "stuck":
       return stuckRow(entry.item, names, lead);
+    case "failed":
+      return failedRow(entry.failed, names, lead);
     default:
       return deviceRow(entry.device, now);
   }

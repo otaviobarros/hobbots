@@ -226,8 +226,9 @@ export const messages = {
   notifications: {
     requests: {
       label: "When a hob needs me",
-      note: "Approvals a hob waits on, while no Hobbots window is in front. Recommended.",
+      note: "Approvals, questions that reach you and failed tasks, while no Hobbots window is in front. Recommended.",
     },
+    finishes: { label: "When work finishes", note: "One notification when a quest is done." },
     devices: { label: "When a device asks to connect", note: "A phone or computer asking to use this hub." },
     sound: { label: "Play a sound", note: "The system sound with each notification." },
     failed: "Hobbots could not read or change its notifications. Try again.",

@@ -1,5 +1,6 @@
 import {
   AgentId,
+  FailedTask,
   HistoryFilter,
   HistoryPage,
   MemberWork,
@@ -80,6 +81,10 @@ export const HistoryQuery = {
   ),
 };
 
+/** Members' failed Tasks that wait on you, oldest first, with the cursor as above (ADR 027). */
+export const FailedTasksRead = Schema.Struct({ cursor: Schema.String, tasks: Schema.Array(FailedTask) });
+export type FailedTasksRead = typeof FailedTasksRead.Type;
+
 /** Tasks and Quests (ADR 018): reads only. Hobs change them through their tools; the user through `TaskControlsGroup`. */
 export class TasksGroup extends HttpApiGroup.make("tasks")
   .add(
@@ -106,6 +111,8 @@ export class TasksGroup extends HttpApiGroup.make("tasks")
       success: ThreadTasksRead,
       error: ThreadNotFound,
     }),
+    // Members' Tasks that failed while their work goes on: a needs-you mark and a notification each.
+    HttpApiEndpoint.get("failed", "/failed-tasks", { success: FailedTasksRead }),
     // What a hob does on Quests it joined as a party member: its Task, the brief and the Quest.
     HttpApiEndpoint.get("questWork", "/agents/:agentId/quest-work", {
       params: { agentId: AgentId },

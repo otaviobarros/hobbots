@@ -24,7 +24,14 @@ export const messages = {
   untitledThread: "A thread",
   unknownHob: "A hob",
   unknownDevice: "a device",
-  kind: { approval: "Approval", expired: "Expired", question: "Question", stuck: "Stuck", device: "New device" },
+  kind: {
+    approval: "Approval",
+    expired: "Expired",
+    question: "Question",
+    stuck: "Stuck",
+    failed: "Failed",
+    device: "New device",
+  },
   /** One row of the list: who asked, as a chain, and when. */
   row: {
     arrow: " → ",
@@ -34,6 +41,7 @@ export const messages = {
     stuckAfter: ({ count }: { count: number }) =>
       plural(count, { one: `Stuck after ${formatCount(count)} try`, other: `Stuck after ${formatCount(count)} tries` }),
     retired: ({ name }: { name: string }) => `${name} retired`,
+    failed: ({ name }: { name: string }) => `${name}'s task failed`,
     deviceAsks: "A new device asks to join",
   },
   status: {
@@ -52,7 +60,8 @@ export const messages = {
   },
   allClear: "Nothing needs you",
   allQuiet: "All quiet here.",
-  allClearHint: "Your hobs are working. Approvals, questions and stuck work land here first, and on Home.",
+  allClearHint:
+    "Your hobs are working. Approvals, questions, stuck work and failed tasks land here first, and on Home.",
   seeDecided: "See what you decided",
   backHome: "Back to Home",
   emptyHistory: "No decisions yet",
@@ -130,6 +139,18 @@ export const messages = {
     goesBack: ({ name }: { name: string }) => `Goes back to ${name}, who passes it to the hob that asked.`,
     goesStraight: ({ name }: { name: string }) => `Goes straight back to ${name}.`,
     loadFailed: "Hobbots could not read the questions for you.",
+  },
+  /** A party member's Task that failed while its Quest goes on (ADR 027), in Needs you. */
+  failedTask: {
+    label: ({ name, what }: { name: string; what: string }) => `Failed task from ${name}: ${what}`,
+    title: ({ name }: { name: string }) => `${name}'s task failed`,
+    why: ({ lead }: { lead: string }) =>
+      `The rest of ${lead}'s quest goes on without it. Retry it, or open it to give it to another hob or cancel it.`,
+    retry: "Retry",
+    retrying: "Retrying…",
+    retried: ({ name }: { name: string }) => `Sent back to ${name} for another try.`,
+    openTask: "Open the task",
+    loadFailed: "Hobbots could not read the failed tasks.",
   },
   /** The keycaps under the list in Needs you. */
   keys: {

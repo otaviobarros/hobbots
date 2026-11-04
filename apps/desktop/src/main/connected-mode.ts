@@ -294,17 +294,14 @@ export const startConnected = async (
     canConnect: () => connectionState.current.state === "connected",
     onConnected: () => {
       connectionState.set({ state: "connected", version: connectionState.hubVersion ?? "" });
-      void notices.requests.check();
-      void notices.devices.check();
+      notices.connected();
     },
     onChange: (change) => {
-      if (change._tag === "Approvals") void notices.requests.check();
-      else if (change._tag === "Pairing") void notices.devices.check();
-      else if (change._tag === "RemoteAccess") {
+      if (change._tag === "RemoteAccess") {
         const next = followedAddress(connection.address, change);
         if (next !== null) void moveTo(next, change);
         else followWindows(change);
-      }
+      } else notices.changed(change);
     },
     onLost: tryAgain,
   });
