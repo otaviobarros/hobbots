@@ -138,6 +138,7 @@ const withTone = (payload: CreateAgentPayload) => ({
 });
 
 const editableFields = [
+  "name",
   ...roleFields,
   ...toneFields,
   "lookSeed",

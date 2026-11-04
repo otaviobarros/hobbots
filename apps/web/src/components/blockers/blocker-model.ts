@@ -20,13 +20,13 @@ export const blockerWhat = (item: BackpackItem): string => {
 /** Why it is stuck, in words, with how its last try ended when the hub said. */
 export const blockerWhy = (item: BackpackItem, blocker: BackpackBlocker, hobName: string): string => {
   if (blocker.reason === "recipient-retired") return copy.why["recipient-retired"]({ name: hobName });
-  const tries = copy.why["retries-exhausted"]({ count: blocker.afterDeliveries - previousDeliveries(item, blocker) });
+  const tries = copy.why["retries-exhausted"]({ count: blockerTries(item, blocker) });
   return blocker.lastEnd === null ? tries : `${tries} ${copy.lastEnd[blocker.lastEnd]}`;
 };
 
-/** The deliveries the item had used before this blocker's round of tries. */
-const previousDeliveries = (item: BackpackItem, blocker: BackpackBlocker) =>
-  item.blockers.find((each) => each.number === blocker.number - 1)?.afterDeliveries ?? 0;
+/** How many times the item was tried in the round that ended in this blocker. */
+export const blockerTries = (item: BackpackItem, blocker: BackpackBlocker): number =>
+  blocker.afterDeliveries - (item.blockers.find((each) => each.number === blocker.number - 1)?.afterDeliveries ?? 0);
 
 /** The open blockers among `items` about a Task in `taskIds`: the ones a Task card shows. */
 export const blockersOn = (

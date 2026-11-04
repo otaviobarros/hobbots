@@ -39,7 +39,7 @@ import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semapho
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing } from "./briefing.ts";
-import { CharmTools, type CharmTurn, combineHubTools, LocalGitTools } from "./charms.ts";
+import { type CharmTurn, charmOffer, combineHubTools } from "./charms.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
@@ -257,14 +257,8 @@ export class ChatService extends Context.Service<
         });
       // Without Task work, turns offer no Task tools and hobs run no steps.
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
-      // Without Charms, turns offer only the Task tools.
-      const charms = yield* Effect.serviceOption(CharmTools);
-      const charmsFor = (turn: CharmTurn) =>
-        Option.isSome(charms) ? charms.value.forTurn(turn) : Effect.succeed(null);
-      // Without local Git tools, a hob cannot create a repository from its sandbox.
-      const localGit = yield* Effect.serviceOption(LocalGitTools);
-      const localGitFor = (turn: CharmTurn) =>
-        Option.isSome(localGit) ? localGit.value.forTurn(turn) : Effect.succeed(null);
+      // Without Charms or local Git tools, turns offer only the Task tools.
+      const charmsFor = yield* charmOffer;
       // Without a backpack, a thread starts only your queued messages.
       const continuations = yield* Effect.serviceOption(Continuations);
       // After a restore nothing that waited starts on its own until you resume work (ADR 026).
@@ -408,7 +402,8 @@ export class ChatService extends Context.Service<
           );
           for (const version of versions) {
             const config = yield* repo.findAgentConfig(agent.id, version);
-            if (Option.isNone(config) || systemInstructions(agent.name, config.value) !== instructions) return true;
+            if (Option.isNone(config) || systemInstructions(config.value.name, config.value) !== instructions)
+              return true;
           }
           return false;
         });
@@ -464,7 +459,6 @@ export class ChatService extends Context.Service<
         carry: Carry,
       ) =>
         Effect.gen(function* () {
-          const name = agent.name;
           const adapter = adapters(brain.runtime);
           if (adapter === undefined) {
             yield* transition(
@@ -488,8 +482,9 @@ export class ChatService extends Context.Service<
           );
           yield* checkpoint.pipe(Effect.delay("1 second"), Effect.forever, Effect.forkScoped);
           const update = (f: (message: Message) => Message | unknown) => transition(reply, f, saveMessage);
-          // The session the turn ran in, for the Attempt it may start on a Task.
+          // The session the turn ran in, and the policy version its tools ran under, for the Attempt it may start on a Task.
           let turnSession: string | null = null;
+          let turnPolicy: string | null = null;
 
           // Saves a step's change with the reply. A tool call that starts is stamped with when.
           const saveStep = (event: RuntimeEvent) =>
@@ -514,6 +509,7 @@ export class ChatService extends Context.Service<
               case "SessionStarted":
                 return Effect.gen(function* () {
                   turnSession = event.sessionId;
+                  turnPolicy = event.policyVersion ?? null;
                   // The runtime accepted the turn: the work it carries is now being processed.
                   yield* carry.accepted(event.sessionId);
                   const seenThrough = (yield* Ref.get(reply.current)).id;
@@ -604,7 +600,8 @@ export class ChatService extends Context.Service<
                   configVersion: config.version,
                   holding: carry.holding,
                 }),
-                (turn) => Ref.get(reply.current).pipe(Effect.flatMap((m) => turn.end(turnEnding(m), turnSession))),
+                (turn) =>
+                  Ref.get(reply.current).pipe(Effect.flatMap((m) => turn.end(turnEnding(m), turnSession, turnPolicy))),
               )
             : null;
           onTask = taskTurn;
@@ -618,7 +615,7 @@ export class ChatService extends Context.Service<
                 prompt,
                 briefing: [briefing, taskTurn?.briefing ?? null].filter((part) => part !== null).join("\n\n") || null,
                 sessionId: thread.sessions.find((s) => s.runtime === brain.runtime)?.sessionId ?? null,
-                instructions: systemInstructions(name, config),
+                instructions: systemInstructions(config.name, config),
                 instructionsChanged: changed,
                 model: brain.model,
                 effort: brain.effort,
@@ -640,10 +637,7 @@ export class ChatService extends Context.Service<
                   };
                   // A Charm call's refusal is recorded as a Task tool's is, when the turn has Task tools.
                   const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);
-                  return combineHubTools(
-                    taskTurn?.hubTools ?? null,
-                    recorded(combineHubTools(yield* localGitFor(charmTurn), yield* charmsFor(charmTurn))),
-                  );
+                  return combineHubTools(taskTurn?.hubTools ?? null, recorded(yield* charmsFor(charmTurn)));
                 }),
               },
               adapter.sendPrompt,
@@ -752,7 +746,7 @@ export class ChatService extends Context.Service<
             thread,
             brain.runtime,
             agent,
-            systemInstructions(agent.name, config),
+            systemInstructions(config.name, config),
           );
           busy.add(thread.id);
           // Registered before the turn starts, so a stop sent right away still reaches it.

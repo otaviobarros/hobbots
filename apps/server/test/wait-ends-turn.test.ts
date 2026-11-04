@@ -5,6 +5,7 @@ import {
   AgentId,
   EMPTY_HOB_POLICY,
   MessageId,
+  QuestionId,
   type TaskId,
   TaskId as TaskIdSchema,
   Thread,
@@ -148,7 +149,7 @@ describe("a wait ends the turn", () => {
     // No automatic "waiting" checkpoint while the turn still runs.
     expect(during.checkpoints.filter((each) => each.taskId === top && each.kind === "waiting")).toEqual([]);
 
-    await run(turn.end({ _tag: "Replied", text: "" }, null));
+    await run(turn.end({ _tag: "Replied", text: "" }, null, null));
     const after = await treeOf(top);
     expect(after.tasks[0]?.state).toBe("waiting");
     expect(after.checkpoints.filter((each) => each.taskId === top && each.kind === "waiting")).toHaveLength(1);
@@ -157,7 +158,72 @@ describe("a wait ends the turn", () => {
     const next = await run(chatTurn("m-2"));
     const again = await run(next.hubTools.call("wait_for", { key: "wait-later", tasks: [pip] }));
     expect(again.text).toContain("End your turn now.");
-    await run(next.end({ _tag: "Replied", text: "" }, null));
+    await run(next.end({ _tag: "Replied", text: "" }, null, null));
     expect((await treeOf(top)).tasks[0]?.state).toBe("waiting");
+  });
+
+  // covers OR-003
+  it("[TC-OR-522] asking again for what it already waits on records nothing, after one of them ended too", async () => {
+    await run(seed);
+    const turn = await run(chatTurn("m-1"));
+    const delegate = async (key: string, brief: string) => {
+      const done = await run(turn.hubTools.call("delegate_task", { key, hob: "Pip", brief }));
+      return TaskIdSchema.make(
+        (JSON.parse(done.text.split("\n").at(-1) ?? "{}") as { readonly task_id: string }).task_id,
+      );
+    };
+    const backend = await delegate("backend", "Write the backend");
+    const tests = await delegate("tests", "Write the tests");
+    await run(turn.hubTools.call("wait_for", { key: "wait", tasks: [backend, tests] }));
+    const cancelled = await run(turn.hubTools.call("cancel_task", { key: "drop-tests", task_id: tests }));
+    expect(cancelled.refused).toBe(false);
+
+    // With the ended Task or without it, the wait is the same one: nothing is journaled.
+    const before = await head();
+    for (const [key, tasks] of [
+      ["again-without", [backend]],
+      ["again-with", [tests, backend]],
+    ] as const) {
+      const again = await run(turn.hubTools.call("wait_for", { key, tasks: [...tasks] }));
+      expect(again.text).toContain("already waits for these. End your turn now.");
+    }
+    expect(await head()).toEqual(before);
+  });
+
+  // covers OR-003, OR-005
+  it("[TC-OR-523] wait_for refuses a question's id saying it takes Task ids, and names the question's Task", async () => {
+    await run(seed);
+    const turn = await run(chatTurn("m-1"));
+    const delegated = await run(
+      turn.hubTools.call("delegate_task", { key: "backend", hob: "Pip", brief: "Write the backend" }),
+    );
+    const pip = TaskIdSchema.make(
+      (JSON.parse(delegated.text.split("\n").at(-1) ?? "{}") as { readonly task_id: string }).task_id,
+    );
+    await run(
+      Effect.flatMap(Effect.service(TaskRepository), (tasks) =>
+        tasks.askQuestion({
+          id: QuestionId.make("q-port"),
+          taskId: pip,
+          askerId: PIP,
+          text: "Which port?",
+          createdAt: now,
+        }),
+      ),
+    );
+
+    const lead = await run(turn.hubTools.call("wait_for", { key: "wait-q", tasks: ["q-port"] }));
+    expect(lead.refused).toBe(true);
+    expect(lead.text).toContain("wait_for takes the ids of Tasks under Task");
+    expect(lead.text).toContain(`q-port is a question about Task ${pip}: wait for that Task instead.`);
+
+    // Pip, who asked it, reads that the answer wakes it.
+    const tools = await run(
+      Effect.map(Effect.service(TaskTools), (each) => each.forTurn({ agentId: PIP, taskId: pip })),
+    );
+    const own = await run(tools.call("wait_for", { key: "wait-own", tasks: ["q-port"] }));
+    expect(own.refused).toBe(true);
+    expect(own.text).toContain(`q-port is your own question about Task ${pip}`);
+    expect(own.text).toContain("Hobbots wakes you with the answer");
   });
 });

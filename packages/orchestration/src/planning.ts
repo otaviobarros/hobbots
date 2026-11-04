@@ -9,12 +9,14 @@ import {
   MilestoneId,
   pendingApprovals,
   QuestId,
+  reportsOn,
   type Task,
   TaskId,
   TaskReadiness,
   type TaskState,
   type TaskToolInput,
   type TaskToolRefused,
+  type TaskWait,
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { Authority, PathSeparator } from "./authority.ts";
@@ -89,7 +91,7 @@ const openOnAwaited = (scope: CallScope, awaited: ReadonlyArray<Task>) => {
   // until someone acts on a Task it comes after (#667).
   const blockers = awaited.flatMap((each) => {
     const reported = scope.tree.checkpoints
-      .filter((checkpoint) => checkpoint.taskId === each.id && checkpoint.source !== "automatic")
+      .filter((checkpoint) => checkpoint.taskId === each.id && reportsOn(checkpoint))
       .toSorted((a, b) => b.revision - a.revision)[0];
     const latest = reported?.kind === "blocker" ? reported.summary : null;
     if (isTerminalTask(each.state)) return [];
@@ -131,9 +133,50 @@ const openDetails = (open: ReturnType<typeof openOnAwaited>) => ({
   ...(open.blockers.length === 0 ? {} : { blockers: open.blockers }),
 });
 
-const sameTasks = (recorded: ReadonlyArray<string>, asked: ReadonlyArray<string>) => {
-  const wanted = new Set(asked);
-  return recorded.length === wanted.size && recorded.every((id) => wanted.has(id));
+/**
+ * Whether a wait asks again for what `recorded` already waits for: the same Tasks of those still
+ * open, so asking again after one of them ended, with or without it, changes nothing (#702).
+ */
+const sameWait = (
+  recorded: TaskWait,
+  asked: ReadonlyArray<string>,
+  mode: TaskWait["mode"],
+  ended: (id: string) => boolean,
+) => {
+  const open = (ids: ReadonlyArray<string>) => new Set(ids.filter((id) => !ended(id)));
+  const [was, now] = [open(recorded.on), open(asked)];
+  return recorded.mode === mode && was.size === now.size && [...was].every((id) => now.has(id));
+};
+
+/**
+ * Why `wait_for` refuses ids that are not Tasks under the caller's: it takes Task ids, and a question's
+ * id names the Task the question is about, which the hob waits on instead, or not at all when it is
+ * its own, since the hub wakes it with the answer (#702).
+ */
+const outsideMessage = (
+  scope: CallScope,
+  task: Task,
+  under: ReadonlyMap<string, Task>,
+  outside: ReadonlyArray<string>,
+) => {
+  const questions = outside.flatMap((id) => {
+    const question = scope.tree.questions.find((each) => each.id === id);
+    if (question === undefined) return [];
+    if (question.taskId === task.id) {
+      return [
+        `${id} is your own question about Task ${task.id}: you need not wait for it, since Hobbots wakes you with the answer.`,
+      ];
+    }
+    return [
+      under.has(question.taskId)
+        ? `${id} is a question about Task ${question.taskId}: wait for that Task instead.`
+        : `${id} is a question about Task ${question.taskId}, which is not under yours either: answer it with answer if it waits for you.`,
+    ];
+  });
+  return [
+    `wait_for takes the ids of Tasks under Task ${task.id}, and these are not: ${outside.join(", ")}.`,
+    ...questions,
+  ].join(" ");
 };
 
 const newMilestones = (titles: ReadonlyArray<string> | undefined) =>
@@ -229,11 +272,12 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, au
       const under = new Map(descendantsOf(task, scope.tree.tasks).map((each) => [each.id as string, each]));
       const outside = input.tasks.filter((id) => !under.has(id));
       if (outside.length > 0) {
-        return yield* refuse("wait-outside-subtree", `These are not under Task ${task.id}: ${outside.join(", ")}.`);
+        return yield* refuse("wait-outside-subtree", outsideMessage(scope, task, under, outside));
       }
       const mode = input.mode ?? "all";
       const states = Object.fromEntries(input.tasks.map((id) => [id, under.get(id)?.state ?? "missing"]));
-      const ended = input.tasks.filter((id) => isTerminalTask(under.get(id)?.state as TaskState));
+      const hasEnded = (id: string) => isTerminalTask(under.get(id)?.state as TaskState);
+      const ended = input.tasks.filter(hasEnded);
       if (mode === "any" ? ended.length > 0 : ended.length === input.tasks.length) {
         return { done: { message: "Nothing to wait for: they have already ended.", details: { states } }, entries: [] };
       }
@@ -243,7 +287,7 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, au
       );
       const details = { states, ...openDetails(open) };
       const recorded = scope.tree.waits.find((wait) => wait.taskId === task.id);
-      if (recorded !== undefined && recorded.mode === mode && sameTasks(recorded.on, input.tasks)) {
+      if (recorded !== undefined && sameWait(recorded, input.tasks, mode, hasEnded)) {
         return {
           done: { message: `Task ${task.id} already waits for these. ${afterWaiting(open)}`, details },
           entries: [],

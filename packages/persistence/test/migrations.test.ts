@@ -18,6 +18,7 @@ import githubCharm from "../src/migrations/0027_github_charm.ts";
 import backpackBlockers from "../src/migrations/0029_backpack_blockers.ts";
 import withdrawnQuestions from "../src/migrations/0033_withdrawn_questions.ts";
 import taskGrants from "../src/migrations/0035_task_grants.ts";
+import versionedName from "../src/migrations/0047_versioned_name.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1032,6 +1033,51 @@ describe("0035_task_grants", () => {
     expect(result.entries.map((e) => e.payload)).toMatchObject([
       { _tag: "GrantCreated", grant: { id: "g1", lifetime: "always", taskId: null } },
       { _tag: "GrantRevoked", grant: { id: "g1", taskId: null, revokeReason: "removed" } },
+    ]);
+  });
+});
+
+describe("0047_versioned_name", () => {
+  // covers AG-002, DP-003
+  it("[TC-AG-103] gives every stored version the name its hob has", async () => {
+    const versions = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      for (const [id, name] of [
+        ["hob1", "Wren"],
+        ["hob2", "Pip"],
+      ] as const) {
+        yield* sql`INSERT INTO agents ${sql.insert({
+          id,
+          name,
+          roleTitle: "Writer",
+          runtime: "claude-code",
+          instructions: "",
+          lookSeed: 1,
+          lookColor: "moss",
+          configVersion: 2,
+          createdAt: "2026-11-04T00:00:00.000Z",
+        })}`;
+        for (const version of [1, 2]) {
+          yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+            agentId: id,
+            version,
+            roleTitle: "Writer",
+            instructions: "",
+            lookSeed: 1,
+            lookColor: "moss",
+            createdAt: "2026-11-04T00:00:00.000Z",
+          })}`;
+        }
+      }
+      yield* versionedName;
+      return yield* sql`SELECT agent_id, version, name FROM agent_config_versions ORDER BY agent_id, version`;
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0047"))), Effect.runPromise);
+
+    expect(versions).toEqual([
+      { agentId: "hob1", version: 1, name: "Wren" },
+      { agentId: "hob1", version: 2, name: "Wren" },
+      { agentId: "hob2", version: 1, name: "Pip" },
+      { agentId: "hob2", version: 2, name: "Pip" },
     ]);
   });
 });

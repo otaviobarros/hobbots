@@ -44,7 +44,7 @@ import { cut, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { makeCancelSettler } from "./cancels.ts";
 import { delegatedAccess, makeMemberRunner } from "./members.ts";
-import { type Ending, type Running, runSessionTurn, STOPPED, type StopReason } from "./session.ts";
+import { currentAccessOf, type Ending, type Running, runSessionTurn, STOPPED, type StopReason } from "./session.ts";
 import { TaskSignal } from "./signal.ts";
 import { TaskTools } from "./task-tools.ts";
 import { endTurn } from "./turn-end.ts";
@@ -187,7 +187,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
         config: AgentConfiguration,
         step: Task,
         tree: TaskTree,
-        access: ToolAccess | null,
+        run: Running,
         attemptId: AttemptId,
         carried: ReadonlyArray<CarriedItem>,
         approvals: TurnApprovals | null,
@@ -202,17 +202,21 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             attemptId,
             // A fresh session: nothing of the hob's chat or of other steps.
             sessionId: null,
-            access,
+            access: run.access,
             // A call the policy answers Ask for is refused, since a step has no conversation to ask in,
             // unless a grant answers it: This Task's cover every step of the Task (ADR 018).
             approvals,
             recordToolStart: recordToolStart(step),
-            hubTools: tools.forTurn({ agentId: agent.id, taskId: step.id, carried }, STEP_TOOLS),
-            started: (sessionId) =>
+            hubTools: tools.forSession(
+              { agentId: agent.id, taskId: step.id, carried },
+              { currentAccess: currentAccessOf(run), redactor, approvals },
+              STEP_TOOLS,
+            ),
+            started: (session) =>
               Effect.asVoid(
                 Effect.flatMap(nowIso, (at) =>
                   attempt(
-                    tasks.updateAttempt(attemptId, { _tag: "Running", sessionId, at }),
+                    tasks.updateAttempt(attemptId, { _tag: "Running", ...session, at }),
                     "record a step's session",
                   ),
                 ),
@@ -333,12 +337,12 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                 };
                 running.set(step.id, run);
                 const grants = Option.isSome(approvalService)
-                  ? approvalService.value.forStep(step.ownerId, step.rootId, run.accessNow ?? Effect.succeed(access))
+                  ? approvalService.value.forStep(step.ownerId, step.rootId, currentAccessOf(run))
                   : null;
                 yield* FiberMap.run(
                   fibers,
                   step.id,
-                  runSession(agent.value, config.value, step, shown, access, attemptId, carried, grants).pipe(
+                  runSession(agent.value, config.value, step, shown, run, attemptId, carried, grants).pipe(
                     Effect.flatMap((ending) => settle(step.id, attemptId, endingOf(ending), carried)),
                     Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
                     Effect.ensuring(

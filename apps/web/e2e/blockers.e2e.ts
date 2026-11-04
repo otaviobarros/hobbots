@@ -74,10 +74,12 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck on its Task card and
 
   // Needs you lists it too, and Retry there starts the work again in the chat.
   await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
-  const needs = page.getByRole("region", { name: "Stuck work" });
-  await expect(needs).toContainText("1 piece of work is stuck");
+  // It is one row in the list, like every other kind, and opens beside it with its choices.
+  const row = page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Stuck/ });
+  await expect(row).toContainText("Stuck after 1 try");
+  const needs = page.getByRole("article", { name: /^Aldric's work is stuck/ });
   await needs.getByRole("button", { name: "Retry" }).click();
-  await expect(needs).toBeHidden();
+  await expect(row).toBeHidden();
   await expect(page.getByText("Nothing needs you")).toBeVisible();
   await page.goBack();
   await expect(page.getByText("Hobbots wrote this, not the user.").last()).toBeVisible({ timeout: 20_000 });
@@ -106,7 +108,7 @@ test("[TC-IN-097] Dismiss takes stuck work off the card and out of Needs you", a
   await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Inbox", exact: true }).click();
   await expect(page.getByText("Nothing needs you")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Stuck work" })).toBeHidden();
+  await expect(page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Stuck/ })).toBeHidden();
 });
 
 /** The read of the blockers, without the decision endpoint under it. */

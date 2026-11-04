@@ -56,8 +56,11 @@ export interface ChatTaskTurn {
   readonly attempt: Effect.Effect<AttemptId | null>;
   /** The folders the Quest on its Task works in, which the turn's activity is tracked in (#670); null for all. */
   readonly workIn: Effect.Effect<ReadonlyArray<string> | null>;
-  /** Ends the Attempt the turn started on its Task, if it started one, by the one turn-end decision. */
-  readonly end: (ending: TurnEnding, sessionId: string | null) => Effect.Effect<void>;
+  /**
+   * Ends the Attempt the turn started on its Task, if it started one, by the one turn-end decision,
+   * with the session the turn ran in and the policy version its tools ran under.
+   */
+  readonly end: (ending: TurnEnding, sessionId: string | null, policyVersion: string | null) => Effect.Effect<void>;
 }
 
 /**

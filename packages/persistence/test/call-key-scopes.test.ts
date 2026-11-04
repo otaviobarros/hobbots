@@ -217,7 +217,10 @@ describe("tool call keys per Task", () => {
 
   // covers DP-003
   it("[TC-OR-423] 0045 keeps every stored call and refusal readable, each in the work its input names, compared without its turn", async () => {
-    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0045")) as typeof migrations;
+    // Keeps 0047 too: the repository that seeds the hob writes its name with each version.
+    const earlier = Object.fromEntries(
+      Object.entries(migrations).filter(([id]) => id < "0045" || id === "0047_versioned_name"),
+    ) as typeof migrations;
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* seed;

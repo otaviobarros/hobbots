@@ -10,6 +10,7 @@ import { ApiError } from "../api/client.ts";
 import { settleBrain } from "../api/first-hob.ts";
 import {
   aboutLine,
+  draftProblem,
   goodAt,
   INSTRUCTIONS_MAX,
   isDirty,
@@ -20,7 +21,6 @@ import {
   RETIRE_OPTIONS,
   rebaseDraft,
   retiredSummary,
-  roleProblem,
 } from "../api/profile.ts";
 import {
   agentsQuery,
@@ -36,6 +36,7 @@ import { ExportDialog } from "./export/export-dialog.tsx";
 import { messages as exportCopy } from "./export/messages.ts";
 import { CharmsTab } from "./hob-charms.tsx";
 import { Choice, ModelsBrain } from "./hob-form.tsx";
+import { NameAndLook } from "./hob-name-look.tsx";
 import { PermissionsTab } from "./hob-permissions.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
@@ -269,7 +270,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
   }, [draftModels.data]);
 
   const edit = profileEdit(hob, draft);
-  const problem = roleProblem(draft);
+  const problem = draftProblem(draft);
   const changes = Object.keys(edit).length > 0 && problem === undefined;
   const rejected = update.error instanceof ApiError && update.error.tag === "InvalidHob" ? update.error : undefined;
 
@@ -311,6 +312,8 @@ function ProfileTab({ hob }: { hob: Agent }) {
     <form onSubmit={save} className="flex min-h-0 flex-1 flex-col">
       <div className="relative min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
         <div className="flex max-w-[880px] flex-col gap-6">
+          <NameAndLook name={hob.name} draft={draft} disabled={update.isPending} onChange={setDraft} />
+
           <section aria-labelledby="hob-role" className="flex flex-col gap-2">
             <h2 id="hob-role" className="lbl m-0 text-moonlight">
               {copy.role}
