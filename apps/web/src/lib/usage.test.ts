@@ -8,7 +8,9 @@ import {
   hobShares,
   leftOf,
   localDay,
+  meterLevel,
   periodStart,
+  planLevel,
   refillOf,
   reportedCredits,
   wholeShares,
@@ -44,6 +46,57 @@ describe("usage", () => {
     // A tie in tokens puts the brain with more replies first.
     expect(shares[1]?.brains.map((brain) => brain.model)).toEqual(["opus", "sonnet"]);
     expect(shares[1]).toMatchObject({ inputTokens: 200, outputTokens: 100 });
+  });
+
+  it("reads a window as low from the provider's warning or 80% used, and out at 100%", () => {
+    const at = (percent: number, severity = "normal") => ({
+      kind: "session",
+      group: "session",
+      percent,
+      resetsAt: null,
+      scope: null,
+      severity,
+      active: true,
+    });
+    expect([at(10), at(79), at(80), at(50, "warning"), at(60, "critical"), at(100)].map(meterLevel)).toEqual([
+      "ok",
+      "ok",
+      "low",
+      "low",
+      "low",
+      "out",
+    ]);
+  });
+
+  it("gives a plan its worst window, the one that refills last on a tie", () => {
+    const window = (kind: string, percent: number, resetsAt: string, active = false) => ({
+      kind,
+      group: kind,
+      percent,
+      resetsAt,
+      scope: null,
+      severity: "normal",
+      active,
+    });
+    const plan = (...meters: ReturnType<typeof window>[]): PlanUsage => ({
+      runtime: "claude-code",
+      reported: true,
+      meters,
+      extraUsage: null,
+      checkedAt: null,
+    });
+    const session = window("session", 40, "2026-11-04T16:10:00.000Z", true);
+    expect(planLevel(plan(session, window("weekly_all", 20, "2026-11-09T09:00:00.000Z")))).toEqual({
+      level: "ok",
+      meter: session,
+    });
+    const week = window("weekly_all", 90, "2026-11-09T09:00:00.000Z");
+    expect(planLevel(plan(session, week))).toEqual({ level: "low", meter: week });
+    const full = window("session", 100, "2026-11-04T16:10:00.000Z", true);
+    expect(planLevel(plan(full, week))).toEqual({ level: "out", meter: full });
+    const fullWeek = window("weekly_all", 100, "2026-11-09T09:00:00.000Z");
+    expect(planLevel(plan(full, fullWeek))).toEqual({ level: "out", meter: fullWeek });
+    expect(planLevel({ ...plan(session), reported: false })).toBeUndefined();
   });
 
   it("rounds shares so they always add up to 100", () => {

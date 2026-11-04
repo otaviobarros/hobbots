@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
@@ -120,4 +121,47 @@ test("[TC-OP-074] a hub where no hob has replied says so", async ({ page }) => {
     "No hob replied in the last 30 days.",
   );
   await expect(page.getByRole("region", { name: "Day by day" })).toContainText("0 replies in the last 30 days");
+});
+
+/** Answers the Usage report with the fake Claude Code plan's windows at these percents. */
+const planAt = async (page: Page, session: number, week: number) => {
+  await page.route("**/api/usage**", async (route) => {
+    const response = await route.fetch();
+    const report = (await response.json()) as { plans: Array<{ runtime: string; meters: Array<{ percent: number }> }> };
+    const claude = report.plans.find((plan) => plan.runtime === "claude-code");
+    if (claude?.meters[0]) claude.meters[0].percent = session;
+    if (claude?.meters[1]) claude.meters[1].percent = week;
+    await route.fulfill({ response, json: report });
+  });
+};
+
+// covers OP-002
+test("[TC-OP-077] a plan warns when it runs low and says when paused hobs come back", async ({ page }) => {
+  hub = await startHub(dataDir);
+  await api(hub, "PATCH", "/setup", { completed: true });
+
+  await planAt(page, 40, 20);
+  await page.goto(`${hub.url}/#/usage`);
+  const claude = page.getByRole("region", { name: "Claude Code plan" });
+  await expect(claude).toContainText("Plenty left");
+  await expect(page.getByRole("status").filter({ hasText: "running low" })).toHaveCount(0);
+
+  // From 80% of a window used, the plan runs low and a banner says what happens.
+  await page.unrouteAll();
+  await planAt(page, 40, 85);
+  await page.reload();
+  await expect(claude).toContainText("Running low");
+  const low = page.getByRole("status").filter({ hasText: "This week on Claude Code is running low" });
+  await expect(low).toContainText("15% left. Hobs pause if it runs out");
+  await expect(claude.getByRole("listitem").nth(1).locator("[data-slot=progress]")).toHaveAttribute("data-tone", "low");
+
+  // A used-up window pauses the hobs until it refills.
+  await page.unrouteAll();
+  await planAt(page, 100, 85);
+  await page.reload();
+  await expect(claude).toContainText(/Paused until \d/);
+  const paused = page.getByRole("status").filter({ hasText: "Your hobs are paused" });
+  await expect(paused).toContainText("This session on Claude Code is used up. Refills in 2 hours");
+  await expect(claude.getByRole("listitem").nth(0)).toContainText("This sessionEmpty");
+  await expect(claude.getByRole("listitem").nth(0).locator("[data-slot=progress]")).toHaveAttribute("data-tone", "out");
 });
