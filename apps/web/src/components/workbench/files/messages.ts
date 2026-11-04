@@ -38,9 +38,17 @@ export const messages = {
   previewLoading: "Opening the file…",
   previewFailed: "Hobbots could not open this file.",
   cut: ({ size }: { size: string }) => `Showing the first ${size}.`,
-  noPreview: "Hobbots cannot preview this kind of file. Download it, or show it in Finder.",
-  secret: "Contents not kept: this file may hold secrets.",
-  tooLarge: "This file is too large to open here. Show it in Finder on the hub.",
-  gone: "This file is no longer there. It was moved or deleted after the task.",
+  unshownTag: {
+    "no-preview": "No preview",
+    secret: "Not shown",
+    "too-large": "Too large to open here",
+    gone: "No longer there",
+  },
+  unshown: {
+    "no-preview": "Hobbots cannot preview this kind of file. Download it, or show it in Finder.",
+    secret: "Contents not kept: this file may hold secrets.",
+    "too-large": "Files over 64 MB are not previewed. Show it in Finder on the hub.",
+    gone: "This file is no longer there. It was moved or deleted after the task.",
+  },
   count: (count: number) => formatCount(count),
 };

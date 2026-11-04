@@ -1,4 +1,5 @@
 import { type AttemptId, PREVIEW_TEXT_BYTES, type TaskFile } from "@hobbots/domain";
+import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { taskFileTextQuery, taskFileUrl } from "../../../api/workbench.ts";
@@ -9,25 +10,28 @@ import { messages } from "./messages.ts";
 
 const NOTE = "m-0 px-4 py-5 text-detail text-text-secondary";
 
+type Unshown = Exclude<ReturnType<typeof fileView>["kind"], "preview">;
+
 /**
  * A file's preview, as it is now on the hub: an image, a PDF, Markdown rendered as replies are, or
- * plain text. A file with no preview, a secret one, one too large and one no longer there each say
- * so in a sentence, under its name, size and kind.
+ * plain text with line numbers. A file with no preview, a secret one, one too large and one no
+ * longer there each get a tag and one sentence instead.
  */
 export function FilePreview({ attemptId, file }: { attemptId: AttemptId; file: TaskFile }) {
   const view = fileView(file);
   const name = fileName(file);
-  if (view.kind === "gone") return <p className={NOTE}>{messages.gone}</p>;
-  if (view.kind === "secret") return <p className={NOTE}>{messages.secret}</p>;
-  if (view.kind === "too-large") return <p className={NOTE}>{messages.tooLarge}</p>;
-  if (view.kind === "no-preview") return <p className={NOTE}>{messages.noPreview}</p>;
+  if (view.kind !== "preview") return <Sentence kind={view.kind} />;
   // Versioned by what the file holds now, so a live update that changes it loads the new one.
   const src = taskFileUrl(attemptId, file.id, { version: file.hash });
   switch (view.preview) {
     case "image":
       return (
-        <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-deep p-4">
-          <img src={src} alt={messages.preview({ name })} className="max-w-full [image-rendering:auto]" />
+        <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-deep p-5">
+          <img
+            src={src}
+            alt={messages.preview({ name })}
+            className="max-w-full rounded-control [image-rendering:auto]"
+          />
         </div>
       );
     case "pdf":
@@ -63,14 +67,44 @@ function TextPreview({ attemptId, file, markdown }: { attemptId: AttemptId; file
         <p className="m-0 px-4 pt-3 text-xs text-label">{messages.cut({ size: formatBytes(PREVIEW_TEXT_BYTES) })}</p>
       )}
       {markdown ? (
-        <div className="max-w-[68ch] px-5 py-4">
+        <div className="max-w-[620px] px-[22px] py-[18px]">
           <ReplyMarkdown content={read.data} streaming={false} caret={false} />
         </div>
       ) : (
-        <pre className="m-0 px-4 py-3 font-mono text-xs leading-normal whitespace-pre-wrap break-all text-text-strong">
-          {read.data}
-        </pre>
+        <NumberedText text={read.data} />
       )}
+    </div>
+  );
+}
+
+/** Plain text with its line numbers, in the same block a diff uses. */
+function NumberedText({ text }: { text: string }) {
+  const lines = text.split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  return (
+    <div className="m-3 overflow-x-auto rounded-control border border-line bg-panel py-1.5 font-mono text-[12.5px] leading-5">
+      <table className="w-full border-collapse">
+        <tbody>
+          {lines.map((line, index) => (
+            // A line is named by its number, which never moves within one version of the file.
+            // biome-ignore lint/suspicious/noArrayIndexKey: the number is the line's identity
+            <tr key={index}>
+              <td className="w-[42px] pe-2 text-end align-top text-label select-none">{index + 1}</td>
+              <td className="pe-4 align-top whitespace-pre-wrap break-all text-text">{line === "" ? " " : line}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Why there is no preview: a tag, then one sentence. */
+function Sentence({ kind }: { kind: Unshown }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2.5 px-6 py-12 text-center text-detail text-text-secondary">
+      <Badge variant="resting">{messages.unshownTag[kind]}</Badge>
+      <p className="m-0 max-w-[420px]">{messages.unshown[kind]}</p>
     </div>
   );
 }
