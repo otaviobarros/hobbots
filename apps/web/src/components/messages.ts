@@ -343,6 +343,7 @@ export const messages = {
     ideas: ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"],
     newThread: "New thread",
     showNav: "Show hob list",
+    openHob: ({ name }: { name: string }) => `Open ${name}'s page`,
     hello: ({ name }: { name: string }) => `Hello, I'm ${name}!`,
     freshPage: "A fresh page",
     helloBody: "Tell me my first chore. I keep working even if you switch to another thread.",
