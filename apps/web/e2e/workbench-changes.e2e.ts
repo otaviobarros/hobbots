@@ -59,7 +59,7 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
     script("complete_task", { key: "done", summary: "Tidied." }),
   ]);
   const { bench, panel } = await openChanges(page, "Tidy the project");
-  await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveText("ChangesHistory");
+  await expect(bench.locator("header").first()).toContainText("History");
   await expect(panel).toContainText("4 files changed: 1 added, 2 edited, and 1 deleted");
 
   // Each file is listed with how it changed; the first, the notes, shows first.
@@ -134,7 +134,7 @@ test("[TC-UX-036] Changes are Live while the turn runs, showing each file as the
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
   const { bench, panel } = await openChanges(page, "Draft the notes");
-  await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveText("ChangesLive");
+  await expect(bench.locator("header").first()).toContainText("●Live");
   const notes = panel.getByRole("article", { name: "notes.md" });
   await expect(notes.getByRole("region", { name: "After" }).getByRole("insertion")).toHaveText("Added:A first draft.", {
     timeout: 20_000,
@@ -146,7 +146,7 @@ test("[TC-UX-036] Changes are Live while the turn runs, showing each file as the
   await page.getByRole("button", { name: "■ Stop" }).click();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
   await openChanges(page, "Draft the notes");
-  await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveText("ChangesHistory", { timeout: 20_000 });
+  await expect(bench.locator("header").first()).toContainText("History", { timeout: 20_000 });
   await expect(notes.getByRole("region", { name: "After" })).toContainText("A first draft.");
   await expect(notes).not.toContainText("So far");
 });
