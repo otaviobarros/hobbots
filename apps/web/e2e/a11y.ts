@@ -13,6 +13,9 @@ const BLOCKING: ReadonlySet<string> = new Set(["serious", "critical"]);
 
 const CONTRAST = "color-contrast";
 
+/** How many settled looks must agree before a contrast failure counts. */
+const CONFIRMING_LOOKS = 2;
+
 type AxeResults = Awaited<ReturnType<AxeBuilder["analyze"]>>;
 type NodeResult = AxeResults["violations"][number]["nodes"][number];
 
@@ -111,18 +114,25 @@ const screenOf = (page: Page) => {
 };
 
 /**
- * Waits for the screen's entrance motion to end, up to three seconds: a fade measured halfway reads as
- * low contrast. Endless animations, such as a working hob's sparkle, are left running.
+ * Waits for the screen's motion to end, up to three seconds: a fade measured halfway reads as low
+ * contrast. Motion that starts while it waits, such as a bar fading in after a tab switch, is waited
+ * for too. Endless animations, such as a working hob's sparkle, are left running.
  */
 const settle = (page: Page) =>
   page.evaluate(async () => {
-    const finite = document
-      .getAnimations()
-      .filter((animation) =>
-        Number.isFinite(animation.effect?.getComputedTiming().endTime ?? Number.POSITIVE_INFINITY),
-      );
-    const finished = Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)));
-    await Promise.race([finished, new Promise((done) => setTimeout(done, 3000))]);
+    const deadline = Date.now() + 3000;
+    const moving = () =>
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.playState === "running" &&
+            Number.isFinite(animation.effect?.getComputedTiming().endTime ?? Number.POSITIVE_INFINITY),
+        );
+    for (let now = moving(); now.length > 0 && Date.now() < deadline; now = moving()) {
+      const finished = Promise.all(now.map((animation) => animation.finished.catch(() => undefined)));
+      await Promise.race([finished, new Promise((done) => setTimeout(done, deadline - Date.now()))]);
+    }
   });
 
 const axe = (page: Page) =>
@@ -139,7 +149,7 @@ const nodeKey = (node: NodeResult) => `${node.target.join(" ")} ${node.html}`;
 /**
  * Scans the page as it is now and returns its serious and critical violations. The scan runs
  * beside the test, so an element can be fading in while it is measured: a contrast failure counts
- * only when a second look, once that motion has ended, finds the same element failing. Only a scan
+ * only when the looks taken once that motion has ended find the same element failing. Only a scan
  * with a contrast failure waits for motion, which keeps the rest fast.
  */
 const scan = async (page: Page): Promise<ReadonlyArray<Violation>> => {
@@ -149,7 +159,9 @@ const scan = async (page: Page): Promise<ReadonlyArray<Violation>> => {
   let violations = blocking(await axe(page).analyze())
     .map((violation) => ({ ...violation, nodes: violation.nodes.filter((node) => !setAside(violation.id, node)) }))
     .filter((violation) => violation.nodes.length > 0);
-  if (violations.some((violation) => violation.id === CONTRAST)) {
+  // The test runs on while the scan looks, so each look can catch a different fade: a contrast
+  // failure counts only when every settled look finds the same element failing.
+  for (let look = 0; look < CONFIRMING_LOOKS && violations.some((violation) => violation.id === CONTRAST); look++) {
     await settle(page);
     const again = blocking(await axe(page).withRules([CONTRAST]).analyze()).flatMap((violation) => violation.nodes);
     const still = new Set(again.map(nodeKey));

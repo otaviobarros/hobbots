@@ -100,7 +100,7 @@ function RetiredRow({
         <span className="truncate text-meta text-label">{meta}</span>
       </span>
       <Button variant="ghost" size="xs" asChild>
-        <Link to="/archive/hobs/$hobId" params={{ hobId: hob.id }} aria-label={retiredCopy.read({ name: hob.name })}>
+        <Link to="/archive/hobs/$hobId" params={{ hobId: hob.id }} aria-label={copy.readChatsWith({ name: hob.name })}>
           {copy.readChats}
         </Link>
       </Button>
