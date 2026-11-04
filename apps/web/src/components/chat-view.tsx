@@ -46,7 +46,7 @@ import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
 import { EmptyThread } from "./empty-thread.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
-import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
+import { type ContinueReply, MessageRow, messageElementId, QueuedRow, WaitingRow } from "./message-row.tsx";
 import { messages } from "./messages.ts";
 import { NeedsTray } from "./needs-tray/needs-tray.tsx";
 import { useThreadNeeds } from "./needs-tray/use-thread-needs.ts";
@@ -320,39 +320,18 @@ export function ChatView({
           />
         ))}
         {waiting.map((message, index) => (
-          <section
+          <WaitingRow
             key={message.id}
-            aria-label={copy.waiting}
-            className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end"
-          >
-            <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
-            <span className="text-xs text-label">
-              {outbox.refused && index === 0
-                ? copy.waitingRefused
-                : connection === "live"
-                  ? copy.waitingSending
-                  : copy.waitingOffline}
-            </span>
-            <span className="flex gap-2">
-              <Button
-                variant="outline"
-                size="xs"
-                disabled={outbox.sending === message.id}
-                onClick={() => {
-                  const content = takeBack(place, message.id);
-                  if (content === undefined) return;
-                  appendDraft(place, content);
-                }}
-              >
-                {copy.edit}
-              </Button>
-              {outbox.refused && index === 0 && (
-                <Button variant="outline" size="xs" onClick={() => tryAgain(place)}>
-                  {copy.tryAgain}
-                </Button>
-              )}
-            </span>
-          </section>
+            message={message}
+            refused={outbox.refused && index === 0}
+            live={connection === "live"}
+            sending={outbox.sending === message.id}
+            onEdit={() => {
+              const content = takeBack(place, message.id);
+              if (content !== undefined) appendDraft(place, content);
+            }}
+            onTryAgain={() => tryAgain(place)}
+          />
         ))}
         {continueOn.isError && (
           <p role="alert" className="text-sm text-rose">

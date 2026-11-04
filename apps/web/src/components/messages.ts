@@ -351,7 +351,7 @@ export const messages = {
     freshBody: ({ name }: { name: string }) =>
       `Tell ${name} what you want done. ${name} plans it, brings in other hobs when it needs them, and asks you before anything risky.`,
     waiting: "Waiting to send",
-    waitingRefused: "◷ Not sent yet. It stays here until you try again or edit it.",
+    waitingRefused: "✗ Not sent yet. It stays here until you try again or edit it.",
     waitingSending: "◷ Sending…",
     waitingOffline: "◷ Waiting to send. It goes out when we reconnect.",
     edit: "Edit",
@@ -388,6 +388,7 @@ export const messages = {
   },
   reply: {
     thinking: ({ name }: { name: string }) => `${name} is thinking`,
+    writing: "writing…",
     stopping: "Stopping this reply…",
     stopped: ({ name }: { name: string }) => `■ You stopped this reply. ${name} kept what it wrote so far.`,
     interrupted: ({ name }: { name: string }) =>

@@ -66,17 +66,20 @@ const replies = async (current: Hub, page: Page, role = "assistant") => {
 const LONG_PROMPT = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
 
 // covers CH-004
-test("[TC-CH-090] a streaming reply shows the steps the runtime reports", async ({ page }) => {
+test("[TC-CH-090] a streaming reply shows the steps the runtime reports and says it is writing", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(page, LONG_PROMPT);
 
   const steps = page.getByRole("list", { name: "Reply steps" });
   await expect(steps.getByRole("listitem")).toHaveText(/Thinking/);
+  // While it writes, the reply says so where its time goes, and shows its time once done.
+  await expect(page.getByText("Pip writing…")).toBeVisible();
   await expect(steps.getByRole("listitem")).toHaveAttribute("data-state", "done");
   // A finished reply keeps its tool calls only, and this one made none.
   await expect(page.getByText(`Echo: ${LONG_PROMPT}`)).toBeVisible();
   await expect(steps).toBeHidden();
+  await expect(page.getByText("Pip writing…")).toHaveCount(0);
 });
 
 // covers CH-004, PE-002
@@ -270,7 +273,7 @@ test("[TC-CH-103] a waiting message the hub refuses stays until it is sent again
   );
   hub = await startHub(dataDir);
   const waiting = page.getByRole("region", { name: "Waiting to send" });
-  await expect(waiting.nth(0)).toContainText("◷ Not sent yet. It stays here until you try again or edit it.");
+  await expect(waiting.nth(0)).toContainText("✗ Not sent yet. It stays here until you try again or edit it.");
   await expect(waiting).toHaveCount(2);
   await expect(page.getByText(/Reconnecting to Hobbots/)).toBeHidden();
 
@@ -299,7 +302,7 @@ test("[TC-CH-104] a refused waiting message can be edited back into the composer
   );
   hub = await startHub(dataDir);
   const waiting = page.getByRole("region", { name: "Waiting to send" });
-  await expect(waiting).toContainText("◷ Not sent yet.");
+  await expect(waiting).toContainText("✗ Not sent yet.");
   await waiting.getByRole("button", { name: "Edit" }).click();
   await expect(waiting).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: /^Message Pip/ })).toHaveValue("fix me");
@@ -382,7 +385,7 @@ test("[TC-CH-107] waiting messages survive a full resync and still go out", asyn
   );
   hub = await startHub(dataDir);
   const waiting = page.getByRole("region", { name: "Waiting to send" });
-  await expect(waiting).toContainText("◷ Not sent yet.");
+  await expect(waiting).toContainText("✗ Not sent yet.");
 
   // An event this client cannot read makes it fetch everything again from the hub.
   const refetched = page.waitForRequest((request) => request.method() === "GET" && /\/api\/agents/.test(request.url()));
