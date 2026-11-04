@@ -2,10 +2,9 @@ import type { BackupState, GitHubStatus } from "@hobbots/api";
 import type { RemoteAccessStatus, RuntimeHealth, RuntimeKind, SafetyPreset } from "@hobbots/domain";
 import { runtimeProblem, signInProblem } from "../../api/runtime-health.ts";
 import { presetInfo } from "../../api/safety.ts";
-import { formatList } from "../../lib/format.ts";
+import { formatAgo, formatList } from "../../lib/format.ts";
 import { PROVIDER_NAMES, PROVIDERS } from "../../lib/providers.ts";
 import type { Theme } from "../../lib/theme.ts";
-import { formatWhen } from "../../lib/time.ts";
 import { messages } from "./messages.ts";
 import type { SettingsSection } from "./sections.ts";
 
@@ -177,7 +176,7 @@ const backupArea = (
         card: {
           ...base,
           tone: "ok",
-          state: copy.backups.done({ when: formatWhen(state.finishedAt, now) }),
+          state: copy.backups.done({ when: formatAgo(state.finishedAt, now) }),
           hint: copy.backups.doneHint,
         },
         problems: [],

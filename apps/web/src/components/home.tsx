@@ -5,26 +5,17 @@ import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { type ActivityMap, useActivity } from "../api/activity.ts";
 import { agentsQuery, runtimesQuery, threadsQuery } from "../api/queries.ts";
 import { useQuestWork } from "../api/quest-work.ts";
 import { POTION_COLORS, potion, potionPalette } from "../art/icons.ts";
-import {
-  type CrewGroup,
-  foldsByDefault,
-  groupCrew,
-  groupOf,
-  groupOrder,
-  matchesHob,
-  SCENE_LIMIT,
-  splitScene,
-} from "../lib/crew.ts";
+import { type CrewGroup, groupOf, SCENE_LIMIT, splitScene } from "../lib/crew.ts";
 import { sceneOrder, withRequests } from "../lib/hob-state.ts";
 import { questsInProgress } from "../lib/quest-work.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
 import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
-import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
+import { HobSprite, hobState } from "./hob-sprite.tsx";
 import type { HobFilter } from "./hobs-page/hobs-page-model.ts";
 import { activeFilter, inFilter, sceneChips } from "./home/home-model.ts";
 import { StageHob } from "./home/stage-hob.tsx";
@@ -37,17 +28,13 @@ import { QuestsInProgress } from "./quest-work/quest-work.tsx";
 import { Stars } from "./scene.tsx";
 
 /** Home, the landing page: what your hobs are doing, what needs you, and what is left of each AI plan. */
-// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export function Home() {
   const agents = useQuery(agentsQuery);
   const hobs = agents.data ?? [];
   const threadLists = useQueries({ queries: hobs.map((hob) => threadsQuery(hob.id)) });
   const activity = useActivity();
   const waitingHobs = useWaitingHobs();
-  const [folded, setFolded] = useState<Partial<Record<CrewGroup, boolean>>>({});
-  const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<HobFilter>("all");
-  const filterRef = useRef<HTMLInputElement>(null);
 
   const crew = sceneOrder(
     hobs.map((hob, index) => {
@@ -65,51 +52,26 @@ export function Home() {
     .sort((a, b) => b.thread.updatedAt.localeCompare(a.thread.updatedAt));
   const live = recent.filter(({ thread }) => activity[thread.id]);
 
-  // The door opens the hall: every group unfolds and the filter is ready to find anyone.
-  const openHall = () => {
-    setFolded(Object.fromEntries(groupOrder.map((group) => [group, false])));
-    filterRef.current?.focus();
-  };
   const chips = sceneChips(crew.map((c) => c.state));
   const filter = activeFilter(picked, chips);
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <section
         aria-label="Your hobs right now"
-        className={cn(
-          "relative flex-none overflow-hidden border-b-4 border-line bg-panel",
-          many ? "h-[196px]" : "h-[262px]",
-        )}
+        className="@container relative h-[262px] flex-none overflow-hidden border-b-4 border-line bg-panel"
       >
-        <Stars count={many ? 20 : 28} height={many ? 130 : 190} />
-        {!many && (
-          <PixelArt
-            rows={MOON}
-            palette={MOON_PALETTE}
-            size={60}
-            className="absolute top-[26px] right-[60px] animate-hb-flicker"
-          />
-        )}
-        <div
-          aria-hidden
-          className={cn(
-            "absolute inset-x-0 bottom-0 border-t-[6px] border-line-2 bg-line",
-            many ? "h-[46px]" : "h-[62px]",
-          )}
+        <Stars count={28} height={190} />
+        <PixelArt
+          rows={MOON}
+          palette={MOON_PALETTE}
+          size={60}
+          className={cn("absolute top-[26px] animate-hb-flicker", many ? "right-[230px]" : "right-[60px]")}
         />
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[62px] border-t-[6px] border-line-2 bg-line" />
 
-        <div
-          className={cn(
-            "absolute flex flex-col",
-            many ? "top-5 left-7 max-w-[420px] gap-2" : "top-[34px] left-9 max-w-[470px] gap-2.5",
-          )}
-        >
-          <h1 className={cn("m-0 font-heading font-bold text-moonlight", many ? "text-[28px]" : "text-[34px]")}>
-            {greeting()}
-          </h1>
-          <p className={cn("m-0 leading-normal", many ? "text-text-secondary" : "text-[17px]")}>
-            {summary(crew.length, busy, paused, hall, crew[0]?.hob)}
-          </p>
+        <div className="absolute top-[34px] left-9 flex max-w-[470px] flex-col gap-2.5">
+          <h1 className="m-0 font-heading text-[34px] font-bold text-moonlight">{greeting()}</h1>
+          <p className="m-0 text-[17px] leading-normal">{summary(crew.length, busy, paused, hall, crew[0]?.hob)}</p>
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <FilterChips
               aria-label={messages.home.chips.label}
@@ -122,14 +84,14 @@ export function Home() {
                 </FilterChip>
               ))}
             </FilterChips>
-            {!many && <SummonLink />}
+            <SummonLink />
           </div>
         </div>
 
         <div
           className={cn(
-            "absolute bottom-[34px] flex items-end",
-            many ? "right-[210px] gap-[22px]" : "right-[150px] gap-11",
+            "absolute bottom-[34px] flex items-end gap-3 @5xl:gap-7",
+            many ? "right-[200px]" : "right-[150px]",
           )}
         >
           {stage.map(({ hob, state, threads }) => (
@@ -139,63 +101,43 @@ export function Home() {
               state={state}
               threads={threads}
               activity={activity}
-              size={many ? 48 : 56}
+              size={56}
               dimmed={!inFilter(state, filter)}
             />
           ))}
         </div>
 
-        {many && <HallDoor count={hall} peek={crew[SCENE_LIMIT]?.hob} onOpen={openHall} />}
+        {many && <HallDoor count={hall} peek={crew[SCENE_LIMIT]?.hob} filter={filter} />}
       </section>
       <WorkHeldNotice className="mx-7 mt-5" />
 
-      {many ? (
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-4 px-[22px] py-4">
-          <AllHobs
-            crew={crew.filter((c) => inFilter(c.state, filter))}
-            folded={folded}
-            onFold={(group, fold) => setFolded((current) => ({ ...current, [group]: fold }))}
-            query={query}
-            narrowed={filter !== "all"}
-            onQuery={setQuery}
-            filterRef={filterRef}
-          />
-          <div className="flex min-w-0 flex-col gap-3.5">
-            <NeedsYou />
-            <HappeningNowCard live={live} activity={activity} />
-            <HomeQuests hobs={hobs} />
-            <AiPlans />
-          </div>
-        </div>
-      ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-[1.15fr_1fr_0.9fr] gap-[18px] px-6 py-5">
-          <NeedsYou />
+      <div className="grid min-h-0 flex-1 grid-cols-[1.15fr_1fr_0.9fr] gap-[18px] px-6 py-5">
+        <NeedsYou />
 
-          <div className="flex min-w-0 flex-col gap-[18px]">
-            <HappeningNowCard live={live} activity={activity} />
-            <Card label="Recent threads" className="flex-1">
-              {recent.length === 0 && <p className="m-0 text-sm text-text-secondary">No threads yet.</p>}
-              {recent.slice(0, 4).map(({ hob, thread }) => (
-                <Link
-                  key={thread.id}
-                  to="/hobs/$hobId/threads/$threadId"
-                  params={{ hobId: hob.id, threadId: thread.id }}
-                  className="flex gap-2.5 text-sm leading-snug text-text-strong no-underline hover:text-moonlight"
-                >
-                  <span className="w-16 flex-none font-heading font-semibold text-moonlight">{hob.name}</span>
-                  <span className="min-w-0 flex-1 truncate text-text-secondary">{thread.title}</span>
-                  <span className="text-xs text-label">{formatWhen(thread.updatedAt)}</span>
-                </Link>
-              ))}
-            </Card>
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-[18px]">
-            <AiPlans />
-            <HomeQuests hobs={hobs} className="flex-1" />
-          </div>
+        <div className="flex min-w-0 flex-col gap-[18px]">
+          <HappeningNowCard live={live} activity={activity} />
+          <Card label="Recent threads" className="flex-1">
+            {recent.length === 0 && <p className="m-0 text-sm text-text-secondary">No threads yet.</p>}
+            {recent.slice(0, 4).map(({ hob, thread }) => (
+              <Link
+                key={thread.id}
+                to="/hobs/$hobId/threads/$threadId"
+                params={{ hobId: hob.id, threadId: thread.id }}
+                className="flex gap-2.5 text-sm leading-snug text-text-strong no-underline hover:text-moonlight"
+              >
+                <span className="w-16 flex-none font-heading font-semibold text-moonlight">{hob.name}</span>
+                <span className="min-w-0 flex-1 truncate text-text-secondary">{thread.title}</span>
+                <span className="text-xs text-label">{formatWhen(thread.updatedAt)}</span>
+              </Link>
+            ))}
+          </Card>
         </div>
-      )}
+
+        <div className="flex min-w-0 flex-col gap-[18px]">
+          <AiPlans />
+          <HomeQuests hobs={hobs} className="flex-1" />
+        </div>
+      </div>
     </main>
   );
 }
@@ -239,14 +181,17 @@ function NeedsYou() {
   );
 }
 
-/** The hall at the right of the scene; its door shows how many hobs wait inside and opens the full list. */
-function HallDoor({ count, peek, onOpen }: { count: number; peek: Agent | undefined; onOpen: () => void }) {
+/**
+ * The hall at the right of the scene: a lit house whose tag counts the hobs inside. Its door opens
+ * Your hobs, on the family a count chip picked.
+ */
+function HallDoor({ count, peek, filter }: { count: number; peek: Agent | undefined; filter: HobFilter }) {
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={`Open the hall: ${count} more ${count === 1 ? "hob" : "hobs"}`}
-      className="hop-on-hover absolute right-9 bottom-[34px] h-[120px] w-[150px] bg-transparent p-0"
+    <Link
+      to="/hobs"
+      search={filter === "all" ? {} : { show: filter }}
+      aria-label={messages.home.hall.open({ count })}
+      className="hop-on-hover absolute right-9 bottom-[34px] h-[120px] w-[150px] no-underline"
     >
       <span aria-hidden className="absolute inset-x-0 bottom-0 h-[84px] bg-scene-wall" />
       <span
@@ -260,126 +205,10 @@ function HallDoor({ count, peek, onOpen }: { count: number; peek: Agent | undefi
           <HobSprite hob={peek} size={24} />
         </span>
       )}
-      <span
-        aria-hidden
-        className="absolute bottom-[50px] left-[98px] animate-hb-float font-pixel text-sm text-text-secondary"
-      >
-        z
+      <span className="absolute top-2 -right-1.5 rounded-tag bg-text-strong px-[7px] py-[3px] text-xs font-bold text-ground">
+        {messages.home.hall.tag({ count })}
       </span>
-      <span className="cut absolute top-2 -right-1.5 bg-text-strong px-[7px] py-[3px] text-xs font-bold text-ground">
-        {count} in the hall
-      </span>
-    </button>
-  );
-}
-
-const groupInfo: Record<CrewGroup, { label: string; dot: string; hint?: string }> = {
-  "needs-you": { label: "Needs you", dot: "bg-lantern", hint: "answer first" },
-  working: { label: "Working", dot: "bg-mint" },
-  waiting: { label: "Waiting", dot: "bg-control" },
-  failed: { label: "Had a problem", dot: "bg-rose" },
-  resting: { label: "Resting", dot: "bg-label", hint: "idle, no chores" },
-  paused: { label: "Paused", dot: "bg-line-2" },
-};
-
-const groupHeaderId = (group: CrewGroup) => `crew-${group}`;
-
-/** Every hob as a tile, grouped by state, with a filter by name or role. */
-function AllHobs({
-  crew,
-  folded,
-  onFold,
-  query,
-  onQuery,
-  filterRef,
-  narrowed,
-}: {
-  crew: ReadonlyArray<{ hob: Agent; state: HobState }>;
-  /** A count chip narrowed the list to one family, so its groups open. */
-  narrowed: boolean;
-  folded: Partial<Record<CrewGroup, boolean>>;
-  onFold: (group: CrewGroup, fold: boolean) => void;
-  query: string;
-  onQuery: (query: string) => void;
-  filterRef: React.RefObject<HTMLInputElement | null>;
-}) {
-  const filtering = query.trim() !== "";
-  const groups = groupCrew(crew.filter((c) => matchesHob(c.hob, query)));
-
-  return (
-    <section aria-label="All hobs" className="cut flex min-h-0 min-w-0 flex-col gap-2.5 bg-panel px-4 py-3.5">
-      <div className="flex items-center gap-2.5">
-        <span className="lbl text-moonlight">Your hobs</span>
-        <span className="text-xs text-label">⌘K jumps to any hob</span>
-        <span className="ml-auto">
-          <SummonLink />
-        </span>
-        <input
-          ref={filterRef}
-          type="search"
-          value={query}
-          onChange={(event) => onQuery(event.target.value)}
-          placeholder="Find a hob"
-          aria-label="Find a hob by name or role"
-          className="w-[200px] border-2 border-control bg-deep px-2 py-[5px] text-[13px] text-text-strong placeholder:text-label"
-        />
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1">
-        {groups.length === 0 && <p className="m-0 text-sm text-text-secondary">No hob matches “{query.trim()}”.</p>}
-        {groups.map(({ group, members }) => {
-          // A filter opens every group, so a match is never hidden.
-          const open = filtering || narrowed || !(folded[group] ?? foldsByDefault(group, crew.length));
-          const info = groupInfo[group];
-          return (
-            <div key={group} className="flex flex-col gap-1.5">
-              <button
-                id={groupHeaderId(group)}
-                type="button"
-                aria-expanded={open}
-                aria-controls={`${groupHeaderId(group)}-tiles`}
-                disabled={filtering}
-                onClick={() => onFold(group, open)}
-                className="flex w-full scroll-mt-2 items-center gap-2 bg-transparent py-1 text-left text-text-strong"
-              >
-                <span aria-hidden className="w-2.5 text-label">
-                  {open ? "▾" : "▸"}
-                </span>
-                <span aria-hidden className={cn("size-2", info.dot)} />
-                <span className="text-sm font-bold">{info.label}</span>
-                <span className="text-[13px] text-label">{members.length}</span>
-                <span aria-hidden className="ml-1.5 h-0.5 flex-1 bg-line" />
-                {info.hint && <span className="text-xs text-label">{info.hint}</span>}
-              </button>
-              {open && (
-                <div
-                  id={`${groupHeaderId(group)}-tiles`}
-                  className="grid animate-hb-in grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-1.5"
-                >
-                  {members.map(({ hob, state }) => (
-                    <Link
-                      key={hob.id}
-                      to="/hobs/$hobId"
-                      params={{ hobId: hob.id }}
-                      aria-label={openPageLabel(hob, state)}
-                      title={`${hob.name} · ${hob.roleTitle} · ${stateLabel[state]}`}
-                      className="cut-control hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text-strong no-underline hover:bg-line hover:text-text-strong"
-                    >
-                      <HobSprite hob={hob} size={28} state={state} badge className="mr-1.5" />
-                      <span className="flex min-w-0 flex-col">
-                        <span className="truncate font-heading text-sm font-semibold">{hob.name}</span>
-                        <span className="truncate text-xs text-text-secondary">
-                          {hob.roleTitle} · {stateLabel[state]}
-                        </span>
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </section>
+    </Link>
   );
 }
 
@@ -427,8 +256,6 @@ function Card({
 }
 
 /** Every reply streaming right now; each opens its thread. */
-const openPageLabel = (hob: Agent, state: HobState) =>
-  messages.home.openPage({ name: hob.name, role: hob.roleTitle, state: stateLabel[state] });
 
 function HappeningNowCard({
   live,

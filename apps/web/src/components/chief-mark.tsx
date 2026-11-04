@@ -24,7 +24,7 @@ const BLINK = chiefBody(chiefFrame("blink"));
 
 /**
  * The Hobbots mark. The chief looks around once when it appears and again whenever `looks`
- * changes (the rail bumps it on hover), then keeps still; only its lantern speaks for the hobs. Look frames are stacked over the still chief and
+ * changes (the sidebar bumps it on hover), then keeps still; only its lantern speaks for the hobs. Look frames are stacked over the still chief and
  * shown in their slice of `chief-*` in styles.css, so Reduce motion leaves the chief looking
  * ahead; the moods keep their colors, raised lantern and "!" without motion.
  */

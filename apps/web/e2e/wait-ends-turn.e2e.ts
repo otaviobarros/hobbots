@@ -50,8 +50,11 @@ const summon = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-/** A push asks you first, so Quill's Task stays open until you answer. */
-const PUSH = "fake:tool Bash git push origin feature";
+/**
+ * A long command keeps Quill's turn, and so her Task, open for the whole test without asking you
+ * anything: a request waiting on you would show the lead as Needs you instead (#698).
+ */
+const LONG_JOB = "fake:tool Bash sleep 600";
 
 /**
  * The fake writes its reply a word at a time once its hub calls are made, so a long reply keeps the
@@ -80,7 +83,7 @@ test("[TC-OR-242] the Quest tab shows the lead Running while the turn that waits
   await composer.fill(
     [
       "Ship the backend",
-      hubCall("delegate_task", { key: "backend", hob: "Quill", brief: ["Write the backend", PUSH].join("\n") }),
+      hubCall("delegate_task", { key: "backend", hob: "Quill", brief: ["Write the backend", LONG_JOB].join("\n") }),
       hubCall("wait_for", { key: "wait", tasks: ["$backend.task_id"] }),
       hubCall("wait_for", { key: "wait-again", tasks: ["$backend.task_id"] }),
       LONG_REPLY,

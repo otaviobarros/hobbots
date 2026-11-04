@@ -40,7 +40,7 @@ export const withRequests = (state: HobState, waiting: boolean): HobState =>
 
 /**
  * One thread's state for the chat header. The hob's lifecycle wins here too, so the header agrees
- * with the rail and Home while a reply started before the pause finishes.
+ * with the sidebar and Home while a reply started before the pause finishes.
  */
 export const threadState = (
   hob: Pick<Agent, "status">,
