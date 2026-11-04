@@ -135,7 +135,7 @@ const readyRoute = createRoute({
   component: OnboardingReady,
 });
 
-// Every page after setup shares the rail.
+// Every page after setup shares the sidebar.
 const shellRoute = createRoute({ getParentRoute: () => rootRoute, id: "shell", component: AppShell });
 
 // Home is the landing page; each hob is one click away on its own page.

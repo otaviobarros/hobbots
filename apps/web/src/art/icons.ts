@@ -1,7 +1,7 @@
 import type { RuntimeKind } from "@hobbots/domain";
 import type { PixelPalette, PixelRows } from "@hobbots/ui/components/pixel-art";
 
-/** 12 × 12 rail icons from the Hobbots design: "#" is the main color, "o" the accent. */
+/** 12 × 12 sidebar icons from the Hobbots design: "#" is the main color, "o" the accent. */
 export const ICONS = {
   Home: [
     "............",
