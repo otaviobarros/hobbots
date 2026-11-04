@@ -38,7 +38,6 @@ export const messages = {
     history: "History",
   },
   chats: {
-    none: "No chats yet. Start one with New chat.",
     open: ({ title }: { title: string }) => `Open ${title}`,
     working: "Working",
     pinned: "Pinned",
