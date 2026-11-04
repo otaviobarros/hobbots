@@ -26,6 +26,7 @@ import {
 } from "./archive-model.ts";
 import { useArchiveActions } from "./archive-notices.tsx";
 import { ArchiveFrame, Crumbs, DimPortrait, doorStyle, MoonIcon, RestoreIcon, stripStyle } from "./archive-parts.tsx";
+import { BringBackButton } from "./archive-read.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages;
@@ -314,11 +315,14 @@ function RetiredCard({ hob }: { hob: Agent }) {
             {hob.roleTitle}
           </span>
         </span>
-        <span className="flex min-w-0 flex-col text-sm">
-          <span className="truncate">{threads.data ? copy.hobs.kept({ count: threads.data.length }) : " "}</span>
-          <span className="truncate text-xs text-label">
-            {hob.retiredAt ? copy.hobs.retired({ day: formatDay(hob.retiredAt) }) : copy.hobs.retiredUnknown}
+        <span className="flex min-w-0 items-end justify-between gap-3">
+          <span className="flex min-w-0 flex-col text-sm">
+            <span className="truncate">{threads.data ? copy.hobs.kept({ count: threads.data.length }) : " "}</span>
+            <span className="truncate text-xs text-label">
+              {hob.retiredAt ? copy.hobs.retired({ day: formatDay(hob.retiredAt) }) : copy.hobs.retiredUnknown}
+            </span>
           </span>
+          <BringBackButton hob={hob} chats={threads.data?.length ?? 0} quiet />
         </span>
       </span>
     </li>

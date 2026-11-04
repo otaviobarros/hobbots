@@ -187,4 +187,13 @@ describe("AgentTransitions", () => {
     expect(AgentTransitions.pause(retired)).toMatchObject({ _tag: "InvalidAgentTransition", from: "retired" });
     expect(AgentTransitions.wake(retired)).toBeInstanceOf(InvalidAgentTransition);
   });
+
+  it("brings a retired hob back active, with no retirement time", () => {
+    const retired = AgentTransitions.retire(hob, "2026-10-30T12:00:00.000Z") as Agent;
+    const back = AgentTransitions.bringBack(retired) as Agent;
+    expect(back).toMatchObject({ status: "active", retiredAt: null });
+    expect(AgentTransitions.bringBack(back)).toBe(back);
+    const paused = AgentTransitions.pause(hob) as Agent;
+    expect(AgentTransitions.bringBack(paused)).toMatchObject({ _tag: "InvalidAgentTransition", from: "paused" });
+  });
 });

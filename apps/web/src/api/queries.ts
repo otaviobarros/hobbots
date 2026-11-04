@@ -134,17 +134,22 @@ export const useCreateHob = () => {
 };
 
 /**
- * Writes a hob the hub returned into the hob list now rather than waiting for the live event. A
- * retired hob leaves the list, as the server's list leaves it out.
+ * Writes a hob the hub returned into the hob lists now rather than waiting for the live event. A
+ * retired hob leaves the hob list for the retired ones, and one brought back goes the other way.
  */
 const useHobChange = <V>(change: (variables: V) => Promise<Agent>) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: change,
-    onSuccess: (hob) =>
+    onSuccess: (hob) => {
+      const retired = hob.status === "retired";
       queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.agents, (old) =>
-        hob.status === "retired" ? old?.filter((h) => h.id !== hob.id) : upsertById(old, hob),
-      ),
+        retired ? old?.filter((h) => h.id !== hob.id) : upsertById(old, hob),
+      );
+      queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.archivedAgents, (old) =>
+        retired ? old && sortArchived(upsertById(old, hob)) : old?.filter((h) => h.id !== hob.id),
+      );
+    },
   });
 };
 
@@ -162,6 +167,16 @@ export const usePauseHob = (agentId: AgentId) =>
 export const useRetireHob = (agentId: AgentId) =>
   useHobChange((activeWork: RetireWork) =>
     call((c) => c.agents.retire({ params: { agentId }, payload: { activeWork } })),
+  );
+
+/** Brings a retired hob back, active with all its chats. */
+export const useBringBackHob = () =>
+  useHobChange((agentId: AgentId) => call((c) => c.agents.bringBack({ params: { agentId } })));
+
+/** Retires a hob again after it was brought back by mistake; replies it started finish. */
+export const useRetireAgain = () =>
+  useHobChange((agentId: AgentId) =>
+    call((c) => c.agents.retire({ params: { agentId }, payload: { activeWork: "finish" } })),
   );
 
 /**

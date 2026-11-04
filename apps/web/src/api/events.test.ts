@@ -141,6 +141,10 @@ describe("applyEvent", () => {
     client.setQueryData(queryKeys.archivedAgents, [older]);
     applyEvent(client, { _tag: "AgentUpserted", agent: wren });
     expect(client.getQueryData(queryKeys.archivedAgents)).toEqual([wren, older]);
+    // Brought back elsewhere, it leaves the retired hobs.
+    const back = new Agent({ ...wren, status: "active", retiredAt: null, revision: wren.revision + 1 });
+    applyEvent(client, { _tag: "AgentUpserted", agent: back });
+    expect(client.getQueryData(queryKeys.archivedAgents)).toEqual([older]);
   });
 
   it("tracks what the hob is doing from the reply's events", () => {

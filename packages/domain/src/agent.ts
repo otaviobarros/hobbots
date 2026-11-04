@@ -28,7 +28,7 @@ export const ConfigVersion = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 export type ConfigVersion = typeof ConfigVersion.Type;
 /**
  * Where a hob is in its life (AG-006). A paused hob keeps its threads but starts no new turns until
- * it is woken; a retired hob takes no new work ever again and stays readable under Archived hobs.
+ * it is woken; a retired hob takes no new work and stays readable in the Archive until it is brought back.
  */
 export const AgentStatus = Schema.Literals(["active", "paused", "retired"]);
 export type AgentStatus = typeof AgentStatus.Type;
@@ -149,8 +149,8 @@ const move = (
 };
 
 /**
- * Pure lifecycle transitions. Each is idempotent, so a repeated request returns the hob unchanged;
- * retiring is final, so a retired hob can be neither paused nor woken.
+ * Pure lifecycle transitions. Each is idempotent, so a repeated request returns the hob unchanged.
+ * A retired hob can be neither paused nor woken: only bringing it back makes it active again.
  */
 export const AgentTransitions = {
   pause: (agent: Agent): Agent | InvalidAgentTransition => move(agent, "pause", ["active"], "paused"),
@@ -158,4 +158,7 @@ export const AgentTransitions = {
   /** Records `at` (an ISO-8601 time) as when the hob retired. */
   retire: (agent: Agent, at: string): Agent | InvalidAgentTransition =>
     move(agent, "retire", ["active", "paused"], "retired", { retiredAt: at }),
+  /** Brings a retired hob back: active again, with no retirement time. */
+  bringBack: (agent: Agent): Agent | InvalidAgentTransition =>
+    move(agent, "bring back", ["retired"], "active", { retiredAt: null }),
 };
