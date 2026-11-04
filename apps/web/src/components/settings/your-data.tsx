@@ -1,5 +1,6 @@
 import type { Agent } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -117,16 +118,28 @@ function RetiredRow({
   );
 }
 
-/** The hub's data folder, with Copy; off the hub's own computer the path is not shown. */
+/**
+ * The hub's data folder, with Copy; off the hub's own computer the path is not shown. Until the hub
+ * answers, the path's row holds a still block and Copy waits, disabled.
+ */
 function DataFolder() {
   const about = useQuery(aboutQuery);
   const [copied, copyPath] = useCopy();
-  if (!about.data) return null;
-  const { dataDir } = about.data;
+  if (about.isError) return null;
+  const dataDir = about.data?.dataDir;
   return (
     <SettingsGroup label={copy.dataFolder}>
       <p className="m-0 text-text-secondary">{copy.dataFolderIntro}</p>
-      {dataDir === null ? (
+      {dataDir === undefined ? (
+        <span aria-busy className="flex min-w-0 flex-wrap items-center gap-2 rounded-control bg-card px-3.5 py-2.5">
+          <code className="min-w-0 flex-1 font-mono text-code">
+            <Skeleton surface="card" width="40ch" className="max-w-full" />
+          </code>
+          <Button variant="outline" size="sm" disabled>
+            {copy.copy.idle}
+          </Button>
+        </span>
+      ) : dataDir === null ? (
         <p className="m-0 text-ui text-text-secondary">{copy.dataFolderElsewhere}</p>
       ) : (
         <span className="flex min-w-0 flex-wrap items-center gap-2 rounded-control bg-card px-3.5 py-2.5">

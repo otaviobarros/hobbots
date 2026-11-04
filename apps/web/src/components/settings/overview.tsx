@@ -1,7 +1,9 @@
 import type { RuntimeKind } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton, WaitNote } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
+import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { backupQuery } from "../../api/backup.ts";
@@ -16,23 +18,38 @@ import { ProviderFixActions, providerFix } from "../providers/provider-fix.tsx";
 import { messages } from "./messages.ts";
 import {
   type AreaTone,
+  type OutsideSource,
   type Overview,
   type OverviewCard,
   type OverviewProblem,
   overviewOf,
   overviewTitle,
+  pendingCards,
+  waitingOn,
 } from "./overview-model.ts";
 import { sectionName } from "./sections.ts";
 
 const copy = messages.overview;
 
+/** What the overview reads while it waits on a check outside the hub, and how to ask it again. */
+interface OverviewWait {
+  readonly source: OutsideSource | null;
+  readonly retry: () => void;
+}
+
 /** Everything the overview reads, from the hub's records; the section list shares it for its marks. */
-export const useOverview = (): { readonly overview: Overview; readonly loading: boolean } => {
+export const useOverview = (): {
+  readonly overview: Overview;
+  /** The cards whose state is still on its first load. */
+  readonly pending: ReadonlySet<OverviewCard["id"]>;
+  readonly waiting: OverviewWait;
+} => {
   const runtimes = useQuery(runtimesQuery);
   const setup = useQuery(setupQuery);
   const github = useQuery(githubStatusQuery);
   // A connected desktop's hub sets remote access, so this Mac does not ask for it.
-  const remote = useQuery({ ...remoteAccessQuery, enabled: connectionBridge === undefined });
+  const local = connectionBridge === undefined;
+  const remote = useQuery({ ...remoteAccessQuery, enabled: local });
   const devices = useQuery(devicesQuery);
   const backup = useQuery(backupQuery);
   const theme = useThemeChoice();
@@ -41,13 +58,47 @@ export const useOverview = (): { readonly overview: Overview; readonly loading: 
     connected: setup.data?.connectedProviders,
     preset: setup.data?.safetyPreset,
     github: github.data,
-    remote: connectionBridge === undefined ? remote.data : null,
+    remote: local ? remote.data : null,
     otherDevices: devices.data && approvedDevices(devices.data).filter((device) => device.kind !== "window").length,
     backup: backup.data?.state,
     theme,
   });
-  return { overview, loading: setup.isPending };
+  const reads = {
+    runtimes: runtimes.isPending,
+    setup: setup.isPending,
+    github: github.isPending,
+    remote: local && remote.isPending,
+    devices: devices.isPending,
+    backup: backup.isPending,
+    remoteOn: local && remote.data?.enabled === true,
+  };
+  const source = waitingOn(reads);
+  const retry = () => {
+    const read = source === "providers" ? runtimes : source === "github" ? github : remote;
+    void read.refetch();
+  };
+  return { overview, pending: pendingCards(reads), waiting: { source, retry } };
 };
+
+const WAIT_WORDS: Readonly<Record<OutsideSource, { readonly detail: string; readonly note: string }>> = {
+  providers: { detail: messages.wait.providers, note: messages.wait.providersSlow },
+  github: { detail: messages.wait.github, note: messages.wait.githubSlow },
+  tailscale: { detail: messages.wait.tailscale, note: messages.wait.tailscaleSlow },
+};
+
+/** Names the outside check the cards still wait on, after a second; after ten, says it is slow, with Try again. */
+function OverviewWaitNote({ waiting }: { waiting: OverviewWait }) {
+  const wait = useWaitStage(waiting.source !== null);
+  if (waiting.source === null) return null;
+  const words = WAIT_WORDS[waiting.source];
+  return (
+    <WaitNote
+      wait={wait}
+      detail={words.detail}
+      outside={{ note: words.note, retryLabel: messages.wait.tryAgain, onRetry: waiting.retry }}
+    />
+  );
+}
 
 /** Each tone's mark and color: a check when it works, a ring when off, a clock when busy. */
 const TONES: Readonly<Record<AreaTone, { readonly glyph: string; readonly color: string; readonly tile: string }>> = {
@@ -63,35 +114,43 @@ const PLAIN_GLYPHS: Partial<Record<OverviewCard["id"], string>> = { appearance: 
 
 /** Settings › Overview: is everything OK? Anything broken first, with its fix, then one card per area. */
 export function SettingsOverview({ titleId }: { titleId: string }) {
-  const { overview, loading } = useOverview();
+  const { overview, pending, waiting } = useOverview();
   const heading = overviewTitle(overview.problems.length);
   return (
     <>
       <header className="flex flex-col gap-1.5">
         <h2 id={titleId} className="m-0 font-heading text-heading font-(--heading-weight) text-text-strong">
-          {loading ? copy.loading : heading.title}
+          {heading.title}
         </h2>
-        {!loading && <p className="m-0 text-text-secondary">{heading.line}</p>}
+        <p className="m-0 text-text-secondary">{heading.line}</p>
       </header>
       {overview.problems.map((problem) => (
         <ProblemCard key={problemKey(problem)} problem={problem} />
       ))}
-      <ul aria-label={copy.cards} className="m-0 grid list-none grid-cols-1 gap-2.5 p-0 sm:grid-cols-2">
+      <ul
+        aria-label={copy.cards}
+        aria-busy={pending.size > 0}
+        className="m-0 grid list-none grid-cols-1 gap-2.5 p-0 sm:grid-cols-2"
+      >
         {overview.cards.map((card) => (
           <li key={card.id} className="flex">
-            <AreaCard card={card} />
+            <AreaCard card={card} pending={pending.has(card.id)} />
           </li>
         ))}
       </ul>
+      <OverviewWaitNote waiting={waiting} />
     </>
   );
 }
 
 const problemKey = (problem: OverviewProblem) => (problem.kind === "provider" ? problem.runtime : problem.kind);
 
-function AreaCard({ card }: { card: OverviewCard }) {
-  const tone = TONES[card.tone];
-  const glyph = card.tone === "plain" ? (PLAIN_GLYPHS[card.id] ?? tone.glyph) : tone.glyph;
+/** One area. While its read is on its first load it keeps its icon and name, with still blocks for its state. */
+function AreaCard({ card, pending }: { card: OverviewCard; pending: boolean }) {
+  // A card still asking wears the plain look, so it claims neither working nor off.
+  const shown = pending ? "plain" : card.tone;
+  const tone = TONES[shown];
+  const glyph = shown === "plain" ? (PLAIN_GLYPHS[card.id] ?? tone.glyph) : tone.glyph;
   return (
     <Link
       to="/settings/$section"
@@ -99,7 +158,7 @@ function AreaCard({ card }: { card: OverviewCard }) {
       search={card.tab ? { tab: card.tab } : {}}
       className={cn(
         "group flex min-h-28 w-full flex-col items-start gap-1.5 rounded-card bg-card p-4 text-text-strong no-underline transition duration-(--dur-fade) hover:-translate-y-px hover:bg-hover hover:text-text-strong motion-reduce:hover:translate-y-0",
-        card.tone === "broken" && "ring-2 ring-rose ring-inset",
+        shown === "broken" && "ring-2 ring-rose ring-inset",
       )}
     >
       <span className="flex w-full items-center gap-2">
@@ -132,8 +191,12 @@ function AreaCard({ card }: { card: OverviewCard }) {
           </svg>
         </span>
       </span>
-      <span className={cn("text-ui font-semibold", tone.color)}>{card.state}</span>
-      <span className="text-detail text-text-secondary">{card.hint}</span>
+      <span className={cn("text-ui font-semibold", tone.color)}>
+        {pending ? <Skeleton surface="card" width="12ch" /> : card.state}
+      </span>
+      <span className="text-detail text-text-secondary">
+        {pending ? <Skeleton surface="card" width="28ch" className="max-w-full" /> : card.hint}
+      </span>
     </Link>
   );
 }

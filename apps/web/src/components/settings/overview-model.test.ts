@@ -2,7 +2,14 @@ import type { RemoteAccessStatus } from "@hobbots/domain";
 import { RuntimeHealth } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { enforcementFixture } from "../../test/enforcement.ts";
-import { type OverviewInput, overviewOf, overviewTitle } from "./overview-model.ts";
+import {
+  type OverviewInput,
+  type OverviewReads,
+  overviewOf,
+  overviewTitle,
+  pendingCards,
+  waitingOn,
+} from "./overview-model.ts";
 import { findSettings } from "./sections.ts";
 
 const health = (runtime: RuntimeHealth["runtime"], availability: RuntimeHealth["availability"]) =>
@@ -120,4 +127,39 @@ describe("Find a setting", () => {
   });
 
   it("finds nothing for an empty query", () => expect(findSettings("  ")).toEqual([]));
+});
+
+describe("the overview while it loads", () => {
+  const settled: OverviewReads = {
+    runtimes: false,
+    setup: false,
+    github: false,
+    remote: false,
+    devices: false,
+    backup: false,
+    remoteOn: false,
+  };
+
+  it("holds a block for each card whose read has not landed, and none once all have", () => {
+    expect([...pendingCards(settled)]).toEqual([]);
+    expect([...pendingCards({ ...settled, setup: true })]).toEqual(["ai", "safety"]);
+    expect([...pendingCards({ ...settled, runtimes: true, github: true, backup: true })]).toEqual([
+      "ai",
+      "github",
+      "backups",
+    ]);
+  });
+
+  it("waits on the device count only while remote access is on", () => {
+    expect([...pendingCards({ ...settled, devices: true })]).toEqual([]);
+    expect([...pendingCards({ ...settled, devices: true, remoteOn: true })]).toEqual(["devices"]);
+    expect([...pendingCards({ ...settled, remote: true })]).toEqual(["devices"]);
+  });
+
+  it("names the providers first, then GitHub, then Tailscale, and nothing for reads from the hub", () => {
+    expect(waitingOn({ ...settled, runtimes: true, github: true, remote: true })).toBe("providers");
+    expect(waitingOn({ ...settled, github: true, remote: true })).toBe("github");
+    expect(waitingOn({ ...settled, remote: true })).toBe("tailscale");
+    expect(waitingOn({ ...settled, setup: true, backup: true, devices: true })).toBeNull();
+  });
 });

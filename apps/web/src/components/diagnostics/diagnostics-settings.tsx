@@ -1,4 +1,5 @@
 import type { Agent, Quest, QuestId } from "@hobbots/domain";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { ApiError } from "../../api/client.ts";
@@ -6,7 +7,7 @@ import { diagnosticsNowQuery, diagnosticsQuestsQuery, questTraceQuery } from "..
 import { agentsQuery, archivedAgentsQuery } from "../../api/queries.ts";
 import { firstLine } from "../../lib/format.ts";
 import { formatWhen } from "../../lib/time.ts";
-import { DiagnosticsNowView } from "./diagnostics-now.tsx";
+import { DiagnosticsNowView, DiagnosticsNowWaiting } from "./diagnostics-now.tsx";
 import { DiagnosticsReportMaker } from "./diagnostics-report.tsx";
 import { messages } from "./messages.ts";
 import type { HobName } from "./model.ts";
@@ -73,7 +74,8 @@ function FollowedQuest({ questId, hobName }: { questId: QuestId; hobName: HobNam
 
 /**
  * Settings › Diagnostics (ADR 026): what is wrong now, one Quest followed across hobs, Tasks,
- * Attempts and runtimes, and a redacted report you read before you copy or save it.
+ * Attempts and runtimes, and a redacted report you read before you copy or save it. Each part draws
+ * at once and holds still blocks until the hub answers.
  */
 export function DiagnosticsSettings() {
   const now = useQuery(diagnosticsNowQuery);
@@ -81,14 +83,23 @@ export function DiagnosticsSettings() {
   const hobName = useHobName();
   const [followed, setFollowed] = useState<QuestId | null>(null);
   if (now.isError || quests.isError) return <p className="m-0 text-ui text-rose">{messages.failed}</p>;
-  if (!now.data || !quests.data) return null;
   return (
     <>
       <p className="m-0 text-text-secondary">{messages.intro}</p>
-      <DiagnosticsNowView now={now.data} hobName={hobName} onFollow={setFollowed} />
-      <section aria-label={copy.heading} className="flex flex-col gap-2">
+      {now.data ? (
+        <DiagnosticsNowView now={now.data} hobName={hobName} onFollow={setFollowed} />
+      ) : (
+        <DiagnosticsNowWaiting />
+      )}
+      <section aria-label={copy.heading} aria-busy={!quests.data} className="flex flex-col gap-2">
         <span className="lbl pt-2 text-label">{copy.heading}</span>
-        <QuestPicker quests={quests.data} value={followed} hobName={hobName} onPick={setFollowed} />
+        {quests.data ? (
+          <QuestPicker quests={quests.data} value={followed} hobName={hobName} onPick={setFollowed} />
+        ) : (
+          <p className="m-0 text-ui">
+            <Skeleton width="30ch" className="max-w-full" />
+          </p>
+        )}
         {followed !== null && <FollowedQuest questId={followed} hobName={hobName} />}
       </section>
       <DiagnosticsReportMaker questId={followed} />

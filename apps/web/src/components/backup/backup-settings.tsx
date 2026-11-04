@@ -1,7 +1,8 @@
-import type { BackupState } from "@hobbots/api";
+import type { BackupState, RestoreStatus } from "@hobbots/api";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Progress } from "@hobbots/ui/components/progress";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -78,7 +79,9 @@ function Outcome({ state }: { state: BackupState }) {
 }
 
 /** The tag beside Backups: never backed up, backing up, when the last one finished, or that it failed. */
-function BackupTag({ state }: { state: BackupState }) {
+/** The card's tag: a still block until the hub says how the last backup went. */
+function BackupTag({ state }: { state: BackupState | undefined }) {
+  if (state === undefined) return <Skeleton shape="block" surface="card" width="14ch" />;
   switch (state._tag) {
     case "Waiting":
     case "Copying":
@@ -178,10 +181,8 @@ function SetAside({ path, size }: { path: string; size: number }) {
 }
 
 /** What the latest restore left: work held until you resume it, folders to set again, and the data set aside. */
-function LatestRestore() {
-  const status = useQuery(restoreStatusQuery);
-  if (!status.data) return null;
-  const { latest, failed } = status.data;
+function LatestRestore({ status }: { status: RestoreStatus }) {
+  const { latest, failed } = status;
   return (
     <>
       {failed !== null && (
@@ -220,64 +221,95 @@ function LatestRestore() {
   );
 }
 
+/** A backup on its way, or how the last one went. */
+function BackupNow({ state }: { state: BackupState }) {
+  return (
+    <>
+      <BackupProgress state={state} />
+      {!backupRunning(state) && <Outcome state={state} />}
+    </>
+  );
+}
+
+/** Back up now, or Cancel while a backup runs. Back up now waits until the hub has answered. */
+function BackupAction({
+  running,
+  ready,
+  destination,
+  start,
+  cancel,
+}: {
+  running: boolean;
+  ready: boolean;
+  destination: string;
+  start: ReturnType<typeof useStartBackup>;
+  cancel: ReturnType<typeof useCancelBackup>;
+}) {
+  if (running) {
+    return (
+      <Button variant="outline" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
+        {copy.backup.cancel}
+      </Button>
+    );
+  }
+  return (
+    <Button
+      disabled={!ready || start.isPending || destination.trim() === ""}
+      onClick={() => start.mutate(destination.trim())}
+    >
+      {start.isPending ? copy.backup.starting : copy.backup.start}
+    </Button>
+  );
+}
+
 type Open = "restore" | "export" | null;
 
 /**
  * Settings › Your data › Backups, one card: how the last backup went, where to save the next, Back
- * up now, Restore from a backup and Export as files (ADR 026).
+ * up now, Restore from a backup and Export as files (ADR 026). The card draws at once: until the hub
+ * answers, a still block holds the tag and the buttons wait, disabled.
  */
 export function BackupSettings() {
   const status = useQuery(backupQuery);
+  const restore = useQuery(restoreStatusQuery);
   const start = useStartBackup();
   const cancel = useCancelBackup();
   const [typed, setTyped] = useState<string | null>(null);
   const [open, setOpen] = useState<Open>(null);
   const toggle = (next: Exclude<Open, null>) => setOpen((now) => (now === next ? null : next));
   if (status.isError) return <p className="m-0 text-ui text-rose">{copy.failedToRead}</p>;
-  if (!status.data) return null;
-  const { state, defaultDestination } = status.data;
-  const destination = typed ?? defaultDestination;
-  const running = backupRunning(state);
+  const state = status.data?.state;
+  const loading = state === undefined || restore.isPending;
+  const destination = typed ?? status.data?.defaultDestination ?? "";
+  const running = state !== undefined && backupRunning(state);
   return (
-    <section aria-label={copy.heading} className="flex flex-col gap-3 rounded-card bg-card p-4">
+    <section aria-label={copy.heading} aria-busy={loading} className="flex flex-col gap-3 rounded-card bg-card p-4">
       <span className="flex flex-wrap items-center gap-2.5">
         <strong className="flex-1 text-text-strong">{copy.heading}</strong>
         <BackupTag state={state} />
       </span>
       <span className="text-ui text-text-secondary">{copy.intro}</span>
-      <LatestRestore />
+      {restore.data && <LatestRestore status={restore.data} />}
       <FolderField
         label={copy.backup.destination}
         hint={copy.backup.destinationHint}
         chooseLabel={copy.backup.choose}
         purpose="save"
         value={destination}
-        disabled={running || start.isPending}
+        disabled={loading || running || start.isPending}
         onChange={(next) => {
           setTyped(next);
           start.reset();
         }}
       />
-      <BackupProgress state={state} />
-      {!running && <Outcome state={state} />}
+      {state !== undefined && <BackupNow state={state} />}
       {start.isError && (
         <p role="alert" className="m-0 text-ui text-rose">
           {refusal(start.error)}
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        {running ? (
-          <Button variant="outline" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
-            {copy.backup.cancel}
-          </Button>
-        ) : (
-          <Button
-            disabled={start.isPending || destination.trim() === ""}
-            onClick={() => start.mutate(destination.trim())}
-          >
-            {start.isPending ? copy.backup.starting : copy.backup.start}
-          </Button>
-        )}
+        <BackupAction running={running} ready={!loading} destination={destination} start={start} cancel={cancel} />
         <Button variant="outline" aria-expanded={open === "restore"} onClick={() => toggle("restore")}>
           {copy.restore.open}
         </Button>

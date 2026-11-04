@@ -1,6 +1,8 @@
 import { openBlocker } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { WaitNote } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
+import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -13,7 +15,7 @@ import { remoteAccessQuery } from "../../api/remote-access.ts";
 import { setupQuery } from "../../api/setup.ts";
 import { saveReport } from "../diagnostics/diagnostics-report.tsx";
 import { messages } from "./messages.ts";
-import { type CheckLine, type CheckTone, checkLines } from "./plain-check-model.ts";
+import { type CheckLine, type CheckSource, type CheckTone, checkLines } from "./plain-check-model.ts";
 
 const copy = messages.check;
 
@@ -41,15 +43,37 @@ const useCheck = () => {
     remote: connectionBridge === undefined ? remote.data : null,
     stuck: blockers.data?.filter((item) => openBlocker(item) !== undefined).length,
   });
-  const reads = [runtimes, setup, github, blockers, ...(connectionBridge === undefined ? [remote] : [])];
+  const local = connectionBridge === undefined;
+  const sources: Readonly<Record<CheckSource, { readonly isFetching: boolean; readonly refetch: () => unknown }>> = {
+    runtimes,
+    setup,
+    github,
+    remote,
+    blockers,
+  };
+  const reads = [runtimes, setup, github, blockers, ...(local ? [remote] : [])];
   return {
     lines,
     checking: reads.some((read) => read.isFetching),
+    fetching: (source: CheckSource) => (source !== "remote" || local) && sources[source].isFetching,
     run: () => Promise.all(reads.map((read) => read.refetch())),
   };
 };
 
-function Line({ line }: { line: CheckLine }) {
+/** One line: ○, its name and "Checking…" while its read runs, then ✓ or ! with what was found. */
+function Line({ line, checking }: { line: CheckLine; checking: boolean }) {
+  if (checking) {
+    return (
+      <li className="flex items-baseline gap-2">
+        <span aria-hidden className={cn("w-4 flex-none text-center font-bold", TONES.off.color)}>
+          {TONES.off.glyph}
+        </span>
+        <span className="min-w-0 flex-1">
+          {line.name} <span className="text-text-secondary">{copy.lineChecking}</span>
+        </span>
+      </li>
+    );
+  }
   const tone = TONES[line.tone];
   return (
     <li className="flex items-baseline gap-2">
@@ -106,6 +130,7 @@ function SaveReport() {
 export function PlainCheck() {
   const check = useCheck();
   const [checked, setChecked] = useState(false);
+  const wait = useWaitStage(checked && check.checking);
   const run = () => {
     setChecked(true);
     void check.run();
@@ -121,9 +146,16 @@ export function PlainCheck() {
           className="m-0 flex animate-hb-in list-none flex-col gap-1 p-0 text-ui"
         >
           {check.lines.map((line) => (
-            <Line key={line.key} line={line} />
+            <Line key={line.key} line={line} checking={check.fetching(line.source)} />
           ))}
         </ul>
+      )}
+      {checked && check.checking && (
+        <WaitNote
+          wait={wait}
+          detail={messages.wait.everything}
+          outside={{ note: messages.wait.everythingSlow, retryLabel: messages.wait.tryAgain, onRetry: run }}
+        />
       )}
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={run} disabled={check.checking && checked}>
