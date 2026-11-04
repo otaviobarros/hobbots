@@ -328,3 +328,35 @@ export const entryRow = (entry: InboxEntry, names: HobName, lead: AgentId | unde
       return deviceRow(entry.device, now);
   }
 };
+
+/** What waits with the soonest expiry, for the Inbox header: when it expires, whose it is, and whether that is under an hour. */
+export interface SoonestExpiry {
+  readonly expiresAt: string;
+  readonly name: string;
+  readonly urgent: boolean;
+}
+
+/** The pending request or device whose answer is due first, or undefined when none expires. */
+export const soonestExpiry = (
+  entries: ReadonlyArray<InboxEntry>,
+  names: HobName,
+  now: Date,
+): SoonestExpiry | undefined => {
+  let found: { expiresAt: string; name: string } | undefined;
+  for (const entry of entries) {
+    const due = entryExpiry(entry, names);
+    if (due !== undefined && (found === undefined || due.expiresAt < found.expiresAt)) found = due;
+  }
+  return found === undefined ? undefined : { ...found, urgent: soon(found.expiresAt, now) };
+};
+
+const entryExpiry = (entry: InboxEntry, names: HobName): { expiresAt: string; name: string } | undefined => {
+  if (entry.kind === "approval") {
+    const { request } = entry;
+    return request.state === "pending" && request.expiresAt !== null
+      ? { expiresAt: request.expiresAt, name: names(request.agentId) }
+      : undefined;
+  }
+  if (entry.kind === "device") return { expiresAt: entry.device.request.expiresAt, name: entry.device.request.name };
+  return undefined;
+};

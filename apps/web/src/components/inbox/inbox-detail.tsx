@@ -1,14 +1,28 @@
 import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
-import type { Agent, AgentId, ApprovalRequest, BackpackItem, Quest, TaskId, ThreadId } from "@hobbots/domain";
+import {
+  type Agent,
+  type AgentId,
+  type ApprovalRequest,
+  type BackpackItem,
+  exactAction,
+  type PolicyOperation,
+  type Quest,
+  type TaskId,
+  type ThreadId,
+} from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
+import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { firstLine } from "../../lib/format.ts";
 import { formatWhen } from "../../lib/time.ts";
-import { ApprovalCard } from "../approvals/approval-card.tsx";
+import { useCopy } from "../../lib/use-copy.ts";
+import { ApprovalDecision } from "../approvals/approval-card.tsx";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
+import { messages as appCopy } from "../messages.ts";
 import { DeviceFacts, MatchingCode, PairingActions } from "../pairing/device-request.tsx";
 import { messages as pairingCopy } from "../pairing/messages.ts";
 import { AnswerForm } from "../quest/question-card.tsx";
@@ -16,6 +30,7 @@ import { useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { EntryPortrait } from "./entry-portrait.tsx";
 import { entryRow, entryThread, type InboxEntry, type InboxRow } from "./inbox-entries.ts";
+import { InboxIcon } from "./inbox-icons.tsx";
 import { expiryText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
 import type { InboxDirectory } from "./use-inbox-directory.ts";
@@ -32,8 +47,9 @@ interface DetailContext {
 /**
  * One entry in full beside the list, the same shape for every kind: who asked as a chain with the
  * kind, what it asks as the title and why, then its facts (Quest, Thread, Asked by, When) and the
- * kind's own controls, with Open in the chat when it has a thread. A request keeps the chat's own
- * approval card, so deciding here works exactly as it does there (ADR 015).
+ * kind's own controls, with Open in the chat when it has a thread. A request shows its exact action
+ * once, then decides with the chat's own buttons and high-risk check, so deciding here works exactly
+ * as it does there (ADR 015); each fact shows once.
  */
 export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob: Agent | undefined } & DetailContext) {
   const thread = entryThread(entry);
@@ -63,6 +79,8 @@ function ApprovalDetail({
   // A party member asks in its lead's thread, whose hob is known only once the threads load.
   const chatHob = directory.threadHob(request.threadId) ?? (request.messageId !== null ? request.agentId : undefined);
   const task = request.taskId ?? request.rootTaskId;
+  const expiry = pending ? expiryText(request.expiresAt, now) : "";
+  const asked = formatWhen(request.createdAt, now);
   return (
     <DetailFrame
       label={copy.detail.label({ name: hob.name, action: row.what })}
@@ -72,23 +90,54 @@ function ApprovalDetail({
       foot={footText(request, hob.name)}
       chat={hob.status === "retired" ? undefined : chatLink(chatHob, request.threadId, request.messageId)}
     >
+      <ActionBlock action={exactAction(request)} command={COMMANDS.has(request.operation)} />
       <Facts
         rows={[
           [copy.detail.quest, questName(task === null ? undefined : questOf(task), directory)],
           [copy.detail.thread, directory.threadTitle(request.threadId)],
           [copy.detail.askedBy, row.chain.join(copy.row.arrow)],
-          [copy.detail.asked, formatWhen(request.createdAt, now)],
-          [
-            copy.detail.expires,
-            pending && request.expiresAt !== null
-              ? copy.detail.expiresLead({ expiry: expiryText(request.expiresAt, now), name: hob.name })
-              : undefined,
-          ],
+          [copy.detail.when, expiry === "" ? asked : copy.detail.whenExpires({ asked, expiry }), row.tone === "urgent"],
           [copy.detail.decided, request.decidedAt === null ? undefined : formatWhen(request.decidedAt, now)],
         ]}
       />
-      <ApprovalCard approval={request} hob={hob} via="inbox" keys />
+      <section aria-label={appCopy.approval.asks({ name: hob.name })} data-state={request.state}>
+        <ApprovalDecision approval={request} hob={hob} via="inbox" look="tray" keys />
+      </section>
     </DetailFrame>
+  );
+}
+
+/** The operations whose exact action is a command line, shown after a prompt sign. */
+const COMMANDS: ReadonlySet<PolicyOperation> = new Set(["run-commands", "local-git", "push"]);
+
+/** The exact action on the deep ground, with Copy: a command after a `$`, or the address or file as it is. */
+function ActionBlock({ action, command }: { action: string; command: boolean }) {
+  const [state, copyText] = useCopy();
+  const said = state === "copied" ? copy.detail.copied : state === "failed" ? copy.detail.copyFailed : "";
+  return (
+    <div className="flex items-center gap-2 rounded-control border border-line bg-deep py-1 ps-3.5 pe-1">
+      {command && (
+        <span aria-hidden className="font-mono text-code text-label">
+          $
+        </span>
+      )}
+      <code className="min-w-0 flex-1 py-1.5 font-mono text-code break-all whitespace-pre-wrap text-moonlight">
+        {action}
+      </code>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={copy.detail.copy}
+        title={said || copy.detail.copy}
+        onClick={() => copyText(action)}
+      >
+        <InboxIcon name="copy" />
+      </Button>
+      {/* Polite, not a status: the decision's line is the detail's one status. */}
+      <span aria-live="polite" className="sr-only">
+        {said}
+      </span>
+    </div>
   );
 }
 
@@ -102,8 +151,10 @@ function QuestionDetail({
 }: { waiting: WaitingQuestion; hob: Agent | undefined; row: InboxRow } & DetailContext) {
   const { question, task } = waiting;
   const asker = directory.hobName(question.askerId);
-  // The chat it opens is the top lead's, the last to pass it up, or the asker's own when nobody leads it.
-  const chatHob = question.chain.at(-1) ?? question.askerId;
+  // The top lead is the last to pass it up, and your answer goes back through it. The chat it opens
+  // is that lead's, or the asker's own when nobody leads it.
+  const lead = question.chain.at(-1);
+  const chatHob = lead ?? question.askerId;
   return (
     <DetailFrame
       label={copy.question.label({ name: asker })}
@@ -116,20 +167,30 @@ function QuestionDetail({
       }
       chat={chatLink(chatHob, task.threadId, null, copy.question.openChat({ name: directory.hobName(chatHob) }))}
     >
-      <blockquote className="m-0 rounded-card bg-card px-4 py-3 text-base leading-normal whitespace-pre-wrap text-text-strong">
-        {question.text}
-      </blockquote>
+      <div className="flex items-start gap-3">
+        <EntryPortrait hob={hob} device={false} waiting={false} />
+        <blockquote className="m-0 min-w-0 flex-1 rounded-[4px_14px_14px_14px] bg-card px-4 py-3 text-base leading-normal whitespace-pre-wrap text-text-strong [overflow-wrap:anywhere]">
+          {question.text}
+        </blockquote>
+      </div>
       <Facts
         rows={[
           [copy.detail.quest, questName(questOf(task.id), directory)],
           [copy.detail.task, taskTitle(task)],
           [copy.detail.passedUpBy, row.chain.join(copy.row.arrow)],
-          [copy.detail.asked, formatWhen(question.createdAt, now)],
+          [copy.detail.when, formatWhen(question.createdAt, now)],
         ]}
       />
-      <div className="rounded-card bg-card p-3">
-        <AnswerForm question={question} askerName={asker} via="inbox" />
-      </div>
+      <AnswerForm
+        question={question}
+        askerName={asker}
+        via="inbox"
+        hint={
+          lead === undefined
+            ? copy.question.goesStraight({ name: asker })
+            : copy.question.goesBack({ name: directory.hobName(lead) })
+        }
+      />
     </DetailFrame>
   );
 }
@@ -257,16 +318,21 @@ function Chain({ names }: { names: ReadonlyArray<string> }) {
   );
 }
 
-/** The entry's facts as a card of term and value; a row with no value is left out. */
-function Facts({ rows }: { rows: ReadonlyArray<readonly [string, string | undefined]> }) {
+/**
+ * The entry's facts as a card of term and value; a row with no value is left out, and a row marked
+ * urgent shows its value in lantern.
+ */
+function Facts({ rows }: { rows: ReadonlyArray<readonly [string, string | undefined, boolean?]> }) {
   return (
     <dl className="m-0 grid grid-cols-[minmax(0,140px)_1fr] rounded-card bg-card px-4 py-1 text-ui">
       {rows
-        .filter((pair): pair is readonly [string, string] => pair[1] !== undefined && pair[1] !== "")
-        .map(([term, value]) => (
+        .filter((fact): fact is readonly [string, string, boolean?] => fact[1] !== undefined && fact[1] !== "")
+        .map(([term, value, urgent]) => (
           <div key={term} className="contents [&:last-child>*]:border-b-0">
             <dt className="border-b border-line py-2.5 pe-3 text-label">{term}</dt>
-            <dd className="m-0 border-b border-line py-2.5 [overflow-wrap:anywhere]">{value}</dd>
+            <dd className={cn("m-0 border-b border-line py-2.5 [overflow-wrap:anywhere]", urgent && "text-lantern")}>
+              {value}
+            </dd>
           </div>
         ))}
     </dl>
@@ -287,6 +353,7 @@ const chatLink = (
       search={messageId === null ? {} : { message: messageId }}
       className="-ms-2 inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-link no-underline hover:bg-hover"
     >
+      <InboxIcon name="chat" />
       {label}
     </Link>
   );
@@ -297,8 +364,12 @@ const questName = (quest: Quest | undefined, directory: InboxDirectory): string 
     ? undefined
     : copy.questGroup({ name: directory.hobName(quest.leadId), goal: firstLine(quest.goal) });
 
-/** What the line under a request says: why an expired one cannot be approved, or what deciding covers. */
+/**
+ * What the line under a request says: why an expired one cannot be approved, what Allow once covers
+ * for a high-risk one, or what happens if it expires.
+ */
 const footText = (request: ApprovalRequest, name: string): string => {
   if (request.state === "expired") return copy.detail.expiredFoot;
-  return request.state === "pending" ? copy.detail.pendingFoot({ name }) : "";
+  if (request.state !== "pending") return "";
+  return request.onceOnly ? copy.detail.onceOnlyFoot : copy.detail.pendingFoot({ name });
 };

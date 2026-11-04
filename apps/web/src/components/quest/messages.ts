@@ -46,6 +46,7 @@ export const messages = {
     about: ({ title }: { title: string }) => `for ${title}`,
     answerLabel: ({ name }: { name: string }) => `Your answer to ${name}`,
     answerPlaceholder: "Type your answer",
+    answerTo: ({ name }: { name: string }) => `Answer ${name}…`,
     send: "Send answer",
     sending: "Sending…",
     youAnswered: ({ answer }: { answer: string }) => `You answered: ${answer}`,

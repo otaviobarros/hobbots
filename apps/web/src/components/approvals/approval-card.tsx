@@ -28,45 +28,15 @@ const TONE: Record<ApprovalState, { readonly ring: string; readonly text: string
  * A tool call waiting for the user, inline in the reply it paused (PE-003): the exact action, what
  * it acts on, who asked, why the policy asks now, the risk and when it expires, with Allow once,
  * Always for this site with the rule it saves, and Deny with an optional reason. It follows the durable request, so a decision made elsewhere or an expiry shows
- * here as it happens. `via` names where it shows, the chat or the Inbox, which a decision records.
- * With `keys`, A and D decide it from anywhere on the page, as in the Inbox.
+ * here as it happens. `via` names where it shows, which a decision records.
  */
-export function ApprovalCard({
-  approval,
-  hob,
-  via,
-  keys = false,
-}: {
-  approval: ApprovalRequest;
-  hob: Agent;
-  via: ApprovalSurface;
-  keys?: boolean;
-}) {
+export function ApprovalCard({ approval, hob, via }: { approval: ApprovalRequest; hob: Agent; via: ApprovalSurface }) {
   const tone = TONE[approval.state];
   const pending = approval.state === "pending";
-  const decide = useDecideApproval(approval, via);
-  const sending = decide.isPending ? copy.sending : "";
-  const statusText = pending ? sending : resultText(approval, hob.name);
-  const status = useRef<HTMLSpanElement>(null);
-  const card = useRef<HTMLElement>(null);
-  // When the buttons that held focus give way to the outcome, focus moves to the outcome line
-  // rather than falling back to the page.
-  const hadFocus = useRef(false);
-  useEffect(() => {
-    const focusLost = document.activeElement === null || document.activeElement === document.body;
-    if (approval.state !== "pending" && hadFocus.current && focusLost) status.current?.focus();
-  }, [approval.state]);
   return (
     <section
-      ref={card}
       aria-label={copy.asks({ name: hob.name })}
       data-state={approval.state}
-      onFocus={() => {
-        hadFocus.current = true;
-      }}
-      onBlur={(event) => {
-        hadFocus.current = card.current?.contains(event.relatedTarget) ?? false;
-      }}
       className={cn(
         "cut flex max-w-column-max flex-col gap-2.5 border-[3px] bg-card px-4 py-3.5",
         tone.ring,
@@ -79,16 +49,65 @@ export function ApprovalCard({
         {pending && <span className="text-meta text-label">{expiryText(approval)}</span>}
       </header>
       <ApprovalDetails approval={approval} hob={hob} />
+      <ApprovalDecision approval={approval} hob={hob} via={via} />
+    </section>
+  );
+}
+
+/**
+ * Deciding a request, wherever it shows: its buttons while it waits, then one line with how it
+ * ended, and why sending failed when it did. `look` and `keys` go to the buttons: the Inbox detail
+ * uses the tray look, with A and D deciding from anywhere on the page.
+ */
+export function ApprovalDecision({
+  approval,
+  hob,
+  via,
+  look = "card",
+  keys = false,
+}: {
+  approval: ApprovalRequest;
+  hob: Agent;
+  via: ApprovalSurface;
+  look?: "card" | "tray";
+  keys?: boolean;
+}) {
+  const tone = TONE[approval.state];
+  const pending = approval.state === "pending";
+  const decide = useDecideApproval(approval, via);
+  const sending = decide.isPending ? copy.sending : "";
+  const statusText = pending ? sending : resultText(approval, hob.name);
+  const status = useRef<HTMLSpanElement>(null);
+  const area = useRef<HTMLFieldSetElement>(null);
+  // When the buttons that held focus give way to the outcome, focus moves to the outcome line
+  // rather than falling back to the page.
+  const hadFocus = useRef(false);
+  useEffect(() => {
+    const focusLost = document.activeElement === null || document.activeElement === document.body;
+    if (approval.state !== "pending" && hadFocus.current && focusLost) status.current?.focus();
+  }, [approval.state]);
+  return (
+    <fieldset
+      ref={area}
+      onFocus={() => {
+        hadFocus.current = true;
+      }}
+      onBlur={(event) => {
+        hadFocus.current = area.current?.contains(event.relatedTarget) ?? false;
+      }}
+      className="m-0 flex min-w-0 flex-col gap-2.5 border-0 p-0"
+    >
       {pending && (
         <ApprovalActions
           approval={approval}
           hob={hob}
           pending={decide.isPending}
           onDecide={(decision) => decide.mutate(decision)}
+          look={look}
           keys={keys}
         />
       )}
-      {/* One live region for the card's whole life, so a screen reader hears each change to it. */}
+      {/* One live region for the request's whole life, so a screen reader hears each change to it. */}
       <span
         ref={status}
         role="status"
@@ -102,7 +121,7 @@ export function ApprovalCard({
           {decisionErrorText(decide.error)}
         </p>
       )}
-    </section>
+    </fieldset>
   );
 }
 

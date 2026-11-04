@@ -4,14 +4,18 @@ import { formatCount, formatIn, formatList, plural } from "../../lib/format.ts";
 /** User-facing copy for the Inbox page and the Needs you counts (STD-I18N-001). */
 export const messages = {
   title: "Inbox",
-  intro: "Who is waiting on whom",
+  nothingWaiting: "Nothing is waiting on you",
   tabsLabel: "Inbox filters",
   tabs: { needs: "Needs you", history: "History" },
   listLabel: "Requests",
   waiting: ({ count }: { count: number }) => `${formatCount(count)} waiting on you`,
+  /** The header's line with the soonest expiry: "6 waiting on you · expires in 20 minutes for Bram". */
+  waitingSoon: ({ count, expiry, name }: { count: number; expiry: string; name: string }) =>
+    `${formatCount(count)} waiting on you · ${expiry} for ${name}`,
   from: ({ name }: { name: string }) => `${name} → you`,
-  group: ({ name, thread }: { name: string; thread: string }) => `${name} · ${thread}`,
-  hubGroup: "This hub · Devices",
+  devices: "Devices",
+  /** A group heading in full, for its tooltip: "Aldric's quest · Plan the spring launch". */
+  groupTitle: ({ label, detail }: { label: string; detail: string }) => `${label} · ${detail}`,
   hub: "This hub",
   questName: ({ name }: { name: string }) => `${name}'s quest`,
   whenIn: ({ when, place }: { when: string; place: string }) => `${when} · ${place}`,
@@ -47,6 +51,7 @@ export const messages = {
     hours: ({ count }: { count: number }) => `expires ${formatIn(count, "hour")}`,
   },
   allClear: "Nothing needs you",
+  allQuiet: "All quiet here.",
   allClearHint: "Your hobs are working. Approvals, questions and stuck work land here first, and on Home.",
   seeDecided: "See what you decided",
   backHome: "Back to Home",
@@ -67,18 +72,19 @@ export const messages = {
     tries: "Tries",
     askedBy: "Asked by",
     passedUpBy: "Passed up by",
-    asked: "Asked",
-    expires: "Expires",
-    expiresLead: ({ expiry, name }: { expiry: string; name: string }) =>
-      `It ${expiry}. After that ${name} has to ask again.`,
+    when: "When",
+    whenExpires: ({ asked, expiry }: { asked: string; expiry: string }) => `${asked} · ${expiry}`,
+    copy: "Copy",
+    copied: "Copied",
+    copyFailed: "Could not copy",
     decided: "Decided",
     openChat: "Open in the chat",
     deviceWhy: ({ name }: { name: string }) =>
       `Someone opened Hobbots on ${name}, a device this hub does not know. Allow it only if it shows the same code.`,
     deviceFoot: "Deny turns that device away. Decide later keeps it waiting in Settings › Devices.",
     expiredFoot: "Expired requests can never be approved late. The hob asks again with what is true now.",
-    pendingFoot: ({ name }: { name: string }) =>
-      `${name} can only do what is listed here. Anything else asks again. Deciding here works the same as in the chat.`,
+    pendingFoot: ({ name }: { name: string }) => `If it expires, nothing runs and ${name} asks again.`,
+    onceOnlyFoot: "Allow once covers this one action only.",
   },
   history: {
     heading: "Decision history",
@@ -123,6 +129,8 @@ export const messages = {
     direct: "No lead could answer it, so it comes to you. Your answer goes straight back.",
     passedBy: ({ names }: { names: ReadonlyArray<string> }) => `Passed up to you by ${formatList(names)}.`,
     openChat: ({ name }: { name: string }) => `Open ${name}'s chat`,
+    goesBack: ({ name }: { name: string }) => `Goes back to ${name}, who passes it to the hob that asked.`,
+    goesStraight: ({ name }: { name: string }) => `Goes straight back to ${name}.`,
     loading: "Reading the questions for you…",
     loadFailed: "Hobbots could not read the questions for you.",
   },
