@@ -95,12 +95,14 @@ const applyAgent = (queryClient: QueryClient, hob: Agent) => {
         ? old.filter((agent) => agent.id !== hob.id)
         : upsertNewer(old, hob),
   );
-  // A hob retired elsewhere joins Archived hobs.
-  if (hob.status === "retired") {
-    queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.archivedAgents, (old) =>
-      old === undefined ? old : sortArchived(upsertNewer(old, hob)),
-    );
-  }
+  // A hob retired elsewhere joins the retired hobs, and one brought back leaves them.
+  queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.archivedAgents, (old) =>
+    old === undefined
+      ? old
+      : hob.status === "retired"
+        ? sortArchived(upsertNewer(old, hob))
+        : old.filter((agent) => agent.id !== hob.id),
+  );
 };
 
 type WorkbenchEvent = Extract<

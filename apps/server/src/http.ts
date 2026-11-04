@@ -55,6 +55,7 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
       pause: ({ params }) => lifecycle.pause(params.agentId),
       wake: ({ params }) => lifecycle.wake(params.agentId),
       retire: ({ params, payload }) => lifecycle.retire(params.agentId, payload.activeWork),
+      bringBack: ({ params }) => lifecycle.bringBack(params.agentId),
       threads: ({ params, query }) =>
         repo.findAgent(params.agentId).pipe(
           Effect.flatMap(foundAgent(params.agentId)),
