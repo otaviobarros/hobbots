@@ -2,7 +2,7 @@ import { AgentId, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { queryKeys } from "./queries.ts";
-import { lastRead, showUnread } from "./thread-reads.ts";
+import { lastRead, readThrough, showUnread } from "./thread-reads.ts";
 
 const agentId = AgentId.make("aldric");
 const threadId = ThreadId.make("t1");
@@ -57,5 +57,17 @@ describe("unread threads", () => {
     const queued = new Message({ ...reply("m4", "queued"), role: "user", configVersion: null });
     expect(lastRead([reply("m1", "complete"), reply("m2", "streaming"), queued])?.id).toBe("m1");
     expect(lastRead([])).toBeUndefined();
+  });
+
+  // covers UX-006
+  it("[TC-UX-195] reads through the newest revision seen up to that message, not one that came after", () => {
+    const at = (id: string, status: Message["status"], revision: number) =>
+      new Message({ ...reply(id, status), revision });
+    // The reply after the one read is still under way, so its newer revision is not seen yet.
+    expect(readThrough([at("m1", "complete", 9), at("m2", "complete", 4), at("m3", "streaming", 12)])).toEqual({
+      messageId: "m2",
+      revision: 9,
+    });
+    expect(readThrough([])).toBeUndefined();
   });
 });

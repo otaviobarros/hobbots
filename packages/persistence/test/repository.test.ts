@@ -160,15 +160,15 @@ describe("HobbotsRepository", () => {
       // A reply under way leaves the thread read until it ends.
       yield* repo.upsertMessage(message("m2", "streaming"));
       const streaming = yield* unread();
-      yield* repo.upsertMessage(message("m2"));
+      const seen = (yield* repo.upsertMessage(message("m2"))).value.revision;
       const ended = yield* unread();
       const listed = (yield* repo.listThreads(agentId))[0]?.unread;
-      const marked = yield* repo.markThreadRead(threadId, MessageId.make("m2"));
+      const marked = yield* repo.markThreadRead(threadId, MessageId.make("m2"), seen);
       const after = yield* unread();
       // Reading an older message, again or a message of another thread changes nothing.
-      const back = yield* repo.markThreadRead(threadId, MessageId.make("m1"));
-      const again = yield* repo.markThreadRead(threadId, MessageId.make("m2"));
-      const elsewhere = yield* repo.markThreadRead(threadId, MessageId.make("nope"));
+      const back = yield* repo.markThreadRead(threadId, MessageId.make("m1"), seen);
+      const again = yield* repo.markThreadRead(threadId, MessageId.make("m2"), seen);
+      const elsewhere = yield* repo.markThreadRead(threadId, MessageId.make("nope"), seen);
       // A write of the thread keeps the marker, and a failed reply with no text is unread too.
       yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Renamed", createdAt: now, updatedAt: now }));
       const kept = yield* unread();
@@ -204,7 +204,7 @@ describe("HobbotsRepository", () => {
   });
 
   // covers UX-006, CH-009, DP-003
-  it("[TC-DP-252] a reply you read that is continued in place is unread again once it ends, until you read it", async () => {
+  it("[TC-DP-252] a reply you read that is continued in place is unread again once it ends, even after a late read of the cut-off reply", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -226,21 +226,24 @@ describe("HobbotsRepository", () => {
       const unread = () => repo.findThread(threadId).pipe(Effect.map((t) => Option.getOrThrow(t).unread));
       yield* repo.upsertMessage(new Message({ ...message("m1"), role: "user", configVersion: null }));
       // The reply was cut off, and you read it as it was.
-      yield* repo.upsertMessage(new Message({ ...message("m2", "failed"), content: "Half a plan" }));
-      yield* repo.markThreadRead(threadId, MessageId.make("m2"));
+      const half = yield* repo.upsertMessage(new Message({ ...message("m2", "failed"), content: "Half a plan" }));
+      yield* repo.markThreadRead(threadId, MessageId.make("m2"), half.value.revision);
       const read = yield* unread();
       // Continue resumes it in the same message, which stays read while it runs.
       yield* repo.upsertMessage(new Message({ ...message("m2", "streaming"), content: "Half a plan, and" }));
       const continuing = yield* unread();
-      yield* repo.upsertMessage(new Message({ ...message("m2"), content: "Half a plan, and the rest." }));
+      const whole = yield* repo.upsertMessage(new Message({ ...message("m2"), content: "Half a plan, and the rest." }));
       const continued = yield* unread();
-      // A fresh read of the list says the same, and reading it again clears it.
+      // Another device's read of the cut-off reply, landing only now, leaves the rest unread.
+      const late = yield* repo.markThreadRead(threadId, MessageId.make("m2"), half.value.revision);
+      // A fresh read of the list says the same, and reading the rest clears it.
       const listed = (yield* repo.listThreads(agentId))[0]?.unread;
-      const marked = yield* repo.markThreadRead(threadId, MessageId.make("m2"));
+      const marked = yield* repo.markThreadRead(threadId, MessageId.make("m2"), whole.value.revision);
       return {
         read,
         continuing,
         continued,
+        late: Option.isNone(late),
         listed,
         cleared: Option.map(marked, (change) => change.value.unread),
         after: yield* unread(),
@@ -251,6 +254,7 @@ describe("HobbotsRepository", () => {
       read: false,
       continuing: false,
       continued: true,
+      late: true,
       listed: true,
       cleared: Option.some(false),
       after: false,

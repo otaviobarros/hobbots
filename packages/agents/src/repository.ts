@@ -43,12 +43,15 @@ export class HobbotsRepository extends Context.Service<
      */
     readonly upsertThread: (thread: Thread) => Effect.Effect<Committed<Thread>>;
     /**
-     * Records that you read the thread through `messageId` (ADR 027). The marker only moves forward:
-     * none, and nothing journaled, when the message is not in the thread or you had read past it.
+     * Records that you read the thread through `messageId`, as you saw it at `revision` (ADR 027):
+     * the marker takes the newest revision of the messages up to it, but never past `revision`, so a
+     * reply continued after you saw it stays unread. It only moves forward: none, and nothing
+     * journaled, when the message is not in the thread or you had read past it.
      */
     readonly markThreadRead: (
       threadId: ThreadId,
       messageId: MessageId,
+      revision: number,
     ) => Effect.Effect<Option.Option<Committed<Thread>>>;
     readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;
     /** Saves the message with the events it produces (`messageEvents`). */

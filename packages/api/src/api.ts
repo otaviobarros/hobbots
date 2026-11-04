@@ -150,7 +150,11 @@ export const RenameThreadPayload = Schema.Struct({
 export const PinThreadPayload = Schema.Struct({ pinned: Schema.Boolean });
 
 /** The last message you read in the thread (ADR 027). */
-export const MarkThreadReadPayload = Schema.Struct({ messageId: MessageId });
+/**
+ * What you read a thread through (ADR 027): the last message you saw, and the newest message
+ * revision you saw up to it, so a reply continued after that is not counted read.
+ */
+export const MarkThreadReadPayload = Schema.Struct({ messageId: MessageId, revision: Schema.Int });
 
 /**
  * What the health endpoint returns: enough for a client to tell this installation's server from

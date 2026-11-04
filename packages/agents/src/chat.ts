@@ -214,11 +214,15 @@ export class ChatService extends Context.Service<
     /** Pins the thread to the top of its hob's chats, or unpins it. Refused while it is archived. */
     readonly setPinned: (threadId: ThreadId, pinned: boolean) => Effect.Effect<Thread, ThreadNotFound | ThreadArchived>;
     /**
-     * Records that you read the thread through `messageId` (ADR 027), so its unread dot clears on
-     * every device. The marker only moves forward: a message you had read past, or one from another
-     * thread, returns the thread as it is. An archived thread takes it too.
+     * Records that you read the thread through `messageId`, as you saw it at `revision` (ADR 027), so
+     * its unread dot clears on every device. The marker only moves forward: a message you had read
+     * past, or one from another thread, returns the thread as it is. An archived thread takes it too.
      */
-    readonly markRead: (threadId: ThreadId, messageId: MessageId) => Effect.Effect<Thread, ThreadNotFound>;
+    readonly markRead: (
+      threadId: ThreadId,
+      messageId: MessageId,
+      revision: number,
+    ) => Effect.Effect<Thread, ThreadNotFound>;
     /** Restores an archived thread, unless its hob is retired. Restoring a live thread returns it unchanged. */
     readonly restore: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
     /** Starts the hob's queued messages and the work waiting in its backpack, in threads with no turn running, as when it wakes. */
@@ -1252,9 +1256,13 @@ export class ChatService extends Context.Service<
       });
 
       // Needs no hob lock: the marker moves forward in one statement, whatever else changes the thread.
-      const markRead = Effect.fn("ChatService.markRead")(function* (threadId: ThreadId, messageId: MessageId) {
+      const markRead = Effect.fn("ChatService.markRead")(function* (
+        threadId: ThreadId,
+        messageId: MessageId,
+        revision: number,
+      ) {
         const thread = yield* findThread(threadId);
-        const marked = yield* repo.markThreadRead(threadId, messageId);
+        const marked = yield* repo.markThreadRead(threadId, messageId, revision);
         return Option.isSome(marked) ? yield* announce(marked.value) : thread;
       });
 

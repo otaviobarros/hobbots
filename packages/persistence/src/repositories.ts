@@ -345,14 +345,14 @@ export const HobbotsRepositoryLive = Layer.effect(
         }),
       );
 
-    // Moves the read marker forward to the newest revision of the messages up to this one, as you
-    // saw them, never back, and announces the thread with its new revision, so every device clears
-    // its unread dot (ADR 027).
-    const markThreadRead = (threadId: ThreadId, messageId: MessageId) =>
+    // Moves the read marker forward to the newest revision of the messages up to this one, capped at
+    // the revision you saw, so a reply continued since stays unread, never back, and announces the
+    // thread with its new revision, so every device clears its unread dot (ADR 027).
+    const markThreadRead = (threadId: ThreadId, messageId: MessageId, seenRevision: number) =>
       journaled(1, (revision) =>
         Effect.gen(function* () {
           const seen = sql`(SELECT MAX(m.revision) FROM messages m
-            WHERE m.thread_id = ${threadId}
+            WHERE m.thread_id = ${threadId} AND m.revision <= ${seenRevision}
               AND m.seq <= (SELECT seq FROM messages WHERE id = ${messageId} AND thread_id = ${threadId}))`;
           const moved = yield* sql`UPDATE threads SET read_revision = ${seen}, revision = ${revision}
             WHERE id = ${threadId} AND ${seen} > COALESCE(read_revision, 0)

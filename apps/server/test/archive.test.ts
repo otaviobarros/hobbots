@@ -334,12 +334,12 @@ describe("read threads", () => {
         const reply = (yield* repo.listMessages(thread.id)).at(-1);
         if (reply === undefined) throw new Error("no reply");
         const events = yield* recordThreadEvents;
-        const read = yield* chat.markRead(thread.id, reply.id);
-        const readAgain = yield* chat.markRead(thread.id, reply.id);
+        const read = yield* chat.markRead(thread.id, reply.id, reply.revision);
+        const readAgain = yield* chat.markRead(thread.id, reply.id, reply.revision);
         yield* chat.sendPrompt(thread.id, "And the lid?");
         yield* settled(thread.id);
         const written = Option.getOrThrow(yield* repo.findThread(thread.id));
-        const missing = yield* Effect.exit(chat.markRead("nope" as ThreadId, reply.id));
+        const missing = yield* Effect.exit(chat.markRead("nope" as ThreadId, reply.id, reply.revision));
         yield* Effect.yieldNow;
         return {
           before: thread.unread,

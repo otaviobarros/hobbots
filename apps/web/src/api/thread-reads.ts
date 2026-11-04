@@ -65,27 +65,44 @@ export const lastRead = (transcript: ReadonlyArray<Message> | undefined): Messag
   transcript?.findLast((message) => message.status !== "queued" && !isInProgress(message.status));
 
 /**
- * Marks the open chat read on the hub while the page is in front and the thread shows unread, so
- * its dot clears on every device (ADR 027). The dot clears here at once; the hub's answer and
- * event bring the thread's new revision.
+ * What you read the transcript through: its last message you have seen whole, and the newest
+ * revision you saw up to it, so the hub never counts read a reply continued after that (ADR 027).
+ */
+export const readThrough = (
+  transcript: ReadonlyArray<Message> | undefined,
+): { readonly messageId: MessageId; readonly revision: number } | undefined => {
+  const last = lastRead(transcript);
+  if (last === undefined || transcript === undefined) return undefined;
+  const upTo = transcript.slice(0, transcript.indexOf(last) + 1);
+  return { messageId: last.id, revision: Math.max(...upTo.map((message) => message.revision)) };
+};
+
+/**
+ * Marks the open chat read on the hub while it is in view, on a page in front, and the thread shows
+ * unread, so its dot clears on every device (ADR 027). A chat folded away beside the Quest room is
+ * not in view. The dot clears here at once; the hub's answer and event bring the thread's new
+ * revision.
  */
 export const useReadThread = (
   hobId: AgentId,
   thread: Thread | undefined,
   transcript: ReadonlyArray<Message> | undefined,
+  inView: boolean,
 ) => {
   const queryClient = useQueryClient();
-  const shown = usePageShown();
-  const through: MessageId | undefined = lastRead(transcript)?.id;
+  const shown = usePageShown() && inView;
+  const through = readThrough(transcript);
+  const messageId = through?.messageId;
+  const revision = through?.revision;
   const threadId = thread?.id;
   const unread = thread?.unread === true;
   useEffect(() => {
-    if (!shown || !unread || threadId === undefined || through === undefined) return;
+    if (!shown || !unread || threadId === undefined || messageId === undefined || revision === undefined) return;
     setUnread(queryClient, threadId, false);
-    call((c) => c.threads.markRead({ params: { threadId }, payload: { messageId: through } })).then(
+    call((c) => c.threads.markRead({ params: { threadId }, payload: { messageId, revision } })).then(
       (read) => placeThread(queryClient, read),
       // The dot comes back with the next read of the list; nothing else depends on it.
       () => void queryClient.invalidateQueries({ queryKey: ["agents", hobId, "threads"], exact: true }),
     );
-  }, [queryClient, hobId, threadId, through, shown, unread]);
+  }, [queryClient, hobId, threadId, messageId, revision, shown, unread]);
 };
