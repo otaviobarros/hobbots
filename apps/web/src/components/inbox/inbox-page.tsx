@@ -182,7 +182,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
             )
           ) : (
             <>
-              {inbox.isPending && <p className="m-0 px-8 py-6 text-sm text-label">{copy.loading}</p>}
+              {inbox.isPending && <p className="m-0 px-8 py-6 text-ui text-label">{copy.loading}</p>}
               {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
               {inbox.isSuccess && <InboxHistory requests={requests} directory={directory} />}
             </>
@@ -232,7 +232,7 @@ function NeedsList({
   return (
     <aside aria-label={copy.title} className="flex w-95 flex-none flex-col border-e border-line bg-panel">
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
-        {inbox.isPending && <p className="px-3 py-4 text-sm text-label">{copy.loading}</p>}
+        {inbox.isPending && <p className="px-3 py-4 text-ui text-label">{copy.loading}</p>}
         {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
         <ReadState read={questions} loading={copy.question.loading} failed={copy.question.loadFailed} />
         <ReadState read={blockers} loading={blockerCopy.loading} failed={blockerCopy.loadFailed} />
@@ -321,7 +321,7 @@ function Selected({
  * way to read it again. A read again that failed keeps what was read before in the list.
  */
 function ReadState({ read, loading, failed }: { read: BlockersRead | QuestionsRead; loading: string; failed: string }) {
-  if (read.isPending) return <p className="m-0 px-3 pt-4 text-sm text-label">{loading}</p>;
+  if (read.isPending) return <p className="m-0 px-3 pt-4 text-ui text-label">{loading}</p>;
   return read.isError ? <LoadFailed message={failed} onRetry={() => void read.refetch()} /> : null;
 }
 
@@ -342,7 +342,7 @@ function AllClear() {
           <span className="relative mb-3">
             {hob === undefined ? <ChiefMark size={72} /> : <HobSprite hob={hob} size={72} />}
           </span>
-          <span className="absolute start-[calc(50%+44px)] top-6.5 rounded-[12px_12px_12px_2px] bg-card px-3 py-1.75 text-sm whitespace-nowrap text-text-strong shadow-menu">
+          <span className="absolute start-[calc(50%+44px)] top-6.5 rounded-[12px_12px_12px_2px] bg-card px-3 py-1.75 text-ui whitespace-nowrap text-text-strong shadow-menu">
             {copy.allQuiet}
           </span>
         </div>
@@ -367,7 +367,7 @@ function AllClear() {
 
 function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="flex flex-col items-start gap-2 px-3 py-4 text-sm text-rose">
+    <div role="alert" className="flex flex-col items-start gap-2 px-3 py-4 text-ui text-rose">
       {message}
       <Button variant="outline" onClick={onRetry}>
         {copy.retry}

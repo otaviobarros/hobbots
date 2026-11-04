@@ -54,10 +54,10 @@ export function QuestionCard({
       {open ? (
         <AnswerForm question={question} askerName={asker.name} via="chat" />
       ) : question.state === "withdrawn" ? (
-        <p className="m-0 animate-hb-in text-sm text-text-secondary">{copy.withdrawn}</p>
+        <p className="m-0 animate-hb-in text-ui text-text-secondary">{copy.withdrawn}</p>
       ) : (
         question.answer !== null && (
-          <p className="m-0 animate-hb-in text-sm text-mint">{yourAnswer(question, "chat")}</p>
+          <p className="m-0 animate-hb-in text-ui text-mint">{yourAnswer(question, "chat")}</p>
         )
       )}
     </section>
@@ -112,7 +112,7 @@ export function AnswerForm({
       <span className="flex flex-wrap items-center gap-2">
         {composer && <span className="min-w-0 flex-1 text-meta text-label">{hint}</span>}
         {send.isError && (
-          <span role="alert" className={cn("text-sm text-rose", !composer && "order-last")}>
+          <span role="alert" className={cn("text-ui text-rose", !composer && "order-last")}>
             {closed ? copy.closed : copy.failed}
           </span>
         )}

@@ -117,11 +117,11 @@ function ActionBlock({ action, command }: { action: string; command: boolean }) 
   return (
     <div className="flex items-center gap-2 rounded-control border border-line bg-deep py-1 ps-3.5 pe-1">
       {command && (
-        <span aria-hidden className="font-mono text-sm text-label">
+        <span aria-hidden className="font-mono text-code text-label">
           $
         </span>
       )}
-      <code className="min-w-0 flex-1 py-1.5 font-mono text-sm leading-5 break-all whitespace-pre-wrap text-moonlight">
+      <code className="min-w-0 flex-1 py-1.5 font-mono text-code break-all whitespace-pre-wrap text-moonlight">
         {action}
       </code>
       <Button

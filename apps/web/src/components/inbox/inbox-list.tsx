@@ -83,7 +83,7 @@ export function InboxList({
               <span className="flex text-star">
                 {heading.icon === "quest" ? <FlagIcon size={13} /> : <InboxIcon name={heading.icon} size={13} />}
               </span>
-              <span className="lbl flex-none text-xs text-label">{heading.label}</span>
+              <span className="lbl flex-none text-meta text-label">{heading.label}</span>
               <span className="min-w-0 truncate text-meta text-label">{heading.detail}</span>
             </span>
             <ul className="m-0 flex list-none flex-col gap-1 p-0">{group.entries.map((entry) => item(entry))}</ul>
@@ -98,7 +98,7 @@ export function InboxList({
 export function InboxViewPicker({ view, onChange }: { view: InboxView; onChange: (view: InboxView) => void }) {
   return (
     <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5">
-      <span className="flex-1 text-xs text-label">{copy.view.label}</span>
+      <span className="flex-1 text-meta text-label">{copy.view.label}</span>
       <SegmentedControl size="sm" aria-label={copy.view.label} value={view} onValueChange={onChange}>
         {INBOX_VIEWS.map((name) => (
           <SegmentedControlItem key={name} value={name}>
@@ -196,7 +196,7 @@ function InboxItem({
           </span>
           <Badge variant={row.tag}>{row.kind}</Badge>
         </span>
-        <span title={row.what} className="truncate text-sm leading-5 font-semibold">
+        <span title={row.what} className="truncate text-ui font-semibold">
           {row.what}
         </span>
         <span className={cn("flex items-center gap-1.25 text-meta", TONE[row.tone])}>
