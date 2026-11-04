@@ -1,6 +1,5 @@
 import {
   AgentId,
-  type Attempt,
   type AttemptActivity,
   AttemptId,
   CommandId,
@@ -17,7 +16,6 @@ import {
   commandsInOrder,
   hobTerminals,
   tallyCommands,
-  terminalAttempts,
   terminalMark,
   wholeOutput,
 } from "./terminal-model.ts";
@@ -85,19 +83,11 @@ describe("the Terminal's commands", () => {
 describe("the Terminal's hobs", () => {
   const task = (id: string, ownerId: string, parentId: string | null = null) =>
     ({ id: TaskId.make(id), ownerId: AgentId.make(ownerId), parentId }) as unknown as Task;
-  const attempt = (id: string, taskId: string, number: number) =>
-    ({ id: AttemptId.make(id), taskId: TaskId.make(taskId), number }) as unknown as Attempt;
   const lead = task("lead", "aldric");
   const tree = {
     tasks: [lead, task("copy", "quill", "lead"), task("build", "ada", "lead"), task("idle", "pip", "lead")],
-    attempts: [attempt("l1", "lead", 1), attempt("c1", "copy", 1), attempt("c2", "copy", 2), attempt("b1", "build", 1)],
+    attempts: [],
   } as unknown as TaskTree;
-
-  it("replays the shown Attempt for the Task and the latest for every other Task that has one", () => {
-    const shown = tree.attempts[0] ?? null;
-    expect(terminalAttempts(tree, lead, shown).map((each) => each.id)).toEqual(["l1", "c2", "b1"]);
-    expect(terminalAttempts(tree, lead, null).map((each) => each.id)).toEqual(["c2", "b1"]);
-  });
 
   it("gives each hob that ran a command one terminal, the Task's own hob first", () => {
     const ran = (taskId: string, id: string, startedAt: string) =>

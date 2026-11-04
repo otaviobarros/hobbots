@@ -9,6 +9,7 @@ import {
   questRoom,
   roomMenu,
   showInWorkbench,
+  taskSummary,
   ticket,
 } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
@@ -16,7 +17,7 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 test.afterEach(stopAldricHub);
 
 // covers UX-002, UX-006
-test("[TC-UX-021] a finished Task's Workbench opens in the room on Summary, greys out the Terminal it did not use and keeps the same chat beside it", async ({
+test("[TC-UX-021] a finished Task's Workbench opens in the room on Changes, counts each tab, greys out the Terminal it did not use and keeps the same chat beside it", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -48,21 +49,21 @@ test("[TC-UX-021] a finished Task's Workbench opens in the room on Summary, grey
   await expect(bench).toContainText("Claude Code");
   await expect(composer).toHaveValue("A thought for later");
 
-  // Summary opens first; a tab the Task did not use is greyed out but opens and says so.
+  // Changes opens first, each tab with how many records it lists; a tab the Task did not use is
+  // greyed out but opens and says so.
   const tabs = bench.getByRole("tablist", { name: "Workbench views" });
   await expect(tabs.getByRole("tab")).toHaveText([
-    "Summary",
-    "Changes",
-    "Files",
+    "Changes1",
+    "Files1",
     "TerminalNot used in this task",
     "BrowserSoon",
   ]);
-  const summary = tabs.getByRole("tab", { name: /^Summary/ });
-  await expect(summary).toHaveAttribute("aria-selected", "true");
-  await expect(bench.getByRole("tabpanel", { name: /^Summary/ })).toBeVisible();
+  const changes = tabs.getByRole("tab", { name: /^Changes/ });
+  await expect(changes).toHaveAttribute("aria-selected", "true");
+  await expect(bench.getByRole("tabpanel", { name: /^Changes/ })).toBeVisible();
 
   // The arrow keys move between the tabs; each opens, the Terminal and the Browser saying why.
-  await summary.focus();
+  await changes.focus();
   await page.keyboard.press("ArrowLeft");
   const browser = tabs.getByRole("tab", { name: /^Browser/ });
   await expect(browser).toBeFocused();
@@ -82,15 +83,15 @@ test("[TC-UX-021] a finished Task's Workbench opens in the room on Summary, grey
   await expect(bench).toBeHidden();
   await expect(composer).toHaveValue("A thought for later");
 
-  // Opened again it starts on Summary.
+  // Opened again it starts on Changes.
   await openWorkbench(page, questTicket);
-  await expect(bench.getByRole("tab", { name: /^Summary/ })).toHaveAttribute("aria-selected", "true");
+  await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
   await room.getByRole("button", { name: "Close room" }).click();
   await expect(bench).toBeHidden();
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-022] the header's quest button opens the room, and a lane's Show in the Workbench opens its Summary in the dock", async ({
+test("[TC-UX-022] the header's quest button opens the room, and a lane's Show in the Workbench opens its Changes in the dock", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -113,14 +114,14 @@ test("[TC-UX-022] the header's quest button opens the room, and a lane's Show in
   const bench = dock(page);
   await expect(bench.getByRole("button", { name: "Open the Workbench" })).toHaveAttribute("aria-expanded", "false");
 
-  // Show in the Workbench opens it on Summary, and the unsent message stays in the chat beside it.
+  // Show in the Workbench opens it on Changes, and the unsent message stays in the chat beside it.
   await showInWorkbench(page, "Tidy the notes");
-  await expect(bench.getByRole("tab", { name: /^Summary/ })).toHaveAttribute("aria-selected", "true");
+  await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
   await expect(composer).toHaveValue("Keep the headings short");
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-030] a finished Task's Summary says what was asked, what happened and what it made, and links each file into Changes and Files", async ({
+test("[TC-UX-030] a finished Task's summary in its lane says what happened and what it made, and links each file into Changes and Files", async ({
   page,
 }) => {
   const { url, aldric, folder } = await aldricHub();
@@ -154,12 +155,9 @@ test("[TC-UX-030] a finished Task's Summary says what was asked, what happened a
 
   await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
-  const summary = bench.getByRole("tabpanel", { name: /^Summary/ });
-  // It leads with the result, then what happened; what you asked waits behind Details.
+  const summary = await taskSummary(page, "Tidy the notes");
+  // It leads with the result, then what happened.
   await expect(summary.getByText("The notes are tidy, and the report says what changed.")).toBeVisible();
-  await expect(summary.getByRole("region", { name: "What you asked" })).toHaveCount(0);
-  await summary.getByRole("button", { name: "Details" }).click();
-  await expect(summary.getByRole("region", { name: "What you asked" })).toContainText("Tidy the notes");
   await expect(summary.getByRole("region", { name: "What happened" })).toContainText(
     "DoneTwo notes said the same thing.",
   );
@@ -183,7 +181,7 @@ test("[TC-UX-030] a finished Task's Summary says what was asked, what happened a
   await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
   await expect(page).toHaveURL(/tab=changes/);
   expect(new URL(page.url().replace("/#/", "/")).searchParams.get("file")).toBe(join(folder, "notes.md"));
-  await bench.getByRole("tab", { name: /^Summary/ }).click();
+  await bench.getByRole("tab", { name: /^Terminal/ }).click();
   await expect(page).not.toHaveURL(/file=/);
   await made.getByRole("button", { name: "See The report in Files" }).click();
   await expect(bench.getByRole("tab", { name: /^Files/ })).toHaveAttribute("aria-selected", "true");
@@ -212,11 +210,9 @@ test("[TC-UX-031] a question waiting for you shows in the lane above the Workben
   const asks = page.getByRole("region", { name: "Aldric asks you" });
   await expect(asks).toContainText("Should the headings be short?");
   await openWorkbench(page, ticket(page, "Tidy the notes"));
-  const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
-  const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
-  await expect(bench.getByRole("tabpanel", { name: /^Summary/ })).toContainText(
-    "Aldric is waiting on your answer in the lane above.",
-  );
+  const summary = await taskSummary(page, "Tidy the notes");
+  const open = summary.getByRole("region", { name: "Still open" });
+  await expect(summary).toContainText("Aldric is waiting on your answer in this lane.");
   await expect(open).not.toContainText("Should the headings be short?");
 
   // The lane holds the question, with its answer box.
@@ -292,8 +288,7 @@ test("[TC-UX-033] Still open says nothing is open only once it could read what w
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
   await openWorkbench(page, questTicket);
-  const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
-  const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
+  const open = (await taskSummary(page, "Tidy the notes")).getByRole("region", { name: "Still open" });
   await expect(open.getByRole("alert")).toHaveText(
     "Hobbots could not read what is still open, so something may still be waiting.Try again",
     { timeout: 20_000 },
@@ -335,12 +330,12 @@ test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the w
   await expect(sheet).toContainText("attempt 2", { timeout: 15_000 });
   await expect(sheet).toContainText("Failed", { timeout: 30_000 });
 
-  // With no Attempt chosen, the Workbench settles on the first, which changed the notes.
+  // With no Attempt chosen, the Workbench and the lane's summary settle on the first, which changed the notes.
   const bench = await showInWorkbench(page, "Tidy the notes file");
   const attempts = bench.getByRole("radiogroup", { name: "Attempts" });
   await expect(attempts.getByRole("radio", { name: "Attempt 1" })).toBeChecked();
   await expect(attempts.getByRole("radio", { name: "Attempt 2" })).not.toBeChecked();
-  const summary = bench.getByRole("tabpanel", { name: /^Summary/ });
+  const summary = await taskSummary(page, "Tidy the notes file");
   const made = summary.getByRole("region", { name: "What it made" });
   await expect(made.getByRole("button", { name: "See the change to notes.md in Changes" })).toBeVisible();
   await expect(summary.getByRole("region", { name: "What happened" })).toContainText("This attempt failed.");
@@ -353,5 +348,6 @@ test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the w
   await expect(made).toContainText("Aldric did not make or change anything in this attempt.");
   await page.reload();
   await expect(attempts.getByRole("radio", { name: "Attempt 2" })).toBeChecked();
+  await taskSummary(page, "Tidy the notes file");
   await expect(made).toContainText("Aldric did not make or change anything in this attempt.");
 });

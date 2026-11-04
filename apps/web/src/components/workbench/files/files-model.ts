@@ -1,30 +1,4 @@
-import type { AttemptActivity, TaskFile, TaskFileId } from "@hobbots/domain";
-
-/**
- * What changes whenever an Attempt's records do: a recorded change or result, or the Attempt
- * moving on. The Files tab reads its list again when it changes.
- */
-export const filesStamp = (activity: AttemptActivity): string => {
-  const latest = activity.changes
-    .map((change) => change.recordedAt)
-    .sort()
-    .at(-1);
-  return [activity.attempt.state, activity.changes.length, activity.artifacts.length, latest].join("|");
-};
-
-/**
- * The file the tab shows: the one picked, else the one another tab pointed at by where it is on the
- * hub, else the first. Null when the Task listed none.
- */
-export const shownFile = (
-  files: ReadonlyArray<TaskFile>,
-  picked: TaskFileId | null,
-  focus: string | undefined,
-): TaskFile | null =>
-  files.find((file) => file.id === picked) ??
-  (focus === undefined ? undefined : files.find((file) => file.location === focus)) ??
-  files[0] ??
-  null;
+import type { TaskFile } from "@hobbots/domain";
 
 /** The file's own name, the last part of its path. */
 export const fileName = (file: Pick<TaskFile, "path">): string => file.path.slice(file.path.lastIndexOf("/") + 1);

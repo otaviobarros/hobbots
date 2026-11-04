@@ -10,6 +10,7 @@ import { StatusTag } from "../quest/status-dot.tsx";
 import { TaskDetail } from "../quest/task-detail.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
+import { TaskSummary } from "../workbench/summary/task-summary.tsx";
 import { messages } from "./messages.ts";
 
 const room = questCopy.room;
@@ -99,7 +100,8 @@ function TaskCard({
       <TaskBackpack tree={tree} task={task} hobs={hobs} onOpen={onOpen} />
       <details>
         <summary className="cursor-pointer text-label">{messages.details}</summary>
-        <div className="mt-3">
+        <div className="mt-3 flex flex-col gap-4">
+          <TaskSummary tree={tree} task={task} hobs={hobs} />
           <TaskDetail tree={tree} task={task} hobs={hobs} onOpen={onOpen} />
         </div>
       </details>

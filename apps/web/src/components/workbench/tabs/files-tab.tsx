@@ -1,137 +1,143 @@
-import type { AttemptActivity, TaskFile, TaskFileId } from "@hobbots/domain";
-import { Button, buttonVariants } from "@hobbots/ui/components/button";
-import { Skeleton } from "@hobbots/ui/components/skeleton";
+import type { AttemptActivity, AttemptId, TaskFile } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { attemptFilesQuery, taskFileUrl } from "../../../api/workbench.ts";
 import { formatBytes } from "../../../lib/format.ts";
-import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../../loading/hub-wait.tsx";
+import type { HobLookup } from "../../quest/use-work.ts";
 import { changePath, leavesFile } from "../changes/changes-model.ts";
+import type { DockSource } from "../dock-model.ts";
 import { FilePicker } from "../file-picker.tsx";
+import { FileActions } from "../files/file-actions.tsx";
 import { FilePreview } from "../files/file-preview.tsx";
-import { canDownload, fileDirectory, fileName, filesStamp, shownFile } from "../files/files-model.ts";
+import { fileDirectory, fileName } from "../files/files-model.ts";
 import { messages } from "../files/messages.ts";
+import { HobBy, HobMark, manyHobs } from "../hob-mark.tsx";
 import { LIST_CARD, listRow } from "../list-row.ts";
 import type { WorkbenchTabProps } from "./tab-props.ts";
 
-/**
- * The Files tab (ADR 023): the files the Task made or touched, with previews: Show in Finder in the
- * desktop app on the hub, Download elsewhere. Only files inside the hob's folders are listed.
- */
-export function FilesTab(props: WorkbenchTabProps) {
-  return (
-    <div data-slot="files" className="flex h-full min-h-0 flex-col gap-3 px-5 py-4">
-      {props.activity !== null && (
-        <Files activity={props.activity} focus={focusOf(props)} onSeeChanges={(path) => props.onTab("changes", path)} />
-      )}
-    </div>
-  );
+/** A file in the one list, with the Attempt that made or touched it and the hob it is for. */
+interface Entry {
+  readonly file: TaskFile;
+  readonly source: DockSource;
 }
 
-/** The file another tab asked to show, by where it is on the hub, when the frame passes one. */
-const focusOf = (props: WorkbenchTabProps): string | undefined =>
-  "focus" in props && typeof props.focus === "string" ? props.focus : undefined;
+/** A file's key in the one list: two Attempts can each list the same file. */
+const keyOf = (entry: Entry): string => `${entry.source.attempt.id}/${entry.file.id}`;
 
-function Files({
-  activity,
-  focus,
-  onSeeChanges,
-}: {
-  activity: AttemptActivity;
-  focus: string | undefined;
-  /** Opens Changes on the file, by where it is on the hub. */
-  onSeeChanges: (location: string) => void;
-}) {
-  const attemptId = activity.attempt.id;
-  const stamp = filesStamp(activity);
-  const read = useQuery(attemptFilesQuery(attemptId, stamp));
-  const [picked, setPicked] = useState<TaskFileId | null>(null);
+/**
+ * The Files tab (ADR 023, ADR 027): the files every hob in view made or touched, in one list with
+ * each hob's sprite, with previews: Show in Finder in the desktop app on the hub, Download
+ * elsewhere. Only files inside the hob's folders are listed. The tree's one read lists them as they
+ * are now, and reads them again when you come back to the app.
+ */
+export function FilesTab({ sources, hobs, focus, from, onTab }: WorkbenchTabProps) {
+  const [picked, setPicked] = useState<string | null>(null);
   // A file another tab asks for wins over the one picked here before.
   const [asked, setAsked] = useState(focus);
   if (focus !== asked) {
     setAsked(focus);
     if (focus !== undefined) setPicked(null);
   }
-  if (read.isPending) return <FilesSkeleton onRetry={() => void read.refetch()} />;
-  if (read.isError) {
-    return (
-      <p className="m-0 flex items-center gap-3 text-detail text-text-secondary">
-        <span>{messages.failed}</span>
-        <Button variant="chip" size="xs" onClick={() => void read.refetch()}>
-          {messages.tryAgain}
-        </Button>
-      </p>
-    );
-  }
-  const files = read.data.files;
-  const shown = shownFile(files, picked, focus);
-  if (shown === null) return null;
-  const made = files.filter((file) => file.origin === "made");
-  const touched = files.filter((file) => file.origin !== "made");
+  const entries: ReadonlyArray<Entry> = sources.flatMap((source) => source.files.map((file) => ({ file, source })));
+  const made = entries.filter((each) => each.file.origin === "made");
+  const touched = entries.filter((each) => each.file.origin !== "made");
+  const listed = [...made, ...touched];
+  const shown =
+    listed.find((each) => keyOf(each) === picked) ??
+    (focus === undefined ? undefined : linkedFile(listed, focus, from)) ??
+    listed[0];
+  if (shown === undefined) return <div data-slot="files" />;
+  // Each row shows whose work it is once the list holds more than one hob's.
+  const party = manyHobs(sources);
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3.5 @min-[720px]:flex-row @min-[720px]:items-start">
-      <FilePicker
-        label={messages.list}
-        items={[...made, ...touched]}
-        shown={Math.max(
-          0,
-          [...made, ...touched].findIndex((file) => file.id === shown.id),
-        )}
-        current={
-          <span className="min-w-0 flex-1 truncate font-mono text-code text-text-strong">
-            {shown.label ?? fileName(shown)}
-          </span>
-        }
-        row={(file) => (
-          <span className="flex min-w-0 flex-col items-start gap-px">
-            <RowContent file={file} />
-          </span>
-        )}
-        onPick={(index) => {
-          const file = [...made, ...touched][index];
-          if (file !== undefined) setPicked(file.id);
-        }}
-      />
-      <nav
-        aria-label={messages.list}
-        className={cn(
-          LIST_CARD,
-          "hidden gap-2 @min-[720px]:sticky @min-[720px]:top-0 @min-[720px]:flex @min-[720px]:w-58",
-        )}
-      >
-        <FileGroup title={messages.made} files={made} shown={shown} onPick={setPicked} />
-        <FileGroup title={messages.touched} files={touched} shown={shown} onPick={setPicked} />
-      </nav>
-      <FileDetail
-        key={shown.id}
-        activity={activity}
-        file={shown}
-        onSeeChanges={hasChange(activity, shown) ? () => onSeeChanges(shown.location) : null}
-      />
+    <div data-slot="files" className="flex h-full min-h-0 flex-col gap-3 px-5 py-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3.5 @min-[720px]:flex-row @min-[720px]:items-start">
+        <FilePicker
+          label={messages.list}
+          items={listed}
+          shown={Math.max(0, listed.indexOf(shown))}
+          current={
+            <>
+              {party && <HobMark hob={hobs(shown.source.ownerId)} />}
+              <span className="min-w-0 flex-1 truncate font-mono text-code text-text-strong">
+                {shown.file.label ?? fileName(shown.file)}
+              </span>
+            </>
+          }
+          row={(entry) => <RowContent entry={entry} hobs={hobs} party={party} />}
+          onPick={(index) => {
+            const entry = listed[index];
+            if (entry !== undefined) setPicked(keyOf(entry));
+          }}
+        />
+        <nav
+          aria-label={messages.list}
+          className={cn(
+            LIST_CARD,
+            "hidden gap-2 @min-[720px]:sticky @min-[720px]:top-0 @min-[720px]:flex @min-[720px]:w-64",
+          )}
+        >
+          <FileGroup title={messages.made} entries={made} shown={shown} hobs={hobs} party={party} onPick={setPicked} />
+          <FileGroup
+            title={messages.touched}
+            entries={touched}
+            shown={shown}
+            hobs={hobs}
+            party={party}
+            onPick={setPicked}
+          />
+        </nav>
+        <FileDetail
+          key={keyOf(shown)}
+          activity={shown.source.activity}
+          file={shown.file}
+          onSeeChanges={
+            hasChange(shown.source.activity, shown.file)
+              ? () => onTab("changes", shown.file.location, shown.source.attempt.id)
+              : null
+          }
+        />
+      </div>
     </div>
   );
 }
 
+/** The file a link asks for: the one its try recorded, as two Tasks can touch one path, else any. */
+const linkedFile = (listed: ReadonlyArray<Entry>, focus: string, from: AttemptId | undefined): Entry | undefined => {
+  const at = listed.filter((each) => each.file.location === focus);
+  return at.find((each) => each.source.attempt.id === from) ?? at[0];
+};
+
 function FileGroup({
   title,
-  files,
+  entries,
   shown,
+  hobs,
+  party,
   onPick,
 }: {
   title: string;
-  files: ReadonlyArray<TaskFile>;
-  shown: TaskFile;
-  onPick: (id: TaskFileId) => void;
+  entries: ReadonlyArray<Entry>;
+  shown: Entry;
+  hobs: HobLookup;
+  party: boolean;
+  onPick: (key: string) => void;
 }) {
-  if (files.length === 0) return null;
+  if (entries.length === 0) return null;
   return (
     <section aria-label={title} className="flex flex-col">
       <h3 className="lbl m-0 px-2 pt-2 pb-1 text-meta font-bold text-label">{title}</h3>
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
-        {files.map((file) => (
-          <li key={file.id}>
-            <FileRow file={file} on={file.id === shown.id} onPick={() => onPick(file.id)} />
+        {entries.map((entry) => (
+          <li key={keyOf(entry)}>
+            <button
+              type="button"
+              aria-pressed={entry === shown}
+              onClick={() => onPick(keyOf(entry))}
+              className={cn(listRow(entry === shown), "items-center")}
+            >
+              <RowContent entry={entry} hobs={hobs} party={party} />
+            </button>
           </li>
         ))}
       </ul>
@@ -139,37 +145,35 @@ function FileGroup({
   );
 }
 
-function FileRow({ file, on, onPick }: { file: TaskFile; on: boolean; onPick: () => void }) {
-  return (
-    <button type="button" aria-pressed={on} onClick={onPick} className={cn(listRow(on), "flex-col items-start gap-px")}>
-      <RowContent file={file} />
-    </button>
-  );
-}
-
-/** A file as the list and the picker's menu show it: its name, where it is and its status note. */
-function RowContent({ file }: { file: TaskFile }) {
+/** A file as the list and the picker's menu show it: its hob's sprite in a party's list, its name, where it is and its status note. */
+function RowContent({ entry, hobs, party }: { entry: Entry; hobs: HobLookup; party: boolean }) {
+  const { file } = entry;
   const folder = fileDirectory(file);
   const note = messages.now[file.now];
+  const hob = hobs(entry.source.ownerId);
   return (
     <>
-      <span className="w-full truncate font-mono text-code leading-[18px] text-text-strong">
-        {file.label ?? fileName(file)}
-      </span>
-      <span className="w-full truncate text-meta text-label">
-        {[
-          messages.origin[file.origin],
-          folder === "" ? null : `${folder}/`,
-          file.label === null ? null : fileName(file),
-        ]
-          .filter((part) => part !== null)
-          .join(" · ")}
-      </span>
-      {note !== null && (
-        <span className={cn("text-meta font-semibold", file.now === "gone" ? "text-rose" : "text-lantern")}>
-          {note}
+      {party && <HobMark hob={hob} />}
+      <span className="flex min-w-0 flex-1 flex-col items-start gap-px">
+        <span className="w-full truncate font-mono text-code leading-[18px] text-text-strong">
+          {file.label ?? fileName(file)}
+          {party && <HobBy hob={hob} />}
         </span>
-      )}
+        <span className="w-full truncate text-meta text-label">
+          {[
+            messages.origin[file.origin],
+            folder === "" ? null : `${folder}/`,
+            file.label === null ? null : fileName(file),
+          ]
+            .filter((part) => part !== null)
+            .join(" · ")}
+        </span>
+        {note !== null && (
+          <span className={cn("text-meta font-semibold", file.now === "gone" ? "text-rose" : "text-lantern")}>
+            {note}
+          </span>
+        )}
+      </span>
     </>
   );
 }
@@ -212,70 +216,5 @@ function FileDetail({
       </header>
       <FilePreview attemptId={activity.attempt.id} file={file} />
     </section>
-  );
-}
-
-/**
- * Show in Finder in the desktop app, which runs on the hub; Download through the hub in a browser
- * or on another device. A file no longer there offers neither.
- */
-function FileActions({
-  attemptId,
-  file,
-  name,
-}: {
-  attemptId: AttemptActivity["attempt"]["id"];
-  file: TaskFile;
-  name: string;
-}) {
-  const showFile = window.hobbots?.showFile;
-  const [missed, setMissed] = useState(false);
-  if (file.now === "gone") return null;
-  if (showFile !== undefined) {
-    return (
-      <span className="flex items-center gap-2">
-        {missed && <span className="text-meta text-lantern">{messages.notShown}</span>}
-        <Button
-          variant="chip"
-          size="xs"
-          aria-label={messages.showInFinderFor({ name })}
-          onClick={() => void showFile(attemptId, file.id).then((shown) => setMissed(!shown))}
-        >
-          {messages.showInFinder}
-        </Button>
-      </span>
-    );
-  }
-  if (!canDownload(file)) return null;
-  return (
-    <a
-      href={taskFileUrl(attemptId, file.id, { download: true, version: file.hash })}
-      download={name}
-      aria-label={messages.downloadFor({ name })}
-      className={buttonVariants({ variant: "chip", size: "xs", className: "no-underline" })}
-    >
-      {messages.download}
-    </a>
-  );
-}
-
-/** The file list's card while the files are read: three rows, each a name and a size in skeleton. */
-function FilesSkeleton({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div aria-busy="true" className="flex flex-col gap-2">
-      <div aria-hidden className={cn(LIST_CARD, "@min-[720px]:w-58")}>
-        {SKELETON_ROWS.map((row) => (
-          <span key={row} className="flex flex-col gap-px px-2 py-[7px]">
-            <span className="font-mono text-code leading-[18px]">
-              <Skeleton surface="card" width={ROW_WIDTHS[row]} className="max-w-full" />
-            </span>
-            <span className="text-meta">
-              <Skeleton surface="card" width="8ch" />
-            </span>
-          </span>
-        ))}
-      </div>
-      <HubWait pending onRetry={onRetry} />
-    </div>
   );
 }

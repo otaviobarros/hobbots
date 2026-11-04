@@ -186,27 +186,36 @@ test("[TC-UX-205] at 960 px the chat starts folded and opens over the lanes, and
 });
 
 // covers UX-002, OR-001
-test("[TC-UX-206] the Workbench docks under the lanes, folded until a tab is picked, and follows the lit lane", async ({
+test("[TC-UX-206] the Workbench docks under the lanes, folded until a tab or a lane opens it, and follows the lit lane", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
   await startQuest(page, url, aldric);
   const room = await openRoom(page, TITLE);
   const bench = dock(page);
+  const lit = bench.getByRole("heading", { level: 2 });
   await expect(bench.getByRole("button", { name: "Open the Workbench" })).toHaveAttribute("aria-expanded", "false");
-  await expect(bench.getByRole("heading")).toHaveCount(0);
+  await expect(bench.getByRole("tab")).toHaveText([/^Changes/, /^Files/, /^Terminal/, "BrowserSoon"]);
 
-  // With no lane lit it shows the lead's Task; a lane shows that hob's work.
+  // Opened with no lane lit, it shows everyone's work on Changes.
   await bench.getByRole("button", { name: "Open the Workbench" }).click();
-  await expect(bench.getByRole("heading", { name: TITLE })).toBeVisible();
+  await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
+  await expect(lit).toHaveCount(0);
+  // A lane shows that hob's work alone, named over the tabs.
   await room.getByRole("button", { name: "Show Quill's work in the Workbench" }).click();
-  await expect(bench.getByRole("heading", { name: "Draft the landing copy" })).toBeVisible();
+  await expect(lit).toHaveText("Draft the landing copy");
+  await expect(bench.getByRole("button", { name: /^Quill only/ })).toBeVisible();
   // Clicking the lit lane again shows everyone.
   await room.getByRole("button", { name: "Show Quill's work in the Workbench" }).click();
-  await expect(bench.getByRole("heading", { name: TITLE })).toBeVisible();
+  await expect(lit).toHaveCount(0);
   await bench.getByRole("button", { name: "Fold the Workbench" }).click();
-  await expect(bench.getByRole("heading")).toHaveCount(0);
+  await expect(bench.getByRole("tabpanel")).toHaveCount(0);
   expect(new URL(page.url()).hash).not.toContain("tab=");
+
+  // Folded, a lane slides it open on that hob's work.
+  await room.getByRole("button", { name: "Show Quill's work in the Workbench" }).click();
+  await expect(bench.getByRole("button", { name: "Fold the Workbench" })).toHaveAttribute("aria-expanded", "true");
+  await expect(lit).toHaveText("Draft the landing copy");
 });
 
 const themeIds: readonly string[] = (

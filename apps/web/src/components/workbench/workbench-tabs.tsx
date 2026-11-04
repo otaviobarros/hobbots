@@ -1,18 +1,26 @@
 import { TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
+import { formatCount } from "../../lib/format.ts";
+import type { ListTab } from "./dock-model.ts";
 import { messages } from "./messages.ts";
 import { TabIcon } from "./tab-icons.tsx";
 import { type TabState, type TabStates, WORKBENCH_TABS } from "./workbench-model.ts";
 
 /**
- * The Workbench's tab list: an icon and a name per tab. Live and History sit once in the header, so
- * a tab only marks what sets it apart. A tab the Task did not use stays in place, dimmed, and says
- * so in its hint; the Browser is marked Soon; an Unavailable tab carries a lantern mark, and its
- * panel says why. It sits inside the Workbench's `Tabs`, which owns the selected tab.
+ * The Workbench's tab list: an icon, a name and how many records each tab lists, once they are read.
+ * A tab no hob in view used stays in place, dimmed, and says so in its hint; the Browser is marked
+ * Soon; an Unavailable tab carries a lantern mark, and its panel says why. It sits inside the
+ * Workbench's `Tabs`, which owns the selected tab.
  */
-export function WorkbenchTabs({ states }: { states: TabStates }) {
+export function WorkbenchTabs({
+  states,
+  counts,
+}: {
+  states: TabStates;
+  counts: Readonly<Record<ListTab, number>> | null;
+}) {
   return (
-    <TabsList aria-label={messages.tabs} className="px-6">
+    <TabsList aria-label={messages.tabs}>
       {WORKBENCH_TABS.map((each) => {
         const state = states[each];
         return (
@@ -24,6 +32,9 @@ export function WorkbenchTabs({ states }: { states: TabStates }) {
           >
             <TabIcon tab={each} />
             <span>{messages.tab[each]}</span>
+            {counts !== null && each !== "browser" && state.kind !== "not-used" && (
+              <span className="text-meta font-normal text-label">{formatCount(counts[each])}</span>
+            )}
             <Mark state={state} />
           </TabsTrigger>
         );

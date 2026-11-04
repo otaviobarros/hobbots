@@ -3,9 +3,9 @@ import { formatCount } from "../../../lib/format.ts";
 
 /** Copy for the Workbench's Files tab (ADR 023, STD-I18N-001). */
 export const messages = {
-  list: "Files from this task",
-  made: "Made in this task",
-  touched: "Changed in this task",
+  list: "Files the hobs made or changed",
+  made: "Made",
+  touched: "Changed",
   origin: {
     made: "Made",
     added: "Added",
@@ -32,7 +32,6 @@ export const messages = {
   seeChanges: "See changes",
   downloadFor: ({ name }: { name: string }) => `Download ${name}`,
   preview: ({ name }: { name: string }) => `Preview of ${name}`,
-  failed: "Hobbots could not read this task's files.",
   tryAgain: "Try again",
   previewFailed: "Hobbots could not open this file.",
   cut: ({ size }: { size: string }) => `Showing the first ${size}.`,

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
-import { openWorkbench, ticket } from "./quest-room.ts";
+import { openWorkbench, taskSummary, ticket } from "./quest-room.ts";
 import { hobTerminal, rows } from "./terminal.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
@@ -82,8 +82,8 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
 
   // Live: the header says so once, every tab follows the running turn, and the Browser is still to come.
   await expect(bench.locator("header").first()).toContainText("●Live");
-  await expect(tabs.getByRole("tab")).toHaveText(["Summary", "Changes", "Files", "Terminal", "BrowserSoon"]);
-  await expect(tabs.getByRole("tab", { name: /^Summary/ })).toHaveAttribute("aria-selected", "true");
+  await expect(tabs.getByRole("tab")).toHaveText([/^Changes\d*$/, /^Files\d*$/, /^Terminal\d*$/, "BrowserSoon"]);
+  await expect(tabs.getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
 
   const changes = await open("Changes");
   const changed = changes.getByRole("navigation", { name: "Changed files" });
@@ -110,8 +110,8 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
   await expect(screen).toContainText("2 passed");
 
   const files = await open("Files");
-  const list = files.getByRole("navigation", { name: "Files from this task" });
-  await expect(list.getByRole("region", { name: "Changed in this task" }).getByRole("button")).toHaveText([
+  const list = files.getByRole("navigation", { name: "Files the hobs made or changed" });
+  await expect(list.getByRole("region", { name: "Changed", exact: true }).getByRole("button")).toHaveText([
     /^CHANGELOG\.mdAdded/,
     /^notes\.mdEdited/,
   ]);
@@ -125,7 +125,7 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
 
   // History: once the turn ends, the header says so, with nothing any tab showed lost.
   await expect(bench.locator("header").first()).toContainText("History", { timeout: 60_000 });
-  await expect(tabs.getByRole("tab")).toHaveText(["Summary", "Changes", "Files", "Terminal", "BrowserSoon"]);
+  await expect(tabs.getByRole("tab")).toHaveText(["Changes3", "Files2", "Terminal2", "BrowserSoon"]);
   await open("Changes");
   await expect(changed.getByRole("button")).toHaveText([
     /^CHANGELOG\.mdAdded\+/,
@@ -140,10 +140,8 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
   await expect(terminal).toContainText("A record of what ran. You cannot type here.");
   await expect(terminal.getByRole("textbox", { name: "Aldric's terminal, read-only" })).toHaveAttribute("readonly");
 
-  // Summary names what the turn changed and the tabs it used, each one click away.
-  const summary = await open("Summary");
-  await summary.getByRole("button", { name: "Details" }).click();
-  await expect(summary.getByRole("region", { name: "What you asked" })).toContainText("Write the release notes");
+  // The summary in its lane names what the turn changed and the tabs it used, each one click away.
+  const summary = await taskSummary(page, "Write the release notes");
   await expect(summary.getByRole("region", { name: "What it made" }).getByRole("button")).toHaveText([
     /^Added.*CHANGELOG\.md$/,
     /^Deleted.*draft\.txt$/,
@@ -183,14 +181,13 @@ test("[TC-UX-063] a Task that changed no file and ran no command greys out Chang
   await openWorkbench(page, questTicket);
   const { tabs, open } = tabsOf(page, "Suggest a name for the release");
   await expect(tabs.getByRole("tab")).toHaveText([
-    "Summary",
     "ChangesNot used in this task",
     "FilesNot used in this task",
     "TerminalNot used in this task",
     "BrowserSoon",
   ]);
-  const summary = await open("Summary");
-  // Summary leads with the result.
+  const summary = await taskSummary(page, "Suggest a name for the release");
+  // Its summary leads with the result.
   await expect(summary.getByText("Call it Lantern.")).toBeVisible();
   await expect(summary.getByRole("navigation", { name: "Open the other views" }).getByRole("button")).toHaveCount(0);
 

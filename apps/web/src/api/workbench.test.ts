@@ -1,33 +1,44 @@
-import type { AttemptActivityRead } from "@hobbots/api";
-import { AttemptActivity, CommandId } from "@hobbots/domain";
+import type { TreeActivityRead } from "@hobbots/api";
+import { AttemptActivity, CommandId, TreeActivity, TreeAttempt } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { attempt, CAMPAIGN } from "../test/quests.ts";
 import * as client from "./client.ts";
 import { startGeneration } from "./sync.ts";
-import { addOutput, applyCommandOutput, attemptActivityQuery, liveOutputQuery } from "./workbench.ts";
+import { addOutput, applyCommandOutput, liveOutputQuery, workbenchTreeQuery } from "./workbench.ts";
 
 afterEach(() => vi.restoreAllMocks());
 
 const done = attempt(CAMPAIGN, "completed");
 
-const read = (cleared: boolean): AttemptActivityRead => ({
+const read = (cleared: boolean): TreeActivityRead => ({
   cursor: "1:1",
-  activity: new AttemptActivity({
-    attempt: done,
-    commands: [],
-    changes: [],
-    scans: [],
-    artifacts: [],
-    sharedWithHobs: [],
-    detailsClearedAt: cleared ? "2026-11-02T10:00:00.000Z" : null,
+  activity: new TreeActivity({
+    taskId: CAMPAIGN,
+    attempts: [
+      new TreeAttempt({
+        ownerId: done.agentId,
+        files: [],
+        activity: new AttemptActivity({
+          attempt: done,
+          commands: [],
+          changes: [],
+          scans: [],
+          artifacts: [],
+          sharedWithHobs: [],
+          detailsClearedAt: cleared ? "2026-11-02T10:00:00.000Z" : null,
+        }),
+      }),
+    ],
   }),
 });
 
-describe("an Attempt's records in the Workbench", () => {
+const clearedAt = (tree: TreeActivityRead | undefined) => tree?.activity.attempts[0]?.activity.detailsClearedAt;
+
+describe("a Quest's Workbench read", () => {
   it("reads them again when a new sync generation began while the first read was on its way", async () => {
     const queryClient = new QueryClient();
-    let answerFirst: (value: AttemptActivityRead) => void = () => undefined;
+    let answerFirst: (value: TreeActivityRead) => void = () => undefined;
     const call = vi
       .spyOn(client, "call")
       .mockReturnValueOnce(
@@ -36,14 +47,14 @@ describe("an Attempt's records in the Workbench", () => {
         }) as never,
       )
       .mockResolvedValueOnce(read(true) as never);
-    const loading = queryClient.fetchQuery(attemptActivityQuery(done.id));
+    const loading = queryClient.fetchQuery(workbenchTreeQuery(CAMPAIGN));
     // A fresh Ready starts a generation while the first read is on its way; then the old read lands.
     startGeneration(queryClient);
     answerFirst(read(false));
     const loaded = await loading;
     expect(call).toHaveBeenCalledTimes(2);
-    expect(loaded.activity.detailsClearedAt).not.toBeNull();
-    expect(queryClient.getQueryData(attemptActivityQuery(done.id).queryKey)?.activity.detailsClearedAt).not.toBeNull();
+    expect(clearedAt(loaded)).not.toBeNull();
+    expect(clearedAt(queryClient.getQueryData(workbenchTreeQuery(CAMPAIGN).queryKey))).not.toBeNull();
   });
 });
 

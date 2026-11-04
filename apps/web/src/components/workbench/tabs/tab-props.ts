@@ -1,29 +1,29 @@
-import type { Attempt, AttemptActivity, Task, TaskTree } from "@hobbots/domain";
+import type { AttemptId, TaskTree } from "@hobbots/domain";
 import type { HobLookup } from "../../quest/use-work.ts";
+import type { DockSource } from "../dock-model.ts";
 import type { TabState, WorkbenchTab } from "../workbench-model.ts";
 
 /**
- * What every Workbench tab is given (ADR 023). The frame owns the header, the tab list and each
- * tab's label; a tab only fills its panel. Each tab stays mounted while another shows, so its
- * scroll, selection and folds are kept.
+ * What every Workbench tab is given (ADR 023, ADR 027). The dock owns the strip, the filter and each
+ * tab's label; a tab only fills its panel, with every hob's work in view in one list. Each tab stays
+ * mounted while another shows, so its scroll, selection and folds are kept.
  */
 export interface WorkbenchTabProps {
   readonly tree: TaskTree;
-  readonly task: Task;
-  /** The chosen Attempt, or null before the Task's first. */
-  readonly attempt: Attempt | null;
-  /** The chosen Attempt's records, or null while they load, when the read failed or with no Attempt. */
-  readonly activity: AttemptActivity | null;
-  /** The tab's label: Live, History or Unavailable, whose reason the frame shows above the tab. */
+  /** Each Task's shown Attempt in view, in tree order: every hob's, or the lit lane's. */
+  readonly sources: ReadonlyArray<DockSource>;
+  /** The tab's label across the hobs in view, whose reasons the dock shows above the tab. */
   readonly state: TabState;
   readonly hobs: HobLookup;
   /**
    * A file this tab shows first, by its absolute path (a change's folder and path joined by `/`, or
-   * a file Artifact reference's value), as Summary's links ask; undefined for none.
+   * a file Artifact reference's value), as a link to it asks; undefined for none.
    */
   readonly focus: string | undefined;
+  /** The try that recorded `focus`, so it names one record when several Tasks touched the path. */
+  readonly from: AttemptId | undefined;
   /** Whether this tab's panel is the one showing, so a tab can wait to load what only it uses. */
   readonly shown: boolean;
-  /** Shows another tab, as Summary's buttons to the tabs the Task used do, with a file to show first. */
-  readonly onTab: (tab: WorkbenchTab, focus?: string) => void;
+  /** Shows another tab, with a file to show first and the try that recorded it, as See changes in Files does. */
+  readonly onTab: (tab: WorkbenchTab, focus?: string, from?: AttemptId) => void;
 }

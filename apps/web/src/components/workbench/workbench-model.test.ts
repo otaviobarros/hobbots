@@ -96,7 +96,6 @@ const activity = (fields: Partial<ConstructorParameters<typeof AttemptActivity>[
 describe("the Workbench's tab labels", () => {
   it("reads History for a finished Task, Not used for each tab it has no record for, and Coming soon for the Browser", () => {
     expect(tabStates(done, activity({ changes: [change("edited")] }))).toEqual({
-      summary: { kind: "history" },
       changes: { kind: "history" },
       files: { kind: "history" },
       terminal: { kind: "not-used" },
@@ -104,13 +103,9 @@ describe("the Workbench's tab labels", () => {
     });
   });
 
-  it("uses the Terminal when another hob in the tree ran a command, since it replays theirs too", () => {
-    expect(tabStates(done, activity(), 2).terminal).toEqual({ kind: "history" });
-  });
-
   it("keeps every tab Live while the Attempt runs, since it may still use them", () => {
     const states = tabStates(running, activity({ attempt: running }));
-    expect([states.summary, states.changes, states.files, states.terminal]).toEqual(Array(4).fill({ kind: "live" }));
+    expect([states.changes, states.files, states.terminal]).toEqual(Array(3).fill({ kind: "live" }));
     expect(states.browser).toEqual({ kind: "coming-soon" });
   });
 
@@ -143,8 +138,7 @@ describe("the Workbench's tab labels", () => {
 
   it("reads Not used for every tab of a Task with no Attempt, and Unavailable when its records could not be read", () => {
     const none = tabStates(null, "none");
-    expect([none.summary, none.changes, none.files, none.terminal]).toEqual([
-      { kind: "history" },
+    expect([none.changes, none.files, none.terminal]).toEqual([
       { kind: "not-used" },
       { kind: "not-used" },
       { kind: "not-used" },

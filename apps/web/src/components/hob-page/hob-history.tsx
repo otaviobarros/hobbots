@@ -254,7 +254,7 @@ function EventActions({ row }: { row: HistoryRow }) {
         <Link
           to="/hobs/$hobId/threads/$threadId"
           params={{ hobId: row.bench.hobId, threadId: row.bench.threadId }}
-          search={roomSearch(row.bench.taskId, { tab: "summary", attemptId: row.bench.attemptId })}
+          search={roomSearch(row.bench.taskId, { tab: "changes", attemptId: row.bench.attemptId })}
           className={linkClass}
         >
           {copy.workbench}

@@ -3,12 +3,6 @@ import type { WorkbenchTab } from "./workbench-model.ts";
 
 // 16px line icons for the Workbench tabs: 1.5 stroke, round caps, in the tab's text color.
 const paths: Readonly<Record<WorkbenchTab, ReactNode>> = {
-  summary: (
-    <>
-      <path d="M3.5 2h6l3 3v9h-9z" />
-      <path d="M6 8h4M6 11h4" />
-    </>
-  ),
   changes: <path d="M5 2.5v7M1.5 6h7M8 13.5h6.5" />,
   files: <path d="M2 4.5V12.5h12V6H8L6.5 4.5z" />,
   terminal: (

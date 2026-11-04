@@ -1,11 +1,11 @@
 import { expect, test } from "./hub.ts";
-import { openWorkbench, ticket } from "./quest-room.ts";
+import { openWorkbench, taskSummary, ticket } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
 // covers OR-007, UX-002
-test("[TC-OR-306] a Task tool call the hub refused shows as a failed step in the reply and in the Workbench Summary", async ({
+test("[TC-OR-306] a Task tool call the hub refused shows as a failed step in the reply and in its lane's summary", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -35,11 +35,9 @@ test("[TC-OR-306] a Task tool call the hub refused shows as a failed step in the
     "done",
   );
 
-  // The Workbench Summary shows it under What happened, as failed, with what Aldric was told.
-  const questTicket = ticket(page, "Tidy the notes");
-  await openWorkbench(page, questTicket);
-  const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
-  const summary = bench.getByRole("tabpanel", { name: /^Summary/ });
+  // The summary in the Task's lane shows it under What happened, as failed, with what Aldric was told.
+  await openWorkbench(page, ticket(page, "Tidy the notes"));
+  const summary = await taskSummary(page, "Tidy the notes");
   const refused = summary.locator('[data-slot="refused-call"]');
   await expect(refused).toHaveCount(1);
   await expect(refused).toContainText("Failed");
