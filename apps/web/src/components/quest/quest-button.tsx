@@ -3,21 +3,20 @@ import { roomRows, roomTone } from "./control-room.ts";
 import { FlagIcon } from "./flag-icon.tsx";
 import { messages } from "./messages.ts";
 import { StatusStrip } from "./status-strip.tsx";
-import { liveTrees, taskTitle, workCard, workCounts } from "./work-model.ts";
+import { taskTitle, workCard, workCounts } from "./work-model.ts";
 
 const copy = messages.strip;
 
 /**
- * The quest button in the chat header (ADR 018): while a request's work runs, its name, one strip
- * segment per Task, how many are done and a chip when any need you. It opens the quest sheet, and
- * leaves once every request's work has ended.
+ * The quest buttons in the chat header (ADR 018): one per request whose work runs here, and one per
+ * Quest pinned from anywhere, each with its name, one strip segment per Task, how many are done and
+ * a chip when any need you. Each opens its quest sheet.
  */
 export function QuestButtons({ trees, onOpen }: { trees: ReadonlyArray<TaskTree>; onOpen: (taskId: TaskId) => void }) {
-  const live = liveTrees(trees);
-  if (live.length === 0) return null;
+  if (trees.length === 0) return null;
   return (
     <section aria-label={copy.label} className="flex shrink-0 items-center gap-1.5">
-      {live.map((tree) => (
+      {trees.map((tree) => (
         <QuestButton key={tree.tasks[0]?.id} tree={tree} onOpen={onOpen} />
       ))}
     </section>

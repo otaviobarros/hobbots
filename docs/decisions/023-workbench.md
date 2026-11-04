@@ -22,7 +22,7 @@ Browser use is too large for the MVP. It moves to its own post-MVP slice ([#382]
 
 The Workbench is one Task's full view: its header, five tabs and a chat drawer. It shows one Attempt at a time. With none chosen it opens on the latest Attempt that recorded work (a command, a changed file, a reference, a report or the result), so a retry that ended before doing anything does not hide the one that did; a running Attempt, or one whose stop was never confirmed, is shown whatever it recorded, and with none that recorded anything it shows the Task's current Attempt.
 
-It opens from the Task card, the Task drawer, a row of the Quest tab, the Workshop tab and "Open in Workbench" on a tool step. It opens in the chat's place, inside the same window. The hob panel, the right panel and a pinned Quest stay where they are. **Back to chat** (or **Back to the task** when it was opened from the drawer) returns to the same thread, scroll position and unsent message.
+It opens from the Task card, the task sheet and "Open in Workbench" on a tool step. It opens in the chat's place, inside the same window. There is no right panel beside the chat: the quest sheet and the task sheet slide in over the chat column and close when the Workbench opens, so the Workbench takes the chat column's whole width. The hob panel stays where it is, and a pinned Quest stays as a quest button in the chat header. **Back to chat** (or **Back to the task** when it was opened from the task sheet) returns to the same thread, scroll position and unsent message.
 
 ### The header
 

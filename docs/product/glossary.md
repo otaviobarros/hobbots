@@ -33,5 +33,4 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Hub | The one computer that runs the server, the database and every runtime connection. Hobs act only on the hub. | [ADR 010](../decisions/010-desktop-hub.md) |
 | Device / client | Another desktop app or browser connected to the hub, approved once and holding a revocable token. | [ADR 010](../decisions/010-desktop-hub.md), [Deployment](../architecture/deployment.md) |
 | Home | The landing page: an animated dashboard of hob activity, what needs you, Quests and usage. | [ADR 008](../decisions/008-design.md), [Design specification](../design/ui-ux.md) |
-| Quest / Inbox / Workshop tabs | The three tabs of the chat workspace's right panel. Workshop is a live scene that links to the Workbench. | [ADR 008](../decisions/008-design.md) |
 | Workbench | One Task's full view: Summary, Changes, Files, Terminal and (later) Browser, labeled by what the hub recorded. | [ADR 023](../decisions/023-workbench.md), [design specification](../design/ui-ux.md), [`packages/workbench`](../../packages/workbench/README.md) |

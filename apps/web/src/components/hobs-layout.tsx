@@ -10,7 +10,6 @@ import { ThreadMain, type WorkspaceMainProps } from "./archived-threads/archived
 import { HobList } from "./hob-list.tsx";
 import { useNoteDrafts } from "./quest/note-box.tsx";
 import { usePins } from "./quest/use-work.ts";
-import { SidePanel } from "./side-panel.tsx";
 import { WorkSheet } from "./work-sheet/work-sheet.tsx";
 import type { WorkbenchView } from "./workbench/use-workbench.ts";
 import { Workbench } from "./workbench/workbench.tsx";
@@ -36,14 +35,14 @@ interface WorkspaceProps {
   main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
   /** A Task's Workbench to show in the chat's place (ADR 023). */
   workbench?: WorkbenchView | undefined;
-  /** What sits at the end, in place of the Quest panel; `null` leaves it out, as a hob's page does. */
+  /** What sits at the end, such as a hob page's side column. */
   aside?: ReactNode | null;
 }
 
 /**
- * The chat workspace: hob list, its middle, and the Quest panel. Both side panels collapse. The
- * middle is the thread's chat unless the route fills it with `main`, such as the hob's archived
- * threads. Threads are archived from their menus or with ⌃⌘A, with Undo in a toast.
+ * The chat workspace: hob list and its middle, where the work sheet and the Workbench open over the
+ * chat. The middle is the thread's chat unless the route fills it with `main`, such as the hob's
+ * archived threads. Threads are archived from their menus or with ⌃⌘A, with Undo in a toast.
  */
 export function HobsLayout(props: WorkspaceProps) {
   return (
@@ -64,8 +63,7 @@ function Workspace({
   aside,
 }: WorkspaceProps) {
   const [navOpen, setNavOpen] = usePersistentToggle("layout.navOpen");
-  const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
-  // Pinned Quests show in the Quest tab of every thread and open in its drawer.
+  // Pinned Quests show in every thread's header and open in its sheet.
   const pins = usePins();
   // The drawer and the Workbench show the same unsent note for a Task, and both outlive each other.
   const drafts = useNoteDrafts();
@@ -84,9 +82,8 @@ function Workspace({
             threadId,
             focusMessageId,
             navOpen,
-            panelOpen,
             onShowNav: () => setNavOpen(true),
-            onTogglePanel: () => setPanelOpen(!panelOpen),
+            pins,
           })}
         </div>
         {/* The sheet closes while the Workbench covers the chat; Back to the task opens it again. */}
@@ -105,9 +102,7 @@ function Workspace({
           <Workbench hobId={hobId} threadId={threadId} view={workbench} pinned={pins.pinned} drafts={drafts} />
         )}
       </div>
-      {aside === undefined
-        ? panelOpen && <SidePanel hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />
-        : aside}
+      {aside}
     </div>
   );
 }

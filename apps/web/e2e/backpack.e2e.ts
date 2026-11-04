@@ -1,7 +1,8 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
-// Issue #297 in the browser: what a hob is waiting on, in the hob panel and the Quest tab. The read
+// Issue #297 in the browser: what a hob is waiting on, in the hob panel and on the lead's Task. The read
 // reads themselves are tested in packages/persistence/test/backpack.test.ts.
 
 let hub: Hub | undefined;
@@ -50,7 +51,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
 // covers IN-001, IN-002, IN-004, OR-003
-test("[TC-IN-150] Aldric's panel and the Quest tab show Quill's result as awaiting him until his continuation handles it", async ({
+test("[TC-IN-150] Aldric's panel and his Task's backpack show Quill's result as awaiting him until his continuation handles it", async ({
   page,
 }) => {
   const current = await startHub(dataDir);
@@ -107,10 +108,16 @@ test("[TC-IN-150] Aldric's panel and the Quest tab show Quill's result as awaiti
   await expect(result).toContainText("Waiting");
   await expect(page.getByRole("region", { name: "What Quill is waiting on" })).toHaveCount(0);
 
-  // The Quest tab says the same, naming who owes the response.
-  const room = page.getByRole("region", { name: "What hobs on Plan the launch are waiting on" });
-  await expect(room).toContainText("awaiting Aldric");
-  await expect(room).toContainText("Waiting");
+  // Aldric's Task says the same in its backpack.
+  const lead = async () => {
+    const tasks = await openQuest(page, "Plan the launch");
+    await tasks.getByRole("button", { name: /^Aldric · Plan the launch/ }).click();
+  };
+  await lead();
+  const room = page.getByRole("region", { name: "Backpack for Plan the launch" });
+  await expect(room.getByRole("button", { name: /^Quill's result for "Draft the landing copy"/ })).toContainText(
+    "Waiting",
+  );
 
   // Opening it opens Quill's Task in the drawer.
   await result.click();
@@ -122,8 +129,6 @@ test("[TC-IN-150] Aldric's panel and the Quest tab show Quill's result as awaiti
   await expect(page.getByText("Hobbots wrote this, not the user.").last()).toBeVisible({ timeout: 20_000 });
   await expect(result).toContainText("Consumed", { timeout: 20_000 });
   await expect(panel).not.toContainText("in the backpack");
+  await lead();
   await expect(room).toContainText("Consumed");
-
-  // Every hob's view, at the end of the Quest tab, has nothing left waiting.
-  await expect(page.getByText("Every hob · 0 waiting")).toBeVisible();
 });

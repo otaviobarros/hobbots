@@ -52,16 +52,26 @@ export const waitingTone = (state: WaitingState): RowStatus => {
 export type WaitingScope =
   | { readonly kind: "hob"; readonly hobId: AgentId }
   | { readonly kind: "tree"; readonly taskIds: ReadonlySet<string>; readonly questIds: ReadonlySet<string> }
+  /** One Task's: the items about its request that wait for its hob, such as a member's result. */
+  | {
+      readonly kind: "task";
+      readonly hobId: AgentId;
+      readonly taskIds: ReadonlySet<string>;
+      readonly questIds: ReadonlySet<string>;
+    }
   | { readonly kind: "workspace" };
+
+const inTree = (item: BackpackItem, taskIds: ReadonlySet<string>, questIds: ReadonlySet<string>): boolean =>
+  item.taskId === null ? item.questId !== null && questIds.has(item.questId) : taskIds.has(item.taskId);
 
 const inScope = (item: BackpackItem, scope: WaitingScope): boolean => {
   switch (scope.kind) {
     case "hob":
       return item.recipientId === scope.hobId;
     case "tree":
-      return item.taskId === null
-        ? item.questId !== null && scope.questIds.has(item.questId)
-        : scope.taskIds.has(item.taskId);
+      return inTree(item, scope.taskIds, scope.questIds);
+    case "task":
+      return item.recipientId === scope.hobId && inTree(item, scope.taskIds, scope.questIds);
     case "workspace":
       return true;
   }

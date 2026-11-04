@@ -22,46 +22,6 @@ const copy = messages.room;
 
 const NO_HOBS: ReadonlyArray<Agent> = [];
 
-/**
- * The controls of the Quest tab (ADR 018): Retry, Reassign and Cancel Task for the Task open in the
- * drawer, and Cancel Quest for the whole request. Each acts on the Task directly, never through the
- * lead. What the tab shows after is what the hub recorded (OR-006): a cancel asked for reads as
- * cancelling until each Task under it confirms it stopped or is left unresolved, and a retry or
- * reassignment reads as queued until its owner starts the new Attempt.
- */
-export function RoomControls({
-  tree,
-  task,
-  hobs,
-  cancel,
-  quest,
-  onWorkbench,
-}: {
-  tree: TaskTree;
-  /** The Task open in the drawer, when it is in this tree. */
-  task: Task | null;
-  hobs: HobLookup;
-  cancel: TopCancel;
-  quest: Quest | null;
-  /** Opens a Task's Workbench (ADR 023). */
-  onWorkbench: (taskId: Task["id"]) => void;
-}) {
-  const top = tree.tasks[0];
-  return (
-    <div className="flex flex-col gap-2 border-t-2 border-line px-3.5 py-2.5">
-      {task === null ? (
-        <p className="m-0 text-xs text-label">{copy.pick}</p>
-      ) : (
-        // A new Task starts with nothing asked and nothing open.
-        <TaskControlsFor key={task.id} tree={tree} task={task} hobs={hobs} onWorkbench={onWorkbench} />
-      )}
-      {top !== undefined && (
-        <TopControls key={top.id} tree={tree} top={top} hobs={hobs} cancel={cancel} quest={quest} />
-      )}
-    </div>
-  );
-}
-
 /** A line that says where a control stands; read out as it changes. */
 function Outcome({ children }: { children: string | null }) {
   return (

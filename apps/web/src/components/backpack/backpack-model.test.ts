@@ -156,6 +156,17 @@ describe("what a hob is waiting on", () => {
     expect(ids(view.open)).toEqual(["r", "ada", "quest"]);
   });
 
+  it("keeps a Task's view to the items about its request that wait for its hob", () => {
+    const tree = { taskIds: new Set([COPY, BUILD]), questIds: new Set([QUEST]) };
+    const forAda = entry("ada", { recipientId: ADA, taskId: BUILD });
+    const aboutQuest = entry("quest", { taskId: null, questId: QUEST });
+    const items = [entry("r"), forAda, aboutQuest, entry("elsewhere", { taskId: null })];
+    const lead = { kind: "task", hobId: ALDRIC, ...tree } as const;
+    expect(ids(waitingView(items, [], lead, NOW).open)).toEqual(["r", "quest"]);
+    const build = { kind: "task", hobId: ADA, ...tree } as const;
+    expect(ids(waitingView(items, [], build, NOW).open)).toEqual(["ada"]);
+  });
+
   it("says what each item is, with who sent it", () => {
     expect(waitingWhat(entry("r"), names)).toBe(`Quill's result for "Draft the landing copy"`);
     expect(waitingWhat(entry("n", { payload: answer }), names)).toBe("Your note: Lead with 20% off");
