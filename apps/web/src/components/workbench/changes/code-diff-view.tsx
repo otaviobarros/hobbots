@@ -4,9 +4,9 @@ import { type CodeDiff, codeDiff, type DiffRow } from "./changes-model.ts";
 import { messages } from "./messages.ts";
 
 const rowTone: Record<Exclude<DiffRow["kind"], "folded">, string> = {
-  added: "bg-mint/12 text-text",
-  removed: "bg-rose/14 text-text",
-  same: "text-secondary-text",
+  added: "bg-mint/12 text-text-strong",
+  removed: "bg-rose/14 text-text-strong",
+  same: "text-text-secondary",
 };
 
 const sign: Record<Exclude<DiffRow["kind"], "folded">, string> = { added: "+", removed: "−", same: " " };

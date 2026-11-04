@@ -71,7 +71,7 @@ export function HobProfile({ hobId }: { hobId: AgentId }) {
         ) : (
           <div className="flex flex-col items-center gap-3 text-center">
             <span className="font-pixel text-[22px] font-bold text-moonlight">This hob is not here</span>
-            <span className="text-secondary-text">It may have retired. Retired hobs live in Archived hobs.</span>
+            <span className="text-text-secondary">It may have retired. Retired hobs live in Archived hobs.</span>
             <div className="flex gap-2.5">
               <Button asChild variant="outline">
                 <Link to="/settings/archived">See archived hobs</Link>
@@ -153,7 +153,7 @@ function Profile({
                   : stateLabel[state][0]?.toUpperCase() + stateLabel[state].slice(1)}
             </span>
           </div>
-          <p className="m-0 flex min-w-0 items-center gap-2 text-sm text-secondary-text">
+          <p className="m-0 flex min-w-0 items-center gap-2 text-sm text-text-secondary">
             <span className="flex-none font-bold text-moonlight">{hob.roleTitle}</span>
             {good && (
               <>
@@ -257,7 +257,7 @@ function Tabs({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
               "cursor-pointer border-0 bg-transparent px-[18px] py-3 font-bold focus-visible:outline-3 focus-visible:-outline-offset-3 focus-visible:outline-moonlight",
               on
                 ? "text-moonlight shadow-[inset_0_-4px_0_var(--color-lantern)]"
-                : "text-secondary-text hover:text-text",
+                : "text-text-secondary hover:text-text-strong",
             )}
           >
             {label}
@@ -359,7 +359,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
               <h2 id="hob-tone" className="lbl m-0 text-moonlight">
                 {copy.tone}
               </h2>
-              <span className="text-sm text-secondary-text">{copy.toneNote({ name: hob.name })}</span>
+              <span className="text-sm text-text-secondary">{copy.toneNote({ name: hob.name })}</span>
             </div>
             <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-3.5 border-0 p-0">
               <TonePicker
@@ -376,7 +376,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
             <label htmlFor="hob-instructions" className="lbl text-moonlight">
               {copy.instructions}
             </label>
-            <span id="hob-instructions-note" className="text-sm text-secondary-text">
+            <span id="hob-instructions-note" className="text-sm text-text-secondary">
               {copy.instructionsNote({ name: hob.name })}
             </span>
             <textarea
@@ -388,7 +388,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
                 const instructions = e.target.value;
                 setDraft((d) => ({ ...d, instructions }));
               }}
-              className="h-[220px] resize-y border-2 border-control bg-deep px-4 py-3.5 leading-[1.55] text-text"
+              className="h-[220px] resize-y border-2 border-control bg-deep px-4 py-3.5 leading-[1.55] text-text-strong"
             />
           </section>
 
@@ -415,7 +415,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
           role={update.isError ? "alert" : "status"}
           className={cn(
             "flex-1 text-sm",
-            update.isError ? "text-rose" : dirty ? "text-lantern" : "text-secondary-text",
+            update.isError ? "text-rose" : dirty ? "text-lantern" : "text-text-secondary",
           )}
         >
           {status}
@@ -469,10 +469,10 @@ function RoleCard({
         <RoleSigil sigil={draft.sigil} size={36} />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className={cn("font-pixel text-xl font-bold", title ? "text-text" : "text-label")}>
+        <span className={cn("font-pixel text-xl font-bold", title ? "text-text-strong" : "text-label")}>
           {title || "No title yet"}
         </span>
-        <span className="text-sm text-secondary-text">
+        <span className="text-sm text-text-secondary">
           {draft.role === null ? "A title in your own words." : starterRole(draft.role).note}
         </span>
         <span className="text-[13px] text-label">
@@ -551,7 +551,7 @@ function MoreActions({
               setOpen(false);
               onExport();
             }}
-            className="cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-sm text-text hover:bg-hover"
+            className="cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-sm text-text-strong hover:bg-hover"
           >
             {exportCopy.menuHob}
           </button>
@@ -624,7 +624,7 @@ function RetireDialog({
         close();
       }}
       className={cn(
-        "cut m-auto w-[600px] max-w-[calc(100vw-32px)] animate-hb-in border-[3px] border-rose bg-card px-[26px] py-[22px] text-text backdrop:bg-deep/80",
+        "cut m-auto w-[600px] max-w-[calc(100vw-32px)] animate-hb-in border-[3px] border-rose bg-card px-[26px] py-[22px] text-text-strong backdrop:bg-deep/80",
       )}
     >
       {retired ? (
@@ -635,7 +635,7 @@ function RetireDialog({
           <h2 id={titleId} className="m-0 font-pixel text-[22px] font-bold text-moonlight">
             {hob.name} is retired
           </h2>
-          <p role="status" className="m-0 max-w-[440px] text-sm text-secondary-text">
+          <p role="status" className="m-0 max-w-[440px] text-sm text-text-secondary">
             {retiredSummary(hob.name, retired.work, retired.busy)}
           </p>
           <div className="flex gap-2.5">
@@ -655,7 +655,7 @@ function RetireDialog({
               <h2 id={titleId} className="m-0 font-pixel text-2xl font-bold text-moonlight">
                 Retire {hob.name}?
               </h2>
-              <span className="text-sm text-secondary-text">
+              <span className="text-sm text-text-secondary">
                 {hob.name} stops working and goes to sleep. Nothing is deleted.
               </span>
             </div>
@@ -683,7 +683,7 @@ function RetireDialog({
                 onPick={() => setWork(option.work)}
                 className={cn(
                   "items-start gap-2.5 px-3 py-2.5",
-                  work === option.work ? "border-lantern bg-line text-text" : "border-line-2",
+                  work === option.work ? "border-lantern bg-line text-text-strong" : "border-line-2",
                 )}
               >
                 <span
@@ -695,7 +695,7 @@ function RetireDialog({
                 />
                 <span className="flex flex-col gap-0.5">
                   <span className="text-sm font-bold">{option.title(hob.name)}</span>
-                  <span className="text-[13px] text-secondary-text">{option.note(hob.name)}</span>
+                  <span className="text-[13px] text-text-secondary">{option.note(hob.name)}</span>
                 </span>
               </Choice>
             ))}
@@ -705,7 +705,7 @@ function RetireDialog({
                   Hand {hob.name}'s work to another hob
                   <span className="bg-lantern px-1.5 text-xs text-ground">Later</span>
                 </span>
-                <span className="text-[13px] text-secondary-text">Arrives once hobs can delegate.</span>
+                <span className="text-[13px] text-text-secondary">Arrives once hobs can delegate.</span>
               </span>
             </div>
           </fieldset>

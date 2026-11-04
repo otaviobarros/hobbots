@@ -15,7 +15,7 @@ const tag: Record<RowStatus, string> = {
   failed: "bg-rose text-ground",
   blocked: "bg-rose text-ground",
   running: "bg-line text-mint",
-  waiting: "bg-line text-secondary-text",
+  waiting: "bg-line text-text-secondary",
   done: "bg-line text-mint",
 };
 

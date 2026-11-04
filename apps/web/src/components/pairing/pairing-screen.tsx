@@ -80,7 +80,7 @@ function AskForm({ hub, failed = false }: { hub: string; failed?: boolean }) {
   return (
     <form className="flex flex-col gap-3.5" onSubmit={submit}>
       <h1 className="m-0 font-pixel text-2xl font-bold text-moonlight">{copy.ask.title({ hub })}</h1>
-      <p className="m-0 text-secondary-text">{copy.ask.intro}</p>
+      <p className="m-0 text-text-secondary">{copy.ask.intro}</p>
       <label htmlFor={nameId} className="font-bold">
         {copy.ask.nameLabel}
       </label>
@@ -90,7 +90,7 @@ function AskForm({ hub, failed = false }: { hub: string; failed?: boolean }) {
         value={name}
         maxLength={64}
         onChange={(event) => setName(event.target.value)}
-        className="cut border-2 border-control bg-ground px-3 py-2 text-text"
+        className="cut border-2 border-control bg-ground px-3 py-2 text-text-strong"
       />
       <span id={hintId} className="-mt-2 text-[13px] text-label">
         {copy.ask.nameHint}
@@ -115,10 +115,10 @@ function Waiting({ code, expiresAt, hub }: { code: string; expiresAt: string; hu
         {copy.waiting.codeLabel}
       </span>
       <h1 className="m-0 font-pixel text-2xl font-bold text-moonlight">{copy.waiting.title({ hub })}</h1>
-      <span className="cut self-start bg-text px-5 py-3 font-pixel text-4xl font-bold tracking-[0.12em] text-ground">
+      <span className="cut self-start bg-text-strong px-5 py-3 font-pixel text-4xl font-bold tracking-[0.12em] text-ground">
         {groupedCode(code)}
       </span>
-      <p className="m-0 text-secondary-text">{copy.waiting.intro({ hub })}</p>
+      <p className="m-0 text-text-secondary">{copy.waiting.intro({ hub })}</p>
       <p className="m-0 text-[13px] text-label">{copy.waiting.expires({ time: formatTime(expiresAt) })}</p>
     </div>
   );
@@ -129,7 +129,7 @@ function Ended({ title, intro }: { title: string; intro: string }) {
   return (
     <div className="flex flex-col gap-3.5">
       <h1 className="m-0 font-pixel text-2xl font-bold text-moonlight">{title}</h1>
-      <p role="status" className="m-0 text-secondary-text">
+      <p role="status" className="m-0 text-text-secondary">
         {intro}
       </p>
       <Button variant="outline" className="self-start" onClick={startOver}>

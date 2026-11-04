@@ -71,7 +71,7 @@ export function QuestCard({
         <HobSprite hob={lead} size={20} state={card.status === "running" ? "working" : "idle"} />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="font-pixel text-base font-semibold">{heading(card, lead.name)}</span>
-          <span className="truncate text-detail text-secondary-text">{title}</span>
+          <span className="truncate text-detail text-text-secondary">{title}</span>
         </span>
         {total > 0 && (
           <span className="text-detail whitespace-nowrap text-label">{copy.progress({ done, total })}</span>
@@ -79,7 +79,7 @@ export function QuestCard({
       </div>
       {total > 0 && <Progress done={done} total={total} />}
       {members.length > 0 && (
-        <p className="m-0 flex items-center gap-1.5 text-detail text-secondary-text">
+        <p className="m-0 flex items-center gap-1.5 text-detail text-text-secondary">
           {card.party.map((id) => (
             <HobSprite key={id} hob={hobs(id)} size={18} />
           ))}
@@ -140,13 +140,13 @@ function Row({ row, hobs, onOpen }: { row: WorkRow; hobs: HobLookup; onOpen: (ta
       type="button"
       onClick={() => onOpen(row.task.id)}
       aria-label={copy.open({ title })}
-      className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-panel px-2.5 py-2 text-start text-text hover:bg-hover"
+      className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-panel px-2.5 py-2 text-start text-text-strong hover:bg-hover"
     >
       <StatusDot status={row.status} />
       <HobSprite hob={owner} size={18} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm font-bold">{title}</span>
-        <span className="truncate text-detail text-secondary-text">
+        <span className="truncate text-detail text-text-secondary">
           {detail === null ? owner.name : copy.rowDetail({ name: owner.name, detail })}
         </span>
       </span>

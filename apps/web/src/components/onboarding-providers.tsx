@@ -54,11 +54,11 @@ const TAG: Record<ProviderState, { label: string; className: string } | null> = 
   checking: null,
   found: { label: copy.tags.found, className: "bg-moonlight text-ground" },
   connected: { label: copy.tags.connected, className: "bg-moonlight text-ground" },
-  notFound: { label: copy.tags.notFound, className: "bg-line-2 text-text" },
+  notFound: { label: copy.tags.notFound, className: "bg-line-2 text-text-strong" },
   notStarted: { label: copy.tags.notStarted, className: "bg-rose text-ground" },
   outdated: { label: copy.tags.outdated, className: "bg-rose text-ground" },
   signedOut: { label: copy.tags.signedOut, className: "bg-lantern text-ground" },
-  unknown: { label: copy.tags.unknown, className: "bg-line-2 text-text" },
+  unknown: { label: copy.tags.unknown, className: "bg-line-2 text-text-strong" },
 };
 
 const BORDER: Record<ProviderState, string> = {
@@ -248,7 +248,7 @@ function ProviderFooter({
       <CardFooter>
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="animate-hb-pop truncate text-sm font-bold text-mint">{copy.connected}</span>
-          {plan && <span className="truncate text-[13px] text-secondary-text">{plan}</span>}
+          {plan && <span className="truncate text-[13px] text-text-secondary">{plan}</span>}
         </span>
         <Button
           variant="outline"
@@ -283,11 +283,11 @@ function ProviderCard(props: ProviderCardProps) {
           <h2 id={headingId} className="m-0 text-base font-bold">
             {PROVIDER_NAMES[runtime]}
           </h2>
-          <span className="text-[13px] text-secondary-text">{PROVIDER_MAKERS[runtime]}</span>
+          <span className="text-[13px] text-text-secondary">{PROVIDER_MAKERS[runtime]}</span>
         </div>
         {tag && <span className={`px-[7px] py-0.5 text-xs font-bold ${tag.className}`}>{tag.label}</span>}
       </div>
-      <span className="min-h-9 text-[13px] leading-snug text-secondary-text">{how(runtime, state, health)}</span>
+      <span className="min-h-9 text-[13px] leading-snug text-text-secondary">{how(runtime, state, health)}</span>
       <ProviderFooter {...props} />
     </section>
   );
@@ -373,7 +373,7 @@ export function OnboardingProviders() {
           <span
             id="providers-hint"
             role={failed ? "alert" : undefined}
-            className={`flex-1 text-right text-sm ${failed ? "text-rose" : ready ? "text-secondary-text" : "text-lantern"}`}
+            className={`flex-1 text-right text-sm ${failed ? "text-rose" : ready ? "text-text-secondary" : "text-lantern"}`}
           >
             {failed ? copy.saveFailed : ready ? messages.providers.connectedCount({ count }) : copy.connectOne}
           </span>
@@ -393,7 +393,7 @@ export function OnboardingProviders() {
     >
       <div className="flex animate-hb-in flex-col gap-1.5">
         <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{copy.heading}</h1>
-        <p className="m-0 mb-3.5 text-secondary-text">{copy.intro}</p>
+        <p className="m-0 mb-3.5 text-text-secondary">{copy.intro}</p>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
           {states.map(([runtime, state]) => (
             <ProviderCard
@@ -419,11 +419,11 @@ export function OnboardingProviders() {
                 <ProviderMark mark={p.mark} style={{ background: p.tile }} />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="text-base font-bold">{p.name}</span>
-                  <span className="text-[13px] text-secondary-text">{p.maker}</span>
+                  <span className="text-[13px] text-text-secondary">{p.maker}</span>
                 </div>
                 <span className="bg-lantern px-[7px] py-0.5 text-xs font-bold text-ground">{copy.later.tag}</span>
               </div>
-              <span className="min-h-9 text-[13px] leading-snug text-secondary-text">{p.how}</span>
+              <span className="min-h-9 text-[13px] leading-snug text-text-secondary">{p.how}</span>
               <CardFooter>
                 <span className="text-[13px] text-label">{copy.later.arrives}</span>
               </CardFooter>
