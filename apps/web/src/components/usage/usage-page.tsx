@@ -32,7 +32,9 @@ function PeriodPicker({ days }: { days: UsagePeriod }) {
     <SegmentedControl
       aria-label={messages.period.label}
       value={days}
-      onValueChange={(period: UsagePeriod) => void navigate({ to: "/usage", search: { days: Number(period) } })}
+      onValueChange={(period: UsagePeriod) =>
+        void navigate({ to: "/usage", search: { days: period === "30" ? 30 : 7 } })
+      }
     >
       {PERIODS.map((period) => (
         <SegmentedControlItem key={period} value={period}>

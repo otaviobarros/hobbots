@@ -1,4 +1,4 @@
-import { AgentId, AttemptId, type HistoryFilter, TaskId, ThreadId } from "@hobbots/domain";
+import { AgentId, AttemptId, HistoryFilter, TaskId, ThreadId } from "@hobbots/domain";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createHashHistory,
@@ -8,41 +8,43 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
+import { Schema } from "effect";
 import { keptDraftOrStored } from "./api/first-hob.ts";
 import { needsPairing } from "./api/pairing.ts";
 import { agentsQuery } from "./api/queries.ts";
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
-import { type ArchiveTab, isArchiveTab } from "./components/archive-page/archive-model.ts";
+import { ArchiveTab } from "./components/archive-page/archive-model.ts";
 import { ArchiveNotices } from "./components/archive-page/archive-notices.tsx";
 import { ArchivePage } from "./components/archive-page/archive-page.tsx";
 import { ArchivedChatPage, RetiredChatPage, RetiredHobPage } from "./components/archive-page/archive-read.tsx";
 import { HobPage } from "./components/hob-page/hob-page.tsx";
-import { type HobPageTab, isHistoryFilter, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
+import { HobPageTab } from "./components/hob-page/hob-page-model.ts";
 import { HobProfile } from "./components/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { HobsPage } from "./components/hobs-page/hobs-page.tsx";
-import { type HobFilter, isHobFilter } from "./components/hobs-page/hobs-page-model.ts";
+import { HobFilter } from "./components/hobs-page/hobs-page-model.ts";
 import { Home } from "./components/home.tsx";
-import { type InboxTab, isInboxTab } from "./components/inbox/inbox-items.ts";
+import { InboxTab } from "./components/inbox/inbox-items.ts";
 import { InboxPage } from "./components/inbox/inbox-page.tsx";
 import { OnboardingFirstHob } from "./components/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
-import { type ConnectionsTab, isConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
+import { AppError, PageError, ScreenError } from "./components/route-error/route-error.tsx";
+import { ConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
 import { SettingsPage } from "./components/settings/settings-page.tsx";
 import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
 import { ArrivedPage } from "./components/summon/arrived.tsx";
 import { Summon } from "./components/summon/summon.tsx";
-import { parseStep, type SummonStep } from "./components/summon/summon-model.ts";
+import { SummonStep } from "./components/summon/summon-model.ts";
 import { UsagePage } from "./components/usage/usage-page.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
-import type { WorkbenchSearch } from "./components/workbench/use-workbench.ts";
-import { isWorkbenchTab } from "./components/workbench/workbench-model.ts";
-import { isUsagePeriod } from "./lib/usage.ts";
+import { WorkbenchSearch } from "./components/workbench/use-workbench.ts";
+import { SearchText, searchParam } from "./lib/search-params.ts";
+import { UsageDays } from "./lib/usage.ts";
 
 const PAIR_PATH = "/pair";
 
@@ -54,11 +56,13 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
     }
   },
   component: AppWindow,
+  errorComponent: AppError,
 });
 
 // The pairing screen: ask once, wait with the matching code, and open Hobbots once allowed.
 const pairRoute = createRoute({
   getParentRoute: () => rootRoute,
+  errorComponent: (props) => <ScreenError error={props.error} />,
   path: "pair",
   beforeLoad: async ({ context }) => {
     if (!(await needsPairing(context.queryClient))) throw redirect({ to: "/" });
@@ -75,6 +79,7 @@ const leaveSetupWhenDone = async ({ context }: { context: { queryClient: QueryCl
 
 const welcomeRoute = createRoute({
   getParentRoute: () => rootRoute,
+  errorComponent: (props) => <ScreenError error={props.error} />,
   path: "welcome",
   beforeLoad: leaveSetupWhenDone,
   component: Welcome,
@@ -82,6 +87,7 @@ const welcomeRoute = createRoute({
 
 const setupWhereRoute = createRoute({
   getParentRoute: () => rootRoute,
+  errorComponent: (props) => <ScreenError error={props.error} way="welcome" />,
   path: "setup/where",
   beforeLoad: leaveSetupWhenDone,
   component: WhereHobbotsRuns,
@@ -89,6 +95,7 @@ const setupWhereRoute = createRoute({
 
 const providersRoute = createRoute({
   getParentRoute: () => rootRoute,
+  errorComponent: (props) => <ScreenError error={props.error} way="welcome" />,
   path: "setup/providers",
   beforeLoad: leaveSetupWhenDone,
   component: OnboardingProviders,
@@ -96,6 +103,7 @@ const providersRoute = createRoute({
 
 const firstHobRoute = createRoute({
   getParentRoute: () => rootRoute,
+  errorComponent: (props) => <ScreenError error={props.error} way="welcome" />,
   path: "setup/hob",
   beforeLoad: leaveSetupWhenDone,
   component: OnboardingFirstHob,
@@ -109,6 +117,7 @@ const afterFirstHob = async (args: { context: { queryClient: QueryClient } }) =>
 
 const safetyRoute = createRoute({
   getParentRoute: () => rootRoute,
+  errorComponent: (props) => <ScreenError error={props.error} way="welcome" />,
   path: "setup/safety",
   beforeLoad: afterFirstHob,
   component: OnboardingSafety,
@@ -116,6 +125,7 @@ const safetyRoute = createRoute({
 
 const foldersRoute = createRoute({
   getParentRoute: () => rootRoute,
+  errorComponent: (props) => <ScreenError error={props.error} way="welcome" />,
   path: "setup/folders",
   beforeLoad: afterFirstHob,
   component: OnboardingFolders,
@@ -124,6 +134,7 @@ const foldersRoute = createRoute({
 // After Folders, setup asks whether other devices may use Hobbots too (ADR 021). It can be skipped.
 const setupRemoteRoute = createRoute({
   getParentRoute: () => rootRoute,
+  errorComponent: (props) => <ScreenError error={props.error} way="welcome" />,
   path: "setup/remote",
   beforeLoad: afterFirstHob,
   component: SetupRemoteAccess,
@@ -131,17 +142,24 @@ const setupRemoteRoute = createRoute({
 
 const readyRoute = createRoute({
   getParentRoute: () => rootRoute,
+  errorComponent: (props) => <ScreenError error={props.error} way="welcome" />,
   path: "setup/ready",
   beforeLoad: afterFirstHob,
   component: OnboardingReady,
 });
 
 // Every page after setup shares the sidebar.
-const shellRoute = createRoute({ getParentRoute: () => rootRoute, id: "shell", component: AppShell });
+const shellRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "shell",
+  component: AppShell,
+  errorComponent: (props) => <ScreenError error={props.error} />,
+});
 
 // Home is the landing page; each hob is one click away on its own page.
 const homeRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "/",
   beforeLoad: async ({ context }) => {
     if (opensWelcome(await readSetup(context.queryClient))) throw redirect({ to: "/welcome" });
@@ -152,10 +170,9 @@ const homeRoute = createRoute({
 // Your hobs: every hob as a card. `?show=` narrows it to the hobs that need you, work or rest.
 const hobsRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="home" />,
   path: "hobs",
-  validateSearch: (search: Record<string, unknown>): { show?: HobFilter | undefined } => ({
-    show: isHobFilter(search.show) && search.show !== "all" ? search.show : undefined,
-  }),
+  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ show: searchParam(HobFilter) })),
   component: function YourHobs() {
     const { show } = hobsRoute.useSearch();
     return <HobsPage filter={show ?? "all"} />;
@@ -165,15 +182,16 @@ const hobsRoute = createRoute({
 // A hob's own page: its hero, its chats and its history. `?tab=history` opens History.
 const hobRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "hobs/$hobId",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { tab?: HobPageTab | undefined; show?: HistoryFilter | undefined; q?: string | undefined } => ({
-    tab: isHobPageTab(search.tab) && search.tab !== "chats" ? search.tab : undefined,
-    show: isHistoryFilter(search.show) && search.show !== "all" ? search.show : undefined,
-    // A link can open the Chats tab already searching, such as from a chat's own search.
-    q: typeof search.q === "string" && search.q.trim() !== "" ? search.q : undefined,
-  }),
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({
+      tab: searchParam(HobPageTab),
+      show: searchParam(HistoryFilter),
+      // A link can open the Chats tab already searching, such as from a chat's own search.
+      q: searchParam(SearchText),
+    }),
+  ),
   component: function HobPageRoute() {
     const params = hobRoute.useParams();
     const { tab, show, q } = hobRoute.useSearch();
@@ -191,6 +209,7 @@ const hobRoute = createRoute({
 
 const newThreadRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "hobs/$hobId/new",
   component: function NewThreadPage() {
     const params = newThreadRoute.useParams();
@@ -201,6 +220,7 @@ const newThreadRoute = createRoute({
 // A hob's archived threads now live in the Archive, narrowed to that hob (CH-009).
 const archivedThreadsRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "hobs/$hobId/archived",
   beforeLoad: ({ params }) => {
     throw redirect({ to: "/archive", search: { hob: params.hobId }, replace: true });
@@ -212,19 +232,16 @@ const archivedThreadsRoute = createRoute({
 // `tab`, `attempt`, the `file` a tab shows first and `chat` when its chat drawer is open (ADR 023).
 const threadRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "hobs/$hobId/threads/$threadId",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { message?: string | undefined; quest?: string | undefined; task?: string | undefined } & WorkbenchSearch => ({
-    message: typeof search.message === "string" ? search.message : undefined,
-    quest: typeof search.quest === "string" ? search.quest : undefined,
-    task: typeof search.task === "string" ? search.task : undefined,
-    bench: typeof search.bench === "string" ? search.bench : undefined,
-    tab: isWorkbenchTab(search.tab) ? search.tab : undefined,
-    attempt: typeof search.attempt === "string" ? search.attempt : undefined,
-    file: typeof search.file === "string" ? search.file : undefined,
-    chat: search.chat === "open" ? "open" : undefined,
-  }),
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({
+      message: searchParam(Schema.String),
+      quest: searchParam(Schema.String),
+      task: searchParam(Schema.String),
+      ...WorkbenchSearch,
+    }),
+  ),
   component: function ThreadPage() {
     const params = threadRoute.useParams();
     const { message, quest, task, bench, tab, attempt, file, chat } = threadRoute.useSearch();
@@ -255,6 +272,7 @@ const threadRoute = createRoute({
 // The hob's profile: its instructions, brain, Pause / Wake and Retire.
 const profileRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "hobs/$hobId/profile",
   component: function ProfilePage() {
     const params = profileRoute.useParams();
@@ -265,6 +283,7 @@ const profileRoute = createRoute({
 // A hob just summoned, on its own stage with three first questions. A reload keeps it.
 const arrivedRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "hobs/$hobId/arrived",
   beforeLoad: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
   component: function ArrivedRoute() {
@@ -277,11 +296,9 @@ const arrivedRoute = createRoute({
 // the step on screen, so Back and a reload keep it; the first step needs none.
 const summonRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "summon",
-  validateSearch: (search: Record<string, unknown>): { step?: SummonStep | undefined } => {
-    const step = parseStep(search.step);
-    return { step: step === "role" ? undefined : step };
-  },
+  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ step: searchParam(SummonStep) })),
   beforeLoad: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
   component: function SummonRoute() {
     const { step } = summonRoute.useSearch();
@@ -298,11 +315,11 @@ const summonRoute = createRoute({
 // `?tab=` picks Needs you, All or History and `?request=` the request shown beside the list.
 const inboxRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="home" />,
   path: "inbox",
-  validateSearch: (search: Record<string, unknown>): { tab?: InboxTab | undefined; request?: string | undefined } => ({
-    tab: isInboxTab(search.tab) ? search.tab : undefined,
-    request: typeof search.request === "string" ? search.request : undefined,
-  }),
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({ tab: searchParam(InboxTab), request: searchParam(Schema.String) }),
+  ),
   component: function Inbox() {
     const { tab, request } = inboxRoute.useSearch();
     return <InboxPage tab={tab ?? "needs"} requestId={request} />;
@@ -311,10 +328,9 @@ const inboxRoute = createRoute({
 // `?days=` picks the period: the last 7 days, or 30. The router reads the number as a number.
 const usageRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="home" />,
   path: "usage",
-  validateSearch: (search: Record<string, unknown>): { days?: number | undefined } => ({
-    days: isUsagePeriod(String(search.days)) ? Number(search.days) : undefined,
-  }),
+  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ days: searchParam(UsageDays) })),
   component: function Usage() {
     const { days } = usageRoute.useSearch();
     return <UsagePage days={days === 30 ? "30" : "7"} />;
@@ -323,20 +339,20 @@ const usageRoute = createRoute({
 // Settings opens on its overview; each section has its own address, such as `/settings/devices`.
 const settingsRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="home" />,
   path: "settings",
   component: () => <SettingsPage section={null} />,
 });
 const settingsSectionRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="settings" />,
   path: "settings/$section",
   // An unknown section opens the overview rather than an empty page.
   beforeLoad: ({ params }) => {
     if (!isSettingsSection(params.section)) throw redirect({ to: "/settings" });
   },
   // `?tab=charms` opens Connections on its Charms tab.
-  validateSearch: (search: Record<string, unknown>): { tab?: ConnectionsTab | undefined } => ({
-    tab: isConnectionsTab(search.tab) && search.tab !== "ai" ? search.tab : undefined,
-  }),
+  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ tab: searchParam(ConnectionsTab) })),
   component: function SettingsSectionPage() {
     const { section } = settingsSectionRoute.useParams();
     const { tab } = settingsSectionRoute.useSearch();
@@ -347,6 +363,7 @@ const settingsSectionRoute = createRoute({
 // one toast, so a Restore made in a chat still offers Undo on the list it goes back to.
 const archiveRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="home" />,
   path: "archive",
   component: () => (
     <ArchiveNotices>
@@ -358,11 +375,11 @@ const archiveRoute = createRoute({
 // `?tab=hobs` opens Retired hobs and `?hob=` narrows the archived chats to one hob.
 const archiveListRoute = createRoute({
   getParentRoute: () => archiveRoute,
+  errorComponent: (props) => <PageError error={props.error} way="home" />,
   path: "/",
-  validateSearch: (search: Record<string, unknown>): { tab?: ArchiveTab | undefined; hob?: string | undefined } => ({
-    tab: isArchiveTab(search.tab) && search.tab !== "chats" ? search.tab : undefined,
-    hob: typeof search.hob === "string" ? search.hob : undefined,
-  }),
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({ tab: searchParam(ArchiveTab), hob: searchParam(Schema.String) }),
+  ),
   component: function Archive() {
     const { tab, hob } = archiveListRoute.useSearch();
     return <ArchivePage tab={tab ?? "chats"} hobId={hob === undefined ? undefined : AgentId.make(hob)} />;
@@ -372,6 +389,7 @@ const archiveListRoute = createRoute({
 // An archived chat, read-only, with Restore.
 const archiveChatRoute = createRoute({
   getParentRoute: () => archiveRoute,
+  errorComponent: (props) => <PageError error={props.error} way="archive" />,
   path: "chats/$hobId/$threadId",
   component: function ArchiveChat() {
     const params = archiveChatRoute.useParams();
@@ -382,6 +400,7 @@ const archiveChatRoute = createRoute({
 // A retired hob and its chats, read-only.
 const retiredHobRoute = createRoute({
   getParentRoute: () => archiveRoute,
+  errorComponent: (props) => <PageError error={props.error} way="archive" />,
   path: "hobs/$hobId",
   component: function RetiredHob() {
     const params = retiredHobRoute.useParams();
@@ -391,6 +410,7 @@ const retiredHobRoute = createRoute({
 
 const retiredChatRoute = createRoute({
   getParentRoute: () => archiveRoute,
+  errorComponent: (props) => <PageError error={props.error} way="archive" />,
   path: "hobs/$hobId/$threadId",
   component: function RetiredChat() {
     const params = retiredChatRoute.useParams();
@@ -401,6 +421,7 @@ const retiredChatRoute = createRoute({
 // Settings › Archived hobs is now the Archive's Retired hobs tab.
 const archivedRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="archive" />,
   path: "settings/archived",
   beforeLoad: () => {
     throw redirect({ to: "/archive", search: { tab: "hobs" }, replace: true });
@@ -410,6 +431,7 @@ const archivedRoute = createRoute({
 // A retired hob's old addresses lead to its page and chats in the Archive.
 const archivedHobRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="archive" />,
   path: "settings/archived/$hobId",
   beforeLoad: ({ params }) => {
     throw redirect({ to: "/archive/hobs/$hobId", params: { hobId: params.hobId }, replace: true });
@@ -418,6 +440,7 @@ const archivedHobRoute = createRoute({
 
 const archivedThreadRoute = createRoute({
   getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="archive" />,
   path: "settings/archived/$hobId/threads/$threadId",
   beforeLoad: ({ params }) => {
     throw redirect({
@@ -466,6 +489,8 @@ export const createAppRouter = (queryClient: QueryClient) =>
     history: createHashHistory(),
     context: { queryClient },
     defaultPreloadStaleTime: 0,
+    // Anything a route does not catch still gets a way out, never a blank window (STD-REACT-014).
+    defaultErrorComponent: (props) => <ScreenError error={props.error} way="home" />,
   });
 
 declare module "@tanstack/react-router" {

@@ -1,20 +1,22 @@
 import type { AgentId, AttemptId, TaskId, ThreadId } from "@hobbots/domain";
 import { useNavigate } from "@tanstack/react-router";
-import type { WorkbenchTab } from "./workbench-model.ts";
+import { Schema } from "effect";
+import { searchParam } from "../../lib/search-params.ts";
+import { WorkbenchTab } from "./workbench-model.ts";
 
 /**
  * Where the Workbench is in the address (STD-REACT-002): `bench` is the Task it shows, `tab` the
  * tab other than Summary, `attempt` an Attempt other than the latest, and `chat` while its chat
  * drawer is open. Opened from the drawer, `task` keeps the drawer's Task, so going back reopens it.
  */
-export interface WorkbenchSearch {
-  readonly bench?: string | undefined;
-  readonly tab?: WorkbenchTab | undefined;
-  readonly attempt?: string | undefined;
+export const WorkbenchSearch = {
+  bench: searchParam(Schema.String),
+  tab: searchParam(WorkbenchTab),
+  attempt: searchParam(Schema.String),
   /** A file to show in the tab, by its absolute path, as Summary's links into Changes and Files ask. */
-  readonly file?: string | undefined;
-  readonly chat?: "open" | undefined;
-}
+  file: searchParam(Schema.String),
+  chat: searchParam(Schema.Literal("open")),
+};
 
 /** Opens a Task's Workbench in the chat's place. It always opens on Summary, on the latest Attempt. */
 export const useOpenWorkbench = (hobId: AgentId, threadId: ThreadId) => {

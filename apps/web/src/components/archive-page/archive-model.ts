@@ -1,10 +1,12 @@
 import { type Agent, type AgentId, foldWord, searchTerms, type Thread, type ThreadId } from "@hobbots/domain";
+import { Schema } from "effect";
 
 /** The Archive's two tabs. */
 const ARCHIVE_TABS = ["chats", "hobs"] as const;
-export type ArchiveTab = (typeof ARCHIVE_TABS)[number];
+export const ArchiveTab = Schema.Literals(ARCHIVE_TABS);
+export type ArchiveTab = typeof ArchiveTab.Type;
 
-export const isArchiveTab = (value: unknown): value is ArchiveTab => ARCHIVE_TABS.some((tab) => tab === value);
+export const isArchiveTab = Schema.is(ArchiveTab);
 
 /** How many archived chats show before Show N more. */
 export const SHOWN = 12;
