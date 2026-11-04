@@ -9,7 +9,7 @@ import { formatWhen } from "../../lib/time.ts";
 import { HobStateTag } from "../hob-page/hob-hero.tsx";
 import { doingOf, stateTag } from "../hob-page/hob-page-model.ts";
 import { HobSprite } from "../hob-sprite.tsx";
-import { lastChat } from "./hobs-page-model.ts";
+import { cardLine, lastChat } from "./hobs-page-model.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages;
@@ -79,9 +79,7 @@ export function HobCard({
             <span aria-hidden className="mt-1.5 size-2 flex-none animate-hb-blink rounded-dot bg-mint" />
           )}
           {needs && <span aria-hidden className="mt-1.5 size-2 flex-none rotate-45 rounded-[2px] bg-lantern" />}
-          <span className="line-clamp-2 min-w-0">
-            {doing?.text ?? (threads.length === 0 ? copy.card.arrived : copy.card.resting)}
-          </span>
+          <span className="line-clamp-2 min-w-0">{cardLine(doing, threads)}</span>
         </span>
         <span className="flex min-w-0 items-center gap-2 border-t border-line pt-2.5 text-[13px] leading-[18px] text-text-secondary">
           <ChatIcon />

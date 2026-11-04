@@ -1,5 +1,7 @@
 import type { Thread } from "@hobbots/domain";
 import type { HobState } from "../../lib/hob-state.ts";
+import type { Doing } from "../hob-page/hob-page-model.ts";
+import { messages } from "./messages.ts";
 
 /** The page's filters; All is the default and stays out of the URL. */
 const HOB_FILTERS = ["all", "needs", "working", "resting"] as const;
@@ -44,3 +46,16 @@ export const lastChat = <T extends Pick<Thread, "updatedAt">>(threads: ReadonlyA
     (newest, thread) => (newest && newest.updatedAt >= thread.updatedAt ? newest : thread),
     undefined,
   );
+
+/**
+ * The line under a hob's name on its card: what it is doing, else the last line of its latest chat,
+ * else that it just arrived or is resting.
+ */
+export const cardLine = (
+  doing: Doing | null,
+  threads: ReadonlyArray<Pick<Thread, "updatedAt" | "lastLine">>,
+): string => {
+  if (doing) return doing.text;
+  if (threads.length === 0) return messages.card.arrived;
+  return lastChat(threads)?.lastLine ?? messages.card.resting;
+};
