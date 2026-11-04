@@ -2,10 +2,8 @@ import { HOB_COLORS } from "@hobbots/art/look";
 import type { Agent, AgentId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
-import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate } from "@tanstack/react-router";
-import { useState } from "react";
 import { writeDraft } from "../../api/drafts.ts";
 import { agentsQuery } from "../../api/queries.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
@@ -26,11 +24,9 @@ const TWINKLES = [
 export function ArrivedPage({ hobId }: { hobId: AgentId }) {
   const hobs = useQuery(agentsQuery);
   const hob = hobs.data?.find((h) => h.id === hobId);
-  // A hob read after the wait fills in place, with no entry motion (Patterns › Loading).
-  const [waited] = useState(hobs.isPending);
   if (hobs.isPending) return <ArrivedWaiting />;
   if (!hob) return <Navigate to="/hobs/$hobId" params={{ hobId }} replace />;
-  return <Arrived hob={hob} enter={!waited} />;
+  return <Arrived hob={hob} />;
 }
 
 /**
@@ -38,17 +34,12 @@ export function ArrivedPage({ hobId }: { hobId: AgentId }) {
  * the ways on: its chat, its profile, or another summon. A question opens the chat with it typed in,
  * ready to send or change. Long names wrap in the words and shorten on the buttons.
  */
-function Arrived({ hob, enter }: { hob: Agent; enter: boolean }) {
+function Arrived({ hob }: { hob: Agent }) {
   const name = hob.name;
   const place = `new-${hob.id}` as const;
   return (
     <main aria-label={copy.title({ name })} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-      <div
-        className={cn(
-          "mx-auto flex w-full max-w-[640px] flex-col items-center gap-4 px-6 py-14 text-center",
-          enter && "animate-hb-in",
-        )}
-      >
+      <div className="mx-auto flex w-full max-w-[640px] animate-hb-in flex-col items-center gap-4 px-6 py-14 text-center">
         <Stage hob={hob} />
         <h1 className="m-0 max-w-full font-heading text-display font-(--heading-weight) break-words">
           {copy.title({ name })}
@@ -158,7 +149,7 @@ function AskIcon() {
  * Arrived while the hobs are read, as after a reload: the stage, the title and the three questions
  * as blocks in their places, so nothing moves when the hob is read. Reads from the hub add no wait line.
  */
-function ArrivedWaiting() {
+export function ArrivedWaiting() {
   return (
     <main aria-busy="true" className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <div className="mx-auto flex w-full max-w-[640px] flex-col items-center gap-4 px-6 py-14 text-center">

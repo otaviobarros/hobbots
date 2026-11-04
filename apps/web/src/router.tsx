@@ -38,7 +38,7 @@ import { AppError, PageError, ScreenError } from "./components/route-error/route
 import { ConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
 import { SettingsPage } from "./components/settings/settings-page.tsx";
 import { AppShell, AppWindow } from "./components/shell/app-shell.tsx";
-import { ArrivedPage } from "./components/summon/arrived.tsx";
+import { ArrivedPage, ArrivedWaiting } from "./components/summon/arrived.tsx";
 import { Summon } from "./components/summon/summon.tsx";
 import { SummonStep } from "./components/summon/summon-model.ts";
 import { UsagePage } from "./components/usage/usage-page.tsx";
@@ -281,11 +281,15 @@ const profileRoute = createRoute({
 });
 
 // A hob just summoned, on its own stage with three first questions. A reload keeps it, and draws
-// the stage at once while the hobs are read rather than waiting for them before the route opens.
+// the stage at once while the hobs are read: the waiting frame shows from the start, not after a delay.
 const arrivedRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
+  pendingComponent: ArrivedWaiting,
+  pendingMs: 0,
+  pendingMinMs: 0,
   path: "hobs/$hobId/arrived",
+  loader: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
   component: function ArrivedRoute() {
     const params = arrivedRoute.useParams();
     return <ArrivedPage hobId={AgentId.make(params.hobId)} />;
