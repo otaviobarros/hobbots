@@ -5,11 +5,17 @@ import { useQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { runtimesQuery } from "../../api/queries.ts";
-import { canContinueSetup, claudeInstallGuide, codexInstallGuide, runtimeProblem } from "../../api/runtime-health.ts";
+import {
+  canContinueSetup,
+  claudeInstallGuide,
+  codexInstallGuide,
+  runtimeProblem,
+  signInProblem,
+} from "../../api/runtime-health.ts";
 import { useUpdateSetup, watchedSetupQuery } from "../../api/setup.ts";
 import { PROVIDER_MAKERS, PROVIDER_MARKS, PROVIDER_NAMES, PROVIDERS } from "../../lib/providers.ts";
 import { messages } from "../messages.ts";
-import { providerFix, WithCommand } from "../providers/provider-fix.tsx";
+import { providerFix, SignInSteps, WithCommand } from "../providers/provider-fix.tsx";
 import { OnboardingFrame, type PreviewChip } from "./onboarding-frame.tsx";
 import { setupSummary } from "./onboarding-preview.ts";
 
@@ -80,7 +86,7 @@ const claudeHow = (state: ProviderState, claude: RuntimeHealth | undefined): Rea
     case "outdated":
       return words.outdated({ version });
     case "signedOut":
-      return <WithCommand text={words.signedOut} command={words.command} />;
+      return <SignInSteps runtime="claude-code" />;
     case "unknown":
       return words.unknown;
   }
@@ -96,6 +102,8 @@ const codexHow = (state: ProviderState, codex: RuntimeHealth | undefined): React
       return copy.codex.ready({ version: codex?.version ?? null });
     case "unknown":
       return copy.codex.unknown;
+    case "signedOut":
+      return signInProblem(codex) === "signedOut" ? <SignInSteps runtime="codex" /> : providerFix("codex", codex);
     default:
       return providerFix("codex", codex);
   }
@@ -237,10 +245,10 @@ function ProviderBody(props: ProviderCardProps) {
   const fixing = state !== "found" && state !== "connected";
   return (
     <div className="flex flex-col gap-2.5">
-      <span className="text-ui leading-5 text-text-secondary">
+      <div className="text-ui leading-5 text-text-secondary">
         {how(runtime, state, health)}
         {plan && <span className="block">{plan}</span>}
-      </span>
+      </div>
       {fixing && <FixActions runtime={runtime} state={state} onCheckAgain={onCheckAgain} />}
     </div>
   );

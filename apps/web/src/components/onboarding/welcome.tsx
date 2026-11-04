@@ -49,7 +49,7 @@ export function Welcome() {
           </>
         }
         more={
-          <Button variant="ghost" size="sm" onClick={() => setRestoring(true)} className="bg-ground/60">
+          <Button variant="text" size="xs" onClick={() => setRestoring(true)}>
             {backupMessages.welcome.open}
           </Button>
         }

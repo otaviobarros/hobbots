@@ -1,13 +1,13 @@
-import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
-import { FIREFLIES, HOUSES, intro, PROVIDERS, SCENE_HOBS, type SceneHob } from "../../art/village.ts";
+import { intro, PROVIDERS, SCENE_HOBS, type SceneHob } from "../../art/village.ts";
+import { WELCOME_SCENE, WELCOME_SCENE_PALETTE, WELCOME_TITLE, WELCOME_TITLE_PALETTE } from "../../art/welcome-scene.ts";
 import { useFirstRunTheme } from "../../lib/theme.ts";
 import { ChiefMark } from "../chief/chief-mark.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
-import { Stars } from "../scene/scene.tsx";
+import { VillageLights } from "./village-lights.tsx";
 
 const GREETING_MS = 1400;
 
@@ -20,9 +20,40 @@ export const welcomeActionClass = {
   secondary: "px-[22px] py-3 text-base text-text-secondary hover:text-text-strong",
 };
 
+/** The scene's own size: everything in it is placed in these pixels, then scaled to cover the window. */
+const STAGE = { width: 1280, height: 800 };
+
+/**
+ * Scales the 1280 × 800 scene to cover the window, standing on its bottom edge and centered, so
+ * the village always reaches the edges and the sky gives way first on a short window.
+ */
+const useCoverStage = () => {
+  const [frame, setFrame] = useState<HTMLElement | null>(null);
+  const [fit, setFit] = useState({ scale: 1, left: 0, top: 0 });
+  useEffect(() => {
+    if (frame === null) return;
+    const measure = () => {
+      const { clientWidth: width, clientHeight: height } = frame;
+      const scale = Math.max(width / STAGE.width, height / STAGE.height);
+      setFit({ scale, left: (width - STAGE.width * scale) / 2, top: height - STAGE.height * scale });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [frame]);
+  const style: CSSProperties = {
+    width: STAGE.width,
+    height: STAGE.height,
+    transform: `translate(${fit.left}px, ${fit.top}px) scale(${fit.scale})`,
+  };
+  return { frame: setFrame, style };
+};
+
 /**
  * Welcome's night village, the first screen of a new installation, around its `actions`: Get started
- * into setup, and a second way in. Every animation stops with Reduce motion (styles.css), and the
+ * into setup, and a second way in. The village is the README banner's world at full size, with the
+ * Chief and the hobs standing in it. Every animation stops with Reduce motion (styles.css), and the
  * scene is drawn at rest then. The hub's pages and setup's local pages each give their own actions.
  */
 export function WelcomeVillage({
@@ -31,7 +62,7 @@ export function WelcomeVillage({
   alert,
 }: {
   actions: ReactNode;
-  /** A quieter way in under the actions, such as restoring a backup. */
+  /** A quieter way in under the time line, such as restoring a backup. */
   more?: ReactNode;
   alert?: string | undefined;
 }) {
@@ -40,51 +71,66 @@ export function WelcomeVillage({
   useEffect(() => {
     introPlayed = true;
   }, []);
+  const stage = useCoverStage();
   // Intro animations run only on the first visit; the idle motion plays on every visit, then settles.
   const introClass = (className: string) => (playIntro ? className : undefined);
   const introDelay = (seconds: number): CSSProperties | undefined =>
     playIntro ? { animationDelay: `${seconds}s` } : undefined;
 
   return (
-    <main className="relative flex min-h-0 flex-1 flex-col items-center overflow-hidden bg-ground">
-      <div aria-hidden className="absolute inset-x-0 bottom-[350px] h-[120px] bg-panel" />
-      <div aria-hidden className="absolute inset-x-0 bottom-[270px] h-[120px] bg-card" />
-      <Stars count={50} height={330} />
-      <span
-        aria-hidden
-        className="absolute top-[60px] end-[11%] h-[3px] w-14 animate-hb-shoot bg-moonlight opacity-0"
-      />
-      <PixelArt
-        rows={MOON}
-        palette={MOON_PALETTE}
-        size={84}
-        className="absolute top-14 end-[150px] animate-hb-flicker"
-      />
+    <main ref={stage.frame} className="relative flex min-h-0 flex-1 flex-col items-center overflow-hidden bg-deep">
+      <div className="absolute top-0 start-0 origin-top-left" style={stage.style}>
+        <PixelArt
+          rows={WELCOME_SCENE}
+          palette={WELCOME_SCENE_PALETTE}
+          size={STAGE.width}
+          className="absolute inset-0"
+        />
+        <VillageLights playIntro={playIntro} />
+        <span
+          aria-hidden
+          className="absolute top-[430px] start-[630px] size-[140px] animate-hb-flicker rounded-full bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--color-lantern-hover)_55%,transparent),color-mix(in_srgb,var(--color-lantern)_18%,transparent)_55%,transparent)]"
+        />
+        <span aria-hidden className="absolute top-[480px] start-[560px]">
+          <ChiefMark size={160} mood="working" />
+        </span>
+        <span className="absolute top-[420px] start-[736px] max-w-[220px] rounded-[12px_12px_12px_2px] bg-text-strong px-3 py-2.5 text-start text-ui leading-5 text-ground">
+          {messages.welcome.chiefHello}
+        </span>
+        {SCENE_HOBS.map((hob) => (
+          <span key={hob.name} className="absolute top-[556px]" style={{ left: hob.left }}>
+            <VillageHob hob={hob} walkIn={playIntro} />
+          </span>
+        ))}
+      </div>
 
-      <div className="relative z-10 flex flex-col items-center gap-3.5 px-6 pt-[70px] text-center">
-        <h1 className="m-0 font-pixel text-[92px] leading-none font-bold tracking-[0.02em] text-moonlight">
+      <div className="relative z-10 flex flex-col items-center gap-3 px-6 pt-10 text-center">
+        <h1 className={cn("m-0", introClass("animate-hb-drop"))} style={introDelay(intro.title)}>
           <span className="sr-only">Hobbots</span>
-          {intro.title.map(({ letter, delay }) => (
-            <span
-              key={delay}
-              aria-hidden
-              className={cn("inline-block", introClass("animate-hb-drop"))}
-              style={introDelay(delay)}
-            >
-              {letter}
-            </span>
-          ))}
+          <PixelArt
+            aria-hidden
+            rows={WELCOME_TITLE}
+            palette={WELCOME_TITLE_PALETTE}
+            size={672}
+            className="block h-auto max-w-[calc(100vw-48px)]"
+          />
         </h1>
-        <p className={cn("m-0 text-xl", introClass("animate-hb-rise"))} style={introDelay(intro.tagline)}>
+        <p
+          className={cn(
+            "m-0 max-w-[560px] pt-3 text-[21px] leading-[30px] text-text-strong",
+            introClass("animate-hb-rise"),
+          )}
+          style={introDelay(intro.tagline)}
+        >
           {messages.welcome.tagline}
         </p>
         <div
-          className={cn("flex flex-wrap justify-center gap-3.5 pt-3.5", introClass("animate-hb-rise"))}
+          className={cn("flex flex-wrap justify-center gap-2.5 pt-2.5", introClass("animate-hb-rise"))}
           style={introDelay(intro.actions)}
         >
           {actions}
         </div>
-        <span className="text-detail text-text-secondary">{messages.welcome.duration}</span>
+        <span className="text-detail text-label">{messages.welcome.duration}</span>
         {more}
         {alert !== undefined && (
           <span role="alert" className="bg-ground px-2 text-ui text-rose">
@@ -93,79 +139,14 @@ export function WelcomeVillage({
         )}
       </div>
 
-      <div aria-hidden className="absolute inset-x-0 bottom-0 h-[250px] border-t-8 border-line-2 bg-line" />
-      <div aria-hidden className="absolute inset-x-0 bottom-[120px] h-[26px] bg-line-2" />
-
-      {HOUSES.map((house) => (
-        <div
-          key={house.left}
-          aria-hidden
-          className="absolute bottom-[146px] bg-scene-wall"
-          style={{ left: `${house.left}%`, width: house.width, height: house.height }}
-        >
-          <div
-            className="absolute -inset-x-4 bg-scene-roof [clip-path:polygon(50%_0,100%_100%,0_100%)]"
-            style={{ top: -house.roof, height: house.roof }}
-          />
-          <div className="absolute end-6 w-5 bg-scene-chimney" style={{ top: -house.chimney, height: house.chimney }} />
-          {house.smoke.map((delay, i) => (
-            <span
-              key={delay}
-              className={cn(
-                "absolute animate-hb-smoke bg-scene-smoke opacity-0",
-                i === 0 ? "end-7 size-2.5" : "end-[26px] size-2",
-              )}
-              style={{ top: -house.chimney - 14, animationDelay: `${delay}s` }}
-            />
-          ))}
-          {house.lights.map((delay, i) => (
-            <span
-              key={delay}
-              className={cn(
-                "absolute top-[30px] h-[30px] w-[34px] bg-lantern",
-                i === 0 ? "start-[22px]" : "end-[22px]",
-                introClass("animate-hb-light"),
-              )}
-              style={introDelay(delay)}
-            />
-          ))}
-          <span className="absolute bottom-0 start-1/2 -ms-[18px] h-[52px] w-9 bg-scene-door" />
-        </div>
-      ))}
-
-      {FIREFLIES.map((fly) => (
-        <span
-          key={`${fly.left}.${fly.bottom}`}
-          aria-hidden
-          className="absolute size-1 animate-hb-firefly bg-moonlight"
-          style={{ left: `${fly.left}%`, bottom: fly.bottom, animationDelay: `${fly.delay}s` }}
-        />
-      ))}
-
-      {/* standards-allow STD-I18N-004: left-1/2 with -translate-x-1/2 centers the box, and translate has no logical form */}
-      <div className="absolute bottom-[132px] left-1/2 flex -translate-x-1/2 items-end gap-10">
-        {SCENE_HOBS.slice(0, 2).map((hob) => (
-          <VillageHob key={hob.name} hob={hob} walkIn={playIntro} />
-        ))}
-        <span className="relative flex flex-col items-center">
-          <span className="absolute bottom-full start-[70%] mb-1 w-[230px] rounded-[12px_12px_12px_2px] bg-text-strong/85 px-3 py-2 text-start text-ui leading-5 text-ground">
-            {messages.welcome.chiefHello}
-          </span>
-          <ChiefMark size={150} mood="working" />
-        </span>
-        {SCENE_HOBS.slice(2).map((hob) => (
-          <VillageHob key={hob.name} hob={hob} walkIn={playIntro} />
-        ))}
-      </div>
-
       <div
         className={cn(
-          "absolute inset-x-0 bottom-9 flex flex-wrap items-center justify-center gap-2.5 px-6",
+          "absolute inset-x-0 bottom-[22px] flex flex-wrap items-center justify-center gap-2.5 px-6",
           introClass("animate-hb-rise"),
         )}
         style={introDelay(intro.providers)}
       >
-        <span className="text-detail text-text-secondary">
+        <span className="text-detail text-label">
           {messages.welcome.worksWith({ providers: PROVIDERS.join(" · ") })}
         </span>
       </div>
@@ -208,7 +189,7 @@ function VillageHob({ hob, walkIn }: { hob: SceneHob; walkIn: boolean }) {
         <span key={greeted} className={cn("block", greeted > 0 && "animate-hb-hop")}>
           {/* The bobs start apart, so the three hobs never move in step. */}
           <span className="block animate-hb-bob" style={{ animationDelay: `${hob.bob}s` }}>
-            <HobSprite hob={hob} size={72} />
+            <HobSprite hob={hob} size={84} />
           </span>
         </span>
       </button>

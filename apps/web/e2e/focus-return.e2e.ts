@@ -175,7 +175,7 @@ test("[TC-OP-080] First run keeps the focused field clear of its sticky footer a
   await expect(footer).toBeVisible();
 
   // Continue by keyboard: the next step opens with focus on its heading, in view.
-  await page.getByRole("textbox", { name: "Name", exact: true }).fill("Pip");
+  await page.getByRole("textbox", { name: "Hob name" }).fill("Pip");
   await footer.getByRole("button", { name: "Continue" }).focus();
   await page.keyboard.press("Enter");
   const next = page.getByRole("heading", { name: "How careful should your hobs be?" });

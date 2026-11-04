@@ -60,7 +60,6 @@ export const messages = {
   // The prompt on the hub, Needs you and Settings › Devices.
   prompt: {
     kicker: "New device",
-    title: ({ name }: { name: string }) => `${name} wants to use Hobbots`,
     label: ({ name }: { name: string }) => `${name} asks to use Hobbots`,
     facts: { device: "Device", using: "Using", tailscale: "Tailscale", asked: "Asked" },
     using: { browser: "A browser", desktop: "The Hobbots app" },
@@ -69,6 +68,10 @@ export const messages = {
     tagged: ({ tags }: { tags: string }) => `tagged ${tags}`,
     matchLabel: "Matching code",
     matchHint: ({ name }: { name: string }) => `Check that ${name} shows the same code.`,
+    joinTitle: "A device wants to join",
+    atTheGate: "The Chief stopped it at the gate until you decide.",
+    matchOnly: "Allow it only if the device shows the same code.",
+    notMine: "Not mine",
     grants:
       "An allowed device gets all of Hobbots: chat, quests, approvals and the Workbench. Hobs keep working only on this computer.",
     allow: "Allow",

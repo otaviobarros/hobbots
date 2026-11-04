@@ -1,13 +1,6 @@
-import { HOB_COLORS, hobLook } from "@hobbots/art/look";
 import {
   type Effort,
-  type HobColor,
-  PICKER_FIRST,
-  ROLE_HAT_TITLES,
-  ROLE_TOOL_TITLES,
-  type RoleHat,
   type RoleId,
-  type RoleTool,
   RUNTIME_NAMES,
   type RuntimeKind,
   type RuntimeModel,
@@ -26,20 +19,14 @@ import {
   CHORES_MAX,
   effortWords,
   type FirstHobDraft,
-  gearOf,
   LABEL_MAX,
-  MORE_ROLES,
-  nearbySeeds,
   pickModel,
   pickRole,
-  roleRequestUrl,
   settleBrain,
   settleRuntime,
   splitModels,
-  thinksWith,
 } from "../../api/first-hob.ts";
 import { DIE, DIE_PALETTE } from "../../art/icons.ts";
-import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
 import { RoleSigil } from "../roles/role-sigil.tsx";
 
@@ -55,33 +42,6 @@ export function Die({ size, rolls }: { size: number; rolls: number }) {
     <span key={rolls} className={cn("block", rolls > 0 && "animate-hb-roll")}>
       <PixelArt rows={DIE} palette={DIE_PALETTE} size={size} />
     </span>
-  );
-}
-
-/** The dice button next to a name field. */
-export function NameDice({
-  rolls,
-  onRoll,
-  size,
-  className,
-}: {
-  rolls: number;
-  onRoll: () => void;
-  /** The die's own size; the button grows around it. */
-  size: number;
-  className?: string | undefined;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="icon"
-      onClick={onRoll}
-      aria-label={messages.hobForm.rollName}
-      title={messages.hobForm.rollName}
-      className={cn("cut border-control bg-line hover:bg-line-2", className)}
-    >
-      <Die size={size} rolls={rolls} />
-    </Button>
   );
 }
 
@@ -193,158 +153,6 @@ export function ChoresField<D extends FirstHobDraft>({
   );
 }
 
-/** One role in the picker: its sigil, title and one-line note, over a native radio. */
-function RoleOption({
-  checked,
-  onPick,
-  sigil,
-  title,
-  note,
-  name,
-  className,
-}: {
-  checked: boolean;
-  name: string;
-  onPick: () => void;
-  sigil: RoleId | null;
-  title: string;
-  note: string;
-  className?: string | undefined;
-}) {
-  return (
-    <label
-      className={cn(
-        "cut relative flex min-w-0 cursor-pointer items-start gap-2.5 border-2 px-2.5 py-2 text-start",
-        checked ? "border-text-strong bg-selected" : "border-line hover:bg-hover",
-        "focus-ring-within",
-        className,
-      )}
-    >
-      <input type="radio" name={name} checked={checked} onChange={onPick} className="sr-only" />
-      {sigil ? (
-        <RoleSigil sigil={sigil} size={20} className="mt-0.5 flex-none" />
-      ) : (
-        <span
-          aria-hidden
-          className="mt-0.5 grid size-5 flex-none place-items-center border-2 border-dashed border-control text-meta text-label"
-        >
-          +
-        </span>
-      )}
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className={cn("text-ui font-bold", checked ? "text-moonlight" : "text-text-strong")}>{title}</span>
-        <span className="text-meta leading-snug text-text-secondary">{note}</span>
-      </span>
-    </label>
-  );
-}
-
-const roleOption = (id: RoleId) => {
-  const role = starterRole(id);
-  return { sigil: id, title: role.title, note: role.note };
-};
-
-/**
- * The role picker: the first eight roles, then "More roles" under their families, then "Your own",
- * which takes a title in the user's words and any sigil from the set. One radio group runs through
- * all of them, so arrow keys move from role to role. A link at the end asks for a missing role.
- */
-export function RolePicker({
-  value,
-  onPick,
-  onOwnTitle,
-  onOwnSigil,
-  legend,
-  columns = 3,
-  disabled = false,
-}: {
-  value: RolePick;
-  onPick: (role: RoleId | null) => void;
-  onOwnTitle: (title: string) => void;
-  onOwnSigil: (sigil: RoleId) => void;
-  legend: React.ReactNode;
-  /** How many roles sit side by side; the screen picks what fits. */
-  columns?: 2 | 3;
-  disabled?: boolean;
-}) {
-  const draft = value;
-  const inMore = draft.role !== null && !PICKER_FIRST.includes(draft.role);
-  // "More roles" starts open when the hob already has one of them, so the choice stays in view.
-  const [moreShown, setMoreShown] = useState<boolean | null>(null);
-  const moreOpen = moreShown ?? inMore;
-  const moreId = useId();
-  const name = useId();
-  const own = draft.role === null;
-  // Picking "Your own" asks for the title right away; a hob that already has one keeps the focus where it is.
-  const [ownPicked, setOwnPicked] = useState(false);
-  const grid = columns === 3 ? "grid-cols-3" : "grid-cols-2";
-  const moreCount = MORE_ROLES.reduce((n, group) => n + group.roles.length, 0);
-  return (
-    <fieldset disabled={disabled} className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
-      {legend}
-      <div className={cn("grid gap-1.5", grid)}>
-        {PICKER_FIRST.map((id) => (
-          <RoleOption key={id} checked={draft.role === id} onPick={() => onPick(id)} name={name} {...roleOption(id)} />
-        ))}
-      </div>
-      <button
-        type="button"
-        aria-expanded={moreOpen}
-        aria-controls={moreId}
-        onClick={() => setMoreShown(!moreOpen)}
-        className="flex items-center gap-2 self-start bg-transparent py-1 text-ui text-label hover:text-text-strong"
-      >
-        <span aria-hidden className="w-2.5">
-          {moreOpen ? "▾" : "▸"}
-        </span>
-        {messages.hobForm.moreRoles}
-        <span className="text-detail">{moreCount}</span>
-      </button>
-      {moreOpen && (
-        <div id={moreId} className="flex animate-hb-in flex-col gap-3 border-2 border-line p-2.5">
-          {MORE_ROLES.map((group) => (
-            <fieldset key={group.family} className="m-0 flex flex-col gap-1.5 border-0 p-0">
-              <legend className="lbl mb-1.5 text-meta text-label">{group.title}</legend>
-              <div className={cn("grid gap-1.5", grid)}>
-                {group.roles.map((id) => (
-                  <RoleOption
-                    key={id}
-                    checked={draft.role === id}
-                    onPick={() => onPick(id)}
-                    name={name}
-                    {...roleOption(id)}
-                  />
-                ))}
-              </div>
-            </fieldset>
-          ))}
-        </div>
-      )}
-      <RoleOption
-        checked={own}
-        onPick={() => {
-          setOwnPicked(true);
-          onPick(null);
-        }}
-        name={name}
-        sigil={own ? draft.ownSigil : null}
-        title={messages.hobForm.ownRole}
-        note={messages.hobForm.ownRoleNote}
-        className={cn("self-start", !own && "border-dashed")}
-      />
-      {own && <OwnRole value={draft} onTitle={onOwnTitle} onSigil={onOwnSigil} autoFocus={ownPicked} />}
-      <a
-        href={roleRequestUrl(own ? draft.ownTitle : "")}
-        target="_blank"
-        rel="noreferrer"
-        className="self-start text-detail"
-      >
-        {messages.hobForm.suggestRole}
-      </a>
-    </fieldset>
-  );
-}
-
 /** What the role picker shows: a starter role, or a title in the user's words with a borrowed sigil. */
 export interface RolePick {
   readonly role: RoleId | null;
@@ -440,177 +248,6 @@ export function SigilPicker({
         })}
       </div>
     </fieldset>
-  );
-}
-
-const HATS = Object.keys(ROLE_HAT_TITLES) as Array<RoleHat>;
-const TOOLS = Object.keys(ROLE_TOOL_TITLES) as Array<RoleTool>;
-
-/**
- * The hat and tool next to the look. Picking a role sets both; the user can still change either,
- * or leave it to the look seed.
- */
-export function GearPicker<D extends FirstHobDraft>({
-  draft,
-  onChange,
-  className,
-}: {
-  draft: D;
-  onChange: (update: (draft: D) => D) => void;
-  className?: string | undefined;
-}) {
-  const select = "min-w-0 flex-1 border-2 border-control bg-deep px-2 py-1 text-detail text-text-strong";
-  return (
-    <div className={cn("flex gap-2", className)}>
-      <label className="flex min-w-0 flex-1 items-center gap-1.5 text-detail text-label">
-        {messages.hobForm.hat}
-        <select
-          value={draft.hat ?? ""}
-          onChange={(e) => {
-            const hat = (e.target.value || null) as RoleHat | null;
-            onChange((d) => ({ ...d, hat }));
-          }}
-          className={select}
-        >
-          <option value="">{messages.hobForm.fromLook}</option>
-          {HATS.map((hat) => (
-            <option key={hat} value={hat}>
-              {ROLE_HAT_TITLES[hat]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex min-w-0 flex-1 items-center gap-1.5 text-detail text-label">
-        {messages.hobForm.tool}
-        <select
-          value={draft.tool ?? ""}
-          onChange={(e) => {
-            const tool = (e.target.value || null) as RoleTool | null;
-            onChange((d) => ({ ...d, tool }));
-          }}
-          className={select}
-        >
-          <option value="">{messages.hobForm.fromLook}</option>
-          {TOOLS.map((tool) => (
-            <option key={tool} value={tool}>
-              {ROLE_TOOL_TITLES[tool]}
-            </option>
-          ))}
-        </select>
-      </label>
-    </div>
-  );
-}
-
-/** The hob colors as swatches, each with its hat over its coat. */
-export function ColorSwatches({
-  value,
-  onPick,
-  className,
-}: {
-  value: HobColor;
-  onPick: (color: HobColor) => void;
-  className?: string | undefined;
-}) {
-  return (
-    <div className={className}>
-      {(Object.keys(HOB_COLORS) as Array<HobColor>).map((id) => {
-        const color = HOB_COLORS[id];
-        const on = value === id;
-        return (
-          <label
-            key={id}
-            title={color.label}
-            className={cn(
-              "size-8 cursor-pointer border-[3px]",
-              on ? "border-moonlight" : "border-line",
-              "focus-ring-within",
-            )}
-            style={{ background: color.hat, boxShadow: `inset 0 -11px 0 ${color.coat}` }}
-          >
-            <input
-              type="radio"
-              name="hob-color"
-              checked={on}
-              onChange={() => onPick(id)}
-              aria-label={color.label}
-              className="sr-only"
-            />
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Other looks near the current one, for "More like this"; picking one keeps the set. */
-export function NearbyLooks({
-  draft,
-  onPick,
-  count = 5,
-  tile,
-  className,
-}: {
-  draft: FirstHobDraft;
-  onPick: (seed: number) => void;
-  count?: number;
-  /** The tile's size; the hob inside it is eight pixels smaller. */
-  tile: number;
-  className?: string | undefined;
-}) {
-  return (
-    <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-      <legend className="lbl mb-1.5 text-meta text-label">{messages.hobForm.moreLikeThis}</legend>
-      <div className={className}>
-        {nearbySeeds(draft.lookBase)
-          .slice(0, count)
-          .map((seed) => (
-            <label
-              key={seed}
-              className={cn(
-                "hop-on-hover grid cursor-pointer place-items-center border-2 bg-line hover:border-moonlight",
-                seed === draft.lookSeed ? "border-moonlight" : "border-line-2",
-                "focus-ring-within",
-              )}
-              style={{ width: tile, height: tile }}
-            >
-              <input
-                type="radio"
-                name="hob-look"
-                checked={seed === draft.lookSeed}
-                onChange={() => onPick(seed)}
-                aria-label={messages.hobForm.lookN({ n: seed })}
-                className="sr-only"
-              />
-              <HobSprite hob={{ lookSeed: seed, lookColor: draft.lookColor, ...gearOf(draft) }} size={tile - 8} />
-            </label>
-          ))}
-      </div>
-    </fieldset>
-  );
-}
-
-/** The line that sums up how the hob thinks and what its role does. */
-export function HobSummary({
-  draft,
-  model,
-  className,
-}: {
-  draft: FirstHobDraft;
-  model: RuntimeModel | undefined;
-  className?: string | undefined;
-}) {
-  const note = draft.role === null ? undefined : starterRole(draft.role).note;
-  const [before, after] = messages.models.thinksWith.split("{brain}");
-  return (
-    <div className={cn("flex flex-col gap-[3px] text-detail text-text-secondary", className)}>
-      <span>
-        {before}
-        <b className="text-text-strong">{thinksWith(draft, model)}</b>
-        {after}
-      </span>
-      {note && <span>{note}</span>}
-    </div>
   );
 }
 
@@ -782,12 +419,6 @@ export function ModelsBrain<D extends BrainChoice>({
   }
   return <Brain models={models.data.models} draft={draft} onChange={onChange} />;
 }
-
-/** The look a draft's seed, color and gear give. */
-export const useDraftLook = (draft: FirstHobDraft) => {
-  const gear = gearOf(draft);
-  return hobLook(draft.lookSeed, draft.lookColor, { hat: gear.hat, tool: gear.tool });
-};
 
 /** Moves an unsent draft off a model the runtime no longer lists, each time the list arrives. */
 export const useSettledBrain = (

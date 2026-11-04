@@ -90,8 +90,9 @@ test("[TC-DP-155] turns on remote access, allows a tailnet browser on the hub, a
   expect(code).toMatch(/^\d{3} \d{3}$/);
 
   // On the hub: the prompt names the laptop with the same code, and Allow lets it in.
-  const prompt = page.getByRole("dialog", { name: "Kitchen laptop wants to use Hobbots" });
+  const prompt = page.getByRole("dialog", { name: "A device wants to join" });
   await expect(prompt).toBeVisible();
+  await expect(prompt.getByText("Kitchen laptop", { exact: true })).toBeVisible();
   await expect(prompt.getByText(code, { exact: true })).toBeVisible();
   await prompt.getByRole("button", { name: "Allow", exact: true }).click();
   await page

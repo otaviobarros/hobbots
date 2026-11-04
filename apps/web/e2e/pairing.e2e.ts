@@ -114,9 +114,10 @@ test("[TC-DP-122] the prompt over the hub's window keeps the keyboard inside it 
     await newcomer.goto(current.url);
     await newcomer.getByLabel("Name this device").fill(name);
     await newcomer.getByRole("button", { name: "Ask for access" }).click();
-    const prompt = page.getByRole("dialog", { name: `${name} wants to use Hobbots` });
+    const prompt = page.getByRole("dialog", { name: "A device wants to join" });
     await expect(prompt).toBeVisible();
-    await expect(prompt.getByRole("heading", { name: `${name} wants to use Hobbots` })).toBeFocused();
+    await expect(prompt.getByText(name, { exact: true })).toBeVisible();
+    await expect(prompt.getByRole("heading", { name: "A device wants to join" })).toBeFocused();
     // The prompt pops in, growing in steps for under half a second. Each step holds still long
     // enough to pass for stable, so a click can press a button on one step and release it on the
     // next, where it no longer is, and no click happens. Answer it once it has settled.
@@ -150,7 +151,7 @@ test("[TC-DP-122] the prompt over the hub's window keeps the keyboard inside it 
   await expect(before).toBeFocused();
 
   const third = await askAs("Hall speaker");
-  await third.getByRole("button", { name: "Deny", exact: true }).click();
+  await third.getByRole("button", { name: "Not mine", exact: true }).click();
   await page
     .getByRole("dialog", { name: "Hall speaker was turned away" })
     .getByRole("button", { name: "Done" })

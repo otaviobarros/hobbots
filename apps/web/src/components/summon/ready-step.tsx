@@ -55,6 +55,7 @@ export function ReadyStep({
         <Row
           term={copy.talks}
           value={copy.talkLine({ voice, length })}
+          note={copy.soundsLike({ sample: messages.look.samples[draft.voice] })}
           action={<ChangeButton label={copy.changeTalk({ name })} onClick={() => onGo("look")} />}
         />
         {preset && (
