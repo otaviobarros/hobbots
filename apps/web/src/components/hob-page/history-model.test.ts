@@ -17,6 +17,7 @@ const base = (agentId: string, rest: Record<string, unknown>) =>
     agentId,
     taskId: "t1",
     threadId: "th1",
+    threadAgentId: "aldric",
     attemptId: null,
     quest: null,
     ...rest,
@@ -48,7 +49,7 @@ describe("historyRow", () => {
     expect(failed).toMatchObject({ mark: "fail", line: "Stopped “Send it” after 3 tries" });
   });
 
-  it("names the party hob that did the work and its Quest, and opens the chat in that hob's thread", () => {
+  it("names the party hob that did the work and its Quest, and opens the chat of the hob you asked", () => {
     const picked = row(base("ada", { _tag: "TaskPickedUp", brief: "Build the page", leadId: "aldric", quest }));
     expect(picked).toMatchObject({
       mark: "quest",
@@ -56,7 +57,8 @@ describe("historyRow", () => {
       who: { name: "Ada", hob: ada },
       quest: "Spring launch",
     });
-    expect(picked.chat).toEqual({ hobId: "ada", threadId: "th1" });
+    // The Quest's thread is Aldric's chat, where you asked for the work, never Ada's.
+    expect(picked.chat).toEqual({ hobId: "aldric", threadId: "th1" });
   });
 
   it("asks you to Review an approval that waits, and credits you with one you decided", () => {

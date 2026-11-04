@@ -7,6 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@hobbots/ui/components/menu";
+import { OverflowTooltip } from "@hobbots/ui/components/overflow-tooltip";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useParams } from "@tanstack/react-router";
 import { type ReactNode, type RefObject, useState } from "react";
@@ -22,7 +23,8 @@ import { roomSearch } from "./room-search.ts";
 import type { RoomWidth } from "./use-chat-fold.ts";
 
 /**
- * The room's header (ADR 027): Close room, the Quest's title under who leads it, its progress strip
+ * The room's header (ADR 027): Close room, the Quest's title under who leads it (cut to a line, with
+ * the whole of it on hover), its progress strip
  * and count, the lineup of the party's sprites, each jumping to its lane, and a ⋯ menu with Pin
  * quest and Cancel quest…. The question a cancel asks opens under it.
  */
@@ -67,13 +69,15 @@ export function RoomHeader({
               : messages.questEyebrow({ name: lead.name })}
           </span>
           <Elsewhere top={top} />
-          <h2
-            ref={headingRef}
-            tabIndex={-1}
-            className="m-0 truncate font-heading text-title font-(--heading-weight) text-text-strong outline-none"
-          >
-            {taskTitle(top)}
-          </h2>
+          <OverflowTooltip text={taskTitle(top)}>
+            <h2
+              ref={headingRef}
+              tabIndex={-1}
+              className="m-0 truncate font-heading text-title font-(--heading-weight) text-text-strong outline-none"
+            >
+              {taskTitle(top)}
+            </h2>
+          </OverflowTooltip>
         </span>
         {width === "wide" && segments.length > 0 && <StatusStrip statuses={segments} className="w-30 shrink-0" />}
         <span

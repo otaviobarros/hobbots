@@ -154,7 +154,7 @@ test("[TC-CH-161] restoring the last archived thread from the Archive leaves the
 });
 
 // covers CH-006, CH-009
-test("[TC-CH-162] ⌘K marks an archived thread and opens it read-only", async ({ page }) => {
+test("[TC-CH-162] ⌘K marks an archived thread and opens it read-only in the Archive", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
   await page.goto(`${current.url}/#/hobs/${hob.id}`);
   // ⌘K listens once the page is up.
@@ -166,17 +166,18 @@ test("[TC-CH-162] ⌘K marks an archived thread and opens it read-only", async (
   await expect(result).toContainText("Archived");
   await result.click();
 
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${hob.id}/threads/${archived.id}\\?message=`));
-  const chat = page.getByRole("main", { name: "Chat" });
-  await expect(chat.getByRole("region", { name: "Archived" })).toBeVisible();
-  await expect(chat.getByRole("textbox")).toHaveCount(0);
+  // An archived chat is read in the Archive, never as a chat in the hob's workspace.
+  await expect(page).toHaveURL(new RegExp(`#/archive/chats/${hob.id}/${archived.id}$`));
+  const read = page.getByRole("main", { name: "Rename the newsletter" });
+  await expect(read.getByRole("note")).toContainText("Pip takes no new messages here until you restore it");
+  await expect(read.getByRole("textbox")).toHaveCount(0);
 });
 
 /** The hub's answer for a hob's archived threads, which these cases hold back or refuse. */
 const archivedList = /\/api\/agents\/[^/]+\/threads\?archived=true$/;
 
 // covers CH-009
-test("[TC-CH-163] an archived thread opened by its address shows no composer while its lists load", async ({
+test("[TC-CH-163] an archived thread opened by its address shows no composer while its lists load, then opens in the Archive", async ({
   page,
 }) => {
   const { current, hob, archived } = await hubWithArchive();
@@ -195,8 +196,9 @@ test("[TC-CH-163] an archived thread opened by its address shows no composer whi
   await expect(chat.getByRole("textbox")).toHaveCount(0);
 
   release();
-  await expect(chat.getByRole("region", { name: "Archived" })).toBeVisible();
-  await expect(chat.getByRole("textbox")).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`#/archive/chats/${hob.id}/${archived.id}$`));
+  await expect(page.getByRole("main", { name: "Rename the newsletter" }).getByRole("note")).toBeVisible();
+  await expect(page.getByRole("textbox")).toHaveCount(0);
 });
 
 // covers CH-009
@@ -214,6 +216,7 @@ test("[TC-CH-164] an archived thread whose lookup fails stays without a composer
 
   await page.unroute(archivedList);
   await chat.getByRole("button", { name: "Try again" }).click();
-  await expect(chat.getByRole("region", { name: "Archived" })).toBeVisible();
-  await expect(chat.getByRole("textbox")).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`#/archive/chats/${hob.id}/${archived.id}$`));
+  await expect(page.getByRole("main", { name: "Rename the newsletter" }).getByRole("note")).toBeVisible();
+  await expect(page.getByRole("textbox")).toHaveCount(0);
 });

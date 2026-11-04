@@ -26,6 +26,11 @@ const base = {
   agentId: AgentId,
   taskId: Schema.NullOr(TaskId),
   threadId: Schema.NullOr(ThreadId),
+  /**
+   * The hob whose chat holds `threadId`: the hob you asked, which for a member's work is not the hob
+   * that did it. Chat and Workbench open in that hob's chat. Null without a thread.
+   */
+  threadAgentId: Schema.NullOr(AgentId),
   /** The Attempt the Workbench opens on, when there is one. */
   attemptId: Schema.NullOr(AttemptId),
   quest: Schema.NullOr(HistoryQuest),
@@ -122,6 +127,8 @@ export interface HistoryRecords {
   readonly approvals: ReadonlyArray<ApprovalRequest>;
   /** The questions about `tasks` that reached you. */
   readonly questions: ReadonlyArray<Question>;
+  /** The hob whose chat holds each thread the records name. */
+  readonly threadOwners: ReadonlyMap<string, AgentId>;
 }
 
 const newestFirst = (a: HistoryEvent, b: HistoryEvent) =>
@@ -134,6 +141,8 @@ export const historyEvents = (agentId: AgentId, records: HistoryRecords): Readon
   const delegated = new Map(records.delegations.map((delegation) => [delegation.childTaskId, delegation]));
   const attempts = new Map(records.attempts.map((attempt) => [attempt.id, attempt]));
   const tasks = new Map(records.tasks.map((task) => [task.id, task]));
+  const ownerOf = (threadId: ThreadId | null) =>
+    threadId === null ? null : (records.threadOwners.get(threadId) ?? null);
   const short = (quest: Quest | undefined): HistoryQuest | null =>
     quest === undefined ? null : { id: quest.id, goal: quest.goal };
   // A member's Task serves the Quest that gave it; any other Task the Quest on it or on its top Task.
@@ -149,6 +158,7 @@ export const historyEvents = (agentId: AgentId, records: HistoryRecords): Readon
     agentId: task.ownerId,
     taskId: task.id,
     threadId: task.threadId,
+    threadAgentId: ownerOf(task.threadId),
     attemptId,
     quest: questOf(task.id, task.rootId),
   });
@@ -195,6 +205,7 @@ export const historyEvents = (agentId: AgentId, records: HistoryRecords): Readon
       agentId: quest.leadId,
       taskId: quest.taskId,
       threadId: quest.threadId,
+      threadAgentId: ownerOf(quest.threadId),
       attemptId: null,
       quest: short(quest),
     });
@@ -214,6 +225,7 @@ export const historyEvents = (agentId: AgentId, records: HistoryRecords): Readon
       agentId: approval.agentId,
       taskId: approval.taskId,
       threadId: approval.threadId,
+      threadAgentId: ownerOf(approval.threadId),
       attemptId: null,
       quest: questOf(approval.taskId, approval.rootTaskId),
       approvalId: approval.id,

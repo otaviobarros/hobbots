@@ -1,5 +1,6 @@
 import { type Attempt, type AttemptId, isLiveAttempt, policySandbox, type Task, type TaskTree } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
+import { OverflowTooltip } from "@hobbots/ui/components/overflow-tooltip";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -30,8 +31,8 @@ const useSandbox = (runtime: Attempt["runtime"], read: ActivityRead): Sandbox | 
 };
 
 /**
- * The Workbench header (ADR 023), one row: the owner's tile, the Task's title with who owns
- * it, who asked, the brain it thinks with and where it runs, then an Attempt switcher once it was
+ * The Workbench header (ADR 023), one compact row over the panels: the owner's tile, the Task's
+ * title, cut to a line with the whole of it on hover, with who owns it, who asked, the brain it thinks with and where it runs, then an Attempt switcher once it was
  * retried, one Live or History tag for the Attempt shown.
  */
 export function WorkbenchHeader({
@@ -56,16 +57,18 @@ export function WorkbenchHeader({
   const owner = hobs(task.ownerId);
   const running = attempt !== null && isLiveAttempt(attempt.state);
   return (
-    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pb-2.5">
-      <HobTile hob={owner} tile="lg" state={running ? "working" : "idle"} />
-      <span className="flex min-w-[12rem] flex-1 flex-col">
-        <h2
-          ref={headingRef}
-          tabIndex={-1}
-          className="m-0 min-w-0 truncate font-heading text-title font-(--heading-weight) text-text-strong outline-none"
-        >
-          {taskTitle(task)}
-        </h2>
+    <header className="flex items-center gap-x-2.5 px-4 pb-2">
+      <HobTile hob={owner} tile="md" state={running ? "working" : "idle"} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <OverflowTooltip text={taskTitle(task)}>
+          <h2
+            ref={headingRef}
+            tabIndex={-1}
+            className="m-0 min-w-0 truncate text-ui font-semibold text-text-strong outline-none"
+          >
+            {taskTitle(task)}
+          </h2>
+        </OverflowTooltip>
         <Byline tree={tree} task={task} attempt={attempt} read={read} hobs={hobs} />
       </span>
       {attempts.length > 1 && attempt !== null && (
@@ -97,7 +100,7 @@ function Byline({
   // The model is the owner's while it thinks with that runtime.
   const model = agent?.runtime === runtime ? (agent?.model ?? null) : null;
   return (
-    <span className="flex min-w-0 flex-wrap items-center gap-x-1 text-detail leading-[18px] text-text-secondary">
+    <span className="flex min-w-0 items-center gap-x-1 overflow-hidden text-meta whitespace-nowrap text-label">
       <span>{hobs(task.ownerId).name}</span>
       <Dot />
       <span>{messages.askedBy({ chain })}</span>

@@ -84,7 +84,12 @@ const questRow = (
 /** One event of a hob's History as its row: the mark, the line, who did it, and where it opens. */
 export const historyRow = (event: HistoryEvent, hob: Agent, hobs: ReadonlyMap<AgentId, Agent>): HistoryRow => {
   const nameOf = (id: AgentId) => hobs.get(id)?.name ?? copy.someone;
-  const chat = event.threadId === null ? null : { hobId: event.agentId, threadId: event.threadId };
+  // Chat and Workbench open in the chat that holds the work, which for a member's Task is the hob you
+  // asked, not the member.
+  const chat =
+    event.threadId === null || event.threadAgentId === null
+      ? null
+      : { hobId: event.threadAgentId, threadId: event.threadId };
   const bench = chat && event.taskId !== null ? { ...chat, taskId: event.taskId, attemptId: event.attemptId } : null;
   const row: Row = (mark, line, extra = {}) => ({
     id: event.id,

@@ -42,3 +42,8 @@ export function UnfoldIcon() {
 export function DockChevron({ open }: { open: boolean }) {
   return <Icon>{open ? <path d="m4 6 4 4 4-4" /> : <path d="m4 10 4-4 4 4" />}</Icon>;
 }
+
+/** Expand: two corners pulled apart, or pushed together once the dock is as tall as it goes. */
+export function ExpandIcon({ expanded }: { expanded: boolean }) {
+  return <Icon>{expanded ? <path d="M6 2v4H2M10 14v-4h4" /> : <path d="M2 6V2h4M14 10v4h-4" />}</Icon>;
+}

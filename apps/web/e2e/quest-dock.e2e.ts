@@ -68,6 +68,15 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
 
   // Changes lists both hobs' files in one list, in the Quest's order, each saying whose it is.
   await bench.getByRole("tab", { name: /^Changes/ }).click();
+  // Expand makes the open dock as tall as the room lets it be, and takes it back again.
+  const expand = bench.getByRole("button", { name: "Make the Workbench as tall as it goes" });
+  const before = (await bench.boundingBox())?.height ?? 0;
+  await expand.click();
+  await expect(expand).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await bench.boundingBox())?.height ?? 0).toBeGreaterThan(before);
+  await expand.click();
+  await expect(expand).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(async () => (await bench.boundingBox())?.height ?? 0).toBe(before);
   await expect(changes.getByRole("button")).toHaveText([/^notes\.md, by Aldric/, /^copy\.md, by Quill/]);
   await changes.getByRole("button", { name: /^copy\.md/ }).click();
   await expect(

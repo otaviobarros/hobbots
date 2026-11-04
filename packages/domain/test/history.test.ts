@@ -157,6 +157,7 @@ const records: HistoryRecords = {
     question("kept-by-lead", true, ALDRIC, "2026-09-02T10:00:00.000Z"),
     question("yours", true, null, "2026-09-02T11:00:00.000Z"),
   ],
+  threadOwners: new Map([[threadId, ALDRIC]]),
 };
 
 const line = (event: HistoryEvent) => [event._tag, event.id, historyKind(event), event.quest?.goal ?? null];
@@ -187,6 +188,8 @@ describe("a hob's History", () => {
       attempts: 3,
       attemptId: "copy-3",
       threadId,
+      // Quill's work opens in Aldric's chat, where you asked for it.
+      threadAgentId: ALDRIC,
     });
     expect(byId.get("ended:launch")).toMatchObject({ state: "completed", summary: "launch is done" });
     expect(byId.get("quest-started:q1")).toMatchObject({ party: [QUILL] });
