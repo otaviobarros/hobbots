@@ -326,6 +326,8 @@ export const messages = {
     askWhat: "What are we making?",
     newThread: "New thread",
     openHob: ({ name }: { name: string }) => `Open ${name}'s page`,
+    /** The back arrow at the start of the chat header, which opens the hob's page on its chats. */
+    backToChats: ({ name }: { name: string }) => `Back to ${name}'s chats`,
     /** After the hob's name under the chat title: the hob leads this chat, and what it is doing now. */
     leadLine: ({ doing }: { doing: string }) => ` · lead · ${doing}`,
     hello: ({ name }: { name: string }) => `Hello, I'm ${name}!`,
