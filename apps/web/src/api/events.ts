@@ -21,6 +21,7 @@ import { storeBackpackItem } from "./backpack.ts";
 import { API_URL } from "./client.ts";
 import { devicesChanged } from "./devices.ts";
 import { grantsChanged } from "./grants.ts";
+import { applyHistory } from "./history.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
@@ -125,6 +126,7 @@ const applyWorkbenchEvent = (queryClient: QueryClient, event: WorkbenchEvent) =>
  */
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   applyQuestWork(queryClient, event);
+  applyHistory(queryClient, event);
   // An Attempt's commands, file changes and scans (ADR 023) read its records again in the Workbench.
   // A running command's output is transient; the Terminal follows it.
   if (isWorkbenchEvent(event)) {
