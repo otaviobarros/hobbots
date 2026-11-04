@@ -190,7 +190,7 @@ function Asked({ asked, hobs }: { asked: Summary["asked"]; hobs: HobLookup }) {
     <Collapsible>
       <div className="flex flex-col gap-2">
         <CollapsibleTrigger asChild>
-          <Button variant="link" size="xs" className="-ms-2 self-start">
+          <Button variant="text" size="xs" className="-ms-2 self-start">
             {copy.details}
             <span aria-hidden className="in-data-[state=open]:rotate-90">
               ›
