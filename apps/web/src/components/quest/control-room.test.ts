@@ -26,6 +26,7 @@ import {
   roomRows,
   taskControls,
   topCancel,
+  waitedTaskCount,
 } from "./control-room.ts";
 import { parsePins, sortPinnedReads } from "./use-work.ts";
 
@@ -92,6 +93,24 @@ describe("roomRows", () => {
     // The hub keeps a Task's last wait after it moves on; it no longer counts then.
     const movedOn = tree({ ...base, waits: [wait] });
     expect(roomRows(movedOn).find((row) => row.task.id === CAMPAIGN)?.waitingOn).toEqual([]);
+  });
+
+  it("counts the unfinished Tasks a waiting lead waits for, and none once it moves on", () => {
+    const base = blackFriday();
+    const wait = new TaskWait({ taskId: CAMPAIGN, on: [COPY, BUILD], mode: "all", createdAt: "2026-11-01T10:00:09Z" });
+    const waiting = tree({
+      ...base,
+      tasks: [task(CAMPAIGN, { state: "waiting" }), ...base.tasks.slice(1)],
+      waits: [wait],
+    });
+    expect(waitedTaskCount(waiting, nth(waiting.tasks, 0))).toBe(2);
+    const oneDone = tree({
+      ...waiting,
+      tasks: waiting.tasks.map((each) => (each.id === COPY ? new Task({ ...each, state: "completed" }) : each)),
+    });
+    expect(waitedTaskCount(oneDone, nth(oneDone.tasks, 0))).toBe(1);
+    const movedOn = tree({ ...base, waits: [wait] });
+    expect(waitedTaskCount(movedOn, nth(movedOn.tasks, 0))).toBe(0);
   });
 
   it("says a member's Task waits on you while its turn waits on your approval, and needs you", () => {

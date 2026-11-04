@@ -101,10 +101,10 @@ test("[TC-OR-242] the quest sheet shows the lead Running while the turn that wai
   const lead = tasks.getByRole("button", { name: /^Frodo · Ship the backend/ });
   await expect(lead).toContainText("Running");
   await expect(stop).toBeVisible();
-  await expect(lead).not.toContainText("Waiting");
+  await expect(lead).not.toContainText("waiting on");
 
-  // His turn ends, and only now his Task waits on Quill.
+  // His turn ends, and only now his Task waits, on Quill's one Task.
   await expect(stop).toBeHidden({ timeout: 30_000 });
-  await expect(lead).toContainText("Waiting");
-  await expect(lead).toContainText("waiting on Quill");
+  await expect(lead).toContainText("Frodo leads · waiting on 1 task");
+  await expect(lead).not.toContainText("Running");
 });

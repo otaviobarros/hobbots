@@ -6,7 +6,15 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { formatWhen } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
-import { type RoomRow, roomRows, roomStatusLabel, roomTone, topCancel, waitingNames } from "../quest/control-room.ts";
+import {
+  type RoomRow,
+  roomRows,
+  roomStatusLabel,
+  roomTone,
+  topCancel,
+  waitedTaskCount,
+  waitingNames,
+} from "../quest/control-room.ts";
 import { FlagIcon } from "../quest/flag-icon.tsx";
 import { messages as questCopy } from "../quest/messages.ts";
 import { TopControls } from "../quest/room-controls.tsx";
@@ -90,7 +98,7 @@ export function QuestView({
           <span className="truncate font-bold">{taskTitle(top)}</span>
           <span className="truncate text-detail text-text-secondary">
             {copy.leads({ name: lead.name })}
-            {rows[0] !== undefined && ` · ${roomStatusLabel(rows[0].status)}`}
+            {rows[0] !== undefined && ` · ${leadNote(tree, rows[0])}`}
           </span>
         </span>
       </button>
@@ -172,6 +180,12 @@ function TaskRow({
     </button>
   );
 }
+
+/** What the lead's card says after "leads": how many Tasks it waits on, else its state (#572). */
+const leadNote = (tree: TaskTree, row: RoomRow) => {
+  const waited = waitedTaskCount(tree, row.task);
+  return waited > 0 ? copy.waitingOnTasks({ count: waited }) : roomStatusLabel(row.status);
+};
 
 /** A row's one-line note and its color: who it waits on first, else its latest step or result. */
 const rowNote = (row: RoomRow, tree: TaskTree, hobs: HobLookup) => {

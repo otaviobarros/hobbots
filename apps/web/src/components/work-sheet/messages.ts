@@ -11,6 +11,8 @@ export const messages = {
   needYou: ({ count }: { count: number }) =>
     plural(count, { one: "1 needs you", other: `${formatCount(count)} need you` }),
   leads: ({ name }: { name: string }) => `${name} leads`,
+  waitingOnTasks: ({ count }: { count: number }) =>
+    plural(count, { one: "waiting on 1 task", other: `waiting on ${formatCount(count)} tasks` }),
   tasks: "Tasks",
   doneFolded: ({ count }: { count: number }) =>
     plural(count, { one: "1 more done", other: `${formatCount(count)} more done` }),
