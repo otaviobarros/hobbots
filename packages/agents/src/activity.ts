@@ -119,6 +119,10 @@ export interface ActivityRepositoryShape {
   readonly read: (attemptId: AttemptId) => Effect.Effect<Option.Option<AttemptActivity>>;
   /** The steps stored for the Attempt's turns outside any chat; none when there are none. */
   readonly readSteps: (attemptId: AttemptId) => Effect.Effect<ReadonlyArray<ReplyStep>>;
+  /** Every Attempt whose stored steps still have one under way: after a restart, none of them still runs. */
+  readonly openSteps: Effect.Effect<
+    ReadonlyArray<{ readonly attemptId: AttemptId; readonly steps: ReadonlyArray<ReplyStep> }>
+  >;
   /** Whether a record of the Attempt names these contents, and they were not cleared. */
   readonly names: (attemptId: AttemptId, contentId: ContentId) => Effect.Effect<boolean>;
   /** The command, when it is the Attempt's. */

@@ -6,6 +6,7 @@ import {
   type ContentId,
   compareListings,
   DEFAULT_ACTIVITY_LIMITS,
+  endedSteps,
   type FileChangeId,
   FileChangeId as FileChangeIdSchema,
   type FileVersion,
@@ -994,6 +995,16 @@ const makeRecorder = (limits: ActivityLimits) =>
         if (Option.isSome(saved)) yield* publisher.publish(saved.value.entries);
       }
     }).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not settle the commands left running", cause)));
+
+    // The same holds for the steps a turn outside any chat left under way (#892): a tool call left
+    // running is uncertain, and anything else still under way unfinished, each with its journal entry.
+    yield* Effect.gen(function* () {
+      const at = yield* nowIso;
+      for (const { attemptId, steps } of yield* repo.openSteps) {
+        const saved = yield* repo.saveSteps(attemptId, endedSteps(steps), at);
+        if (Option.isSome(saved)) yield* publisher.publish(saved.value.entries);
+      }
+    }).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not settle the steps left under way", cause)));
 
     const prune = Effect.gen(function* () {
       const now = yield* DateTime.now;

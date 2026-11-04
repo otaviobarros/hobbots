@@ -236,9 +236,10 @@ export const ActivityRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const taskId = yield* taskOf(attemptId);
           if (taskId === null) return null;
-          const row = { attempt_id: attemptId, task_id: taskId, steps: encodeSteps(steps), updated_at: at };
+          const open = steps.some((step) => step.state === "running" || step.state === "awaiting") ? 1 : 0;
+          const row = { attempt_id: attemptId, task_id: taskId, steps: encodeSteps(steps), open, updated_at: at };
           yield* sql`INSERT INTO attempt_steps ${sql.insert(row)}
-            ON CONFLICT (attempt_id) DO UPDATE SET steps = ${row.steps}, updated_at = ${at}`;
+            ON CONFLICT (attempt_id) DO UPDATE SET steps = ${row.steps}, open = ${open}, updated_at = ${at}`;
           return { value: steps, events: [{ _tag: "AttemptStepsRecorded" as const, attemptId, taskId, steps }] };
         }),
       );
@@ -248,6 +249,16 @@ export const ActivityRepositoryLive = Layer.effect(
         Effect.flatMap(([row]) => decodeSteps(row === undefined ? [] : json(row.steps))),
         Effect.orDie,
       );
+
+    const openSteps = sql<Row>`SELECT attempt_id, steps FROM attempt_steps WHERE open = 1
+      ORDER BY ${byteOrder(sql, ["attempt_id"])}`.pipe(
+      Effect.flatMap((rows) =>
+        Effect.forEach(rows, (row) =>
+          Effect.map(decodeSteps(json(row.steps)), (steps) => ({ attemptId: row.attemptId as AttemptId, steps })),
+        ),
+      ),
+      Effect.orDie,
+    );
 
     const read = (attemptId: AttemptId) =>
       Effect.gen(function* () {
@@ -343,6 +354,7 @@ export const ActivityRepositoryLive = Layer.effect(
       saveScan,
       saveSteps,
       readSteps: stepsOf,
+      openSteps,
       read: (attemptId) => Effect.orDie(read(attemptId)),
       names: (attemptId, contentId) => Effect.orDie(names(attemptId, contentId)),
       findCommand: (attemptId, commandId) => Effect.orDie(findCommand(attemptId, commandId)),

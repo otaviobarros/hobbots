@@ -12,7 +12,8 @@ const stepsDone = (tree: TaskTree) =>
   tree.tasks.filter((task) => task.parentId !== null).every((task) => task.state === "completed");
 
 describe("a step's own steps", () => {
-  it("keeps the tool calls of a planned step's turn on its Attempt, ended", async () => {
+  // covers UX-002
+  it("[TC-PE-451] keeps the tool calls of a planned step's turn on its Attempt, ended", async () => {
     const { run: inHub } = setUp({ "README.md": "# Site\n" });
     await inHub(
       say(
@@ -32,7 +33,8 @@ describe("a step's own steps", () => {
     expect(activity.steps.every((each) => each.state !== "running" && each.state !== "awaiting")).toBe(true);
   }, 30_000);
 
-  it("keeps none on the lead's own Attempt, whose steps stay on its chat reply", async () => {
+  // covers UX-002
+  it("[TC-PE-452] keeps none on the lead's own Attempt, whose steps stay on its chat reply", async () => {
     const { run: inHub } = setUp({ "README.md": "# Site\n" });
     await inHub(
       say(

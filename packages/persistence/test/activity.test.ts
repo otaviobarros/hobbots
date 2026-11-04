@@ -171,7 +171,7 @@ describe("Workbench records", () => {
   });
 
   // covers UX-002
-  it("keeps an Attempt's steps outside any chat, replacing them whole as they change, and journals each write (#892)", async () => {
+  it("[TC-IN-493] keeps an Attempt's steps outside any chat, replacing them whole as they change, and journals each write (#892)", async () => {
     const searching = {
       id: "s1",
       kind: "tool" as const,
