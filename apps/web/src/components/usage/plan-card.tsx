@@ -6,6 +6,7 @@ import {
   type RuntimeKind,
   unreportedPlan,
 } from "@hobbots/domain";
+import { Badge } from "@hobbots/ui/components/badge";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { Progress } from "@hobbots/ui/components/progress";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -13,7 +14,15 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { POTION_COLORS, potion, potionPalette, UNREPORTED_POTION } from "../../art/icons.ts";
 import { formatAgo, formatMoney } from "../../lib/format.ts";
-import { billingOf, headlineMeter, leftOf, refillOf, reportedCredits } from "../../lib/usage.ts";
+import {
+  billingOf,
+  leftOf,
+  meterLevel,
+  type PlanLevel,
+  planLevel,
+  refillOf,
+  reportedCredits,
+} from "../../lib/usage.ts";
 import { RuntimeTile } from "../brain-picker.tsx";
 import { messages } from "./messages.ts";
 
@@ -25,8 +34,16 @@ interface PlanWindow {
   readonly label: string;
   /** How much of the window is used, 0 to 100. */
   readonly used: number;
+  readonly level: PlanLevel;
   readonly left: string;
   readonly refill: string;
+}
+
+/** A plan's state tag and the banner it raises when it is low or out. */
+interface PlanState {
+  readonly level: PlanLevel;
+  readonly tag: string;
+  readonly banner: { readonly title: string; readonly line: string } | null;
 }
 
 /** What one provider's card says. Nothing is guessed: a plan that reported nothing says why. */
@@ -48,6 +65,8 @@ interface PlanView {
   readonly windows: ReadonlyArray<PlanWindow>;
   readonly credits: string | null;
   readonly checked: string | null;
+  /** Null when the plan reported no window. */
+  readonly state: PlanState | null;
 }
 
 const meterLabel = (meter: PlanMeter): string => {
@@ -66,8 +85,9 @@ const windowOf =
     key: `${meter.kind}-${meter.scope ?? ""}`,
     label: meterLabel(meter),
     used: Math.min(100, Math.max(0, meter.percent)),
+    level: meterLevel(meter),
     left: leftText(meter),
-    refill: meter.resetsAt === null ? copy.noRefill : copy.refill(refillOf(meter.resetsAt, now), meter.resetsAt),
+    refill: refillLine(meter, now),
   });
 
 const creditsOf = (plan: PlanUsage): string | null => {
@@ -87,19 +107,49 @@ const unreportedDetail = (health: RuntimeHealth, name: string): string => {
   return copy.unknownUnreported({ name });
 };
 
+const refillLine = (meter: PlanMeter, now: Date): string =>
+  meter.resetsAt === null ? copy.noRefill : copy.refill(refillOf(meter.resetsAt, now), meter.resetsAt);
+
+/** The plan's tag, and a banner when it is low or out, from the window that sets its level. */
+const stateOf = (plan: PlanUsage, name: string, now: Date): PlanState | null => {
+  const worst = planLevel(plan);
+  if (worst === undefined) return null;
+  const { level, meter } = worst;
+  const window = meterLabel(meter);
+  if (level === "ok") return { level, tag: copy.state.ok, banner: null };
+  if (level === "low") {
+    return {
+      level,
+      tag: copy.state.low,
+      banner: {
+        title: copy.banner.low({ name, window }),
+        line: copy.banner.lowLine({ left: leftText(meter), refill: refillLine(meter, now) }),
+      },
+    };
+  }
+  const refill = meter.resetsAt === null ? null : refillOf(meter.resetsAt, now);
+  return {
+    level,
+    tag: copy.state.out(refill, meter.resetsAt),
+    banner: { title: copy.banner.out, line: copy.banner.outLine({ name, window, refill: refillLine(meter, now) }) },
+  };
+};
+
 const KIND = { subscription: copy.subscription, apiKey: copy.apiKey, unknown: copy.connected } as const;
 
 /** What a provider's card shows, from its health and the plan it reported. */
 const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView => {
   const name = RUNTIME_NAMES[health.runtime];
   const kind = health.availability === "ready" ? KIND[billingOf(health.billing)] : copy.unavailable;
-  const meter = plan.reported ? headlineMeter(plan) : undefined;
+  // The potion and the big number follow the window that sets the plan's level.
+  const meter = planLevel(plan)?.meter;
   const base = {
     runtime: health.runtime,
     name,
     kind,
     credits: creditsOf(plan),
     checked: plan.checkedAt === null ? null : copy.checked({ name, ago: formatAgo(plan.checkedAt, now) }),
+    state: stateOf(plan, name, now),
   };
   if (meter === undefined) {
     return {
@@ -126,6 +176,22 @@ const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView =
   };
 };
 
+const TONE = { ok: "default", low: "low", out: "out" } as const;
+
+// A tile's big number takes its plan's color once it is low or out.
+const HEADLINE = { ok: "", low: "text-lantern", out: "text-rose" } as const;
+
+const TAG = { ok: "done", low: "needs-you", out: "failed" } as const;
+
+function StateTag({ state }: { state: PlanState }) {
+  return (
+    <Badge variant={TAG[state.level]}>
+      {state.level === "ok" && <span data-slot="badge-glyph">✓</span>}
+      {state.tag}
+    </Badge>
+  );
+}
+
 function Window({ window }: { window: PlanWindow }) {
   return (
     <li className="flex flex-col gap-1.5">
@@ -133,7 +199,7 @@ function Window({ window }: { window: PlanWindow }) {
         <span className="flex-1 text-text">{window.label}</span>
         <strong className="text-text-strong">{window.left}</strong>
       </span>
-      <Progress value={window.used} aria-hidden />
+      <Progress value={window.used} tone={TONE[window.level]} aria-hidden />
       <span className="text-detail text-label">{window.refill}</span>
     </li>
   );
@@ -156,6 +222,7 @@ function PlanCard({ view }: { view: PlanView }) {
           <strong className="flex-1 text-text-strong">
             {view.name} · {view.kind}
           </strong>
+          {view.state && <StateTag state={view.state} />}
         </span>
         {view.unreported !== null && (
           <span className="flex flex-col gap-1">
@@ -174,6 +241,33 @@ function PlanCard({ view }: { view: PlanView }) {
         {view.checked !== null && <span className="text-detail text-text-secondary">{view.checked}</span>}
       </div>
     </section>
+  );
+}
+
+const BANNER_EDGE = {
+  low: "shadow-[inset_0_0_0_1px_var(--color-lantern)]",
+  out: "shadow-[inset_0_0_0_1px_var(--color-rose)]",
+};
+const BANNER_GLYPH = { low: "bg-lantern text-on-lantern", out: "bg-rose text-on-rose" };
+
+/** What happens while a plan is low or used up, and when it comes back. */
+function PlanBanner({ level, title, line }: { level: "low" | "out"; title: string; line: string }) {
+  return (
+    <div
+      role="status"
+      className={cn("cut flex animate-hb-in items-center gap-3.5 bg-card py-3 ps-3 pe-3.5", BANNER_EDGE[level])}
+    >
+      <span
+        aria-hidden
+        className={cn("grid size-8 shrink-0 place-items-center rounded-dot font-bold", BANNER_GLYPH[level])}
+      >
+        {level === "low" ? "◷" : "!"}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <strong className="text-text-strong">{title}</strong>
+        <span className="text-detail text-text-secondary">{line}</span>
+      </span>
+    </div>
   );
 }
 
@@ -197,7 +291,7 @@ function ProviderTile({ view, on, onPick }: { view: PlanView; on: boolean; onPic
       <span className="flex items-end gap-2.5">
         <PixelArt rows={potion(view.level)} palette={potionPalette(...view.palette)} size={28} />
         <span className="flex min-w-0 flex-col">
-          <strong className="text-[15px]">{view.headline}</strong>
+          <strong className={cn("text-[15px]", view.state && HEADLINE[view.state.level])}>{view.headline}</strong>
           <span className="truncate text-meta text-label">{view.summary}</span>
         </span>
       </span>
@@ -227,8 +321,12 @@ export function PlanShelf({
     );
   const current = views.find((view) => view.runtime === picked) ?? views[0];
   if (current === undefined) return null;
+  const alarm = views.find((view) => view.state?.level === "out") ?? views.find((view) => view.state?.level === "low");
   return (
     <>
+      {alarm?.state?.banner && alarm.state.level !== "ok" && (
+        <PlanBanner level={alarm.state.level} title={alarm.state.banner.title} line={alarm.state.banner.line} />
+      )}
       {views.length > 1 && (
         <fieldset
           aria-label={copy.picker}

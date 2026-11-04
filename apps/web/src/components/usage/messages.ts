@@ -55,6 +55,24 @@ export const messages = {
     } as const,
     credits: ({ used, limit }: { used: string; limit: string | null }) =>
       limit === null ? `Usage credits: ${used} spent this month.` : `Usage credits: ${used} of ${limit} this month.`,
+    state: {
+      ok: "Plenty left",
+      low: "Running low",
+      out: (refill: Refill | null, at: string | null) =>
+        refill === null || at === null || "now" in refill
+          ? "Paused"
+          : "in" in refill
+            ? `Paused until ${formatTime(at)}`
+            : `Paused until ${formatWeekdayTime(at)}`,
+    },
+    banner: {
+      low: ({ name, window }: { name: string; window: string }) => `${window} on ${name} is running low`,
+      lowLine: ({ left, refill }: { left: string; refill: string }) =>
+        `${left}. Hobs pause if it runs out, and nothing they wrote is lost. ${refill}`,
+      out: "Your hobs are paused",
+      outLine: ({ name, window, refill }: { name: string; window: string; refill: string }) =>
+        `${window} on ${name} is used up. ${refill} A reply the limit stopped keeps what it wrote, and you can continue it then.`,
+    },
     checked: ({ name, ago }: { name: string; ago: string }) => `Numbers from ${name}, checked ${ago}.`,
     subscriptionUnreported: ({ name }: { name: string }) =>
       `${name} didn't report this plan's limits, so Hobbots shows none. They appear here once it does.`,

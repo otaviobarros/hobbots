@@ -147,6 +147,41 @@ export const dailyUsage = (
 export const headlineMeter = (plan: PlanUsage): PlanMeter | undefined =>
   plan.meters.find((meter) => meter.active) ?? plan.meters[0];
 
+/**
+ * How a plan window stands: `ok`, `low` when little is left, `out` when it is used up and hobs on
+ * it pause until it refills. The provider's own warning counts first; from 80% used, a window is
+ * low even when the provider didn't warn.
+ */
+export type PlanLevel = "ok" | "low" | "out";
+
+/** From this much of a window used, it is running low. */
+export const LOW_FROM_PERCENT = 80;
+
+const LEVEL_RANK: Record<PlanLevel, number> = { ok: 0, low: 1, out: 2 };
+
+export const meterLevel = (meter: PlanMeter): PlanLevel => {
+  if (meter.percent >= 100) return "out";
+  if (meter.severity === "warning" || meter.severity === "critical" || meter.percent >= LOW_FROM_PERCENT) return "low";
+  return "ok";
+};
+
+/**
+ * A plan's level and the window that sets it: the worst of its windows, and among those the one
+ * that refills last, since hobs wait for it. Undefined when the plan reported no window.
+ */
+export const planLevel = (plan: PlanUsage): { readonly level: PlanLevel; readonly meter: PlanMeter } | undefined => {
+  if (!plan.reported) return undefined;
+  const headline = headlineMeter(plan);
+  if (headline === undefined) return undefined;
+  const rank = (meter: PlanMeter) => LEVEL_RANK[meterLevel(meter)];
+  const worst = plan.meters.reduce((best, meter) => {
+    const difference = rank(meter) - rank(best);
+    const refillsLater = (meter.resetsAt ?? "") > (best.resetsAt ?? "");
+    return difference > 0 || (difference === 0 && rank(meter) > 0 && refillsLater) ? meter : best;
+  }, headline);
+  return { level: meterLevel(worst), meter: worst };
+};
+
 /** How much of a meter's window is left, 0 to 1. */
 export const leftOf = (meter: PlanMeter): number => Math.min(1, Math.max(0, (100 - meter.percent) / 100));
 
