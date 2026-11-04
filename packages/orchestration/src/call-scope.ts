@@ -11,6 +11,7 @@ import {
   exactAction,
   IllegalTaskTransition,
   isTerminalTask,
+  type MessageId,
   POLICY_OPERATIONS,
   type QuestLimits,
   questPlacement,
@@ -51,6 +52,8 @@ export interface TaskToolCaller {
   readonly taskId: TaskId;
   /** The backpack items the turn's prompt carries, which its `complete_task` consumes (ADR 019). */
   readonly carried?: ReadonlyArray<CarriedItem>;
+  /** For a chat turn, the message of yours it answers: what its notes to members trace back to (#900). */
+  readonly messageId?: MessageId;
 }
 
 /** What a tool handler sees: the caller, its Task, that Task's whole tree as read in the call's transaction, and now. */

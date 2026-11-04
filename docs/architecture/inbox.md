@@ -49,7 +49,7 @@ The backpack is built in `@hobbots/inbox`, `@hobbots/persistence` and migration 
 | Hand-off | `HandedOff` | The receiving Task's owner |
 | Message | `NoteLeft`, for your note on a Task | The Task's nearest lead whose own Task is still open, or its owner when nobody leads it. A note on a lead's own step is held under the Task above its steps, so the session that coordinates the work hears it, and names the step it is about |
 
-An approval request that expires because Hobbots restarted, so no live turn waits for it, records an Approval outcome for the hob that asked, in its thread, with the expiry. A note you leave on a Task is a Message about that Task, keyed by the note, whose id is the idempotency key of the command that left it. Messages between a lead and its members and deadlines have their kinds and payloads but no source yet. They come with the commands that make them.
+An approval request that expires because Hobbots restarted, so no live turn waits for it, records an Approval outcome for the hob that asked, in its thread, with the expiry. A note you leave on a Task is a Message about that Task, keyed by the note, whose id is the idempotency key of the command that left it. A Message names the note it carries (`noteId`), and once a turn picks it up (the backpack put it into the turn and the runtime accepted the turn), the same transaction records that turn on the note and journals `NotePickedUp`, for the steer receipt of the message of yours behind it ([#900](https://github.com/otaviobarros/hobbots/issues/900)). Messages between a lead and its members and deadlines have their kinds and payloads but no source yet. They come with the commands that make them.
 
 ## Delivery and recovery
 

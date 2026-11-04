@@ -601,6 +601,7 @@ export class ChatService extends Context.Service<
                   agentId: agent.id,
                   threadId: thread.id,
                   messageId: (yield* Ref.get(reply.current)).id,
+                  promptId: (yield* Ref.get(reply.current)).promptId,
                   prompt,
                   runtime: brain.runtime,
                   configVersion: config.version,
@@ -697,6 +698,7 @@ export class ChatService extends Context.Service<
             configVersion: config.version,
             runtime: brain.runtime,
             model: brain.model,
+            promptId: typeof prompt === "string" ? null : prompt.id,
             createdAt: now,
           });
           const saved = yield* saveReply(assistantMessage);

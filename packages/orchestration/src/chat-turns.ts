@@ -64,6 +64,13 @@ export const makeChatResolver = (
    */
   const carriedBy = (taskId: TaskId): ReadonlyArray<CarriedItem> =>
     carriedWith(turn.holding ?? [], briefed?.taskId === taskId ? briefed.carried : []);
+  /** The caller on `taskId`, with what it carries and the message of yours the turn answers (#900). */
+  const callerOn = (taskId: TaskId): TaskToolCaller => ({
+    agentId: turn.agentId,
+    taskId,
+    carried: carriedBy(taskId),
+    ...(turn.promptId != null && { messageId: turn.promptId }),
+  });
   return {
     /**
      * What the turn's session is told of the open Task, read as the turn starts. The briefing shows
@@ -183,7 +190,7 @@ export const makeChatResolver = (
           );
         }
         workingOn = task.id;
-        const caller = { agentId: turn.agentId, taskId: task.id, carried: carriedBy(task.id) };
+        const caller = callerOn(task.id);
         const own = ownAttempt !== null && task.currentAttemptId === ownAttempt;
         if (own || !NEEDS_ATTEMPT.has(name) || (name !== "complete_task" && task.currentAttemptId !== null)) {
           return { caller, entries: journal.entries, attemptId: null };

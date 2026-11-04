@@ -96,6 +96,8 @@ const QuestionEscalated = Schema.TaggedStruct("QuestionEscalated", { question: Q
 const QuestionWithdrawn = Schema.TaggedStruct("QuestionWithdrawn", { question: Question });
 /** You left a note on a Task; it goes to the Task's nearest lead (ADR 018). */
 const NoteLeft = Schema.TaggedStruct("NoteLeft", { note: TaskNote });
+/** A turn of a note's recipient picked it up: the backpack put it into that turn, which its runtime accepted (#900, ADR 019). */
+const NotePickedUp = Schema.TaggedStruct("NotePickedUp", { note: TaskNote });
 /** A lead gave one Task's artifact to another Task. */
 const HandedOff = Schema.TaggedStruct("HandedOff", { handOff: HandOff, artifact: ArtifactRef });
 /** A Task passed the completion gate, with its result and the artifacts it made. */
@@ -193,6 +195,7 @@ export const JournaledEvent = Schema.Union([
   QuestionEscalated,
   QuestionWithdrawn,
   NoteLeft,
+  NotePickedUp,
   HandedOff,
   TaskCompleted,
   QuestCompleted,
@@ -227,7 +230,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // added with a default, compatibly.
   ThreadUpserted: 3,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
-  // A reply's `usage` was added with a default, compatibly.
+  // A reply's `usage`, and later its `promptId`, were added with defaults, compatibly.
   MessageUpserted: 4,
   MessageQueued: 1,
   MessageDequeued: 1,
@@ -248,7 +251,9 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   QuestionAnswered: 1,
   QuestionEscalated: 1,
   QuestionWithdrawn: 1,
+  // A note's `messageId`, `fromNoteId`, `pickedUpBy` and `pickedUpAt` were added with defaults, compatibly.
   NoteLeft: 1,
+  NotePickedUp: 1,
   HandedOff: 1,
   TaskCompleted: 1,
   QuestCompleted: 1,
