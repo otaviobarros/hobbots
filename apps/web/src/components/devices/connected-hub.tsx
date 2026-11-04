@@ -67,11 +67,11 @@ function DisconnectQuestion({ run, hub }: { readonly run: Disconnect; readonly h
       className="cut m-0 flex basis-full animate-hb-in flex-wrap items-center gap-2 border-2 border-solid border-rose bg-deep px-3 py-2.5"
     >
       <span className="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
-        <span className="text-sm font-bold text-rose">{copy.confirm({ hub })}</span>
-        <span className="text-[13px] text-text-secondary">{copy.confirmNote({ hub })}</span>
+        <span className="text-ui font-bold text-rose">{copy.confirm({ hub })}</span>
+        <span className="text-detail text-text-secondary">{copy.confirmNote({ hub })}</span>
       </span>
       {disconnect.isError && (
-        <span role="alert" className="basis-full text-sm text-rose">
+        <span role="alert" className="basis-full text-ui text-rose">
           {copy.failed}
         </span>
       )}
@@ -97,7 +97,7 @@ export function ConnectedHubSettings({ bridge }: { readonly bridge: ConnectionBr
     <>
       <p className="m-0 text-text-secondary">{copy.intro}</p>
       {connection.isError && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {copy.readFailed}
         </p>
       )}
@@ -114,16 +114,16 @@ export function ConnectedHubSettings({ bridge }: { readonly bridge: ConnectionBr
                   ? copy.connected({ hub: view.hubName })
                   : copy.notConnected({ hub: view.hubName })}
               </span>
-              <span className="font-mono text-[13px] text-text-secondary wrap-anywhere">
+              <span className="font-mono text-code text-text-secondary wrap-anywhere">
                 {view.address} · {copy.overTailscale}
               </span>
-              <span className="text-[13px] text-text-secondary">{versionsLine(view)}</span>
+              <span className="text-detail text-text-secondary">{versionsLine(view)}</span>
             </span>
             {bridge.disconnect && <DisconnectQuestion run={bridge.disconnect} hub={view.hubName} />}
           </div>
-          <span className="text-[13px] text-label">{copy.managedThere({ hub: view.hubName })}</span>
+          <span className="text-detail text-label">{copy.managedThere({ hub: view.hubName })}</span>
           {!bridge.disconnect && (
-            <span className="text-[13px] text-label">{copy.updateToDisconnect({ hub: view.hubName })}</span>
+            <span className="text-detail text-label">{copy.updateToDisconnect({ hub: view.hubName })}</span>
           )}
         </>
       )}

@@ -8,8 +8,10 @@ const LITERAL = /#[0-9a-f]{3,8}(?![\w-])|rgba?\(/gi;
 const withoutComments = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 
 describe("hard-coded colors", () => {
-  it("leaves none in components, which take them from tokens or from art in src/art", () => {
-    const folder = new URL("./src/components/", import.meta.url);
+  it.each([
+    ["apps/web/src/components", new URL("./src/components/", import.meta.url)],
+    ["packages/ui/src/components", new URL("../../packages/ui/src/components/", import.meta.url)],
+  ])("leaves none in %s, which take them from tokens or from the art palettes", (_, folder) => {
     const found = readdirSync(folder, { recursive: true, encoding: "utf8" })
       .filter((path) => /\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path))
       .flatMap((path) =>

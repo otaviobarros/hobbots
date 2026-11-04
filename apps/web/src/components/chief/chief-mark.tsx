@@ -51,7 +51,7 @@ export function ChiefMark({ size, mood = "idle", looks = 0 }: { size: number; mo
         </span>
       </span>
       {mood === "needs-you" && (
-        <span aria-hidden className="absolute -top-2 -end-1.5 font-pixel font-bold text-lantern text-sm">
+        <span aria-hidden className="absolute -top-2 -end-1.5 font-pixel font-bold text-lantern text-ui">
           !
         </span>
       )}

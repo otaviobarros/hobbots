@@ -1,6 +1,6 @@
-import { cn } from "cn";
 import { Tabs as TabsPrimitive } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // The Hobbots tabs: plain labels on a line, the selected one bold with a lantern bar under it. Arrow
 // keys move between tabs and select them, and Home and End go to the ends.

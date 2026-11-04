@@ -31,7 +31,7 @@ export function CharmsTab({ hob }: { hob: Agent }) {
       <span className="text-text-secondary">{copy.intro({ name: hob.name })}</span>
       <GitHubCharm hob={hob} permissions={data} outdated={permissions.outdated} />
       <div className="flex items-center gap-3 rounded-card border-(length:--edge) border-dashed border-line-2 px-4 py-3.5">
-        <span className="flex-1 text-sm text-text-secondary">{copy.more}</span>
+        <span className="flex-1 text-ui text-text-secondary">{copy.more}</span>
         <Button asChild variant="outline">
           <Link to="/settings/$section" params={{ section: "connections" }} search={{ tab: "charms" }}>
             {copy.moreLink}
@@ -116,7 +116,7 @@ function GitHubCharm({ hob, permissions, outdated }: { hob: Agent; permissions: 
           />
         </div>
       ) : (
-        <span className="animate-hb-in ps-16 pe-4.5 pb-4 text-sm text-text-secondary">
+        <span className="animate-hb-in ps-16 pe-4.5 pb-4 text-ui text-text-secondary">
           {copy.off({ name: hob.name })}
         </span>
       )}

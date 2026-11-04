@@ -54,7 +54,7 @@ function WhereChoices({
     <WhereLayout
       footer={
         failed && (
-          <p role="alert" className="m-0 pt-3 text-sm text-rose">
+          <p role="alert" className="m-0 pt-3 text-ui text-rose">
             {where.startFailed}
           </p>
         )

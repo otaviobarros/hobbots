@@ -49,7 +49,7 @@ export function Welcome() {
           </>
         }
         more={
-          <Button variant="link" onClick={() => setRestoring(true)} className="bg-ground/60 px-2 text-sm">
+          <Button variant="link" onClick={() => setRestoring(true)} className="bg-ground/60 px-2 text-ui">
             {backupMessages.welcome.open}
           </Button>
         }

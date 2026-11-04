@@ -18,7 +18,7 @@ export function DeviceFacts({ device, now }: { device: WaitingDevice; now: Date 
   return (
     <dl className="m-0 flex flex-col">
       {rows.map(([label, value]) => (
-        <div key={label} className="grid grid-cols-[110px_1fr] gap-3 border-b-2 border-line py-1.5 text-sm">
+        <div key={label} className="grid grid-cols-[110px_1fr] gap-3 border-b-2 border-line py-1.5 text-ui">
           <dt className="text-label">{label}</dt>
           <dd className="m-0 break-words">{value}</dd>
         </div>
@@ -32,8 +32,8 @@ export function MatchingCode({ device }: { device: WaitingDevice }) {
   return (
     <div className="cut flex items-center gap-4 bg-text-strong px-4 py-3 text-ground">
       <div className="flex flex-1 flex-col gap-0.5">
-        <span className="lbl text-xs">{copy.matchLabel}</span>
-        <span className="text-sm">{copy.matchHint({ name: device.request.name })}</span>
+        <span className="lbl text-meta">{copy.matchLabel}</span>
+        <span className="text-ui">{copy.matchHint({ name: device.request.name })}</span>
       </div>
       <span className="font-heading text-3xl font-bold tracking-[0.12em] whitespace-nowrap">
         {groupedCode(device.request.code)}
@@ -74,7 +74,7 @@ export function PairingActions({
         </Button>
       </div>
       {decide.isError && (
-        <p role="alert" className="m-0 text-xs text-rose">
+        <p role="alert" className="m-0 text-meta text-rose">
           {copy.failed}
         </p>
       )}
@@ -89,7 +89,7 @@ export function DeviceRequestCard({ device, now, canDefer }: { device: WaitingDe
       aria-label={copy.label({ name: device.request.name })}
       className="cut flex flex-col gap-2.5 border-2 border-lantern bg-card px-3 py-2.5"
     >
-      <span className="lbl text-xs text-lantern">{copy.kicker}</span>
+      <span className="lbl text-meta text-lantern">{copy.kicker}</span>
       <DeviceFacts device={device} now={now} />
       <MatchingCode device={device} />
       <PairingActions device={device} canDefer={canDefer} />

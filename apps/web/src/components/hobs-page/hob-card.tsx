@@ -67,13 +67,13 @@ export function HobCard({
           <strong title={hob.name} className="truncate font-heading text-lg leading-6 font-(--heading-weight)">
             {hob.name}
           </strong>
-          <span title={hob.roleTitle} className="truncate text-[13px] leading-[18px] text-label">
+          <span title={hob.roleTitle} className="truncate text-detail leading-[18px] text-label">
             {hob.roleTitle}
           </span>
         </span>
         <span
           className={cn(
-            "flex min-h-10 items-start gap-2 text-sm leading-5",
+            "flex min-h-10 items-start gap-2 text-ui leading-5",
             needs ? "text-lantern" : "text-text-secondary",
           )}
         >
@@ -83,7 +83,7 @@ export function HobCard({
           {needs && <span aria-hidden className="mt-1.5 size-2 flex-none rotate-45 rounded-[2px] bg-lantern" />}
           <span className="line-clamp-2 min-w-0">{cardLine(doing, threads, fresh)}</span>
         </span>
-        <span className="flex min-w-0 items-center gap-2 border-t border-line pt-2.5 text-[13px] leading-[18px] text-text-secondary">
+        <span className="flex min-w-0 items-center gap-2 border-t border-line pt-2.5 text-detail leading-[18px] text-text-secondary">
           <ChatIcon />
           <span className="sr-only">{copy.card.lastChat}</span>
           <span title={last?.title} className="min-w-0 flex-1 truncate">

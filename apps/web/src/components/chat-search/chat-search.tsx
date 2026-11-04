@@ -75,7 +75,7 @@ export function ChatSearch({
           className="min-w-0 flex-1 border-0 bg-transparent text-[15px] [&::-webkit-search-cancel-button]:appearance-none leading-[22px] text-text-strong outline-none placeholder:text-label"
         />
         {searching && (
-          <span role="status" className="text-xs whitespace-nowrap text-label">
+          <span role="status" className="text-meta whitespace-nowrap text-label">
             {copy.count({ count: hits.length })}
           </span>
         )}
@@ -102,7 +102,7 @@ export function ChatSearch({
                     className="flex w-full cursor-pointer flex-col gap-0.5 rounded-control border-0 bg-transparent px-2.5 py-2 text-start text-text hover:bg-hover focus-visible:bg-hover"
                   >
                     <Who hob={hob} message={hit.message} />
-                    <span className="text-sm leading-5">
+                    <span className="text-ui leading-5">
                       <Marked parts={hit.parts} />
                     </span>
                   </button>
@@ -110,7 +110,7 @@ export function ChatSearch({
               ))}
             </ul>
           ) : (
-            <p className="m-0 px-2.5 py-2 text-sm leading-5 text-text-secondary">
+            <p className="m-0 px-2.5 py-2 text-ui leading-5 text-text-secondary">
               {copy.nothing({ query: query.trim() })}{" "}
               <Link to="/hobs/$hobId" params={{ hobId: hob.id }} search={{ q: query.trim() }} className="text-lantern">
                 {copy.everywhere({ name: hob.name })}
@@ -127,7 +127,7 @@ export function ChatSearch({
 function Who({ hob, message }: { hob: Agent; message: Message }) {
   const mine = message.role === "user";
   return (
-    <span className="flex items-center gap-2 text-xs text-label">
+    <span className="flex items-center gap-2 text-meta text-label">
       {mine ? (
         <span className="flex size-5 shrink-0 items-center justify-center rounded-[6px] bg-lantern/35 text-[11px] font-bold text-text-strong">
           {copy.you[0]}

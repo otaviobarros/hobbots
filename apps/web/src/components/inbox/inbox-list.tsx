@@ -101,7 +101,7 @@ export function InboxList({
         const label = groupLabel(group, directory);
         return (
           <li key={group.key} className="flex flex-col gap-1">
-            <span title={label} className="lbl truncate px-1.5 py-1 text-xs text-label">
+            <span title={label} className="lbl truncate px-1.5 py-1 text-meta text-label">
               {label}
             </span>
             <ul className="m-0 flex list-none flex-col gap-1 p-0">{group.entries.map((entry) => item(entry))}</ul>
@@ -116,7 +116,7 @@ export function InboxList({
 export function InboxViewPicker({ view, onChange }: { view: InboxView; onChange: (view: InboxView) => void }) {
   return (
     <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5">
-      <span className="flex-1 text-xs text-label">{copy.view.label}</span>
+      <span className="flex-1 text-meta text-label">{copy.view.label}</span>
       <SegmentedControl size="sm" aria-label={copy.view.label} value={view} onValueChange={onChange}>
         {INBOX_VIEWS.map((name) => (
           <SegmentedControlItem key={name} value={name}>
@@ -198,8 +198,8 @@ function InboxItem({
           </span>
           <Badge variant={row.tag}>{row.kind}</Badge>
         </span>
-        <span className="text-sm leading-snug font-semibold [overflow-wrap:anywhere]">{row.what}</span>
-        <span className={cn("text-xs", TONE[row.tone])}>
+        <span className="text-ui leading-snug font-semibold [overflow-wrap:anywhere]">{row.what}</span>
+        <span className={cn("text-meta", TONE[row.tone])}>
           {place === undefined ? row.when : copy.whenIn({ when: row.when, place })}
         </span>
       </span>

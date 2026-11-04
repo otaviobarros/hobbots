@@ -32,7 +32,7 @@ function Ids({ row }: { row: TraceRow }) {
     copy.taskId({ id: row.task.id }),
     ...(row.delegation ? [copy.delegationId({ id: row.delegation.id })] : []),
   ];
-  return <span className="font-mono text-xs break-all text-label">{copy.idsLine({ ids: ids.join(" · ") })}</span>;
+  return <span className="font-mono text-meta break-all text-label">{copy.idsLine({ ids: ids.join(" · ") })}</span>;
 }
 
 function TaskRow({ row, hobName }: { row: TraceRow; hobName: HobName }) {
@@ -49,13 +49,13 @@ function TaskRow({ row, hobName }: { row: TraceRow; hobName: HobName }) {
         <Badge variant={badgeFor(task.state)}>{messages.taskStates[task.state]}</Badge>
       </span>
       {delegation && (
-        <span className="text-sm text-text-secondary">
+        <span className="text-ui text-text-secondary">
           {copy.delegated({ lead: hobName(delegation.leadId), member: hobName(delegation.memberId) })}
         </span>
       )}
-      {row.attempts.length === 0 && <span className="text-sm text-text-secondary">{copy.noAttempts}</span>}
+      {row.attempts.length === 0 && <span className="text-ui text-text-secondary">{copy.noAttempts}</span>}
       {row.attempts.map((attempt) => (
-        <span key={attempt.id} className="flex flex-col text-sm">
+        <span key={attempt.id} className="flex flex-col text-ui">
           <span>
             {copy.attempt({
               number: attempt.number,
@@ -64,14 +64,14 @@ function TaskRow({ row, hobName }: { row: TraceRow; hobName: HobName }) {
             })}
             {attempt.outcome !== null && <span className="text-text-secondary"> · {attempt.outcome}</span>}
           </span>
-          <span className="font-mono text-xs break-all text-label">
+          <span className="font-mono text-meta break-all text-label">
             {copy.attemptId({ id: attempt.id })}
             {attempt.sessionId !== null && ` · ${copy.session({ id: attempt.sessionId })}`}
           </span>
         </span>
       ))}
       {row.items.map((item) => (
-        <span key={item.id} className="text-sm text-lantern">
+        <span key={item.id} className="text-ui text-lantern">
           {copy.waiting({
             hob: hobName(item.recipientId),
             kind: messages.itemKinds[item.kind],
@@ -87,13 +87,13 @@ function TaskRow({ row, hobName }: { row: TraceRow; hobName: HobName }) {
 
 function EventRow({ entry, hobName }: { entry: TraceEntry; hobName: HobName }) {
   return (
-    <li className="flex items-center gap-3 border-b-2 border-line py-1.5 text-sm">
-      <time dateTime={entry.occurredAt} className="w-[72px] shrink-0 font-mono text-xs text-label">
+    <li className="flex items-center gap-3 border-b-2 border-line py-1.5 text-ui">
+      <time dateTime={entry.occurredAt} className="w-[72px] shrink-0 font-mono text-meta text-label">
         {formatTime(entry.occurredAt)}
       </time>
       <span className="min-w-0 flex-1">{eventLabel(entry.type)}</span>
       <span className="text-text-secondary">{entry.agentId === null ? "" : hobName(entry.agentId)}</span>
-      <span className="font-mono text-xs text-label">{copy.sequence({ n: entry.sequence })}</span>
+      <span className="font-mono text-meta text-label">{copy.sequence({ n: entry.sequence })}</span>
     </li>
   );
 }
@@ -103,7 +103,7 @@ export function QuestTraceView({ trace, hobName }: { trace: QuestTrace; hobName:
   const title = firstLine(trace.quest.goal);
   return (
     <div className="flex flex-col gap-2">
-      <span className="flex items-center gap-2 text-sm">
+      <span className="flex items-center gap-2 text-ui">
         <span className="flex-1 text-text-secondary">
           {hobName(trace.quest.leadId)} · {formatWhen(trace.quest.createdAt)}
         </span>
@@ -116,9 +116,9 @@ export function QuestTraceView({ trace, hobName }: { trace: QuestTrace; hobName:
           <TaskRow key={row.task.id} row={row} hobName={hobName} />
         ))}
       </ul>
-      <span className="lbl pt-1 text-xs text-label">{copy.events}</span>
+      <span className="lbl pt-1 text-meta text-label">{copy.events}</span>
       <ol aria-label={copy.events} className="m-0 flex list-none flex-col p-0">
-        {trace.journal.length === 0 && <li className="text-sm text-text-secondary">{copy.noEvents}</li>}
+        {trace.journal.length === 0 && <li className="text-ui text-text-secondary">{copy.noEvents}</li>}
         {trace.journal.map((entry) => (
           <EventRow key={entry.sequence} entry={entry} hobName={hobName} />
         ))}

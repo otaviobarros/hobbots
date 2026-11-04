@@ -120,7 +120,7 @@ export function Home() {
 
 function SummonLink() {
   return (
-    <Link to="/summon" className="bg-deep px-2.5 py-1 text-[13px] text-lantern no-underline hover:bg-line">
+    <Link to="/summon" className="bg-deep px-2.5 py-1 text-detail text-lantern no-underline hover:bg-line">
       {messages.home.summon}
     </Link>
   );
@@ -130,7 +130,7 @@ function LiveDot() {
   return (
     <>
       <span aria-hidden className="size-2 animate-hb-blink rounded-dot bg-rose" />
-      <span className="text-xs text-text-secondary">{messages.home.live}</span>
+      <span className="text-meta text-text-secondary">{messages.home.live}</span>
     </>
   );
 }
@@ -159,7 +159,7 @@ function HallDoor({ count, peek, filter }: { count: number; peek: Agent | undefi
           <HobSprite hob={peek} size={24} />
         </span>
       )}
-      <span className="absolute top-2 -end-1.5 rounded-tag bg-text-strong px-[7px] py-[3px] text-xs font-bold text-ground">
+      <span className="absolute top-2 -end-1.5 rounded-tag bg-text-strong px-[7px] py-[3px] text-meta font-bold text-ground">
         {messages.home.hall.tag({ count })}
       </span>
     </Link>
@@ -221,7 +221,7 @@ function HappeningNowCard({
   return (
     <Card label={messages.home.happeningNow} extra={live.length > 0 && <LiveDot />}>
       {live.length === 0 ? (
-        <p className="m-0 text-sm text-text-secondary">{messages.home.allQuiet}</p>
+        <p className="m-0 text-ui text-text-secondary">{messages.home.allQuiet}</p>
       ) : (
         <HappeningNow live={live} activity={activity} />
       )}
@@ -250,7 +250,7 @@ function HappeningNow({
         className="flex animate-hb-in items-center gap-2.5 text-text-strong no-underline"
       >
         <HobSprite hob={hob} size={26} state={activity[thread.id] ?? "working"} />
-        <span className="min-w-0 flex-1 text-sm leading-snug">
+        <span className="min-w-0 flex-1 text-ui leading-snug">
           {before}
           <b>{hob.name}</b>
           {after}

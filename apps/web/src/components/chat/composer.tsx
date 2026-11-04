@@ -120,7 +120,7 @@ export function Composer({
           </Button>
         )}
       </div>
-      <span className="text-xs text-label">{hintFor(busy, stopping, paused)}</span>
+      <span className="text-meta text-label">{hintFor(busy, stopping, paused)}</span>
     </div>
   );
 }

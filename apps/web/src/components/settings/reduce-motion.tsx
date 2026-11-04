@@ -20,7 +20,7 @@ export function ReduceMotionRow() {
         <span id={labelId} className="font-bold">
           {copy.label}
         </span>
-        <span id={noteId} className="text-[13px] text-text-secondary">
+        <span id={noteId} className="text-detail text-text-secondary">
           {note}
         </span>
       </div>

@@ -38,7 +38,7 @@ function Bubble({ children, tail }: { children: string; tail: "left" | "right" }
     <span
       title={children}
       className={cn(
-        "block w-[230px] max-w-full bg-text-strong px-3 py-2.5 text-sm leading-5 text-ground",
+        "block w-[230px] max-w-full bg-text-strong px-3 py-2.5 text-ui leading-5 text-ground",
         tail === "right" ? "rounded-[12px_12px_2px_12px]" : "rounded-[12px_12px_12px_2px]",
       )}
     >

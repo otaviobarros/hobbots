@@ -41,7 +41,7 @@ export function PickUp({
         <h2 className="lbl m-0 text-label">{copy.title}</h2>
         <Link
           to="/hobs"
-          className="ms-auto inline-flex items-center gap-1 rounded-control px-2 py-[3px] text-[13px] text-link no-underline hover:bg-hover"
+          className="ms-auto inline-flex items-center gap-1 rounded-control px-2 py-[3px] text-detail text-link no-underline hover:bg-hover"
         >
           {copy.yourHobs}
           <span aria-hidden>→</span>
@@ -100,7 +100,7 @@ function Row({
         <span className="flex items-center gap-2 pt-1">
           <Progress aria-hidden size="sm" value={done} max={total} className="max-w-[160px]" />
           {needs > 0 && (
-            <span className="rounded-tag bg-lantern px-2 text-xs leading-6 font-bold whitespace-nowrap text-on-lantern">
+            <span className="rounded-tag bg-lantern px-2 text-meta leading-6 font-bold whitespace-nowrap text-on-lantern">
               {copy.needs({ count: needs })}
             </span>
           )}
@@ -129,7 +129,7 @@ function Body({ title, who, children }: { title: string; who: string; children: 
   return (
     <span className="flex min-w-0 flex-col gap-0.5">
       <span className="truncate text-[15px] leading-[22px] font-semibold text-text-strong">{title}</span>
-      <span className="truncate text-sm text-text-secondary">
+      <span className="truncate text-ui text-text-secondary">
         <b className="font-semibold text-text">{who}</b>
         {children !== null && children !== "" && <> · {children}</>}
       </span>
@@ -138,7 +138,7 @@ function Body({ title, who, children }: { title: string; who: string; children: 
 }
 
 function Age({ at }: { at: string }) {
-  return <span className="text-xs leading-[22px] whitespace-nowrap text-label">{formatWhen(at)}</span>;
+  return <span className="text-meta leading-[22px] whitespace-nowrap text-label">{formatWhen(at)}</span>;
 }
 
 function ChatIcon() {

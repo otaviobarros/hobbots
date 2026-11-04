@@ -116,7 +116,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
       <aside aria-label={copy.title} className="flex w-95 flex-none flex-col border-e-4 border-line bg-panel">
         <InboxHeader waiting={waiting} />
         <InboxTabs tab={tab} waiting={waiting}>
-          {inbox.isPending && <p className="px-3 py-4 text-sm text-label">{copy.loading}</p>}
+          {inbox.isPending && <p className="px-3 py-4 text-ui text-label">{copy.loading}</p>}
           {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
           {tab === "needs" && (
             <ReadState read={questions} loading={copy.question.loading} failed={copy.question.loadFailed} />
@@ -227,7 +227,7 @@ function Selected({
  * way to read it again. A read again that failed keeps what was read before in the list.
  */
 function ReadState({ read, loading, failed }: { read: BlockersRead | QuestionsRead; loading: string; failed: string }) {
-  if (read.isPending) return <p className="m-0 px-3 pt-4 text-sm text-label">{loading}</p>;
+  if (read.isPending) return <p className="m-0 px-3 pt-4 text-ui text-label">{loading}</p>;
   return read.isError ? <LoadFailed message={failed} onRetry={() => void read.refetch()} /> : null;
 }
 
@@ -248,7 +248,7 @@ function InboxHeader({ waiting }: { waiting: number }) {
         )}
       />
       <h1 className="absolute top-2.5 start-4 m-0 font-heading text-xl font-bold text-moonlight">{copy.title}</h1>
-      <p className="absolute top-9 start-4 m-0 text-xs text-text-secondary">
+      <p className="absolute top-9 start-4 m-0 text-meta text-text-secondary">
         {waiting > 0 ? copy.waiting({ count: waiting }) : copy.intro}
       </p>
     </div>
@@ -279,7 +279,7 @@ function AllClear() {
 
 function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="flex flex-col items-start gap-2 px-3 py-4 text-sm text-rose">
+    <div role="alert" className="flex flex-col items-start gap-2 px-3 py-4 text-ui text-rose">
       {message}
       <Button variant="outline" onClick={onRetry}>
         {copy.retry}

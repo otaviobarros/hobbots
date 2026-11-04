@@ -25,7 +25,7 @@ const NO_HOBS: ReadonlyArray<Agent> = [];
 /** A line that says where a control stands; read out as it changes. */
 function Outcome({ children }: { children: string | null }) {
   return (
-    <p role="status" className="m-0 text-xs text-text-secondary empty:hidden">
+    <p role="status" className="m-0 text-meta text-text-secondary empty:hidden">
       {children}
     </p>
   );
@@ -34,7 +34,7 @@ function Outcome({ children }: { children: string | null }) {
 /** Why a control was refused or could not be sent. */
 function Refusal({ children }: { children: string | null }) {
   return children === null ? null : (
-    <p role="alert" className="m-0 text-xs text-rose">
+    <p role="alert" className="m-0 text-meta text-rose">
       {children}
     </p>
   );
@@ -72,7 +72,7 @@ function ConfirmCancel({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="m-0 text-xs text-text-strong">{question}</p>
+      <p className="m-0 text-meta text-text-strong">{question}</p>
       <span className="flex flex-wrap gap-1.5">
         <Button variant="deny" size="xs" disabled={pending} onClick={onYes}>
           {pending ? copy.cancelling : copy.yesCancel}
@@ -204,11 +204,11 @@ function ReassignPicker({
   const label = copy.giveTo({ title: taskTitle(task) });
   return (
     <fieldset aria-label={label} className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
-      <legend className="p-0 text-xs text-label">
+      <legend className="p-0 text-meta text-label">
         {sending === null ? label : copy.giving({ name: sending.name })}
       </legend>
       {targets.length === 0 ? (
-        <p className="m-0 text-xs text-label">{copy.noOneElse}</p>
+        <p className="m-0 text-meta text-label">{copy.noOneElse}</p>
       ) : (
         <span className="flex flex-wrap gap-1.5">
           {targets.map((hob) => (
@@ -311,7 +311,9 @@ function ControlsHead({
   return (
     <>
       <span className="truncate text-detail">{copy.row({ name: owner, title })}</span>
-      <span className="text-xs text-label">{attempts === 0 ? copy.notStarted : copy.attempt({ count: attempts })}</span>
+      <span className="text-meta text-label">
+        {attempts === 0 ? copy.notStarted : copy.attempt({ count: attempts })}
+      </span>
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { cn, TEXT_STYLES } from "@hobbots/ui/lib/utils";
 import { describe, expect, it } from "vitest";
 
 interface ThemeFile {
@@ -10,6 +11,9 @@ interface ThemeFile {
   readonly type: Readonly<Record<string, { readonly size: string; readonly lineHeight: string }>>;
   readonly space: Readonly<Record<string, string>>;
   readonly duration: Readonly<Record<string, string>>;
+  readonly font: Readonly<Record<string, string>>;
+  readonly fixed: Readonly<Record<string, { readonly value: string }>>;
+  readonly skin: Readonly<Record<string, Readonly<Record<string, string | number>>>>;
 }
 
 const themes: ThemeFile = JSON.parse(readFileSync(new URL("../../docs/design/themes.json", import.meta.url), "utf8"));
@@ -84,6 +88,30 @@ describe("type scale and spacing", () => {
 
   it.each(Object.entries(themes.duration))("%s is set in @theme", (token, value) => {
     expect(theme).toContain(`--${token}: ${value};`);
+  });
+
+  it.each(["sans", "pixel", "mono"])("sets the %s font stack from themes.json", (family) => {
+    expect(theme).toContain(`--font-${family}: ${themes.font[family]};`);
+  });
+
+  it("sets the fixed segment shadow in @theme", () => {
+    expect(theme).toContain(`--shadow-segment: ${themes.fixed["shadow-segment"]?.value};`);
+  });
+
+  it("draws a 2px focus ring in every look", () => {
+    for (const look of Object.values(themes.skin)) expect(look["focus-outline"]).toBe("2px solid focus-ring");
+    const outlines = [...css.matchAll(/--focus-outline:\s*([^;]+);/g)].map(([, value]) => value);
+    expect(outlines).toEqual(["2px solid var(--color-focus-ring)", "2px solid var(--color-focus-ring)"]);
+  });
+
+  it("lets cn merge every text style as a size, never as a color", () => {
+    expect([...TEXT_STYLES].sort()).toEqual(
+      Object.keys(themes.type)
+        .filter((style) => style !== "label")
+        .sort(),
+    );
+    for (const style of TEXT_STYLES)
+      expect(cn(`text-${style}`, "text-text-strong")).toBe(`text-${style} text-text-strong`);
   });
 
   it("lets no theme or look change type, spacing or sizes", () => {

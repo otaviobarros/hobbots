@@ -33,7 +33,7 @@ const refusal = (error: Error | null) => {
 function BackupProgress({ state }: { state: BackupState }) {
   if (state._tag === "Waiting") {
     return (
-      <span role="status" className="text-sm text-lantern">
+      <span role="status" className="text-ui text-lantern">
         {copy.backup.waiting({ turns: state.turns })}
       </span>
     );
@@ -41,7 +41,7 @@ function BackupProgress({ state }: { state: BackupState }) {
   if (state._tag !== "Copying") return null;
   return (
     <div className="flex flex-col gap-1">
-      <span role="status" className="text-sm">
+      <span role="status" className="text-ui">
         {copy.backup.copying[state.step]}{" "}
         <span className="text-text-secondary">
           {copy.backup.progress({ copied: formatBytes(state.copiedBytes), total: formatBytes(state.totalBytes) })}
@@ -61,15 +61,15 @@ function BackupProgress({ state }: { state: BackupState }) {
 function Outcome({ state }: { state: BackupState }) {
   if (state._tag === "Done") {
     return (
-      <div className="flex min-w-0 flex-col gap-0.5 text-sm">
+      <div className="flex min-w-0 flex-col gap-0.5 text-ui">
         <span className="text-text-secondary">{copy.backup.saved({ size: formatBytes(state.size) })}</span>
-        <span className="font-mono text-detail break-all text-text">{state.path}</span>
+        <span className="font-mono text-code break-all text-text">{state.path}</span>
       </div>
     );
   }
   if (state._tag === "Failed") {
     return (
-      <span role="alert" className="text-sm text-rose">
+      <span role="alert" className="text-ui text-rose">
         {copy.backup.failed({ reason: state.reason })}
       </span>
     );
@@ -101,7 +101,7 @@ function BackupTag({ state }: { state: BackupState }) {
 
 function WhatItHolds() {
   return (
-    <details className="text-sm">
+    <details className="text-ui">
       <summary className="cursor-pointer text-text-secondary hover:text-text-strong">{copy.holds.title}</summary>
       <ul className="m-0 mt-2 grid list-none grid-cols-1 gap-x-5 gap-y-1.5 p-0 sm:grid-cols-2">
         {copy.holds.kept.map((item) => (
@@ -134,7 +134,7 @@ export function ResumeWorkButton() {
         {resume.isPending ? copy.latest.resuming : copy.latest.resume}
       </Button>
       {resume.isError && (
-        <span role="alert" className="text-sm text-rose">
+        <span role="alert" className="text-ui text-rose">
           {copy.latest.resumeFailed}
         </span>
       )}
@@ -146,11 +146,11 @@ function SetAside({ path, size }: { path: string; size: number }) {
   const [asking, setAsking] = useState(false);
   const remove = useDeleteSetAside();
   return (
-    <div className="flex flex-col gap-1.5 text-sm">
+    <div className="flex flex-col gap-1.5 text-ui">
       <span className="flex flex-wrap items-center gap-2">
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span>{copy.latest.setAside({ size: formatBytes(size) })}</span>
-          <span className="font-mono text-[13px] break-all text-text-secondary">{path}</span>
+          <span className="font-mono text-code break-all text-text-secondary">{path}</span>
         </span>
         {!asking && (
           <Button variant="deny" size="xs" onClick={() => setAsking(true)}>
@@ -185,28 +185,28 @@ function LatestRestore() {
   return (
     <>
       {failed !== null && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {copy.latest.lastFailed({ reason: failed })}
         </p>
       )}
       {latest !== null && (
         <div className="flex flex-col gap-2.5 rounded-control bg-panel px-3.5 py-3">
-          <span className="text-sm">
+          <span className="text-ui">
             {copy.latest.restored({ when: formatMoment(latest.restoredAt), made: formatMoment(latest.backupMadeAt) })}
           </span>
           {latest.workHeld && (
             <div className="flex flex-col gap-1.5">
               <span className="font-bold text-lantern">{copy.latest.held}</span>
-              <span className="text-sm text-text-secondary">{copy.latest.heldNote}</span>
+              <span className="text-ui text-text-secondary">{copy.latest.heldNote}</span>
               <ResumeWorkButton />
             </div>
           )}
           {latest.missingFolders.length > 0 && (
-            <div className="flex flex-col gap-1 text-sm">
+            <div className="flex flex-col gap-1 text-ui">
               <span>{copy.latest.missing}</span>
               <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
                 {latest.missingFolders.map((folder) => (
-                  <li key={folder} className="font-mono text-[13px] break-all text-text-secondary">
+                  <li key={folder} className="font-mono text-code break-all text-text-secondary">
                     {folder}
                   </li>
                 ))}
@@ -233,7 +233,7 @@ export function BackupSettings() {
   const [typed, setTyped] = useState<string | null>(null);
   const [open, setOpen] = useState<Open>(null);
   const toggle = (next: Exclude<Open, null>) => setOpen((now) => (now === next ? null : next));
-  if (status.isError) return <p className="m-0 text-sm text-rose">{copy.failedToRead}</p>;
+  if (status.isError) return <p className="m-0 text-ui text-rose">{copy.failedToRead}</p>;
   if (!status.data) return null;
   const { state, defaultDestination } = status.data;
   const destination = typed ?? defaultDestination;
@@ -244,7 +244,7 @@ export function BackupSettings() {
         <strong className="flex-1 text-text-strong">{copy.heading}</strong>
         <BackupTag state={state} />
       </span>
-      <span className="text-sm text-text-secondary">{copy.intro}</span>
+      <span className="text-ui text-text-secondary">{copy.intro}</span>
       <LatestRestore />
       <FolderField
         label={copy.backup.destination}
@@ -261,7 +261,7 @@ export function BackupSettings() {
       <BackupProgress state={state} />
       {!running && <Outcome state={state} />}
       {start.isError && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {refusal(start.error)}
         </p>
       )}

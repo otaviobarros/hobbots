@@ -14,12 +14,12 @@ function RuntimeRow({ health }: { health: RuntimeHealth }) {
     <li className="flex flex-col gap-1 border-b-2 border-line py-2">
       <span className="flex items-center gap-2">
         <span className="flex-1">{RUNTIME_NAMES[health.runtime]}</span>
-        {health.version !== null && <span className="text-xs text-label">{health.version}</span>}
+        {health.version !== null && <span className="text-meta text-label">{health.version}</span>}
         <Badge variant={health.availability === "ready" ? "working" : "waiting"}>
           {messages.availability[health.availability]}
         </Badge>
       </span>
-      {fix !== null && <span className="text-sm text-lantern">{fix}</span>}
+      {fix !== null && <span className="text-ui text-lantern">{fix}</span>}
     </li>
   );
 }
@@ -36,7 +36,7 @@ function StalledRow({
   const { questId } = stalled;
   return (
     <li className="flex flex-wrap items-center gap-2 border-b-2 border-line py-2">
-      <span className="min-w-0 flex-1 text-sm">{stalledText(stalled, hobName)}</span>
+      <span className="min-w-0 flex-1 text-ui">{stalledText(stalled, hobName)}</span>
       {questId !== null && (
         <Button variant="outline" size="sm" onClick={() => onFollow(questId)}>
           {copy.followQuest}
@@ -59,14 +59,14 @@ export function DiagnosticsNowView({
   return (
     <section aria-label={copy.heading} className="flex flex-col gap-2">
       <span className="lbl pt-2 text-label">{copy.heading}</span>
-      {now.workHeld && <p className="m-0 text-sm text-lantern">{copy.held}</p>}
+      {now.workHeld && <p className="m-0 text-ui text-lantern">{copy.held}</p>}
       <ul aria-label={copy.providers} className="m-0 flex list-none flex-col p-0">
         {now.runtimes.map((health) => (
           <RuntimeRow key={health.runtime} health={health} />
         ))}
       </ul>
       <ul aria-label={copy.stalled} className="m-0 flex list-none flex-col p-0">
-        {now.stalled.length === 0 && <li className="text-sm text-text-secondary">{copy.noStalled}</li>}
+        {now.stalled.length === 0 && <li className="text-ui text-text-secondary">{copy.noStalled}</li>}
         {now.stalled.map((stalled) => (
           <StalledRow
             key={`${stalled.kind}:${stalled.itemId ?? stalled.attemptId}`}
@@ -78,10 +78,10 @@ export function DiagnosticsNowView({
       </ul>
       <ul aria-label={copy.recovery} className="m-0 flex list-none flex-col p-0">
         {now.recovery.length === 0 && (
-          <li className="text-sm text-text-secondary">{copy.recovered({ when: formatAgo(now.startedAt) })}</li>
+          <li className="text-ui text-text-secondary">{copy.recovered({ when: formatAgo(now.startedAt) })}</li>
         )}
         {now.recovery.map((error) => (
-          <li key={`${error.step}:${error.attemptId ?? error.taskId}:${error.at}`} className="text-sm text-rose">
+          <li key={`${error.step}:${error.attemptId ?? error.taskId}:${error.at}`} className="text-ui text-rose">
             {recoveryText(error)}
           </li>
         ))}

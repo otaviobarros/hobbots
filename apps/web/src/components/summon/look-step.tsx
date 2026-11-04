@@ -200,7 +200,7 @@ function Talk({ draft, onChange, name }: { draft: FirstHobDraft; onChange: Updat
       onPick={() => onChange((d) => ({ ...d, voice: choice.id }))}
       className="flex-col gap-0.5 p-2"
     >
-      <strong className="text-sm">{choice.title}</strong>
+      <strong className="text-ui">{choice.title}</strong>
       <span className="text-meta text-text-secondary">{choice.description}</span>
     </PickCard>
   );
@@ -234,7 +234,7 @@ function Talk({ draft, onChange, name }: { draft: FirstHobDraft; onChange: Updat
       </SegmentedControl>
       <div className="flex items-start gap-2.5 rounded-card bg-deep px-3 py-2.5">
         <span className="lbl flex-none text-label">{copy.soundsLike}</span>
-        <span aria-live="polite" className="text-sm text-text">
+        <span aria-live="polite" className="text-ui text-text">
           {copy.samples[draft.voice]}
         </span>
       </div>

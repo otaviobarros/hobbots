@@ -61,7 +61,7 @@ function RemoteAccessState({
   if (why !== null) {
     return (
       <div className="flex flex-col items-start gap-2">
-        <p role="status" className="m-0 flex items-start gap-2 text-sm">
+        <p role="status" className="m-0 flex items-start gap-2 text-ui">
           <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
           <span>{why}</span>
         </p>
@@ -77,14 +77,14 @@ function RemoteAccessState({
   if (address === null) return null;
   return (
     <div className="flex animate-hb-in flex-col gap-2">
-      <p role="status" className="m-0 flex items-center gap-2 text-sm">
+      <p role="status" className="m-0 flex items-center gap-2 text-ui">
         <span aria-hidden className="size-2 flex-none bg-mint" />
         <span>
           {copy.connected} <b>{tailnetName(status)}</b>
         </span>
       </p>
       <RemoteAddress address={address} label={copy.address}>
-        <span className="text-[13px] text-label">{copy.addressNote}</span>
+        <span className="text-detail text-label">{copy.addressNote}</span>
         <PortField port={status.port} />
       </RemoteAddress>
     </div>
@@ -131,7 +131,7 @@ export function RemoteAccessSettings() {
           <span id={labelId} className="font-bold">
             {copy.switchLabel}
           </span>
-          <span className="text-[13px] text-text-secondary">{on ? copy.onNote : copy.offNote}</span>
+          <span className="text-detail text-text-secondary">{on ? copy.onNote : copy.offNote}</span>
         </div>
         <Switch
           aria-labelledby={labelId}
@@ -141,7 +141,7 @@ export function RemoteAccessSettings() {
         />
       </div>
       {notReady !== null && (
-        <p className="m-0 flex items-start gap-2 text-sm">
+        <p className="m-0 flex items-start gap-2 text-ui">
           <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
           <span>
             {notReady}{" "}
@@ -165,7 +165,7 @@ export function RemoteAccessSettings() {
       )}
       {status !== undefined && <ServeLeftOver status={status} />}
       {(access.isError || change.isError) && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {copy.failed}
         </p>
       )}

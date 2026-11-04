@@ -118,7 +118,7 @@ function Result({
     <div className="flex flex-col gap-1 text-detail leading-snug">
       <p className="m-0 whitespace-pre-wrap">{result.summary}</p>
       {attempt !== null && from !== undefined && from.id !== attempt.id && (
-        <span className="text-xs text-label">{copy.resultFrom({ number: from.number })}</span>
+        <span className="text-meta text-label">{copy.resultFrom({ number: from.number })}</span>
       )}
     </div>
   );
@@ -159,7 +159,7 @@ function Happened({ line, hobs, onOpen }: { line: HappenedLine; hobs: HobLookup;
       >
         {mark}
         <span className="min-w-0 flex-1">{text}</span>
-        {line.tries > 1 && <span className="shrink-0 text-xs text-label">{copy.tries({ count: line.tries })}</span>}
+        {line.tries > 1 && <span className="shrink-0 text-meta text-label">{copy.tries({ count: line.tries })}</span>}
       </button>
     );
   }
@@ -208,7 +208,9 @@ function Refused({
           {copy.refusedTold({ name: hobs(refusal.agentId).name, message: refusal.message })}
         </span>
       </span>
-      {refusal.tries > 1 && <span className="shrink-0 text-xs text-label">{copy.tries({ count: refusal.tries })}</span>}
+      {refusal.tries > 1 && (
+        <span className="shrink-0 text-meta text-label">{copy.tries({ count: refusal.tries })}</span>
+      )}
     </div>
   );
 }
@@ -254,10 +256,10 @@ function Made({
                 aria-label={copy.seeChange({ path: change.path })}
                 className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-2.5 py-1 text-start text-detail text-text-strong hover:bg-hover"
               >
-                <span className="w-16 shrink-0 text-xs font-bold text-label">{copy.change[change.kind]}</span>
+                <span className="w-16 shrink-0 text-meta font-bold text-label">{copy.change[change.kind]}</span>
                 <span className="min-w-0 flex-1 truncate font-mono">{change.path}</span>
                 {change.movedFrom !== null && (
-                  <span className="min-w-0 truncate text-xs text-label">
+                  <span className="min-w-0 truncate text-meta text-label">
                     {copy.movedFrom({ path: change.movedFrom })}
                   </span>
                 )}
@@ -451,7 +453,7 @@ function OpenRow({
   return (
     <div className="flex items-start gap-2.5 border-2 border-line bg-card px-3 py-2 text-detail leading-snug">
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-xs font-bold text-lantern">{label}</span>
+        <span className="text-meta font-bold text-lantern">{label}</span>
         <span className="whitespace-pre-wrap">{text}</span>
       </span>
       {action !== null && (
@@ -490,7 +492,7 @@ function TabButtons({ used, onTab }: { used: Summary["used"]; onTab: (tab: Workb
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section aria-label={title} className="flex flex-col gap-2">
-      <h3 className="lbl m-0 text-xs text-label">{title}</h3>
+      <h3 className="lbl m-0 text-meta text-label">{title}</h3>
       {children}
     </section>
   );

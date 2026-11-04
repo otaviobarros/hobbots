@@ -89,8 +89,8 @@ function ReplyRow({
     <div id={id} className={cn("flex max-w-[640px] animate-hb-in gap-2.5", focused && focusRing)}>
       <HobSprite hob={hob} size={26} state={streaming ? "working" : message.status === "failed" ? "failed" : "idle"} />
       <div className="flex min-w-0 flex-col gap-[3px]">
-        <span className="text-xs text-label">
-          <b className="font-heading text-sm text-moonlight">{hob.name}</b>{" "}
+        <span className="text-meta text-label">
+          <b className="font-heading text-ui text-moonlight">{hob.name}</b>{" "}
           {writing ? copy.writing : formatTime(message.createdAt)}
         </span>
         <ReplySteps
@@ -106,25 +106,25 @@ function ReplyRow({
           <ReplyMarkdown content={message.content} streaming={streaming} caret={writing} />
         )}
         {message.status === "stopping" && (
-          <span role="status" className="flex items-center gap-2 text-[13px] text-lantern">
+          <span role="status" className="flex items-center gap-2 text-detail text-lantern">
             <span aria-hidden className="size-[5px] animate-hb-blink rounded-dot bg-lantern" />
             {copy.stopping}
           </span>
         )}
         {message.status === "stopped" && (
-          <span role="status" className="animate-hb-in text-[13px] text-lantern">
+          <span role="status" className="animate-hb-in text-detail text-lantern">
             {copy.stopped({ name: hob.name })}
           </span>
         )}
         {message.status === "interrupted" && (
-          <span className="animate-hb-in text-[13px] text-rose">
+          <span className="animate-hb-in text-detail text-rose">
             {message.error === null ? copy.interrupted({ name: hob.name }) : copy.cutOff({ error: message.error })}
           </span>
         )}
         {message.status === "limited" && <LimitedNote message={message} name={hob.name} />}
         {resume && <ResumeControls resume={resume} name={hob.name} />}
         {message.status === "failed" && (
-          <span className="animate-hb-in text-[13px] text-rose">{copy.failed({ error: message.error })}</span>
+          <span className="animate-hb-in text-detail text-rose">{copy.failed({ error: message.error })}</span>
         )}
       </div>
     </div>
@@ -139,7 +139,7 @@ function LimitedNote({ message, name }: { message: Message; name: string }) {
   const plans = usePlans();
   const plan = planOf(plans, message.runtime ?? "claude-code");
   return (
-    <span role="status" className="animate-hb-in text-[13px] text-lantern">
+    <span role="status" className="animate-hb-in text-detail text-lantern">
       {copy.limited({ name, provider: providerName(message), refill: limitRefill(plan, message.resetsAt, new Date()) })}
     </span>
   );
@@ -148,7 +148,7 @@ function LimitedNote({ message, name }: { message: Message; name: string }) {
 /** Continue for a reply that ended early, and Continue with each other ready brain. */
 function ResumeControls({ resume, name }: { resume: ContinueReply; name: string }) {
   return resume.pending ? (
-    <span role="status" className="flex items-center gap-2 text-[13px] text-text-secondary">
+    <span role="status" className="flex items-center gap-2 text-detail text-text-secondary">
       <span aria-hidden className="size-[5px] animate-hb-blink rounded-dot bg-mint" />
       {copy.resuming({ name })}
     </span>
@@ -192,7 +192,7 @@ export function QueuedRow({
       className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end"
     >
       <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
-      <span className="text-xs text-label">
+      <span className="text-meta text-label">
         {paused ? messages.queued.waitsForWake({ name: hob.name }) : messages.queued.readsNext({ name: hob.name })}
       </span>
       <span className="flex gap-2">
@@ -233,7 +233,7 @@ export function WaitingRow({
   return (
     <section aria-label={chat.waiting} className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end">
       <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-60">{message.content}</div>
-      <span className={cn("text-[13px] leading-[18px]", refused ? "text-rose" : "text-label")}>
+      <span className={cn("text-detail leading-[18px]", refused ? "text-rose" : "text-label")}>
         {refused ? chat.waitingRefused : live ? chat.waitingSending : chat.waitingOffline}
       </span>
       <span className="flex items-center gap-2">
@@ -257,7 +257,7 @@ export function WaitingRow({
 
 function Thinking({ name }: { name: string }) {
   return (
-    <span role="status" className="flex items-center gap-2.5 text-sm text-text-secondary">
+    <span role="status" className="flex items-center gap-2.5 text-ui text-text-secondary">
       {copy.thinking({ name })}
       <span aria-hidden className="flex gap-1">
         <span className="size-[5px] animate-hb-blink rounded-dot bg-mint" />

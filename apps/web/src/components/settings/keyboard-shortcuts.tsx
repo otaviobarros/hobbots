@@ -13,15 +13,15 @@ export function KeyboardShortcuts({ onClose }: { onClose: () => void }) {
         <DialogTitle className="m-0 font-heading text-heading font-(--heading-weight) text-text-strong">
           {copy.title}
         </DialogTitle>
-        <DialogDescription className="m-0 text-sm text-text-secondary">{copy.intro}</DialogDescription>
-        <dl className="m-0 grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2.5 text-sm">
+        <DialogDescription className="m-0 text-ui text-text-secondary">{copy.intro}</DialogDescription>
+        <dl className="m-0 grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2.5 text-ui">
           {copy.list({ mac: isMac() }).map(({ keys, does }) => (
             <div key={does} className="contents">
               <dt className="flex gap-1">
                 {keys.map((key) => (
                   <kbd
                     key={key}
-                    className="rounded-tag bg-line px-1.5 py-0.5 font-mono text-detail whitespace-nowrap text-text-strong"
+                    className="rounded-tag bg-line px-1.5 py-0.5 font-mono text-code whitespace-nowrap text-text-strong"
                   >
                     {key}
                   </kbd>

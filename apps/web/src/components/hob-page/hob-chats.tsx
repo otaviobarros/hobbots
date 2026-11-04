@@ -103,13 +103,13 @@ function Matches({
     return <Group label={copy.groups.matches}>{matches.map((match) => row(match.thread, match))}</Group>;
   if (search.error)
     return (
-      <p role="alert" className="m-0 text-sm text-rose">
+      <p role="alert" className="m-0 text-ui text-rose">
         {copy.search.failed}
       </p>
     );
   if (search.pending)
     return (
-      <p role="status" className="m-0 text-sm text-label">
+      <p role="status" className="m-0 text-ui text-label">
         {copy.search.searching}
       </p>
     );
@@ -134,7 +134,7 @@ type ChatMatchParts = ReturnType<typeof chatMatches>[number]["title"];
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section aria-label={label} className="flex flex-col">
-      <h3 className="lbl m-0 flex items-center gap-2 px-1 pb-1.5 text-xs leading-4 text-label after:h-px after:flex-1 after:bg-line">
+      <h3 className="lbl m-0 flex items-center gap-2 px-1 pb-1.5 text-meta leading-4 text-label after:h-px after:flex-1 after:bg-line">
         {label}
       </h3>
       <ul className="cut m-0 flex list-none flex-col overflow-hidden bg-card p-0">{children}</ul>
@@ -148,7 +148,7 @@ function ShowMore({ onClick, children }: { onClick: () => void; children: ReactN
       <button
         type="button"
         onClick={onClick}
-        className="w-full cursor-pointer bg-transparent px-3.5 py-2.5 text-start text-sm text-link underline decoration-line-2 underline-offset-3 hover:bg-hover"
+        className="w-full cursor-pointer bg-transparent px-3.5 py-2.5 text-start text-ui text-link underline decoration-line-2 underline-offset-3 hover:bg-hover"
       >
         {children}
       </button>
@@ -164,7 +164,7 @@ function ArchivedLink({ hob }: { hob: Agent }) {
     <Link
       to="/archive"
       search={{ hob: hob.id }}
-      className="inline-flex items-center gap-2 self-start rounded-control px-2 py-1.5 text-sm text-text-secondary no-underline hover:bg-hover hover:text-text-strong"
+      className="inline-flex items-center gap-2 self-start rounded-control px-2 py-1.5 text-ui text-text-secondary no-underline hover:bg-hover hover:text-text-strong"
     >
       <svg
         viewBox="0 0 16 16"

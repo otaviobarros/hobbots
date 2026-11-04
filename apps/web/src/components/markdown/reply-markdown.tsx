@@ -42,7 +42,7 @@ const components: Components = {
   hr: () => <hr className="h-0.5 w-full border-0 bg-line" />,
   table: ({ node: _, ...props }) => (
     <div className="max-w-full overflow-x-auto">
-      <table className="border-collapse text-sm" {...props} />
+      <table className="border-collapse text-ui" {...props} />
     </div>
   ),
   th: ({ node: _, style, ...props }) => (

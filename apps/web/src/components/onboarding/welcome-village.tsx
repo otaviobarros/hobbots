@@ -84,10 +84,10 @@ export function WelcomeVillage({
         >
           {actions}
         </div>
-        <span className="text-[13px] text-text-secondary">{messages.welcome.duration}</span>
+        <span className="text-detail text-text-secondary">{messages.welcome.duration}</span>
         {more}
         {alert !== undefined && (
-          <span role="alert" className="bg-ground px-2 text-sm text-rose">
+          <span role="alert" className="bg-ground px-2 text-ui text-rose">
             {alert}
           </span>
         )}
@@ -148,7 +148,7 @@ export function WelcomeVillage({
           <VillageHob key={hob.name} hob={hob} walkIn={playIntro} />
         ))}
         <span className="relative flex flex-col items-center">
-          <span className="absolute bottom-full start-[70%] mb-1 w-[230px] rounded-[12px_12px_12px_2px] bg-text-strong/85 px-3 py-2 text-start text-sm leading-5 text-ground">
+          <span className="absolute bottom-full start-[70%] mb-1 w-[230px] rounded-[12px_12px_12px_2px] bg-text-strong/85 px-3 py-2 text-start text-ui leading-5 text-ground">
             {messages.welcome.chiefHello}
           </span>
           <ChiefMark size={150} mood="working" />
@@ -165,7 +165,7 @@ export function WelcomeVillage({
         )}
         style={introDelay(intro.providers)}
       >
-        <span className="text-[13px] text-text-secondary">
+        <span className="text-detail text-text-secondary">
           {messages.welcome.worksWith({ providers: PROVIDERS.join(" · ") })}
         </span>
       </div>
@@ -200,7 +200,7 @@ function VillageHob({ hob, walkIn }: { hob: SceneHob; walkIn: boolean }) {
           <span
             key={greeted}
             aria-hidden
-            className="absolute -top-[38px] start-1/2 -ms-8 w-16 animate-hb-say bg-text-strong py-1 text-center text-[13px] font-bold text-ground"
+            className="absolute -top-[38px] start-1/2 -ms-8 w-16 animate-hb-say bg-text-strong py-1 text-center text-detail font-bold text-ground"
           >
             {hob.greeting}
           </span>

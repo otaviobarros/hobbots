@@ -82,7 +82,7 @@ Nothing loops past `dur-loop-cap` (10s) or 3 cycles without new input, in any th
 | `shadow-segment` | `0 1px 2px rgb(0 0 0 / 0.18)` | The lift under the picked segment of a segmented control |
 | `stand-shadow` | `rgb(0 0 0 / 0.28)` | The soft shadow under a standing hob |
 
-A new fixed shadow is added to that list first.
+A new fixed shadow is added to that list first. `styles.css` sets `shadow-segment` in `@theme`, so it is the `shadow-segment` utility.
 
 Gradients in the hob's color are allowed on the hob hero, card doors and the pixel ground strip. Nothing else uses a gradient.
 
@@ -90,7 +90,7 @@ Gradients in the hob's color are allowed on the hob hero, card doors and the pix
 
 Corners come from the skin's `corner-*` values. Filter chips are the one exception: they are pills (`radius-round`) in every theme, Workshop included. Bubble corners are fixed by design too.
 
-The focus ring is 2px in every theme. Workshop's `--focus-outline` in `styles.css` is still 3px until #801 lands.
+The focus ring is 2px in every theme.
 
 ## In the code
 
@@ -127,6 +127,6 @@ Workshop Night keeps the palette the app had before the themes. These tokens wer
 
 The shadcn names in `styles.css`, such as `--color-primary` and `--color-border`, keep pointing at these tokens. That way the components in `packages/ui` follow the theme without changes.
 
-Components never write a color. Scene art keeps the colors the design draws it with in every theme, so `styles.css` names them once beside `wood`: `scene-*` for the village, Home's hall and setup's ground, `desk` and `desk-edge` for the Workbench desk, and `provider-*` for the tile behind each AI provider's letter mark. Pixel art palettes live in `apps/web/src/art`. A test fails on a hex or `rgb()` color in `apps/web/src/components`.
+Components never write a color. Scene art keeps the colors the design draws it with in every theme, so `styles.css` names them once beside `wood`: `scene-*` for the village, Home's hall and setup's ground, `desk` and `desk-edge` for the Workbench desk, and `provider-*` for the tile behind each AI provider's letter mark. Pixel art palettes live in `apps/web/src/art` and `packages/art`, such as the inks of a role's sigil in `packages/art/src/sigil.ts`. A test fails on a hex or `rgb()` color in `apps/web/src/components` or `packages/ui/src/components`.
 
 The desktop window's background follows the theme too. The preload script reports `ground` each time `data-theme` changes, and the next window opens with the last one. Before any page reports, it uses Workshop Night's ground, since first run always uses Workshop Night.

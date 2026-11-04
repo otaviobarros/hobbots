@@ -51,7 +51,7 @@ export function GitHubSettings() {
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <span className="font-bold">{copy.name}</span>
         {status.isError && (
-          <p role="alert" className="m-0 flex flex-wrap items-center gap-3 text-sm text-rose">
+          <p role="alert" className="m-0 flex flex-wrap items-center gap-3 text-ui text-rose">
             {copy.failed}
             <Button variant="outline" size="xs" onClick={() => void status.refetch()}>
               {copy.retry}
@@ -67,7 +67,7 @@ export function GitHubSettings() {
           />
         )}
         {change.isError && (
-          <p role="alert" className="m-0 text-sm text-rose">
+          <p role="alert" className="m-0 text-ui text-rose">
             {changeError(change.error)}
           </p>
         )}
@@ -91,7 +91,7 @@ function GitHubState({
 }) {
   switch (status._tag) {
     case "Environment":
-      return <span className="text-[13px] text-text-secondary">{copy.environment}</span>;
+      return <span className="text-detail text-text-secondary">{copy.environment}</span>;
     case "Connected":
       return (
         <Connected account={status.account} pending={pending} onDisconnect={() => onChange({ kind: "disconnect" })} />
@@ -114,14 +114,14 @@ function Connected({
 }) {
   return (
     <>
-      <span className="text-[13px] text-text-secondary">
+      <span className="text-detail text-text-secondary">
         {copy.connectedAs({ login: account.login, since: formatDay(account.connectedAt) })}{" "}
         {copy.through[account.source]}
       </span>
       {account.source === "app" ? (
         <AppReach login={account.login} />
       ) : (
-        <span className="text-[13px] text-label">{copy.everyRepository({ login: account.login })}</span>
+        <span className="text-detail text-label">{copy.everyRepository({ login: account.login })}</span>
       )}
       <div>
         <Button variant="outline" size="sm" disabled={pending} onClick={onDisconnect}>
@@ -156,13 +156,13 @@ function AppReach({ login }: { login: string }) {
   }, [repositories.isError, queryClient]);
   return (
     <>
-      <span className="lbl pt-1 text-xs text-label">{copy.repositoriesLabel}</span>
-      {repositories.isError && <span className="text-[13px] text-rose">{copy.repositoriesFailed}</span>}
-      {listed && listed.length === 0 && <span className="text-[13px] text-text-secondary">{copy.noRepositories}</span>}
+      <span className="lbl pt-1 text-meta text-label">{copy.repositoriesLabel}</span>
+      {repositories.isError && <span className="text-detail text-rose">{copy.repositoriesFailed}</span>}
+      {listed && listed.length === 0 && <span className="text-detail text-text-secondary">{copy.noRepositories}</span>}
       {listed && listed.length > 0 && (
         <ul aria-label={copy.repositoriesLabel} className="m-0 flex list-none flex-wrap gap-1.5 p-0">
           {listed.map((repository) => (
-            <li key={repository.fullName} className="bg-line px-2 py-0.5 text-[13px]">
+            <li key={repository.fullName} className="bg-line px-2 py-0.5 text-detail">
               {repository.fullName}
               {repository.private && <span className="ms-1.5 text-label">{copy.private}</span>}
             </li>
@@ -175,15 +175,15 @@ function AppReach({ login }: { login: string }) {
           target="_blank"
           rel="noreferrer"
           onClick={() => setWatch({ until: Date.now() + REPOSITORY_WATCH.forMs, seen: names })}
-          className="text-[13px] text-lantern no-underline hover:underline"
+          className="text-detail text-lantern no-underline hover:underline"
         >
           {copy.chooseRepositories}
         </a>
       )}
-      <span className="lbl pt-1 text-xs text-label">{copy.permissionsLabel}</span>
+      <span className="lbl pt-1 text-meta text-label">{copy.permissionsLabel}</span>
       <ul aria-label={copy.permissionsLabel} className="m-0 flex list-none flex-wrap gap-1.5 p-0">
         {GITHUB_APP_PERMISSIONS.map((permission) => (
-          <li key={permission.name} className="border-2 border-line px-2 py-0.5 text-[13px] text-text-secondary">
+          <li key={permission.name} className="border-2 border-line px-2 py-0.5 text-detail text-text-secondary">
             {copy.permission(permission)}
           </li>
         ))}
@@ -203,11 +203,11 @@ function Connecting({
 }) {
   return (
     <div className="cut flex flex-col gap-2 border-2 border-lantern bg-notice px-3 py-2.5" role="status">
-      <span className="text-sm">{copy.enterCode}</span>
+      <span className="text-ui">{copy.enterCode}</span>
       <span className="select-all font-heading text-[28px] font-bold tracking-widest text-moonlight">
         {status.userCode}
       </span>
-      <span className="text-[13px] text-text-secondary">{copy.waiting}</span>
+      <span className="text-detail text-text-secondary">{copy.waiting}</span>
       <div className="flex flex-wrap gap-2">
         <Button asChild size="sm">
           <a href={status.verificationUri} target="_blank" rel="noreferrer">
@@ -237,7 +237,7 @@ function Disconnected({
   return (
     <>
       {justDisconnected && (
-        <span className="text-[13px] text-text-secondary">
+        <span className="text-detail text-text-secondary">
           {copy.disconnected}{" "}
           <a href={GITHUB_AUTHORIZED_APPS} target="_blank" rel="noreferrer" className="text-lantern">
             {copy.authorizedApps}
@@ -245,7 +245,7 @@ function Disconnected({
         </span>
       )}
       {status.problem && (
-        <span role="alert" className="text-[13px] text-rose">
+        <span role="alert" className="text-detail text-rose">
           {copy.problem[status.problem.reason]}
         </span>
       )}
@@ -254,20 +254,20 @@ function Disconnected({
           <Button size="sm" disabled={pending} onClick={() => onChange({ kind: "connect" })}>
             {copy.connect}
           </Button>
-          <span className="text-[13px] text-label">{copy.recommended}</span>
+          <span className="text-detail text-label">{copy.recommended}</span>
         </div>
       ) : (
-        <span className="text-[13px] text-text-secondary">{copy.cannotConnect[status.cannotConnect]}</span>
+        <span className="text-detail text-text-secondary">{copy.cannotConnect[status.cannotConnect]}</span>
       )}
       {found.data && found.data.length > 0 && (
         <>
-          <span className="lbl pt-1 text-xs text-label">{copy.found}</span>
+          <span className="lbl pt-1 text-meta text-label">{copy.found}</span>
           <ul aria-label={copy.found} className="m-0 flex list-none flex-col gap-1.5 p-0">
             {found.data.map((signIn) => (
               <li key={signIn.source} className="flex flex-wrap items-center gap-3">
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-sm">{copy.foundSource[signIn.source]({ login: signIn.login })}</span>
-                  <span className="text-[13px] text-label">{copy.foundNote}</span>
+                  <span className="text-ui">{copy.foundSource[signIn.source]({ login: signIn.login })}</span>
+                  <span className="text-detail text-label">{copy.foundNote}</span>
                 </div>
                 <Button
                   variant="outline"

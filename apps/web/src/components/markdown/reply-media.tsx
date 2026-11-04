@@ -28,7 +28,7 @@ export function ReplyLink({
     title: messages.link.opensOutside({ url: href }),
   };
   const address = (
-    <span className="ms-1 inline-block text-xs text-label">{messages.link.address({ url: shownUrl(href) })}</span>
+    <span className="ms-1 inline-block text-meta text-label">{messages.link.address({ url: shownUrl(href) })}</span>
   );
   if (node !== undefined && hasImage(node)) {
     return (

@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
 import { Slot } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // An empty state: art, one line that says what will appear here, and an optional action.
 // `page` fills a screen, such as an Inbox with nothing waiting. `section` sits in a list or a tab,

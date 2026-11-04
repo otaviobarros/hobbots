@@ -64,7 +64,7 @@ export function ChangesTab({ activity, state, hobs, focus, onTab }: WorkbenchTab
           current={
             selected !== null && (
               <>
-                <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-text-strong">
+                <span className="min-w-0 flex-1 truncate font-mono text-code text-text-strong">
                   {splitPath(selected.path).name}
                 </span>
                 {/* Very narrow, the name keeps the room; the menu still tags every file. */}
@@ -123,7 +123,7 @@ function RowContent({ change, activity, dir }: { change: FileChange; activity: A
   return (
     <>
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate font-mono text-[13px] leading-[18px] text-text-strong">{name}</span>
+        <span className="truncate font-mono text-code leading-[18px] text-text-strong">{name}</span>
         {dir !== "" && <span className="truncate font-mono text-[11px] leading-[15px] text-label">{dir}</span>}
       </span>
       <span className="flex shrink-0 flex-col items-end gap-[3px]">

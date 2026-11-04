@@ -1,7 +1,7 @@
-import { cn } from "cn";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import type * as React from "react";
 import { useRestoreFocus } from "../lib/restore-focus.ts";
+import { cn } from "../lib/utils.ts";
 
 // The work sheet (docs/design/ui-ux.md): a panel at the right edge of the window, over the chat,
 // for the quest and the task inside it. Built on the shadcn Sheet, so it is a Radix dialog: focus

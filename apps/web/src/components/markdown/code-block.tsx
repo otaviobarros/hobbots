@@ -21,7 +21,7 @@ export function CodeBlock({
   return (
     <figure aria-label={label} className="m-0 flex min-w-0 flex-col border-2 border-line bg-deep">
       <figcaption className="flex items-center justify-between gap-3 border-b-2 border-line py-1 ps-3 pe-1">
-        <span className="text-xs text-label">{language ?? copy.plain}</span>
+        <span className="text-meta text-label">{language ?? copy.plain}</span>
         <Button variant="ghost" size="xs" onClick={onCopy}>
           {state === "idle" ? copy.copy : state === "copied" ? copy.copied : copy.copyFailed}
         </Button>
@@ -29,7 +29,7 @@ export function CodeBlock({
           {state === "copied" ? copy.copied : state === "failed" ? copy.copyFailed : ""}
         </span>
       </figcaption>
-      <pre className="m-0 overflow-x-auto px-3 py-2.5 font-mono text-[13px] leading-normal [&>code]:bg-transparent [&>code]:p-0 [&>code]:text-[length:inherit]">
+      <pre className="m-0 overflow-x-auto px-3 py-2.5 font-mono text-code leading-normal [&>code]:bg-transparent [&>code]:p-0 [&>code]:text-[length:inherit]">
         {children}
       </pre>
     </figure>

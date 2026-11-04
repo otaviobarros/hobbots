@@ -42,13 +42,13 @@ function Card({ label, children }: { label: string; children: ReactNode }) {
 
 function Heading({ icon, label, count }: { icon: ReactNode; label: string; count?: number }) {
   return (
-    <h2 className="lbl m-0 flex items-center gap-2 text-sm text-text-strong">
+    <h2 className="lbl m-0 flex items-center gap-2 text-ui text-text-strong">
       <span aria-hidden className="flex size-4 text-label">
         {icon}
       </span>
       {label}
       {count !== undefined && (
-        <span className="rounded-full bg-line px-[7px] py-px font-sans text-xs font-semibold tracking-normal text-text-secondary normal-case">
+        <span className="rounded-full bg-line px-[7px] py-px font-sans text-meta font-semibold tracking-normal text-text-secondary normal-case">
           {count}
         </span>
       )}
@@ -61,7 +61,7 @@ function ShowMore({ onClick, children }: { onClick: () => void; children: ReactN
     <button
       type="button"
       onClick={onClick}
-      className="cursor-pointer self-start rounded-control bg-transparent px-2 py-1.5 text-sm text-link underline decoration-line-2 underline-offset-3 hover:bg-hover"
+      className="cursor-pointer self-start rounded-control bg-transparent px-2 py-1.5 text-ui text-link underline decoration-line-2 underline-offset-3 hover:bg-hover"
     >
       {children}
     </button>
@@ -93,7 +93,7 @@ function LedQuests({ hob }: { hob: Agent }) {
         </ShowMore>
       )}
       {finished > 0 && (
-        <span className="flex items-center gap-1.5 text-[13px] leading-[18px] text-label">
+        <span className="flex items-center gap-1.5 text-detail leading-[18px] text-label">
           <span aria-hidden className="text-mint">
             ✓
           </span>
@@ -116,7 +116,7 @@ function QuestCard({ quest }: { quest: LedQuest }) {
       taskId={group.quest.taskId}
       className="flex min-w-0 flex-col gap-1.5 rounded-control bg-deep px-3 py-2.5 text-text-strong no-underline hover:bg-hover hover:text-text-strong"
     >
-      <strong title={group.quest.goal} className="line-clamp-2 text-sm leading-5">
+      <strong title={group.quest.goal} className="line-clamp-2 text-ui leading-5">
         {group.quest.goal}
       </strong>
       <span aria-hidden className="flex gap-[3px]">
@@ -125,7 +125,7 @@ function QuestCard({ quest }: { quest: LedQuest }) {
           <span key={index} className={cn("h-1 flex-1 rounded-[2px]", index < filled ? "bg-mint" : "bg-line-2")} />
         ))}
       </span>
-      <span className={cn("truncate text-[13px] leading-[18px]", needs > 0 ? "text-lantern" : "text-text-secondary")}>
+      <span className={cn("truncate text-detail leading-[18px]", needs > 0 ? "text-lantern" : "text-text-secondary")}>
         {copy.quests.progress({ done, total, needs })}
       </span>
     </QuestLink>
@@ -140,10 +140,10 @@ function Backpack({ hob }: { hob: Agent }) {
     <Card label={copy.backpack.label}>
       <Heading icon={<PackIcon />} label={copy.backpack.label} count={count} />
       {empty ? (
-        <span className="text-[13px] leading-[18px] text-label">{copy.backpack.empty}</span>
+        <span className="text-detail leading-[18px] text-label">{copy.backpack.empty}</span>
       ) : (
         <>
-          <span className="text-[13px] leading-[18px] text-label">{copy.backpack.intro}</span>
+          <span className="text-detail leading-[18px] text-label">{copy.backpack.intro}</span>
           <WaitingList
             view={view}
             hobs={hobs}
@@ -170,11 +170,11 @@ function Setup({ hob }: { hob: Agent }) {
       <div className="flex min-w-0 flex-col gap-1.5">
         <Heading icon={<FolderIcon />} label={copy.worksIn} />
         {folders.length === 0 ? (
-          <span className="text-[13px] leading-[18px] text-label">{copy.noFolders}</span>
+          <span className="text-detail leading-[18px] text-label">{copy.noFolders}</span>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {shown.map((folder) => (
-              <li key={folder} title={folder} className="truncate font-mono text-[13px] leading-5 text-text">
+              <li key={folder} title={folder} className="truncate font-mono text-code leading-5 text-text">
                 {folder}
               </li>
             ))}
@@ -188,9 +188,9 @@ function Setup({ hob }: { hob: Agent }) {
       </div>
       <div className="flex min-w-0 flex-col gap-1.5 border-t border-line pt-2.5">
         <Heading icon={<SparkIcon />} label={copy.thinksWith} />
-        <span className="text-sm">{brainLabel(hob.runtime, hob.model)}</span>
+        <span className="text-ui">{brainLabel(hob.runtime, hob.model)}</span>
       </div>
-      <Link to="/hobs/$hobId/profile" params={{ hobId: hob.id }} className="text-[13px] text-link underline">
+      <Link to="/hobs/$hobId/profile" params={{ hobId: hob.id }} className="text-detail text-link underline">
         {copy.change}
       </Link>
     </Card>

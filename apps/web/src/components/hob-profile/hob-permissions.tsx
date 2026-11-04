@@ -56,7 +56,7 @@ export const useHobPermissions = (hob: Agent) => {
 
 export function Loading({ name, failed, retry }: { name: string; failed: boolean; retry: () => void }) {
   return failed ? (
-    <p role="alert" className="m-0 flex items-center gap-3 text-sm text-rose">
+    <p role="alert" className="m-0 flex items-center gap-3 text-ui text-rose">
       {messages.permissions.loadFailed({ name })}
       <Button variant="outline" size="xs" onClick={retry}>
         {messages.permissions.tryAgain}
@@ -109,7 +109,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
     <div className="flex max-w-[760px] flex-col gap-4">
       <div className="flex items-center gap-3 rounded-card bg-notice px-4 py-3">
         <span className="flex flex-1 flex-col">
-          <span className="text-sm text-text">{copy.intro({ name: hob.name, preset })}</span>
+          <span className="text-ui text-text">{copy.intro({ name: hob.name, preset })}</span>
           <span className="text-detail text-label">{copy.careful({ count: careful, preset })}</span>
         </span>
         <Link
@@ -144,7 +144,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
         </section>
       ))}
       {otherError && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {otherError instanceof ApiError && otherError.tag === "OverrideWidens"
             ? copy.widens({ preset })
             : otherError instanceof ApiError && otherError.tag === "InvalidFolder"
@@ -164,9 +164,9 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
           pending={locked}
           onChange={(hiddenSharedFolders) => save({ hiddenSharedFolders })}
         />
-        <span className="pt-2 text-sm font-bold text-text-strong">{copy.ownFolders({ name: hob.name })}</span>
+        <span className="pt-2 text-ui font-bold text-text-strong">{copy.ownFolders({ name: hob.name })}</span>
         {data.policy.ownFolders.length === 0 && sending?.ownFolders === undefined && (
-          <span className="text-sm text-text-secondary">{copy.noOwnFolders({ name: hob.name })}</span>
+          <span className="text-ui text-text-secondary">{copy.noOwnFolders({ name: hob.name })}</span>
         )}
         <FolderList
           label={copy.ownFolders({ name: hob.name })}
@@ -193,7 +193,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
       </section>
 
       <details className="rounded-control bg-card px-3.5 py-2.5">
-        <summary className="cursor-pointer text-sm text-text-strong">{copy.details}</summary>
+        <summary className="cursor-pointer text-ui text-text-strong">{copy.details}</summary>
         <div className="flex flex-col gap-2 pt-2">
           <p className="m-0 text-detail text-text-secondary">{copy.detailsNote({ name: hob.name })}</p>
           <h3 className="lbl m-0 pt-1 text-label">{messages.enforcement.heading}</h3>
@@ -245,7 +245,7 @@ function SigningSwitch({
         <span id={labelId} className="font-bold text-text-strong">
           {messages.signing.label}
         </span>
-        <span id={noteId} className="text-[13px] text-text-secondary">
+        <span id={noteId} className="text-detail text-text-secondary">
           {checked ? messages.signing.on({ name }) : messages.signing.off({ name })}
         </span>
       </div>
@@ -282,7 +282,7 @@ function SharedFolders({
 }) {
   if (permissions.sharedFolders.length === 0) {
     return (
-      <span className="text-sm text-text-secondary">
+      <span className="text-ui text-text-secondary">
         {messages.permissions.noShared}{" "}
         <Link to="/settings/$section" params={{ section: "safety" }}>
           {messages.permissions.addInSettings}
@@ -304,11 +304,11 @@ function SharedFolders({
           >
             <span className="flex min-w-0 flex-1 flex-col gap-px">
               <span
-                className={cn("truncate font-mono text-detail text-text-strong", shownHidden && "text-text-secondary")}
+                className={cn("truncate font-mono text-code text-text-strong", shownHidden && "text-text-secondary")}
               >
                 {folderName(folder)}
               </span>
-              <span className="truncate text-[13px] text-text-secondary" title={folder}>
+              <span className="truncate text-detail text-text-secondary" title={folder}>
                 {shownHidden ? `Hidden from ${name} · ${folder}` : `Shared · ${folder}`}
               </span>
             </span>
@@ -376,7 +376,7 @@ export function Rule({
       {icon !== undefined && (
         <span
           aria-hidden
-          className="grid size-7 flex-none place-items-center rounded-control bg-moonlight/16 text-sm font-bold text-moonlight"
+          className="grid size-7 flex-none place-items-center rounded-control bg-moonlight/16 text-ui font-bold text-moonlight"
         >
           {icon}
         </span>

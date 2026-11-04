@@ -28,11 +28,11 @@ export function InboxHistory({
     <div className="flex max-w-205 flex-col gap-7 px-8 pt-6 pb-8">
       <StandingRules />
       <section aria-label={copy.history.heading} className="flex flex-col gap-2.5">
-        <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-text-strong">
+        <h2 className="m-0 flex items-center gap-2 text-ui font-semibold text-text-strong">
           {copy.history.title}
-          <span className="text-xs font-normal text-label">{copy.count({ count: requests.length })}</span>
+          <span className="text-meta font-normal text-label">{copy.count({ count: requests.length })}</span>
         </h2>
-        <p className="m-0 text-sm text-text-secondary">{copy.history.intro}</p>
+        <p className="m-0 text-ui text-text-secondary">{copy.history.intro}</p>
         {requests.length === 0 ? (
           <Empty title={copy.emptyHistory} hint={copy.emptyHistoryHint} />
         ) : (
@@ -60,22 +60,22 @@ function HistoryRow({ request, directory }: { request: ApprovalRequest; director
       </Badge>
       {hob && <HobSprite hob={hob} size={22} />}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm text-text-strong">
+        <span className="truncate text-ui text-text-strong">
           {copy.history.action({ name: directory.hobName(request.agentId), action: title.what })}
         </span>
-        <span className="truncate text-xs text-label">
+        <span className="truncate text-meta text-label">
           {copy.history.meta({
             when: formatWhen(request.decidedAt ?? request.createdAt),
             thread: directory.threadTitle(request.threadId),
           })}
         </span>
         {decider !== null && (
-          <span data-testid="decider" className="text-xs text-text-secondary">
+          <span data-testid="decider" className="text-meta text-text-secondary">
             {decider}
           </span>
         )}
       </span>
-      <code className="max-w-60 shrink truncate rounded-tag bg-deep px-1.5 py-0.5 font-mono text-detail text-moonlight">
+      <code className="max-w-60 shrink truncate rounded-tag bg-deep px-1.5 py-0.5 font-mono text-code text-moonlight">
         {title.exact}
       </code>
     </li>
@@ -87,7 +87,7 @@ function Empty({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
       <span className="font-heading text-lg font-bold text-moonlight">{title}</span>
-      <span className="text-sm text-text-secondary">{hint}</span>
+      <span className="text-ui text-text-secondary">{hint}</span>
     </div>
   );
 }

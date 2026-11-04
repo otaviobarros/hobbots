@@ -31,7 +31,7 @@ function ChoiceRow({
         <span id={labelId} className="font-bold">
           {label}
         </span>
-        <span className="text-[13px] text-text-secondary">{note}</span>
+        <span className="text-detail text-text-secondary">{note}</span>
       </div>
       <Switch aria-labelledby={labelId} checked={checked} disabled={disabled} onCheckedChange={onChange} />
     </div>
@@ -62,11 +62,11 @@ function NotificationRows({ notifications }: { notifications: NonNullable<typeof
         />
       ))}
       {(state.isError || change.isError) && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {copy.failed}
         </p>
       )}
-      <p className="m-0 text-[13px] text-label">{copy.systemSettings}</p>
+      <p className="m-0 text-detail text-label">{copy.systemSettings}</p>
     </>
   );
 }

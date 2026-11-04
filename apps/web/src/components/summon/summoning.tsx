@@ -35,7 +35,7 @@ export function SummoningCircle({ hob, size, className }: { hob: SpriteHob; size
       {SPARKS.map(([x, y, delay]) => (
         <span
           key={`${x}-${y}`}
-          className="absolute animate-hb-sparkle text-sm text-lantern"
+          className="absolute animate-hb-sparkle text-ui text-lantern"
           style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${delay}ms` }}
         >
           ✦

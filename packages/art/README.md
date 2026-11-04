@@ -7,6 +7,7 @@ The pixel art that the app (`apps/web`, `apps/desktop`) and the website (`apps/s
 | `look.ts`   | `hobLook`, the seeded hob avatar generator, and the six `HOB_COLORS`.                                                                                                                |
 | `chief.ts`  | The chief of the hobs: the Hobbots mark and app icon, with its gaze, staff and lantern frames. Free of imports, so `apps/desktop/scripts/app-icon.ts` loads it straight from source. |
 | `moon.ts`   | The crescent moon over the night sky.                                                                                                                                                |
+| `sigil.ts`  | `SIGIL_INKS`, the fixed inks of a role's sigil plate.                                                                                                                                |
 | `pixels.ts` | The `PixelRows` and `PixelPalette` types and `pixelPaths`, which turns a drawing into one SVG path per color.                                                                        |
 
 Import a module by name, for example `import { hobLook } from "@hobbots/art/look"`.

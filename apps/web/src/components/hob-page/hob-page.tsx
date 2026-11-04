@@ -77,7 +77,7 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
     <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-6 pt-5 pb-12">
       <nav
         aria-label={copy.crumbs}
-        className="-mb-2 flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-label"
+        className="-mb-2 flex min-w-0 items-center gap-1.5 text-detail leading-[18px] text-label"
       >
         <Link
           to="/hobs"
@@ -104,7 +104,7 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
           <TabsList aria-label={copy.tabs.label({ name: hob.name })}>
             <TabsTrigger value="chats">
               {copy.tabs.chats}
-              <span className="rounded-full bg-line px-[7px] py-px text-xs font-semibold text-text-secondary">
+              <span className="rounded-full bg-line px-[7px] py-px text-meta font-semibold text-text-secondary">
                 {list.length}
               </span>
             </TabsTrigger>

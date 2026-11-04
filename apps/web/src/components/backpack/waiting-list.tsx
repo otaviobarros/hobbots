@@ -55,14 +55,14 @@ export function WaitingList({
           <button
             type="button"
             onClick={onMore}
-            className="cursor-pointer self-start rounded-control bg-transparent px-2 py-1.5 text-sm text-link underline decoration-line-2 underline-offset-3 hover:bg-hover"
+            className="cursor-pointer self-start rounded-control bg-transparent px-2 py-1.5 text-ui text-link underline decoration-line-2 underline-offset-3 hover:bg-hover"
           >
             {copy.more({ count: rows.length - shown.length })}
           </button>
         ) : (
-          <span className="px-2 text-xs text-label">{copy.more({ count: rows.length - shown.length })}</span>
+          <span className="px-2 text-meta text-label">{copy.more({ count: rows.length - shown.length })}</span>
         ))}
-      {view.routine > 0 && <span className="px-2 text-xs text-label">{copy.routine({ count: view.routine })}</span>}
+      {view.routine > 0 && <span className="px-2 text-meta text-label">{copy.routine({ count: view.routine })}</span>}
     </div>
   );
 }
@@ -89,7 +89,7 @@ function WaitingRow({
       {owners && <HobSprite hob={owner} size={18} />}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-detail">{waitingWhat(item, (id) => hobs(id).name)}</span>
-        <span className="truncate text-xs text-label">
+        <span className="truncate text-meta text-label">
           {owners && `${copy.awaiting({ name: owner.name })} · `}
           <time dateTime={item.createdAt}>{copy.since({ since: formatWhen(item.createdAt, now) })}</time>
         </span>

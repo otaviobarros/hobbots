@@ -1,6 +1,6 @@
-import { cn } from "cn";
 import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // A row of filter chips: each chip is a pill with a label and, for a filter, a count. Exactly one is picked.
 // The picked chip is inverted. Built on the Radix toggle group, so the row is one tab stop, arrow
@@ -42,7 +42,7 @@ function FilterChip({
     <ToggleGroupPrimitive.Item
       data-slot="filter-chip"
       className={cn(
-        "group/filter-chip inline-flex h-8.5 shrink-0 cursor-pointer items-center gap-2 rounded-full border-(length:--edge) border-line-2 bg-transparent py-0 ps-3.5 text-sm whitespace-nowrap text-text-secondary outline-none hover:border-control hover:text-text-strong focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-ground disabled:cursor-not-allowed disabled:opacity-50 data-[state=on]:border-text-strong data-[state=on]:bg-text-strong data-[state=on]:text-ground",
+        "group/filter-chip inline-flex h-8.5 shrink-0 cursor-pointer items-center gap-2 rounded-full border-(length:--edge) border-line-2 bg-transparent py-0 ps-3.5 text-ui whitespace-nowrap text-text-secondary outline-none hover:border-control hover:text-text-strong focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-ground disabled:cursor-not-allowed disabled:opacity-50 data-[state=on]:border-text-strong data-[state=on]:bg-text-strong data-[state=on]:text-ground",
         count === undefined ? "pe-3.5" : "pe-1.5",
         className,
       )}
@@ -52,7 +52,7 @@ function FilterChip({
       {count !== undefined && (
         <span
           data-slot="filter-chip-count"
-          className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-text-strong/11 px-1.5 text-xs font-semibold text-text-secondary tabular-nums group-data-[state=on]/filter-chip:bg-ground group-data-[state=on]/filter-chip:text-text-strong"
+          className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-text-strong/11 px-1.5 text-meta font-semibold text-text-secondary tabular-nums group-data-[state=on]/filter-chip:bg-ground group-data-[state=on]/filter-chip:text-text-strong"
         >
           {count}
         </span>

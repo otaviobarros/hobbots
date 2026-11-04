@@ -38,7 +38,7 @@ export function EmptyThread({
           aria-hidden
           className="absolute inset-x-0 bottom-0 h-3 bg-[repeating-linear-gradient(90deg,color-mix(in_srgb,var(--hob)_55%,var(--color-deep))_0_8px,color-mix(in_srgb,var(--hob)_40%,var(--color-deep))_8px_16px)] shadow-[inset_0_2px_0_color-mix(in_srgb,var(--hob)_70%,var(--color-card))]"
         />
-        <span className="absolute top-[26px] start-[calc(50%+40px)] z-[2] rounded-[12px_12px_12px_2px] bg-card px-3 py-[7px] text-sm leading-5 whitespace-nowrap text-text-strong shadow-menu">
+        <span className="absolute top-[26px] start-[calc(50%+40px)] z-[2] rounded-[12px_12px_12px_2px] bg-card px-3 py-[7px] text-ui leading-5 whitespace-nowrap text-text-strong shadow-menu">
           {copy.askWhat}
         </span>
       </div>
@@ -52,7 +52,7 @@ export function EmptyThread({
             key={idea}
             type="button"
             onClick={() => onIdea(idea)}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-[18px] border border-line-2 bg-card px-3.5 py-2 text-sm leading-5 text-text transition-colors hover:border-lantern hover:text-text-strong"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-[18px] border border-line-2 bg-card px-3.5 py-2 text-ui leading-5 text-text transition-colors hover:border-lantern hover:text-text-strong"
           >
             <SparkIcon />
             {idea}

@@ -63,10 +63,10 @@ export function WorkbenchChat({
       <header className="flex items-center gap-2.5 border-b border-line px-3.5 py-3">
         <HobSprite hob={lead} size={26} />
         <span className="flex min-w-0 flex-1 flex-col">
-          <h3 ref={heading} tabIndex={-1} className="m-0 truncate text-sm font-bold text-text-strong outline-none">
+          <h3 ref={heading} tabIndex={-1} className="m-0 truncate text-ui font-bold text-text-strong outline-none">
             {copy.heading}
           </h3>
-          <span className={asker === null ? "text-xs text-label" : "text-xs font-semibold text-lantern"}>
+          <span className={asker === null ? "text-meta text-label" : "text-meta font-semibold text-lantern"}>
             {asker === null ? copy.notesGo({ name: lead.name }) : copy.waiting({ name: asker.name })}
           </span>
         </span>
@@ -76,7 +76,7 @@ export function WorkbenchChat({
       </header>
       <ol
         aria-label={copy.notes}
-        className="m-0 flex min-h-0 flex-1 list-none flex-col gap-2.5 overflow-y-auto px-3.5 py-3 text-sm leading-snug"
+        className="m-0 flex min-h-0 flex-1 list-none flex-col gap-2.5 overflow-y-auto px-3.5 py-3 text-ui leading-snug"
       >
         {notes.length === 0 ? (
           <li className="text-detail text-label">{copy.empty({ name: lead.name })}</li>
@@ -86,7 +86,7 @@ export function WorkbenchChat({
               <span className="cut max-w-[90%] bg-line px-2.5 py-1.5 whitespace-pre-wrap text-text-strong">
                 {note.text}
               </span>
-              <span className="text-xs text-label">
+              <span className="text-meta text-label">
                 {questMessages.drawer.noteTo({ name: hobs(note.recipientId).name, time: formatTime(note.createdAt) })}
               </span>
             </li>
@@ -165,8 +165,8 @@ function Footer({
       aria-label={copy.asks({ name: askerName })}
       className="flex flex-col gap-2 border-t border-lantern bg-lantern/8 px-3.5 py-3"
     >
-      <span className="lbl text-xs font-bold text-lantern">{copy.asks({ name: askerName })}</span>
-      <p className="m-0 text-sm leading-snug whitespace-pre-wrap text-text-strong">{question.text}</p>
+      <span className="lbl text-meta font-bold text-lantern">{copy.asks({ name: askerName })}</span>
+      <p className="m-0 text-ui leading-snug whitespace-pre-wrap text-text-strong">{question.text}</p>
       <AnswerForm question={question} askerName={askerName} via="task" />
       <Button variant="link" size="xs" className="self-start" onClick={() => setNoting(true)}>
         {copy.noteInstead({ name: leadName })}

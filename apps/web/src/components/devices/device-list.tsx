@@ -49,7 +49,7 @@ function DeviceRow({ device, now, context }: { device: Device; now: Date; contex
       <div className="flex items-center gap-3">
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="font-bold wrap-anywhere">{name}</span>
-          <span className="text-[13px] text-text-secondary wrap-anywhere">{deviceMeta(device, now, context)}</span>
+          <span className="text-detail text-text-secondary wrap-anywhere">{deviceMeta(device, now, context)}</span>
         </span>
         {revocable && !asking && (
           <Button
@@ -69,9 +69,9 @@ function DeviceRow({ device, now, context }: { device: Device; now: Date; contex
           disabled={revoke.isPending}
           className="cut m-0 flex animate-hb-in flex-wrap items-center gap-2 border-2 border-solid border-rose bg-deep px-3 py-2.5"
         >
-          <span className="flex-1 text-sm text-rose">{copy.confirm({ name })}</span>
+          <span className="flex-1 text-ui text-rose">{copy.confirm({ name })}</span>
           {revoke.isError && (
-            <span role="alert" className="basis-full text-sm text-rose">
+            <span role="alert" className="basis-full text-ui text-rose">
               {copy.revokeFailed}
             </span>
           )}
@@ -93,12 +93,12 @@ function RevokedByRestore({ devices }: { devices: ReadonlyArray<Device> }) {
   if (revoked.length === 0) return null;
   return (
     <div className="flex flex-col gap-1 pt-2">
-      <span className="lbl text-xs text-label">{copy.revokedByRestore}</span>
+      <span className="lbl text-meta text-label">{copy.revokedByRestore}</span>
       <ul className="m-0 flex list-none flex-col p-0">
         {revoked.map((device) => (
           <li key={device.id} className="flex flex-col gap-0.5 border-b-2 border-line py-2 opacity-70 last:border-b-0">
             <span className="font-bold wrap-anywhere">{deviceName(device)}</span>
-            <span className="text-[13px] text-text-secondary">{copy.pairAgain}</span>
+            <span className="text-detail text-text-secondary">{copy.pairAgain}</span>
           </li>
         ))}
       </ul>
@@ -127,11 +127,11 @@ export function DeviceList() {
   // A group rather than a region of its own, so the Devices panel stays the one region named for devices.
   return (
     <div className="flex flex-col gap-1 pt-2">
-      <span id={headingId} className="lbl text-xs text-label">
+      <span id={headingId} className="lbl text-meta text-label">
         {copy.heading}
       </span>
       {devices.isError && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {copy.failed}
         </p>
       )}
@@ -143,7 +143,7 @@ export function DeviceList() {
         </ul>
       )}
       {devices.data && <RevokedByRestore devices={devices.data} />}
-      <span className="pt-1.5 text-[13px] text-label">{copy.footer}</span>
+      <span className="pt-1.5 text-detail text-label">{copy.footer}</span>
     </div>
   );
 }

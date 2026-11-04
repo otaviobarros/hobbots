@@ -129,7 +129,7 @@ export function RetiredHobPage({ hobId }: { hobId: AgentId }) {
       </section>
       <ArchiveNote icon={<MoonIcon />}>{copy.retired.note({ name: hob.name })}</ArchiveNote>
       {chats.length === 0 ? (
-        <p className="m-0 text-sm text-text-secondary">{copy.retired.none({ name: hob.name })}</p>
+        <p className="m-0 text-ui text-text-secondary">{copy.retired.none({ name: hob.name })}</p>
       ) : (
         <ul aria-label={copy.retired.chats({ name: hob.name })} className="cut m-0 flex list-none flex-col bg-card p-0">
           {chats.map((thread) => (
@@ -143,7 +143,7 @@ export function RetiredHobPage({ hobId }: { hobId: AgentId }) {
                 <span title={thread.title} className="min-w-0 flex-1 truncate font-semibold">
                   {thread.title}
                 </span>
-                <span className="flex flex-none items-center gap-1.5 text-xs text-label">
+                <span className="flex flex-none items-center gap-1.5 text-meta text-label">
                   {formatWhen(thread.updatedAt)}
                   <LockIcon label={copy.retired.readOnly} />
                 </span>
@@ -244,7 +244,7 @@ function ReadHeader({ hob, title, meta }: { hob: Agent; title: string; meta: str
         >
           {title}
         </h1>
-        <span className="truncate text-xs text-label">{meta}</span>
+        <span className="truncate text-meta text-label">{meta}</span>
       </span>
     </header>
   );
@@ -258,14 +258,14 @@ function Transcript({ hob, threadId }: { hob: Agent; threadId: ThreadId }) {
   });
   if (transcript.isError) {
     return (
-      <p role="alert" className="m-0 text-sm text-rose">
+      <p role="alert" className="m-0 text-ui text-rose">
         {copy.read.loadFailed}
       </p>
     );
   }
   if (transcript.isPending) {
     return (
-      <p role="status" className="m-0 text-sm text-label">
+      <p role="status" className="m-0 text-ui text-label">
         {copy.read.loading}
       </p>
     );
@@ -286,7 +286,7 @@ function ReadOnlyBar({ text, children }: { text: string; children?: ReactNode })
       <span className="flex text-label">
         <LockIcon />
       </span>
-      <span className="min-w-0 flex-1 text-sm leading-5 text-text-secondary">{text}</span>
+      <span className="min-w-0 flex-1 text-ui leading-5 text-text-secondary">{text}</span>
       {children}
     </div>
   );

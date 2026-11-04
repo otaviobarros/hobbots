@@ -237,10 +237,10 @@ export function ChatView({
             >
               {current.name}
             </Link>
-            <span className="text-sm font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
+            <span className="text-ui font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
             <ChatTitle thread={thread.data} title={title} renaming={renaming} onDone={() => setRenaming(false)} />
           </span>
-          <span className="text-xs text-label">{stateLabel[state]}</span>
+          <span className="text-meta text-label">{stateLabel[state]}</span>
         </div>
         {threadId && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
         <BrainPicker hob={current} thread={thread.data} />
@@ -327,27 +327,27 @@ export function ChatView({
           />
         ))}
         {continueOn.isError && (
-          <p role="alert" className="text-sm text-rose">
+          <p role="alert" className="text-ui text-rose">
             {brainCopy.continueFailed({ name: current.name })}
           </p>
         )}
         {resume.isError && (
-          <p role="alert" className="text-sm text-rose">
+          <p role="alert" className="text-ui text-rose">
             {copy.continueFailed({ name: current.name, why: sendErrorText(resume.error, current) })}
           </p>
         )}
         {queueError && (
-          <p role="alert" className="text-sm text-rose">
+          <p role="alert" className="text-ui text-rose">
             {copy.queueGone}
           </p>
         )}
         {error && (
-          <p role="alert" className="text-sm text-rose">
+          <p role="alert" className="text-ui text-rose">
             {sendErrorText(error, current)}
           </p>
         )}
         {pause.isError && (
-          <p role="alert" className="text-sm text-rose">
+          <p role="alert" className="text-ui text-rose">
             {copy.wakeFailed(current)}
           </p>
         )}
@@ -357,7 +357,7 @@ export function ChatView({
       {brainProblem !== null && (
         <section
           aria-label={copy.brainUnavailable}
-          className="mx-4 mb-2 flex flex-wrap items-center gap-2.5 bg-card px-3.5 py-2.5 text-sm"
+          className="mx-4 mb-2 flex flex-wrap items-center gap-2.5 bg-card px-3.5 py-2.5 text-ui"
         >
           <span className="flex-1 text-lantern">
             {copy.brainProblem({

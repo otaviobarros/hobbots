@@ -188,8 +188,8 @@ function Where({ runtime, read }: { runtime: Attempt["runtime"]; read: ActivityR
       <span
         title={messages.sandboxHint[sandbox]}
         className={cn(
-          sandbox === "off" && "rounded-tag border border-rose px-tag-x text-xs font-bold text-rose",
-          sandbox === "unavailable" && "rounded-tag bg-line-2 px-tag-x text-xs font-bold text-text-secondary",
+          sandbox === "off" && "rounded-tag border border-rose px-tag-x text-meta font-bold text-rose",
+          sandbox === "unavailable" && "rounded-tag bg-line-2 px-tag-x text-meta font-bold text-text-secondary",
         )}
       >
         {sandbox === "on" ? messages.inSandboxLower : sandboxWords[sandbox]}

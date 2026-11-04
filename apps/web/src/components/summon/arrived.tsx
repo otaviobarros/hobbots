@@ -48,7 +48,7 @@ function Arrived({ hob }: { hob: Agent }) {
             className="absolute -top-8 left-1/2 size-65 -translate-x-1/2 rounded-full bg-[radial-gradient(circle,color-mix(in_srgb,var(--hob)_34%,transparent)_0%,transparent_65%)]"
           />
           {TWINKLES.map((spot) => (
-            <span key={spot} aria-hidden className={`absolute z-10 animate-hb-twinkle text-sm text-lantern ${spot}`}>
+            <span key={spot} aria-hidden className={`absolute z-10 animate-hb-twinkle text-ui text-lantern ${spot}`}>
               ✦
             </span>
           ))}

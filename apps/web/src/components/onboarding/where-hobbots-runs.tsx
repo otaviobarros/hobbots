@@ -81,7 +81,7 @@ export function RunHereChoice({ badge = copy.here.badge }: { badge?: string }) {
       <ChoiceIcon rows={HOUSE} palette={HOUSE_PALETTE} />
       <ChoiceText
         title={copy.here.title}
-        tag={<span className="rounded-tag bg-line-2 px-2 py-0.5 text-[13px] font-bold">{badge}</span>}
+        tag={<span className="rounded-tag bg-line-2 px-2 py-0.5 text-detail font-bold">{badge}</span>}
         body={copy.here.body}
       />
     </>
@@ -129,7 +129,7 @@ export function WhereHobbotsRuns() {
       </Link>
       <div className={choiceClass}>
         <ConnectChoice muted>
-          <span className="pt-1 text-[13px] leading-normal text-label">{copy.connect.onHub}</span>
+          <span className="pt-1 text-detail leading-normal text-label">{copy.connect.onHub}</span>
         </ConnectChoice>
       </div>
     </WhereLayout>

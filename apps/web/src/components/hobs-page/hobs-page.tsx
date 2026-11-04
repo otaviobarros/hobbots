@@ -33,7 +33,7 @@ export function HobsPage({ filter }: { filter: HobFilter }) {
         {agents.data ? (
           <Crew hobs={agents.data} filter={filter} query={query} onQuery={setQuery} />
         ) : (
-          <p role={agents.isError ? "alert" : "status"} className="m-0 text-sm text-text-secondary">
+          <p role={agents.isError ? "alert" : "status"} className="m-0 text-ui text-text-secondary">
             {agents.isError ? copy.loadFailed : copy.loading}
           </p>
         )}
@@ -137,7 +137,7 @@ function SummonCard() {
         +
       </span>
       <strong className="text-text-strong">{copy.summon}</strong>
-      <span className="max-w-[200px] text-[13px] leading-[18px] text-label">{copy.summonCard}</span>
+      <span className="max-w-[200px] text-detail leading-[18px] text-label">{copy.summonCard}</span>
     </Link>
   );
 }
@@ -149,7 +149,7 @@ function RetiredLink() {
     <Link
       to="/archive"
       search={{ tab: "hobs" }}
-      className="inline-flex items-center gap-2 self-start rounded-control px-2 py-1.5 text-sm text-text-secondary no-underline hover:bg-hover hover:text-text-strong"
+      className="inline-flex items-center gap-2 self-start rounded-control px-2 py-1.5 text-ui text-text-secondary no-underline hover:bg-hover hover:text-text-strong"
     >
       <svg
         viewBox="0 0 16 16"

@@ -1,6 +1,6 @@
-import { cn } from "cn";
 import { Switch as SwitchPrimitive } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // The Hobbots switch from the component sheet: a square track, mint-deep when on, and a knob that
 // moves in steps (none with Reduce motion). The knob of an on switch is the light switch-knob color

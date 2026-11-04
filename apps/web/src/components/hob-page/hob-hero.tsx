@@ -112,7 +112,7 @@ function DoingBubble({ doing }: { doing: Doing }) {
   return (
     <span
       className={cn(
-        "flex max-w-full items-center gap-2 self-start rounded-xl rounded-ss-[2px] px-3 py-[7px] text-sm",
+        "flex max-w-full items-center gap-2 self-start rounded-xl rounded-ss-[2px] px-3 py-[7px] text-ui",
         needs ? "bg-[color-mix(in_srgb,var(--color-lantern)_18%,var(--color-deep))] text-text-strong" : "bg-deep",
       )}
     >

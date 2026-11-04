@@ -45,15 +45,15 @@ function RetiredHobs() {
   const failed = bringing.isError ? hobs.data?.find((hob) => hob.id === bringing.variables) : undefined;
   return (
     <SettingsGroup label={copy.retiredHobs}>
-      <p role="status" className="m-0 text-sm text-text-secondary empty:hidden">
+      <p role="status" className="m-0 text-ui text-text-secondary empty:hidden">
         {back && archiveMessages.toast.back(back)}
       </p>
       {failed && (
-        <p role="alert" className="m-0 text-sm text-rose">
+        <p role="alert" className="m-0 text-ui text-rose">
           {archiveMessages.toast.backFailed({ name: failed.name })}
         </p>
       )}
-      {hobs.isError && <p className="m-0 text-sm text-rose">{retiredCopy.loadFailed}</p>}
+      {hobs.isError && <p className="m-0 text-ui text-rose">{retiredCopy.loadFailed}</p>}
       {hobs.data?.length === 0 && <p className="m-0 text-text-secondary">{retiredCopy.none}</p>}
       {hobs.data !== undefined && hobs.data.length > 0 && (
         <ul aria-label={copy.retiredHobs} className="m-0 flex list-none flex-col gap-1 p-0">
@@ -68,7 +68,7 @@ function RetiredHobs() {
         </ul>
       )}
       <p className="m-0 text-detail text-text-secondary">{copy.retiredHobsBody}</p>
-      <Link to="/archive" search={{ tab: "hobs" }} className="self-start text-sm text-link underline">
+      <Link to="/archive" search={{ tab: "hobs" }} className="self-start text-ui text-link underline">
         {copy.openArchive}
       </Link>
     </SettingsGroup>
@@ -127,10 +127,10 @@ function DataFolder() {
     <SettingsGroup label={copy.dataFolder}>
       <p className="m-0 text-text-secondary">{copy.dataFolderIntro}</p>
       {dataDir === null ? (
-        <p className="m-0 text-sm text-text-secondary">{copy.dataFolderElsewhere}</p>
+        <p className="m-0 text-ui text-text-secondary">{copy.dataFolderElsewhere}</p>
       ) : (
         <span className="flex min-w-0 flex-wrap items-center gap-2 rounded-control bg-card px-3.5 py-2.5">
-          <code className="min-w-0 flex-1 font-mono text-detail break-all text-text">{dataDir}</code>
+          <code className="min-w-0 flex-1 font-mono text-code break-all text-text">{dataDir}</code>
           <Button variant="outline" size="sm" onClick={() => copyPath(dataDir)}>
             {copy.copy[copied]}
           </Button>

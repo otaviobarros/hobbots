@@ -1,5 +1,5 @@
-import { cn } from "cn";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // A stepper (docs/design/ui-ux.md): the steps of a short flow in a row, each with a bar under it.
 // The current step's dot and bar are lantern, done steps show a check, and steps still to come are
@@ -71,7 +71,7 @@ function StepperStep({
       >
         {state === "done" ? "✓" : number}
       </span>
-      <span className="min-w-0 truncate text-sm">
+      <span className="min-w-0 truncate text-ui">
         {label}
         {state === "done" && <span className="sr-only"> {doneLabel}</span>}
       </span>

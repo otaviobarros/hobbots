@@ -72,7 +72,7 @@ function CommandEntry({ command, now, live }: { command: CommandRecord; now: Dat
         <span aria-hidden className={cn("w-3.5 shrink-0 text-center", mark.className)}>
           {mark.glyph}
         </span>
-        <code className="min-w-0 flex-1 font-mono text-xs leading-normal break-all whitespace-pre-wrap">
+        <code className="min-w-0 flex-1 font-mono text-meta leading-normal break-all whitespace-pre-wrap">
           <span aria-hidden className="text-label">
             ${" "}
           </span>
@@ -83,9 +83,9 @@ function CommandEntry({ command, now, live }: { command: CommandRecord; now: Dat
           ›
         </span>
       </CollapsibleTrigger>
-      {command.state === "uncertain" && <span className="ps-5.5 text-xs text-lantern">{copy.uncertain}</span>}
+      {command.state === "uncertain" && <span className="ps-5.5 text-meta text-lantern">{copy.uncertain}</span>}
       <CollapsibleContent className="flex flex-col gap-1.5">
-        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 text-xs text-text-secondary">
+        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 text-meta text-text-secondary">
           <dt className="text-label">{copy.folder}</dt>
           <dd className="m-0 font-mono break-all">{command.folder}</dd>
           <dt className="text-label">{copy.sandbox}</dt>
@@ -125,7 +125,7 @@ function StateText({ command, duration }: { command: CommandRecord; duration: nu
   return (
     <span
       className={cn(
-        "shrink-0 text-xs",
+        "shrink-0 text-meta",
         command.state === "failed"
           ? "text-rose"
           : command.state === "succeeded" && !partly
@@ -144,7 +144,7 @@ function StateText({ command, duration }: { command: CommandRecord; duration: nu
  */
 function Printed({ command, live }: { command: CommandRecord; live: LiveOutput | undefined }) {
   if (showsLive(command)) return <LiveOutputBlock live={live} />;
-  if (command.state === "running") return <p className="m-0 ps-5.5 text-xs text-label">{copy.atEnd}</p>;
+  if (command.state === "running") return <p className="m-0 ps-5.5 text-meta text-label">{copy.atEnd}</p>;
   if (command.output === null) return null;
   return <OutputBlock output={command.output} className="ms-5.5" whole={<WholeLog command={command} />} />;
 }
@@ -153,8 +153,8 @@ function Printed({ command, live }: { command: CommandRecord; live: LiveOutput |
 function LiveOutputBlock({ live }: { live: LiveOutput | undefined }) {
   return (
     <figure aria-label={copy.liveOutput} className="m-0 ms-5.5 flex min-w-0 flex-col border-2 border-line bg-deep">
-      <figcaption className="border-b-2 border-line px-2.5 py-1 text-xs text-label">{copy.liveOutput}</figcaption>
-      {live?.missed && <p className="m-0 border-b-2 border-line px-2.5 py-1 text-xs text-label">{copy.missed}</p>}
+      <figcaption className="border-b-2 border-line px-2.5 py-1 text-meta text-label">{copy.liveOutput}</figcaption>
+      {live?.missed && <p className="m-0 border-b-2 border-line px-2.5 py-1 text-meta text-label">{copy.missed}</p>}
       {/* Reversed, so the newest line shows and the rest scrolls up. */}
       <div className="flex max-h-60 flex-col-reverse overflow-auto">
         <pre role="log" aria-live="polite" className={cn(OUTPUT_TEXT, "max-h-none overflow-visible")}>

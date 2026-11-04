@@ -108,7 +108,7 @@ export function OnboardingReady() {
 function ReadyFooter({ problem, onBack }: { problem: string | undefined; onBack: () => void }) {
   return (
     <>
-      <span role={problem ? "alert" : undefined} className="flex-1 text-sm text-rose">
+      <span role={problem ? "alert" : undefined} className="flex-1 text-ui text-rose">
         {problem}
       </span>
       <Button variant="outline" onClick={onBack}>

@@ -99,7 +99,7 @@ export function RoleSheet({
                 aria-pressed={family === f.id}
                 onClick={() => setFamily(f.id)}
                 className={cn(
-                  "flex min-h-9 cursor-pointer items-center gap-2 rounded-control border-0 px-2.5 text-start text-sm text-text-strong hover:bg-hover",
+                  "flex min-h-9 cursor-pointer items-center gap-2 rounded-control border-0 px-2.5 text-start text-ui text-text-strong hover:bg-hover",
                   family === f.id ? "bg-card" : "bg-transparent",
                 )}
               >

@@ -104,7 +104,7 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
         {copy.label}
       </h3>
       {status.isError && (
-        <p role="alert" className="m-0 flex flex-wrap items-center gap-3 text-[13px] text-rose">
+        <p role="alert" className="m-0 flex flex-wrap items-center gap-3 text-detail text-rose">
           {copy.failed}
           <Button variant="outline" size="xs" onClick={() => void status.refetch()}>
             {copy.retry}
@@ -226,7 +226,7 @@ function Finishing({
           aria-hidden
           className="size-3.5 flex-none animate-spin rounded-dot border-2 border-lantern/30 border-t-lantern motion-reduce:animate-none"
         />
-        <strong className="text-sm text-text-strong">{copy.finishOnGitHub({ name: hob.name })}</strong>
+        <strong className="text-ui text-text-strong">{copy.finishOnGitHub({ name: hob.name })}</strong>
       </span>
       <span className="text-detail text-text-secondary">{copy.restartNote}</span>
       <span className="flex flex-wrap items-center gap-2">
@@ -290,7 +290,7 @@ function NoApp({
       {cannotCreate === null && hob.status !== "retired" && started === null && (
         <div className={OFFER}>
           <span className="flex min-w-[220px] flex-1 flex-col">
-            <strong className="text-sm text-text-strong">{copy.give({ name: hob.name })}</strong>
+            <strong className="text-ui text-text-strong">{copy.give({ name: hob.name })}</strong>
             <span className="text-detail text-text-secondary">{copy.giveNote({ name: hob.name })}</span>
             {expired && <span className="text-detail text-label">{copy.expired}</span>}
           </span>
@@ -343,7 +343,7 @@ function ConnectedApp({
               href={app.htmlUrl}
               target="_blank"
               rel="noreferrer"
-              className="font-mono text-sm font-bold text-text-strong no-underline hover:text-lantern hover:underline"
+              className="font-mono text-ui font-bold text-text-strong no-underline hover:text-lantern hover:underline"
             >
               {hobAppBot(app)}
             </a>
@@ -358,7 +358,7 @@ function ConnectedApp({
             <strong className="text-text-strong">{copy.reconnectTitle}</strong>
             <Badge variant="failed">{copy.cannotAct}</Badge>
           </span>
-          <span className="text-sm text-text">
+          <span className="text-ui text-text">
             {needsReconnect.reason === "key"
               ? copy.reconnectKey({ name: hob.name })
               : copy.reconnectInstallation({ name: hob.name })}
@@ -381,7 +381,7 @@ function ConnectedApp({
       )}
       {confirming ? (
         <div className={PROBLEM}>
-          <span className="text-sm text-text">{copy.confirmDisconnect({ name: hob.name })}</span>
+          <span className="text-ui text-text">{copy.confirmDisconnect({ name: hob.name })}</span>
           <span className="flex flex-wrap gap-2">
             <Button variant="deny" disabled={pending} onClick={onDisconnect}>
               {copy.disconnect}
@@ -429,7 +429,7 @@ function Installations({
     return (
       <div className={OFFER}>
         <span className="flex min-w-[220px] flex-1 flex-col">
-          <strong className="text-sm text-text-strong">{copy.installTitle}</strong>
+          <strong className="text-ui text-text-strong">{copy.installTitle}</strong>
           <span className="text-detail text-text-secondary">{copy.notInstalled({ name: hob.name })}</span>
         </span>
         <Button asChild>
@@ -447,7 +447,7 @@ function Installations({
     >
       {listed.map((installation) => (
         <li key={installation.id} className="flex flex-col gap-2 px-3.5 py-1 first:pt-3 last:pb-3">
-          <span className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="flex flex-wrap items-center gap-2 text-ui">
             <span className="flex-1">
               {copy.installation({ account: installation.account, all: installation.repositorySelection === "all" })}
               {installation.suspended && <span className="ms-1.5 text-rose">{copy.suspended}</span>}
@@ -477,7 +477,7 @@ const NAMED_REPOSITORIES = 8;
 /** The repositories one installation reaches, by name, without the account when it is the installation's. */
 function Repositories({ account, names }: { account: string; names: ReadonlyArray<string> }) {
   if (names.length === 0) {
-    return <span className="text-xs text-text-secondary">{copy.noRepositories}</span>;
+    return <span className="text-meta text-text-secondary">{copy.noRepositories}</span>;
   }
   const shown = names.slice(0, NAMED_REPOSITORIES);
   const chip =
@@ -512,7 +512,7 @@ function LeftOver({
   return (
     <div role="alert" className={PROBLEM}>
       <strong className="text-text-strong">{copy.leftOverTitle({ name: hob.name })}</strong>
-      <span className="text-sm text-text">
+      <span className="text-ui text-text">
         {copy.leftOver} {status.problem}
       </span>
       <span className="flex flex-wrap items-center gap-3">

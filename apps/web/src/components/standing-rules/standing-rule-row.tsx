@@ -49,8 +49,8 @@ export function StandingRuleRow({ grant, hob }: { grant: Grant; hob: Agent | und
       <div className="flex items-center gap-3">
         {hob && <HobSprite hob={hob} size={22} />}
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-sm wrap-anywhere">{rule}</span>
-          <span className="flex flex-wrap gap-x-2 text-xs text-label">
+          <span className="text-ui wrap-anywhere">{rule}</span>
+          <span className="flex flex-wrap gap-x-2 text-meta text-label">
             <span>{ruleMeta(grant)}</span>
             {grant.approvalId !== null && (
               <Link
@@ -82,12 +82,12 @@ export function StandingRuleRow({ grant, hob }: { grant: Grant; hob: Agent | und
           disabled={revoke.isPending}
           className="cut m-0 flex animate-hb-in flex-col gap-2 border-2 border-solid border-rose bg-deep px-3 py-2.5"
         >
-          <span className="text-sm">{copy.confirm.question({ name })}</span>
+          <span className="text-ui">{copy.confirm.question({ name })}</span>
           {grant.rule._tag === "Host" && (
-            <span className="text-xs text-text-secondary">{copy.confirm.hostNote({ name })}</span>
+            <span className="text-meta text-text-secondary">{copy.confirm.hostNote({ name })}</span>
           )}
           {revoke.isError && (
-            <span role="alert" className="text-sm text-rose">
+            <span role="alert" className="text-ui text-rose">
               {copy.removeFailed}
             </span>
           )}

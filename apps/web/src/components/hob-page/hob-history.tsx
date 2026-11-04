@@ -59,7 +59,7 @@ export function HobHistory({
           type="button"
           disabled={history.isFetchingNextPage}
           onClick={() => void history.fetchNextPage()}
-          className="cursor-pointer self-start rounded-control border-0 bg-transparent px-2 py-1.5 text-sm text-link underline decoration-line-2 underline-offset-3 hover:bg-hover disabled:cursor-default disabled:opacity-60"
+          className="cursor-pointer self-start rounded-control border-0 bg-transparent px-2 py-1.5 text-ui text-link underline decoration-line-2 underline-offset-3 hover:bg-hover disabled:cursor-default disabled:opacity-60"
         >
           {history.isFetchingNextPage ? copy.loadingEarlier : copy.showEarlier({ count: earlier })}
         </button>
@@ -90,7 +90,7 @@ function Filters({
           </SegmentedControlItem>
         ))}
       </SegmentedControl>
-      <span className="text-[13px] leading-[18px] text-label">
+      <span className="text-detail leading-[18px] text-label">
         {live.length > 0 || finished > 0 ? copy.noteLead : copy.note({ name: hob.name })}
       </span>
     </div>
@@ -113,13 +113,13 @@ function Days({
   const hobs = new Map(list.map((each) => [each.id, each]));
   if (history.isPending)
     return (
-      <p role="status" className="m-0 text-sm text-label">
+      <p role="status" className="m-0 text-ui text-label">
         {copy.loading}
       </p>
     );
   if (history.isError && days.length === 0)
     return (
-      <div role="alert" className="flex items-center gap-3 text-sm text-rose">
+      <div role="alert" className="flex items-center gap-3 text-ui text-rose">
         {copy.failed}
         <Button variant="outline" size="sm" onClick={() => void history.refetch()}>
           {copy.retry}
@@ -147,7 +147,7 @@ function Days({
     const label = dayLabel(day, now);
     return (
       <section key={day} aria-label={label} className="flex flex-col">
-        <h3 className="lbl m-0 flex items-center gap-2 px-1 pb-1.5 text-xs leading-4 text-label after:h-px after:flex-1 after:bg-line">
+        <h3 className="lbl m-0 flex items-center gap-2 px-1 pb-1.5 text-meta leading-4 text-label after:h-px after:flex-1 after:bg-line">
           {label}
         </h3>
         <ol className="m-0 flex list-none flex-col p-0">
@@ -169,13 +169,13 @@ function EventRow({ row }: { row: HistoryRow }) {
         aria-hidden
         className="absolute top-9 -bottom-2 start-[81.5px] w-px bg-line-2 group-last/ev:hidden max-[640px]:start-[73.5px]"
       />
-      <time dateTime={row.at} className="text-end text-xs leading-6 text-label tabular-nums">
+      <time dateTime={row.at} className="text-end text-meta leading-6 text-label tabular-nums">
         {formatTime(row.at)}
       </time>
       <span
         aria-hidden
         className={cn(
-          "relative z-1 grid size-6 place-items-center rounded-dot border border-solid bg-card text-xs font-bold",
+          "relative z-1 grid size-6 place-items-center rounded-dot border border-solid bg-card text-meta font-bold",
           MARK_CLASS[row.mark],
         )}
       >
@@ -188,7 +188,7 @@ function EventRow({ row }: { row: HistoryRow }) {
             {row.who !== null && <Who name={row.who.name} hob={row.who.hob} />}
             {row.quest !== null && <QuestChip label={row.quest} />}
             {row.waiting && (
-              <span className="rounded-tag bg-lantern px-2 py-px text-xs leading-4 font-semibold text-on-lantern">
+              <span className="rounded-tag bg-lantern px-2 py-px text-meta leading-4 font-semibold text-on-lantern">
                 {copy.waiting}
               </span>
             )}
@@ -205,7 +205,7 @@ function Who({ name, hob }: { name: string; hob: Agent | null }) {
   return (
     <span
       style={{ "--hob": tint } as CSSProperties}
-      className="inline-flex items-center gap-1.5 text-xs leading-4 font-semibold text-text-secondary before:size-2 before:rounded-[3px] before:bg-(--hob)"
+      className="inline-flex items-center gap-1.5 text-meta leading-4 font-semibold text-text-secondary before:size-2 before:rounded-[3px] before:bg-(--hob)"
     >
       {name}
     </span>
@@ -213,7 +213,7 @@ function Who({ name, hob }: { name: string; hob: Agent | null }) {
 }
 
 const linkClass =
-  "rounded-control border border-solid border-line-2 px-2.5 py-1 text-[13px] leading-[18px] whitespace-nowrap text-text no-underline hover:border-lantern hover:text-text-strong";
+  "rounded-control border border-solid border-line-2 px-2.5 py-1 text-detail leading-[18px] whitespace-nowrap text-text no-underline hover:border-lantern hover:text-text-strong";
 
 /** Review opens the Inbox on what waits; Workbench and Chat open where the work happened. */
 function EventActions({ row }: { row: HistoryRow }) {

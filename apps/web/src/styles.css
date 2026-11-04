@@ -81,7 +81,7 @@
 
   --font-sans: "Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif;
   --font-pixel: "Pixelify Sans Variable", "Pixelify Sans", system-ui, sans-serif;
-  --font-mono: ui-monospace, Menlo, monospace;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /*
    * The type scale, the same in every theme (`type` in themes.json). Each style carries its own line
@@ -105,6 +105,9 @@
   --text-meta--line-height: 16px;
   --text-code: 13px;
   --text-code--line-height: 20px;
+
+  /* The fixed shadows, the same in every theme (`fixed` in themes.json). */
+  --shadow-segment: 0 1px 2px rgb(0 0 0 / 0.18);
 
   /* Measures of the chat workspace. */
   --spacing-row-y: 7px;
@@ -652,7 +655,7 @@
     0 calc(100% - 4px),
     0 4px
   );
-  --focus-outline: 3px solid var(--color-focus-ring);
+  --focus-outline: 2px solid var(--color-focus-ring);
   --control-focus-outline: none;
   --control-focus-ring: inset 0 0 0 2px var(--color-focus-ring), inset 0 0 0 4px var(--color-ground);
   --press-edge: 4px;
