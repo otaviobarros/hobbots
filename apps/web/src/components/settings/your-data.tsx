@@ -69,7 +69,7 @@ function RetiredRow({ hob }: { hob: Agent }) {
       </span>
       <Button variant="ghost" size="xs" asChild>
         <Link
-          to="/settings/archived/$hobId"
+          to="/archive/hobs/$hobId"
           params={{ hobId: hob.id }}
           aria-label={retiredCopy.read({ name: hob.name })}
         >
