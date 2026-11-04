@@ -98,7 +98,7 @@ The component is built so that a later live terminal can attach it to a session 
 
 The chat stays your conversation with the lead. It is not a second place to follow the work.
 
-- **A ticket replaces the card.** Under the request that started the Task, a one-line ticket shows the party's sprites, the title, "2 of 3 done", a "1 needs you" tag when something waits on you, and Open room. It updates live and never grows with the work. An ended Quest's ticket says how it ended. In a narrow chat column, as beside the room at 1024 px, one line has no room for all of that, so the ticket keeps a fixed second line: two sprites and how many more, the title and the arrow on the first, and the state under them.
+- **A ticket replaces the card.** Under the request that started the Task, a one-line ticket shows the party's sprites, the title, "2 of 3 done", a "1 needs you" tag when something waits on you, and Open room. It updates live and never grows with the work. An ended Quest's ticket says how it ended. In a narrow chat column, as beside the room at 1024 px, one line has no room for all of that, so the ticket keeps a fixed second line: the title and the arrow on the first, and two sprites, how many more and the state under them.
 - **The quest button** in the chat header stays, and a pinned Quest keeps it in every thread.
 - **The lead says only what keeps you informed:** the plan when the Quest starts, a question no lead can answer, and the finish. The finish is one short summary of what was made, where it is and who did what. Between those the lead stays quiet, and it says more once you write to it ([#901](https://github.com/otaviobarros/hobbots/issues/901)).
 - **Beats, marks and hand-offs** live only in the room.

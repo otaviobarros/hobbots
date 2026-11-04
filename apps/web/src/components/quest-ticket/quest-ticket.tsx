@@ -60,10 +60,10 @@ export function QuestTicket({
       onClick={() => onOpen(ticket.top.id)}
       className="@container/ticket ms-10 block w-[calc(100%-2.5rem)] max-w-work-max animate-hb-in cursor-pointer rounded-card border-(length:--edge) border-line-2 bg-card px-3 py-2 text-start text-text-strong transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
     >
-      {/* A narrow chat column, as beside the room at 1024 px, puts the state on a second line under the
-          title and shows fewer sprites, so the title, the state and the way in all stay readable. */}
+      {/* A narrow chat column, as beside the room at 1024 px, gives the title and the arrow the first
+          line and puts fewer sprites and the state on a second, so each stays readable. */}
       <span className="flex items-center gap-x-3 gap-y-1 @max-sm/ticket:flex-wrap">
-        <span aria-hidden className="flex shrink-0 items-center">
+        <span aria-hidden className="flex shrink-0 items-center @max-sm/ticket:order-3">
           {sprites.map((member, index) => (
             <span
               key={member.hobId}
@@ -78,15 +78,15 @@ export function QuestTicket({
           <More count={ticket.party.length - WIDE_SPRITES} narrow={false} />
           <More count={ticket.party.length - NARROW_SPRITES} narrow />
         </span>
-        <span className="min-w-0 flex-1 truncate font-heading text-body font-(--heading-weight) @sm/ticket:flex-initial">
+        <span className="min-w-0 flex-1 truncate font-heading text-body font-(--heading-weight) @max-sm/ticket:order-1 @max-sm/ticket:basis-[calc(100%-2rem)] @sm/ticket:flex-initial">
           {ticket.title}
         </span>
-        <span className="flex min-w-0 items-center gap-2 @max-sm/ticket:order-last @max-sm/ticket:basis-full">
+        <span className="flex min-w-0 items-center gap-2 @max-sm/ticket:order-4 @max-sm/ticket:flex-1">
           <span className="min-w-0 truncate text-detail text-text-secondary">{progress}</span>
           {needs !== null && <StatusTag status="needs-you">{needs}</StatusTag>}
           {stuck && <StatusTag status="blocked">{messages.stuck}</StatusTag>}
         </span>
-        <span className="ms-auto shrink-0 text-ui font-bold whitespace-nowrap text-lantern">
+        <span className="ms-auto shrink-0 text-ui font-bold whitespace-nowrap text-lantern @max-sm/ticket:order-2">
           <span className="@max-sm/ticket:sr-only">{messages.openRoom} </span>
           <span aria-hidden>→</span>
         </span>

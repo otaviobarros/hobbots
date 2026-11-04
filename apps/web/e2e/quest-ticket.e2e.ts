@@ -163,8 +163,8 @@ test("[TC-UX-223] at 1024 wide, beside the room, a party of five's ticket keeps 
   const quest = ticket(page, title);
   await expect(quest).toContainText("1 needs you", { timeout: 15_000 });
 
-  // With the room open, the chat is a 300 px column: the ticket shows two sprites and how many
-  // more, its title, its progress and the needs-you tag, all inside the column.
+  // With the room open, the chat is a 300 px column: the title and the arrow take the first line,
+  // and two sprites, how many more, the progress and the needs-you tag the second, all inside it.
   await openRoom(page, title);
   const chat = page.getByRole("main", { name: "Chat" });
   await expect(quest).toHaveAccessibleName(/of \d+ done, 1 needs you$/);
@@ -179,7 +179,7 @@ test("[TC-UX-223] at 1024 wide, beside the room, a party of five's ticket keeps 
     await expect(part).toBeVisible();
     await expectWithin(part, chat);
   }
-  expect((await quest.getByText(title, { exact: true }).boundingBox())?.width ?? 0).toBeGreaterThan(80);
+  expect((await quest.getByText(title, { exact: true }).boundingBox())?.width ?? 0).toBeGreaterThan(140);
 
   // In the chat's full width it is one line again, with four sprites and Open room in words.
   await questRoom(page, title).getByRole("button", { name: "Close room" }).click();
