@@ -196,10 +196,7 @@ function FileDetail({
     >
       <header className="flex flex-wrap items-center gap-2 border-b border-line px-3.5 py-2.5">
         <div className="flex min-w-0 flex-1 flex-col">
-          <h3
-            className="m-0 truncate font-mono text-[13.5px] leading-5 font-semibold text-text-strong"
-            title={file.location}
-          >
+          <h3 className="m-0 truncate font-mono text-code font-semibold text-text-strong" title={file.location}>
             {name}
           </h3>
           <span className="text-meta text-label">{meta}</span>

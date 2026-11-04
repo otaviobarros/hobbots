@@ -175,7 +175,7 @@ function ReadyToSummon({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
-        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.heading}</h1>
+        <h1 className="m-0 font-heading text-display font-bold text-moonlight">{copy.heading}</h1>
         <p className="m-0 text-text-secondary">{copy.intro}</p>
       </div>
       <dl className="m-0 rounded-card bg-card px-4 py-1">

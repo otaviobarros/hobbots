@@ -83,7 +83,7 @@ function HobPeek({
   return (
     <>
       <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate font-heading text-base font-bold text-text-strong">{hob.name}</span>
+        <span className="min-w-0 flex-1 truncate font-heading text-title font-bold text-text-strong">{hob.name}</span>
         <Badge variant={tag.variant}>
           <span aria-hidden data-slot="badge-glyph">
             {tag.glyph}

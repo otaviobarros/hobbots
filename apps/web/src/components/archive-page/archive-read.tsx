@@ -108,7 +108,7 @@ export function RetiredHobPage({ hobId }: { hobId: AgentId }) {
             <span className="flex min-w-0 items-center gap-2.5">
               <h1
                 title={hob.name}
-                className="m-0 min-w-0 truncate font-(family-name:--font-heading) text-[32px] leading-[38px] font-(--heading-weight) [font-variant-ligatures:none]"
+                className="m-0 min-w-0 truncate font-(family-name:--font-heading) text-display font-(--heading-weight) [font-variant-ligatures:none]"
               >
                 {hob.name}
               </h1>
@@ -240,7 +240,7 @@ function ReadHeader({ hob, title, meta }: { hob: Agent; title: string; meta: str
       <span className="flex min-w-0 flex-col gap-0.5">
         <h1
           title={title}
-          className="m-0 line-clamp-2 font-(family-name:--font-heading) text-2xl leading-[30px] font-(--heading-weight) break-words [font-variant-ligatures:none]"
+          className="m-0 line-clamp-2 font-(family-name:--font-heading) text-heading font-(--heading-weight) break-words [font-variant-ligatures:none]"
         >
           {title}
         </h1>

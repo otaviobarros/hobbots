@@ -264,7 +264,7 @@ function ProviderCard(props: ProviderCardProps) {
       <div className="flex items-center gap-3">
         <ProviderMark mark={look.mark} tile={look.tile} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <h2 id={headingId} className="m-0 text-[17px] font-bold">
+          <h2 id={headingId} className="m-0 text-title font-bold">
             {PROVIDER_NAMES[runtime]}
           </h2>
           <span className="text-detail text-text-secondary">{PROVIDER_MAKERS[runtime]}</span>
@@ -404,7 +404,7 @@ export function OnboardingProviders() {
     >
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.heading}</h1>
+          <h1 className="m-0 font-heading text-display font-bold text-moonlight">{copy.heading}</h1>
           <p className="m-0 text-text-secondary">{copy.intro}</p>
         </div>
         {states.map(([runtime, state]) => (

@@ -44,7 +44,7 @@ export function SummonPreview({ draft, name, last }: { draft: FirstHobDraft; nam
           <RoleSigil sigil={sigil} size={26} />
         </span>
       </span>
-      <strong title={name} className="max-w-full truncate font-heading text-xl leading-[26px] font-(--heading-weight)">
+      <strong title={name} className="max-w-full truncate font-heading text-title font-(--heading-weight)">
         {name}
       </strong>
       {title && (

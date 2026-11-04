@@ -68,7 +68,7 @@ export function TaskView({
       >
         <HobSprite hob={owner} size={56} state={status === "running" ? "working" : "idle"} />
         <div className="flex min-w-0 flex-col pb-2">
-          <SheetTitle tabIndex={-1} className="text-xl leading-[26px]">
+          <SheetTitle tabIndex={-1} className="text-title">
             {taskTitle(task)}
           </SheetTitle>
           <SheetDescription>

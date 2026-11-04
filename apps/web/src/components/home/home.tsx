@@ -60,7 +60,7 @@ export function Home() {
     <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <section
         aria-label={messages.home.landmark}
-        className="@container relative h-[262px] flex-none overflow-hidden bg-scene-sky"
+        className="@container relative h-[232px] flex-none overflow-hidden bg-scene-sky"
       >
         <Sky />
         <div className={cn("absolute inset-x-0 top-[34px] bottom-1.5 flex gap-6 ps-9", many ? "pe-[196px]" : "pe-11")}>
@@ -144,10 +144,10 @@ function SceneText({
 }) {
   return (
     <div className="flex max-w-[470px] flex-none flex-col gap-2.5">
-      <h1 className="m-0 font-heading text-[34px] font-bold text-scene-title text-shadow-[0_2px_0_var(--color-scene-sky)]">
+      <h1 className="m-0 font-heading text-display font-bold text-scene-title text-shadow-[0_2px_0_var(--color-scene-sky)]">
         {greeting()}
       </h1>
-      <p className="m-0 text-[17px] leading-normal text-scene-text">{summary}</p>
+      <p className="m-0 text-reading text-scene-text">{summary}</p>
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <FilterChips
           aria-label={messages.home.chips.label}

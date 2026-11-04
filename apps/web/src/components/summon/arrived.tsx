@@ -66,7 +66,7 @@ function Arrived({ hob }: { hob: Agent }) {
             className="absolute inset-x-0 bottom-0 h-3.5 bg-[repeating-linear-gradient(90deg,color-mix(in_srgb,var(--hob)_55%,var(--color-deep))_0_8px,color-mix(in_srgb,var(--hob)_40%,var(--color-deep))_8px_16px)] shadow-[inset_0_2px_0_color-mix(in_srgb,var(--hob)_70%,var(--color-card))]"
           />
         </span>
-        <h1 className="m-0 max-w-full font-heading text-[28px] leading-[34px] font-(--heading-weight) break-words">
+        <h1 className="m-0 max-w-full font-heading text-display font-(--heading-weight) break-words">
           {copy.title({ name })}
         </h1>
         <p className="m-0 max-w-full text-text-secondary break-words">{copy.body({ name, role: hob.roleTitle })}</p>

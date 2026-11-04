@@ -111,7 +111,7 @@ function AskingPrompt({
       <div className="flex items-center gap-3 rounded-card bg-card p-3">
         <span aria-hidden className="h-9 w-6 flex-none rounded-[3px] border-3 border-text-strong bg-deep" />
         <span className="flex min-w-0 flex-col">
-          <strong className="truncate text-[17px]" title={device.request.name}>
+          <strong className="truncate text-title" title={device.request.name}>
             {device.request.name}
           </strong>
           <span className="text-detail text-text-secondary">{asked}</span>
@@ -135,7 +135,7 @@ function AnsweredPrompt({ answered, onDone }: { answered: Answered; onDone: () =
   const name = answered.device.request.name;
   return (
     <div role="status" className="flex flex-col items-center gap-2.5 py-2 text-center">
-      <DialogTitle className="m-0 font-heading text-2xl font-bold break-words text-moonlight">
+      <DialogTitle className="m-0 font-heading text-heading font-bold break-words text-moonlight">
         {allowed ? copy.allowedTitle({ name }) : copy.deniedTitle({ name })}
       </DialogTitle>
       <p className="m-0 text-text-secondary">{allowed ? copy.allowedIntro : copy.deniedIntro}</p>

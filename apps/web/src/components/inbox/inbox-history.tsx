@@ -86,7 +86,7 @@ function HistoryRow({ request, directory }: { request: ApprovalRequest; director
 function Empty({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
-      <span className="font-heading text-lg font-bold text-moonlight">{title}</span>
+      <span className="font-heading text-title font-bold text-moonlight">{title}</span>
       <span className="text-ui text-text-secondary">{hint}</span>
     </div>
   );

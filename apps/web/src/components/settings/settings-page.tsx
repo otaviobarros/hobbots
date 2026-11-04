@@ -47,7 +47,7 @@ function SectionHeader({ section, titleId }: { section: SettingsSection; titleId
         >
           <SectionIcon section={section} size={18} />
         </span>
-        <h2 id={titleId} className="m-0 font-heading text-[26px] leading-8 font-(--heading-weight) text-text-strong">
+        <h2 id={titleId} className="m-0 font-heading text-heading font-(--heading-weight) text-text-strong">
           {sectionName(section)}
         </h2>
       </span>

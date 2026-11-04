@@ -111,7 +111,7 @@ function AskForm({ hub, failed = false }: { hub: string; failed?: boolean }) {
   };
   return (
     <form className="flex flex-col gap-3.5" onSubmit={submit}>
-      <h1 className="m-0 font-heading text-2xl font-bold text-moonlight">{copy.ask.title({ hub })}</h1>
+      <h1 className="m-0 font-heading text-heading font-bold text-moonlight">{copy.ask.title({ hub })}</h1>
       <p className="m-0 text-text-secondary">{copy.ask.intro}</p>
       <label htmlFor={nameId} className="lbl text-label">
         {copy.ask.nameLabel}
@@ -146,7 +146,7 @@ function Waiting({ code, expiresAt, hub }: { code: string; expiresAt: string; hu
         <span aria-hidden className="inline-block size-2 animate-hb-blink rounded-dot bg-lantern" />
         {copy.waiting.codeLabel}
       </span>
-      <h1 className="m-0 font-heading text-2xl font-bold text-moonlight">{copy.waiting.title({ hub })}</h1>
+      <h1 className="m-0 font-heading text-heading font-bold text-moonlight">{copy.waiting.title({ hub })}</h1>
       <span className="cut self-start bg-text-strong px-5 py-3 font-heading text-4xl font-bold tracking-[0.12em] text-ground">
         {groupedCode(code)}
       </span>
@@ -160,7 +160,7 @@ function Ended({ title, intro }: { title: string; intro: string }) {
   const startOver = useStartOver();
   return (
     <div className="flex flex-col gap-3.5">
-      <h1 className="m-0 font-heading text-2xl font-bold text-moonlight">{title}</h1>
+      <h1 className="m-0 font-heading text-heading font-bold text-moonlight">{title}</h1>
       <p role="status" className="m-0 text-text-secondary">
         {intro}
       </p>

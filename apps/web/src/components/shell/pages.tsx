@@ -92,12 +92,7 @@ export function PageHeader({
         <PageIcon icon={icon} />
       )}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <h1
-          className={cn(
-            "m-0 font-heading font-bold",
-            bar ? "text-[22px] leading-7 text-text-strong" : "text-[28px] text-moonlight",
-          )}
-        >
+        <h1 className={cn("m-0 font-heading text-heading font-bold", bar ? "text-text-strong" : "text-moonlight")}>
           {title}
         </h1>
         <p className={cn("m-0", bar && "text-detail", introClassName ?? "text-text-secondary")}>{intro}</p>

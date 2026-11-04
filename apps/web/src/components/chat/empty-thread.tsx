@@ -42,7 +42,7 @@ export function EmptyThread({
           {copy.askWhat}
         </span>
       </div>
-      <h2 className="m-0 mt-1.5 font-heading text-[30px] leading-9 font-(--heading-weight)">
+      <h2 className="m-0 mt-1.5 font-heading text-display font-(--heading-weight)">
         {newHob ? copy.hello(hob) : copy.freshPage}
       </h2>
       <p className="m-0 max-w-[440px] text-text-secondary">{newHob ? copy.helloBody : copy.freshBody(hob)}</p>

@@ -233,7 +233,7 @@ export function ChatView({
               to="/hobs/$hobId"
               params={{ hobId }}
               title={copy.openHob({ name: current.name })}
-              className="font-heading text-xl font-semibold whitespace-nowrap text-text-strong no-underline hover:underline"
+              className="font-heading text-title font-semibold whitespace-nowrap text-text-strong no-underline hover:underline"
             >
               {current.name}
             </Link>

@@ -119,7 +119,7 @@ export function OnboardingFirstHob() {
       <fieldset disabled={locked} className="m-0 flex min-w-0 flex-col gap-3.5 border-0 p-0 disabled:opacity-85">
         <legend className="sr-only">{locked ? copy.legendSent({ name: draft.name.trim() }) : copy.legend}</legend>
         <div className="flex flex-col gap-1">
-          <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.heading}</h1>
+          <h1 className="m-0 font-heading text-display font-bold text-moonlight">{copy.heading}</h1>
           <p className="m-0 text-text-secondary">{copy.intro}</p>
         </div>
 
