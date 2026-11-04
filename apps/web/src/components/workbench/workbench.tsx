@@ -18,6 +18,7 @@ import { FilesTab } from "./tabs/files-tab.tsx";
 import { SummaryTab } from "./tabs/summary-tab.tsx";
 import type { WorkbenchTabProps } from "./tabs/tab-props.ts";
 import { TerminalTab } from "./tabs/terminal-tab.tsx";
+import { useTerminalActivity } from "./use-terminal-activity.ts";
 import { useWorkbenchMoves, type WorkbenchView } from "./use-workbench.ts";
 import { WorkbenchChat } from "./workbench-chat.tsx";
 import { BackButton, WorkbenchHeader } from "./workbench-header.tsx";
@@ -194,7 +195,14 @@ function Bench({
     enabled: attempt !== null,
   });
   const activity: ActivityRead = attempt === null ? "none" : (read.data ?? (read.isError ? "failed" : "loading"));
-  const states = tabStates(attempt, activity);
+  // The Terminal replays every hob's commands in the tree, so the others' count toward its label,
+  // and so does each other Task that could not be read, so the Terminal stays open to say so.
+  const terminal = useTerminalActivity(tree, task, attempt);
+  const elsewhere =
+    terminal.activities
+      .filter((each) => each.attempt.id !== attempt?.id)
+      .reduce((sum, each) => sum + each.commands.length, 0) + terminal.unread;
+  const states = tabStates(attempt, activity, elsewhere);
   // Opening a Task's Workbench moves focus to its title, so a keyboard user lands in it.
   useEffect(() => {
     heading.current?.focus();
@@ -249,7 +257,10 @@ function Bench({
                     onRetry={() => void read.refetch()}
                   />
                   {tab !== "browser" && states[tab].kind !== "not-used" && (
-                    <Panel tab={tab} props={{ ...shared, state: states[tab], focus: on ? view.file : undefined }} />
+                    <Panel
+                      tab={tab}
+                      props={{ ...shared, state: states[tab], focus: on ? view.file : undefined, shown: on }}
+                    />
                   )}
                 </TabsContent>
               );

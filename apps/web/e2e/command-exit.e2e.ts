@@ -1,4 +1,5 @@
 import { expect, test } from "./hub.ts";
+import { colored, hobTerminal, rows } from "./terminal.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #591: a command that exits non-zero is Failed with its exit code. The fake runtime reports
@@ -38,16 +39,14 @@ test("[TC-RT-105] a command that exits non-zero shows as Failed with its exit co
   const panel = bench.getByRole("tabpanel", { name: /^Terminal/ });
   await expect(panel).toContainText("2 commands · 1 failed");
 
-  const commands = panel.getByRole("list", { name: "Commands" }).getByRole("listitem");
-  await expect(commands).toHaveCount(2);
-  const red = commands.nth(0);
-  await expect(red).toContainText("Failed · exit code 1");
-  await expect(red).toContainText("ImportError: cannot import name 'notes'");
-  // The exit code is shown once, as the command's state, not again as a line of its output.
-  await expect(red.getByRole("figure", { name: "Output" })).not.toContainText("Exit code 1");
-  const green = commands.nth(1);
-  await expect(green).toContainText("Succeeded");
-  await expect(green).toContainText("1 passed");
+  const screen = rows(hobTerminal(panel, "Aldric"));
+  // The failed run ends with its exit code in red, once: not again as a line of its output.
+  await expect(screen).toContainText("ImportError: cannot import name 'notes'");
+  await expect(colored(hobTerminal(panel, "Aldric"), "red", "✗ exit code 1")).toBeVisible();
+  await expect(screen).not.toContainText("Exit code 1");
+  // The passing run ends with a check mark and no exit code.
+  await expect(screen).toContainText(/1 passed\s*✓ ran in/);
+  expect((await screen.textContent())?.match(/exit code/g)).toHaveLength(1);
 });
 
 // Issue #702: `git rev-parse …; git init …` exits with its last command's code, so a line of
@@ -81,13 +80,10 @@ test("[TC-RT-500] a line of commands run one after another that exits 0 shows as
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Set up the repository" });
   await bench.getByRole("tab", { name: /^Terminal/ }).click();
-  const commands = bench
-    .getByRole("tabpanel", { name: /^Terminal/ })
-    .getByRole("list", { name: "Commands" })
-    .getByRole("listitem");
-  await expect(commands).toHaveCount(2);
-  await expect(commands.nth(0)).toContainText("Finished · an earlier part may have failed");
-  await expect(commands.nth(0)).not.toContainText("Succeeded");
-  // A chain that runs on only after a success still reads Succeeded.
-  await expect(commands.nth(1)).toContainText("Succeeded");
+  const terminal = hobTerminal(bench.getByRole("tabpanel", { name: /^Terminal/ }), "Aldric");
+  await expect(rows(terminal)).toContainText("$ ls notes; echo checked");
+  await expect(colored(terminal, "yellow", "Finished · an earlier part may have failed")).toBeVisible();
+  // A chain that runs on only after a success still ends with a check mark.
+  await expect(rows(terminal)).toContainText(/listed\s*✓ ran in/);
+  expect((await rows(terminal).textContent())?.match(/Finished · an earlier part/g)).toHaveLength(1);
 });

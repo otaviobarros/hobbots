@@ -12,6 +12,10 @@ interface ThemeFile {
   readonly duration: Readonly<Record<string, string>>;
   readonly font: Readonly<Record<string, string>>;
   readonly fixed: Readonly<Record<string, { readonly value: string }>>;
+  readonly terminal: {
+    readonly color: Readonly<Record<string, { readonly value: string }>>;
+    readonly pairs: readonly { readonly text: string; readonly on: string; readonly floor: number }[];
+  };
   readonly skin: Readonly<Record<string, Readonly<Record<string, string | number>>>>;
   readonly size: Readonly<Record<string, string>>;
 }
@@ -116,5 +120,23 @@ describe("type scale and spacing", () => {
   it("lets no theme or look change type, spacing or sizes", () => {
     const themed = rulesMatching(/data-theme/).join("\n");
     expect(themed).not.toMatch(/--text-|--spacing|font-size|line-height|letter-spacing/);
+  });
+});
+
+describe("the terminal palette", () => {
+  const theme = rulesMatching(/^@theme static$/).join("\n");
+
+  it.each(Object.entries(themes.terminal.color))("%s is set in @theme, the same in every theme", (name, { value }) => {
+    expect(theme).toContain(`--color-term-${name}: ${value};`);
+    expect(rulesMatching(/data-theme/).join("\n")).not.toContain(`--color-term-${name}:`);
+  });
+
+  it("meets every floor on its own dark ground", () => {
+    const color = (name: string) => themes.terminal.color[name]?.value ?? "";
+    const below = themes.terminal.pairs
+      .map((pair) => ({ ...pair, ratio: contrast(color(pair.text), color(pair.on)) }))
+      .filter(({ ratio, floor }) => ratio < floor)
+      .map(({ text, on, ratio, floor }) => `${text} on ${on}: ${ratio.toFixed(2)}, floor ${floor}`);
+    expect(below).toEqual([]);
   });
 });

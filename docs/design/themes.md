@@ -55,6 +55,10 @@ The 12:1 floor for `text` is measured on `ground` only. Reading text means hob r
 
 `on-lantern` on a `lantern` fill and `on-rose` on a `rose` fill are 6.2:1 or more in every theme. Status tags add their own pairs (`mint` on `line`, `text-secondary` on `line` and `line-2`, `text-strong` on `line-2`, `label` on `line`), each at 4.5:1.
 
+## The terminal
+
+The Workbench's Terminal keeps its own palette, the same in every theme, so it stays dark in Lamplight Paper and Workshop Daylight too, as a terminal does. It lives in `terminal` in themes.json and as the `--color-term-*` tokens in `apps/web/src/styles.css`, in an `@theme static` block because the terminal reads its 16 ANSI colors from script. Every text color in it meets 4.5:1 on its `ground` and its tab strip, and the terminal raises any color a command printed below 4.5:1 to meet it. Its controls draw focus in `term-focus`, which shows on that dark ground. `apps/web/type-and-contrast.test.ts` checks each pair.
+
 ## Type and spacing
 
 The type scale, the spacing grid and every size are the same in all four themes. `apps/web/src/styles.css` sets each style of `type` as a Tailwind text size with its own line height: `text-display`, `text-heading`, `text-title`, `text-reading`, `text-body`, `text-ui`, `text-detail`, `text-meta` and `text-code`. The `label` style is the `lbl` utility, because `text-label` is the label color.

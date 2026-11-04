@@ -1,4 +1,4 @@
-import type { CommandRecord, NotKept } from "@hobbots/domain";
+import type { AgentId, Attempt, AttemptActivity, CommandRecord, NotKept, Task, TaskTree } from "@hobbots/domain";
 
 /**
  * What the Terminal shows of an Attempt's commands (ADR 023): each in the order it started, with
@@ -42,9 +42,61 @@ export const wholeOutput = (command: CommandRecord): WholeOutput =>
     ? { kind: "log", totalBytes: command.log.totalBytes, omittedBytes: command.log.omittedBytes }
     : { kind: "not-kept", reason: command.logNotKept };
 
-/** What the Terminal shows while a command runs: its output as it comes, or that it shows at the end. */
-export const showsLive = (command: CommandRecord): boolean => command.state === "running" && command.liveOutput;
-
 /** Whether any command still runs, so the Terminal's clock ticks. */
 export const anyRunning = (commands: ReadonlyArray<CommandRecord>): boolean =>
   commands.some((each) => each.state === "running");
+
+/**
+ * The Attempt the Terminal replays for each Task in the tree that has one (#908): the shown one for
+ * the Task the Workbench is on, the latest for every other Task, so each hob's commands in the
+ * Quest show beside the Task's own.
+ */
+export const terminalAttempts = (tree: TaskTree, task: Task, shown: Attempt | null): ReadonlyArray<Attempt> =>
+  tree.tasks.flatMap((each) => {
+    if (each.id === task.id) return shown === null ? [] : [shown];
+    const latest = tree.attempts
+      .filter((attempt) => attempt.taskId === each.id)
+      .reduce<Attempt | null>(
+        (last, attempt) => (last === null || attempt.number > last.number ? attempt : last),
+        null,
+      );
+    return latest === null ? [] : [latest];
+  });
+
+/** One hob's terminal: every command it ran in the replayed Attempts, in the order they started. */
+export interface HobCommands {
+  readonly ownerId: AgentId;
+  readonly commands: ReadonlyArray<CommandRecord>;
+}
+
+/**
+ * A terminal per hob that ran a command, the Task's own hob first and the rest in the order the
+ * tree lists their Tasks, with each hob's commands from all its Tasks in one scrollback.
+ */
+export const hobTerminals = (
+  tree: TaskTree,
+  task: Task,
+  activities: ReadonlyArray<AttemptActivity>,
+): ReadonlyArray<HobCommands> => {
+  const ownerOf = new Map(tree.tasks.map((each) => [each.id, each.ownerId]));
+  const owners = [task.ownerId, ...tree.tasks.map((each) => each.ownerId)].filter(
+    (owner, index, all) => all.indexOf(owner) === index,
+  );
+  const commands = activities.flatMap((each) => each.commands);
+  return owners
+    .map((ownerId) => ({
+      ownerId,
+      commands: commandsInOrder(commands.filter((command) => ownerOf.get(command.taskId) === ownerId)),
+    }))
+    .filter((each) => each.commands.length > 0);
+};
+
+/** How a hob's terminal stands, for the mark on its tab: a command running, the last one failed, or idle. */
+export type TerminalMark = "running" | "failed" | "idle";
+
+export const terminalMark = (commands: ReadonlyArray<CommandRecord>): TerminalMark =>
+  anyRunning(commands) ? "running" : commands.at(-1)?.state === "failed" ? "failed" : "idle";
+
+/** The commands whose output was folded and whose whole log can be opened. */
+export const foldedWithLog = (commands: ReadonlyArray<CommandRecord>): ReadonlyArray<CommandRecord> =>
+  commands.filter((each) => (each.output?.omittedBytes ?? 0) > 0 && wholeOutput(each).kind === "log");
