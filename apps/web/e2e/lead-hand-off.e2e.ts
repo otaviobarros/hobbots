@@ -107,7 +107,8 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
 
   const tasks = await openQuest(page, "Build the app");
   const frontend = tasks.getByRole("button", { name: /Rook · Write the frontend/ });
-  await expect(frontend).toContainText("Done", { timeout: 30_000 });
+  // Rook finishes only after several paced fake replies, each echoing the prompt and briefing it was given.
+  await expect(frontend).toContainText("Done", { timeout: 45_000 });
   await frontend.click();
   const drawer = page.getByRole("dialog", { name: "Write the frontend, task details" });
   await expect(drawer).toBeVisible();

@@ -20,7 +20,7 @@ import {
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { Authority, PathSeparator } from "./authority.ts";
-import { cut } from "./briefs.ts";
+import { cut, planNote } from "./briefs.ts";
 import {
   approvalsWaiting,
   type CallScope,
@@ -224,7 +224,7 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, au
         steps.push({ task_id: ids[index] as string, milestones: milestones.map((m) => m.id as string) });
       }
       return {
-        done: { message: `Planned ${steps.length} steps under Task ${task.id}.`, details: { steps } },
+        done: { message: `Planned ${steps.length} steps under Task ${task.id}.${planNote(task)}`, details: { steps } },
         entries: journal.entries,
       };
     }),
@@ -259,7 +259,7 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, au
       );
       return {
         done: {
-          message: `Task ${task.id} is now a Quest. You lead it.`,
+          message: `Task ${task.id} is now a Quest. You lead it.${planNote(task)}`,
           details: { quest_id: started.id, depth: started.depth, max_depth: quest.maxDepth, deadline: quest.deadline },
         },
         entries: journal.entries,

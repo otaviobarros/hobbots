@@ -246,6 +246,48 @@ describe("hob tools for Tasks and Quests", () => {
     expect(milestones.map((each) => each.title)).toEqual(["Outline"]);
   });
 
+  // covers OR-001, OR-002, UX-002
+  it("[TC-OR-541] a checkpoint keeps its short summary and its detail apart, and the first delegation in the chat asks for the plan once", async () => {
+    await run(seed);
+    const first = await done(ALDRIC, TOP, "delegate_task", { key: "copy", hob: "Quill", brief: "Draft the copy" });
+    expect(first.message).toContain("Tell the user the plan in a line or two");
+    const second = await done(ALDRIC, TOP, "delegate_task", { key: "build", hob: "Ada", brief: "Build it" });
+    expect(second.message).not.toContain("Tell the user the plan");
+    const quill = TaskIdSchema.make(String(first.details.task_id));
+    await done(QUILL, quill, "report_checkpoint", {
+      key: "short",
+      kind: "finding",
+      summary: "Two headlines too long",
+      detail: "Both run past 60 characters, so the landing page wraps them.",
+    });
+    await done(QUILL, quill, "report_checkpoint", {
+      key: "plain",
+      kind: "progress",
+      summary: "Three headlines drafted",
+    });
+    const reported = (await tree()).checkpoints.filter((each) => each.taskId === quill && each.source !== "automatic");
+    expect(reported.map(({ summary, detail }) => ({ summary, detail }))).toEqual([
+      { summary: "Two headlines too long", detail: "Both run past 60 characters, so the landing page wraps them." },
+      { summary: "Three headlines drafted", detail: null },
+    ]);
+    // The lead reads the detail with the summary, so nothing put beyond the beat is lost to it.
+    const read = await done(ALDRIC, TOP, "read_tasks", { key: "read" });
+    const tasksRead = read.details.tasks as ReadonlyArray<{
+      readonly task_id: string;
+      readonly recent_checkpoints: ReadonlyArray<{ readonly summary: string; readonly detail?: string }>;
+    }>;
+    expect(tasksRead.find((each) => each.task_id === quill)?.recent_checkpoints).toEqual([
+      expect.objectContaining({ summary: "Three headlines drafted" }),
+      expect.objectContaining({
+        summary: "Two headlines too long",
+        detail: "Both run past 60 characters, so the landing page wraps them.",
+      }),
+    ]);
+    // A member's own Quest has no chat of its own, so its first delegation asks for no plan.
+    const nested = await done(QUILL, quill, "delegate_task", { key: "pip", hob: "Pip", brief: "Find keywords" });
+    expect(nested.message).not.toContain("Tell the user the plan");
+  });
+
   // covers OR-002, PE-004
   it("[TC-OR-012] a member's authority is the lead's narrowed by the brief, never wider", async () => {
     await run(seed);

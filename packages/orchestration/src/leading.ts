@@ -2,6 +2,7 @@ import type { TaskRepository } from "@hobbots/agents";
 import {
   type ApprovalRequest,
   descendantsOf,
+  detailOf,
   isTerminalTask,
   liveAttemptOn,
   NoteId,
@@ -88,7 +89,11 @@ const describeTask = (task: Task, tree: TaskTree, caller: string) => {
       .map((question) => describeQuestion(question, caller)),
     // Its turn is paused on these until the user decides them (#698).
     approvals: pendingApprovalsOn(tree, task.id).map(describeApproval),
-    recent_checkpoints: reported.map((each) => ({ kind: each.kind, summary: each.summary, at: each.createdAt })),
+    // The detail travels with its summary, bounded, so a lead reads what the hob put beyond the beat (#901).
+    recent_checkpoints: reported.map((each) => {
+      const detail = detailOf(each);
+      return { kind: each.kind, summary: each.summary, ...(detail === null ? {} : { detail }), at: each.createdAt };
+    }),
     ...(task.result === null ? {} : { result: task.result.summary }),
   };
 };

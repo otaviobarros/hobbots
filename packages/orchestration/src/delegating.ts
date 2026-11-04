@@ -22,7 +22,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { type Authority, delegatedAuthority, narrowBy, type PathSeparator } from "./authority.ts";
-import { firstLine } from "./briefs.ts";
+import { firstLine, planNote } from "./briefs.ts";
 import {
   type CallScope,
   depthWithin,
@@ -264,7 +264,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         );
         return {
           done: {
-            message: `Delegated Task ${created.id} to ${member.name}. You lead Quest ${quest.id}.${tools}${alreadyOpen(scope.tree, task, member)}`,
+            message: `Delegated Task ${created.id} to ${member.name}. You lead Quest ${quest.id}.${tools}${alreadyOpen(scope.tree, task, member)}${existing === undefined ? planNote(task) : ""}`,
             details: {
               task_id: created.id,
               quest_id: quest.id,

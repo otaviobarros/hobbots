@@ -187,7 +187,13 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
           })
           .pipe(Effect.flatMap(announce));
       });
-    const report = (taskId: TaskId, kind: "milestone" | "progress", summary: string, milestone: string | null) =>
+    const report = (
+      taskId: TaskId,
+      kind: "milestone" | "progress",
+      summary: string,
+      milestone: string | null,
+      detail: string | null = null,
+    ) =>
       Effect.gen(function* () {
         yield* tasks
           .recordCheckpoint({
@@ -197,6 +203,7 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
             kind,
             milestoneId: milestone === null ? null : MilestoneId.make(id(milestone)),
             summary,
+            detail,
             createdAt: yield* iso,
           })
           .pipe(Effect.flatMap(announce));
@@ -252,6 +259,26 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
           times: 50,
         }),
       );
+
+    // What the lead writes in your chat: only the plan, a question no lead can answer and the
+    // finish (#901). The plan is its reply to your request; the rest the play writes as it goes.
+    const say = (content: string) =>
+      Effect.gen(function* () {
+        yield* repo
+          .upsertMessage(
+            new Message({
+              id: MessageId.make(crypto.randomUUID()),
+              threadId: cast.thread.id,
+              role: "assistant",
+              content,
+              status: "complete",
+              error: null,
+              configVersion: null,
+              createdAt: yield* iso,
+            }),
+          )
+          .pipe(Effect.flatMap(announce));
+      });
 
     // Aldric takes the request and brings in Quill and Ada.
     const campaign = yield* tasks
@@ -480,7 +507,16 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
         }),
       );
     }
-    yield* whileOpen(build.id, report(build.id, "progress", "Keyword research done", null));
+    yield* whileOpen(
+      build.id,
+      report(
+        build.id,
+        "progress",
+        "Keyword research done",
+        null,
+        "Doorbuster and early access lead what shoppers search for.",
+      ),
+    );
     yield* pause;
 
     // Ada's question needs a call only you can make: Aldric passes it up to you.
@@ -494,6 +530,7 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
           "Carriers stop international deliveries on Dec 10. Should international orders get an earlier cutoff, Dec 12, while everything else stays Dec 18?",
         );
         yield* tasks.escalateQuestion(asked.id, cast.lead).pipe(Effect.flatMap(announce));
+        yield* say("Ada has one question for you about the international cutoff. Answer it on its card.");
         return asked;
       }),
     );
@@ -509,22 +546,12 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
     yield* pause;
     yield* complete(campaign.id, "a-campaign", "Black Friday campaign ready", null);
     const scheduled = (yield* stateOf(build.id)) === "completed";
-    yield* repo
-      .upsertMessage(
-        new Message({
-          id: MessageId.make(crypto.randomUUID()),
-          threadId: cast.thread.id,
-          role: "assistant",
-          content: scheduled
-            ? "The Black Friday campaign is ready. Quill wrote the landing copy, leading with 20% off everything, and Ada scheduled the launch email for Friday. International orders follow the cutoff you chose."
-            : "The Black Friday campaign is wrapped up without Ada's part, which you cancelled: the launch email is not scheduled.",
-          status: "complete",
-          error: null,
-          configVersion: null,
-          createdAt: yield* iso,
-        }),
-      )
-      .pipe(Effect.flatMap(announce));
+    // One short summary: what was made, where it is, and who did what.
+    yield* say(
+      scheduled
+        ? "The Black Friday campaign is ready. The landing copy leads with 20% off everything, and the launch email is scheduled for Friday 6:00. Quill wrote the copy and Ada scheduled the email, with the cutoff you chose."
+        : "The Black Friday campaign is wrapped up without Ada's part, which you cancelled: the landing copy is ready and the launch email is not scheduled. Quill wrote the copy.",
+    );
   });
 
 /** Where a played Task stands now, or null once the hub no longer has it. */

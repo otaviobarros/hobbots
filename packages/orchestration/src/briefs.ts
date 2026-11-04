@@ -2,8 +2,12 @@ import { clip } from "@hobbots/agents";
 import {
   ancestorsOf,
   type BackpackItem,
+  CHECKPOINT_WORDS,
+  checkpointText,
+  FINISH_RULE,
   handedFrom,
   isTerminalTask,
+  LEAN_CHAT_RULE,
   type Question,
   type Task,
   TaskReadiness,
@@ -27,6 +31,22 @@ export const BRIEF_LIMIT = 2_000;
 export const RESULT_LIMIT = 4_000;
 /** Longest text a step is given from the steps it comes after and what was handed to it, all together. */
 const STEP_INPUT_LIMIT = 16_000;
+
+/**
+ * How a hob keeps its checkpoints short (#901): a lane shows each summary as one beat, and the
+ * Workbench shows the detail.
+ */
+export const CHECKPOINT_RULE = `Keep each checkpoint's summary to about ${CHECKPOINT_WORDS} words, like "Three headlines drafted", and put anything more in its detail.`;
+
+/**
+ * What a call that starts work in the user's chat adds to its result (#901): the lead tells the user
+ * the plan once, then stays quiet. Only the Task you asked for in a chat has one: any other, as a
+ * member's, gets nothing.
+ */
+export const planNote = (task: Task): string =>
+  task.parentId !== null || task.threadId === null
+    ? ""
+    : " Tell the user the plan in a line or two, who does what, then stay quiet until a question no lead can answer, or the finish.";
 
 /** `text` trimmed and cut to `limit` characters, marked when it was cut. */
 export const cut = (text: string, limit: number): string => clip(text.trim(), limit);
@@ -74,7 +94,7 @@ export const stepPrompt = (step: Task, tree: TaskTree): string => {
     `This is step ${index} of ${total} of a Task you own, running in a fresh session with only its brief and what it refers to.`,
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(step, tree),
-    `Report findings or blockers with report_checkpoint. If the work is already done or you cannot do it as briefed, report a finding or blocker and end without complete_task: the step then waits for its owner. When the step is done, call complete_task with its result; otherwise your final reply becomes its result. Task id: ${step.id}.`,
+    `Report findings or blockers with report_checkpoint. ${CHECKPOINT_RULE} If the work is already done or you cannot do it as briefed, report a finding or blocker and end without complete_task: the step then waits for its owner. When the step is done, call complete_task with its result; otherwise your final reply becomes its result. Task id: ${step.id}.`,
   ].join("\n");
 };
 
@@ -151,7 +171,7 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
     ...(delegation?.expectedOutput == null ? [] : [`${lead} expects back: ${delegation.expectedOutput}`]),
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(task, tree),
-    `Report findings or blockers with report_checkpoint, and ask ${lead} with ask. When the Task is done, call complete_task with its result. Task id: ${task.id}.`,
+    `Report findings or blockers with report_checkpoint, and ask ${lead} with ask. ${CHECKPOINT_RULE} When the Task is done, call complete_task with its result. Task id: ${task.id}.`,
   ].join("\n");
 };
 
@@ -217,7 +237,7 @@ const childLine = (child: Task, tree: TaskTree, place: string) => {
       ? ` Result: ${cut(child.result.summary, SUMMARY_LIMIT)}`
       : latest === undefined
         ? ""
-        : ` Latest: ${latest.kind}, ${cut(latest.summary, SUMMARY_LIMIT)}`;
+        : ` Latest: ${latest.kind}, ${cut(checkpointText(latest, SUMMARY_LIMIT), 2 * SUMMARY_LIMIT)}`;
   const kind = isStep(child, tree.tasks) ? "Step" : "Task";
   const state = stuck ? "queued, but it cannot start because a Task it comes after did not complete" : child.state;
   const indent = "  ".repeat(place.split(".").length - 1);
@@ -289,7 +309,8 @@ const STOPPED_STEP =
 /**
  * What the owner's chat turn is told of the open Task it works on: the Task, and for each Task
  * under it, and under its own steps, its state, result or latest checkpoint, and when it leads a
- * Quest, how results move between its members. Transcripts never reach it.
+ * Quest, how results move between its members, then what it writes in the chat: the plan, a
+ * question no lead can answer and the finish, nothing between (#901). Transcripts never reach it.
  */
 export const ownerBriefing = (task: Task, tree: TaskTree): string => {
   const under = briefedUnder(task, tree);
@@ -311,5 +332,7 @@ export const ownerBriefing = (task: Task, tree: TaskTree): string => {
             : []),
           "Call complete_task with the Task's result once everything under it has ended.",
         ]),
+    LEAN_CHAT_RULE,
+    FINISH_RULE,
   ].join("\n");
 };

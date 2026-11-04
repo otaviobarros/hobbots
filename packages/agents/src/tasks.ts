@@ -150,6 +150,8 @@ export interface NewCheckpoint {
   readonly kind: CheckpointKind;
   readonly milestoneId: MilestoneId | null;
   readonly summary: string;
+  /** More about it than the summary holds, for the Workbench, or null. */
+  readonly detail?: string | null;
   /** Another Task the checkpoint is also about, as for a hub finding on two Tasks changing one file. */
   readonly aboutTaskId?: TaskId | null;
   readonly createdAt: string;
