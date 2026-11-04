@@ -208,6 +208,10 @@ export class ChatService extends Context.Service<
      * Archiving an archived thread returns it unchanged.
      */
     readonly archive: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
+    /** Renames the thread. Refused while it is archived. */
+    readonly rename: (threadId: ThreadId, title: string) => Effect.Effect<Thread, ThreadNotFound | ThreadArchived>;
+    /** Pins the thread to the top of its hob's chats, or unpins it. Refused while it is archived. */
+    readonly setPinned: (threadId: ThreadId, pinned: boolean) => Effect.Effect<Thread, ThreadNotFound | ThreadArchived>;
     /** Restores an archived thread, unless its hob is retired. Restoring a live thread returns it unchanged. */
     readonly restore: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
     /** Starts the hob's queued messages and the work waiting in its backpack, in threads with no turn running, as when it wakes. */
@@ -1214,6 +1218,29 @@ export class ChatService extends Context.Service<
         ).pipe(Effect.tap(() => drainThreads([threadId])));
       });
 
+      // Neither changes `updatedAt`, so a renamed or pinned chat keeps its place by last activity. Both
+      // run under the hob's lock, so no archive lands between the check and the change.
+      const changeLive = (threadId: ThreadId, change: (thread: Thread) => Thread | null) =>
+        withThreadHob(threadId, (thread) =>
+          Effect.gen(function* () {
+            yield* requireLive(thread);
+            return Option.getOrElse(yield* changeThread(threadId, change), () => thread);
+          }),
+        );
+
+      const rename = Effect.fn("ChatService.rename")(function* (threadId: ThreadId, title: string) {
+        return yield* changeLive(threadId, (latest) =>
+          latest.title === title ? null : new Thread({ ...latest, title }),
+        );
+      });
+
+      const setPinned = Effect.fn("ChatService.setPinned")(function* (threadId: ThreadId, pinned: boolean) {
+        const now = yield* nowIso;
+        return yield* changeLive(threadId, (latest) =>
+          (latest.pinnedAt !== null) === pinned ? null : new Thread({ ...latest, pinnedAt: pinned ? now : null }),
+        );
+      });
+
       // The threads with your queued messages or backpack work waiting: of one hob, or of every hob.
       const threadsWaiting = (agentId?: AgentId) =>
         Effect.gen(function* () {
@@ -1257,6 +1284,8 @@ export class ChatService extends Context.Service<
         checkBrainSwitch,
         followHob,
         archive,
+        rename,
+        setPinned,
         restore,
         drainAgent,
         wake,
