@@ -24,6 +24,7 @@ export const messages = {
   plans: {
     label: "Your AI",
     manage: "Manage providers",
+    save: "How to save",
     picker: "Provider",
     checking: "Checking…",
     plan: ({ name }: { name: string }) => `${name} plan`,
@@ -98,6 +99,11 @@ export const messages = {
     today: "Today",
     busiest: ({ day }: { day: string }) => `Busiest: ${day}`,
   },
+  split: {
+    label: "Show",
+    hob: "By hob",
+    quest: "By quest",
+  },
   hobs: {
     label: "Who used what",
     empty: ({ period }: { period: string }) => `No hob replied in ${period}.`,
@@ -118,6 +124,25 @@ export const messages = {
     earlierBrain: "An earlier brain",
     tokens: ({ input, output }: { input: number; output: number }) =>
       `${formatCompact(input)} in, ${formatCompact(output)} out, the rest read from or written to the cache`,
+  },
+  quests: {
+    outside: "Chats without a quest",
+    lead: ({ lead, party }: { lead: string; party: number }) =>
+      plural(party, { one: `${lead}'s quest`, other: `${lead}'s quest · ${formatCount(party)} hobs` }),
+    chats: ({ chats }: { chats: number }) => plural(chats, { one: "1 chat", other: `${formatCount(chats)} chats` }),
+    note: "A reply counts for a quest when it was written in the quest's chat while the quest ran. Each share is its part of every token your providers reported for chat replies in the period, so the shares add up to 100%. Task steps aren't counted yet.",
+  },
+  tips: {
+    label: "Ways to make it last",
+    busiest: ({ name, share }: { name: string; share: number }) => `${name} used the most, ${formatPercent(share)}`,
+    busiestWhy:
+      "A lower effort, or a smaller model for everyday chores, makes your plan last longer. Both are in its profile.",
+    busiestAct: ({ name }: { name: string }) => `Open ${name}'s profile`,
+    answer: "Answer what waits on you",
+    answerWhy: "A hob that waits on you holds its work, and work that has to start over uses the plan again.",
+    answerAct: "Open Inbox",
+    fresh: "Start a new chat for a new topic",
+    freshWhy: "Every reply reads its whole chat again, so a long chat uses more with each reply.",
   },
   note: "Each share is the hob's part of every token your providers reported for chat replies in the period, cache reads included, so the shares add up to 100%. Task steps aren't counted yet.",
 };

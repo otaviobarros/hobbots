@@ -11,6 +11,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
+import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { HobbotsRepositoryLive, UsageLedger } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
@@ -101,9 +102,52 @@ const seed = Effect.gen(function* () {
 
 const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, UsageLedger.layer).pipe(Layer.provideMerge(TestDatabase));
 
-const run = <A>(effect: Effect.Effect<A, never, HobbotsRepository | UsageLedger>) =>
+// Pip led a Quest in its chat from 09:30 to 10:00 on Oct 28, with Bramble in the party, and started a
+// sub-quest under it at 09:35. Only Pip's 09:40 reply was written while the Quest ran.
+const seedQuests = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const at = "2026-10-28T09:30:00.000Z";
+  for (const [id, owner, parent] of [
+    ["k-plan", "pip", null],
+    ["k-draft", "bramble", "k-plan"],
+    ["k-sub", "pip", "k-plan"],
+  ] as const) {
+    yield* sql`INSERT INTO tasks ${sql.insert({
+      id,
+      owner_id: owner,
+      parent_id: parent,
+      root_id: "k-plan",
+      thread_id: "t-pip",
+      brief: id,
+      state: "active",
+      created_at: at,
+      updated_at: at,
+    })}`;
+  }
+  for (const [id, task, parent, createdAt, endedAt] of [
+    ["q-plan", "k-plan", null, at, "2026-10-28T10:00:00.000Z"],
+    ["q-sub", "k-sub", "q-plan", "2026-10-28T09:35:00.000Z", null],
+  ] as const) {
+    yield* sql`INSERT INTO quests ${sql.insert({
+      id,
+      task_id: task,
+      lead_id: "pip",
+      parent_quest_id: parent,
+      thread_id: "t-pip",
+      goal: id === "q-plan" ? "Plan the week" : "Pick the days",
+      limits: "{}",
+      depth: parent === null ? 0 : 1,
+      state: endedAt === null ? "active" : "completed",
+      created_at: createdAt,
+      ended_at: endedAt,
+    })}`;
+  }
+}).pipe(Effect.orDie);
+
+const run = <A>(effect: Effect.Effect<A, never, HobbotsRepository | UsageLedger | SqlClient.SqlClient>) =>
   Effect.gen(function* () {
     yield* seed;
+    yield* seedQuests;
     return yield* effect;
   }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
@@ -149,6 +193,28 @@ describe("UsageLedger", () => {
       { minute: "2026-10-28T10:05:00.000Z", replies: 1, tokens: 0 },
       { minute: "2026-10-29T15:00:00.000Z", replies: 1, tokens: 10 },
       { minute: "2026-10-30T23:59:00.000Z", replies: 1, tokens: 10 },
+    ]);
+  });
+
+  // covers OP-002
+  it("[TC-OP-090] sums the period's replies by the Quest whose chat they were written in while it ran", async () => {
+    const { quests } = await run(
+      UsageLedger.use((ledger) => ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z")),
+    );
+    expect(quests).toEqual([
+      // Every reply outside a Quest's run, in three chats, the failed one unreported.
+      { questId: null, goal: null, leadName: null, party: 0, chats: 3, replies: 4, unreported: 1, tokens: 1320 },
+      // The reply under the sub-quest counts for the Quest at the top, whose party is Pip and Bramble.
+      {
+        questId: "q-plan",
+        goal: "Plan the week",
+        leadName: "Pip",
+        party: 2,
+        chats: 1,
+        replies: 1,
+        unreported: 0,
+        tokens: 600,
+      },
     ]);
   });
 });

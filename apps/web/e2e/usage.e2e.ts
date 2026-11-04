@@ -158,6 +158,14 @@ test("[TC-OP-077] a plan warns when it runs low and says when paused hobs come b
   const low = page.getByRole("status").filter({ hasText: "This week on Claude Code is running low" });
   await expect(low).toContainText("15% left. Hobs pause if it runs out");
   await expect(claude.getByRole("listitem").nth(1).locator("[data-slot=progress]")).toHaveAttribute("data-tone", "low");
+  // The potion shows the week, in the meter's tone.
+  await expect(claude.locator("[data-slot=potion-liquid]")).toHaveAttribute("data-tone", "low");
+  // How to save leads to the ways to make the plan last, and takes the keyboard there too.
+  await low.getByRole("button", { name: "How to save" }).click();
+  await expect(page.getByRole("heading", { name: "Ways to make it last" })).toBeFocused();
+  await expect(
+    page.getByRole("region", { name: "Ways to make it last" }).getByRole("link", { name: "Open Inbox" }),
+  ).toBeVisible();
 
   // A used-up window pauses the hobs until it refills.
   await page.unrouteAll();
@@ -168,4 +176,44 @@ test("[TC-OP-077] a plan warns when it runs low and says when paused hobs come b
   await expect(paused).toContainText("This session on Claude Code is used up. Refills in 2 hours");
   await expect(claude.getByRole("listitem").nth(0)).toContainText("This sessionEmpty");
   await expect(claude.getByRole("listitem").nth(0).locator("[data-slot=progress]")).toHaveAttribute("data-tone", "out");
+});
+
+// covers OP-002
+test("[TC-OP-091] Who used what splits the period by quest, with the chats outside a quest last", async ({ page }) => {
+  hub = await startHub(dataDir);
+  await api(hub, "PATCH", "/setup", { completed: true });
+  await page.route("**/api/usage**", async (route) => {
+    const response = await route.fetch();
+    const report = (await response.json()) as Record<string, unknown>;
+    const quest = { party: 0, chats: 1, replies: 2, unreported: 0 };
+    report.quests = [
+      { ...quest, questId: null, goal: null, leadName: null, chats: 3, tokens: 2500 },
+      { ...quest, questId: "q-launch", goal: "Plan the spring launch", leadName: "Pip", party: 3, tokens: 6300 },
+      { ...quest, questId: "q-pricing", goal: "Review the pricing page", leadName: "Rook", party: 2, tokens: 1200 },
+    ];
+    await route.fulfill({ response, json: report });
+  });
+  await page.goto(`${hub.url}/#/usage`);
+
+  const who = page.getByRole("region", { name: "Who used what" });
+  const split = who.getByRole("radiogroup", { name: "Show" });
+  await expect(split.getByRole("radio", { name: "By hob" })).toBeChecked();
+  await split.getByRole("radio", { name: "By quest" }).click();
+  // The split lives in the URL beside the period.
+  await expect(page).toHaveURL(/#\/usage\?by=quest$/);
+  const rows = who.getByRole("listitem");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toContainText("Plan the spring launch");
+  await expect(rows.nth(0)).toContainText("Pip's quest · 3 hobs");
+  await expect(rows.nth(0)).toContainText("63%");
+  await expect(rows.nth(1)).toContainText("Review the pricing page");
+  await expect(rows.nth(1)).toContainText("12%");
+  await expect(rows.nth(2)).toContainText("Chats without a quest");
+  await expect(rows.nth(2)).toContainText("3 chats");
+  await expect(rows.nth(2)).toContainText("25%");
+
+  // Picking the period keeps the split.
+  await page.getByRole("radiogroup", { name: "Period" }).getByRole("radio", { name: "30 days" }).click();
+  await expect(page).toHaveURL(/#\/usage\?days=30&by=quest$/);
+  await expect(rows).toHaveCount(3);
 });

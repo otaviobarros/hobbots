@@ -38,7 +38,7 @@ export const UsageHandlers = HttpApiBuilder.group(HobbotsApi, "usage", (handlers
           const until = DateTime.formatIso(now);
           const since = DateTime.formatIso(periodStart(now, Number(query.days), query.since));
           const [used, reported] = yield* Effect.all([ledger.usage(since, until), plans], { concurrency: 2 });
-          return { since, until, hobs: used.hobs, minutes: used.minutes, plans: reported };
+          return { since, until, hobs: used.hobs, quests: used.quests, minutes: used.minutes, plans: reported };
         }),
     });
   }),
