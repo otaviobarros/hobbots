@@ -1,7 +1,17 @@
 import { AgentId, type TaskTree, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
+import type { HobState } from "../../lib/hob-state.ts";
 import { memberWork, quest } from "../../test/member-work.ts";
-import { activeFilter, inFilter, peekBench, peekThread, pickUpRows, questProgress, sceneChips } from "./home-model.ts";
+import {
+  activeFilter,
+  homeSummary,
+  inFilter,
+  peekBench,
+  peekThread,
+  pickUpRows,
+  questProgress,
+  sceneChips,
+} from "./home-model.ts";
 
 const older = { id: ThreadId.make("t-old"), updatedAt: "2026-11-01T08:00:00.000Z" };
 const newer = { id: ThreadId.make("t-new"), updatedAt: "2026-11-02T08:00:00.000Z" };
@@ -125,4 +135,25 @@ describe("questProgress", () => {
       needs: 1,
     });
   });
+});
+
+describe("homeSummary", () => {
+  const hob = (name: string, state: HobState) => ({ hob: { name }, state });
+
+  it("names who needs you first, then who is working", () => {
+    const crew = [hob("Ada", "needs-you"), hob("Pip", "needs-you"), hob("Aldric", "thinking"), hob("Quill", "idle")];
+    expect(homeSummary(crew)).toBe("4 hobs. Ada and Pip need you. Aldric is working.");
+  });
+
+  it("says nothing needs you, and leaves out working when no hob works", () => {
+    expect(homeSummary([hob("Ada", "idle"), hob("Pip", "paused")])).toBe("2 hobs. Nothing needs you.");
+    expect(homeSummary([hob("Ada", "working")])).toBe("1 hob. Nothing needs you. Ada is working.");
+  });
+
+  it("names three hobs and counts the rest", () => {
+    const crew = ["Ada", "Pip", "Quill", "Bram", "Rook"].map((name) => hob(name, "needs-you"));
+    expect(homeSummary(crew)).toBe("5 hobs. Ada, Pip, Quill, and 2 more need you.");
+  });
+
+  it("has a line for no hobs", () => expect(homeSummary([])).toBe("No hobs yet."));
 });

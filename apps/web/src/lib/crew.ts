@@ -1,7 +1,7 @@
 import type { HobState } from "./hob-state.ts";
 
 /** The scene shows at most five hobs: those who need you first, then the busiest. */
-export const SCENE_LIMIT = 5;
+const SCENE_LIMIT = 5;
 
 /** The groups Home counts hobs in for its summary line. */
 export type CrewGroup = "needs-you" | "working" | "waiting" | "failed" | "resting" | "paused";
