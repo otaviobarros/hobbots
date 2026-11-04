@@ -75,11 +75,11 @@ export function DiagnosticsReportMaker({ questId }: { questId: QuestId | null })
   return (
     <section aria-label={copy.heading} className="flex flex-col gap-2">
       <span className="lbl pt-2 text-label">{copy.heading}</span>
-      <p className="m-0 text-sm text-secondary-text">{copy.note}</p>
+      <p className="m-0 text-sm text-text-secondary">{copy.note}</p>
       <div className="flex items-center gap-3">
         <span className="flex flex-1 flex-col">
           <span id={titlesId}>{copy.includeTitles}</span>
-          <span className="text-xs text-secondary-text">{copy.includeTitlesNote}</span>
+          <span className="text-xs text-text-secondary">{copy.includeTitlesNote}</span>
         </span>
         <Switch aria-labelledby={titlesId} checked={includeTitles} onCheckedChange={changeTitles} />
       </div>

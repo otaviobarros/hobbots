@@ -107,4 +107,4 @@ function WaitingRow({
   );
 }
 
-const ROW = "flex w-full items-center gap-2 border-0 bg-transparent px-2 py-1.5 text-start text-text";
+const ROW = "flex w-full items-center gap-2 border-0 bg-transparent px-2 py-1.5 text-start text-text-strong";

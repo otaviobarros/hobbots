@@ -150,7 +150,7 @@ export function WelcomeVillage({
         )}
         style={introDelay(intro.providers)}
       >
-        <span className="text-sm text-secondary-text">Works with the AI you already use</span>
+        <span className="text-sm text-text-secondary">Works with the AI you already use</span>
         <ul className="m-0 flex list-none flex-wrap justify-center gap-2.5 p-0">
           {PROVIDERS.map((provider) => (
             <li key={provider} className="border-2 border-line-2 bg-ground px-2.5 py-1 text-[13px]">
@@ -190,7 +190,7 @@ function VillageHob({ hob, walkIn }: { hob: SceneHob; walkIn: boolean }) {
           <span
             key={greeted}
             aria-hidden
-            className="absolute -top-[38px] left-1/2 -ml-8 w-16 animate-hb-say bg-text py-1 text-center text-[13px] font-bold text-ground"
+            className="absolute -top-[38px] left-1/2 -ml-8 w-16 animate-hb-say bg-text-strong py-1 text-center text-[13px] font-bold text-ground"
           >
             {hob.greeting}
           </span>

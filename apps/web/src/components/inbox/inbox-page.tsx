@@ -153,7 +153,7 @@ function Selected({
     );
   }
   if (request === undefined) {
-    return ready ? <p className="m-0 px-7 py-6 text-secondary-text">{copy.pickOne}</p> : null;
+    return ready ? <p className="m-0 px-7 py-6 text-text-secondary">{copy.pickOne}</p> : null;
   }
   const hob = directory.hob(request.agentId);
   if (hob === undefined) return <p className="m-0 px-7 py-6 text-label">{copy.loadingRequest}</p>;
@@ -232,7 +232,7 @@ function InboxHeader({ waiting }: { waiting: number }) {
         )}
       />
       <h1 className="absolute top-2.5 start-4 m-0 font-pixel text-xl font-bold text-moonlight">{copy.title}</h1>
-      <p className="absolute top-9 start-4 m-0 text-xs text-secondary-text">
+      <p className="absolute top-9 start-4 m-0 text-xs text-text-secondary">
         {waiting > 0 ? copy.waiting({ count: waiting }) : copy.intro}
       </p>
     </div>

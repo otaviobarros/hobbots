@@ -91,12 +91,12 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
 
   return (
     <div className="flex max-w-[860px] flex-col gap-2">
-      <span className="text-secondary-text">
+      <span className="text-text-secondary">
         What {hob.name} may touch. Changes are saved at once and apply from {hob.name}'s next reply.
       </span>
 
       <h2 className="lbl m-0 pt-3 text-xs text-label">Folders</h2>
-      <span className="text-[13px] text-secondary-text">
+      <span className="text-[13px] text-text-secondary">
         {hob.name} works in the shared folders it can see and its own, and nowhere else on this computer.
       </span>
       <SharedFolders
@@ -110,7 +110,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
       />
       <span className="pt-2 text-sm font-bold">{hob.name}'s own folders</span>
       {data.policy.ownFolders.length === 0 && sending?.ownFolders === undefined && (
-        <span className="text-sm text-secondary-text">None yet. Only {hob.name} can work in a folder added here.</span>
+        <span className="text-sm text-text-secondary">None yet. Only {hob.name} can work in a folder added here.</span>
       )}
       <FolderList
         label={`${hob.name}'s own folders`}
@@ -131,7 +131,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
       />
 
       <h2 className="lbl m-0 pt-4 text-xs text-label">Rules</h2>
-      <span className="text-[13px] text-secondary-text">
+      <span className="text-[13px] text-text-secondary">
         From your {presetInfo(data.preset).label} safety. You can make {hob.name} more careful than that. Ask means{" "}
         {hob.name} shows a permission card in chat and waits for you.
       </span>
@@ -203,7 +203,7 @@ function SigningSwitch({
         <span id={labelId} className="font-bold">
           {messages.signing.label}
         </span>
-        <span id={noteId} className="text-[13px] text-secondary-text">
+        <span id={noteId} className="text-[13px] text-text-secondary">
           {checked ? messages.signing.on({ name }) : messages.signing.off({ name })}
         </span>
       </div>
@@ -240,7 +240,7 @@ function SharedFolders({
 }) {
   if (permissions.sharedFolders.length === 0) {
     return (
-      <span className="text-sm text-secondary-text">
+      <span className="text-sm text-text-secondary">
         No shared folders yet. <Link to="/settings">Add them in Settings</Link>
       </span>
     );
@@ -258,10 +258,10 @@ function SharedFolders({
             )}
           >
             <span className="flex min-w-0 flex-1 flex-col gap-px">
-              <span className={cn("truncate font-bold", shownHidden && "text-secondary-text")}>
+              <span className={cn("truncate font-bold", shownHidden && "text-text-secondary")}>
                 {folderName(folder)}
               </span>
-              <span className="truncate text-[13px] text-secondary-text" title={folder}>
+              <span className="truncate text-[13px] text-text-secondary" title={folder}>
                 {shownHidden ? `Hidden from ${name} · ${folder}` : `Shared · ${folder}`}
               </span>
             </span>
@@ -320,10 +320,10 @@ function Rule({
           <span id={labelId} className="font-bold">
             {rule.label}
           </span>
-          {checked && <span className="border-2 border-line-2 px-1.5 text-xs text-secondary-text">Checked</span>}
+          {checked && <span className="border-2 border-line-2 px-1.5 text-xs text-text-secondary">Checked</span>}
           {blocked && <NeedsSandbox />}
         </span>
-        <span id={noteId} className="text-[13px] text-secondary-text">
+        <span id={noteId} className="text-[13px] text-text-secondary">
           {rule.note}
           {narrowed && ` Narrowed from ${ANSWER[preset]}.`}
           {gap !== null && ` ${messages.enforcement.ruleBlocked[gap]}`}
@@ -344,8 +344,8 @@ function Rule({
               title={offered ? undefined : "Wider than your safety allows"}
               className={cn(
                 "min-w-[70px] px-3 py-1.5 text-center text-sm",
-                on ? cn(ruleColor(ANSWER[answer]), "font-bold text-ground") : "text-secondary-text",
-                offered && !on && !pending ? "cursor-pointer hover:bg-hover hover:text-text" : "",
+                on ? cn(ruleColor(ANSWER[answer]), "font-bold text-ground") : "text-text-secondary",
+                offered && !on && !pending ? "cursor-pointer hover:bg-hover hover:text-text-strong" : "",
                 !offered && "text-label opacity-60",
                 focusWithin,
               )}

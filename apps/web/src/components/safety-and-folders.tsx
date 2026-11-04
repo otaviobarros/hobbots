@@ -51,14 +51,14 @@ export function PresetPicker({
                 className="sr-only"
               />
               <span className="flex items-center gap-2">
-                <span className={cn("font-pixel text-[22px] font-bold", on ? "text-moonlight" : "text-text")}>
+                <span className={cn("font-pixel text-[22px] font-bold", on ? "text-moonlight" : "text-text-strong")}>
                   {preset.label}
                 </span>
                 {preset.recommended && (
                   <span className="bg-moonlight px-[7px] py-0.5 text-xs font-bold text-ground">Most people</span>
                 )}
               </span>
-              <span className="min-h-[42px] text-sm leading-[1.45] text-secondary-text">{preset.note}</span>
+              <span className="min-h-[42px] text-sm leading-[1.45] text-text-secondary">{preset.note}</span>
               <span className="flex flex-col">
                 {preset.rules.map(([rule, answer]) => (
                   <span key={rule} className="flex items-center gap-2 py-[3px] text-sm">
@@ -117,7 +117,7 @@ export function LockedSwitch({
           </span>
           <span className="bg-lantern px-1.5 text-xs text-ground">Later</span>
         </span>
-        <span id={noteId} className="text-[13px] text-secondary-text">
+        <span id={noteId} className="text-[13px] text-text-secondary">
           {note} {later}
         </span>
       </div>
@@ -199,7 +199,7 @@ export function FolderList({
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-px">
                 <span className="truncate font-bold">{folderName(folder)}</span>
-                <span className="truncate text-[13px] text-secondary-text" title={folder}>
+                <span className="truncate text-[13px] text-text-secondary" title={folder}>
                   {folder}
                 </span>
               </span>
@@ -246,7 +246,7 @@ export function FolderList({
             spellCheck={false}
             autoCapitalize="off"
             autoComplete="off"
-            className="min-w-[260px] flex-1 border-2 border-control bg-deep px-[11px] py-[7px] font-mono text-sm text-text placeholder:text-label"
+            className="min-w-[260px] flex-1 border-2 border-control bg-deep px-[11px] py-[7px] font-mono text-sm text-text-strong placeholder:text-label"
           />
           <Button type="submit" variant="outline" disabled={typed.trim() === "" || pending}>
             Add folder

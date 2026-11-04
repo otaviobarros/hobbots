@@ -7,10 +7,8 @@ import { useRestoreFocus } from "../lib/restore-focus.ts";
 // for the quest and the task inside it. Built on the shadcn Sheet, so it is a Radix dialog: focus
 // stays inside while it is open, Escape or a click outside closes it, and focus goes back to what had
 // it before, even when the app opened the sheet with no trigger. It slides in 24px and fades, and
-// leaves the same way; Reduce motion stops both.
-//
-// The redesign's theme skins (#477) will round its corners and soften its shadow per theme. Until
-// they land it uses today's pixel corners, 2px border and drawer shadow.
+// leaves the same way; Reduce motion stops both. Its corners, border, shadow and easing come from the
+// theme's skin: soft and eased in Lamplight, cut corners and four steps in Workshop.
 
 function Sheet(props: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />;
@@ -38,8 +36,8 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "cut fixed inset-y-3 end-3 z-50 flex w-[calc(100vw-24px)] max-w-[340px] flex-col gap-3.5 overflow-y-auto border-2 border-line bg-panel p-[18px] text-text shadow-drawer outline-none",
-          "duration-[220ms] ease-[steps(4)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-end-6 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-end-6",
+          "fixed inset-y-3 end-3 z-50 flex w-[calc(100vw-24px)] max-w-[340px] flex-col gap-3.5 overflow-y-auto rounded-(--corner-card) border-(length:--edge) border-line bg-panel p-[18px] text-text-strong shadow-sheet outline-none in-[[data-theme^=workshop-]]:cut",
+          "duration-[220ms] ease-(--ease-ui) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-end-6 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-end-6",
           className,
         )}
         {...props}
@@ -60,7 +58,10 @@ function SheetTitle({ className, ...props }: React.ComponentProps<typeof SheetPr
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
-      className={cn("m-0 font-pixel text-2xl leading-[30px] font-bold text-moonlight", className)}
+      className={cn(
+        "m-0 font-(family-name:--font-heading) text-2xl leading-[30px] font-(--heading-weight) text-text-strong in-[[data-theme^=workshop-]]:text-moonlight",
+        className,
+      )}
       {...props}
     />
   );
@@ -70,7 +71,7 @@ function SheetDescription({ className, ...props }: React.ComponentProps<typeof S
   return (
     <SheetPrimitive.Description
       data-slot="sheet-description"
-      className={cn("m-0 text-detail text-secondary-text", className)}
+      className={cn("m-0 text-detail text-text-secondary", className)}
       {...props}
     />
   );
@@ -92,7 +93,7 @@ function SheetCloseButton({
       data-slot="sheet-close"
       aria-label={label}
       className={cn(
-        "ms-auto inline-flex size-7 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-secondary-text hover:bg-hover hover:text-text",
+        "ms-auto inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-(--corner-control) border-0 bg-transparent p-0 text-text-secondary hover:bg-hover hover:text-text-strong",
         className,
       )}
       {...props}

@@ -28,7 +28,7 @@ export function BlockerCard({ item, hobs, inChat = false }: { item: BackpackItem
         <HobSprite hob={hob} size={20} state="needs-you" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="text-sm font-bold">{copy.title({ name: hob.name })}</span>
-          <span className="truncate text-detail text-secondary-text">{what}</span>
+          <span className="truncate text-detail text-text-secondary">{what}</span>
         </span>
         <Badge variant="failed">{copy.heading}</Badge>
       </div>

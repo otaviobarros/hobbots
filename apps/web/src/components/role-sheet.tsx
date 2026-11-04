@@ -58,7 +58,7 @@ export function RoleSheet({
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Find a role"
             placeholder="Find a role, like “taxes” or “code”"
-            className="w-[340px] max-w-full border-2 border-control bg-deep px-3 py-2 text-text placeholder:text-label"
+            className="w-[340px] max-w-full border-2 border-control bg-deep px-3 py-2 text-text-strong placeholder:text-label"
           />
         </div>
 
@@ -80,7 +80,7 @@ export function RoleSheet({
         <fieldset className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto border-0 px-5 py-4">
           <legend className="sr-only">Role</legend>
           {groups.length === 0 && (
-            <p role="status" className="m-0 text-sm text-secondary-text">
+            <p role="status" className="m-0 text-sm text-text-secondary">
               No role matches “{search.trim()}”. Give {name} a title of your own below, or suggest the role.
             </p>
           )}
@@ -131,7 +131,7 @@ export function RoleSheet({
         </fieldset>
 
         <div className="flex items-center gap-3 border-t-2 border-line px-5 py-3.5">
-          <span className="flex-1 text-sm text-secondary-text">
+          <span className="flex-1 text-sm text-text-secondary">
             {name} is told its role before every reply. A role changes how {name} looks and works, never what {name} may
             do.
           </span>

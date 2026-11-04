@@ -27,7 +27,7 @@ function PopoverContent({
         sideOffset={sideOffset}
         collisionPadding={8}
         className={cn(
-          "cut z-50 w-[300px] border-2 border-solid border-line-2 bg-card p-3 text-text outline-none",
+          "cut z-50 w-[300px] border-2 border-solid border-line-2 bg-card p-3 text-text-strong outline-none",
           className,
         )}
         {...props}

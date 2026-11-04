@@ -84,7 +84,7 @@ export function StandingRuleRow({ grant, hob }: { grant: Grant; hob: Agent | und
         >
           <span className="text-sm">{copy.confirm.question({ name })}</span>
           {grant.rule._tag === "Host" && (
-            <span className="text-xs text-secondary-text">{copy.confirm.hostNote({ name })}</span>
+            <span className="text-xs text-text-secondary">{copy.confirm.hostNote({ name })}</span>
           )}
           {revoke.isError && (
             <span role="alert" className="text-sm text-rose">

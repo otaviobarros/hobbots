@@ -95,11 +95,11 @@ export function ArchivedEntry({ hobId, threadId }: { hobId: AgentId; threadId?: 
       aria-current={current ? "page" : undefined}
       aria-label={messages.entryLabel({ count })}
       className={cn(
-        "flex w-full items-center gap-2 py-row-y ps-thread-indent pe-2.5 text-sm text-text no-underline hover:bg-hover hover:text-text",
+        "flex w-full items-center gap-2 py-row-y ps-thread-indent pe-2.5 text-sm text-text-strong no-underline hover:bg-hover hover:text-text-strong",
         current && "bg-line text-moonlight hover:text-moonlight",
       )}
     >
-      <span aria-hidden className="size-2.5 flex-none border-2 border-secondary-text" />
+      <span aria-hidden className="size-2.5 flex-none border-2 border-text-secondary" />
       <span className="min-w-0 flex-1 truncate">{messages.entry}</span>
       <span className="text-meta whitespace-nowrap text-label">{count}</span>
     </Link>
@@ -138,7 +138,7 @@ function ArchivedHeader({
         <span className="flex min-w-0 items-baseline gap-2">
           <span className="font-pixel text-xl font-semibold whitespace-nowrap">{hob.name}</span>
           <span className="text-sm font-bold whitespace-nowrap text-moonlight">{hob.roleTitle}</span>
-          <span className="truncate text-secondary-text">{title}</span>
+          <span className="truncate text-text-secondary">{title}</span>
           {tagged && <Badge variant="archived">{messages.tag}</Badge>}
         </span>
         <span className="text-xs text-label">{detail}</span>
@@ -195,7 +195,7 @@ export function ArchivedThreadList(props: WorkspaceMainProps) {
         {archived.data && count === 0 && <EmptyArchive hob={current} />}
         {archived.data && count > 0 && (
           <>
-            <p className="m-0 text-secondary-text">{messages.intro({ name: current.name })}</p>
+            <p className="m-0 text-text-secondary">{messages.intro({ name: current.name })}</p>
             <ul aria-label={messages.title} className="m-0 flex list-none flex-col p-0">
               {archived.data.map((thread) => (
                 <ArchivedRow key={thread.id} hob={current} thread={thread} />
@@ -212,9 +212,9 @@ function EmptyArchive({ hob }: { hob: Agent }) {
   return (
     <section
       aria-label={messages.empty}
-      className="flex max-w-bubble-max animate-hb-in flex-col gap-2 bg-deep px-4 py-3.5 text-secondary-text"
+      className="flex max-w-bubble-max animate-hb-in flex-col gap-2 bg-deep px-4 py-3.5 text-text-secondary"
     >
-      <h2 className="m-0 font-pixel text-base font-semibold text-text">{messages.empty}</h2>
+      <h2 className="m-0 font-pixel text-base font-semibold text-text-strong">{messages.empty}</h2>
       <p className="m-0 text-sm">{messages.emptyBody({ name: hob.name })}</p>
       <Link to="/hobs/$hobId" params={{ hobId: hob.id }} className="text-sm text-lantern underline">
         {messages.backToThreads({ name: hob.name })}
@@ -231,10 +231,10 @@ function ArchivedRow({ hob, thread }: { hob: Agent; thread: Thread }) {
         <Link
           to="/hobs/$hobId/threads/$threadId"
           params={{ hobId: hob.id, threadId: thread.id }}
-          className="flex min-w-0 flex-1 flex-col gap-0.5 text-text no-underline hover:text-moonlight"
+          className="flex min-w-0 flex-1 flex-col gap-0.5 text-text-strong no-underline hover:text-moonlight"
         >
           <span className="truncate font-bold">{thread.title}</span>
-          <span className="text-detail text-secondary-text">
+          <span className="text-detail text-text-secondary">
             {messages.rowDetail({
               archived: thread.archivedAt ? archivedWhen(thread.archivedAt) : messages.justNow,
               last: formatWhen(thread.updatedAt),
@@ -315,7 +315,7 @@ function ArchivedThreadView({ thread, ...props }: ChatProps & { thread: Thread }
       >
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span>{messages.banner({ name: current.name, date })}</span>
-          {draftKept && <span className="text-secondary-text">{messages.draftKept}</span>}
+          {draftKept && <span className="text-text-secondary">{messages.draftKept}</span>}
         </span>
         <RestoreButton
           pending={restore.isPending}
@@ -340,7 +340,7 @@ function ArchivedThreadView({ thread, ...props }: ChatProps & { thread: Thread }
 
 function ReadOnlyFooter({ hobId, children }: { hobId: AgentId; children: ReactNode }) {
   return (
-    <p role="note" className="m-0 flex-none border-t-4 border-line px-6 py-3.5 text-sm text-secondary-text">
+    <p role="note" className="m-0 flex-none border-t-4 border-line px-6 py-3.5 text-sm text-text-secondary">
       {children} ·{" "}
       <Link to="/hobs/$hobId/archived" params={{ hobId }} className="text-lantern underline">
         {messages.backToArchived}
