@@ -6,7 +6,6 @@ import { Link } from "@tanstack/react-router";
 import { connectionBridge } from "../api/connected-desktop.ts";
 import { setupQuery } from "../api/setup.ts";
 import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
-import { ArchivedHobs } from "./archived-hobs.tsx";
 import { BackupSettings } from "./backup/backup-settings.tsx";
 import { messages as backupMessages } from "./backup/messages.ts";
 import { ConnectedHubSettings } from "./devices/connected-hub.tsx";
@@ -150,24 +149,15 @@ export function SettingsPage() {
         <DiagnosticsSettings />
       </Panel>
       <Panel label="Archived hobs">
-        <ArchivedHobs />
+        <p className="m-0 text-text-secondary">
+          Retired hobs and their chats live in the Archive, where you can read them.
+        </p>
+        <Link to="/archive" search={{ tab: "hobs" }} className="self-start text-sm text-link underline">
+          Open the Archive
+        </Link>
       </Panel>
       <Panel label={settingsMessages.about.heading} id="about">
         <AboutSettings />
-      </Panel>
-    </Page>
-  );
-}
-
-/** Settings › Archived hobs on its own, where a retired hob's profile and its chats lead back to. */
-export function ArchivedHobsPage() {
-  return (
-    <Page icon="Settings" title="Archived hobs" intro="Retired hobs and the chats they leave behind.">
-      <Link to="/settings" className="text-sm text-lantern no-underline hover:underline">
-        ‹ All settings
-      </Link>
-      <Panel label="Archived hobs">
-        <ArchivedHobs />
       </Panel>
     </Page>
   );

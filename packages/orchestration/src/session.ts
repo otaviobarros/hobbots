@@ -37,9 +37,10 @@ export interface SessionTurn {
   /** Asks you about calls the policy answers Ask for; null, those calls are refused. */
   readonly approvals: TurnApprovals | null;
   readonly recordToolStart: (event: ToolStartedEvent) => Effect.Effect<boolean>;
-  readonly hubTools: HubTools;
-  /** Records the runtime's evidence that it took the turn: its session. */
-  readonly started: (sessionId: string) => Effect.Effect<void>;
+  /** The hub tools the turn offers, read at its start. */
+  readonly hubTools: Effect.Effect<HubTools>;
+  /** Records the runtime's evidence that it took the turn: its session, and the policy version its tools run under. */
+  readonly started: (session: { readonly sessionId: string; readonly policyVersion?: string }) => Effect.Effect<void>;
 }
 
 /** Runs one turn of a Task's own session to its end: its final reply, or why it ended without one. */
@@ -70,7 +71,7 @@ export const runSessionTurn = (
           prompt: turn.prompt,
           briefing: null,
           sessionId: turn.sessionId,
-          instructions: systemInstructions(turn.agent.name, turn.config),
+          instructions: systemInstructions(turn.config.name, turn.config),
           instructionsChanged: false,
           model: turn.config.model,
           effort: turn.config.effort,
@@ -78,13 +79,17 @@ export const runSessionTurn = (
           approvals: turn.approvals,
           redaction: redactor,
           recordToolStart: turn.recordToolStart,
-          hubTools: turn.hubTools,
+          hubTools: yield* turn.hubTools,
         },
         adapter.sendPrompt,
       )
       .pipe(
         Stream.runForEach((event) => {
-          if (event._tag === "SessionStarted") return turn.started(event.sessionId);
+          if (event._tag === "SessionStarted")
+            return turn.started({
+              sessionId: event.sessionId,
+              ...(event.policyVersion && { policyVersion: event.policyVersion }),
+            });
           if (event._tag === "Completed") ending = { _tag: "Replied", text: event.text };
           return Effect.void;
         }),
@@ -128,3 +133,7 @@ export interface Running {
   readonly accessNow?: Effect.Effect<ToolAccess | null>;
   stop: StopReason | null;
 }
+
+/** What the session's hob may do on its Task now: read again for every Charm call (PE-008). */
+export const currentAccessOf = (run: Running): Effect.Effect<ToolAccess | null> =>
+  run.accessNow ?? Effect.succeed(run.access);

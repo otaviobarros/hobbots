@@ -472,6 +472,36 @@ describe("editing hobs", () => {
   });
 
   // covers AG-002
+  it("[TC-AG-102] renames a hob and changes its look as a new version, and tells the runtime its new name on the next turn", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const send = async (content: string, count: number) => {
+      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === count);
+    };
+
+    await send("first", 2);
+    const edited = await request("PATCH", `/api/agents/${agent.id}`, {
+      name: "Bramble",
+      lookSeed: 7,
+      lookColor: "sky",
+    });
+    expect(edited.body).toMatchObject({ name: "Bramble", lookSeed: 7, lookColor: "sky", configVersion: 2 });
+    await send("second", 4);
+    for (const name of ["", " Bramble", "x".repeat(41)]) {
+      const invalid = await request("PATCH", `/api/agents/${agent.id}`, { name });
+      expect(invalid).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "name" } });
+    }
+
+    expect((await request("GET", "/api/agents")).body).toEqual([edited.body]);
+    expect(prompts.map((p) => [p.instructions, p.instructionsChanged])).toEqual([
+      [told("Write short answers."), false],
+      [told("Write short answers.", "Bramble"), true],
+    ]);
+  });
+
+  // covers AG-002
   it("[TC-AG-087] starts a hob at Default and Balanced, and tells the runtime a tone saved as a new version", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     expect([agent.voice, agent.length]).toEqual(["default", "balanced"]);

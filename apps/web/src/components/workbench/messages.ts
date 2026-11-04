@@ -76,6 +76,8 @@ export const messages = {
       failed: "Failed",
       uncertain: "Cut off",
     },
+    /** A line of commands run one after another succeeds by its last one alone (#702). */
+    finishedInSequence: "Finished · an earlier part may have failed",
     exitCode: ({ code }: { code: number }) => `exit code ${formatCount(code)}`,
     uncertain: "The turn ended while this ran, so whether it finished is not known.",
     folder: "Ran in",

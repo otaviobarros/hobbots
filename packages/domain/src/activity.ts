@@ -72,6 +72,111 @@ export type NotKept = typeof NotKept.Type;
 export const CommandState = Schema.Literals(["running", "succeeded", "failed", "uncertain"]);
 export type CommandState = typeof CommandState.Type;
 
+/** Whether the `&` at `i` runs what comes before it in the background, rather than redirecting (`2>&1`, `&>`) or piping (`|&`). */
+const background = (line: string, i: number) => !"|<>".includes(line[i - 1] ?? " ") && line[i + 1] !== ">";
+
+/** The index just past the quoted text or escape that starts at `i`, or `i` when none starts there. */
+const pastQuote = (line: string, i: number) => {
+  const c = line[i];
+  if (c === "\\") return i + 2;
+  if (c !== "'" && c !== '"') return i;
+  let j = i + 1;
+  while (j < line.length && line[j] !== c) j += c === '"' && line[j] === "\\" ? 2 : 1;
+  return j + 1;
+};
+
+/** Whether the character at `i`, outside quotes, ends a command whatever its exit: `;`, a newline or a lone `&`. */
+const sequenceAt = (line: string, i: number) => {
+  const c = line[i];
+  if (c === ";" || c === "\n") return true;
+  return c === "&" && line[i + 1] !== "&" && line[i - 1] !== "&" && background(line, i);
+};
+
+/**
+ * The text of the quoted part of a word that opens at `j`, quotes removed, and the index past it.
+ * Inside double quotes a backslash still escapes `$`, a backtick, `"` and a backslash, and joins the next line.
+ */
+const quotedPart = (line: string, j: number) => {
+  const quote = line[j];
+  let text = "";
+  let k = j + 1;
+  while (k < line.length && line[k] !== quote) {
+    const escaped = quote === '"' && line[k] === "\\" && '$`"\\\n'.includes(line[k + 1] ?? "x");
+    text += escaped && line[k + 1] === "\n" ? "" : line[escaped ? k + 1 : k];
+    k += escaped ? 2 : 1;
+  }
+  return { text, next: k + 1 };
+};
+
+/**
+ * The delimiter word of the heredoc whose `<<` ends just before `i`, after an optional `-`, with its
+ * quotes and backslashes removed as the shell removes them, and the index just past it.
+ */
+const heredocWord = (line: string, i: number) => {
+  let j = i + (line[i] === "-" ? 1 : 0);
+  while (line[j] === " " || line[j] === "\t") j++;
+  let word = "";
+  while (j < line.length && !/[\s;&|<>()]/.test(line[j] as string)) {
+    const c = line[j] as string;
+    if (c === "'" || c === '"') {
+      const part = quotedPart(line, j);
+      word += part.text;
+      j = part.next;
+    } else {
+      word += c === "\\" ? (line[j + 1] ?? "") : c;
+      j += c === "\\" ? 2 : 1;
+    }
+  }
+  return { word, next: j };
+};
+
+/**
+ * The index of the newline that ends the last of `words`' heredoc bodies, which follow the newline
+ * at `i` one after another, each up to the line that holds its delimiter alone; the line's end when
+ * one is never closed.
+ */
+const pastBodies = (line: string, i: number, words: ReadonlyArray<string>) => {
+  let end = i;
+  for (const word of words) {
+    do {
+      const start = end + 1;
+      const next = line.indexOf("\n", start);
+      end = next === -1 ? line.length : next;
+      if (line.slice(start, end).replace(/^\t+/, "") === word) break;
+    } while (end < line.length);
+  }
+  return end;
+};
+
+/**
+ * Whether a command line runs a command after another whatever the first one's exit: at a `;`, a
+ * newline or a lone `&` outside quotes, with a command after it. Its exit code is the last
+ * command's, so a line that succeeded may hold one that failed, as `git rev-parse …; git init` does
+ * (#702). A heredoc's body is skipped up to its delimiter, and what follows that is read on.
+ */
+export const runsInSequence = (line: string): boolean => {
+  const heredocs: Array<string> = [];
+  for (let i = 0; i < line.length; ) {
+    const past = pastQuote(line, i);
+    if (past !== i) {
+      i = past;
+    } else if (line.startsWith("<<<", i)) {
+      i += 3;
+    } else if (line.startsWith("<<", i)) {
+      const read = heredocWord(line, i + 2);
+      heredocs.push(read.word);
+      i = read.next;
+    } else if (line[i] === "\n" && heredocs.length > 0) {
+      // The newline after the last delimiter ends the command, and is read as any other.
+      i = pastBodies(line, i, heredocs.splice(0));
+    } else {
+      if (sequenceAt(line, i) && line.slice(i + 1).trim() !== "") return true;
+      i++;
+    }
+  }
+  return false;
+};
+
 /** A command's whole output, kept as a log outside the database. */
 export const CommandLog = Schema.Struct({
   contentId: Schema.NullOr(ContentId),

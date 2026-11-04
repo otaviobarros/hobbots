@@ -94,6 +94,20 @@ export type IconName = keyof typeof ICONS;
 export const iconPalette = (active: boolean): PixelPalette =>
   active ? { "#": "#f3e9b5", o: "#f2a541" } : { "#": "#a9a2e0", o: "#7770c4" };
 
+/** The Archive's chest, 12 × 8: a lid, a dark band and a brass clasp. */
+export const ARCHIVE_CHEST: PixelRows = [
+  "..aaaaaaaa..",
+  ".abbbbbbbba.",
+  "abbbbbbbbbba",
+  "accccddcccca",
+  "abbbbddbbbba",
+  "abbbbbbbbbba",
+  "abbbbbbbbbba",
+  "aaaaaaaaaaaa",
+];
+
+export const archiveChestPalette: PixelPalette = { a: "#5a3d26", b: "#8a5d3a", c: "#3d2a1a", d: "#e8a54b" };
+
 /** A 12 × 13 potion bottle; `left` (0..1) fills it from the bottom. */
 export const potion = (left: number): PixelRows => {
   const rows = [
@@ -135,10 +149,11 @@ export const POTION_COLORS: Readonly<Record<RuntimeKind, readonly [fill: string,
 /** A plan that reports nothing shows an empty grey bottle. */
 export const UNREPORTED_POTION = ["#3a3666", "#3a3666"] as const;
 
+// The glass reads the theme's tokens, so the bottle keeps its outline on a light card too.
 export const potionPalette = (fill: string, top: string): PixelPalette => ({
   k: "#a9774a",
-  g: "#ece8ff",
-  e: "#2c2a5a",
+  g: "var(--color-line-2)",
+  e: "var(--color-deep)",
   f: fill,
   t: top,
 });

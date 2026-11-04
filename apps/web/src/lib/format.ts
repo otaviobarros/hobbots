@@ -36,6 +36,20 @@ export const formatDay = (iso: string, locale?: string): string =>
 export const formatMoment = (iso: string, locale?: string): string =>
   new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
 
+/** A time of day in the reader's locale: "4:10 PM". */
+export const formatTime = (iso: string, locale?: string): string =>
+  new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(new Date(iso));
+
+/** A weekday, day and time in the reader's locale: "Monday, Nov 9, 9:00 AM". */
+export const formatWeekdayTime = (iso: string, locale?: string): string =>
+  new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+
 /** The first line of a text, trimmed: the title of a brief, or the gist of a longer note. */
 export const firstLine = (text: string): string => text.split("\n", 1)[0]?.trim() ?? "";
 

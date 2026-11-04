@@ -6,7 +6,14 @@ import type { PolicyOperation, SandboxState } from "@hobbots/domain";
 import type { PolicyEngine } from "@hobbots/permissions";
 import { Deferred, type Duration, Effect, Queue, type Scope, Stream } from "effect";
 import { grantedHosts } from "../approval.ts";
-import { type ToolTurn, toolTurn, turnInstructions, turnPrompt, turnSigningAgent } from "../claude-code.ts";
+import {
+  sessionPolicy,
+  type ToolTurn,
+  toolTurn,
+  turnInstructions,
+  turnPrompt,
+  turnSigningAgent,
+} from "../claude-code.ts";
 import {
   folderAccessFor,
   type PreparedSandbox,
@@ -477,6 +484,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
         cwd: config.workspaceDir,
         instructions: codexInstructions(turnInstructions(request.instructions, false)),
         gate: refuseTools,
+        session: {},
       };
     }
     const { tools, sandbox, policy } = governed;
@@ -488,6 +496,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
         turnInstructions(request.instructions, sandbox !== null, Boolean(request.approvals), tools.commitAs),
       ),
       gate: withPolicy(policyGate(policy.engine, tools, request, sandbox !== null)),
+      session: sessionPolicy(tools),
     };
   });
 
@@ -585,7 +594,7 @@ const turnEvents = (
         redact: request.redaction?.text ?? ((text) => text),
         gate: launch.gate,
       };
-      report({ _tag: "SessionStarted", sessionId: threadId, billing: billingOf(tokens) });
+      report({ _tag: "SessionStarted", sessionId: threadId, billing: billingOf(tokens), ...launch.session });
       yield* Deferred.await(accepted);
 
       // Subscribed before the turn starts, so its first notifications are not missed.

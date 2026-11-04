@@ -1,4 +1,4 @@
-import { type ApprovalRequest, type DeviceId, exactAction, type ThreadId } from "@hobbots/domain";
+import { type ApprovalRequest, type DeviceId, exactAction } from "@hobbots/domain";
 import { byClosing } from "../../api/inbox-window.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
 import { messages } from "./messages.ts";
@@ -29,25 +29,6 @@ export const tabRequests = (
   if (tab === "needs") return approvals.filter((approval) => approval.state === "pending" || approval.id === kept);
   if (tab === "all") return [...approvals].reverse();
   return approvals.filter((approval) => approval.state !== "pending").sort(byClosing);
-};
-
-export interface InboxGroup {
-  readonly threadId: ThreadId;
-  readonly requests: ReadonlyArray<ApprovalRequest>;
-}
-
-/**
- * Requests grouped by their hob's thread until Quests exist (ADR 015), each group where its first
- * request falls, so the groups keep the tab's order.
- */
-export const groupByThread = (requests: ReadonlyArray<ApprovalRequest>): Array<InboxGroup> => {
-  const groups = new Map<ThreadId, Array<ApprovalRequest>>();
-  for (const request of requests) {
-    const group = groups.get(request.threadId);
-    if (group === undefined) groups.set(request.threadId, [request]);
-    else group.push(request);
-  }
-  return Array.from(groups, ([threadId, grouped]) => ({ threadId, requests: grouped }));
 };
 
 /** When a pending request expires, in words: "expires in 3 h". Empty when it names no expiry. */

@@ -85,9 +85,10 @@ test("[TC-IN-132] a question no lead could answer waits in the Inbox's Needs you
   const chat = page.url();
 
   await page.goto(`${url}/#/inbox?tab=needs`);
-  const questions = page.getByRole("region", { name: "Questions for you" });
-  await expect(questions).toContainText("1 question for you");
-  const asks = questions.getByRole("region", { name: "Question from Ada" });
+  // It is one row in the list, like every other kind, and opens beside it with its answer box.
+  const questions = page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Question/ });
+  await expect(questions).toContainText("Ada → Aldric → you");
+  const asks = page.getByRole("article", { name: "Question from Ada" });
   await expect(asks).toContainText("Should international orders get an earlier cutoff");
   await expect(asks).toContainText("For Build the campaign");
   await expect(asks).toContainText("Passed up to you by Aldric.");
@@ -145,7 +146,7 @@ test("[TC-IN-154] cancelling the work a question waits on withdraws it from the 
   // It no longer waits for you in the Inbox, and the chat still shows it withdrawn after a reload.
   await page.goto(`${url}/#/inbox?tab=needs`);
   await expect(page.getByText("Nothing needs you")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Questions for you" })).toBeHidden();
+  await expect(page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Question/ })).toHaveCount(0);
   await page.goto(chat);
   await page.reload();
   await expect(asks).toContainText(withdrawn);

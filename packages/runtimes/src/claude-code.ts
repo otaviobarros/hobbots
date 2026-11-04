@@ -47,7 +47,7 @@ import {
   stableJson,
   unreportedPlan,
 } from "@hobbots/domain";
-import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
+import { type PolicyContext, PolicyEngine, type PolicyVerdict, policyVersion } from "@hobbots/permissions";
 import { DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
 import {
   type CallDecision,
@@ -574,9 +574,10 @@ const planMaxAge = Duration.minutes(1);
 
 /**
  * Maps one turn's SDK messages to runtime events. Stateful, so make one per turn: a thinking block
- * becomes a step that starts with the block and ends when it stops.
+ * becomes a step that starts with the block and ends when it stops. `tools` are the turn's, whose
+ * policy version its session start reports.
  */
-export const turnEvents = () => {
+export const turnEvents = (tools: ToolTurn | null = null) => {
   // The step of each open thinking block, by content block index.
   const open = new Map<number, string>();
   let steps = 0;
@@ -596,6 +597,7 @@ export const turnEvents = () => {
                 _tag: "SessionStarted",
                 sessionId: message.session_id,
                 billing: billingFrom(message.apiKeySource),
+                ...sessionPolicy(tools),
               },
             ]
           : [];
@@ -710,6 +712,10 @@ export const turnSigningAgent = (
   sandboxedTools !== null && sandboxedTools.commitAs === undefined && sandboxedTools.context.hob.signCommits === true
     ? agentSocket()
     : undefined;
+
+/** What `SessionStarted` says of the policy the turn's tools run under, so its Attempt records it (ADR 018). */
+export const sessionPolicy = (tools: ToolTurn | null): { readonly policyVersion?: string } =>
+  tools === null ? {} : { policyVersion: policyVersion(tools.context) };
 
 /**
  * The turn's tools, or null for a chat-only turn: no access, no folder that exists, reading the
@@ -1131,7 +1137,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                 Effect.andThen(Effect.sync(() => prepared && child?.pid && killGroup(child.pid))),
               ),
           );
-          const toEvents = turnEvents();
+          const toEvents = turnEvents(tools);
           // Tool events arrive from the hooks while the turn runs, so the turn's own events share their queue.
           yield* Stream.fromAsyncIterable(turn, errorMessage).pipe(
             Stream.mapEffect((message) => Effect.try({ try: () => toEvents(message), catch: errorMessage })),

@@ -49,3 +49,45 @@ test("[TC-RT-105] a command that exits non-zero shows as Failed with its exit co
   await expect(green).toContainText("Succeeded");
   await expect(green).toContainText("1 passed");
 });
+
+// Issue #702: `git rev-parse …; git init …` exits with its last command's code, so a line of
+// commands run one after another that exits 0 is Finished, never Succeeded: an earlier one may have failed.
+// covers UX-002, UX-006
+test("[TC-RT-500] a line of commands run one after another that exits 0 shows as Finished, saying an earlier part may have failed", async ({
+  page,
+}) => {
+  const { url, aldric } = await aldricHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill(
+    [
+      "Set up the repository",
+      run({
+        command: "ls notes; echo checked",
+        output: "ls: notes: No such file or directory\nchecked\n",
+        exitCode: 0,
+      }),
+      run({ command: "ls && echo listed", output: "README.md\nlisted\n", exitCode: 0 }),
+      script("start_quest", { key: "quest", goal: "Set up the repository" }),
+      script("complete_task", { key: "done", summary: "Initialized." }),
+    ].join("\n"),
+  );
+  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+
+  const card = page.getByRole("region", { name: "Aldric's work on Set up the repository" });
+  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  const bench = page.getByRole("region", { name: "Workbench for Set up the repository" });
+  await bench.getByRole("tab", { name: /^Terminal/ }).click();
+  const commands = bench
+    .getByRole("tabpanel", { name: /^Terminal/ })
+    .getByRole("list", { name: "Commands" })
+    .getByRole("listitem");
+  await expect(commands).toHaveCount(2);
+  await expect(commands.nth(0)).toContainText("Finished · an earlier part may have failed");
+  await expect(commands.nth(0)).not.toContainText("Succeeded");
+  // A chain that runs on only after a success still reads Succeeded.
+  await expect(commands.nth(1)).toContainText("Succeeded");
+});

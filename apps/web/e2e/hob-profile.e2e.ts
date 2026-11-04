@@ -119,8 +119,54 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
     ]);
 });
 
+// covers AG-002
+test("[TC-AG-104] renaming a hob and changing its look in the profile shows them everywhere, past chats too", async ({
+  page,
+}) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await send(page, "first");
+
+  await page.getByRole("link", { name: "Edit hob" }).click();
+  const profile = page.getByRole("main", { name: "Pip's profile" });
+  const look = profile.getByRole("region", { name: "Name and look" });
+  await look.getByRole("button", { name: "Change name or look" }).click();
+  const name = look.getByRole("textbox", { name: "Name" });
+  await expect(name).toHaveValue("Pip");
+  await name.fill("  ");
+  await expect(profile.getByText("Give the hob a name.")).toBeVisible();
+  await expect(profile.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await name.fill("Bramble");
+  await expect(look.getByRole("radio", { name: "Look 1" })).toBeChecked();
+  await look.getByRole("radio", { name: "Look 3" }).check({ force: true });
+  await look.getByRole("radio", { name: "Sky" }).check({ force: true });
+  await look.getByRole("radio", { name: "Tiny crown" }).click();
+  await look.getByRole("radio", { name: "From the look" }).last().click();
+  await profile.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Saved as version 2. Bramble's next reply uses it.")).toBeVisible();
+
+  const renamed = page.getByRole("main", { name: "Bramble's profile" });
+  await expect(renamed.getByRole("heading", { name: "Bramble", exact: true })).toBeVisible();
+  const [saved] = await api<ReadonlyArray<Hob & { name: string; lookSeed: number }>>(current, "GET", "/api/agents");
+  expect(saved).toMatchObject({ name: "Bramble", lookColor: "sky", hat: "crown", tool: null, configVersion: 2 });
+  expect(saved?.lookSeed).not.toBe(4821);
+
+  // The chat it had before the rename says its new name.
+  await page.getByRole("link", { name: "Back to Bramble's page" }).click();
+  await page
+    .getByRole("main", { name: "Bramble's page" })
+    .getByRole("link", { name: /^Open / })
+    .click();
+  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByRole("main", { name: "Chat" }).getByText("Bramble", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("main", { name: "Chat" }).getByText("Pip", { exact: true })).toHaveCount(0);
+});
+
 // covers AG-006
-test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to Archived hobs", async ({ page }) => {
+test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to the Archive's Retired hobs", async ({
+  page,
+}) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
@@ -151,7 +197,10 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
     { id: pip.id, status: "retired" },
   ]);
   await page.getByRole("link", { name: "See archived hobs" }).click();
-  await expect(page).toHaveURL(/#\/settings\/archived$/);
+  await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
+  await expect(
+    page.getByRole("list", { name: "Retired hobs" }).getByRole("link", { name: "Read Pip's chats" }),
+  ).toBeVisible();
 });
 
 // covers AG-002, UX-005
