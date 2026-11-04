@@ -4,6 +4,9 @@ import {
   ApprovalRequest,
   Attempt,
   AttemptId,
+  BackpackBlocker,
+  BackpackItem,
+  BackpackItemId,
   Checkpoint,
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
@@ -209,4 +212,46 @@ export const blackFriday = (): TaskTree =>
     ],
     quests: [quest()],
     delegations: [delegation(QUILL, COPY, "Draft the landing copy"), delegation(ADA, BUILD, "Build the campaign")],
+  });
+
+/** Work Quill could not carry on with, waiting on you as a blocker (IN-007). */
+/** An hour before the Quest, as the Inbox tests read it. */
+const STUCK_AT = "2026-11-01T09:00:00.000Z";
+
+export const stuckItem = (threadId: ThreadId | null, retired = false): BackpackItem =>
+  new BackpackItem({
+    id: BackpackItemId.make("b1"),
+    recipientId: QUILL,
+    kind: "message",
+    actionable: true,
+    priority: 1,
+    state: "failed",
+    taskId: COPY,
+    questId: null,
+    attemptId: null,
+    threadId,
+    dedupeKey: "b1",
+    payload: { _tag: "message", senderId: null, text: "Hi" },
+    notBefore: null,
+    claim: null,
+    fencingToken: 0,
+    deliveries: [],
+    blockers: [
+      new BackpackBlocker({
+        number: 1,
+        reason: retired ? "recipient-retired" : "retries-exhausted",
+        nextAction: retired ? "dismiss" : "retry",
+        diagnostic: null,
+        lastEnd: null,
+        afterDeliveries: 3,
+        raisedAt: STUCK_AT,
+        decision: null,
+        decidedAt: null,
+      }),
+    ],
+    disposition: null,
+    error: null,
+    createdAt: STUCK_AT,
+    updatedAt: STUCK_AT,
+    revision: 1,
   });

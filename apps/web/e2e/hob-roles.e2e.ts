@@ -72,7 +72,16 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   await expect(page.getByRole("definition").filter({ hasText: "Frontend wizard" })).toBeVisible();
   await page.getByRole("button", { name: "Summon Fern" }).focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/#\/hobs\/[^/]+\/new/);
+  // The summoning plays, then Fern arrives with first questions; one opens the chat with it typed in.
+  await expect(page).toHaveURL(/#\/hobs\/[^/]+\/arrived$/);
+  await expect(page.getByRole("heading", { name: "Fern is here!" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Fern's profile" })).toBeVisible();
+  await page
+    .getByRole("region", { name: "Try asking" })
+    .getByRole("link", { name: /What can you help me with/ })
+    .click();
+  await expect(page).toHaveURL(/#\/hobs\/[^/]+\/new$/);
+  await expect(page.getByRole("textbox", { name: /^Message Fern/ })).toHaveValue("What can you help me with?");
 
   const hobs = (await (await fetch(`${current.url}/api/agents`, { headers: current.headers })).json()) as ReadonlyArray<
     Record<string, unknown>
@@ -106,7 +115,7 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   await expect(sheet).toBeHidden();
 
   // The hub tells the hob its role on every turn, so the instructions never name it.
-  await expect(profile.getByRole("textbox", { name: "Instructions" })).not.toHaveValue(/a hob in Hobbots/);
+  await expect(profile.getByRole("textbox", { name: "What Fern should do" })).not.toHaveValue(/a hob in Hobbots/);
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect
     .poll(async () => {

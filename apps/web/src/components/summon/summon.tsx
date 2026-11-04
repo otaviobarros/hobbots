@@ -1,3 +1,4 @@
+import type { RuntimeHealth } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Stepper } from "@hobbots/ui/components/stepper";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -7,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import {
   type FirstHobDraft,
+  gearOf,
   keepSummonDraft,
   keptSummonDraft,
   reopenDraft,
@@ -14,9 +16,11 @@ import {
   submitDraft,
 } from "../../api/first-hob.ts";
 import { agentsQuery, modelsQuery, runtimesQuery, useCreateHob } from "../../api/queries.ts";
+import { signInProblem } from "../../api/runtime-health.ts";
 import { presetInfo } from "../../api/safety.ts";
 import { setupQuery } from "../../api/setup.ts";
 import { openSummonDraft, summonProblem } from "../../api/summon.ts";
+import { motionReduced } from "../../lib/motion.ts";
 import { readyProviders } from "../../lib/providers.ts";
 import { useSettledBrain, useSettledRuntime } from "../hob-form.tsx";
 import { messages as shared } from "../messages.ts";
@@ -24,8 +28,9 @@ import { LookStep } from "./look-step.tsx";
 import { messages } from "./messages.ts";
 import { ReadyStep } from "./ready-step.tsx";
 import { RoleStep } from "./role-step.tsx";
-import { roleProblem, type SummonStep, stepAt, stepIndex } from "./summon-model.ts";
+import { roleProblem, type SummonStep, stepAt, stepIndex, summoningLeft } from "./summon-model.ts";
 import { SummonPreview } from "./summon-preview.tsx";
+import { SUMMONING_MS, Summoning } from "./summoning.tsx";
 
 const copy = messages;
 
@@ -33,7 +38,7 @@ const copy = messages;
  * Summon a hob, after onboarding, in three steps: what it helps with, its name and look, then a
  * plain summary with the AI it thinks with. A live preview follows every choice. The step lives in
  * the address, so Back and a reload keep it; the draft is kept until the hob exists. The summon
- * opens the new hob's chat.
+ * plays the summoning while the hub makes the hob, then shows it on the Arrived screen.
  */
 export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: SummonStep) => void }) {
   const navigate = useNavigate();
@@ -48,7 +53,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
   const [draft, setDraft] = useState<FirstHobDraft>(() => openSummonDraft(keptSummonDraft(), hobs.data ?? []));
   const models = useQuery(modelsQuery(draft.runtime));
   const [tried, setTried] = useState(false);
-  const { left, summon } = useSummonHob(draft, setDraft, create);
+  const { left, summon, summoning } = useSummonHob(draft, setDraft, create);
 
   // Leaving and coming back keeps what was chosen, until the hob exists.
   useEffect(() => keepSummonDraft(draft), [draft]);
@@ -60,6 +65,8 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
   const locked = draft.submitted !== null;
   const name = draft.name.trim() || shared.onboarding.firstHob.yourHob;
   const health = runtimes.data?.find((r) => r.runtime === draft.runtime);
+  // The AI it would think with is signed out: Ready leads with how to fix it.
+  const signedOut = signedOutHealth(health);
   const model = models.data?.models.find((m) => m.id === draft.model);
   const rejected = create.error instanceof ApiError && create.error.tag === "InvalidHob" ? create.error : undefined;
   const problem = summonProblem(
@@ -86,6 +93,13 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
     if (last) void summon();
     else onStep(stepAt(index + 1));
   };
+
+  if (summoning)
+    return (
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <Summoning hob={{ lookSeed: draft.lookSeed, lookColor: draft.lookColor, ...gearOf(draft) }} name={name} />
+      </main>
+    );
 
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
@@ -115,7 +129,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
               <legend className="sr-only">{copy.steps[index]}</legend>
               <div className="flex flex-col gap-1">
                 <h2 className="m-0 font-heading text-[26px] leading-8 font-(--heading-weight)">
-                  {stepTitle(step, name)}
+                  {stepTitle(step, name, signedOut !== undefined)}
                 </h2>
                 <span className="text-text-secondary">{stepIntro(step, name)}</span>
               </div>
@@ -127,6 +141,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
                   name={name}
                   preset={setup.data && presetInfo(setup.data.safetyPreset)}
                   runtimes={runtimes}
+                  signedOut={signedOut}
                   models={models}
                   onStep={onStep}
                 />
@@ -150,8 +165,11 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
   );
 }
 
-const stepTitle = (step: SummonStep, name: string) =>
-  step === "role" ? copy.role.title : step === "look" ? copy.look.title({ name }) : copy.ready.title({ name });
+const stepTitle = (step: SummonStep, name: string, blocked: boolean) => {
+  if (step === "role") return copy.role.title;
+  if (step === "look") return copy.look.title({ name });
+  return blocked ? copy.ready.blockedTitle({ name }) : copy.ready.title({ name });
+};
 
 const stepIntro = (step: SummonStep, name: string) =>
   step === "role" ? copy.role.intro : step === "look" ? copy.look.intro : copy.ready.intro({ name });
@@ -182,6 +200,7 @@ function useSummonHob(
   create: Create,
 ) {
   const navigate = useNavigate();
+  const [summoning, setSummoning] = useState(false);
   // A summon that finishes after the user left only joins the hob list; it does not pull them back.
   const left = useRef(false);
   useEffect(() => {
@@ -195,13 +214,18 @@ function useSummonHob(
     // retry repeats the same request; the hub returns the hob it made the first time.
     const sent = submitDraft(draft);
     setDraft(sent);
+    setSummoning(true);
+    const startedAt = Date.now();
     try {
       const made = await create.mutateAsync(sent.submitted);
       // The hob exists, so the next Summon starts fresh, even when the user already left. A newer
       // draft started meanwhile belongs to another hob and stays.
       settleSummonDraft(sent.id, null);
-      if (!left.current) void navigate({ to: "/hobs/$hobId/new", params: { hobId: made.id }, replace: true });
+      // The circle plays out before the hob is shown, unless motion is reduced.
+      await wait(summoningLeft(startedAt, Date.now(), SUMMONING_MS, motionReduced()));
+      if (!left.current) void navigate({ to: "/hobs/$hobId/arrived", params: { hobId: made.id }, replace: true });
     } catch (error) {
+      setSummoning(false);
       if (error instanceof ApiError && error.tag === "InvalidHob") {
         const reopened = reopenDraft(sent);
         setDraft(reopened);
@@ -209,8 +233,10 @@ function useSummonHob(
       }
     }
   };
-  return { left, summon };
+  return { left, summon, summoning };
 }
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function StepBody({
   step,
@@ -268,3 +294,6 @@ function SummonFooter({
     </footer>
   );
 }
+
+const signedOutHealth = (health: RuntimeHealth | undefined): RuntimeHealth | undefined =>
+  signInProblem(health) === null ? undefined : health;

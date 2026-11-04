@@ -1,4 +1,4 @@
-import { type Agent, brainLabel } from "@hobbots/domain";
+import type { Agent } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@hobbots/ui/components/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
@@ -10,6 +10,7 @@ import { hobState, withRequests } from "../../lib/hob-state.ts";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
 import type { WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
 import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
+import { HobAside } from "./hob-aside.tsx";
 import { HobChats } from "./hob-chats.tsx";
 import { HobHero } from "./hob-hero.tsx";
 import { doingOf, type HobPageTab, isHobPageTab, statsLine } from "./hob-page-model.ts";
@@ -116,15 +117,7 @@ function Page({ hob, tab }: { hob: Agent; tab: HobPageTab }) {
             </Empty>
           </TabsContent>
         </Tabs>
-        <aside aria-label={copy.aside.label({ name: hob.name })} className="flex min-w-0 flex-col gap-3">
-          <section className="cut flex flex-col gap-2 bg-card p-4">
-            <h2 className="lbl m-0 text-label">{copy.aside.thinksWith}</h2>
-            <span className="text-sm">{brainLabel(hob.runtime, hob.model)}</span>
-            <Link to="/hobs/$hobId/profile" params={{ hobId: hob.id }} className="text-[13px] text-link underline">
-              {copy.aside.change}
-            </Link>
-          </section>
-        </aside>
+        <HobAside hob={hob} />
       </div>
     </div>
   );

@@ -121,3 +121,41 @@ test("[TC-UX-088] the first run opens in Workshop Night, and a saved theme survi
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-night");
 });
+
+// covers UX-003
+test("[TC-UX-124] This app picks the look, Dark or Light and the text size by hand, and keeps them on this device", async ({
+  page,
+}) => {
+  await openSettings(page);
+  const appearance = page.getByRole("region", { name: "Appearance" });
+  await expect(appearance.getByRole("radio", { name: /Workshop/ })).toBeChecked();
+  await expect(appearance.getByRole("radio", { name: "Dark", exact: true })).toHaveAttribute("aria-checked", "true");
+
+  // The look keeps the mode, and the mode keeps the look.
+  await appearance.getByText("Lamplight", { exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "lamplight-dusk");
+  await appearance.getByRole("radio", { name: "Light", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "lamplight-paper");
+  expect((await looks(page)).background).toBe(rgb("ground", "lamplight-paper"));
+  await appearance.getByText("Workshop", { exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-daylight");
+
+  // Larger scales the whole app, which still fits the window.
+  await appearance.getByRole("radio", { name: "Larger" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-text-size", "larger");
+  // The frame is sized to the screen, so it must end at the window's bottom edge, not past it.
+  const fits = () =>
+    page.evaluate(() => ({
+      zoom: getComputedStyle(document.documentElement).zoom,
+      overflows:
+        (document.querySelector("#root")?.firstElementChild?.getBoundingClientRect().bottom ?? 0) > innerHeight + 1,
+    }));
+  expect(await fits()).toEqual({ zoom: "1.125", overflows: false });
+
+  // Both survive a restart, and Standard takes Larger back.
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-daylight");
+  await expect(page.locator("html")).toHaveAttribute("data-text-size", "larger");
+  await page.getByRole("region", { name: "Appearance" }).getByRole("radio", { name: "Standard" }).click();
+  await expect(page.locator("html")).not.toHaveAttribute("data-text-size", /.*/);
+});

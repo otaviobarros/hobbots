@@ -70,6 +70,18 @@ export const messages = {
   },
   ready: {
     title: ({ name }: { name: string }) => `Ready to summon ${name}?`,
+    blockedTitle: ({ name }: { name: string }) => `${name} can't be summoned yet`,
+    signedOut: ({ provider }: { provider: string }) => `${provider} is signed out`,
+    needsFix: "Needs a fix",
+    signedOutWhy: ({ provider, name }: { provider: string; name: string }) =>
+      `Hobs think with ${provider}, so a new one can't start until ${provider} is signed in again. Sign in to ${provider}, then check again to summon ${name}. Everything you picked is kept.`,
+    checkAgain: "Check again",
+    checking: "Checking…",
+    openSettings: "Open Settings",
+    copy: "Copy",
+    copied: "Copied",
+    copyFailed: "Copy it by hand",
+    copyLabel: ({ command }: { command: string }) => `Copy ${command}`,
     intro: ({ name }: { name: string }) => `Here is ${name} in plain words. Change anything before you summon.`,
     summary: ({ name }: { name: string }) => `${name} in plain words`,
     helpsWith: "Helps with",
@@ -91,6 +103,74 @@ export const messages = {
     brainClosed: ({ brain }: { brain: string }) => `Model and effort: ${brain}`,
     later: "You can change all of this later in its profile.",
     summon: ({ name }: { name: string }) => `Summon ${name}`,
+  },
+  summoning: {
+    line: ({ name }: { name: string }) => `Summoning ${name}…`,
+    note: "Setting up its profile and its place on the hub.",
+  },
+  arrived: {
+    title: ({ name }: { name: string }) => `${name} is here!`,
+    body: ({ name, role }: { name: string; role: string }) =>
+      `${name} moved in as your ${role} and is ready to chat. It shows up in the sidebar and on Home.`,
+    tryAsking: "Try asking",
+    chat: ({ name }: { name: string }) => `Start chatting with ${name}`,
+    profile: ({ name }: { name: string }) => `Open ${name}'s profile`,
+    another: "Summon another",
+    /** Three first questions for the common roles, then for each family, then for a title of your own. */
+    starters: {
+      assistant: ["What can you help me with?", "Here is my to-do list, sort it for me", "Plan my week with me"],
+      researcher: [
+        "Find three good sources on a topic I pick",
+        "Sum up this article in five points",
+        "Compare two products for me",
+      ],
+      writer: [
+        "Turn these bullet points into a friendly email",
+        "Make this note shorter and clearer",
+        "Draft a reply to a customer who is upset",
+      ],
+      engineer: ["Why does my build fail?", "Add a test for the sign-up form", "Explain this file to me"],
+      exec: [
+        "Sort my inbox into what needs me today",
+        "Draft a short update for my team",
+        "Plan my week around three goals",
+      ],
+      analyst: [
+        "Find the trend in this spreadsheet",
+        "Turn these numbers into a short summary",
+        "Which chart fits this data?",
+      ],
+      tutor: [
+        "Explain this idea like I'm new to it",
+        "Quiz me on what I learned today",
+        "Make me a study plan for two weeks",
+      ],
+      lifeorg: [
+        "Help me plan meals for the week",
+        "Make a packing list for a weekend trip",
+        "Remind me what's coming up this month",
+      ],
+      helpers: ["What can you help me with?", "Here is something I wrote, make it better", "Help me plan my week"],
+      leadership: [
+        "Draft a short update for my team",
+        "Help me think through a hard decision",
+        "Plan the next quarter with me",
+      ],
+      software: ["Explain this file to me", "Why does my build fail?", "Review this change for bugs"],
+      business: ["Draft a reply to this customer", "Turn these notes into a plan", "Sum up this report in five points"],
+      learning: [
+        "Explain this idea like I'm new to it",
+        "Quiz me on what I learned today",
+        "Find good sources on a topic",
+      ],
+      creative: [
+        "Give me five ideas to start from",
+        "Help me shape this rough draft",
+        "Describe a scene I can build on",
+      ],
+      life: ["Help me plan my week", "Make a list for my next errand run", "Sort out a plan with me step by step"],
+      own: ["What can you help me with?", "Here is my to-do list, sort it for me", "Plan my week with me"],
+    },
   },
   preview: {
     label: "Preview",

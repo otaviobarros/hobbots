@@ -9,6 +9,7 @@ import { ModelsBrain } from "../hob-form.tsx";
 import { messages as shared } from "../messages.ts";
 import { messages } from "./messages.ts";
 import { ProviderCards } from "./provider-cards.tsx";
+import { SignedOutCard } from "./signed-out-card.tsx";
 import type { SummonStep } from "./summon-model.ts";
 
 const copy = messages.ready;
@@ -26,6 +27,7 @@ export function ReadyStep({
   preset,
   runtimes,
   models,
+  signedOut,
   onGo,
 }: {
   draft: FirstHobDraft;
@@ -34,12 +36,15 @@ export function ReadyStep({
   preset: PresetInfo | undefined;
   runtimes: UseQueryResult<ReadonlyArray<RuntimeHealth>>;
   models: UseQueryResult<RuntimeModels>;
+  /** The signed-out AI the hob would think with, which Ready leads with until it is signed in. */
+  signedOut?: RuntimeHealth | undefined;
   onGo: (step: SummonStep) => void;
 }) {
   const voice = voiceChoice(draft.voice).title;
   const length = lengthChoice(draft.length).title;
   return (
     <div className="flex flex-col gap-3.5">
+      {signedOut && <SignedOutCard health={signedOut} name={name} />}
       <dl aria-label={copy.summary({ name })} className="m-0 flex flex-col rounded-card bg-card px-4 py-1.5">
         <Row
           term={copy.helpsWith}

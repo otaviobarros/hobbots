@@ -29,6 +29,14 @@ export class Thread extends Schema.Class<Thread>("Thread")({
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
   /**
+   * The last message the transcript shows, as one line of at most `PREVIEW_LENGTH` characters, for
+   * lists of chats. Worked out when the thread is read, never stored; null while it has none.
+   */
+  lastLine: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
    * When the thread was pinned to the top of its hob's chats, or null when it is not pinned. A
    * thread setting: it grants nothing.
    */
@@ -40,6 +48,23 @@ export class Thread extends Schema.Class<Thread>("Thread")({
   updatedAt: Schema.String,
   revision: Revision,
 }) {}
+
+/** How long a thread's last line runs before it is cut. */
+export const PREVIEW_LENGTH = 140;
+
+/** A message's text as one line, cut at `PREVIEW_LENGTH` with an ellipsis; null when it has none. */
+export const previewLine = (content: string): string | null => {
+  const line = content.replace(/\s+/g, " ").trim();
+  if (line.length === 0) return null;
+  return line.length > PREVIEW_LENGTH ? `${line.slice(0, PREVIEW_LENGTH - 1).trimEnd()}…` : line;
+};
+
+/**
+ * The line a message gives its thread's preview: null for a queued message, which the transcript
+ * does not show yet, and for one with no text, such as a reply made only of tool calls.
+ */
+export const messagePreview = (message: { readonly content: string; readonly status: string }): string | null =>
+  message.status === "queued" ? null : previewLine(message.content);
 
 export const DEFAULT_THREAD_TITLE = "New thread";
 /** The longest title a thread takes. */

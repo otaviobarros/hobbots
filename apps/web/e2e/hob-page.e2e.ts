@@ -78,7 +78,7 @@ test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a Hi
   await page.goBack();
   await hero.getByRole("link", { name: "Profile" }).click();
   await expect(page.getByRole("main", { name: "Pip's profile" })).toBeVisible();
-  await page.getByRole("link", { name: "Back to Pip's page" }).click();
+  await page.goBack();
   await hero.getByRole("link", { name: "New chat with Pip" }).click();
   await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/new$`));
 });

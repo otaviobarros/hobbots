@@ -84,11 +84,11 @@ test("[TC-IN-062] a party member's request waits in the Inbox under its lead's t
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
   const thread = page.url();
 
-  // Quill asks you, not Aldric: the Inbox has Quill's request, and Aldric's chat shows it on his
-  // Quest card, never as one of Aldric's own (#698).
+  // Quill asks you, not Aldric: the Inbox has Quill's request, and Aldric's chat shows it in its
+  // Needs-you tray, never as one of Aldric's own (#698).
   await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
-  const questCard = page.getByRole("region", { name: "Aldric's work on Plan the launch" });
-  await expect(questCard.getByRole("region", { name: "Quill asks permission" })).toHaveCount(1);
+  const tray = page.getByRole("region", { name: /^Needs you/ });
+  await expect(tray.getByRole("region", { name: "Quill asks permission" })).toHaveCount(1);
   await expect(page.getByRole("region", { name: "Aldric asks permission" })).toHaveCount(0);
   await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
   // It waits under Aldric's quest, as asked by Quill through Aldric.
@@ -121,7 +121,7 @@ test("[TC-IN-062] a party member's request waits in the Inbox under its lead's t
 // Issue #698: Nettle's delete waited five minutes in the Inbox while his Task read active and
 // nothing in the Quest said why. The hub-level side is apps/server/test/member-approvals.test.ts.
 // covers PE-003, PE-006, OR-002, UX-002
-test("[TC-PE-445] a party member's request shows on its Task in the Quest card and the Quest tab, Allow once there lets the member finish, and the Inbox shows it settled", async ({
+test("[TC-PE-445] a party member's request shows in the chat's tray and on its Task in the Quest tab, Allow once there lets the member finish, and the Inbox shows it settled", async ({
   page,
 }) => {
   const current = await startHub(dataDir);
@@ -155,13 +155,15 @@ test("[TC-PE-445] a party member's request shows on its Task in the Quest card a
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden();
 
-  // Aldric's Quest card names what Nettle's Task waits on, and holds the request itself.
+  // Aldric's Quest card names what Nettle's Task waits on, and the tray holds the request itself.
   const card = page.getByRole("region", { name: "Aldric's work on Tidy the scratch folder" });
   const row = card.getByRole("button", { name: "Look inside Remove the notes" });
   await expect(row).toContainText("Nettle · waiting on your approval: Delete files", { timeout: 20_000 });
   await expect(row).toContainText("Needs you");
-  const onCard = card.getByRole("region", { name: "Nettle asks permission" });
-  await expect(onCard.getByText(`rm ${shared}/tmp-notes.txt`, { exact: true })).toBeVisible();
+  const inTray = page
+    .getByRole("region", { name: /^Needs you/ })
+    .getByRole("region", { name: "Nettle asks permission" });
+  await expect(inTray.getByText(`rm ${shared}/tmp-notes.txt`, { exact: true })).toBeVisible();
 
   // The Task's drawer opens on what waits on your approval.
   await row.click();
@@ -183,7 +185,7 @@ test("[TC-PE-445] a party member's request shows on its Task in the Quest card a
     timeout: 20_000,
   });
   await expect(page.getByRole("button", { name: "Allow once" })).toHaveCount(0);
-  await expect(onCard.getByRole("status")).toHaveText("✓ Allowed once. Nettle carries on.");
+  await expect(inTray).toBeHidden();
   const approvals = await api<ReadonlyArray<{ readonly state: string; readonly decidedVia: string | null }>>(
     current,
     "GET",

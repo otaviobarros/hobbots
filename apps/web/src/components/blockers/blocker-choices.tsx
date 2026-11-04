@@ -29,8 +29,19 @@ export const blockerChoice = (
 /**
  * Retry, Reassign and Dismiss for a stuck item, bound to the blocker shown, with why Reassign is
  * held and what went wrong when a choice could not be saved. `children` joins the buttons' row.
+ * Without `held`, Reassign is left out instead of shown disabled.
  */
-export function BlockerChoices({ item, hob, children }: { item: BackpackItem; hob: Hob; children?: ReactNode }) {
+export function BlockerChoices({
+  item,
+  hob,
+  held: showHeld = true,
+  children,
+}: {
+  item: BackpackItem;
+  hob: Hob;
+  held?: boolean;
+  children?: ReactNode;
+}) {
   const decide = useDecideBlocker(item);
   const held = useId();
   const choice = blockerChoice(item, hob);
@@ -49,9 +60,11 @@ export function BlockerChoices({ item, hob, children }: { item: BackpackItem; ho
             {copy.retry}
           </Button>
         )}
-        <Button size="xs" variant="outline" disabled aria-describedby={held}>
-          {copy.reassign}
-        </Button>
+        {showHeld && (
+          <Button size="xs" variant="outline" disabled aria-describedby={held}>
+            {copy.reassign}
+          </Button>
+        )}
         <Button
           size="xs"
           variant={next === "dismiss" ? "default" : "outline"}
@@ -62,9 +75,11 @@ export function BlockerChoices({ item, hob, children }: { item: BackpackItem; ho
         </Button>
         {children}
       </div>
-      <p id={held} className="m-0 text-xs text-label">
-        {copy.reassignHeld}
-      </p>
+      {showHeld && (
+        <p id={held} className="m-0 text-xs text-label">
+          {copy.reassignHeld}
+        </p>
+      )}
       {decide.isError && (
         <p role="alert" className="m-0 text-xs text-rose">
           {decide.error instanceof ApiError && decide.error.tag === "HobUnavailable"

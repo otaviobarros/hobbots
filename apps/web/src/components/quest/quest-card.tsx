@@ -3,8 +3,6 @@ import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useBlockers } from "../../api/blockers.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
-import { TaskApprovals, useShownApprovals } from "../approvals/task-approvals.tsx";
-import { BlockerCard } from "../blockers/blocker-card.tsx";
 import { blockersOn } from "../blockers/blocker-model.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { messages } from "./messages.ts";
@@ -56,7 +54,6 @@ export function QuestCard({
 }) {
   const card = workCard(tree);
   const stuck = useStuck(tree);
-  const asking = useShownApprovals(tree.approvals);
   if (card === null) return null;
   const lead = hobs(card.leadId);
   const title = taskTitle(card.top);
@@ -89,9 +86,6 @@ export function QuestCard({
           <span>{copy.party({ lead: lead.name, members: messages.names(members) })}</span>
         </p>
       )}
-      {stuck.map((item) => (
-        <BlockerCard key={item.id} item={item} hobs={hobs} inChat />
-      ))}
       {card.rows.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {card.rows.map((row) => (
@@ -101,8 +95,6 @@ export function QuestCard({
           ))}
         </ul>
       )}
-      {/* A member's turn asks outside the chat, so its request is decided here, on its lead's card (#698). */}
-      <TaskApprovals approvals={asking} />
       {/* Always there, so a Task without rows still opens its brief and output once it ends. */}
       <div className="flex items-center gap-2 text-detail text-label">
         {card.more > 0 && <span>{copy.moreCount({ count: card.more })}</span>}

@@ -116,7 +116,7 @@ function ProviderMark({ mark, tile }: { mark: string; tile: string }) {
   return (
     <span
       aria-hidden
-      className={cn("cut grid size-9 flex-none place-items-center text-[19px] font-bold text-ground", tile)}
+      className={cn("cut grid size-9 flex-none place-items-center text-[19px] font-bold text-provider-ink", tile)}
     >
       {mark}
     </span>

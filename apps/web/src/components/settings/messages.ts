@@ -37,6 +37,12 @@ export const messages = {
       { label: "Menu bar", words: ["close the window", "keep running"], section: "app" },
       { label: "Notifications", words: ["notify", "alerts", "sound"], section: "app" },
       {
+        label: "Appearance",
+        words: ["theme", "look", "lamplight", "workshop", "dark", "light", "mode", "colors"],
+        section: "app",
+      },
+      { label: "Text size", words: ["font", "bigger", "larger", "zoom", "readable"], section: "app" },
+      {
         label: "How careful hobs are",
         words: ["safety", "preset", "permissions", "careful", "trusting"],
         section: "safety",
@@ -175,6 +181,18 @@ export const messages = {
     dataFolderIntro: "Everything Hobbots keeps lives in this folder on the hub. A backup copies what matters in it.",
     dataFolderElsewhere: "Shown only on the hub's own computer.",
     copy: { idle: "Copy", copied: "Copied", failed: "Could not copy" },
+  },
+  appearance: {
+    heading: "Appearance",
+    look: "Look",
+    looks: {
+      lamplight: { label: "Lamplight", hint: "Calm and smooth" },
+      workshop: { label: "Workshop", hint: "Pixel art, more playful" },
+    },
+    mode: "Light or dark",
+    modes: { dark: "Dark", light: "Light" },
+    textSize: "Text size",
+    sizes: { standard: "Standard", larger: "Larger" },
   },
   thisApp: {
     heading: "This app",

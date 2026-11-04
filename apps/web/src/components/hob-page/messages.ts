@@ -68,6 +68,25 @@ export const messages = {
   },
   aside: {
     label: ({ name }: { name: string }) => `About ${name}`,
+    showFewer: "Show fewer",
+    quests: {
+      label: "Quests it leads",
+      showAll: ({ count }: { count: number }) => `Show all ${formatCount(count)}`,
+      progress: ({ done, total, needs }: { done: number; total: number; needs: number }) =>
+        `${formatCount(done)} of ${formatCount(total)} done${needs > 0 ? ` · ${formatCount(needs)} need you` : ""}`,
+      finished: ({ count }: { count: number }) =>
+        plural(count, { one: "1 finished quest", other: `${formatCount(count)} finished quests` }),
+    },
+    backpack: {
+      label: "Backpack",
+      intro: "What it still has to deal with. You can look; it does the work.",
+      empty: "Empty. Nothing waiting on anyone.",
+      list: ({ name }: { name: string }) => `What ${name} still has to deal with`,
+    },
+    setup: "Setup",
+    worksIn: "Works in",
+    noFolders: "No folders yet.",
+    moreFolders: ({ count }: { count: number }) => `${formatCount(count)} more`,
     thinksWith: "Thinks with",
     change: "Change in Profile",
   },

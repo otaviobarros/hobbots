@@ -9,6 +9,7 @@ import {
   Message,
   type MessageId,
   messageEvents,
+  previewLine,
   type ReplyUsage,
   Thread,
   ThreadCheckpoint,
@@ -76,14 +77,29 @@ const configColumns = (agent: Agent) => ({
 });
 // A thread's sessions and own brain are JSON text columns (migration 0020).
 export const threadRows = (
-  rows: ReadonlyArray<{ readonly revision?: unknown; readonly sessions?: unknown; readonly brain?: unknown }>,
+  rows: ReadonlyArray<{
+    readonly revision?: unknown;
+    readonly sessions?: unknown;
+    readonly brain?: unknown;
+    readonly lastContent?: unknown;
+  }>,
 ) =>
-  rows.map((row) => ({
+  rows.map(({ lastContent, ...row }) => ({
     ...row,
+    lastLine: typeof lastContent === "string" ? previewLine(lastContent) : null,
     revision: Number(row.revision),
     sessions: JSON.parse(String(row.sessions ?? "[]")),
     brain: row.brain == null ? null : JSON.parse(String(row.brain)),
   }));
+/**
+ * The start of the last message a thread's transcript shows, as `last_content`: queued messages and
+ * ones with no text, such as a reply made only of tool calls, are skipped. `threadRows` makes it one line.
+ * 600 characters leave room for the whitespace that line collapses before it cuts at `PREVIEW_LENGTH`.
+ */
+const lastContent = (sql: SqlClient.SqlClient) =>
+  sql`(SELECT substr(m.content, 1, 600) FROM messages m
+    WHERE m.thread_id = threads.id AND m.status <> 'queued' AND trim(m.content) <> ''
+    ORDER BY m.seq DESC LIMIT 1) AS last_content`;
 const checkpointRows = (rows: ReadonlyArray<{ readonly lines?: unknown; readonly omitted?: unknown }>) =>
   rows.map((row) => ({ ...row, lines: JSON.parse(String(row.lines)), omitted: Number(row.omitted) }));
 // A reply's usage is one column per field (migration 0037), read as numbers: PostgreSQL reads
@@ -168,20 +184,21 @@ export const HobbotsRepositoryLive = Layer.effect(
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT * FROM threads WHERE agent_id = ${agentId} AND archived_at IS NULL
+        sql`SELECT threads.*, ${lastContent(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NULL
           ORDER BY updated_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
     });
     const listArchivedThreads = SqlSchema.findAll({
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT * FROM threads WHERE agent_id = ${agentId} AND archived_at IS NOT NULL
+        sql`SELECT threads.*, ${lastContent(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NOT NULL
           ORDER BY archived_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
     });
     const findThread = SqlSchema.findOneOption({
       Request: Schema.String,
       Result: Thread,
-      execute: (id) => sql`SELECT * FROM threads WHERE id = ${id}`.pipe(Effect.map(threadRows)),
+      execute: (id) =>
+        sql`SELECT threads.*, ${lastContent(sql)} FROM threads WHERE id = ${id}`.pipe(Effect.map(threadRows)),
     });
     const findCheckpoint = SqlSchema.findOneOption({
       Request: Schema.String,
@@ -299,7 +316,14 @@ export const HobbotsRepositoryLive = Layer.effect(
             pinned_at = excluded.pinned_at,
             updated_at = excluded.updated_at,
             revision = excluded.revision`;
-          return { value: thread, events: [{ _tag: "ThreadUpserted", thread }] };
+          // The last line is read, never written, so the event carries what a read would show.
+          const [read] = threadRows(
+            yield* sql<{
+              readonly lastContent: unknown;
+            }>`SELECT ${lastContent(sql)} FROM threads WHERE id = ${thread.id}`,
+          );
+          const shown = new Thread({ ...thread, lastLine: read?.lastLine ?? null });
+          return { value: shown, events: [{ _tag: "ThreadUpserted", thread: shown }] };
         }),
       );
 

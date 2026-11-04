@@ -3,7 +3,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { useActivity } from "../../api/activity.ts";
-import type { IconName } from "../../art/icons.ts";
+import type { SectionName } from "../../art/icons.ts";
 import { ChiefMark, type ChiefMood } from "../chief-mark.tsx";
 import { chiefLabel, chiefMood } from "../chief-mood.ts";
 import { useWaitingCount } from "../inbox/use-waiting-count.ts";
@@ -13,14 +13,13 @@ import { useSidebarOpen } from "./use-sidebar-open.ts";
 
 const copy = messages;
 
-// The MVP sections. Routines and Memory return after the MVP.
+// The four sections; the hobs follow them. Routines and Memory return after the MVP.
 const ITEMS = [
   { label: "Home", to: "/" },
-  { label: "Hobs", to: "/hobs" },
   { label: "Inbox", to: "/inbox" },
   { label: "Usage", to: "/usage" },
   { label: "Settings", to: "/settings" },
-] as const satisfies ReadonlyArray<{ label: IconName; to: string }>;
+] as const satisfies ReadonlyArray<{ label: SectionName; to: string }>;
 
 /** In development, `?chief=needs-you`, `?chief=working` or `?chief=idle` previews a mood. */
 const previewMood = (): ChiefMood | null => {
@@ -109,15 +108,15 @@ function Chevron({ open }: { open: boolean }) {
   return (
     <svg
       aria-hidden
-      viewBox="0 0 20 20"
-      className={cn("size-5 transition-transform duration-220", open && "rotate-180")}
+      viewBox="0 0 16 16"
+      className={cn("size-[18px] transition-transform duration-220", open && "rotate-180")}
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.6}
+      strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="M8 5l5 5-5 5" />
+      <path d="M6 3.5 10.5 8 6 12.5" />
     </svg>
   );
 }
