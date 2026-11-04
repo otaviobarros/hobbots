@@ -96,7 +96,7 @@ test("[TC-UX-045] a finished Task's Terminal shows its commands as history: wher
 
   const { bench, panel } = await openTerminal(page, "Check the notes");
   // A finished Task's Terminal is history, never a live session, and nothing in it takes typing.
-  await expect(bench.getByRole("tab", { name: /^Terminal/ })).toHaveText("TerminalHistory");
+  await expect(bench.locator("header").first()).toContainText("History");
   await expect(panel).toContainText("3 commands · 1 failed");
   await expect(panel).toContainText("A record of what ran. You cannot type here.");
   await expect(panel.getByRole("textbox")).toHaveCount(0);
@@ -154,7 +154,7 @@ test("[TC-UX-046] while a turn runs the Terminal is Live: a running command coun
   // The second turn runs a command that keeps running until the turn ends.
   await send(page, ["Keep watching", "fake:tool Bash echo started", "fake:tool Bash sleep 600"]);
   const { bench, panel } = await openTerminal(page, "Watch the build");
-  await expect(bench.getByRole("tab", { name: /^Terminal/ })).toHaveText("TerminalLive");
+  await expect(bench.locator("header").first()).toContainText("●Live");
   const commands = panel.getByRole("list", { name: "Commands" }).getByRole("listitem");
   await expect(commands).toHaveCount(2, { timeout: 20_000 });
   await expect(panel).toContainText("2 commands · 1 running");
