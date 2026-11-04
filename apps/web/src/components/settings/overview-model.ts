@@ -4,7 +4,7 @@ import { runtimeProblem, signInProblem } from "../../api/runtime-health.ts";
 import { presetInfo } from "../../api/safety.ts";
 import { formatAgo, formatList } from "../../lib/format.ts";
 import { PROVIDER_NAMES, PROVIDERS } from "../../lib/providers.ts";
-import type { Theme } from "../../lib/theme.ts";
+import { lookOf, modeOf, type Theme } from "../../lib/theme.ts";
 import { messages } from "./messages.ts";
 import type { SettingsSection } from "./sections.ts";
 
@@ -192,9 +192,8 @@ const backupArea = (
 };
 
 const appearanceCard = (theme: Theme): OverviewCard => {
-  const look = theme.startsWith("workshop") ? copy.appearance.looks.workshop : copy.appearance.looks.lamplight;
-  const mode =
-    theme === "lamplight-dusk" || theme === "workshop-night" ? copy.appearance.modes.dark : copy.appearance.modes.light;
+  const look = copy.appearance.looks[lookOf(theme)];
+  const mode = copy.appearance.modes[modeOf(theme)];
   return {
     id: "appearance",
     section: "app",

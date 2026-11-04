@@ -6,6 +6,26 @@ export const THEMES = ["lamplight-dusk", "lamplight-paper", "workshop-night", "w
 
 export type Theme = (typeof THEMES)[number];
 
+/** The two looks, each with a dark and a light theme. */
+export type Look = "lamplight" | "workshop";
+
+export type Mode = "dark" | "light";
+
+/** The look a theme belongs to. */
+export const lookOf = (theme: Theme): Look => (theme.startsWith("workshop") ? "workshop" : "lamplight");
+
+/** Whether a theme is dark or light. */
+export const modeOf = (theme: Theme): Mode =>
+  theme === "lamplight-dusk" || theme === "workshop-night" ? "dark" : "light";
+
+const THEME_OF: Readonly<Record<Look, Readonly<Record<Mode, Theme>>>> = {
+  lamplight: { dark: "lamplight-dusk", light: "lamplight-paper" },
+  workshop: { dark: "workshop-night", light: "workshop-daylight" },
+};
+
+/** The theme a look shows in a mode: Lamplight Dusk, Lamplight Paper, Workshop Night or Workshop Daylight. */
+export const themeOf = (look: Look, mode: Mode): Theme => THEME_OF[look][mode];
+
 /** The theme a device shows until a theme is picked on it: first run always uses Workshop Night. */
 export const FIRST_RUN_THEME: Theme = "workshop-night";
 
@@ -98,6 +118,9 @@ export const followThemeChoice = () => {
     if (event.key === STORAGE_KEY || event.key === null) store.storageChanged();
   });
 };
+
+/** Picks this device's theme, here and in every other window on it. */
+export const setTheme = (theme: Theme) => store.set(theme);
 
 /** This device's theme, kept in step with every change, here or in another window. */
 export const useTheme = (): Theme => useSyncExternalStore(store.subscribe, store.theme, store.theme);
