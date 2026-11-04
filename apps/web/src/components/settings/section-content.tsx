@@ -116,7 +116,10 @@ function Connections() {
             <div key={provider.name} className="flex items-center gap-3.5 border-b border-line py-2.5">
               <span
                 aria-hidden
-                className={cn("grid size-[30px] place-items-center rounded-tile font-bold text-provider-ink", provider.tile)}
+                className={cn(
+                  "grid size-[30px] place-items-center rounded-tile font-bold text-provider-ink",
+                  provider.tile,
+                )}
               >
                 {provider.mark}
               </span>
