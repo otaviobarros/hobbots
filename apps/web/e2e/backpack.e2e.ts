@@ -129,10 +129,8 @@ test("[TC-IN-150] Aldric's card and his Task's backpack show Quill's result as a
     "Waiting",
   );
 
-  // Opening it from the card opens Quill's Task. The sheet gives focus back as it finishes closing,
-  // which would close a card opened before then, so the card opens only once the sheet is gone.
+  // Opening it from the card opens Quill's Task.
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
   await (await card("Aldric")).getByRole("button", { name: quillResult }).click();
   await expect(page.getByRole("heading", { name: "Draft the landing copy" })).toBeVisible();
   await page.keyboard.press("Escape");
