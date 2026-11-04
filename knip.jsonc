@@ -12,9 +12,7 @@
     },
     "apps/web": {
       // The window frame, which app-frame-plugin.ts loads by path to render it into index.html.
-      "entry": ["src/components/shell/app-frame.tsx"],
-      // The Quest room's lanes (#905), until the room that mounts them lands (#903).
-      "ignore": ["src/components/lanes/**"]
+      "entry": ["src/components/shell/app-frame.tsx"]
     },
     "apps/site": {
       // `cloudflare:workers` is a module of the Workers runtime, not a package.

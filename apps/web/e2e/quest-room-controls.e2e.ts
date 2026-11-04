@@ -35,7 +35,7 @@ test("[TC-CH-190] the Quest room shows every lane live with its controls and kee
   const room = await openRoom(page, title);
   await expect(room).toContainText("Aldric's quest");
   await expect(laneHead(page, "Quill")).toContainText("Draft the landing copy");
-  await expect(laneTask(page, "Build the campaign")).toContainText("waiting on Quill");
+  await expect(lane(page, "Ada")).toContainText("Waits on Quill");
   await expect(laneHead(page, "Ada")).toContainText("you", { timeout: 15_000 });
   await roomMenu(page, title);
   await expect(page.getByRole("menuitem", { name: "Cancel quest…" })).toBeVisible();

@@ -31,7 +31,8 @@ import { EventBus } from "./event-bus.ts";
  * Quill and Ada as its party. Ada's question climbs to you; the Quest finishes once you answer it.
  * Cancelling it stops the play, and each of its Attempts ends as a session would when told to stop,
  * so every Task confirms its cancel. When hobs named Rook and Pip are there too, Aldric also brings in
- * Rook, who leads a Quest of his own under Aldric's and brings in Pip (#275).
+ * Rook, who leads a Quest of his own under Aldric's and brings in Pip (#275). With a hob named Bram
+ * as well, Aldric brings Bram in for the banners, so the room has six lanes (#905).
  *
  * Asking for a spring sale sets up the same party with work for the Quest tab's controls instead:
  * Quill's banner and Ada's email have failed, so they can be retried or given to another hob, and
@@ -118,6 +119,8 @@ interface Cast {
   readonly ada: AgentId;
   /** Rook and Pip, for the nested Quest, when both are there. */
   readonly nested: { readonly rook: AgentId; readonly pip: AgentId } | null;
+  /** Bram, for the banners, when there. */
+  readonly bram: AgentId | null;
 }
 
 /** The thread of a scripted request and which script it asks for, or null for any other event. */
@@ -468,6 +471,17 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       yield* pause;
       yield* complete(ads.id, "a-ads", "Ads ready around doorbuster", null);
     }
+    if (cast.bram !== null) {
+      const banners = yield* member(
+        "banners",
+        cast.bram,
+        "Design the banners\nThree banners for the shop's pages.",
+        [],
+        [],
+      );
+      yield* pause;
+      yield* complete(banners.id, "a-banners", "Three banners in the shop's colours", null);
+    }
 
     // Quill asks Aldric, who answers without bothering you.
     yield* whileOpen(
@@ -619,7 +633,15 @@ const castFor = (threadId: Thread["id"]) =>
     const rook = named("rook");
     const pip = named("pip");
     const nested = rook === undefined || pip === undefined ? null : { rook: rook.id, pip: pip.id };
-    return Option.some({ thread: thread.value, lead: thread.value.agentId, quill: quill.id, ada: ada.id, nested });
+    const bram = named("bram")?.id ?? null;
+    return Option.some({
+      thread: thread.value,
+      lead: thread.value.agentId,
+      quill: quill.id,
+      ada: ada.id,
+      nested,
+      bram,
+    });
   });
 
 /** Plays the Black Friday Quest for each request that asks for one, `step` apart, until it is cancelled. */

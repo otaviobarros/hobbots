@@ -13,9 +13,16 @@ export const stopQuestHub = async () => {
 
 /**
  * A hub past setup that plays the scripted Black Friday Quest, with Aldric, Quill and Ada. With
- * `nested`, Rook and Pip join too, and Rook leads a Quest of his own under Aldric's.
+ * `nested`, Rook and Pip join too, and Rook leads a Quest of his own under Aldric's. With `six`, Bram
+ * joins the nested party for the banners, so the room has six lanes.
  */
-export const questHub = async ({ nested = false }: { readonly nested?: boolean } = {}) => {
+export const questHub = async ({
+  nested = false,
+  six = false,
+}: {
+  readonly nested?: boolean;
+  readonly six?: boolean;
+} = {}) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir, { HOBBOTS_FAKE_QUEST: "black-friday" });
   const { url, headers } = hub;
@@ -30,7 +37,11 @@ export const questHub = async ({ nested = false }: { readonly nested?: boolean }
   };
   await api("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
   const ids: Record<string, string> = {};
-  const names = nested ? ["Aldric", "Quill", "Ada", "Rook", "Pip"] : ["Aldric", "Quill", "Ada"];
+  const names = six
+    ? ["Aldric", "Quill", "Ada", "Rook", "Pip", "Bram"]
+    : nested
+      ? ["Aldric", "Quill", "Ada", "Rook", "Pip"]
+      : ["Aldric", "Quill", "Ada"];
   for (const [index, name] of names.entries()) {
     const hob = await api("POST", "/agents", {
       id: randomUUID(),
@@ -41,7 +52,7 @@ export const questHub = async ({ nested = false }: { readonly nested?: boolean }
       hat: null,
       tool: null,
       lookSeed: 4000 + index * 911,
-      lookColor: (["amber", "sky", "moss", "amber", "sky"] as const)[index],
+      lookColor: (["amber", "sky", "moss", "amber", "sky", "moss"] as const)[index],
       runtime: "claude-code",
       model: null,
       effort: null,

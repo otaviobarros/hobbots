@@ -19,7 +19,8 @@ export const questRoom = (page: Page, title: string): Locator =>
   page.getByRole("region", { name: `${title}, Quest room` });
 
 /** A hob's lane in the open room. */
-export const lane = (page: Page, name: string): Locator => page.getByRole("article", { name: `${name}'s lane` });
+export const lane = (page: Page, name: string): Locator =>
+  page.getByRole("region", { name: `${name}'s lane`, exact: true });
 
 /** One Task in its hob's lane, by its title, in the named hob's lane when two Tasks share a title. */
 export const laneTask = (page: Page, title: string, owner?: string): Locator =>

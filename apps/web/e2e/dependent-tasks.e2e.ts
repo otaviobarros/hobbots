@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, laneTask, openRoom } from "./quest-room.ts";
+import { lane, laneHead, openRoom } from "./quest-room.ts";
 
 // Issue #564 in the browser: a Task delegated with depends_on waits, and shows whom it waits on in
 // the quest sheet, until the Task it depends on is done; only then does it run. The hub-level checks
@@ -104,7 +104,7 @@ test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill
   // While Quill's Task waits on your push, Rook's waits on Quill's and has not run.
   await openRoom(page, "Build the app");
   const frontend = laneHead(page, "Rook");
-  await expect(laneTask(page, "Write the frontend")).toContainText("waiting on Quill");
+  await expect(lane(page, "Rook")).toContainText("Waits on Quill");
   await expect(frontend).toContainText("Waiting");
   await expect(frontend).not.toContainText("Running");
 
@@ -121,5 +121,5 @@ test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill
   await openRoom(page, "Build the app");
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 20_000 });
   await expect(frontend).toContainText("Done", { timeout: 20_000 });
-  await expect(laneTask(page, "Write the frontend")).not.toContainText("waiting on Quill");
+  await expect(lane(page, "Rook")).not.toContainText("Waits on Quill");
 });

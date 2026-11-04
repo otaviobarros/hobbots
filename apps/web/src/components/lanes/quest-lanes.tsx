@@ -1,8 +1,9 @@
 import type { AgentId } from "@hobbots/domain";
 import type { HobLookup } from "../quest/use-work.ts";
-import type { LaneNode, LaneRoom } from "./lane-model.ts";
-import { LaneView } from "./lane-view.tsx";
+import type { Lane as LaneData, LaneNode, LaneRoom } from "./lane-model.ts";
+import { type LaneSlots, LaneView } from "./lane-view.tsx";
 import { messages } from "./messages.ts";
+import type { LaneReads } from "./use-lane-room.ts";
 
 interface Shared {
   hobs: HobLookup;
@@ -12,6 +13,10 @@ interface Shared {
   /** The lane the lineup last jumped to, which flashes once. */
   flashing: AgentId | null;
   onFlashed: () => void;
+  /** What the room puts in each lane: its menu, its tries and its Tasks' cards. */
+  slots?: (lane: LaneData) => LaneSlots;
+  /** Where the reads of each hob's records stand. */
+  reads?: (hobId: AgentId) => LaneReads;
 }
 
 function Lane({ node, ...shared }: Shared & { node: LaneNode }) {
@@ -25,6 +30,8 @@ function Lane({ node, ...shared }: Shared & { node: LaneNode }) {
       flashing={flashing === id}
       onPick={shared.onPick}
       onFlashed={shared.onFlashed}
+      slots={shared.slots?.(node.lane) ?? {}}
+      reads={shared.reads?.(id)}
     />
   );
 }
