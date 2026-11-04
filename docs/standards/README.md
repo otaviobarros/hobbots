@@ -145,6 +145,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-DESKTOP-007 | The packaged app flips Electron's fuses | Active |
 | STD-DESKTOP-008 | The main process never blocks | Active |
 | STD-DESKTOP-009 | Electron stays on a supported release | Active |
+| STD-DESKTOP-010 | A window never flashes blank or fails silently | Active |
 | STD-TEST-001 | Integration and end-to-end tests carry a case ID | Active |
 | STD-TEST-002 | Fakes first, then the real runtime | Active |
 | STD-TEST-003 | Pure logic has unit tests | Active |

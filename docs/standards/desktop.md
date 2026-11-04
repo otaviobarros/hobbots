@@ -73,3 +73,11 @@ Keep Electron on a supported major release with its latest patch, pinned exactly
 - **Why:** Electron ships Chromium and Node, and their security fixes reach the app only through an Electron update.
 - **Enforced by:** dependency update pull requests and review.
 - **Applies to:** `apps/desktop`.
+
+### STD-DESKTOP-010 A window never flashes blank or fails silently
+
+A window opens with the active theme's background color, or stays hidden until `ready-to-show`, so it never flashes white. When a renderer crashes, hangs or fails to load (`render-process-gone`, `unresponsive`, `did-fail-load`), the main process logs it and recovers: it reloads the page or shows a message that follows STD-UI-009. The main process also logs uncaught exceptions and unhandled rejections.
+
+- **Why:** a blank or frozen window with no way out is the worst failure a desktop app can show.
+- **Enforced by:** a unit test of the window's crash and load-failure handlers.
+- **Applies to:** `apps/desktop/src/main`.
