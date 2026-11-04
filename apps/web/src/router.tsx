@@ -1,4 +1,4 @@
-import { AgentId, AttemptId, TaskId, ThreadId } from "@hobbots/domain";
+import { AgentId, AttemptId, type HistoryFilter, TaskId, ThreadId } from "@hobbots/domain";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createHashHistory,
@@ -18,7 +18,7 @@ import { ArchiveNotices } from "./components/archive-page/archive-notices.tsx";
 import { ArchivePage } from "./components/archive-page/archive-page.tsx";
 import { ArchivedChatPage, RetiredChatPage, RetiredHobPage } from "./components/archive-page/archive-read.tsx";
 import { HobPage } from "./components/hob-page/hob-page.tsx";
-import { type HobPageTab, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
+import { type HobPageTab, isHistoryFilter, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
 import { HobProfile } from "./components/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { HobsPage } from "./components/hobs-page/hobs-page.tsx";
@@ -166,17 +166,20 @@ const hobsRoute = createRoute({
 const hobRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId",
-  validateSearch: (search: Record<string, unknown>): { tab?: HobPageTab | undefined } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: HobPageTab | undefined; show?: HistoryFilter | undefined } => ({
     tab: isHobPageTab(search.tab) && search.tab !== "chats" ? search.tab : undefined,
+    show: isHistoryFilter(search.show) && search.show !== "all" ? search.show : undefined,
   }),
   component: function HobPageRoute() {
     const params = hobRoute.useParams();
-    const { tab } = hobRoute.useSearch();
+    const { tab, show } = hobRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
         aside={null}
-        main={(props) => <HobPage key={params.hobId} {...props} tab={tab ?? "chats"} />}
+        main={(props) => <HobPage key={params.hobId} {...props} tab={tab ?? "chats"} show={show ?? "all"} />}
       />
     );
   },

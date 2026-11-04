@@ -63,8 +63,55 @@ export const messages = {
     unpin: "Unpin",
   },
   history: {
-    soon: "History is on its way",
-    soonBody: ({ name }: { name: string }) => `It will list what ${name} did across all its chats, newest first.`,
+    filters: {
+      label: "Show",
+      all: "Everything",
+      work: "Work",
+      you: "Your decisions",
+      quest: "Quests",
+    },
+    noteLead: "Includes the work of the hobs on its quests",
+    note: ({ name }: { name: string }) => `Across all of ${name}'s chats`,
+    loading: "Reading the history…",
+    failed: "The history did not load. Try again.",
+    retry: "Try again",
+    today: "Today",
+    yesterday: "Yesterday",
+    you: "You",
+    someone: "A retired hob",
+    waiting: "Waiting on you",
+    review: "Review",
+    workbench: "Workbench",
+    chat: "Chat",
+    showEarlier: ({ count }: { count: number }) =>
+      plural(count, { one: "Show 1 earlier day", other: `Show ${formatCount(count)} earlier days` }),
+    loadingEarlier: "Reading earlier days…",
+    empty: "Nothing yet.",
+    emptyBody: ({ name }: { name: string }) =>
+      `When ${name} starts working, what it does, and what you decide, shows up here.`,
+    emptyKind: "Nothing of this kind yet.",
+    emptyKindBody: ({ name }: { name: string }) => `Try Everything to see all of ${name}'s work.`,
+    asked: ({ brief }: { brief: string }) => `You asked for “${brief}”`,
+    pickedUp: ({ brief, lead }: { brief: string; lead: string }) => `Picked up “${brief}” from ${lead}`,
+    finished: ({ brief }: { brief: string }) => `Finished “${brief}”`,
+    stopped: ({ brief, tries }: { brief: string; tries: number }) =>
+      tries > 1 ? `Stopped “${brief}” after ${formatCount(tries)} tries` : `Stopped “${brief}”`,
+    cancelled: ({ brief }: { brief: string }) => `“${brief}” was cancelled`,
+    questStarted: ({ goal, party }: { goal: string; party: string | null }) =>
+      party === null ? `Started ${goal}` : `Started ${goal} with ${party}`,
+    questDone: ({ goal }: { goal: string }) => `${goal} finished`,
+    questEnded: ({ goal }: { goal: string }) => `${goal} ended before it was done`,
+    approval: {
+      asks: ({ label }: { label: string }) => `Asks you before “${label}”`,
+      allowed: ({ label, always }: { label: string; always: boolean }) =>
+        always ? `You allowed “${label}”, always` : `You allowed “${label}”`,
+      denied: ({ label }: { label: string }) => `You denied “${label}”`,
+      expired: ({ label }: { label: string }) => `Nobody answered “${label}” in time`,
+    },
+    question: {
+      asks: ({ text }: { text: string }) => `Asks you: ${text}`,
+      answered: ({ answer }: { answer: string }) => `You answered: ${answer}`,
+    },
   },
   aside: {
     label: ({ name }: { name: string }) => `About ${name}`,
