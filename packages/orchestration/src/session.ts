@@ -70,7 +70,7 @@ export const runSessionTurn = (
           prompt: turn.prompt,
           briefing: null,
           sessionId: turn.sessionId,
-          instructions: systemInstructions(turn.agent.name, turn.config),
+          instructions: systemInstructions(turn.config.name, turn.config),
           instructionsChanged: false,
           model: turn.config.model,
           effort: turn.config.effort,

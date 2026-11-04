@@ -1,6 +1,7 @@
 import type { UpdateAgentPayload } from "@hobbots/api";
 import {
   type Agent,
+  type HobColor,
   type ReplyLength,
   type RetireWork,
   type RoleHat,
@@ -23,16 +24,23 @@ export interface RoleChoice {
 }
 
 /**
- * The hob profile's editable configuration: its role, its tone, its instructions and the model and
- * effort it thinks with. Kept apart from the screen so the edit it sends can be tested without a browser.
+ * The hob profile's editable configuration: its name and look, its role, its tone, its instructions
+ * and the model and effort it thinks with. Kept apart from the screen so the edit it sends can be
+ * tested without a browser.
  */
 export interface ProfileDraft extends BrainChoice, RoleChoice {
+  readonly name: string;
+  readonly lookSeed: number;
+  readonly lookColor: HobColor;
   readonly voice: Voice;
   readonly length: ReplyLength;
   readonly instructions: string;
 }
 
 const ROLE_KEYS = ["role", "roleTitle", "sigil", "hat", "tool"] as const;
+// The parts of a draft that move on their own when it is rebased.
+const OWN_KEYS = ["name", "lookSeed", "lookColor", "voice", "length"] as const;
+type OwnKey = (typeof OWN_KEYS)[number];
 
 /**
  * Picks a starter role, which brings its title, sigil, hat and tool, or the user's own words
@@ -44,6 +52,13 @@ export const pickRole = <D extends RoleChoice>(draft: D, role: RoleId | null): D
 /** Why the role cannot be saved as it is, or undefined when it can. */
 export const roleProblem = (draft: RoleChoice): string | undefined =>
   draft.roleTitle.trim() === "" ? "Give the role a title." : undefined;
+
+/** The API's limit on a hob's name. */
+export const NAME_MAX = 40;
+
+/** Why the draft cannot be saved as it is, or undefined when it can. */
+export const draftProblem = (draft: ProfileDraft): string | undefined =>
+  draft.name.trim() === "" ? "Give the hob a name." : roleProblem(draft);
 
 /** The API's limit on instructions. */
 export const INSTRUCTIONS_MAX = 20_000;
@@ -58,6 +73,9 @@ const storedModel = (model: string | null) => (model === null || model === DEFAU
  */
 export const profileDraft = (hob: Agent, models?: RuntimeModels): ProfileDraft => {
   const draft: ProfileDraft = {
+    name: hob.name,
+    lookSeed: hob.lookSeed,
+    lookColor: hob.lookColor,
     role: hob.role,
     roleTitle: hob.roleTitle,
     sigil: hob.sigil,
@@ -73,6 +91,16 @@ export const profileDraft = (hob: Agent, models?: RuntimeModels): ProfileDraft =
   return models ? settleBrain(draft, models) : draft;
 };
 
+// The name, look and color the draft changes.
+const lookEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload => {
+  const name = draft.name.trim();
+  return {
+    ...(name !== hob.name && { name }),
+    ...(draft.lookSeed !== hob.lookSeed && { lookSeed: draft.lookSeed }),
+    ...(draft.lookColor !== hob.lookColor && { lookColor: draft.lookColor }),
+  };
+};
+
 /** Only the fields the draft changes, so an untouched field never becomes a new version. */
 export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload => {
   const model = storedModel(draft.model);
@@ -80,6 +108,7 @@ export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload
   // The hub checks the model and effort against the runtime, so a new runtime sends both.
   const newRuntime = draft.runtime !== hob.runtime;
   return {
+    ...lookEdit(hob, draft),
     ...(role.role !== hob.role && { role: role.role }),
     ...(role.roleTitle !== hob.roleTitle && { roleTitle: role.roleTitle }),
     ...(role.sigil !== hob.sigil && { sigil: role.sigil }),
@@ -98,7 +127,8 @@ export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload
  * Moves a draft onto a newer baseline, such as a version saved from another window or the answer
  * to a save. Each part the user left as it was in the old baseline takes the new value; each part
  * they changed keeps their edit. The provider, model and effort move together, as the form picks them, and so
- * do the role's title, sigil, hat and tool. The voice and the length move on their own.
+ * do the role's title, sigil, hat and tool. The name, the look, the color, the voice and the length
+ * move on their own.
  *
  * While a save is on its way, the parts it sends stay as the user has them now, even when that is
  * back to the old baseline: the update for the save itself can arrive before the save's answer.
@@ -117,9 +147,12 @@ export const rebaseDraft = (
   const roleChanged = (d: ProfileDraft) => ROLE_KEYS.some((key) => d[key] !== from[key]);
   const keepRole = roleChanged(draft) || (sending !== undefined && roleChanged(sending));
   const role = keepRole ? draft : to;
-  const keep = <K extends "voice" | "length">(key: K) =>
+  const keep = <K extends OwnKey>(key: K) =>
     draft[key] !== from[key] || (sending !== undefined && sending[key] !== from[key]) ? draft[key] : to[key];
   return {
+    name: keep("name"),
+    lookSeed: keep("lookSeed"),
+    lookColor: keep("lookColor"),
     role: role.role,
     roleTitle: role.roleTitle,
     sigil: role.sigil,
@@ -137,8 +170,7 @@ export const rebaseDraft = (
 /** Whether the draft differs from where the form started. */
 export const isDirty = (base: ProfileDraft, draft: ProfileDraft): boolean =>
   ROLE_KEYS.some((key) => base[key] !== draft[key]) ||
-  base.voice !== draft.voice ||
-  base.length !== draft.length ||
+  OWN_KEYS.some((key) => base[key] !== draft[key]) ||
   base.instructions !== draft.instructions ||
   base.runtime !== draft.runtime ||
   base.model !== draft.model ||
