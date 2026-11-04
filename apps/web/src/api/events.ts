@@ -43,7 +43,7 @@ import {
 import type { TaskEvent } from "./task-trees.ts";
 import { applyTaskEvent } from "./tasks.ts";
 import { showUnread } from "./thread-reads.ts";
-import { activityChanged, applyCommandOutput, recordedAttempt } from "./workbench.ts";
+import { applyCommandOutput } from "./workbench.ts";
 
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
 const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady));
@@ -118,18 +118,14 @@ type WorkbenchEvent = Extract<
       | "CommandOutput";
   }
 >;
-const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent =>
-  event._tag === "CommandOutput" || recordedAttempt(event) !== null;
-
-/** A recorded command, file change or scan reads its Attempt's records again; a running command's output is kept as it comes. */
-const applyWorkbenchEvent = (queryClient: QueryClient, event: WorkbenchEvent) => {
-  if (event._tag === "CommandOutput") {
-    applyCommandOutput(queryClient, event);
-    return;
-  }
-  const attemptId = recordedAttempt(event);
-  if (attemptId !== null) void activityChanged(queryClient, attemptId);
-};
+const WORKBENCH_RECORDS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  "CommandRecorded",
+  "FileChangesRecorded",
+  "FolderScanned",
+  "AttemptStepsRecorded",
+  "CommandOutput",
+]);
+const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent => WORKBENCH_RECORDS.has(event._tag);
 
 /**
  * Applies an event to the Query cache and records what it changed in the sync generation's overlay.
@@ -138,10 +134,10 @@ const applyWorkbenchEvent = (queryClient: QueryClient, event: WorkbenchEvent) =>
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   applyQuestWork(queryClient, event);
   applyHistory(queryClient, event);
-  // An Attempt's commands, file changes and scans (ADR 023) read its records again in the Workbench.
-  // A running command's output is transient; the Terminal follows it.
+  // An open Quest room's Workbench follows its tree's records on the tree's own stream (ADR 027).
+  // A running command's output is transient and kept as it comes, whichever stream brings it.
   if (isWorkbenchEvent(event)) {
-    applyWorkbenchEvent(queryClient, event);
+    if (event._tag === "CommandOutput") applyCommandOutput(queryClient, event);
     return;
   }
   switch (event._tag) {

@@ -139,7 +139,7 @@ function WorkbenchLink({
       <Link
         to="/hobs/$hobId/threads/$threadId"
         params={{ hobId: bench.hobId, threadId: bench.threadId }}
-        search={roomSearch(bench.taskId, { tab: "summary" })}
+        search={roomSearch(bench.taskId, { tab: "changes" })}
       >
         {copy.openWorkbench}
       </Link>

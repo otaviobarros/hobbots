@@ -80,13 +80,13 @@ test("[TC-UX-040] a finished Task's Files tab lists what it made first, previews
   page,
 }) => {
   const { files } = await finishedTask(page);
-  const list = files.getByRole("navigation", { name: "Files from this task" });
-  await expect(list.getByRole("region", { name: "Made in this task" }).getByRole("button")).toHaveText([
+  const list = files.getByRole("navigation", { name: "Files the hobs made or changed" });
+  await expect(list.getByRole("region", { name: "Made", exact: true }).getByRole("button")).toHaveText([
     /^BriefMade · brief\.pdf/,
     /^Sales chartMade · chart\.png/,
     /^Launch reportMade · report\.md/,
   ]);
-  await expect(list.getByRole("region", { name: "Changed in this task" }).getByRole("button")).toHaveText([
+  await expect(list.getByRole("region", { name: "Changed", exact: true }).getByRole("button")).toHaveText([
     /^\.envEdited/,
     /^sales\.csvAdded · data\//,
     /^notes\.mdEdited/,
@@ -111,7 +111,7 @@ test("[TC-UX-040] a finished Task's Files tab lists what it made first, previews
 // covers UX-002
 test("[TC-UX-041] the Files tab previews images, PDF and text, with each kind and size", async ({ page }) => {
   const { files } = await finishedTask(page);
-  const list = files.getByRole("navigation", { name: "Files from this task" });
+  const list = files.getByRole("navigation", { name: "Files the hobs made or changed" });
 
   await list.getByRole("button", { name: /^Sales chart/ }).click();
   const image = files.getByRole("img", { name: "Preview of chart.png" });
@@ -144,7 +144,7 @@ test("[TC-UX-042] a file changed or deleted since the Task says so, one no longe
   rmSync(join(folder, "data", "sales.csv"));
   await page.reload();
   await page.getByRole("tab", { name: /^Files/ }).click();
-  const list = files.getByRole("navigation", { name: "Files from this task" });
+  const list = files.getByRole("navigation", { name: "Files the hobs made or changed" });
 
   await expect(list.getByRole("button", { name: /^notes\.md/ })).toContainText("Changed since this task");
   await list.getByRole("button", { name: /^notes\.md/ }).click();

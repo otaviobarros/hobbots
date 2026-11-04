@@ -1,4 +1,4 @@
-import type { AgentId, Attempt, AttemptActivity, CommandRecord, NotKept, Task, TaskTree } from "@hobbots/domain";
+import type { AgentId, AttemptActivity, CommandRecord, NotKept, Task, TaskTree } from "@hobbots/domain";
 
 /**
  * What the Terminal shows of an Attempt's commands (ADR 023): each in the order it started, with
@@ -46,23 +46,6 @@ export const wholeOutput = (command: CommandRecord): WholeOutput =>
 export const anyRunning = (commands: ReadonlyArray<CommandRecord>): boolean =>
   commands.some((each) => each.state === "running");
 
-/**
- * The Attempt the Terminal replays for each Task in the tree that has one (#908): the shown one for
- * the Task the Workbench is on, the latest for every other Task, so each hob's commands in the
- * Quest show beside the Task's own.
- */
-export const terminalAttempts = (tree: TaskTree, task: Task, shown: Attempt | null): ReadonlyArray<Attempt> =>
-  tree.tasks.flatMap((each) => {
-    if (each.id === task.id) return shown === null ? [] : [shown];
-    const latest = tree.attempts
-      .filter((attempt) => attempt.taskId === each.id)
-      .reduce<Attempt | null>(
-        (last, attempt) => (last === null || attempt.number > last.number ? attempt : last),
-        null,
-      );
-    return latest === null ? [] : [latest];
-  });
-
 /** One hob's terminal: every command it ran in the replayed Attempts, in the order they started. */
 export interface HobCommands {
   readonly ownerId: AgentId;
@@ -70,7 +53,7 @@ export interface HobCommands {
 }
 
 /**
- * A terminal per hob that ran a command, the Task's own hob first and the rest in the order the
+ * A terminal per hob that ran a command, the given Task's hob first and the rest in the order the
  * tree lists their Tasks, with each hob's commands from all its Tasks in one scrollback.
  */
 export const hobTerminals = (

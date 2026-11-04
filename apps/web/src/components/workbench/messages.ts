@@ -1,6 +1,6 @@
 import type { FileChange } from "@hobbots/domain";
 import { formatCount, formatList, plural } from "../../lib/format.ts";
-import type { Mark } from "./tabs/summary-model.ts";
+import type { Mark } from "./summary/summary-model.ts";
 import type { UnavailableReason, WorkbenchTab } from "./workbench-model.ts";
 
 /** Copy for the Workbench: one Task's full view (ADR 023, STD-I18N-001). */
@@ -24,7 +24,6 @@ export const messages = {
   attempt: ({ number }: { number: number }) => `Attempt ${formatCount(number)}`,
   tabs: "Workbench views",
   tab: {
-    summary: "Summary",
     changes: "Changes",
     files: "Files",
     terminal: "Terminal",
@@ -58,6 +57,17 @@ export const messages = {
     terminal: ({ name }: { name: string }) => `${name} did not use the terminal in this task.`,
   },
   comingSoon: "Watching a hob use a browser comes in a later update.",
+  /** The docked Workbench of a whole Quest (ADR 027). */
+  dock: {
+    everyone: "Everyone · click a lane to filter",
+    only: ({ name }: { name: string }) => `${name} only`,
+    showEveryone: "Show every hob's work",
+    by: ({ name }: { name: string }) => `, by ${name}`,
+    resize: "Resize the Workbench",
+    readFailed: "Hobbots could not read this quest's Workbench.",
+    /** Why one hob's records for a tab cannot be shown, when the dock shows more than one hob. */
+    hobUnavailable: ({ name, reason }: { name: string; reason: string }) => `${name}: ${reason}`,
+  },
   terminal: {
     tally: ({ total, failed, running }: { total: number; failed: number; running: number }) =>
       [
@@ -67,12 +77,6 @@ export const messages = {
       ].join(" · "),
     readOnly: "A record of what ran. You cannot type here.",
     none: "No commands yet. They show here as they run.",
-    /** Another Task's records could not be read, so its hob's commands are missing here. */
-    unread: ({ count }: { count: number }) =>
-      plural(count, {
-        one: "The commands of another task in this quest could not be loaded, so they are missing here.",
-        other: `The commands of ${formatCount(count)} other tasks in this quest could not be loaded, so they are missing here.`,
-      }),
     state: {
       running: ({ time }: { time: string }) => `Running · ${time}`,
       failed: "Failed",
@@ -118,7 +122,7 @@ export const messages = {
   summary: {
     line: {
       notStarted: ({ name }: { name: string }) => `${name} has not started yet.`,
-      asks: ({ name }: { name: string }) => `${name} is waiting on your answer in the lane above.`,
+      asks: ({ name }: { name: string }) => `${name} is waiting on your answer in this lane.`,
       working: ({ name, number }: { name: string; number: number }) => `${name} is on attempt ${formatCount(number)}.`,
       waiting: ({ name, number }: { name: string; number: number }) =>
         `${name} is on attempt ${formatCount(number)} and is waiting before going on.`,
@@ -134,10 +138,6 @@ export const messages = {
           other: `${formatCount(count)} earlier tries ended early.`,
         }),
     },
-    details: "Details",
-    asked: "What you asked",
-    askedBy: ({ name }: { name: string }) => `What ${name} asked`,
-    expected: ({ text }: { text: string }) => `Expected back: ${text}`,
     happened: "What happened",
     nothingYet: ({ name }: { name: string }) => `${name} has not reported anything yet.`,
     nothingHappened: ({ name }: { name: string }) => `${name} did not report any progress in this attempt.`,

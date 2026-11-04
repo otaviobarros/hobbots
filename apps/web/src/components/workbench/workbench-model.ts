@@ -9,8 +9,8 @@ import {
 } from "@hobbots/domain";
 import { Schema } from "effect";
 
-/** The Workbench's tabs, in their order (ADR 023). Summary is the one it opens on. */
-export const WORKBENCH_TABS = ["summary", "changes", "files", "terminal", "browser"] as const;
+/** The Workbench's tabs, in their order (ADR 023, ADR 027). Changes is the one it opens on. */
+export const WORKBENCH_TABS = ["changes", "files", "terminal", "browser"] as const;
 export const WorkbenchTab = Schema.Literals(WORKBENCH_TABS);
 export type WorkbenchTab = typeof WorkbenchTab.Type;
 
@@ -61,14 +61,12 @@ const touchedFiles = (activity: AttemptActivity): number =>
  * The label of each tab. While the Attempt runs a tab may still be used, so it is Live; once it
  * ends, a tab with no record reads Not used in this task. A folder whose tracking stopped makes
  * Changes Unavailable with why, and details cleared past the window make Changes and Terminal
- * Unavailable while their lists stay. `elsewhere` counts the commands the other hobs in the tree
- * ran, which the Terminal replays beside the Task's own (#908), and each other Task whose records
- * could not be read, since the Terminal says which are missing.
+ * Unavailable while their lists stay.
  */
-export const tabStates = (attempt: Attempt | null, read: ActivityRead, elsewhere = 0): TabStates => {
+export const tabStates = (attempt: Attempt | null, read: ActivityRead): TabStates => {
   const running = attempt !== null && isLiveAttempt(attempt.state);
   const shown: TabState = running ? LIVE : HISTORY;
-  const base = { summary: shown, browser: { kind: "coming-soon" } } as const;
+  const base = { browser: { kind: "coming-soon" } } as const;
   if (read === "none") return { ...base, changes: NOT_USED, files: NOT_USED, terminal: NOT_USED };
   if (read === "loading") return { ...base, changes: shown, files: shown, terminal: shown };
   if (read === "failed") {
@@ -85,8 +83,7 @@ export const tabStates = (attempt: Attempt | null, read: ActivityRead, elsewhere
         ? unavailable("cleared")
         : used(read.changes.length);
   const files = stopped !== null && touchedFiles(read) === 0 ? unavailable(stopped) : used(touchedFiles(read));
-  const terminal =
-    cleared && read.commands.length > 0 ? unavailable("cleared") : used(read.commands.length + elsewhere);
+  const terminal = cleared && read.commands.length > 0 ? unavailable("cleared") : used(read.commands.length);
   return { ...base, changes, files, terminal };
 };
 

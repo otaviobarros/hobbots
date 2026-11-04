@@ -62,22 +62,29 @@ export const useRoomMoves = (hobId: AgentId, threadId: ThreadId, top: TaskId | u
   const to = "/hobs/$hobId/threads/$threadId" as const;
   const params = { hobId, threadId };
   return {
-    /** Lights a lane, or none; a try picked for another lane does not carry over. */
+    /**
+     * Lights a lane and slides the dock open on its work, on the tab it was on, else Changes; with
+     * none, shows everyone's work. A try picked for another lane does not carry over.
+     */
     lane: (taskId: TaskId | undefined) =>
       void navigate({
         from: to,
         to,
         params,
-        search: (prev) => ({ room: top ?? prev.room, lane: taskId, tab: prev.tab }),
+        search: (prev) => ({
+          room: top ?? prev.room,
+          lane: taskId,
+          tab: taskId === undefined ? prev.tab : (prev.tab ?? "changes"),
+        }),
         replace: true,
       }),
-    /** Lights a lane and opens the dock on its work. */
-    show: (taskId: TaskId, tab: WorkbenchTab) =>
+    /** Lights a lane and opens the dock on a tab of its work, with a file to show first. */
+    show: (taskId: TaskId, tab: WorkbenchTab, file?: string) =>
       void navigate({
         from: to,
         to,
         params,
-        search: (prev) => ({ room: top ?? prev.room, lane: taskId, tab }),
+        search: (prev) => ({ room: top ?? prev.room, lane: taskId, tab, file }),
         replace: true,
       }),
     /** Opens the dock on a tab, with a file to show first, or folds it. */

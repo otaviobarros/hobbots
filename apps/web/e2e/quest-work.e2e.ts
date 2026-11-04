@@ -180,7 +180,7 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
     .getByRole("button", { name: /^Quill, / })
     .click();
   await page.getByRole("dialog", { name: "Quill" }).getByRole("link", { name: "Open Workbench" }).click();
-  await expect(page).toHaveURL(new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?room=copy&tab=summary$`));
+  await expect(page).toHaveURL(new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?room=copy&tab=changes$`));
 });
 
 // covers UX-001, OR-001

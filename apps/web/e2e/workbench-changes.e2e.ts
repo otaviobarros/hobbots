@@ -224,7 +224,7 @@ test("[TC-UX-038] past the retention window a Task's Changes keep their list and
   try {
     await page.goto(`${again.url}/${thread}`);
     const { bench, panel } = await openChanges(page, "Tidy the notes");
-    await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveText("ChangesUnavailable");
+    await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveText(/^Changes\d*Unavailable$/);
     await expect(panel).toContainText("Details were cleared after 30 days.");
     await expect(panel.getByRole("navigation", { name: "Changed files" }).getByRole("button")).toHaveText([
       "notes.mdEdited",
@@ -275,8 +275,10 @@ test("[TC-UX-148] in the room at 1024, with the chat column beside it, Changes a
   // Files does the same.
   await bench.getByRole("tab", { name: /^Files/ }).click();
   const files = bench.getByRole("tabpanel", { name: /^Files/ });
-  await expect(files.getByRole("navigation", { name: "Files from this task" })).toBeHidden();
-  await expect(files.getByRole("button", { name: "Files from this task: pick a file" })).toContainText("1 of 3");
+  await expect(files.getByRole("navigation", { name: "Files the hobs made or changed" })).toBeHidden();
+  await expect(files.getByRole("button", { name: "Files the hobs made or changed: pick a file" })).toContainText(
+    "1 of 3",
+  );
   await files.getByRole("button", { name: "Next file" }).click();
   await expect(files.getByRole("region", { name: "b.txt" })).toBeVisible();
 });

@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { lane, laneHead, laneMenu, laneTask, openRoom, showInWorkbench } from "./quest-room.ts";
+import { lane, laneHead, laneMenu, laneTask, openRoom, showInWorkbench, taskSummary } from "./quest-room.ts";
 
 // Issues #669 and #674 in the browser: a member's Task and a step cancelled while their turns run
 // each end with a cancelled Attempt, and their Workbench says so. The decision is tested in
@@ -52,7 +52,7 @@ const summon = (current: Hub, name: string, lookSeed: number) =>
 const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
 // covers EX-001, OR-006, UX-002
-test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in the Workbench that the attempt stopped", async ({
+test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in their lane that the attempt stopped", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -98,9 +98,8 @@ test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in the Workb
       timeout: 30_000,
     });
 
-    // Its Workbench says the attempt stopped, and why, never that it finished.
-    const bench = await showInWorkbench(page, title);
-    const summary = bench.getByRole("tabpanel", { name: /^Summary/ });
+    // Its summary in the lane says the attempt stopped, and why, never that it finished.
+    const summary = await taskSummary(page, title);
     await expect(summary).toContainText("This attempt stopped before it finished.");
     await expect(summary).toContainText("Why: You cancelled this Task.");
   }

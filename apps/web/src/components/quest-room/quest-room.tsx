@@ -167,7 +167,7 @@ function OpenRoom({
                   tried={acted.tried}
                   hobs={hobs}
                   onOpen={(taskId) => moves.lane(taskId)}
-                  onWorkbench={(taskId) => moves.show(taskId, "summary")}
+                  onWorkbench={(taskId) => moves.show(taskId, "changes")}
                 />
                 <LaneNotes tree={tree} ownerId={lane.hobId} hobs={hobs} />
                 {acted.cards}
@@ -176,7 +176,7 @@ function OpenRoom({
           };
         }}
       />
-      <WorkbenchDock tree={tree} taskId={lit ?? top.id} view={view} hobs={hobs} moves={moves} />
+      <WorkbenchDock tree={tree} party={room.order.length > 1} lit={lit} view={view} hobs={hobs} moves={moves} />
     </section>
   );
 }

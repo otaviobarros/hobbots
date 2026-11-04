@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
-import { openWorkbench, ticket } from "./quest-room.ts";
+import { openWorkbench, taskSummary, ticket } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
@@ -52,12 +52,12 @@ test("[TC-OR-315] the lead's later turns on its Task stay in Attempt 1, and its 
     { number: 1, state: "completed" },
   ]);
 
-  // Its Workbench offers no Attempt to pick, and shows what both turns changed.
+  // Its Workbench offers no Attempt to pick, and its lane's summary shows what both turns changed.
   await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   await expect(bench.getByRole("heading", { name: "Tidy the notes" })).toBeVisible();
   await expect(bench.getByRole("radiogroup", { name: "Attempts" })).toHaveCount(0);
-  const made = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "What it made" });
+  const made = (await taskSummary(page, "Tidy the notes")).getByRole("region", { name: "What it made" });
   await expect(made.getByRole("button", { name: /^See the change to / })).toHaveText([
     /^Added.*CHANGELOG\.md$/,
     /^Edited.*notes\.md$/,

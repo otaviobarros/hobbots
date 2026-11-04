@@ -27,8 +27,6 @@
     "apps/web/src/components/summon/arrived.tsx": 1,
     "apps/web/src/components/summon/summon.tsx": 2,
     "apps/web/src/components/usage/plan-card.tsx": 1,
-    "apps/web/src/components/workbench/tabs/files-tab.tsx": 1,
-    "apps/web/src/components/workbench/tabs/summary-tab.tsx": 1,
     "apps/web/src/router.tsx": 1
   },
   "STD-UI-010": {
@@ -84,6 +82,6 @@
     "apps/web/src/components/summon/summoning.tsx": 1,
     "apps/web/src/components/workbench/file-picker.tsx": 4,
     "apps/web/src/components/workbench/workbench-header.tsx": 1,
-    "apps/web/src/components/workbench/workbench-tabs.tsx": 2
+    "apps/web/src/components/workbench/workbench-tabs.tsx": 1
   }
 }
