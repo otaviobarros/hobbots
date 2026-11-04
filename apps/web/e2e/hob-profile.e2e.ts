@@ -220,11 +220,19 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   const chip = profile.locator("header").getByText(/^(Writer|QA engineer|Bug hunter)$/);
   await expect(chip).toHaveText("Writer");
   await profile.getByRole("button", { name: "Change role" }).click();
-  const sheet = page.getByRole("dialog", { name: "Choose Pip's role" });
+  const sheet = page.getByRole("dialog", { name: "Pick a role" });
+  // It opens on the hob's own family; QA engineer is in the software team.
+  await sheet.getByRole("button", { name: /^Software team/ }).click();
   await sheet.getByText("QA engineer", { exact: true }).click();
   await expect(sheet.getByRole("radio", { name: /^QA engineer/ })).toBeChecked();
-  // Escape keeps the pick, as the button does; the save bar still decides.
+  // Escape leaves the role as it was; only Pick changes it, and the save bar still decides.
   await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(chip).toHaveText("Writer");
+  await profile.getByRole("button", { name: "Change role" }).click();
+  await sheet.getByRole("button", { name: /^Software team/ }).click();
+  await sheet.getByText("QA engineer", { exact: true }).click();
+  await sheet.getByRole("button", { name: "Pick QA engineer" }).click();
   await expect(sheet).toBeHidden();
   await expect(profile.getByText("QA engineer", { exact: true }).first()).toBeVisible();
   await profile.getByRole("button", { name: "Save changes" }).click();
@@ -241,7 +249,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await profile.getByRole("button", { name: "Change role" }).click();
   await sheet.getByText("Your own", { exact: true }).click();
   await sheet.getByRole("textbox", { name: "Your own role title" }).fill("Bug hunter");
-  await sheet.getByRole("button", { name: "Use Bug hunter" }).click();
+  await sheet.getByRole("button", { name: "Use your own title" }).click();
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect(profile.getByText("Saved as version 3. Pip's next reply uses it.")).toBeVisible();
   await expect(chip).toHaveText("Bug hunter");
