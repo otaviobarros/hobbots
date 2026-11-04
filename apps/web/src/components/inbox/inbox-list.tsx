@@ -1,7 +1,9 @@
 import type { ApprovalRequest } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useNavigate } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { HobSprite } from "../hob-sprite.tsx";
 import { groupByThread, INBOX_TABS, type InboxTab, requestTitle, statusText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
@@ -9,30 +11,31 @@ import type { InboxDirectory } from "./use-inbox-directory.ts";
 
 const copy = messages;
 
-/** Needs you, All and History, with how many requests need you on the first. The tab is in the address. */
-export function InboxTabs({ tab, waiting }: { tab: InboxTab; waiting: number }) {
+/**
+ * Needs you, All and History, with how many requests need you on the first, above the open tab's
+ * panel. The tab is in the address.
+ */
+export function InboxTabs({ tab, waiting, children }: { tab: InboxTab; waiting: number; children: ReactNode }) {
   const navigate = useNavigate();
+  // Opens a tab. Clicking the open tab again lands here too, so the request shown leaves the address.
+  const open = (next: string) => {
+    const name = INBOX_TABS.find((each) => each === next);
+    if (name !== undefined) void navigate({ to: "/inbox", search: { tab: name } });
+  };
   return (
-    <div role="tablist" aria-label={copy.tabsLabel} className="flex gap-0.5 border-b-2 border-line px-2.5 pt-2">
-      {INBOX_TABS.map((name) => (
-        <button
-          key={name}
-          type="button"
-          role="tab"
-          aria-selected={tab === name}
-          onClick={() => void navigate({ to: "/inbox", search: { tab: name } })}
-          className={cn(
-            "inline-flex cursor-pointer items-center gap-1.5 border-0 border-b-3 px-3 py-2 text-sm font-bold",
-            tab === name
-              ? "border-lantern bg-hover text-moonlight"
-              : "border-transparent bg-transparent text-text-secondary hover:bg-hover hover:text-text-strong",
-          )}
-        >
-          {copy.tabs[name]}
-          {name === "needs" && waiting > 0 && <Badge variant="needs-you">{copy.count({ count: waiting })}</Badge>}
-        </button>
-      ))}
-    </div>
+    <Tabs value={tab} onValueChange={open} className="min-h-0 flex-1">
+      <TabsList aria-label={copy.tabsLabel} className="px-2.5 pt-2">
+        {INBOX_TABS.map((name) => (
+          <TabsTrigger key={name} value={name} onClick={() => name === tab && open(name)}>
+            {copy.tabs[name]}
+            {name === "needs" && waiting > 0 && <Badge variant="needs-you">{copy.count({ count: waiting })}</Badge>}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      <TabsContent value={tab} className="min-h-0 flex-1 overflow-y-auto">
+        {children}
+      </TabsContent>
+    </Tabs>
   );
 }
 

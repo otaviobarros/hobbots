@@ -2,9 +2,9 @@ import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
 import type { Agent, AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
-import { cn } from "@hobbots/ui/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { agentsQuery } from "../api/queries.ts";
 import { readStored, writeStored } from "../lib/storage.ts";
@@ -30,7 +30,6 @@ export function SidePanel({
   pins: Pins;
 }) {
   const [tab, setTab] = useState<Tab>(() => readStored<Tab>("layout.panelTab", "Quest"));
-  const id = useId();
   const pick = (next: Tab) => {
     setTab(next);
     writeStored("layout.panelTab", next);
@@ -41,41 +40,33 @@ export function SidePanel({
       aria-label="Quest and inbox"
       className="flex min-h-0 w-[340px] flex-none flex-col border-l-4 border-line bg-panel"
     >
-      <div role="tablist" aria-label="Panel" className="flex border-b-4 border-line">
-        {TABS.map((name) => (
-          <button
-            key={name}
-            type="button"
-            role="tab"
-            id={`${id}-${name}`}
-            aria-selected={tab === name}
-            aria-controls={`${id}-panel`}
-            onClick={() => pick(name)}
-            className={cn(
-              "flex-1 cursor-pointer border-0 px-1.5 py-[11px] text-sm font-bold",
-              tab === name
-                ? "bg-line text-moonlight"
-                : "bg-transparent text-label hover:bg-hover hover:text-text-strong",
-            )}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
-      <div
-        role="tabpanel"
-        id={`${id}-panel`}
-        aria-labelledby={`${id}-${tab}`}
-        className="min-h-0 flex-1 overflow-y-auto"
+      <Tabs
+        value={tab}
+        onValueChange={(next) => {
+          const found = TABS.find((name) => name === next);
+          if (found) pick(found);
+        }}
+        className="min-h-0 flex-1"
       >
-        {tab === "Quest" && <QuestTab key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />}
-        {tab === "Inbox" && (
+        <TabsList aria-label="Panel">
+          {TABS.map((name) => (
+            <TabsTrigger key={name} value={name} className="flex-1 px-1.5">
+              {name}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value="Quest" className="min-h-0 flex-1 overflow-y-auto">
+          <QuestTab key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />
+        </TabsContent>
+        <TabsContent value="Inbox" className="min-h-0 flex-1 overflow-y-auto">
           <Empty title="Nothing here yet">
             Questions, approvals, problems and results for this thread land here, each with its delivery state.
           </Empty>
-        )}
-        {tab === "Workshop" && <Workshop hobId={hobId} threadId={threadId} />}
-      </div>
+        </TabsContent>
+        <TabsContent value="Workshop" className="min-h-0 flex-1 overflow-y-auto">
+          <Workshop hobId={hobId} threadId={threadId} />
+        </TabsContent>
+      </Tabs>
     </aside>
   );
 }

@@ -118,3 +118,84 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
     timeout: 20_000,
   });
 });
+
+// covers OR-002, IN-001, PE-003
+test("[TC-OR-489] a lead's message while its member waits for your approval shows as held, then reaches the member once you decide", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const current = await startHub(dataDir);
+  hub = current;
+  await request(current, "PATCH", "/api/setup", {
+    completed: true,
+    connectedProviders: ["claude-code"],
+    safetyPreset: "balanced",
+    approvedFolders: [shared],
+  });
+  const frodo = await summon(current, "Frodo", 4100);
+  await summon(current, "Pip", 4821);
+
+  // Pip's push asks you first, under Balanced, so his turn waits on your decision.
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
+  await composer.fill(
+    [
+      "Ship the copy",
+      hubCall("delegate_task", {
+        key: "ship",
+        hob: "Pip",
+        brief: [
+          "Push the copy",
+          "fake:tool Bash git push origin feature",
+          `fake:then ${hubCall("complete_task", { key: "ship-done", summary: "Pushed under the new name" })}`,
+        ].join("\n"),
+      }),
+      hubCall("wait_for", { key: "wait", tasks: ["$ship.task_id"] }),
+    ].join("\n"),
+  );
+  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await composer.press("Enter");
+  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 45_000 });
+
+  // Frodo messages Pip meanwhile; his result says it is held and why.
+  await page.getByRole("tab", { name: "Quest" }).click();
+  const tasks = page.getByRole("list", { name: /^Tasks of Ship the copy/ });
+  const pip = tasks.getByRole("button", { name: /^Pip · Push the copy/ });
+  await expect(pip).toBeVisible();
+  const approvals = await request<ReadonlyArray<{ readonly taskId: string | null }>>(current, "GET", "/api/approvals");
+  const asked = approvals.find((each) => each.taskId !== null);
+  if (asked?.taskId == null) throw new Error("Pip asked nothing");
+  await composer.fill(
+    [
+      "Tell Pip the product is renamed",
+      hubCall("message_task", { key: "rename", task_id: asked.taskId, text: "The product is now Hobbots." }),
+    ].join("\n"),
+  );
+  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await composer.press("Enter");
+  await expect(page.getByText(/Held for hob .*: their turn waits for the user to decide/).first()).toBeVisible({
+    timeout: 45_000,
+  });
+
+  // On the Quest, the message waits for a turn to carry it, while Pip's request waits for you.
+  const room = page.getByRole("region", { name: "What hobs on Ship the copy are waiting on" });
+  const note = room.getByRole("button", { name: /The product is now Hobbots\./ });
+  await expect(note).toContainText("Waiting");
+
+  // You allow the push; Pip's turn ends, and his next one carries the message.
+  await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
+  await page
+    .getByRole("list", { name: "Requests" })
+    .getByRole("link", { name: /Push your work/ })
+    .click();
+  const card = page
+    .getByRole("article", { name: "Request from Pip: Push your work" })
+    .getByRole("region", { name: "Pip asks permission" });
+  await card.getByRole("button", { name: "Allow once" }).click();
+  await expect(card.getByRole("status")).toHaveText("✓ Allowed once. Pip carries on.");
+  await page.getByRole("link", { name: "Open in the chat" }).click();
+  await page.getByRole("tab", { name: "Quest" }).click();
+  await expect(pip).toContainText("Done", { timeout: 30_000 });
+  await expect(note).toContainText("Consumed", { timeout: 20_000 });
+});

@@ -53,7 +53,7 @@ const FIREFLIES = [0, 1, 2, 3, 4, 5].map((i) => ({ x: 30 + i * 64, bottom: 206 -
 
 /** A choice card's frame; `choiceOpenClass` adds the hover and focus of one that can be chosen. */
 const choiceClass = "cut flex flex-col gap-3 border-2 bg-card p-[22px] text-left text-text-strong no-underline";
-export const choiceOpenClass = `${choiceClass} cursor-pointer border-line-2 transition-transform duration-100 ease-[steps(2)] hover:-translate-y-[3px] hover:border-moonlight focus-visible:outline-3 focus-visible:outline-moonlight focus-visible:-outline-offset-3 disabled:cursor-wait disabled:hover:translate-y-0`;
+export const choiceOpenClass = `${choiceClass} cursor-pointer border-line-2 transition-transform duration-100 ease-(--ease-press) hover:-translate-y-[3px] hover:border-moonlight focus-visible:outline-3 focus-visible:outline-moonlight focus-visible:-outline-offset-3 disabled:cursor-wait disabled:hover:translate-y-0`;
 
 function ChoiceIcon({ rows, palette }: { rows: ReadonlyArray<string>; palette: Record<string, string> }) {
   return (

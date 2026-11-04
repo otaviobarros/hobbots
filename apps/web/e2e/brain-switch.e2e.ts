@@ -75,7 +75,7 @@ test("[TC-CH-184] the picker switches the thread's brain, the chat shows it, and
 
   // Effort changes for the thread too, keeping its runtime and model.
   await page.getByRole("button", { name: /^Thinking with Codex · Fake Coder · Medium/ }).click();
-  await page.getByRole("dialog", { name: "Think with" }).getByRole("button", { name: "High" }).click();
+  await page.getByRole("dialog", { name: "Think with" }).getByRole("radio", { name: "High" }).click();
   await expect(page.getByRole("button", { name: /^Thinking with Codex · Fake Coder · High, ready/ })).toBeVisible();
 
   await send(page, "What is my cat called?");

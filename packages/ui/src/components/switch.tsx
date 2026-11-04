@@ -3,7 +3,8 @@ import { Switch as SwitchPrimitive } from "radix-ui";
 import type * as React from "react";
 
 // The Hobbots switch from the component sheet: a square track, mint-deep when on, and a knob that
-// moves in steps (none with Reduce motion).
+// moves in steps (none with Reduce motion). The knob of an on switch is the light switch-knob color
+// in every theme, so it stays readable on mint-deep in the light themes too.
 function Switch({ className, ...props }: React.ComponentProps<typeof SwitchPrimitive.Root>) {
   return (
     <SwitchPrimitive.Root
@@ -16,7 +17,7 @@ function Switch({ className, ...props }: React.ComponentProps<typeof SwitchPrimi
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
-        className="absolute top-0.5 left-0.5 size-4 bg-text-strong transition-[left] duration-150 ease-[steps(3)] motion-reduce:transition-none data-[state=checked]:left-6"
+        className="absolute top-0.5 left-0.5 size-4 bg-text-strong transition-[left] duration-150 ease-(--ease-ui) motion-reduce:transition-none data-[state=checked]:left-6 data-[state=checked]:bg-switch-knob"
       />
     </SwitchPrimitive.Root>
   );

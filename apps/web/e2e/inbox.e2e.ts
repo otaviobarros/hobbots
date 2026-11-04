@@ -118,8 +118,10 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   await expect(history.locator('[data-state="approved"]')).toContainText("Once");
   await expect(history.locator('[data-state="approved"]')).toContainText("Pip: Push your work");
 
-  // The paused reply went on in its thread.
-  await page.getByRole("tab", { name: "All" }).click();
+  // The paused reply went on in its thread. The arrow keys move between the tabs, and the address follows.
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("tab", { name: "All" })).toHaveAttribute("aria-selected", "true");
+  await expect(page).toHaveURL(/tab=all/);
   await page.getByRole("link", { name: "Open in the chat" }).click();
   await expect(page.locator('[data-state="done"]', { hasText: "git push" })).toBeVisible();
   await expect(page.getByText(/^Echo: Ship it/)).toBeVisible();
