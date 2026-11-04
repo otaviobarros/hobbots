@@ -251,6 +251,13 @@ export const messages = {
     peekResting: "Nothing on right now.",
     openChat: "Open chat",
     openWorkbench: "Open Workbench",
+    chips: {
+      label: "Show hobs",
+      all: "All",
+      needs: "Need you",
+      working: "Working",
+      resting: "Resting",
+    },
     happeningNow: "Happening now",
     allQuiet: "All quiet. No hob is replying right now.",
   },
