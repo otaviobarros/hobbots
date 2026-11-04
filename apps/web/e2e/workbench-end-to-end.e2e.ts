@@ -82,9 +82,12 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
 
   const changes = await open("Changes");
   const changed = changes.getByRole("navigation", { name: "Changed files" });
-  await expect(changed.getByRole("button")).toHaveText(["CHANGELOG.mdAdded", "draft.txtDeleted", "notes.mdEdited"], {
-    timeout: 20_000,
-  });
+  await expect(changed.getByRole("button")).toHaveText(
+    [/^CHANGELOG\.mdAdded\+/, /^draft\.txtDeleted\+0 −/, /^notes\.mdEdited\+/],
+    {
+      timeout: 20_000,
+    },
+  );
   await changed.getByRole("button", { name: /^notes\.md/ }).click();
   const notes = changes.getByRole("article", { name: "notes.md" });
   await expect(notes.getByRole("region", { name: "After" }).getByRole("insertion")).toContainText("Faster search.");
@@ -119,7 +122,11 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
   await expect(bench.locator("header").first()).toContainText("History", { timeout: 60_000 });
   await expect(tabs.getByRole("tab")).toHaveText(["Summary", "Changes", "Files", "Terminal", "BrowserSoon"]);
   await open("Changes");
-  await expect(changed.getByRole("button")).toHaveText(["CHANGELOG.mdAdded", "draft.txtDeleted", "notes.mdEdited"]);
+  await expect(changed.getByRole("button")).toHaveText([
+    /^CHANGELOG\.mdAdded\+/,
+    /^draft\.txtDeleted\+0 −/,
+    /^notes\.mdEdited\+/,
+  ]);
   await expect(notes).not.toContainText("So far");
   await changed.getByRole("button", { name: /^draft\.txt/ }).click();
   await expect(changes.getByRole("article", { name: "draft.txt" })).toContainText("An old draft.");

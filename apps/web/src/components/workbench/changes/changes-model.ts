@@ -3,6 +3,7 @@ import { diffArrays, diffLines } from "diff";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import { folderName } from "../../quest/member-folders.ts";
 
 /**
  * How the Changes tab shows a file (ADR 023): a document rendered before and after, code and other
@@ -53,17 +54,13 @@ export const changeCounts = (changes: ReadonlyArray<FileChange>): Readonly<Recor
   return counts;
 };
 
-/** The folders the changes are in, in their order, each with its changes. */
-export const byFolder = (
-  changes: ReadonlyArray<FileChange>,
-): ReadonlyArray<{ readonly folder: string; readonly changes: ReadonlyArray<FileChange> }> => {
-  const folders = new Map<string, Array<FileChange>>();
-  for (const change of changes) {
-    const list = folders.get(change.folder) ?? [];
-    list.push(change);
-    folders.set(change.folder, list);
-  }
-  return [...folders].map(([folder, list]) => ({ folder, changes: list }));
+/**
+ * Where a changed file sits, for the list's second line: its folders inside the hob's, led by the
+ * hob's folder's name when the Task changed files in more than one.
+ */
+export const changeDir = (change: Pick<FileChange, "folder" | "path">, manyFolders: boolean): string => {
+  const { dir } = splitPath(change.path);
+  return manyFolders ? `${folderName(change.folder)}/${dir}` : dir;
 };
 
 /**
@@ -101,10 +98,8 @@ export type DiffRow =
     }
   | { readonly kind: "folded"; readonly lines: number };
 
-export interface CodeDiff {
+export interface CodeDiff extends LineCounts {
   readonly rows: ReadonlyArray<DiffRow>;
-  readonly added: number;
-  readonly removed: number;
 }
 
 /** A text's lines, without the empty one after a final line break. */
@@ -163,12 +158,23 @@ const nearChanges = (lines: ReadonlyArray<{ readonly kind: DiffRow["kind"] }>, c
  */
 export const codeDiff = (before: string | null, after: string | null, context: number = 3): CodeDiff => {
   const lines = lineRows(before ?? "", after ?? "");
-  return {
-    rows: foldLines(lines, context),
-    added: lines.filter((row) => row.kind === "added").length,
-    removed: lines.filter((row) => row.kind === "removed").length,
-  };
+  return { rows: foldLines(lines, context), ...countRows(lines) };
 };
+
+/** How many lines a change added and removed. */
+export interface LineCounts {
+  readonly added: number;
+  readonly removed: number;
+}
+
+const countRows = (lines: ReadonlyArray<DiffRow>): LineCounts => ({
+  added: lines.filter((row) => row.kind === "added").length,
+  removed: lines.filter((row) => row.kind === "removed").length,
+});
+
+/** The lines a change to a text file added and removed, as its diff counts them. */
+export const lineCounts = (before: string | null, after: string | null): LineCounts =>
+  countRows(lineRows(before ?? "", after ?? ""));
 
 /** A diff's lines with each unchanged run more than `context` lines from a change folded into one row. */
 export const foldLines = (lines: ReadonlyArray<DiffRow>, context: number): ReadonlyArray<DiffRow> => {
