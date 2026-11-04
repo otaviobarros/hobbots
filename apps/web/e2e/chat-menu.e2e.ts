@@ -1,4 +1,4 @@
-import { expect, test } from "./hub.ts";
+import { expandSidebar, expect, sidebarThread, test } from "./hub.ts";
 import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #510: the chat header's ⋯ menu renames the chat in place, pins it to the top, searches it,
@@ -9,7 +9,9 @@ test.afterEach(stopAldricHub);
 // covers CH-001, UX-001
 test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searches it, opens the hob's page and archives it with Undo", async ({
   page,
+  context,
 }) => {
+  await expandSidebar(context);
   const { url, aldric } = await aldricHub();
   // Two chats, so archiving this one moves to the other.
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -39,7 +41,8 @@ test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searche
   await field.press("Enter");
   await expect(field).toBeHidden();
   await expect(header).toContainText("Spring banner");
-  await expect(page.getByRole("link", { name: /Spring banner/ }).first()).toBeVisible();
+  // The sidebar's recent threads take the new title too.
+  await expect(sidebarThread(page, "Spring banner")).toBeVisible();
 
   // Pin to the top shows the lantern pin beside the title; the menu then offers Unpin.
   await menu.click();

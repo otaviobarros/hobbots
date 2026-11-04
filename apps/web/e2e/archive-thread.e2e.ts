@@ -1,6 +1,16 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import type { Page, Route } from "@playwright/test";
-import { admit, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import {
+  admit,
+  emptyDataDir,
+  expandSidebar,
+  expect,
+  type Hub,
+  removeDataDir,
+  sidebarThread,
+  startHub,
+  test,
+} from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -59,8 +69,9 @@ const pipWithThreads = async (current: Hub, titles: ReadonlyArray<string>, setup
   return { pip: pip.id, threads };
 };
 
-const threadList = (page: Page) => page.getByRole("navigation", { name: "Hobs and threads" });
-const threadLink = (page: Page, title: string) => threadList(page).getByRole("link", { name: new RegExp(`^${title}`) });
+// The open hob's threads show under it in the expanded sidebar.
+test.beforeEach(({ context }) => expandSidebar(context));
+const threadLink = sidebarThread;
 
 // covers CH-009, UX-003
 test("[TC-CH-150] archiving the open thread opens the next one, and Undo brings it back", async ({ page, browser }) => {
@@ -72,6 +83,7 @@ test("[TC-CH-150] archiving the open thread opens the next one, and Undo brings 
   // A second window follows along live.
   const other = await browser.newPage();
   await admit(other.context(), hub);
+  await expandSidebar(other.context());
   await other.goto(`${hub.url}/#/hobs/${pip}/threads/${threads[0]}`);
   await expect(threadLink(other, "Support triage")).toBeVisible();
 
@@ -84,7 +96,6 @@ test("[TC-CH-150] archiving the open thread opens the next one, and Undo brings 
   await expect(page.getByRole("status").filter({ hasText: "Archived “Support triage”." })).toBeVisible();
   await expect(threadLink(page, "Support triage")).toHaveCount(0);
   await expect(threadLink(other, "Support triage")).toHaveCount(0);
-  await expect(threadList(page).getByText("· 2 threads")).toBeVisible();
 
   await page.getByRole("button", { name: "Undo archive of Support triage" }).click();
   await expect(page).toHaveURL(new RegExp(`threads/${triage}$`));
@@ -94,29 +105,29 @@ test("[TC-CH-150] archiving the open thread opens the next one, and Undo brings 
 });
 
 // covers CH-009, UX-003
-test("[TC-CH-151] a thread row's menu archives it by keyboard, and ⌘Z undoes it", async ({ page }) => {
+test("[TC-CH-151] a chat row's menu on the hob's page archives it by keyboard, and ⌘Z undoes it", async ({ page }) => {
   hub = await startHub(dataDir);
-  const { pip, threads } = await pipWithThreads(hub, ["Tagline ideas", "Weekly digest"]);
+  const { pip } = await pipWithThreads(hub, ["Tagline ideas", "Weekly digest"]);
 
-  await page.goto(`${hub.url}/#/hobs/${pip}/threads/${threads[1]}`);
-  // Shift+F10 on the row opens its menu; the open thread stays open.
-  await threadLink(page, "Tagline ideas").focus();
-  await page.keyboard.press("Shift+F10");
+  await page.goto(`${hub.url}/#/hobs/${pip}`);
+  const chats = page.getByRole("main", { name: "Pip's page" });
+  const row = chats.getByRole("link", { name: "Open Tagline ideas" });
+  await expect(row).toBeVisible();
+  // The row's ⋯ button opens its menu from the keyboard; Archive is its last item.
+  await chats.getByRole("button", { name: "More for “Tagline ideas”" }).focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("End");
   await expect(page.getByRole("menuitem", { name: /Archive thread/ })).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(threadLink(page, "Tagline ideas")).toHaveCount(0);
-  await expect(page).toHaveURL(new RegExp(`threads/${threads[1]}$`));
+  await expect(row).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`hobs/${pip}$`));
   await expect(page.getByRole("status").filter({ hasText: "Archived “Tagline ideas”." })).toBeVisible();
 
-  // Undo by shortcut, with focus outside the composer.
-  await threadLink(page, "Weekly digest").focus();
+  // Undo by shortcut.
+  await chats.getByRole("link", { name: "Open Weekly digest" }).focus();
   await page.keyboard.press("ControlOrMeta+z");
-  await expect(threadLink(page, "Tagline ideas")).toBeVisible();
+  await expect(row).toBeVisible();
   expect(await api<Array<unknown>>(hub, "GET", `/agents/${pip}/threads?archived=true`)).toEqual([]);
-
-  // The ⋯ button holds the same menu.
-  await page.getByRole("button", { name: "More for “Tagline ideas”" }).click();
-  await expect(page.getByRole("menuitem", { name: /Archive thread/ })).toBeVisible();
 });
 
 // covers CH-009
@@ -244,23 +255,24 @@ test("[TC-CH-154] a refusal that arrives late puts the thread back and reopens i
 test("[TC-CH-155] an Undo that fails offers Try again, which brings the thread back", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
-  const { pip, threads } = await pipWithThreads(current, ["Tagline ideas", "Support triage"]);
+  const { pip } = await pipWithThreads(current, ["Tagline ideas", "Support triage"]);
 
-  await page.goto(`${current.url}/#/hobs/${pip}/threads/${threads[1]}`);
-  await threadLink(page, "Tagline ideas").focus();
-  await page.keyboard.press("Shift+F10");
+  await page.goto(`${current.url}/#/hobs/${pip}`);
+  const chats = page.getByRole("main", { name: "Pip's page" });
+  const row = chats.getByRole("link", { name: "Open Tagline ideas" });
+  await chats.getByRole("button", { name: "More for “Tagline ideas”" }).click();
   await page.getByRole("menuitem", { name: /Archive thread/ }).click();
-  await expect(threadLink(page, "Tagline ideas")).toHaveCount(0);
+  await expect(row).toHaveCount(0);
 
   const restoreCall = await holdRequests(page, /\/api\/threads\/[^/]+\/restore$/);
   await page.getByRole("button", { name: "Undo archive of Tagline ideas" }).click();
   await expect.poll(restoreCall.waiting).toBe(1);
   await restoreCall.release({ status: 0 });
   await expect(page.getByRole("status").filter({ hasText: "Couldn't bring back “Tagline ideas”." })).toBeVisible();
-  await expect(threadLink(page, "Tagline ideas")).toHaveCount(0);
+  await expect(row).toHaveCount(0);
 
   await page.getByRole("button", { name: "Try again for Tagline ideas" }).click();
-  await expect(threadLink(page, "Tagline ideas")).toBeVisible();
+  await expect(row).toBeVisible();
   expect(await api<Array<unknown>>(current, "GET", `/agents/${pip}/threads?archived=true`)).toEqual([]);
 });
 
@@ -283,8 +295,7 @@ test("[TC-CH-156] a thread waiting for approval cannot be archived, and Show req
     const card = page.getByRole("region", { name: "Pip asks permission" });
     await expect(card).toBeVisible();
 
-    await threadLink(page, "Tagline ideas").focus();
-    await page.keyboard.press("Shift+F10");
+    await page.getByRole("button", { name: "More for this thread" }).click();
     const item = page.getByRole("menuitem", { name: /Archive thread/ });
     await expect(item).toHaveAttribute("aria-disabled", "true");
     await expect(item).toContainText("Pip is waiting for your approval here. Answer it first.");

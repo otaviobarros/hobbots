@@ -1,4 +1,4 @@
-import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { emptyDataDir, expandSidebar, expect, type Hub, removeDataDir, sidebarThread, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -63,17 +63,20 @@ const hubWithArchive = async () => {
 };
 
 // covers CH-009
-test("[TC-CH-160] an archived thread opens read-only from the Archive and comes back on Restore", async ({ page }) => {
+test("[TC-CH-160] an archived thread opens read-only from the Archive and comes back on Restore", async ({
+  page,
+  context,
+}) => {
   const { current, hob, archived } = await hubWithArchive();
+  await expandSidebar(context);
   await page.goto(`${current.url}/#/hobs/${hob.id}`);
 
-  const nav = page.getByRole("navigation", { name: "Hobs and threads" });
-  await expect(nav.getByRole("link", { name: /Plan my week/ })).toBeVisible();
-  await expect(nav.getByRole("link", { name: /Rename the newsletter/ })).toHaveCount(0);
-  await expect(nav).toContainText("Writer· 1 thread");
-  await nav.getByRole("link", { name: "Archived, 1 thread" }).click();
+  const chats = page.getByRole("main", { name: "Pip's page" });
+  await expect(chats.getByRole("link", { name: "Open Plan my week" })).toBeVisible();
+  await expect(chats.getByRole("link", { name: "Open Rename the newsletter" })).toHaveCount(0);
+  await chats.getByRole("link", { name: "Archived chats · 1" }).click();
 
-  // The hob's Archived entry opens the Archive narrowed to the hob.
+  // The hob's Archived chats link opens the Archive narrowed to the hob.
   await expect(page).toHaveURL(new RegExp(`#/archive\\?hob=${hob.id}$`));
   const archive = page.getByRole("main", { name: "Archive" });
   await expect(archive.getByRole("radio", { name: "Pip" })).toHaveAttribute("aria-checked", "true");
@@ -99,7 +102,7 @@ test("[TC-CH-160] an archived thread opens read-only from the Archive and comes 
   ).toBeVisible();
   await expect(archive.getByRole("heading", { name: "Nothing archived yet." })).toBeVisible();
   await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${archived.id}`);
-  await expect(nav.getByRole("link", { name: /Rename the newsletter/ })).toBeVisible();
+  await expect(sidebarThread(page, "Rename the newsletter")).toBeVisible();
   const chat = page.getByRole("main", { name: "Chat" });
   const composer = chat.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("Try a shorter name");
@@ -151,12 +154,15 @@ test("[TC-CH-161] restoring the last archived thread from the Archive leaves the
 });
 
 // covers CH-006, CH-009
-test("[TC-CH-162] search marks an archived thread and opens it read-only", async ({ page }) => {
+test("[TC-CH-162] ⌘K marks an archived thread and opens it read-only", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
   await page.goto(`${current.url}/#/hobs/${hob.id}`);
-
-  await page.getByRole("searchbox", { name: "Search hobs, threads and messages" }).fill("newsletter");
-  const result = page.getByRole("link", { name: /Rename the newsletter/ });
+  // ⌘K listens once the page is up.
+  await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+k");
+  const finder = page.getByRole("dialog", { name: "Jump anywhere" });
+  await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("newsletter");
+  const result = finder.getByRole("option", { name: /Rename the newsletter/ });
   await expect(result).toContainText("Archived");
   await result.click();
 

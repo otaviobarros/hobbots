@@ -241,8 +241,9 @@ test("[TC-UX-038] past the retention window a Task's Changes keep their list and
 test("[TC-UX-148] with the task chat open beside the tabs, Changes and Files swap their lists for a picker", async ({
   page,
 }) => {
-  // Wide enough that the chat sits beside the tabs, and narrow enough that it leaves them under 720px.
-  await page.setViewportSize({ width: 1440, height: 800 });
+  // Wide enough that the chat sits beside the tabs, and narrow enough that it leaves them under 720px
+  // beside the collapsed sidebar.
+  await page.setViewportSize({ width: 1024, height: 800 });
   const { url, aldric } = await aldricHub({ "a.txt": "one\n", "b.txt": "two\n" });
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   await playTurn(page, [

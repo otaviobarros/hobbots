@@ -78,15 +78,11 @@ export function ChatView({
   hobId,
   threadId,
   focusMessageId,
-  navOpen,
-  onShowNav,
   pins,
 }: {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
   focusMessageId?: string | undefined;
-  navOpen: boolean;
-  onShowNav: () => void;
   /** The Quests pinned to every thread's header. */
   pins: Pins;
 }) {
@@ -225,11 +221,6 @@ export function ChatView({
   return (
     <main aria-label="Chat" className="flex min-w-[360px] flex-1 flex-col">
       <header className="@container/header flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
-        {!navOpen && (
-          <Button variant="icon" size="icon" onClick={onShowNav} aria-label={copy.showNav} title={copy.showNav}>
-            »
-          </Button>
-        )}
         {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
         <Link to="/hobs/$hobId" params={{ hobId }} tabIndex={-1} aria-hidden className="shrink-0">
           <HobSprite hob={current} size={36} state={state} badge />

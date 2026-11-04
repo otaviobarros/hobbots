@@ -205,15 +205,23 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
 });
 
 // covers AG-002, UX-005
-test("[TC-AG-075] changing the role in the profile updates the hob list, chat header and profile at once", async ({
+test("[TC-AG-075] changing the role in the profile updates the hob's card, chat header and profile at once", async ({
   page,
 }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
-  const list = page.getByRole("navigation", { name: "Hobs and threads" });
   const header = page.getByRole("main", { name: "Chat" }).locator("header");
-  await expect(list.getByRole("link", { name: /^Pip/ })).toContainText("Writer");
+  // The hob's card, opened from its tile in the sidebar, shows its role.
+  const cardRole = async (role: string) => {
+    await page
+      .getByRole("navigation", { name: "Sections" })
+      .getByRole("button", { name: /^Pip, / })
+      .click();
+    await expect(page.getByRole("dialog", { name: "Pip" })).toContainText(role);
+    await page.keyboard.press("Escape");
+  };
+  await cardRole("Writer");
   await expect(header).toContainText("Writer");
 
   await page.getByRole("link", { name: "Edit hob" }).click();
@@ -240,7 +248,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await expect(profile.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
   await expect(chip).toHaveText("QA engineer");
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
-  await expect(list.getByRole("link", { name: /^Pip/ })).toContainText("QA engineer");
+  await cardRole("QA engineer");
   await expect(page.getByRole("region", { name: "Pip", exact: true })).toContainText("QA engineer");
   await page.getByRole("link", { name: "New chat with Pip" }).click();
   await expect(header).toContainText("QA engineer");
@@ -256,7 +264,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await expect(chip).toHaveText("Bug hunter");
 
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
-  await expect(list.getByRole("link", { name: /^Pip/ })).toContainText("Bug hunter");
+  await cardRole("Bug hunter");
   await page.getByRole("link", { name: "New chat with Pip" }).click();
   await expect(header).toContainText("Bug hunter");
   const [saved] = await api<ReadonlyArray<Hob & { role: string | null; roleTitle: string; sigil: string }>>(

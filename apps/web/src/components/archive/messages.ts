@@ -9,7 +9,6 @@ interface Titled {
 }
 
 export const messages = {
-  threadMenu: ({ title }: Titled) => `More for “${title}”`,
   headerMenu: "More for this thread",
   rename: "Rename",
   pin: "Pin to the top",

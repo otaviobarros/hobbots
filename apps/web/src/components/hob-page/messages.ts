@@ -215,5 +215,4 @@ export const messages = {
     thinksWith: "Thinks with",
     change: "Change in Profile",
   },
-  showNav: "Show hob list",
 } as const;

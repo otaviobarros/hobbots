@@ -37,13 +37,6 @@ export function HobPage({
       aria-label={hob.data ? copy.page({ name: hob.data.name }) : undefined}
       className="flex min-w-0 flex-1 flex-col overflow-y-auto"
     >
-      {!props.navOpen && (
-        <div className="px-4 pt-3">
-          <Button variant="icon" size="icon" onClick={props.onShowNav} aria-label={copy.showNav} title={copy.showNav}>
-            »
-          </Button>
-        </div>
-      )}
       {hob.data ? (
         <Page hob={hob.data} tab={tab} show={show} query={query} />
       ) : (

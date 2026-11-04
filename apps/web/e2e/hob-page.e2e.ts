@@ -54,8 +54,12 @@ test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a Hi
   await composer.press("Enter");
   await expect(page.getByText("Echo: first")).toBeVisible();
 
-  // The hob in the sidebar opens its page, not a chat.
-  await page.getByRole("navigation", { name: "Hobs and threads" }).getByRole("link", { name: /^Pip/ }).click();
+  // The hob's card in the sidebar opens its page, not a chat.
+  await page
+    .getByRole("navigation", { name: "Sections" })
+    .getByRole("button", { name: /^Pip, / })
+    .click();
+  await page.getByRole("dialog", { name: "Pip" }).getByRole("link", { name: "Open page" }).click();
   await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}$`));
   const main = page.getByRole("main", { name: "Pip's page" });
   const hero = main.getByRole("region", { name: "Pip", exact: true });
