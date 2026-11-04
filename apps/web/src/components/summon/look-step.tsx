@@ -232,6 +232,12 @@ function Talk({ draft, onChange, name }: { draft: FirstHobDraft; onChange: Updat
           </SegmentedControlItem>
         ))}
       </SegmentedControl>
+      <div className="flex items-start gap-2.5 rounded-card bg-deep px-3 py-2.5">
+        <span className="lbl flex-none text-label">{copy.soundsLike}</span>
+        <span aria-live="polite" className="text-sm text-text">
+          {copy.samples[draft.voice]}
+        </span>
+      </div>
     </div>
   );
 }
