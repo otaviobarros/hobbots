@@ -33,6 +33,7 @@ import {
   COPY,
   checkpoint,
   delegation,
+  memberApproval,
   QUILL,
   quest,
   question,
@@ -308,6 +309,25 @@ describe("the Quest room's lanes", () => {
     expect(lines(laneOf(room, ADA))).toEqual([`wait ${QUILL}, you`]);
   });
 
+  it("lights a hob's lane for a question or an approval on any of its Tasks, not only the first", () => {
+    const SIGNS = TaskId.make("signs");
+    const base = blackFriday();
+    const two = (fields: Partial<ConstructorParameters<typeof TaskTree>[0]>) =>
+      tree({
+        ...base,
+        tasks: [...base.tasks, task(SIGNS, { ownerId: QUILL, brief: "Make the signs", second: 6 })],
+        delegations: [...base.delegations, delegation(QUILL, SIGNS, "Make the signs")],
+        ...fields,
+      });
+    const asked = laneRoom(two({ questions: [question(SIGNS, QUILL, "Which font?", { recipientId: null })] }), []);
+    expect(laneOf(asked, QUILL)).toMatchObject({ title: "Draft the landing copy", status: "needs-you" });
+    expect(laneOf(asked, ALDRIC).status).toBe("running");
+    expect(laneOf(asked, ADA).status).toBe("waiting");
+    const approving = laneRoom(two({ approvals: [memberApproval(SIGNS, QUILL)] }), []);
+    expect(laneOf(approving, QUILL).status).toBe("needs-you");
+    expect(laneOf(approving, ADA).status).toBe("waiting");
+  });
+
   it("shows only what the latest try did once a Task was retried", () => {
     const first = attempt(COPY, "failed");
     const second = new Attempt({ ...first, id: AttemptId.make("a-copy-2"), number: 2, state: "running" });
@@ -340,6 +360,74 @@ describe("the Quest room's lanes", () => {
     expect(shown[0]).toBe("folded 3");
     expect(shown.filter((each) => each.startsWith("run"))).toHaveLength(SHOWN_MARKS);
     expect(shown.at(-1)).toBe("beat Halfway");
+  });
+
+  it("folds each run of older marks where it was, so no mark moves past a result or into another Task", () => {
+    const mark = (key: string): LaneItem => ({ kind: "read", key, path: key });
+    const items: ReadonlyArray<LaneItem> = [
+      { kind: "task", key: "task-a", title: "A" },
+      mark("a1"),
+      { kind: "result", key: "result-a", outcome: "completed", text: "A done" },
+      { kind: "task", key: "task-b", title: "B" },
+      mark("b1"),
+      { kind: "hand-in", key: "hand", label: "Copy", from: QUILL },
+      mark("b2"),
+      ...["r1", "r2"].map(mark),
+    ];
+    expect(foldMarks(items, 2).map(line)).toEqual([
+      "task A",
+      "folded 1",
+      "completed A done",
+      "task B",
+      "folded 1",
+      `in Copy ← ${QUILL}`,
+      "folded 1",
+      "read r1",
+      "read r2",
+    ]);
+    const opened = foldMarks(items, 2).flatMap(
+      (item): ReadonlyArray<LaneItem> => (item.kind === "folded" ? item.marks : [item]),
+    );
+    expect(opened).toEqual(items);
+  });
+
+  it("folds a hob's older marks inside the Task they belong to when it has two Tasks", () => {
+    const SIGNS = TaskId.make("signs");
+    const base = blackFriday();
+    const signs = new Task({
+      ...task(SIGNS, { ownerId: QUILL, brief: "Make the signs", second: 6 }),
+      currentAttemptId: null,
+    });
+    const room = laneRoom(
+      tree({
+        ...base,
+        tasks: [
+          ...base.tasks.map((each) =>
+            each.id === COPY
+              ? task(COPY, { ownerId: QUILL, state: "completed", brief: "Draft the landing copy", second: 2 })
+              : each,
+          ),
+          signs,
+        ],
+        attempts: [attempt(COPY, "completed"), attempt(SIGNS, "completed")],
+        delegations: [...base.delegations, delegation(QUILL, SIGNS, "Make the signs")],
+      }),
+      [
+        activity(COPY, { commands: [command(COPY, "pnpm copy", 1)] }),
+        activity(SIGNS, {
+          attempt: attempt(SIGNS, "completed"),
+          commands: Array.from({ length: SHOWN_MARKS + 1 }, (_, index) => command(SIGNS, `sign ${index}`, index + 10)),
+        }),
+      ],
+    );
+    expect(lines(laneOf(room, QUILL)).slice(0, 6)).toEqual([
+      "task Draft the landing copy",
+      "folded 1",
+      "completed -",
+      "task Make the signs",
+      "folded 1",
+      "run sign 1",
+    ]);
   });
 
   it("folds nothing while a lane holds no more marks than it shows", () => {

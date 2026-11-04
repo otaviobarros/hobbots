@@ -231,18 +231,33 @@ const briefedItems = (tree: TaskTree, unit: ReadonlyArray<Task>): ReadonlyArray<
   });
 
 /**
- * Folds every mark but the last `shown` into one count, where the first of them was. Beats, chips
- * and refused calls stay in place.
+ * Folds every mark but the last `shown` into counts. Each run of hidden marks folds where it was,
+ * so opening it shows its marks in place: beats, chips, refused calls, results and Task headings
+ * stay where they happened, and no mark moves into another Task's part of the lane.
  */
 export const foldMarks = (items: ReadonlyArray<LaneItem>, shown: number = SHOWN_MARKS): ReadonlyArray<LaneItem> => {
   const isMark = (item: LaneItem): item is LaneMark =>
     item.kind === "read" || item.kind === "edit" || item.kind === "delete" || item.kind === "run";
   const marks = items.filter(isMark);
-  const hidden = new Set(marks.slice(0, Math.max(0, marks.length - shown)));
+  const hidden = new Set<LaneItem>(marks.slice(0, Math.max(0, marks.length - shown)));
   if (hidden.size === 0) return items;
-  const folded: LaneItem = { kind: "folded", key: `folded-${items[0]?.key ?? ""}`, marks: [...hidden] };
-  const first = items.findIndex((item) => isMark(item) && hidden.has(item));
-  return items.flatMap((item, index) => (index === first ? [folded] : isMark(item) && hidden.has(item) ? [] : [item]));
+  const folded: Array<LaneItem> = [];
+  let run: Array<LaneMark> = [];
+  const close = () => {
+    const first = run[0];
+    if (first !== undefined) folded.push({ kind: "folded", key: `folded-${first.key}`, marks: run });
+    run = [];
+  };
+  for (const item of items) {
+    if (isMark(item) && hidden.has(item)) {
+      run.push(item);
+    } else {
+      close();
+      folded.push(item);
+    }
+  }
+  close();
+  return folded;
 };
 
 /** How a Task that ended ends its part of the lane: its result, or why the hub stopped it. */
@@ -322,6 +337,8 @@ const laneOf = (
       : section.items,
   );
   const current = sections.find((section) => section.task.id === task.id)?.unit ?? [task];
+  // Every Task the lane holds, with their steps: a question or approval on any of them lights it.
+  const owned = sections.flatMap((section) => section.unit);
   const waitingOn = roomRows(tree).find((row) => row.task.id === task.id)?.waitingOn ?? [];
   const tail: Array<LaneItem> = [];
   if (!isTerminalTask(task.state) && waitingOn.length > 0)
@@ -333,7 +350,7 @@ const laneOf = (
     role,
     task,
     title: taskTitle(task),
-    status: laneStatus(tree, current, task),
+    status: laneStatus(tree, owned, task),
     items: [...foldMarks(items), ...tail],
   };
 };
