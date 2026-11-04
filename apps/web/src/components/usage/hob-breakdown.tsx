@@ -1,8 +1,9 @@
 import { HOB_COLORS } from "@hobbots/art/look";
 import { type Agent, type AgentId, RUNTIME_NAMES } from "@hobbots/domain";
+import { Badge } from "@hobbots/ui/components/badge";
 import { cn } from "@hobbots/ui/lib/utils";
 import { formatDay } from "../../lib/format.ts";
-import type { BrainShare, DayUsage, HobShare } from "../../lib/usage.ts";
+import { type BrainShare, busiestDay, type DayUsage, type HobShare } from "../../lib/usage.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { messages } from "./messages.ts";
 
@@ -13,43 +14,50 @@ const brainLabel = (brain: BrainShare) =>
     ? copy.earlierBrain
     : copy.brain({ runtime: RUNTIME_NAMES[brain.runtime], model: brain.model });
 
-function HobRow({ hob, look }: { hob: HobShare; look: Agent | undefined }) {
+function HobRow({ hob, look, most }: { hob: HobShare; look: Agent | undefined; most: number }) {
+  // The hob's own hat color tints its tile and its bar, as everywhere it appears.
   const color = look ? HOB_COLORS[look.lookColor].hat : undefined;
   return (
-    <li className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
-      <span className="w-8 shrink-0" aria-hidden="true">
-        {look && <HobSprite hob={look} size={32} />}
-      </span>
-      <span className="flex w-[180px] min-w-0 flex-col">
-        <span className="flex items-center gap-2">
-          <span className="truncate font-heading text-base font-semibold">{hob.name}</span>
-          {hob.status === "retired" && (
-            <span className="border-2 border-line-2 px-1 text-[11px] text-label">{copy.retired}</span>
-          )}
-        </span>
-        <span className="truncate text-xs text-label">{hob.brains.map(brainLabel).join(", ")}</span>
-      </span>
-      <span className="h-3.5 min-w-[120px] flex-1 bg-line" aria-hidden="true">
+    <li className="flex flex-col gap-1 px-3 py-2.5 shadow-[inset_0_1px_0_var(--color-line)] first:shadow-none">
+      <span className="flex items-center gap-3">
         <span
-          className={cn("block h-full", color === undefined && "bg-control")}
-          style={{ width: `${hob.share}%`, ...(color && { background: color }) }}
-        />
-      </span>
-      <span
-        className="flex w-[190px] flex-col items-end text-sm text-text-secondary tabular-nums"
-        title={copy.tokens({ input: hob.inputTokens, output: hob.outputTokens })}
-      >
-        <span>{copy.share({ share: hob.share, tokens: hob.tokens })}</span>
-        <span className="text-xs text-label">{copy.replies({ count: hob.replies })}</span>
+          aria-hidden="true"
+          className="grid size-[30px] shrink-0 place-items-center overflow-hidden rounded-tile bg-tile"
+          style={
+            color === undefined ? undefined : { background: `color-mix(in srgb, ${color} 30%, var(--color-card))` }
+          }
+        >
+          {look && <HobSprite hob={look} size={22} />}
+        </span>
+        <span className="flex w-[170px] min-w-0 shrink-0 flex-col">
+          <span className="flex items-center gap-2">
+            <span className="truncate font-semibold text-text-strong">{hob.name}</span>
+            {hob.status === "retired" && <Badge variant="archived">{copy.retired}</Badge>}
+          </span>
+          <span className="truncate text-meta text-label">{hob.brains.map(brainLabel).join(", ")}</span>
+        </span>
+        <span className="h-2 min-w-[80px] flex-1 overflow-hidden rounded-dot bg-line-2" aria-hidden="true">
+          <span
+            className={cn("block h-full rounded-dot", color === undefined && "bg-control")}
+            style={{ width: `${most === 0 ? 0 : (hob.share / most) * 100}%`, ...(color && { background: color }) }}
+          />
+        </span>
+        <span
+          className="flex w-[132px] shrink-0 flex-col items-end whitespace-nowrap tabular-nums"
+          title={copy.tokens({ input: hob.inputTokens, output: hob.outputTokens })}
+        >
+          <strong className="text-text-strong">{copy.share({ share: hob.share })}</strong>
+          <span className="text-meta text-label">{copy.amount({ tokens: hob.tokens, replies: hob.replies })}</span>
+        </span>
       </span>
       {hob.unreported > 0 && (
-        <span className="basis-full ps-[46px] text-xs text-label">{copy.unreported({ count: hob.unreported })}</span>
+        <span className="ps-[42px] text-meta text-label">{copy.unreported({ count: hob.unreported })}</span>
       )}
     </li>
   );
 }
 
-/** Each hob's share of the period's tokens, most first, with the brains it used. */
+/** Each hob's share of the period's tokens, most first, with the brains it used. The shares add up to 100. */
 export function HobBreakdown({
   hobs,
   looks,
@@ -60,25 +68,29 @@ export function HobBreakdown({
   period: string;
 }) {
   if (hobs.length === 0) return <p className="m-0 text-text-secondary">{copy.empty({ period })}</p>;
+  // The longest bar is the hob that used the most, so small shares stay readable.
+  const most = Math.max(...hobs.map((hob) => hob.share));
   return (
-    <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
+    <ul className="cut m-0 flex list-none flex-col bg-card p-0">
       {hobs.map((hob) => (
-        <HobRow key={hob.hobId} hob={hob} look={looks.get(hob.hobId)} />
+        <HobRow key={hob.hobId} hob={hob} look={looks.get(hob.hobId)} most={most} />
       ))}
     </ul>
   );
 }
 
-/** The period's replies on each of the reader's days, today last and lit. */
+/** The period's replies on each of the reader's days, today last and lit, with the busiest day named. */
 export function DailyChart({ days }: { days: ReadonlyArray<DayUsage> }) {
   const most = Math.max(1, ...days.map((day) => day.replies));
   const first = days[0];
+  const busiest = busiestDay(days);
   return (
-    <>
+    <div className="cut flex flex-col bg-card">
       <ol
         className={cn(
-          "m-0 flex h-40 list-none items-end border-b-2 border-line-2 p-0",
-          days.length > 7 ? "gap-1" : "gap-3.5",
+          "m-0 flex h-[140px] list-none items-end px-4 pt-4 pb-0",
+          "bg-[repeating-linear-gradient(0deg,transparent_0_34px,var(--color-line)_34px_35px)] bg-origin-content",
+          days.length > 7 ? "gap-[3px]" : "gap-2.5",
         )}
       >
         {days.map((day, index) => {
@@ -92,17 +104,24 @@ export function DailyChart({ days }: { days: ReadonlyArray<DayUsage> }) {
               <span className="sr-only">{label}</span>
               <span
                 aria-hidden="true"
-                className={cn("block", index === days.length - 1 ? "bg-lantern" : "bg-mint")}
+                className={cn(
+                  "block min-h-[3px] rounded-t-[4px]",
+                  index === days.length - 1 ? "bg-lantern" : "bg-line-2",
+                )}
                 style={{ height: `${Math.round((day.replies / most) * 100)}%` }}
               />
             </li>
           );
         })}
       </ol>
-      <div className="flex justify-between text-xs text-label" aria-hidden="true">
+      <div
+        className="flex justify-between gap-3 border-t border-line-2 px-4 py-2 text-meta text-label"
+        aria-hidden="true"
+      >
         <span>{first && formatDay(`${first.day}T12:00:00`)}</span>
+        {busiest && <span>{messages.daily.busiest({ day: formatDay(`${busiest.day}T12:00:00`) })}</span>}
         <span>{messages.daily.today}</span>
       </div>
-    </>
+    </div>
   );
 }

@@ -67,7 +67,7 @@ export const messages = {
       `${name} isn't ready on this hub. Settings says why and how to fix it.`,
   },
   daily: {
-    label: "Replies per day",
+    label: "Day by day",
     total: ({ count, period }: { count: number; period: string }) =>
       plural(count, {
         one: `1 reply in ${period}`,
@@ -79,15 +79,18 @@ export const messages = {
         other: `${day}: ${formatCount(replies)} replies, ${formatCompact(tokens)} tokens`,
       }),
     today: "Today",
+    busiest: ({ day }: { day: string }) => `Busiest: ${day}`,
   },
   hobs: {
-    label: "Who used your plans",
+    label: "Who used what",
     empty: ({ period }: { period: string }) => `No hob replied in ${period}.`,
     retired: "Retired",
-    share: ({ share, tokens }: { share: number; tokens: number }) =>
-      `${formatPercent(share)} · ${formatCompact(tokens)} tokens`,
-    replies: ({ count }: { count: number }) =>
-      plural(count, { one: "1 reply", other: `${formatCount(count)} replies` }),
+    share: ({ share }: { share: number }) => formatPercent(share),
+    amount: ({ tokens, replies }: { tokens: number; replies: number }) =>
+      plural(replies, {
+        one: `${formatCompact(tokens)} tokens · 1 reply`,
+        other: `${formatCompact(tokens)} tokens · ${formatCount(replies)} replies`,
+      }),
     unreported: ({ count }: { count: number }) =>
       plural(count, {
         one: "1 reply didn't report its usage.",
@@ -99,5 +102,5 @@ export const messages = {
     tokens: ({ input, output }: { input: number; output: number }) =>
       `${formatCompact(input)} in, ${formatCompact(output)} out, the rest read from or written to the cache`,
   },
-  note: "Counts chat replies with the tokens each provider reported for them, cache reads included. Task steps aren't counted yet.",
+  note: "Each share is the hob's part of every token your providers reported for chat replies in the period, cache reads included, so the shares add up to 100%. Task steps aren't counted yet.",
 };

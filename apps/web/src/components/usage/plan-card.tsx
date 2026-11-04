@@ -185,8 +185,9 @@ function ProviderTile({ view, on, onPick }: { view: PlanView; on: boolean; onPic
       aria-pressed={on}
       onClick={onPick}
       className={cn(
-        "flex min-w-0 cursor-pointer flex-col items-stretch gap-2 rounded-control border-0 bg-card p-3 text-start text-text-strong transition-colors hover:bg-hover",
-        on && "shadow-[inset_0_0_0_2px_var(--color-focus-ring)]",
+        "flex min-w-0 cursor-pointer flex-col items-stretch gap-2 rounded-control border-0 p-3 text-start text-text-strong transition-colors",
+        // Selection is a fill, never an edge.
+        on ? "bg-line" : "bg-card hover:bg-hover",
       )}
     >
       <span className="flex items-center gap-2">

@@ -91,7 +91,7 @@ export function UsagePage({ days }: { days: UsagePeriod }) {
             </Section>
             <Section label={messages.hobs.label}>
               {report.data && <HobBreakdown hobs={hobShares(report.data.hobs)} looks={looks} period={period} />}
-              <p className="m-0 text-xs text-label">{messages.note}</p>
+              <p className="m-0 text-meta text-label">{messages.note}</p>
             </Section>
           </>
         )}
