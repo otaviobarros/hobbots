@@ -163,9 +163,7 @@ function RecentThreads({ hobId, pathname }: { hobId: AgentId; pathname: string }
             )}
           >
             <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-            {thread.unread && (
-              <span aria-hidden className="size-2 flex-none rounded-dot bg-lantern" />
-            )}
+            {thread.unread && <span aria-hidden className="size-2 flex-none rounded-dot bg-lantern" />}
           </Link>
         );
       })}
