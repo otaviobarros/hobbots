@@ -64,6 +64,7 @@
   --color-desk: #6b4a2f;
   --color-desk-edge: #8a6240;
   /* The tile behind each AI provider's letter mark, the same in every theme. */
+  --color-provider-ink: #141228;
   --color-provider-claude: #e39a74;
   --color-provider-codex: #8fd3a8;
   --color-provider-gemini: #8fb4f0;

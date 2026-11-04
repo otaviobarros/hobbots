@@ -1,8 +1,8 @@
 import { HobbotsRepository, QuestionService, TaskControls, TaskRepository } from "@hobbots/agents";
 import { AgentNotFound, HobbotsApi, QuestNotFound, TaskNotFound, ThreadNotFound } from "@hobbots/api";
-import { partyOf, type TaskId } from "@hobbots/domain";
+import { type AgentId, HISTORY_PAGE_DAYS, historyEvents, historyPage, partyOf, type TaskId } from "@hobbots/domain";
 import { EventJournal } from "@hobbots/persistence";
-import { Effect, Layer, Option } from "effect";
+import { DateTime, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { formatCursor } from "./event-stream.ts";
 
@@ -14,6 +14,14 @@ export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers
     const repo = yield* HobbotsRepository;
     const journal = yield* EventJournal;
     const cursor = journal.head.pipe(Effect.map((head) => formatCursor(head.epoch, head.sequence)));
+    // A read of one hob's records, with the cursor taken before it, or 404 for a hob that is not there.
+    const ofHob = <A>(agentId: AgentId, records: Effect.Effect<A>) =>
+      Effect.gen(function* () {
+        const at = yield* cursor;
+        const hob = yield* repo.findAgent(agentId);
+        if (Option.isNone(hob)) return yield* new AgentNotFound({ agentId });
+        return { at, read: yield* records };
+      });
     return handlers.handleAll({
       tree: ({ params }) =>
         Effect.gen(function* () {
@@ -50,12 +58,21 @@ export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers
           return { cursor: at, trees: yield* tasks.readThreadTrees(params.threadId) };
         }),
       questWork: ({ params }) =>
-        Effect.gen(function* () {
-          const at = yield* cursor;
-          const hob = yield* repo.findAgent(params.agentId);
-          if (Option.isNone(hob)) return yield* new AgentNotFound({ agentId: params.agentId });
-          return { cursor: at, work: yield* tasks.listMemberWork(params.agentId) };
-        }),
+        ofHob(params.agentId, tasks.listMemberWork(params.agentId)).pipe(
+          Effect.map(({ at, read }) => ({ cursor: at, work: read })),
+        ),
+      history: ({ params, query }) =>
+        ofHob(params.agentId, tasks.readHistoryRecords(params.agentId)).pipe(
+          Effect.map(({ at, read }) => ({
+            cursor: at,
+            page: historyPage(historyEvents(params.agentId, read), {
+              timeZone: query.timeZone,
+              filter: query.filter ?? "all",
+              before: query.before === undefined ? null : DateTime.toEpochMillis(query.before),
+              days: query.days ?? HISTORY_PAGE_DAYS,
+            }),
+          })),
+        ),
     });
   }),
 );

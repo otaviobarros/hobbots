@@ -29,10 +29,11 @@ import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
-import { isSettingsSection } from "./components/settings/sections.ts";
+import { type ConnectionsTab, isConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
 import { SettingsPage } from "./components/settings/settings-page.tsx";
 import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
-import { Summon } from "./components/summon.tsx";
+import { Summon } from "./components/summon/summon.tsx";
+import { parseStep, type SummonStep } from "./components/summon/summon-model.ts";
 import { UsagePage } from "./components/usage/usage-page.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
@@ -249,12 +250,26 @@ const profileRoute = createRoute({
   },
 });
 
-// Summon names the new hob apart from the hobs already there, so it loads them first.
+// Summon names the new hob apart from the hobs already there, so it loads them first. `?step=` is
+// the step on screen, so Back and a reload keep it; the first step needs none.
 const summonRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "summon",
+  validateSearch: (search: Record<string, unknown>): { step?: SummonStep | undefined } => {
+    const step = parseStep(search.step);
+    return { step: step === "role" ? undefined : step };
+  },
   beforeLoad: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
-  component: Summon,
+  component: function SummonRoute() {
+    const { step } = summonRoute.useSearch();
+    const navigate = summonRoute.useNavigate();
+    return (
+      <Summon
+        step={step ?? "role"}
+        onStep={(next) => void navigate({ search: { step: next === "role" ? undefined : next } })}
+      />
+    );
+  },
 });
 
 // `?tab=` picks Needs you, All or History and `?request=` the request shown beside the list.
@@ -295,9 +310,14 @@ const settingsSectionRoute = createRoute({
   beforeLoad: ({ params }) => {
     if (!isSettingsSection(params.section)) throw redirect({ to: "/settings" });
   },
+  // `?tab=charms` opens Connections on its Charms tab.
+  validateSearch: (search: Record<string, unknown>): { tab?: ConnectionsTab | undefined } => ({
+    tab: isConnectionsTab(search.tab) && search.tab !== "ai" ? search.tab : undefined,
+  }),
   component: function SettingsSectionPage() {
     const { section } = settingsSectionRoute.useParams();
-    return <SettingsPage section={isSettingsSection(section) ? section : null} />;
+    const { tab } = settingsSectionRoute.useSearch();
+    return <SettingsPage section={isSettingsSection(section) ? section : null} tab={tab ?? "ai"} />;
   },
 });
 // The Archive: archived chats across every hob and retired hobs (CH-009, AG-006). `?tab=hobs`

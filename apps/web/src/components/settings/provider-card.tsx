@@ -26,7 +26,7 @@ function ProviderFacts({ health }: { health: RuntimeHealth }) {
         <dt className="text-label">{copy.version}</dt>
         <dd className="m-0">{health.version ?? "—"}</dd>
       </dl>
-      <h3 className="lbl mt-3 mb-1.5 text-xs text-label">{sharedMessages.enforcement.providerHeading}</h3>
+      <h4 className="lbl mt-3 mb-1.5 text-xs text-label">{sharedMessages.enforcement.providerHeading}</h4>
       <EnforcementList enforcement={health.enforcement} />
     </>
   );
@@ -45,20 +45,30 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
   const availability = health?.availability ?? "unavailable";
 
   return (
-    <section aria-label={name} className="cut bg-card p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span aria-hidden className={`grid size-5 place-items-center text-xs font-bold text-ground ${look.tile}`}>
+    <section aria-label={name} className="flex flex-col gap-2.5 rounded-card bg-card p-4">
+      <div className="flex items-center gap-2.5">
+        <span
+          aria-hidden
+          className={`grid size-7 flex-none place-items-center rounded-tile text-detail font-bold text-ground ${look.tile}`}
+        >
           {look.mark}
         </span>
-        <span className="font-heading flex-1 text-base font-semibold">{name}</span>
+        <span className="flex-1 font-semibold text-text-strong">{name}</span>
         <Badge variant={availability === "ready" ? "working" : "waiting"}>
           {runtimes.isPending ? copy.checking : copy.availability[availability]}
         </Badge>
       </div>
-      {health && <ProviderFacts health={health} />}
-      {hint && <p className="mt-2 mb-0 text-sm text-lantern">{hint}</p>}
-      {hint && <ProviderFixActions runtime={runtime} notFound={health?.version === null} />}
-      {billsElsewhere(health) && <p className="mt-2 mb-0 text-sm text-lantern">{copy["claude-code"].billingWarning}</p>}
+      {hint && <p className="m-0 text-sm text-lantern">{hint}</p>}
+      {hint && <ProviderFixActions runtime={runtime} notFound={health?.version === null} className="mt-0" />}
+      {billsElsewhere(health) && <p className="m-0 text-sm text-lantern">{copy["claude-code"].billingWarning}</p>}
+      {health && (
+        <details className="group">
+          <summary className="cursor-pointer text-detail text-label hover:text-text-strong">{copy.technical}</summary>
+          <div className="pt-2.5">
+            <ProviderFacts health={health} />
+          </div>
+        </details>
+      )}
     </section>
   );
 }
