@@ -196,6 +196,30 @@ const hasClassName = (members) =>
 /** The name a function component is known by, from its declaration or the variable it is assigned to. */
 const functionName = (node, parent) => node.id?.name ?? (parent?.type === "VariableDeclarator" ? parent.id.name : null);
 
+const FUNCTIONS = new Set(["FunctionDeclaration", "ArrowFunctionExpression", "FunctionExpression"]);
+
+/** The members of a `…Props` interface or object type, with its name. */
+const typeProps = (node) => {
+  if (!node.id?.name?.endsWith("Props")) return null;
+  if (node.type === "TSInterfaceDeclaration") return { name: node.id.name, members: node.body.body };
+  if (node.type === "TSTypeAliasDeclaration" && node.typeAnnotation.type === "TSTypeLiteral")
+    return { name: node.id.name, members: node.typeAnnotation.members };
+  return null;
+};
+
+/** The members that a component's first parameter destructures or types inline, with its name. */
+const componentProps = (node, parent) => {
+  const name = functionName(node, parent);
+  if (!FUNCTIONS.has(node.type) || !isComponentName(name)) return null;
+  const param = node.params[0];
+  const literal = param?.typeAnnotation?.typeAnnotation;
+  const typed = literal?.type === "TSTypeLiteral" ? literal.members : [];
+  const destructured = param?.type === "ObjectPattern" ? param.properties : [];
+  return { name, members: [...destructured, ...typed] };
+};
+
+const propsOf = (node, parent) => typeProps(node) ?? componentProps(node, parent);
+
 /** Feature components take no className prop, so a screen cannot restyle them (STD-UI-010). */
 const featureClassName = (file, lines, program, lineOf) => {
   const problems = [];
@@ -207,30 +231,8 @@ const featureClassName = (file, lines, program, lineOf) => {
       );
   };
   walk(program, (node, parent) => {
-    if (node.type === "TSInterfaceDeclaration" && node.id.name.endsWith("Props") && hasClassName(node.body.body))
-      report(node.start, node.id.name);
-    else if (
-      node.type === "TSTypeAliasDeclaration" &&
-      node.id.name.endsWith("Props") &&
-      node.typeAnnotation.type === "TSTypeLiteral" &&
-      hasClassName(node.typeAnnotation.members)
-    )
-      report(node.start, node.id.name);
-    else if (
-      (node.type === "FunctionDeclaration" ||
-        node.type === "ArrowFunctionExpression" ||
-        node.type === "FunctionExpression") &&
-      isComponentName(functionName(node, parent))
-    ) {
-      const props = node.params[0];
-      if (!props) return;
-      const literal = props.typeAnnotation?.typeAnnotation;
-      if (
-        (props.type === "ObjectPattern" && hasClassName(props.properties)) ||
-        (literal?.type === "TSTypeLiteral" && hasClassName(literal.members))
-      )
-        report(node.start, functionName(node, parent));
-    }
+    const props = propsOf(node, parent);
+    if (props !== null && hasClassName(props.members)) report(node.start, props.name);
   });
   return problems;
 };
