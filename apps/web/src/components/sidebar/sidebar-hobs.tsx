@@ -155,6 +155,8 @@ function RecentThreads({ hobId, pathname }: { hobId: AgentId; pathname: string }
             to="/hobs/$hobId/threads/$threadId"
             params={{ hobId, threadId: thread.id }}
             aria-current={current ? "page" : undefined}
+            // The link keeps the chat's title as its name, so the dot is told as its description.
+            aria-description={thread.unread ? copy.unreadThread : undefined}
             className={cn(
               sidebarItem,
               "animate-hb-in ps-14 pe-2 text-text-secondary hover:text-text-strong aria-[current=page]:text-text-strong",
@@ -162,7 +164,7 @@ function RecentThreads({ hobId, pathname }: { hobId: AgentId; pathname: string }
           >
             <span className="min-w-0 flex-1 truncate">{thread.title}</span>
             {thread.unread && (
-              <span role="img" aria-label={copy.unreadThread} className="size-2 flex-none rounded-dot bg-lantern" />
+              <span aria-hidden className="size-2 flex-none rounded-dot bg-lantern" />
             )}
           </Link>
         );
