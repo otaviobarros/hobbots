@@ -12,6 +12,9 @@ test.afterEach(stopAldricHub);
 // Wide enough that the Changes and Files lists sit beside the file; under 720px a picker takes their place.
 test.use({ viewport: { width: 1600, height: 900 } });
 
+// A party's Quest runs two hobs' turns before the dock is looked at.
+test.describe.configure({ timeout: 120_000 });
+
 const TITLE = "Write the launch copy";
 
 /** Sends Aldric a scripted turn that starts the Quest, edits the notes and hands Quill the copy. */

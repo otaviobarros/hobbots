@@ -162,7 +162,8 @@ test("[TC-UX-214] a lane whose records could not be read says so and reads them 
   page,
 }) => {
   const { url, aldric } = await questHub();
-  const activity = "**/api/attempts/*/activity";
+  // The lanes read the Quest's Workbench in one call.
+  const activity = "**/api/tasks/*/workbench";
   await page.route(activity, (route) => route.fulfill({ status: 500, body: "" }));
   await startRoom(page, url, aldric, "Make the shop badge in our green", "Make the shop badge");
 
