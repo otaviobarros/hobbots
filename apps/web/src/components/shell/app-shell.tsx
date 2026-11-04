@@ -11,6 +11,7 @@ import { ConnectionBanner } from "./connection-banner.tsx";
 import { DeviceRemoved } from "./device-removed.tsx";
 import { HobJump } from "./hob-jump.tsx";
 import { ReconnectingCard, ReconnectingProvider } from "./reconnecting.tsx";
+import { titleStrip, windowBody, windowFrame } from "./window-classes.ts";
 
 /** A hob's chat or its fresh page, whose header holds the reconnecting card. */
 const CHAT_PATH = /^\/hobs\/[^/]+\/(new|threads\/[^/]+)$/;
@@ -21,17 +22,13 @@ const CHAT_PATH = /^\/hobs\/[^/]+\/(new|threads\/[^/]+)$/;
  */
 function TitleStrip() {
   if (window.hobbots === undefined) return null;
-  return (
-    <header className="flex h-title-strip flex-none items-center justify-center bg-deep text-detail text-label [-webkit-app-region:drag]">
-      Hobbots
-    </header>
-  );
+  return <header className={titleStrip}>Hobbots</header>;
 }
 
 /** The window's frame: the desktop title bar above whatever fills it, a page or an error screen. */
 export function WindowFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-screen min-h-[610px] flex-col bg-ground text-text-strong">
+    <div className={windowFrame}>
       <TitleStrip />
       {children}
     </div>
@@ -61,7 +58,7 @@ export function AppShell() {
       <ReconnectingProvider
         value={{ down: reason === null && connection.state === "reconnecting", unreachable, retry: connection.retry }}
       >
-        <div className="flex min-h-0 flex-1">
+        <div className={windowBody}>
           <Sidebar />
           <div className="flex min-w-0 flex-1 flex-col">
             {/* A chat shows the card under its own header; every other page shows it at the top. */}

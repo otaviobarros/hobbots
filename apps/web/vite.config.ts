@@ -3,6 +3,7 @@ import babel, { type RolldownBabelPreset } from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { appFrame } from "./app-frame-plugin.ts";
 import { hubProxy } from "./hub-proxy.ts";
 
 // The React Compiler's preset as plain data, so Babel can run it in worker threads: its own preset
@@ -29,6 +30,7 @@ export default defineConfig({
       parallel: true,
     }),
     tailwindcss(),
+    appFrame(),
   ],
   // Two entries: the hub's pages, and setup's local pages that the desktop app serves from its own
   // resources before this computer is a hub or connected to one (ADR 025).
