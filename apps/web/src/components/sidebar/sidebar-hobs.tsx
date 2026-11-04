@@ -1,4 +1,5 @@
 import type { Agent, AgentId } from "@hobbots/domain";
+import { Popover, PopoverTrigger } from "@hobbots/ui/components/popover";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
@@ -7,6 +8,7 @@ import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
+import { HobCard } from "./hob-card.tsx";
 import { type SidebarState, sidebarState } from "./hob-mark.ts";
 import { messages as copy } from "./messages.ts";
 import { SidebarTip, sidebarIcon, sidebarItem } from "./sidebar-item.tsx";
@@ -20,8 +22,9 @@ const MARK: Partial<Record<SidebarState, string>> = { "needs-you": "bg-lantern",
 const openHobOf = (pathname: string): string | undefined => /^\/hobs\/([^/]+)/.exec(pathname)?.[1];
 
 /**
- * Every hob, each with a still state mark: lantern when it needs you, mint while it works. The hob
- * whose page or chat is open lists its recent threads under its name while the sidebar is expanded.
+ * Every hob, each with a still state mark: lantern when it needs you, mint while it works. A hob's
+ * tile opens its card. The hob whose page or chat is open lists its recent threads under its name
+ * while the sidebar is expanded.
  */
 export function SidebarHobs({ expanded }: { expanded: boolean }) {
   const agents = useQuery(agentsQuery);
@@ -77,41 +80,45 @@ function SidebarHob({
 }) {
   const threads = useQuery(threadsQuery(hob.id));
   const activity = useActivity();
-  const state = sidebarState(withRequests(hobState(hob, threads.data, activity), waiting));
+  const full = withRequests(hobState(hob, threads.data, activity), waiting);
+  const state = sidebarState(full);
   const word = copy.state[state];
   const mark = MARK[state];
   const showThreads = expanded && open;
 
   return (
     <div className="flex flex-none flex-col">
-      <SidebarTip label={copy.hobTip({ name: hob.name, state: word })} expanded={expanded}>
-        <Link
-          to="/hobs/$hobId"
-          params={{ hobId: hob.id }}
-          aria-label={copy.hob({ name: hob.name, state: word })}
-          aria-current={pathname === `/hobs/${hob.id}` ? "page" : undefined}
-          aria-expanded={expanded ? open : undefined}
-          className={sidebarItem}
-        >
-          <span className={sidebarIcon}>
-            <span className="relative inline-flex size-9 items-center justify-center rounded-tile bg-tile">
-              <HobSprite hob={hob} size={28} />
-              {mark && (
-                <span
-                  aria-hidden
-                  className={cn("absolute -end-[3px] -bottom-[3px] size-3 rounded-dot border-2 border-panel", mark)}
-                />
-              )}
-            </span>
-          </span>
-          <span className="sidebar-label flex min-w-0 flex-1 flex-col">
-            <span className="truncate font-heading font-semibold">{hob.name}</span>
-            <span className={cn("text-detail", state === "needs-you" ? "text-lantern" : "text-text-secondary")}>
-              {word}
-            </span>
-          </span>
-        </Link>
-      </SidebarTip>
+      <Popover>
+        <SidebarTip label={copy.hobTip({ name: hob.name, state: word })} expanded={expanded}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={copy.hob({ name: hob.name, state: word })}
+              aria-current={pathname === `/hobs/${hob.id}` ? "page" : undefined}
+              className={cn(sidebarItem, "cursor-pointer")}
+            >
+              <span className={sidebarIcon}>
+                <span className="relative inline-flex size-9 items-center justify-center rounded-tile bg-tile">
+                  <HobSprite hob={hob} size={28} />
+                  {mark && (
+                    <span
+                      aria-hidden
+                      className={cn("absolute -end-[3px] -bottom-[3px] size-3 rounded-dot border-2 border-panel", mark)}
+                    />
+                  )}
+                </span>
+              </span>
+              <span className="sidebar-label flex min-w-0 flex-1 flex-col">
+                <span className="truncate font-heading font-semibold">{hob.name}</span>
+                <span className={cn("text-detail", state === "needs-you" ? "text-lantern" : "text-text-secondary")}>
+                  {word}
+                </span>
+              </span>
+            </button>
+          </PopoverTrigger>
+        </SidebarTip>
+        <HobCard hob={hob} state={full} threads={threads.data ?? []} />
+      </Popover>
       {showThreads && <RecentThreads hobId={hob.id} pathname={pathname} />}
     </div>
   );
