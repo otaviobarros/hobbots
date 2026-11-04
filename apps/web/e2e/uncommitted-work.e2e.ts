@@ -1,5 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
+import { openQuest, taskSheet } from "./work-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -17,17 +18,11 @@ test("[TC-OR-288] a Task that completed with uncommitted changes shows them unde
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Make the shop badge" });
-  const badge = room
-    .getByRole("list", { name: "Tasks of Make the shop badge" })
-    .getByRole("button", { name: /Quill · Make the shop badge/ });
+  const room = await openQuest(page, "Make the shop badge");
+  const badge = room.getByRole("button", { name: /Quill · Make the shop badge/ });
   await expect(badge).toContainText("Done", { timeout: 15_000 });
   await badge.click();
-  await room
-    .getByRole("region", { name: "Controls for Make the shop badge" })
-    .getByRole("button", { name: "Open in Workbench" })
-    .click();
+  await taskSheet(page, "Make the shop badge").getByRole("button", { name: "Open Workbench" }).click();
 
   const bench = page.getByRole("region", { name: "Workbench for Make the shop badge" });
   const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
@@ -49,17 +44,11 @@ test("[TC-OR-462] a Quest whose lead left a file uncommitted shows it under Stil
   await composer.fill("Wrap up the spec for the shop");
   await composer.press("Enter");
 
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Wrap up the spec" });
-  const top = room
-    .getByRole("list", { name: "Tasks of Wrap up the spec" })
-    .getByRole("button", { name: /Aldric · Wrap up the spec/ });
-  await expect(top).toContainText("Done", { timeout: 15_000 });
-  await top.click();
-  await room
-    .getByRole("region", { name: "Controls for Wrap up the spec" })
-    .getByRole("button", { name: "Open in Workbench" })
-    .click();
+  // Aldric brings nobody in, so Details on his card opens his own Task.
+  const card = page.getByRole("region", { name: "Aldric's work on Wrap up the spec" });
+  await expect(card).toContainText("Aldric finished this", { timeout: 15_000 });
+  await card.getByRole("button", { name: "Show details" }).click();
+  await taskSheet(page, "Wrap up the spec").getByRole("button", { name: "Open Workbench" }).click();
 
   const bench = page.getByRole("region", { name: "Workbench for Wrap up the spec" });
   const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });

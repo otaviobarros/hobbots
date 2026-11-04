@@ -116,7 +116,7 @@
   --spacing-work-max: 604px;
   --spacing-drawer: 420px;
   /* The Task chat drawer beside the Workbench's tabs. */
-  --spacing-workbench-chat: 330px;
+  --spacing-workbench-chat: 300px;
   /* The sidebar on every screen after setup: collapsed, expanded, and its rows. */
   --spacing-sidebar: 72px;
   --spacing-sidebar-open: 256px;

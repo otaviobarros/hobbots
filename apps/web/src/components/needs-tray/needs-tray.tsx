@@ -1,4 +1,4 @@
-import { exactAction } from "@hobbots/domain";
+import { type ApprovalSurface, exactAction } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -30,9 +30,17 @@ type Hob = ReturnType<HobLookup>;
  * Everything waiting on you, one item at a time, right above the composer: approvals, then stuck
  * work, then questions. "1 of 2" and Next step through them; deciding one shows the next. The
  * high-risk variant has a rose edge and its confirm box. Gone when nothing waits. The chat and Home
- * pass the entries they hold.
+ * pass the entries they hold, and `via` names the surface a decision made here records.
  */
-export function NeedsTray({ entries, className }: { entries: ReadonlyArray<TrayEntry>; className?: string }) {
+export function NeedsTray({
+  entries,
+  via = "chat",
+  className,
+}: {
+  entries: ReadonlyArray<TrayEntry>;
+  via?: ApprovalSurface;
+  className?: string;
+}) {
   const hobs = useHobLookup();
   const [place, setPlace] = useState<{ key: string | undefined; index: number }>({ key: undefined, index: 0 });
   const shown = shownEntry(entries, place.key, place.index);
@@ -95,7 +103,7 @@ export function NeedsTray({ entries, className }: { entries: ReadonlyArray<TrayE
             </Button>
           )}
         </div>
-        <TrayBody entry={entry} asker={asker} hobs={hobs} />
+        <TrayBody entry={entry} asker={asker} hobs={hobs} via={via} />
       </section>
     </section>
   );
@@ -124,14 +132,24 @@ const titleOf = (entry: TrayEntry, asker: Hob): string => {
   return entry.kind === "stuck" ? copy.stuckTitle({ name: asker.name }) : copy.questionTitle({ name: asker.name });
 };
 
-function TrayBody({ entry, asker, hobs }: { entry: TrayEntry; asker: Hob; hobs: HobLookup }) {
-  if (entry.kind === "approval") return <ApprovalBody entry={entry} asker={asker} />;
+function TrayBody({
+  entry,
+  asker,
+  hobs,
+  via,
+}: {
+  entry: TrayEntry;
+  asker: Hob;
+  hobs: HobLookup;
+  via: ApprovalSurface;
+}) {
+  if (entry.kind === "approval") return <ApprovalBody entry={entry} asker={asker} via={via} />;
   if (entry.kind === "stuck") return <StuckBody entry={entry} asker={asker} />;
   const { question, task } = entry.waiting;
   return (
     <>
       <p className="m-0 whitespace-pre-wrap text-text">{question.text}</p>
-      <AnswerForm question={question} askerName={asker.name} via="chat" />
+      <AnswerForm question={question} askerName={asker.name} via={via} />
       <Details summary={copy.details.question}>
         {copy.passedUp({
           names: [asker.name, ...question.chain.map((id) => hobs(id).name)],
@@ -143,9 +161,17 @@ function TrayBody({ entry, asker, hobs }: { entry: TrayEntry; asker: Hob; hobs: 
   );
 }
 
-function ApprovalBody({ entry, asker }: { entry: Extract<TrayEntry, { kind: "approval" }>; asker: Hob }) {
+function ApprovalBody({
+  entry,
+  asker,
+  via,
+}: {
+  entry: Extract<TrayEntry, { kind: "approval" }>;
+  asker: Hob;
+  via: ApprovalSurface;
+}) {
   const { request } = entry;
-  const decide = useDecideApproval(request, "chat");
+  const decide = useDecideApproval(request, via);
   return (
     <>
       <p className="m-0 text-text">{request.reason}</p>

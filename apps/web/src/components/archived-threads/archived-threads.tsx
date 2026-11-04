@@ -107,15 +107,6 @@ function ArchivedHeader({
           {messages.editHob}
         </Link>
       </Button>
-      <Button
-        variant="icon"
-        size="icon"
-        onClick={props.onTogglePanel}
-        aria-label={props.panelOpen ? chatCopy.chat.hidePanel : chatCopy.chat.showPanel}
-        title={props.panelOpen ? chatCopy.chat.hidePanel : chatCopy.chat.showPanel}
-      >
-        {props.panelOpen ? "»" : "«"}
-      </Button>
     </header>
   );
 }

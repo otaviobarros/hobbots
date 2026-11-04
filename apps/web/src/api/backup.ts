@@ -39,7 +39,7 @@ export const restoreStatusQuery = queryOptions({
   queryFn: () => call((c) => c.backup.restoreStatus()),
 });
 
-/** Whether work is held after a restore, for the notices on Home and the Quest tab. */
+/** Whether work is held after a restore, for the notices on Home and in the chat. */
 export const workHeld = (status: RestoreStatus | undefined) => status?.latest?.workHeld === true;
 
 /** Reads a backup and what it holds, before anything changes. */

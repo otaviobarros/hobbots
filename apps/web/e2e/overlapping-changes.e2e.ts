@@ -1,5 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
+import { openQuest, taskSheet } from "./work-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -16,10 +17,8 @@ test("[TC-OR-283] two members changing the same file show the hub's finding on b
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  // In the Quest tab, each member's row says whose Task changed the same file.
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Make the shop badge" });
-  const tasks = room.getByRole("list", { name: "Tasks of Make the shop badge" });
+  // On the quest sheet, each member's row says whose Task changed the same file.
+  const tasks = await openQuest(page, "Make the shop badge");
   const badge = tasks.getByRole("button", { name: /Quill · Make the shop badge/ });
   const review = tasks.getByRole("button", { name: /Ada · Review the shop/ });
   await expect(review).toContainText("Same file as Quill", { timeout: 15_000 });
@@ -32,10 +31,11 @@ test("[TC-OR-283] two members changing the same file show the hub's finding on b
     [badge, "Make the shop badge"],
   ] as const) {
     await row.click();
-    const drawer = page.getByRole("complementary", { name: `${title}, Task details` });
+    const drawer = taskSheet(page, title);
     await expect(drawer).toContainText("Finding");
     await expect(drawer).toContainText("Ada changed web/badge.png");
     await expect(drawer).toContainText("Quill's Task");
+    await drawer.getByRole("button", { name: "Back to Make the shop badge" }).click();
   }
 });
 
@@ -48,10 +48,7 @@ test("[TC-OR-411] the lead's change from before it delegated shows no Same file 
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const tasks = page
-    .getByRole("region", { name: "Control room for Make the shop badge" })
-    .getByRole("list", { name: "Tasks of Make the shop badge" });
+  const tasks = await openQuest(page, "Make the shop badge");
   // Quill and Ada wrote the badge while both were at work: each names only the other.
   const review = tasks.getByRole("button", { name: /Ada · Review the shop/ });
   const badge = tasks.getByRole("button", { name: /Quill · Make the shop badge/ });

@@ -56,21 +56,9 @@ export const messages = {
     count: ({ count }: { count: number }) =>
       plural(count, { one: "1 in the backpack", other: `${formatCount(count)} in the backpack` }),
   },
-  /** The Quest tab. */
-  quest: {
-    label: ({ title }: { title: string }) => `What hobs on ${title} are waiting on`,
-    list: "Items waiting",
-    heading: "Waiting on",
-  },
-  workspace: {
-    label: "What every hob is waiting on",
-    list: "Every hob's items",
-    heading: ({ count }: { count: number }) =>
-      plural(count, { one: "Every hob · 1 waiting", other: `Every hob · ${formatCount(count)} waiting` }),
-    empty: "No hob is waiting on anything.",
-    loading: "Reading what hobs are waiting on…",
-    loadFailed: "Hobbots could not read what hobs are waiting on, so something may still be waiting.",
-    tryAgain: "Try again",
-    unknown: "Every hob",
+  task: {
+    label: ({ title }: { title: string }) => `Backpack for ${title}`,
+    list: "Items in the backpack",
+    heading: "Backpack",
   },
 } as const;

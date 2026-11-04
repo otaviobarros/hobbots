@@ -36,11 +36,14 @@ export function HobHero({
   state,
   stats,
   doing,
+  fresh,
 }: {
   hob: Agent;
   state: HobState;
   stats: string;
   doing: Doing | null;
+  /** A hob with no chats yet, whose tag says New. */
+  fresh: boolean;
 }) {
   return (
     <section aria-label={hob.name} className="cut relative overflow-hidden px-6 pt-6" style={heroStyle(hob)}>
@@ -52,7 +55,7 @@ export function HobHero({
           />
           <HobSprite hob={hob} size={98} state={state} className="z-[1] mb-1.5" />
         </span>
-        <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-1.5 pb-[18px]">
+        <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-1.5 pb-[18px]">
           <span className="flex min-w-0 items-center gap-2.5">
             <h1
               title={hob.name}
@@ -60,7 +63,7 @@ export function HobHero({
             >
               {hob.name}
             </h1>
-            <HobStateTag state={state} />
+            <HobStateTag state={state} fresh={fresh} />
           </span>
           <span title={`${hob.roleTitle} · ${stats}`} className="truncate text-[15px] text-text-secondary">
             {hob.roleTitle}
@@ -88,8 +91,8 @@ export function HobHero({
 }
 
 /** A hob's state as a tag: the family's glyph, so it reads without color, and its word. */
-export function HobStateTag({ state }: { state: HobState }) {
-  const tag = stateTag(state);
+export function HobStateTag({ state, fresh = false }: { state: HobState; fresh?: boolean }) {
+  const tag = stateTag(state, fresh);
   return (
     <Badge variant={tag.variant}>
       <span aria-hidden data-slot="badge-glyph">

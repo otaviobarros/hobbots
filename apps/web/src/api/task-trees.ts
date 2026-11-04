@@ -16,7 +16,7 @@ import {
 } from "@hobbots/domain";
 
 /**
- * What the hub answered a Quest tab control with (ADR 018): the tree as it recorded the change.
+ * What the hub answered a Task control with (ADR 018): the tree as it recorded the change.
  * The client applies it before the change's events arrive, as it applies each of them, so whichever
  * comes first the tree ends as the newest copy of each Task says, its Delegation included.
  */
@@ -116,7 +116,7 @@ const withWait = (
 };
 
 /**
- * A retry or reassignment from the Quest tab carries the Task's Delegation as it now is: after a
+ * A retry or reassignment from the task sheet carries the Task's Delegation as it now is: after a
  * reassignment it names the new member, so the party follows.
  */
 const withControl = (

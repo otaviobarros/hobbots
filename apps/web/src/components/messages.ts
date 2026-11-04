@@ -7,6 +7,7 @@ import { formatCount, plural as pluralForm } from "../lib/format.ts";
 /** Evidence from the hub as a sentence, ending with one period. */
 const sentence = (text: string) => text.replace(/\.?$/, ".");
 
+
 export const messages = {
   providers: {
     names: { "claude-code": "Claude", codex: "Codex" },
@@ -321,8 +322,7 @@ export const messages = {
   chat: {
     ideas: ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"],
     newThread: "New thread",
-    hidePanel: "Hide Quest panel",
-    showPanel: "Show Quest panel",
+    openHob: ({ name }: { name: string }) => `Open ${name}'s page`,
     hello: ({ name }: { name: string }) => `Hello, I'm ${name}!`,
     freshPage: "A fresh page",
     helloBody: "Tell me my first chore. I keep working even if you switch to another thread.",

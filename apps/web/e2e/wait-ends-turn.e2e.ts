@@ -1,7 +1,8 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
-// Issue #572 in the browser: a lead that waits on a member's Task shows Running in the Quest tab
+// Issue #572 in the browser: a lead that waits on a member's Task shows Running in the quest sheet
 // while its turn still runs, and Waiting once the turn has ended. The hub's side is tested in
 // apps/server/test/wait-ends-turn.test.ts.
 
@@ -63,7 +64,7 @@ const LONG_JOB = "fake:tool Bash sleep 600";
 const LONG_REPLY = Array.from({ length: 250 }, (_, index) => `word${index}`).join(" ");
 
 // covers OR-003, UX-001
-test("[TC-OR-242] the Quest tab shows the lead Running while the turn that waits still runs, and Waiting after it", async ({
+test("[TC-OR-242] the quest sheet shows the lead Running while the turn that waits still runs, and Waiting after it", async ({
   page,
 }) => {
   const current = await startHub(dataDir);
@@ -96,8 +97,7 @@ test("[TC-OR-242] the Quest tab shows the lead Running while the turn that waits
 
   // Both waits are made while his turn still runs: his Task shows Running, not Waiting.
   await expect(page.getByRole("list", { name: "Reply steps" }).getByText("Waiting on Tasks")).toHaveCount(2);
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const tasks = page.getByRole("list", { name: /^Tasks of Ship the backend/ });
+  const tasks = await openQuest(page, "Ship the backend");
   const lead = tasks.getByRole("button", { name: /^Frodo · Ship the backend/ });
   await expect(lead).toContainText("Running");
   await expect(stop).toBeVisible();

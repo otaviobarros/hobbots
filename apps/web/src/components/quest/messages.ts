@@ -37,24 +37,9 @@ export const messages = {
     label: "Work in progress",
     quest: ({ name }: { name: string }) => `${name}'s quest`,
     task: ({ name }: { name: string }) => `${name}'s task`,
-    open: ({ name }: { name: string }) => `Show ${name}'s work`,
-    count: ({ status, count }: { status: RowStatus; count: number }) => {
-      const n = formatCount(count);
-      switch (status) {
-        case "needs-you":
-          return plural(count, { one: "1 needs you", other: `${n} need you` });
-        case "failed":
-          return `${n} failed`;
-        case "blocked":
-          return `${n} blocked`;
-        case "running":
-          return `${n} running`;
-        case "waiting":
-          return `${n} waiting`;
-        case "done":
-          return `${n} done`;
-      }
-    },
+    done: ({ done, total }: { done: number; total: number }) => `${formatCount(done)} of ${formatCount(total)} done`,
+    needYou: ({ count }: { count: number }) =>
+      plural(count, { one: "1 needs you", other: `${formatCount(count)} need you` }),
   },
   question: {
     asks: ({ name }: { name: string }) => `${name} asks you`,
@@ -113,6 +98,7 @@ export const messages = {
     noteTo: ({ name, time }: { name: string; time: string }) => `To ${name} · ${time}`,
     asksYou: ({ name }: { name: string }) => `${name} asks you. Your answer goes straight back to ${name}.`,
     waitingOn: ({ name }: { name: string }) => `Waiting for ${name} to answer.`,
+    waitsForYou: "Waiting for your answer, above.",
     noteNotAnswer: ({ name }: { name: string }) => `Note to ${name}, not an answer`,
     noteNotAnswerHint: ({ lead, asker }: { lead: string; asker: string }) =>
       `This goes to ${lead} as a note. To answer ${asker}, use the answer box above.`,
@@ -131,12 +117,6 @@ export const messages = {
     uncommitted: "Left uncommitted",
   } satisfies Record<CheckpointKind, string>,
   room: {
-    label: ({ title }: { title: string }) => `Control room for ${title}`,
-    emptyTitle: "No Quest in this thread",
-    empty:
-      "When a hob splits work or asks other hobs for help, the Quest shows up here: who is on each Task, what they wait on, and how far it got. Pin a Quest to keep it in view while you chat elsewhere.",
-    summary: ({ whose, done, total }: { whose: string; done: number; total: number }) =>
-      `${whose} · ${formatCount(done)} of ${formatCount(total)} done`,
     elsewhere: "Pinned from another thread",
     openThread: "Open its thread",
     pin: "Pin",
@@ -157,7 +137,6 @@ export const messages = {
     sameFile: ({ names }: { names: string }) => `Same file as ${names}`,
     /** A member that started a Quest of its own but has brought nobody into it (#576). */
     nobodyYet: "No one brought in yet",
-    pick: "Pick a Task to retry, reassign or cancel it.",
     workbench: "Open in Workbench",
     controls: ({ title }: { title: string }) => `Controls for ${title}`,
     attempt: ({ count }: { count: number }) => `Attempt ${formatCount(count)}`,

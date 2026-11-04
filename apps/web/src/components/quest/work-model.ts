@@ -111,7 +111,7 @@ export const rowStatus = (tree: TaskTree, task: Task): RowStatus => {
  * What the Task's owner last reported, or a finding the hub made about it, such as another Task
  * changing a file it changed; the other automatic checkpoints only repeat its state.
  */
-const latestOf = (tree: TaskTree, task: Task): string | null =>
+export const latestOf = (tree: TaskTree, task: Task): string | null =>
   tree.checkpoints.findLast((checkpoint) => checkpointOn(checkpoint, task.id) && saysMore(checkpoint))?.summary ?? null;
 
 /** The hobs whose Tasks this one comes after and that have not completed, failed ones included. */
@@ -305,6 +305,10 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
 
 /** The hob a note on the Task goes to, as the hub decides it (ADR 018). */
 export const noteRecipient = (tree: TaskTree, task: Task): AgentId => noteRecipientOf(task, tree.tasks);
+
+/** The first question on a Task that waits for you. */
+export const questionForYou = (tree: TaskTree, task: Task): Question | null =>
+  questionsForYou(tree).find((question) => question.taskId === task.id) ?? null;
 
 /** Every Task right under one, done ones included, for Show all. */
 const workRowsAll = (tree: TaskTree, task: Task): ReadonlyArray<WorkRow> =>

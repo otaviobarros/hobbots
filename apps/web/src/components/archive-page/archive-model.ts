@@ -27,17 +27,33 @@ export const allArchivedChats = <H extends HobLike, T extends ThreadLike>(
     .flatMap((hob) => (archived.get(hob.id) ?? []).map((thread) => ({ hob, thread })))
     .sort((a, b) => (b.thread.archivedAt ?? "").localeCompare(a.thread.archivedAt ?? ""));
 
+/** How many hob chips the scope shows before the rest go under More hobs. */
+const SCOPE_CHIPS = 6;
+
+export interface ScopeChip<H> {
+  readonly hob: H;
+  readonly count: number;
+}
+
 /**
- * The hobs the scope offers: each hob with archived chats, by name, and the hob the Archive was
- * opened for even when it has none, so its empty list can say so.
+ * The scope's hob chips: the six hobs with the most archived chats (ties by name), then More hobs
+ * with the rest by name. A hob picked from More hobs joins the chips, so the picked one always shows.
  */
-export const scopeHobs = <H extends HobLike>(
+export const scopeChips = <H extends HobLike>(
   hobs: ReadonlyArray<H>,
   chats: ReadonlyArray<ArchivedChat<HobLike, ThreadLike>>,
   chosen: AgentId | undefined,
-): ReadonlyArray<H> => {
-  const withChats = new Set(chats.map((chat) => chat.hob.id));
-  return hobs.filter((hob) => withChats.has(hob.id) || hob.id === chosen).sort((a, b) => a.name.localeCompare(b.name));
+): { readonly chips: ReadonlyArray<ScopeChip<H>>; readonly more: ReadonlyArray<ScopeChip<H>> } => {
+  const counts = new Map<AgentId, number>();
+  for (const chat of chats) counts.set(chat.hob.id, (counts.get(chat.hob.id) ?? 0) + 1);
+  const ranked = hobs
+    .filter((hob) => counts.has(hob.id) || hob.id === chosen)
+    .map((hob) => ({ hob, count: counts.get(hob.id) ?? 0 }))
+    .sort((a, b) => b.count - a.count || a.hob.name.localeCompare(b.hob.name));
+  const chips = ranked.slice(0, SCOPE_CHIPS);
+  const rest = ranked.slice(SCOPE_CHIPS).sort((a, b) => a.hob.name.localeCompare(b.hob.name));
+  const picked = rest.find((chip) => chip.hob.id === chosen);
+  return picked ? { chips: [...chips, picked], more: rest.filter((chip) => chip !== picked) } : { chips, more: rest };
 };
 
 /**

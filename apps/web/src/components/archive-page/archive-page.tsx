@@ -2,9 +2,10 @@ import type { Agent, AgentId, Thread, ThreadId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@hobbots/ui/components/empty";
+import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@hobbots/ui/components/menu";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { SearchField } from "@hobbots/ui/components/search-field";
-import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -12,6 +13,7 @@ import { useMemo, useState } from "react";
 import { agentsQuery, archivedAgentsQuery, archivedThreadsQuery, threadsQuery } from "../../api/queries.ts";
 import { useSearch } from "../../api/search.ts";
 import { ARCHIVE_CHEST, archiveChestPalette } from "../../art/icons.ts";
+import { formatCount } from "../../lib/format.ts";
 import { formatDay } from "../../lib/time.ts";
 import { isMac } from "../archive/archive-rules.ts";
 import { HobSprite } from "../hob-sprite.tsx";
@@ -20,8 +22,9 @@ import {
   type ArchiveTab,
   allArchivedChats,
   isArchiveTab,
+  type ScopeChip,
   SHOWN,
-  scopeHobs,
+  scopeChips,
   visibleChats,
 } from "./archive-model.ts";
 import { useArchiveActions } from "./archive-notices.tsx";
@@ -143,7 +146,7 @@ function ArchivedChats({
     () => new Set<ThreadId>(search.hits.filter((hit) => hit.thread.archivedAt !== null).map((hit) => hit.thread.id)),
     [search.hits],
   );
-  const scope = scopeHobs(hobs, chats, hobId);
+  const scope = scopeChips(hobs, chats, hobId);
   const chosen = hobs.find((hob) => hob.id === hobId);
   const visible = visibleChats(chats, chosen?.id, query, messageHits);
   const trimmed = query.trim();
@@ -158,15 +161,20 @@ function ArchivedChats({
   return (
     <>
       <div className="flex flex-wrap items-center gap-3">
-        {scope.length > 0 && (
-          <SegmentedControl aria-label={copy.scope.label} value={chosen?.id ?? "all"} onValueChange={pickScope}>
-            {scope.map((hob) => (
-              <SegmentedControlItem key={hob.id} value={hob.id} className="max-w-[180px]">
-                <span className="truncate">{hob.name}</span>
-              </SegmentedControlItem>
-            ))}
-            <SegmentedControlItem value="all">{copy.scope.all}</SegmentedControlItem>
-          </SegmentedControl>
+        {scope.chips.length > 0 && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <FilterChips aria-label={copy.scope.label} value={chosen?.id ?? "all"} onValueChange={pickScope}>
+              <FilterChip value="all" count={chats.length}>
+                {copy.scope.all}
+              </FilterChip>
+              {scope.chips.map(({ hob, count }) => (
+                <FilterChip key={hob.id} value={hob.id} count={count} title={hob.name} className="max-w-[220px]">
+                  <span className="truncate">{hob.name}</span>
+                </FilterChip>
+              ))}
+            </FilterChips>
+            {scope.more.length > 0 && <MoreHobs more={scope.more} onPick={pickScope} />}
+          </div>
         )}
         <span className="flex-1" />
         <SearchField
@@ -206,6 +214,30 @@ function ArchivedChats({
   );
 }
 
+/** The hobs past the scope's six chips, in a menu; picking one makes it the picked chip. */
+function MoreHobs({ more, onPick }: { more: ReadonlyArray<ScopeChip<Agent>>; onPick: (hobId: string) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="inline-flex h-8.5 shrink-0 cursor-pointer items-center gap-2 rounded-full border-(length:--edge) border-dashed border-line-2 bg-transparent px-3.5 text-sm whitespace-nowrap text-text-secondary outline-none hover:border-control hover:text-text-strong focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-ground">
+        {copy.scope.more}
+        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-text-strong/11 px-1.5 text-xs font-semibold tabular-nums">
+          {formatCount(more.length)}
+        </span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="max-h-[320px] overflow-y-auto">
+        {more.map(({ hob, count }) => (
+          <DropdownMenuItem key={hob.id} onSelect={() => onPick(hob.id)} className="flex-row items-center gap-3">
+            <span className="min-w-0 flex-1 truncate" title={hob.name}>
+              {hob.name}
+            </span>
+            <span className="flex-none text-xs text-label tabular-nums">{formatCount(count)}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function ChatList({ chats }: { chats: ReadonlyArray<ArchivedChat> }) {
   const [all, setAll] = useState(false);
   const shown = all ? chats : chats.slice(0, SHOWN);
@@ -242,6 +274,11 @@ function ChatRow({ chat: { hob, thread } }: { chat: ArchivedChat }) {
           >
             {thread.title}
           </Link>
+          {thread.lastLine && (
+            <span title={thread.lastLine} className="truncate text-sm text-text-secondary">
+              {thread.lastLine}
+            </span>
+          )}
           <span className="truncate text-xs text-label">
             {copy.chats.meta({ name: hob.name, day: formatDay(thread.archivedAt ?? thread.updatedAt) })}
           </span>
@@ -255,7 +292,8 @@ function ChatRow({ chat: { hob, thread } }: { chat: ArchivedChat }) {
           onClick={() => actions.restore(hob, thread)}
         >
           <RestoreIcon />
-          {busy ? copy.chats.restoring : copy.chats.restore}
+          {/* On a narrow screen the row keeps the icon, so the title has room; the label still names it. */}
+          <span className="max-sm:sr-only">{busy ? copy.chats.restoring : copy.chats.restore}</span>
         </Button>
       </div>
     </li>
@@ -280,7 +318,10 @@ function RetiredHobs({ hobs }: { hobs: ReadonlyArray<Agent> }) {
     );
   }
   return (
-    <ul aria-label={copy.hobs.list} className="m-0 grid list-none grid-cols-2 gap-4 p-0 min-[1120px]:grid-cols-3">
+    <ul
+      aria-label={copy.hobs.list}
+      className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))] gap-4 p-0"
+    >
       {hobs.map((hob) => (
         <RetiredCard key={hob.id} hob={hob} />
       ))}
@@ -315,7 +356,7 @@ function RetiredCard({ hob }: { hob: Agent }) {
             {hob.roleTitle}
           </span>
         </span>
-        <span className="flex min-w-0 items-end justify-between gap-3">
+        <span className="flex min-w-0 flex-wrap items-end justify-between gap-x-3 gap-y-2">
           <span className="flex min-w-0 flex-col text-sm">
             <span className="truncate">{threads.data ? copy.hobs.kept({ count: threads.data.length }) : " "}</span>
             <span className="truncate text-xs text-label">

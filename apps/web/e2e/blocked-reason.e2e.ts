@@ -1,8 +1,9 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
 // Issue #571 in the browser: Rook's Task is blocked only when its own milestone is all that keeps
-// it open, and its Quest tab row then says why, in the words its lead reads. The hub side is
+// it open, and its row on the quest sheet then says why, in the words its lead reads. The hub side is
 // checked in apps/server/test/blocked-reason.test.ts.
 
 let hub: Hub | undefined;
@@ -76,8 +77,7 @@ test("[TC-OR-223] the Task card and drawer say why Rook's Task is blocked, not a
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
 
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const tasks = page.getByRole("list", { name: "Tasks of Build the app" });
+  const tasks = await openQuest(page, "Build the app");
   const frontend = tasks.getByRole("button", { name: /Rook · Write the frontend/ });
   await expect(frontend).toContainText("Blocked", { timeout: 30_000 });
   // The Task card in the chat gives the reason on Rook's row.
@@ -85,7 +85,7 @@ test("[TC-OR-223] the Task card and drawer say why Rook's Task is blocked, not a
   await expect(cardRow).toContainText("Its member ended a turn without completing it");
   await expect(cardRow).toContainText("Blocked");
   await frontend.click();
-  const drawer = page.getByRole("complementary", { name: "Write the frontend, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Write the frontend, Task details" });
   await expect(drawer).toContainText('only its own milestones are unreported: "Page live"');
   await expect(drawer).toContainText("It waits on no question, approval or other Task");
 });

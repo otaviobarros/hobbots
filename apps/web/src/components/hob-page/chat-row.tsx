@@ -9,6 +9,7 @@ import { formatWhen } from "../../lib/time.ts";
 import { ArchiveItem } from "../archive/thread-menu.tsx";
 import { cleanTitle } from "./chats-model.ts";
 import { messages } from "./messages.ts";
+import { QuestChip } from "./quest-chip.tsx";
 
 const copy = messages.chats;
 
@@ -28,7 +29,7 @@ function Marked({ parts }: { parts: ReadonlyArray<SnippetPart> }) {
 
 /**
  * One chat on a hob's page: its title, a matching message while searching, a chip when something in
- * it needs you, and its age, which gives way to the ⋯ menu on hover and focus. The menu renames it in
+ * it needs you and one for each Quest it follows, and its age, which gives way to the ⋯ menu on hover and focus. The menu renames it in
  * place, pins it to the top and archives it.
  */
 export function ChatRow({
@@ -36,6 +37,7 @@ export function ChatRow({
   thread,
   live,
   needs,
+  quests,
   title,
   snippet,
 }: {
@@ -44,6 +46,8 @@ export function ChatRow({
   live: boolean;
   /** How many approvals wait for you in it. */
   needs: number;
+  /** The Quests followed in it, as their chips. */
+  quests: ReadonlyArray<string>;
   /** The title with its matching words marked, while searching. */
   title?: ReadonlyArray<SnippetPart> | undefined;
   snippet?: ReadonlyArray<SnippetPart> | null | undefined;
@@ -82,16 +86,28 @@ export function ChatRow({
             {title ? <Marked parts={title} /> : thread.title}
           </span>
         )}
-        {snippet && (
+        {/* While searching, where the words matched; otherwise the chat's last line. */}
+        {snippet ? (
           <span className="truncate text-sm leading-5 text-text-secondary">
             <Marked parts={snippet} />
           </span>
-        )}
-        {needs > 0 && (
-          <span className="flex min-w-0 gap-1.5 pt-1">
-            <span className="rounded-tag bg-lantern px-2 py-px text-xs leading-[18px] font-semibold text-on-lantern">
-              {copy.needs({ count: needs })}
+        ) : (
+          thread.lastLine && (
+            <span title={thread.lastLine} className="truncate text-sm leading-5 text-text-secondary">
+              {thread.lastLine}
             </span>
+          )
+        )}
+        {(needs > 0 || quests.length > 0) && (
+          <span className="flex min-w-0 flex-wrap gap-1.5 pt-1">
+            {needs > 0 && (
+              <span className="rounded-tag bg-lantern px-2 py-px text-xs leading-[18px] font-semibold whitespace-nowrap text-on-lantern">
+                {copy.needs({ count: needs })}
+              </span>
+            )}
+            {quests.map((quest) => (
+              <QuestChip key={quest} label={quest} />
+            ))}
           </span>
         )}
       </span>

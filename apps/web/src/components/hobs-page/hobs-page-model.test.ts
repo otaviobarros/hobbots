@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HobState } from "../../lib/hob-state.ts";
-import { filterCounts, filterOf, isHobFilter, lastChat, shownCrew } from "./hobs-page-model.ts";
+import { cardLine, filterCounts, filterOf, isHobFilter, lastChat, shownCrew } from "./hobs-page-model.ts";
 
 const crewOf = (states: ReadonlyArray<HobState>) => states.map((state, index) => ({ id: `h${index}`, state }));
 
@@ -57,5 +57,24 @@ describe("isHobFilter", () => {
     expect(isHobFilter("all")).toBe(true);
     expect(isHobFilter("paused")).toBe(false);
     expect(isHobFilter(undefined)).toBe(false);
+  });
+});
+
+describe("cardLine", () => {
+  const chat = (updatedAt: string, lastLine: string | null) => ({ updatedAt, lastLine });
+  it("says what the hob is doing first", () => {
+    expect(cardLine({ kind: "live", text: "Writing “Plan”" }, [chat("2026-11-01", "Done.")], false)).toBe(
+      "Writing “Plan”",
+    );
+  });
+  it("then the last line of its latest chat", () => {
+    expect(cardLine(null, [chat("2026-11-01", "Older"), chat("2026-11-03", "Sent the report.")], false)).toBe(
+      "Sent the report.",
+    );
+  });
+  it("says a new hob just arrived, and rests when it has no line yet or only did Quest work", () => {
+    expect(cardLine(null, [], true)).toBe("Just arrived");
+    expect(cardLine(null, [], false)).toBe("Resting");
+    expect(cardLine(null, [chat("2026-11-03", null)], false)).toBe("Resting");
   });
 });

@@ -22,46 +22,6 @@ const copy = messages.room;
 
 const NO_HOBS: ReadonlyArray<Agent> = [];
 
-/**
- * The controls of the Quest tab (ADR 018): Retry, Reassign and Cancel Task for the Task open in the
- * drawer, and Cancel Quest for the whole request. Each acts on the Task directly, never through the
- * lead. What the tab shows after is what the hub recorded (OR-006): a cancel asked for reads as
- * cancelling until each Task under it confirms it stopped or is left unresolved, and a retry or
- * reassignment reads as queued until its owner starts the new Attempt.
- */
-export function RoomControls({
-  tree,
-  task,
-  hobs,
-  cancel,
-  quest,
-  onWorkbench,
-}: {
-  tree: TaskTree;
-  /** The Task open in the drawer, when it is in this tree. */
-  task: Task | null;
-  hobs: HobLookup;
-  cancel: TopCancel;
-  quest: Quest | null;
-  /** Opens a Task's Workbench (ADR 023). */
-  onWorkbench: (taskId: Task["id"]) => void;
-}) {
-  const top = tree.tasks[0];
-  return (
-    <div className="flex flex-col gap-2 border-t-2 border-line px-3.5 py-2.5">
-      {task === null ? (
-        <p className="m-0 text-xs text-label">{copy.pick}</p>
-      ) : (
-        // A new Task starts with nothing asked and nothing open.
-        <TaskControlsFor key={task.id} tree={tree} task={task} hobs={hobs} onWorkbench={onWorkbench} />
-      )}
-      {top !== undefined && (
-        <TopControls key={top.id} tree={tree} top={top} hobs={hobs} cancel={cancel} quest={quest} />
-      )}
-    </div>
-  );
-}
-
 /** A line that says where a control stands; read out as it changes. */
 function Outcome({ children }: { children: string | null }) {
   return (
@@ -125,17 +85,22 @@ function ConfirmCancel({
   );
 }
 
-/** The open Task's owner, title and attempt, with the controls that apply to it. */
-function TaskControlsFor({
+/**
+ * The open Task's owner, title and attempt, with the controls that apply to it. The task sheet shows
+ * its own owner, attempt and Open Workbench, so it asks for the controls alone (`bare`).
+ */
+export function TaskControlsFor({
   tree,
   task,
   hobs,
   onWorkbench,
+  bare = false,
 }: {
   tree: TaskTree;
   task: Task;
   hobs: HobLookup;
   onWorkbench: (taskId: Task["id"]) => void;
+  bare?: boolean;
 }) {
   const [open, setOpen] = useState<"reassign" | "cancel" | null>(null);
   const [target, setTarget] = useState<Agent | null>(null);
@@ -152,12 +117,9 @@ function TaskControlsFor({
   };
   return (
     <section aria-label={copy.controls({ title })} className="flex flex-col gap-1.5">
-      <span className="truncate text-detail">{copy.row({ name: owner, title })}</span>
-      <span className="text-xs text-label">{attempts === 0 ? copy.notStarted : copy.attempt({ count: attempts })}</span>
+      <ControlsHead bare={bare} owner={owner} title={title} attempts={attempts} />
       <span className="flex flex-wrap gap-1.5 empty:hidden">
-        <Button variant="outline" size="xs" onClick={() => onWorkbench(task.id)}>
-          {copy.workbench}
-        </Button>
+        <WorkbenchButton bare={bare} onClick={() => onWorkbench(task.id)} />
         {controls.retry && (
           <Button
             variant="outline"
@@ -270,7 +232,7 @@ function ReassignPicker({
  * Cancel Quest for the whole request (Cancel Task while no party joined): asked first, then
  * Cancelling… until every Task confirms, then what the cancel came to.
  */
-function TopControls({
+export function TopControls({
   tree,
   top,
   hobs,
@@ -330,5 +292,36 @@ function TopControls({
       <Outcome>{outcome}</Outcome>
       <Refusal>{control.isError ? controlError(control.error, { owner, target: owner }) : null}</Refusal>
     </div>
+  );
+}
+
+/** Whose Task it is and its attempt, unless the task sheet already shows them. */
+function ControlsHead({
+  bare,
+  owner,
+  title,
+  attempts,
+}: {
+  bare: boolean;
+  owner: string;
+  title: string;
+  attempts: number;
+}) {
+  if (bare) return null;
+  return (
+    <>
+      <span className="truncate text-detail">{copy.row({ name: owner, title })}</span>
+      <span className="text-xs text-label">{attempts === 0 ? copy.notStarted : copy.attempt({ count: attempts })}</span>
+    </>
+  );
+}
+
+/** Open in Workbench, unless the task sheet offers its own. */
+function WorkbenchButton({ bare, onClick }: { bare: boolean; onClick: () => void }) {
+  if (bare) return null;
+  return (
+    <Button variant="outline" size="xs" onClick={onClick}>
+      {copy.workbench}
+    </Button>
   );
 }

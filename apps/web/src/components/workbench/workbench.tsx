@@ -8,7 +8,7 @@ import { threadTasksQuery } from "../../api/tasks.ts";
 import { attemptActivityQuery } from "../../api/workbench.ts";
 import type { NoteDrafts } from "../quest/note-box.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup } from "../quest/use-work.ts";
-import { findTask, noteRecipient, taskTitle } from "../quest/work-model.ts";
+import { findTask, questionForYou, taskTitle } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
 import { ChangesTab } from "./tabs/changes-tab.tsx";
 import { FilesTab } from "./tabs/files-tab.tsx";
@@ -88,7 +88,8 @@ export function Workbench({
           <p className="m-0 px-6 py-6 text-detail text-label">{reading ? messages.loading : messages.notFound}</p>
         </>
       ) : (
-        <div className="flex min-h-0 flex-1">
+        <div className="@container/bench relative flex min-h-0 flex-1">
+          {/* Narrower than 480px the task chat sits over the Workbench instead of squeezing it; its ✕ closes it. */}
           <div className="flex min-w-0 flex-1 flex-col">
             <Bench
               key={found.task.id}
@@ -103,13 +104,15 @@ export function Workbench({
                   ref={toggle}
                   variant="chip"
                   size="xs"
-                  aria-expanded={view.chatOpen}
+                  aria-pressed={view.chatOpen}
                   aria-controls={view.chatOpen ? chatId : undefined}
                   onClick={() => (view.chatOpen ? closeChat() : moves.chat(true))}
                 >
-                  {view.chatOpen
-                    ? messages.chat.hide
-                    : messages.chat.open({ name: hobs(noteRecipient(found.tree, found.task)).name })}
+                  {/* While the chat is hidden, a lantern dot says a question in it waits for you. */}
+                  {!view.chatOpen && questionForYou(found.tree, found.task) !== null && (
+                    <span aria-hidden className="size-1.5 rounded-dot bg-lantern" />
+                  )}
+                  {messages.chat.toggle}
                 </Button>
               }
             />

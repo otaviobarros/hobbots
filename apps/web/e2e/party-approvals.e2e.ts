@@ -1,5 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
 // Issue #273 in the browser: a party member's request reaches you in the Inbox, under its lead's
 // thread, and never its lead. The hub-level side is apps/server/test/quests.test.ts.
@@ -121,7 +122,7 @@ test("[TC-IN-062] a party member's request waits in the Inbox under its lead's t
 // Issue #698: Nettle's delete waited five minutes in the Inbox while his Task read active and
 // nothing in the Quest said why. The hub-level side is apps/server/test/member-approvals.test.ts.
 // covers PE-003, PE-006, OR-002, UX-002
-test("[TC-PE-445] a party member's request shows in the chat's tray and on its Task in the Quest tab, Allow once there lets the member finish, and the Inbox shows it settled", async ({
+test("[TC-PE-445] a party member's request shows in the chat's tray and on the quest sheet, Allow once in the tray lets the member finish, and the Inbox shows it settled", async ({
   page,
 }) => {
   const current = await startHub(dataDir);
@@ -165,22 +166,21 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on its T
     .getByRole("region", { name: "Nettle asks permission" });
   await expect(inTray.getByText(`rm ${shared}/tmp-notes.txt`, { exact: true })).toBeVisible();
 
-  // The Task's drawer opens on what waits on your approval.
+  // The Task's sheet says it needs you, and Review in chat goes back to the tray.
   await row.click();
-  const drawer = page.getByRole("complementary", { name: "Remove the notes, Task details" });
-  await expect(drawer.getByRole("region", { name: "Nettle asks permission" })).toBeVisible();
-  await drawer.getByRole("button", { name: "Close" }).click();
+  const drawer = page.getByRole("dialog", { name: "Remove the notes, Task details" });
+  await expect(drawer).toContainText("Needs you");
+  await drawer.getByRole("button", { name: "Review in chat" }).click();
+  await expect(drawer).toBeHidden();
 
-  // The Quest tab, open beside the chat while the work runs, shows it under the Task too, and
-  // Allow once there decides the same request.
-  await expect(page.getByRole("tab", { name: "Quest" })).toHaveAttribute("aria-selected", "true");
-  const room = page.getByRole("region", { name: "Control room for Tidy the scratch folder" });
+  // The quest sheet shows the Task waiting on you, and Allow once in the tray decides the request.
+  const room = await openQuest(page, "Tidy the scratch folder");
   await expect(room.getByRole("button", { name: /Nettle · Remove the notes/ })).toContainText("waiting on you");
-  const inRoom = room.getByRole("region", { name: "Nettle asks permission" });
-  await inRoom.getByRole("button", { name: "Allow once" }).click();
-  await expect(inRoom.getByRole("status")).toHaveText("✓ Allowed once. Nettle carries on.");
+  await page.keyboard.press("Escape");
+  await inTray.getByRole("button", { name: "Allow once" }).click();
 
   // Nettle goes on and finishes. Nothing waits on you any more, and the card says how it ended.
+  await openQuest(page, "Tidy the scratch folder");
   await expect(room.getByRole("button", { name: /Nettle · Remove the notes/ })).toContainText("Done", {
     timeout: 20_000,
   });
