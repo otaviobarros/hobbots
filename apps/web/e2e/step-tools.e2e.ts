@@ -1,5 +1,5 @@
 import { expect, test } from "./hub.ts";
-import { laneTask, openRoom, showInWorkbench } from "./quest-room.ts";
+import { lane, laneMenu, laneTask, openRoom, showInWorkbench } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #892 in the browser: a planned step's turn runs outside any chat, so its Workbench Summary
@@ -46,10 +46,10 @@ test("[TC-UX-165] a step's Summary shows its tool calls live, a refused one with
   );
 
   // Cancelled, the job it cut off is marked as unresolved, never as done.
-  const controls = sheet.getByRole("region", { name: `Controls for ${TITLE}` });
-  await controls.getByRole("button", { name: "Cancel task" }).click();
-  await controls.getByRole("button", { name: "Yes, cancel" }).click();
-  await expect(controls.getByRole("status")).toHaveText("Cancelled: the task confirmed it stopped.", {
+  await (await laneMenu(page, "Aldric")).getByRole("menuitem", { name: "Cancel a step…" }).click();
+  const lead = lane(page, "Aldric");
+  await lead.getByRole("button", { name: "Yes, cancel" }).click();
+  await expect(lead.getByRole("status").filter({ hasText: "Cancelled: the task confirmed it stopped." })).toBeVisible({
     timeout: 30_000,
   });
   await sheet.getByRole("button", { name: "Show in the Workbench" }).click();

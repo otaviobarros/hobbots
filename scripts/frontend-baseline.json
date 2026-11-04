@@ -17,7 +17,6 @@
     "apps/web/src/components/onboarding/onboarding-frame.tsx": 1,
     "apps/web/src/components/onboarding/onboarding-providers.tsx": 1,
     "apps/web/src/components/providers/brain-picker.tsx": 1,
-    "apps/web/src/components/quest/room-controls.tsx": 1,
     "apps/web/src/components/roles/role-sheet.tsx": 1,
     "apps/web/src/components/safety/safety-and-folders.tsx": 1,
     "apps/web/src/components/settings/connections-section.tsx": 1,

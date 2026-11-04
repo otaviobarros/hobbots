@@ -4,6 +4,7 @@ import { focusElement } from "@hobbots/ui/lib/restore-focus";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { threadTasksQuery } from "../../api/tasks.ts";
+import { useLaneSlots } from "../lane-actions/lane-slots.tsx";
 import { HubWait } from "../loading/hub-wait.tsx";
 import { type Pins, useFollowedTrees, useHobLookup } from "../quest/use-work.ts";
 import { findTask, taskTitle } from "../quest/work-model.ts";
@@ -40,6 +41,7 @@ export function QuestRoom({
   const hobs = useHobLookup();
   const opened = found?.tree.tasks[0]?.id;
   const moves = useRoomMoves(hobId, threadId, opened);
+  const slots = useLaneSlots({ hobs, pins, view, moves });
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (opened !== undefined && heading.current !== null) focusElement(heading.current);
@@ -92,7 +94,7 @@ export function QuestRoom({
         onClose={close}
         onLane={moves.lane}
       />
-      <RoomLanes tree={tree} lanes={lanes} lit={lit} hobs={hobs} moves={moves} />
+      <RoomLanes tree={tree} lanes={lanes} lit={lit} hobs={hobs} moves={moves} slots={(lane) => slots(tree, lane)} />
       <WorkbenchDock tree={tree} taskId={lit ?? top.id} view={view} hobs={hobs} moves={moves} />
     </section>
   );

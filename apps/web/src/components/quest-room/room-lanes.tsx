@@ -1,6 +1,7 @@
 import type { TaskId, TaskTree } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { type HobState, HobTile } from "../hob-sprite/hob-sprite.tsx";
+import type { ActedLane, LaneSlots } from "../lane-actions/lane-slots.tsx";
 import { type RoomStatus, roomStatusLabel, roomTone, waitedTaskCount } from "../quest/control-room.ts";
 import { messages as questCopy } from "../quest/messages.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
@@ -32,12 +33,14 @@ export function RoomLanes({
   lit,
   hobs,
   moves,
+  slots,
 }: {
   tree: TaskTree;
   lanes: ReadonlyArray<RoomLane>;
   lit: TaskId | undefined;
   hobs: HobLookup;
   moves: RoomMoves;
+  slots: (lane: ActedLane) => LaneSlots;
 }) {
   const litLane = laneOf(lanes, lit);
   return (
@@ -50,6 +53,7 @@ export function RoomLanes({
           lit={litLane?.ownerId === lane.ownerId}
           hobs={hobs}
           moves={moves}
+          slots={slots}
         />
       ))}
     </section>
@@ -62,15 +66,18 @@ function Lane({
   lit,
   hobs,
   moves,
+  slots,
 }: {
   tree: TaskTree;
   lane: RoomLane;
   lit: boolean;
   hobs: HobLookup;
   moves: RoomMoves;
+  slots: (lane: ActedLane) => LaneSlots;
 }) {
   const hob = hobs(lane.ownerId);
   const task = laneTask(lane);
+  const acted = slots({ hobId: lane.ownerId, task, tasks: lane.rows.map((row) => row.task) });
   const status = lane.rows.find((row) => row.task.id === task.id)?.status ?? "waiting";
   const tone = roomTone(status);
   const role = lane.lead
@@ -93,28 +100,32 @@ function Lane({
         lit && "border-focus-ring",
       )}
     >
-      <button
-        type="button"
-        aria-pressed={lit}
-        aria-label={messages.pick({ name: hob.name })}
-        onClick={() => moves.lane(lit ? undefined : task.id)}
-        className="flex cursor-pointer items-center gap-2.5 rounded-t-card border-0 bg-transparent px-3 py-2.5 text-start text-text-strong hover:bg-hover"
-      >
-        <HobTile hob={hob} tile="lg" state={MOOD[status] ?? "idle"} />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate font-heading font-(--heading-weight)">
-            {hob.name}
-            {role !== null && <span className="ms-1.5 font-sans text-meta font-normal text-label">{role}</span>}
-            {waited > 0 && (
-              <span className="ms-1.5 font-sans text-meta font-normal text-lantern">
-                {messages.waitingOnTasks({ count: waited })}
-              </span>
-            )}
+      <div className="flex items-center gap-1 pe-2">
+        <button
+          type="button"
+          aria-pressed={lit}
+          aria-label={messages.pick({ name: hob.name })}
+          onClick={() => moves.lane(lit ? undefined : task.id)}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-t-card border-0 bg-transparent px-3 py-2.5 text-start text-text-strong hover:bg-hover"
+        >
+          <HobTile hob={hob} tile="lg" state={MOOD[status] ?? "idle"} />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate font-heading font-(--heading-weight)">
+              {hob.name}
+              {role !== null && <span className="ms-1.5 font-sans text-meta font-normal text-label">{role}</span>}
+              {waited > 0 && (
+                <span className="ms-1.5 font-sans text-meta font-normal text-lantern">
+                  {messages.waitingOnTasks({ count: waited })}
+                </span>
+              )}
+            </span>
+            <span className="truncate text-detail text-text-secondary">{taskTitle(task)}</span>
           </span>
-          <span className="truncate text-detail text-text-secondary">{taskTitle(task)}</span>
-        </span>
-        <StatusTag status={tone}>{roomStatusLabel(status)}</StatusTag>
-      </button>
+          <StatusTag status={tone}>{roomStatusLabel(status)}</StatusTag>
+        </button>
+        {acted.actions}
+      </div>
+      {acted.tries}
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pt-1 pb-3">
         {lane.rows.map((row) => (
           <LaneTask
@@ -127,6 +138,7 @@ function Lane({
             onWorkbench={(taskId) => moves.show(taskId, "summary")}
           />
         ))}
+        {acted.cards}
       </div>
     </article>
   );
