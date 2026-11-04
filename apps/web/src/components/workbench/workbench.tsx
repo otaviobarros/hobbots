@@ -3,7 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { Tabs, TabsContent } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ComponentType, useEffect, useId, useRef } from "react";
+import { type ComponentType, type ReactNode, useEffect, useId, useRef } from "react";
 import { threadTasksQuery } from "../../api/tasks.ts";
 import { attemptActivityQuery } from "../../api/workbench.ts";
 import type { NoteDrafts } from "../quest/note-box.tsx";
@@ -17,7 +17,7 @@ import type { WorkbenchTabProps } from "./tabs/tab-props.ts";
 import { TerminalTab } from "./tabs/terminal-tab.tsx";
 import { useWorkbenchMoves, type WorkbenchView } from "./use-workbench.ts";
 import { WorkbenchChat } from "./workbench-chat.tsx";
-import { WorkbenchHeader } from "./workbench-header.tsx";
+import { BackButton, WorkbenchHeader } from "./workbench-header.tsx";
 import {
   type ActivityRead,
   attemptsOf,
@@ -71,6 +71,9 @@ export function Workbench({
     moves.chat(false);
     toggle.current?.focus();
   };
+  const back = (
+    <BackButton label={view.from === "drawer" ? messages.backToTask : messages.backToChat} onClick={moves.back} />
+  );
   return (
     <section
       aria-label={messages.label({ title: found === null ? "" : taskTitle(found.task) })}
@@ -79,32 +82,37 @@ export function Workbench({
       }}
       className="absolute inset-0 z-10 flex min-w-0 animate-hb-in flex-col bg-ground"
     >
-      <div className="flex items-center border-b-2 border-line px-3 py-2">
-        <Button variant="link" size="xs" onClick={moves.back}>
-          ← {view.from === "drawer" ? messages.backToTask : messages.backToChat}
-        </Button>
-        <span className="flex-1" />
-        {found !== null && (
-          <Button
-            ref={toggle}
-            variant="chip"
-            size="xs"
-            aria-expanded={view.chatOpen}
-            aria-controls={view.chatOpen ? chatId : undefined}
-            onClick={() => (view.chatOpen ? closeChat() : moves.chat(true))}
-          >
-            {view.chatOpen
-              ? messages.chat.hide
-              : messages.chat.open({ name: hobs(noteRecipient(found.tree, found.task)).name })}
-          </Button>
-        )}
-      </div>
       {found === null ? (
-        <p className="m-0 px-5 py-6 text-detail text-label">{reading ? messages.loading : messages.notFound}</p>
+        <>
+          <div className="flex items-center border-b border-line px-6 py-3">{back}</div>
+          <p className="m-0 px-6 py-6 text-detail text-label">{reading ? messages.loading : messages.notFound}</p>
+        </>
       ) : (
         <div className="flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
-            <Bench key={found.task.id} tree={found.tree} task={found.task} view={view} hobs={hobs} moves={moves} />
+            <Bench
+              key={found.task.id}
+              tree={found.tree}
+              task={found.task}
+              view={view}
+              hobs={hobs}
+              moves={moves}
+              back={back}
+              end={
+                <Button
+                  ref={toggle}
+                  variant="chip"
+                  size="xs"
+                  aria-expanded={view.chatOpen}
+                  aria-controls={view.chatOpen ? chatId : undefined}
+                  onClick={() => (view.chatOpen ? closeChat() : moves.chat(true))}
+                >
+                  {view.chatOpen
+                    ? messages.chat.hide
+                    : messages.chat.open({ name: hobs(noteRecipient(found.tree, found.task)).name })}
+                </Button>
+              }
+            />
           </div>
           {view.chatOpen && (
             <WorkbenchChat
@@ -153,12 +161,16 @@ function Bench({
   view,
   hobs,
   moves,
+  back,
+  end,
 }: {
   tree: TaskTree;
   task: Task;
   view: WorkbenchView;
   hobs: HobLookup;
   moves: ReturnType<typeof useWorkbenchMoves>;
+  back: ReactNode;
+  end: ReactNode;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const attempts = attemptsOf(tree, task);
@@ -192,7 +204,9 @@ function Bench({
         read={activity}
         hobs={hobs}
         headingRef={heading}
+        back={back}
         onAttempt={moves.attempt}
+        end={end}
       />
       <Tabs
         value={view.tab}
