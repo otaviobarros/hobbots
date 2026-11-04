@@ -13,6 +13,8 @@ describe("the window key", () => {
   it("[TC-DP-085] sends the key the hub wrote, and after a 401 reads it again, sets the cookie again and retries once", async () => {
     writeFileSync(keyFile, "hbw_first\n");
     const key = makeWindowKey(temp);
+    expect(key.headers()).toEqual({});
+    await key.reload();
     expect(key.headers()).toEqual({ authorization: "Bearer hbw_first" });
 
     // The hub restarted with a new key: the old one is refused.
@@ -31,15 +33,16 @@ describe("the window key", () => {
 
     // A 401 with the key unchanged is the answer: no second try.
     writeFileSync(keyFile, "hbw_third\n");
-    key.reload();
+    await key.reload();
     sent.length = 0;
     expect((await fetchHub("http://127.0.0.1:4317/api/activity")).status).toBe(401);
     expect(sent).toEqual(["Bearer hbw_third"]);
     expect(renewed).toBe(1);
   });
 
-  it("has no key, and sends none, while the hub has written none", () => {
+  it("has no key, and sends none, while the hub has written none", async () => {
     const key = makeWindowKey(join(temp, "missing"));
+    await expect(key.reload()).resolves.toBeUndefined();
     expect(key.current()).toBeUndefined();
     expect(key.headers()).toEqual({});
   });

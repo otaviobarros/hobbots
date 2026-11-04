@@ -1,3 +1,5 @@
+import { electronFuses } from "./scripts/electron-fuses.ts";
+
 /** @type {import("electron-builder").Configuration} */
 export default {
   // CFBundleIdentifier. The data folder follows the product name, not this, so it is unaffected.
@@ -11,6 +13,9 @@ export default {
   // shipped: the server runs the one installed on the host.
   files: ["out/**", "package.json"],
   npmRebuild: false,
+  // Turns off what lets another program run code as the app, such as NODE_OPTIONS and --inspect, and
+  // loads only the app's own checked archive (STD-DESKTOP-007). check-fuses.ts reads them back.
+  electronFuses,
   extraResources: [
     { from: "../web/dist", to: "web" },
     { from: "../../LICENSE", to: "LICENSE" },

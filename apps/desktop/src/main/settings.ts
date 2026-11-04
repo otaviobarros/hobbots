@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 /**
@@ -47,8 +48,10 @@ interface DesktopSettings {
 
 export interface SettingsStore {
   readonly read: () => DesktopSettings;
-  /** Merges `patch` into the file; a key set to undefined is removed. */
+  /** Merges `patch` into the settings and saves them in the background; a key set to undefined is removed. */
   readonly update: (patch: DesktopSettings) => DesktopSettings;
+  /** Resolves once every update made so far is on disk, as before the app quits or starts again. */
+  readonly saved: () => Promise<void>;
 }
 
 const CONNECTION_KEYS = ["address", "name", "nodeId", "nodeName", "deviceId"] as const satisfies ReadonlyArray<
@@ -95,24 +98,44 @@ const parse = (raw: string): DesktopSettings => {
   };
 };
 
-/** A small JSON file in the app's data folder. A missing or unreadable file reads as no choices made. */
+/** The settings as the file holds them; a missing or unreadable file reads as no choices made. */
+const load = (file: string): DesktopSettings => {
+  try {
+    // standards-allow STD-DESKTOP-008: read once when the app starts, before any window opens
+    return parse(readFileSync(file, "utf8"));
+  } catch {
+    return {};
+  }
+};
+
+/** Written beside the file and renamed over it, so a crash never leaves half a file. */
+const save = async (file: string, settings: DesktopSettings) => {
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(`${file}.tmp`, `${JSON.stringify(settings, null, 2)}\n`);
+  await rename(`${file}.tmp`, file);
+};
+
+const withoutUnset = (settings: DesktopSettings): DesktopSettings =>
+  Object.fromEntries(Object.entries(settings).filter(([, value]) => value !== undefined));
+
+/**
+ * A small JSON file in the app's data folder, read once when the store is made and kept in memory
+ * after that. The app is its only writer, so each update changes the copy in memory at once and is
+ * saved without blocking the main process (STD-DESKTOP-008), one save after another in order.
+ */
 export const fileSettingsStore = (file: string): SettingsStore => {
-  const read = () => {
-    try {
-      return parse(readFileSync(file, "utf8"));
-    } catch {
-      return {};
-    }
-  };
+  let current = load(file);
+  let saving: Promise<void> = Promise.resolve();
   return {
-    read,
+    read: () => current,
     update: (patch) => {
-      const next = { ...read(), ...patch };
-      mkdirSync(dirname(file), { recursive: true });
-      // Written beside the file and renamed over it, so a crash never leaves half a file.
-      writeFileSync(`${file}.tmp`, `${JSON.stringify(next, null, 2)}\n`);
-      renameSync(`${file}.tmp`, file);
+      const next = withoutUnset({ ...current, ...patch });
+      current = next;
+      saving = saving
+        .then(() => save(file, next))
+        .catch((error: unknown) => console.error("Hobbots could not save its desktop settings", error));
       return next;
     },
+    saved: () => saving,
   };
 };

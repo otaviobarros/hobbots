@@ -1,10 +1,10 @@
-import type { IpcMain, IpcMainInvokeEvent } from "electron";
+import { Schema } from "effect";
 import type { Disconnected } from "./disconnect.ts";
 import type { ConnectionState } from "./hub-connection.ts";
 import type { AddressChange } from "./hub-move.ts";
 import { type ConnectionAction, connectedTrayModel } from "./menu-bar-model.ts";
 import type { HubConnection } from "./settings.ts";
-import { handleTrusted } from "./trusted-ipc.ts";
+import { handleTrusted, noArgs, type TrustedIpcOptions, withArgs } from "./trusted-ipc.ts";
 
 /** The channels the preload bridge calls on a connected desktop for the hub it uses (ADR 025). */
 export const connectionChannels = {
@@ -66,24 +66,25 @@ const addressAnswer = (change: AddressChange): AddressChangeAnswer =>
   change._tag === "Moved" ? { ok: true } : { ok: false, message: change.message };
 
 /** Answers the bridge's connection calls, Disconnect among them, only from the hub's pages. */
-export const handleConnectionIpc = (options: {
-  readonly ipcMain: Pick<IpcMain, "handle">;
-  readonly isTrusted: (event: IpcMainInvokeEvent) => boolean;
-  readonly view: () => ConnectionView;
-  readonly retry: () => Promise<void>;
-  readonly changeAddress: (typed: string) => Promise<AddressChange>;
-  readonly openTailscale: () => Promise<boolean>;
-  /** Disconnects from the hub; the app then starts again at setup's first screen. */
-  readonly disconnect: () => Promise<Disconnected>;
-}) =>
+export const handleConnectionIpc = (
+  options: TrustedIpcOptions & {
+    readonly view: () => ConnectionView;
+    readonly retry: () => Promise<void>;
+    readonly changeAddress: (typed: string) => Promise<AddressChange>;
+    readonly openTailscale: () => Promise<boolean>;
+    /** Disconnects from the hub; the app then starts again at setup's first screen. */
+    readonly disconnect: () => Promise<Disconnected>;
+  },
+) =>
   handleTrusted(options, {
-    [connectionChannels.get]: () => options.view(),
-    [connectionChannels.retry]: async () => {
+    [connectionChannels.get]: noArgs(() => options.view()),
+    [connectionChannels.retry]: noArgs(async () => {
       await options.retry();
       return options.view();
-    },
-    [connectionChannels.changeAddress]: async (typed: unknown) =>
-      typeof typed === "string" ? addressAnswer(await options.changeAddress(typed)) : { ok: false, message: "" },
-    [connectionChannels.openTailscale]: () => options.openTailscale(),
-    [connectionChannels.disconnect]: () => options.disconnect(),
+    }),
+    [connectionChannels.changeAddress]: withArgs(Schema.Tuple([Schema.String]), async ([typed]) =>
+      addressAnswer(await options.changeAddress(typed)),
+    ),
+    [connectionChannels.openTailscale]: noArgs(() => options.openTailscale()),
+    [connectionChannels.disconnect]: noArgs(() => options.disconnect()),
   });

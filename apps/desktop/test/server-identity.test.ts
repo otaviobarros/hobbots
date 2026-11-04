@@ -9,7 +9,7 @@ import { checkServer, judgeHealth, ownInstallation, requireOurs } from "../src/m
 
 const dataDir = mkdtempSync(join(tmpdir(), "hobbots-identity-"));
 writeFileSync(installationIdFile(dataDir), "this-installation\n");
-const own = ownInstallation(dataDir);
+const own = await ownInstallation(dataDir);
 const identity = { app: "hobbots", installationId: "this-installation", version: "0.2.0", dataDir: own.dataDir };
 
 let server: Server | undefined;

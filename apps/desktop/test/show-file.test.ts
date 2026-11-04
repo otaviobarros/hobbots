@@ -45,9 +45,10 @@ describe("the Show in Finder bridge", () => {
   // covers PE-005
   it("[#388] shows nothing the hub does not list, a gone file, or one no longer a regular file", async () => {
     const { read, shown, show } = setup();
-    await expect(show(trusted, "a1", "/etc/passwd")).resolves.toBe(false);
-    await expect(show(trusted, "../a1", "report")).resolves.toBe(false);
-    await expect(show(trusted, "a1", { id: "report" })).resolves.toBe(false);
+    const malformed = { refused: "malformed" };
+    await expect(show(trusted, "a1", "/etc/passwd")).resolves.toEqual(malformed);
+    await expect(show(trusted, "../a1", "report")).resolves.toEqual(malformed);
+    await expect(show(trusted, "a1", { id: "report" })).resolves.toEqual(malformed);
     await expect(show(trusted, "a2", "report")).resolves.toBe(false);
     await expect(show(trusted, "a1", "old")).resolves.toBe(false);
     // Listed, but now a link or a folder at that place.
@@ -59,7 +60,7 @@ describe("the Show in Finder bridge", () => {
   // covers PE-005
   it("[#388] refuses a page the window is not allowed to show", async () => {
     const { read, shown, show } = setup();
-    await expect(show(stranger, "a1", "report")).rejects.toThrow("Not allowed from this page");
+    await expect(show(stranger, "a1", "report")).resolves.toEqual({ refused: "notAllowed" });
     expect(read).toEqual([]);
     expect(shown).toEqual([]);
   });

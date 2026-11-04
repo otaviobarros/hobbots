@@ -136,9 +136,9 @@ export const startHub = async (
   };
 
   /** Reads the key again and sets the cookie again, as after the server restarts or answers 401. */
-  const renewWindowKey = () => {
-    windowKey.reload();
-    void setWindowCookie();
+  const renewWindowKey = async () => {
+    await windowKey.reload();
+    await setWindowCookie();
   };
 
   const fetchHub = fetchAsWindow(windowKey, () => void setWindowCookie());
@@ -148,7 +148,7 @@ export const startHub = async (
     session.defaultSession.webRequest.onCompleted({ urls: ["http://*/api/*"] }, (details) => {
       // The hub's port can change while the app runs, so the address is checked on each answer.
       const own = [hub.apiUrl, devWebUrl].some((base) => details.url.startsWith(`${base}/api/`));
-      if (own && details.statusCode === 401) renewWindowKey();
+      if (own && details.statusCode === 401) void renewWindowKey();
     });
 
   /**
@@ -195,8 +195,7 @@ export const startHub = async (
     // Followed only while the server may answer; a server started again is followed at once, with
     // the key it wrote.
     supervisor.onChange(() => {
-      renewWindowKey();
-      events.sync();
+      void renewWindowKey().finally(() => events.sync());
     });
     app.on("will-quit", () => void events.stop());
   };
@@ -243,8 +242,7 @@ export const startHub = async (
     return;
   }
   // The server answers now, so its window key is in the data folder.
-  windowKey.reload();
-  await setWindowCookie();
+  await renewWindowKey();
   renewOnRefusal();
   const notices = systemNotices({
     fetch: (path, init) => fetchHub(`${hub.apiUrl}${path}`, init),

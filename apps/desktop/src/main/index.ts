@@ -1,17 +1,22 @@
 import { join } from "node:path";
 import { readInstallationId } from "@hobbots/server/installation";
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import { startMode } from "./app-mode.ts";
 import { startConnected } from "./connected-mode.ts";
 import { startHub } from "./hub-mode.ts";
 import { handleKeepRunningIpc } from "./keep-running.ts";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
 import { handleNotificationIpc } from "./notification-choices.ts";
+import { limitPermissions } from "./permissions.ts";
+import { logProcessFailures } from "./process-failures.ts";
 import { fileSettingsStore } from "./settings.ts";
 import { registerLocalScheme, startSetup } from "./setup-mode.ts";
 import { claimSingleInstance } from "./single-instance.ts";
 import { thisComputer } from "./tailnet.ts";
 import { handleWindowBackgroundIpc } from "./window-background.ts";
+
+// An error nothing caught is logged rather than lost (STD-DESKTOP-010).
+logProcessFailures(process);
 
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
 app.setName("Hobbots");
@@ -31,10 +36,25 @@ app.setAboutPanelOptions({
   credits: "Free and open-source software under the Apache License 2.0. See hobbots.app.",
 });
 
+// Every session refuses the web permissions no feature needs (STD-DESKTOP-005): the windows' own
+// session, and any other one made later.
+app.on("session-created", limitPermissions);
+
 app.whenReady().then(async () => {
   if (!primary) return;
+  limitPermissions(session.defaultSession);
   const dataDir = app.getPath("userData");
   const settings = fileSettingsStore(join(dataDir, "desktop-settings.json"));
+  // Settings are saved in the background; quitting, or starting again after Disconnect, waits for them.
+  let settingsSaved = false;
+  app.on("before-quit", (event) => {
+    if (settingsSaved) return;
+    event.preventDefault();
+    void settings.saved().finally(() => {
+      settingsSaved = true;
+      app.quit();
+    });
+  });
   // Only the installed app registers, so a checkout never adds Electron itself as a login item.
   const loginItem = makeLoginItem({
     supported: app.isPackaged && process.platform === "darwin",

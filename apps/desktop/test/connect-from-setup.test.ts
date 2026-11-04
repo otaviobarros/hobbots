@@ -393,18 +393,20 @@ describe("setup's first screen", () => {
     const call = (channel: string, url: string, arg?: unknown) => handlers.get(channel)?.(page(url), arg);
 
     // A hub's page, or any other, gets nothing.
-    expect(() => call(setupChannels.findHubs, "http://studio.example.ts.net:4317/")).toThrow("Not allowed");
-    expect(() => call(setupChannels.runHere, "https://example.com/")).toThrow("Not allowed");
+    const notAllowed = { refused: "notAllowed" };
+    expect(await call(setupChannels.findHubs, "http://studio.example.ts.net:4317/")).toEqual(notAllowed);
+    expect(await call(setupChannels.runHere, "https://example.com/")).toEqual(notAllowed);
     // The local pages connect with the typed text, and the waiting screen goes back to the page that asked.
     expect(await call(setupChannels.connect, `${LOCAL_ORIGIN}/`, "studio")).toEqual({ kind: "cancelled" });
     expect(typed).toEqual(["studio"]);
     expect(sentToPage).toEqual([{ computer: "studio", owner: null, hubName: "Studio", code: "042317", expiresAt: "" }]);
-    // Anything but a short text is not an address.
-    for (const odd of [{ host: "studio" }, "x".repeat(301), 42]) {
-      expect(await call(setupChannels.connect, `${LOCAL_ORIGIN}/`, odd)).toEqual({
-        kind: "refused",
-        refusal: { reason: "Malformed" },
-      });
+    // Text too long to be an address is refused in Connect's words; anything but text is malformed.
+    expect(await call(setupChannels.connect, `${LOCAL_ORIGIN}/`, "x".repeat(301))).toEqual({
+      kind: "refused",
+      refusal: { reason: "Malformed" },
+    });
+    for (const odd of [{ host: "studio" }, 42]) {
+      expect(await call(setupChannels.connect, `${LOCAL_ORIGIN}/`, odd)).toEqual({ refused: "malformed" });
     }
     expect(typed).toEqual(["studio"]);
     // Once this computer chose, setup stops answering.

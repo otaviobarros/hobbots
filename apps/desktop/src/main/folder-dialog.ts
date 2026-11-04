@@ -1,4 +1,5 @@
-import type { BrowserWindow, IpcMain, IpcMainInvokeEvent, OpenDialogOptions } from "electron";
+import type { BrowserWindow, IpcMainInvokeEvent, OpenDialogOptions } from "electron";
+import { handleTrusted, noArgs, type TrustedIpcOptions } from "./trusted-ipc.ts";
 
 /** The one channel the preload bridge calls to pick a folder for hobs. */
 export const folderDialogChannel = "hobbots:folder-dialog:choose";
@@ -35,27 +36,25 @@ export const backupDialogOptions: Record<keyof typeof backupDialogChannels, Open
  * no arguments, answers only pages the window is allowed to show, and returns a path the user chose
  * in the system dialog; the hub checks the folder again before it uses it.
  */
-export const handleFolderDialogIpc = (options: {
-  readonly ipcMain: Pick<IpcMain, "handle">;
-  readonly isTrusted: (event: IpcMainInvokeEvent) => boolean;
-  readonly windowOf: (event: IpcMainInvokeEvent) => BrowserWindow | null;
-  readonly showOpenDialog: (
-    window: BrowserWindow | null,
-    options: OpenDialogOptions,
-  ) => Promise<{ canceled: boolean; filePaths: ReadonlyArray<string> }>;
-}) => {
-  const { ipcMain, isTrusted, windowOf, showOpenDialog } = options;
-  const dialogs: ReadonlyArray<readonly [string, OpenDialogOptions]> = [
-    [folderDialogChannel, folderDialogOptions],
-    [backupDialogChannels.save, backupDialogOptions.save],
-    [backupDialogChannels.restore, backupDialogOptions.restore],
-  ];
-  for (const [channel, shown] of dialogs) {
-    ipcMain.handle(channel, async (event: IpcMainInvokeEvent) => {
-      if (!isTrusted(event)) throw new Error("Not allowed from this page");
+export const handleFolderDialogIpc = (
+  options: TrustedIpcOptions & {
+    readonly windowOf: (event: IpcMainInvokeEvent) => BrowserWindow | null;
+    readonly showOpenDialog: (
+      window: BrowserWindow | null,
+      options: OpenDialogOptions,
+    ) => Promise<{ canceled: boolean; filePaths: ReadonlyArray<string> }>;
+  },
+) => {
+  const { windowOf, showOpenDialog } = options;
+  const choose = (shown: OpenDialogOptions) =>
+    noArgs(async (event) => {
       const result = await showOpenDialog(windowOf(event), shown);
       const [folder] = result.filePaths;
       return result.canceled || folder === undefined ? null : folder;
     });
-  }
+  return handleTrusted(options, {
+    [folderDialogChannel]: choose(folderDialogOptions),
+    [backupDialogChannels.save]: choose(backupDialogOptions.save),
+    [backupDialogChannels.restore]: choose(backupDialogOptions.restore),
+  });
 };

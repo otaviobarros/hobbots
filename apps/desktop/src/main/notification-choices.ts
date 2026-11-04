@@ -1,5 +1,6 @@
+import { Schema } from "effect";
 import type { SettingsStore } from "./settings.ts";
-import { handleTrusted, type SettingsIpcOptions } from "./trusted-ipc.ts";
+import { handleTrusted, noArgs, type SettingsIpcOptions, withArgs } from "./trusted-ipc.ts";
 
 /** Which system notifications the app sends. Each is on until the user turns it off. */
 export interface NotificationChoices {
@@ -26,25 +27,28 @@ export const notificationChannels = {
   set: "hobbots:notifications:set",
 } as const;
 
-/** Keeps only the known choices that are booleans, so a page can never write anything else. */
-const patchFrom = (value: unknown) => {
-  if (typeof value !== "object" || value === null) return {};
-  const { requests, devices, sound } = value as Record<string, unknown>;
-  return {
-    ...(typeof requests === "boolean" ? { notifyRequests: requests } : {}),
-    ...(typeof devices === "boolean" ? { notifyDevices: devices } : {}),
-    ...(typeof sound === "boolean" ? { notifySound: sound } : {}),
-  };
-};
+/** The choices a page changes: only the known ones, each a boolean; any other key is dropped. */
+const ChoicesPatch = () =>
+  Schema.Struct({
+    requests: Schema.optionalKey(Schema.Boolean),
+    devices: Schema.optionalKey(Schema.Boolean),
+    sound: Schema.optionalKey(Schema.Boolean),
+  });
+
+const patchFrom = ({ requests, devices, sound }: Partial<NotificationChoices>) => ({
+  ...(requests !== undefined && { notifyRequests: requests }),
+  ...(devices !== undefined && { notifyDevices: devices }),
+  ...(sound !== undefined && { notifySound: sound }),
+});
 
 /** Answers the bridge's calls, only from pages the window is allowed to show. */
 export const handleNotificationIpc = (options: SettingsIpcOptions) =>
   handleTrusted(options, {
-    [notificationChannels.get]: () => notificationChoices(options.settings),
-    [notificationChannels.set]: (patch) => {
+    [notificationChannels.get]: noArgs(() => notificationChoices(options.settings)),
+    [notificationChannels.set]: withArgs(Schema.Tuple([ChoicesPatch()]), ([patch]) => {
       options.settings.update(patchFrom(patch));
       return notificationChoices(options.settings);
-    },
+    }),
   });
 
 type Notify = (notice: { title: string; body: string; silent: boolean }, onClick: () => void) => { close: () => void };

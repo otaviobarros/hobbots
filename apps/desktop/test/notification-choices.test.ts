@@ -15,17 +15,18 @@ const temp = mkdtempSync(join(tmpdir(), "hobbots-notifications-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
 describe("notification choices", () => {
-  it("are all on by default and keep the other settings beside them", () => {
+  it("are all on by default and keep the other settings beside them", async () => {
     const file = join(temp, "settings.json");
     const settings = fileSettingsStore(file);
     expect(notificationChoices(settings)).toEqual({ requests: true, devices: true, sound: true });
     settings.update({ keepRunningInMenuBar: false });
     settings.update({ notifyDevices: false });
+    await settings.saved();
     expect(notificationChoices(fileSettingsStore(file))).toEqual({ requests: true, devices: false, sound: true });
     expect(fileSettingsStore(file).read().keepRunningInMenuBar).toBe(false);
   });
 
-  it("answers the bridge only from trusted pages, and saves only known switches", () => {
+  it("answers the bridge only from trusted pages, and saves only known switches", async () => {
     const handlers = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
     const settings = fileSettingsStore(join(temp, "ipc.json"));
     handleNotificationIpc({
@@ -35,14 +36,21 @@ describe("notification choices", () => {
     });
     const trusted = { senderFrame: { url: "http://127.0.0.1:4317/" } } as IpcMainInvokeEvent;
     const stranger = { senderFrame: { url: "https://example.com/" } } as IpcMainInvokeEvent;
-    expect(
-      handlers.get(notificationChannels.set)?.(trusted, { sound: false, openAtLogin: true, devices: "no" }),
-    ).toEqual({ requests: true, devices: true, sound: false });
+    const set = handlers.get(notificationChannels.set);
+    // An unknown key is dropped; a known one that is not a boolean refuses the whole call.
+    await expect(set?.(trusted, { sound: false, openAtLogin: true })).resolves.toEqual({
+      requests: true,
+      devices: true,
+      sound: false,
+    });
+    await expect(set?.(trusted, { devices: "no" })).resolves.toEqual({ refused: "malformed" });
     expect(settings.read()).toEqual({ notifySound: false });
-    expect(() => handlers.get(notificationChannels.set)?.(stranger, { requests: false })).toThrow(
-      "Not allowed from this page",
-    );
-    expect(handlers.get(notificationChannels.get)?.(trusted)).toEqual({ requests: true, devices: true, sound: false });
+    await expect(set?.(stranger, { requests: false })).resolves.toEqual({ refused: "notAllowed" });
+    await expect(handlers.get(notificationChannels.get)?.(trusted)).resolves.toEqual({
+      requests: true,
+      devices: true,
+      sound: false,
+    });
   });
 
   it("shows a kind only while it is on, silent when the sound is off", () => {

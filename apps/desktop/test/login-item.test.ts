@@ -106,10 +106,11 @@ describe("the login item", () => {
       openSystemSettings: async () => {},
     });
     const set = handlers.get(loginItemChannels.set);
-    expect(() => set?.({ trusted: false }, false)).toThrow();
+    await expect(set?.({ trusted: false }, false)).resolves.toEqual({ refused: "notAllowed" });
+    // Only a boolean is taken.
+    await expect(set?.({ trusted: true }, "yes")).resolves.toEqual({ refused: "malformed" });
     expect(item.state().openAtLogin).toBe(true);
-    // Anything but `true` turns it off.
-    expect(set?.({ trusted: true }, "yes")).toEqual({ openAtLogin: false, status: "not-registered" });
+    await expect(set?.({ trusted: true }, false)).resolves.toEqual({ openAtLogin: false, status: "not-registered" });
     await expect(handlers.get(loginItemChannels.openSystemSettings)?.({ trusted: true })).resolves.toEqual(
       item.state(),
     );

@@ -1,6 +1,6 @@
-import { realpathSync } from "node:fs";
+import { readFile, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import { parseServerIdentity, readInstallationId, type ServerIdentity } from "@hobbots/server/installation";
+import { installationIdFile, parseServerIdentity, type ServerIdentity } from "@hobbots/server/installation";
 
 /** What answers on the server's port. */
 export type ServerCheck =
@@ -15,17 +15,13 @@ export interface OwnInstallation {
   readonly dataDir: string;
 }
 
-const canonicalPath = (path: string) => {
-  try {
-    return realpathSync(path);
-  } catch {
-    return resolve(path);
-  }
-};
+const canonicalPath = (path: string) => realpath(path).catch(() => resolve(path));
 
-export const ownInstallation = (dataDir: string): OwnInstallation => {
-  const canonical = canonicalPath(dataDir);
-  return { installationId: readInstallationId(canonical), dataDir: canonical };
+/** Read without blocking the main process, as on every check of the server (STD-DESKTOP-008). */
+export const ownInstallation = async (dataDir: string): Promise<OwnInstallation> => {
+  const canonical = await canonicalPath(dataDir);
+  const id = await readFile(installationIdFile(canonical), "utf8").catch(() => "");
+  return { installationId: id.trim() || undefined, dataDir: canonical };
 };
 
 /**
@@ -56,7 +52,7 @@ export const checkServer = async (apiUrl: string, dataDir: string): Promise<Serv
   if (!response.ok) return { kind: "notHobbots" };
   const body: unknown = await response.json().catch(() => undefined);
   // Read after the request, so a server that just created the data folder's ID is recognized.
-  return judgeHealth(body, ownInstallation(dataDir));
+  return judgeHealth(body, await ownInstallation(dataDir));
 };
 
 /** The error to show instead of connecting to something that is not this installation's server. */
