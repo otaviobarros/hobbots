@@ -1,4 +1,4 @@
-import type { TaskId, TaskTree } from "@hobbots/domain";
+import type { TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import {
   DropdownMenu,
@@ -9,8 +9,7 @@ import {
 } from "@hobbots/ui/components/menu";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useParams } from "@tanstack/react-router";
-import { type RefObject, useState } from "react";
-import { HobTile } from "../hob-sprite/hob-sprite.tsx";
+import { type ReactNode, type RefObject, useState } from "react";
 import { progressStrip, topCancel } from "../quest/control-room.ts";
 import { FlagIcon } from "../quest/flag-icon.tsx";
 import { messages as questCopy } from "../quest/messages.ts";
@@ -19,16 +18,8 @@ import { StatusStrip } from "../quest/status-strip.tsx";
 import type { HobLookup, Pins } from "../quest/use-work.ts";
 import { taskTitle, workCard } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
-import { laneOf, laneTask, type RoomLane } from "./room-model.ts";
 import { roomSearch } from "./room-search.ts";
 import type { RoomWidth } from "./use-chat-fold.ts";
-
-/** Scrolls a hob's lane into view, as the lineup jumps to it. */
-const showLane = (taskId: TaskId) =>
-  document.getElementById(laneElementId(taskId))?.scrollIntoView({ block: "nearest", inline: "nearest" });
-
-/** The element id of the lane that holds a Task, for the lineup to jump to. */
-export const laneElementId = (taskId: TaskId) => `lane-${taskId}`;
 
 /**
  * The room's header (ADR 027): Close room, the Quest's title under who leads it, its progress strip
@@ -37,24 +28,21 @@ export const laneElementId = (taskId: TaskId) => `lane-${taskId}`;
  */
 export function RoomHeader({
   tree,
-  lanes,
-  lit,
+  lineup,
   hobs,
   pins,
   width,
   headingRef,
   onClose,
-  onLane,
 }: {
   tree: TaskTree;
-  lanes: ReadonlyArray<RoomLane>;
-  lit: TaskId | undefined;
+  /** The party's sprites, each going to its lane. */
+  lineup: ReactNode;
   hobs: HobLookup;
   pins: Pins;
   width: RoomWidth;
   headingRef: RefObject<HTMLHeadingElement | null>;
   onClose: () => void;
-  onLane: (taskId: TaskId | undefined) => void;
 }) {
   const [asking, setAsking] = useState(false);
   const card = workCard(tree);
@@ -63,7 +51,6 @@ export function RoomHeader({
   const lead = hobs(card.leadId);
   const { segments, needs } = progressStrip(tree);
   const { done, total } = card.progress;
-  const litLane = laneOf(lanes, lit);
   const cancel = topCancel(tree);
   return (
     <>
@@ -95,29 +82,7 @@ export function RoomHeader({
           {total > 0 && messages.done({ done, total })}
           {needs > 0 && <span className="font-bold text-lantern"> · {messages.needYou({ count: needs })}</span>}
         </span>
-        <fieldset aria-label={messages.party} className="m-0 ms-auto flex shrink-0 items-center gap-1 border-0 p-0">
-          {lanes.map((lane) => {
-            const hob = hobs(lane.ownerId);
-            const picked = litLane?.ownerId === lane.ownerId;
-            const task = laneTask(lane);
-            return (
-              <button
-                key={lane.ownerId}
-                type="button"
-                aria-pressed={picked}
-                aria-label={messages.goToLane({ name: hob.name })}
-                title={hob.name}
-                onClick={() => {
-                  onLane(picked ? undefined : task.id);
-                  showLane(task.id);
-                }}
-                className="cursor-pointer rounded-control border-0 bg-transparent p-0.5 aria-pressed:shadow-[inset_0_0_0_2px_var(--color-focus-ring)]"
-              >
-                <HobTile hob={hob} tile="sm" />
-              </button>
-            );
-          })}
-        </fieldset>
+        <span className="ms-auto shrink-0">{lineup}</span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="icon" size="icon" aria-label={messages.menu({ title: taskTitle(top) })}>

@@ -3,25 +3,56 @@ import { Button } from "@hobbots/ui/components/button";
 import { formatWhen } from "../../lib/time.ts";
 import { TaskBackpack } from "../backpack/quest-backpack.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
-import { attemptCount, type RoomRow, roomStatusLabel, roomTone, waitingNames } from "../quest/control-room.ts";
+import type { Lane } from "../lanes/lane-model.ts";
+import { attemptCount, type RoomRow, roomRows, roomStatusLabel, roomTone } from "../quest/control-room.ts";
 import { messages as questCopy } from "../quest/messages.ts";
 import { AnswerForm, answerRoute } from "../quest/question-card.tsx";
 import { TaskControlsFor } from "../quest/room-controls.tsx";
 import { StatusTag } from "../quest/status-dot.tsx";
 import { TaskDetail } from "../quest/task-detail.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
-import { latestOf, questionForYou, taskTitle } from "../quest/work-model.ts";
+import { questionForYou, taskTitle } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
 
 const room = questCopy.room;
 
 /**
- * One of a hob's Tasks in its lane: where it stands in a line, a question that waits for you with
- * its answer box, Show in the Workbench, Retry, Reassign and Cancel, what its hob waits on and
- * everything else it holds behind a disclosure. The lane's own beats, marks and menu replace these
- * parts as the room grows (ADR 027).
+ * The cards that close a hob's lane, one per Task it owns on the Quest and each of its steps, in tree
+ * order: the lane above them already tells what the hob did.
  */
-export function LaneTask({
+export function LaneCards({
+  tree,
+  lane,
+  hobs,
+  onOpen,
+  onWorkbench,
+}: {
+  tree: TaskTree;
+  lane: Lane;
+  hobs: HobLookup;
+  onOpen: (taskId: TaskId) => void;
+  onWorkbench: (taskId: TaskId) => void;
+}) {
+  const rows = roomRows(tree).filter((row) => row.task.ownerId === lane.hobId);
+  return rows.map((row) => (
+    <LaneTask
+      key={row.task.id}
+      tree={tree}
+      row={row}
+      titled={rows.length > 1}
+      hobs={hobs}
+      onOpen={onOpen}
+      onWorkbench={onWorkbench}
+    />
+  ));
+}
+
+/**
+ * One of a hob's Tasks at the end of its lane: which try it is on, a question that waits for you with its answer box,
+ * Show in the Workbench, Retry, Reassign and Cancel, and everything else it holds behind a
+ * disclosure (ADR 027).
+ */
+function LaneTask({
   tree,
   row,
   titled,
@@ -40,10 +71,11 @@ export function LaneTask({
   const { task } = row;
   const top = task.id === tree.tasks[0]?.id;
   const question = questionForYou(tree, task);
-  const waits = waitingNames(row, (id) => hobs(id).name);
-  const line = task.result?.summary ?? latestOf(tree, task);
   return (
-    <section aria-label={taskTitle(task)} className="flex min-w-0 flex-col gap-2 text-detail wrap-anywhere">
+    <section
+      aria-label={taskTitle(task)}
+      className="flex min-w-0 flex-col gap-2 border-t border-line pt-2.5 text-detail wrap-anywhere"
+    >
       {titled && (
         <span className="flex items-center gap-2">
           <h3 className="m-0 min-w-0 flex-1 truncate text-detail font-bold text-text-strong">{taskTitle(task)}</h3>
@@ -53,10 +85,6 @@ export function LaneTask({
       <p className="m-0 text-meta text-label">
         {messages.taskMeta({ attempt: attemptCount(tree, task), age: formatWhen(task.createdAt) })}
       </p>
-      {waits.length > 0 && (
-        <p className="m-0 text-lantern">{questCopy.card.waitingOn({ names: questCopy.names(waits) })}</p>
-      )}
-      {line !== null && <p className="m-0 line-clamp-3 whitespace-pre-wrap text-text">{line}</p>}
       <Flags row={row} hobs={hobs} />
       {question !== null && <AsksYou question={question} hobs={hobs} />}
       <span className="flex">

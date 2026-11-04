@@ -29,7 +29,7 @@ export type LaneRole =
   | { readonly kind: "member" };
 
 /** Who a Task waits on: a hob, or you. */
-export type LaneWaited = { readonly kind: "hob"; readonly id: AgentId } | { readonly kind: "you" };
+type LaneWaited = { readonly kind: "hob"; readonly id: AgentId } | { readonly kind: "you" };
 
 /** A compact mark for something the hob did, from its tool steps, commands and file changes. */
 export type LaneMark =
@@ -75,6 +75,8 @@ export interface Lane {
   readonly role: LaneRole;
   /** The Task the header names: the first of the hob's Tasks that has not ended, else its last. */
   readonly task: Task;
+  /** Every Task the hob owns on the Quest, in the order they were created, without its steps. */
+  readonly tasks: ReadonlyArray<Task>;
   readonly title: string;
   readonly status: RoomStatus;
   readonly items: ReadonlyArray<LaneItem>;
@@ -121,14 +123,39 @@ const leadOf = (tree: TaskTree, task: Task): AgentId | null => {
   return null;
 };
 
-/** The Attempt a Task's lane shows: its latest. */
-const shownAttempt = (tree: TaskTree, task: Task): Attempt | undefined =>
-  tree.attempts
-    .filter((each) => each.taskId === task.id)
-    .reduce<Attempt | undefined>(
+/** The try picked for a Task in the room, by its Task: the lane shows that try in place of the latest. */
+export type LanePicks = ReadonlyMap<TaskId, AttemptId>;
+
+const NO_PICKS: LanePicks = new Map();
+
+/** The Attempt a Task's lane shows: the one picked for it, else its latest. */
+const shownAttempt = (tree: TaskTree, task: Task, picks: LanePicks): Attempt | undefined => {
+  const attempts = tree.attempts.filter((each) => each.taskId === task.id);
+  const picked = picks.get(task.id);
+  return (
+    attempts.find((each) => each.id === picked) ??
+    attempts.reduce<Attempt | undefined>(
       (latest, each) => (latest === undefined || each.number > latest.number ? each : latest),
       undefined,
-    );
+    )
+  );
+};
+
+/**
+ * The Attempts whose Workbench records the lanes show, for the room to read: the shown try of every
+ * Task in the tree, and the running one of a Task that runs, which says the step it is on.
+ */
+export const laneAttempts = (tree: TaskTree, picks: LanePicks = NO_PICKS): ReadonlyArray<AttemptId> => [
+  ...new Set(
+    tree.tasks.flatMap((task) => {
+      const shown = shownAttempt(tree, task, picks)?.id;
+      return [shown, task.currentAttemptId].filter((id): id is AttemptId => id !== undefined && id !== null);
+    }),
+  ),
+];
+
+/** The Workbench records the room has read, and the tries picked in it. */
+type Reads = { readonly of: (id: AttemptId) => AttemptActivity | undefined; readonly picks: LanePicks };
 
 /** A lane item with the time it happened, to put a lane in order. */
 type Timed = { readonly at: string; readonly item: LaneItem };
@@ -274,11 +301,11 @@ const resultItem = (tree: TaskTree, task: Task): LaneItem | null => {
 };
 
 /** One of the hob's Tasks, with its steps: everything recorded on them in time order, then how it ended. */
-const sectionOf = (tree: TaskTree, task: Task, readOf: (id: AttemptId) => AttemptActivity | undefined) => {
+const sectionOf = (tree: TaskTree, task: Task, read: Reads) => {
   const unit = unitOf(tree, task);
   const timed = unit.flatMap((each) => {
-    const attempt = shownAttempt(tree, each);
-    const activity = attempt === undefined ? undefined : readOf(attempt.id);
+    const attempt = shownAttempt(tree, each, read.picks);
+    const activity = attempt === undefined ? undefined : read.of(attempt.id);
     return [
       ...beatItems(tree, each, attempt?.id),
       ...refusalItems(tree, each),
@@ -294,14 +321,10 @@ const sectionOf = (tree: TaskTree, task: Task, readOf: (id: AttemptId) => Attemp
 };
 
 /** The step a running turn is on, from the records of the Attempt that runs. */
-const nowItem = (
-  tree: TaskTree,
-  unit: ReadonlyArray<Task>,
-  readOf: (id: AttemptId) => AttemptActivity | undefined,
-): LaneItem | null => {
+const nowItem = (tree: TaskTree, unit: ReadonlyArray<Task>, read: Reads): LaneItem | null => {
   const running = unit.find((each) => liveAttemptOn(each, tree));
   if (running === undefined) return null;
-  const activity = running.currentAttemptId === null ? undefined : readOf(running.currentAttemptId);
+  const activity = running.currentAttemptId === null ? undefined : read.of(running.currentAttemptId);
   const step = activity?.steps.findLast((each) => each.state === "running");
   return { kind: "now", key: `now-${running.id}`, label: step?.label ?? null };
 };
@@ -322,15 +345,9 @@ const laneStatus = (tree: TaskTree, unit: ReadonlyArray<Task>, task: Task): Room
 type Owned = readonly [Task, ...Array<Task>];
 
 /** One hob's lane, from its Tasks in the order they were created. */
-const laneOf = (
-  tree: TaskTree,
-  hobId: AgentId,
-  tasks: Owned,
-  role: LaneRole,
-  readOf: (id: AttemptId) => AttemptActivity | undefined,
-): Lane => {
+const laneOf = (tree: TaskTree, hobId: AgentId, tasks: Owned, role: LaneRole, read: Reads): Lane => {
   const task = tasks.find((each) => !isTerminalTask(each.state)) ?? tasks[tasks.length - 1] ?? tasks[0];
-  const sections = tasks.map((each) => ({ task: each, ...sectionOf(tree, each, readOf) }));
+  const sections = tasks.map((each) => ({ task: each, ...sectionOf(tree, each, read) }));
   const items = sections.flatMap((section) =>
     tasks.length > 1
       ? [{ kind: "task", key: `task-${section.task.id}`, title: taskTitle(section.task) } as const, ...section.items]
@@ -343,12 +360,13 @@ const laneOf = (
   const tail: Array<LaneItem> = [];
   if (!isTerminalTask(task.state) && waitingOn.length > 0)
     tail.push({ kind: "wait", key: `wait-${task.id}`, on: waitingOn });
-  const now = nowItem(tree, current, readOf);
+  const now = nowItem(tree, current, read);
   if (now !== null) tail.push(now);
   return {
     hobId,
     role,
     task,
+    tasks,
     title: taskTitle(task),
     status: laneStatus(tree, owned, task),
     items: [...foldMarks(items), ...tail],
@@ -358,13 +376,18 @@ const laneOf = (
 /**
  * The room's lanes for a request's Task tree: one per hob, each under the hob that brought it in.
  * `activities` are the Workbench records of the tree's Attempts that have been read; an Attempt not
- * read yet adds only what the tree itself records.
+ * read yet adds only what the tree itself records. `picks` names a try picked for a Task, which its
+ * lane shows in place of the latest.
  */
-export const laneRoom = (tree: TaskTree, activities: ReadonlyArray<AttemptActivity>): LaneRoom => {
+export const laneRoom = (
+  tree: TaskTree,
+  activities: ReadonlyArray<AttemptActivity>,
+  picks: LanePicks = NO_PICKS,
+): LaneRoom => {
   const top = tree.tasks[0];
   if (top === undefined) return { lanes: [], order: [] };
   const reads = new Map(activities.map((each) => [each.attempt.id, each]));
-  const readOf = (id: AttemptId) => reads.get(id);
+  const read: Reads = { of: (id) => reads.get(id), picks };
   // A hob keeps one lane, under the hob that brought it in first.
   const owned = new Map<AgentId, { tasks: Owned; lead: AgentId | null }>();
   for (const task of tree.tasks) {
@@ -380,10 +403,17 @@ export const laneRoom = (tree: TaskTree, activities: ReadonlyArray<AttemptActivi
   const node = (hobId: AgentId, tasks: Owned, seen: ReadonlySet<AgentId>): LaneNode => {
     const isLead = hobId === top.ownerId;
     const members = membersOf(hobId).filter((id) => !seen.has(id) || isLead);
-    const role: LaneRole =
-      members.length === 0 ? { kind: "member" } : isLead ? { kind: "lead" } : { kind: "leads", members };
+    // A member that started a Quest of its own leads it, even before it brought anyone in.
+    const leadsQuest = tree.quests.some((quest) => tasks.some((each) => each.id === quest.taskId));
+    const role: LaneRole = isLead
+      ? members.length === 0
+        ? { kind: "member" }
+        : { kind: "lead" }
+      : members.length > 0 || leadsQuest
+        ? { kind: "leads", members }
+        : { kind: "member" };
     const next = new Set([...seen, ...members]);
-    return { lane: laneOf(tree, hobId, tasks, role, readOf), party: isLead ? [] : nodes(members, next) };
+    return { lane: laneOf(tree, hobId, tasks, role, read), party: isLead ? [] : nodes(members, next) };
   };
   const nodes = (ids: ReadonlyArray<AgentId>, seen: ReadonlySet<AgentId>): ReadonlyArray<LaneNode> =>
     ids.flatMap((id) => {

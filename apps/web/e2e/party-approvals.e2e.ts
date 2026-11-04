@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, laneTask } from "./quest-room.ts";
+import { lane, laneHead } from "./quest-room.ts";
 
 // Issue #273 in the browser: a party member's request reaches you in the Inbox, under its lead's
 // thread, and never its lead. The hub-level side is apps/server/test/quests.test.ts.
@@ -172,7 +172,7 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on the q
   await row.click();
   await expect(laneHead(page, "Nettle")).toHaveAttribute("aria-pressed", "true");
   await expect(laneHead(page, "Nettle")).toContainText("Needs you");
-  await expect(laneTask(page, "Remove the notes")).toContainText("waiting on you");
+  await expect(lane(page, "Nettle")).toContainText("Waits on you");
   await inTray.getByRole("button", { name: "Allow once" }).click();
 
   // Nettle goes on and finishes. Nothing waits on you any more, and the card says how it ended.

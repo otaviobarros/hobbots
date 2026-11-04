@@ -2,7 +2,7 @@ import { formatCount, formatList, plural } from "../../lib/format.ts";
 
 /** Copy for the Quest room's lanes (STD-I18N-001). */
 export const messages = {
-  region: "The party's lanes",
+  region: "Lanes",
   lane: ({ name }: { name: string }) => `${name}'s lane`,
   party: ({ name }: { name: string }) => `${name}'s party`,
   show: ({ name }: { name: string }) => `Show ${name}'s work in the Workbench`,
@@ -13,6 +13,8 @@ export const messages = {
   role: {
     lead: "Lead",
     leads: ({ names }: { names: string }) => `Leads ${names}`,
+    /** A member that started a Quest of its own and brought nobody in yet. */
+    leadsQuest: "Leads a quest",
   },
   names: (names: ReadonlyArray<string>) => formatList(names),
   you: "you",

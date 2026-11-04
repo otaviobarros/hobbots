@@ -105,16 +105,12 @@ export const messages = {
     uncommitted: "Left uncommitted",
   } satisfies Record<CheckpointKind, string>,
   room: {
-    you: "you",
     elsewhere: "Pinned from another thread",
     openThread: "Open its thread",
     missing: "A pinned quest is no longer on this hub.",
     unpin: "Unpin",
     unreadable: "A pinned quest could not be loaded right now.",
     tryAgain: "Try again",
-    leads: "Leads a quest",
-    /** A member that brought in hobs of its own: the party it leads under the Quest. */
-    leadsParty: ({ names }: { names: string }) => `Leads ${names}`,
     /** Another Task of the work changed a file this one changed too (#570). */
     sameFile: ({ names }: { names: string }) => `Same file as ${names}`,
     /** A member that started a Quest of its own but has brought nobody into it (#576). */

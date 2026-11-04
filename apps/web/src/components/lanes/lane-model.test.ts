@@ -40,7 +40,7 @@ import {
   task,
   tree,
 } from "../../test/quests.ts";
-import { foldMarks, type Lane, type LaneItem, laneRoom, SHOWN_MARKS, shortPath } from "./lane-model.ts";
+import { foldMarks, type Lane, type LaneItem, laneAttempts, laneRoom, SHOWN_MARKS, shortPath } from "./lane-model.ts";
 
 const AT = (second: number) => `2026-11-01T10:00:${String(second).padStart(2, "0")}.000Z`;
 const PIP = AgentId.make("pip");
@@ -347,6 +347,30 @@ describe("the Quest room's lanes", () => {
     expect(lines(laneOf(room, QUILL))).toEqual(["beat Trying again", "now -"]);
   });
 
+  it("shows the try picked in the room in place of the latest, and reads the running one too", () => {
+    const first = attempt(COPY, "failed");
+    const second = new Attempt({ ...first, id: AttemptId.make("a-copy-2"), number: 2, state: "running" });
+    const base = blackFriday();
+    const retried = tree({
+      ...base,
+      tasks: base.tasks.map((each) => (each.id === COPY ? new Task({ ...each, currentAttemptId: second.id }) : each)),
+      attempts: [...base.attempts.filter((each) => each.taskId !== COPY), first, second],
+      checkpoints: [
+        report(COPY, "First draft", 3, { attemptId: first.id }),
+        report(COPY, "Trying again", 4, { attemptId: second.id }),
+      ],
+    });
+    const picks = new Map([[COPY, first.id]]);
+    const room = laneRoom(
+      retried,
+      [activity(COPY, { attempt: first, commands: [command(COPY, "pnpm old", 2)] })],
+      picks,
+    );
+    expect(lines(laneOf(room, QUILL))).toEqual(["run pnpm old", "beat First draft", "now -"]);
+    expect(laneAttempts(retried, picks)).toEqual(expect.arrayContaining([first.id, second.id]));
+    expect(laneAttempts(retried)).not.toContain(first.id);
+  });
+
   it("TC-UX-905-03 folds the oldest marks into a count and keeps beats and chips in place", () => {
     const records = activity(COPY, {
       commands: Array.from({ length: SHOWN_MARKS + 3 }, (_, index) => command(COPY, `step ${index}`, index + 1)),
@@ -472,6 +496,7 @@ describe("the Quest room's lanes", () => {
     expect(room.order.filter((each) => each.hobId === QUILL)).toHaveLength(1);
     expect(lane.title).toBe("Make the signs");
     expect(kinds(lane)).toEqual(["task", "result", "task"]);
+    expect(lane.tasks.map((each) => each.id)).toEqual([COPY, SIGNS]);
   });
 
   it("TC-UX-905-04 groups a nested Quest's lanes under its lead, who leads them", () => {
@@ -503,6 +528,23 @@ describe("the Quest room's lanes", () => {
     expect(group?.party.map((node) => node.lane.hobId)).toEqual([PIP, BRAM]);
     expect(group?.lane.role).toEqual({ kind: "leads", members: [PIP, BRAM] });
     expect(lines(laneOf(room, ADA))).toContain(`briefed ${PIP}, ${BRAM}`);
+  });
+
+  it("names a member that started a Quest of its own its lead before it brought anyone in", () => {
+    const base = blackFriday();
+    const room = laneRoom(
+      tree({
+        ...base,
+        quests: [
+          ...base.quests,
+          new Quest({ ...quest(), id: QuestId.make("quest-build"), taskId: BUILD, leadId: ADA, depth: 2 }),
+        ],
+      }),
+      [],
+    );
+    expect(laneOf(room, ADA).role).toEqual({ kind: "leads", members: [] });
+    expect(laneOf(room, QUILL).role).toEqual({ kind: "member" });
+    expect(room.lanes.map((node) => node.party.length)).toEqual([0, 0, 0]);
   });
 
   it("gives a Task alone one lane, with no role", () => {

@@ -266,10 +266,6 @@ export const controlError = (error: unknown, names: Names): string => {
   return known?.(names) ?? refused.other({ message: String(error.fields.message ?? error.message) });
 };
 
-/** Who a row waits on, by name, with you as "you". */
-export const waitingNames = (row: RoomRow, nameOf: (id: AgentId) => string): ReadonlyArray<string> =>
-  row.waitingOn.map((each) => (each.kind === "you" ? messages.room.you : nameOf(each.id)));
-
 /**
  * What a Quest's progress strip shows: a segment per Task under the lead's, or the Task itself when
  * it works alone, in its tone, and how many Tasks need you.

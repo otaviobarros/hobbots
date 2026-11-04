@@ -1,0 +1,158 @@
+import type { Locator, Page } from "@playwright/test";
+import { expect, test } from "./hub.ts";
+import { questHub, stopQuestHub } from "./quest-hub.ts";
+import { lane, laneHead, openRoom } from "./quest-room.ts";
+
+test.afterEach(stopQuestHub);
+
+const TITLE = "Plan the Black Friday campaign";
+
+/** Asks Aldric for a scripted request on a fresh page and opens the room on it. */
+const startRoom = async (page: Page, url: string, aldric: string, ask: string, title: string) => {
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill(ask);
+  await composer.press("Enter");
+  await expect(page.getByRole("region", { name: `Aldric's work on ${title}` })).toBeVisible();
+  return openRoom(page, title);
+};
+
+const lineup = (room: Locator) => room.getByRole("list", { name: "The party" }).getByRole("button");
+
+/** Whether every element in a lane has stopped moving. */
+const still = (target: Locator) =>
+  target.evaluate((element) =>
+    [element, ...element.querySelectorAll("*")].every((each) => getComputedStyle(each).animationName === "none"),
+  );
+
+// covers UX-002, OR-001
+test("[TC-UX-208] the Black Friday party's lanes fill live from the records: beats, waits, chips and results", async ({
+  page,
+}) => {
+  const { url, aldric } = await questHub();
+  const room = await startRoom(page, url, aldric, "Plan a Black Friday campaign for the shop", TITLE);
+
+  // A lane per hob, each a region named for its hob, the lead's first and named so.
+  const lanes = room.getByRole("region", { name: "Lanes" });
+  await expect(lanes.getByRole("region", { name: /'s lane$/ })).toHaveCount(3);
+  await expect(laneHead(page, "Aldric")).toContainText("Lead");
+  await expect(laneHead(page, "Quill")).toContainText("Draft the landing copy");
+  await expect(lineup(room)).toHaveCount(3);
+
+  // Quill's milestones show as beats as they come, then the result once the copy is ready.
+  const quill = lane(page, "Quill").getByRole("list", { name: "What Quill did" });
+  await expect(quill).toContainText("Three headlines drafted", { timeout: 20_000 });
+  await expect(quill).toContainText("Landing copy ready", { timeout: 30_000 });
+  await expect(laneHead(page, "Quill")).toContainText("Done");
+
+  // Ada's lane takes the copy, reports, and lights up for the question that climbed to you.
+  const ada = lane(page, "Ada").getByRole("list", { name: "What Ada did" });
+  await expect(ada).toContainText("Keyword research done", { timeout: 30_000 });
+  await expect(laneHead(page, "Ada")).toContainText("Needs you", { timeout: 30_000 });
+  await expect(lane(page, "Ada").getByRole("region", { name: "Ada asks you" })).toBeVisible();
+});
+
+// covers UX-002, OR-001
+test("[TC-UX-209] a lane marks the files its hob changed and deleted, by their path in its folder", async ({
+  page,
+}) => {
+  const { url, aldric } = await questHub();
+  await startRoom(page, url, aldric, "Make the shop badge in our green", "Make the shop badge");
+
+  // Aldric cleared the old badge before he delegated; Quill then made it again.
+  const aldricDid = lane(page, "Aldric").getByRole("list", { name: "What Aldric did" });
+  await expect(aldricDid.getByRole("listitem").filter({ hasText: "Deleted" })).toContainText("web/badge.png", {
+    timeout: 20_000,
+  });
+  const quillDid = lane(page, "Quill").getByRole("list", { name: "What Quill did" });
+  await expect(quillDid.getByRole("listitem").filter({ hasText: "Edited" })).toContainText("web/badge.png", {
+    timeout: 20_000,
+  });
+  await expect(quillDid).not.toContainText("/fake/shop");
+});
+
+// covers UX-002, OR-004
+test("[TC-UX-210] a nested Quest groups its members' lanes under the party of the member that leads it", async ({
+  page,
+}) => {
+  const { url, aldric } = await questHub({ nested: true });
+  const room = await startRoom(page, url, aldric, "Plan a Black Friday campaign for the shop", TITLE);
+
+  const party = room.getByRole("region", { name: "Rook's party" });
+  await expect(party.getByRole("region", { name: "Rook's lane", exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(party.getByRole("region", { name: "Pip's lane", exact: true })).toBeVisible();
+  await expect(party.getByRole("region", { name: "Quill's lane", exact: true })).toHaveCount(0);
+  await expect(laneHead(page, "Rook")).toContainText("Leads Pip");
+  await expect(lineup(room)).toHaveCount(5);
+  await expect(lane(page, "Pip").getByRole("list", { name: "What Pip did" })).toContainText(
+    "Twelve keywords, led by doorbuster",
+    { timeout: 30_000 },
+  );
+});
+
+// covers UX-002, UX-006
+test("[TC-UX-211] six lanes scroll sideways, and a sprite in the lineup goes to its lane, flashes it and lights it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 800 });
+  const { url, aldric } = await questHub({ six: true });
+  const room = await startRoom(page, url, aldric, "Plan a Black Friday campaign for the shop", TITLE);
+  await expect(lineup(room)).toHaveCount(6, { timeout: 20_000 });
+
+  const lanes = room.getByRole("region", { name: "Lanes" });
+  expect(await lanes.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  const bram = lane(page, "Bram");
+  await expect(bram).not.toBeInViewport();
+
+  const go = room.getByRole("button", { name: /^Go to Bram's lane/ });
+  await go.click();
+  await expect(bram).toBeInViewport();
+  await expect(bram).toHaveClass(/animate-hb-flash/);
+  await expect(go).toHaveAttribute("aria-pressed", "true");
+  await expect(laneHead(page, "Bram")).toHaveAttribute("aria-pressed", "true");
+  // The flash plays once.
+  await expect(bram).not.toHaveClass(/animate-hb-flash/, { timeout: 5_000 });
+});
+
+// covers UX-002, UX-006
+test("[TC-UX-212] every control in a lane is reached with the keyboard, and its header lights the lane", async ({
+  page,
+}) => {
+  const { url, aldric } = await questHub();
+  await startRoom(page, url, aldric, "Plan a Black Friday campaign for the shop", TITLE);
+  const quill = lane(page, "Quill");
+  const show = quill.getByRole("button", { name: "Show in the Workbench" });
+  await expect(show).toBeVisible();
+
+  // The header lights the lane from the keyboard, and again shows everyone.
+  await laneHead(page, "Quill").focus();
+  await page.keyboard.press("Enter");
+  await expect(laneHead(page, "Quill")).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Space");
+  await expect(laneHead(page, "Quill")).toHaveAttribute("aria-pressed", "false");
+
+  // Tab goes through the lane's controls in order and reaches its Task's, never the page.
+  let reached = false;
+  for (let step = 0; step < 12 && !reached; step++) {
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+    reached = await show.evaluate((element) => element === document.activeElement);
+  }
+  expect(reached).toBe(true);
+});
+
+// covers UX-002, UX-006
+test("[TC-UX-213] with Reduce motion the sprites stop hopping and the lineup's jump does not flash", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const { url, aldric } = await questHub();
+  const room = await startRoom(page, url, aldric, "Plan a Black Friday campaign for the shop", TITLE);
+  await expect(laneHead(page, "Quill")).toContainText("Running", { timeout: 20_000 });
+  expect(await still(lane(page, "Quill"))).toBe(true);
+  expect(await still(room.getByRole("region", { name: "Lanes" }))).toBe(true);
+
+  await room.getByRole("button", { name: /^Go to Ada's lane/ }).click();
+  await expect(laneHead(page, "Ada")).toHaveAttribute("aria-pressed", "true");
+  await expect(lane(page, "Ada")).not.toHaveClass(/animate-hb-flash/);
+});
