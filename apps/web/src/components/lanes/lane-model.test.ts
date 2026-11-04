@@ -121,37 +121,25 @@ const laneOf = (room: ReturnType<typeof laneRoom>, hobId: AgentId): Lane => {
 const kinds = (lane: Lane) => lane.items.map((item) => item.kind);
 
 /** Each item as a short line, to compare a lane at a glance. */
-const line = (item: LaneItem): string => {
-  switch (item.kind) {
-    case "read":
-    case "delete":
-      return `${item.kind} ${item.path}`;
-    case "edit":
-      return `edit ${item.path}`;
-    case "run":
-      return `run ${item.command.command}`;
-    case "beat":
-      return `beat ${item.text}`;
-    case "refused":
-      return `refused ${item.what}: ${item.reason}`;
-    case "folded":
-      return `folded ${item.marks.length}`;
-    case "hand-out":
-      return `out ${item.label} → ${item.to}`;
-    case "hand-in":
-      return `in ${item.label} ← ${item.from}`;
-    case "briefed":
-      return `briefed ${item.members.join(", ")}`;
-    case "task":
-      return `task ${item.title}`;
-    case "wait":
-      return `wait ${item.on.map((each) => (each.kind === "you" ? "you" : each.id)).join(", ")}`;
-    case "now":
-      return `now ${item.label ?? "-"}`;
-    case "result":
-      return `${item.outcome} ${item.text ?? "-"}`;
-  }
+const LINES: { [K in LaneItem["kind"]]: (item: Extract<LaneItem, { kind: K }>) => string } = {
+  read: (item) => `read ${item.path}`,
+  delete: (item) => `delete ${item.path}`,
+  edit: (item) => `edit ${item.path}`,
+  run: (item) => `run ${item.command.command}`,
+  beat: (item) => `beat ${item.text}`,
+  refused: (item) => `refused ${item.what}: ${item.reason}`,
+  folded: (item) => `folded ${item.marks.length}`,
+  "hand-out": (item) => `out ${item.label} → ${item.to}`,
+  "hand-in": (item) => `in ${item.label} ← ${item.from}`,
+  briefed: (item) => `briefed ${item.members.join(", ")}`,
+  task: (item) => `task ${item.title}`,
+  wait: (item) => `wait ${item.on.map((each) => (each.kind === "you" ? "you" : each.id)).join(", ")}`,
+  now: (item) => `now ${item.label ?? "-"}`,
+  result: (item) => `${item.outcome} ${item.text ?? "-"}`,
 };
+
+const line = <K extends LaneItem["kind"]>(item: Extract<LaneItem, { kind: K }>): string =>
+  (LINES[item.kind] as (each: typeof item) => string)(item);
 
 const lines = (lane: Lane) => lane.items.map(line);
 
