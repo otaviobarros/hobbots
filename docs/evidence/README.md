@@ -43,6 +43,7 @@ What this run did not prove, each with the issue that tracks it.
 A check that needs a real runtime, a packaged app or a real Mac, and that will be run again, keeps its steps in [`checklists/`](checklists/). Each run of a checklist leaves a new record that cites its step numbers in `Manual` rows.
 
 - [Tools under policy on real Claude Code](checklists/tools-under-policy.md)
+- [The Quest room on real Claude Code](checklists/quest-room.md)
 
 ## Records
 
