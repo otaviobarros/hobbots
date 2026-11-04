@@ -1,6 +1,6 @@
 import type { AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { Sheet, SheetContent, SheetTitle } from "@hobbots/ui/components/sheet";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { messages as questCopy } from "../quest/messages.ts";
 import type { NoteDrafts } from "../quest/note-box.tsx";
 import { type Pins, useFollowedTrees, useHobLookup, useOpenQuest, useOpenTask } from "../quest/use-work.ts";
@@ -33,8 +33,24 @@ const focusTitle = (event: Event) => {
 };
 
 /**
- * The work sheet over the end of the chat (ADR 018): a request's quest, or one task inside it, which
- * slides in over the quest with a link back. What it shows is in the address, so a link opens it;
+ * Going from the quest to a task, or Back, changes what the open sheet shows without closing it: the
+ * sheet stays mounted, so it neither fades out and in again nor shifts the page (#894). Its content
+ * starts again from the top, and focus moves to the new heading, the way it lands when the sheet opens.
+ */
+const useContentChange = (sheet: HTMLDivElement | null, shown: string | undefined) => {
+  const last = useRef(shown);
+  useEffect(() => {
+    const before = last.current;
+    last.current = shown;
+    if (sheet === null || shown === undefined || before === undefined || before === shown) return;
+    sheet.scrollTop = 0;
+    sheet.querySelector<HTMLElement>('[data-slot="sheet-title"]')?.focus();
+  }, [sheet, shown]);
+};
+
+/**
+ * The work sheet over the end of the chat (ADR 018): a request's quest, or one task inside it, shown in
+ * the same open sheet with a link back. What it shows is in the address, so a link opens it;
  * Escape, ✕ or a click outside closes it, and focus goes back to where it was. A Quest pinned from
  * another thread opens here too.
  */
@@ -71,12 +87,16 @@ export function WorkSheet({
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   // It ends above the composer, so what you type stays in view at any width (#515).
   const clearance = useComposerClearance(host, wanted !== undefined);
+  const [sheet, setSheet] = useState<HTMLDivElement | null>(null);
+  const shown = wanted === undefined ? undefined : `${showTask ? "task" : "quest"}-${wanted}`;
+  useContentChange(sheet, shown);
   return (
     <>
       <div ref={setHost} className="contents" />
       {/* Not modal: the chat and its header stay in reach, and a click on them closes the sheet. */}
       <Sheet modal={false} open={wanted !== undefined} onOpenChange={(open) => !open && close()}>
         <SheetContent
+          ref={setSheet}
           aria-label={showTask ? questCopy.drawer.label({ title }) : copy.questLabel({ title })}
           // The label names the sheet, "<title>, Task details" or "<title>, quest", not the title alone.
           aria-labelledby={undefined}
@@ -87,13 +107,13 @@ export function WorkSheet({
           onOpenAutoFocus={focusTitle}
           onPointerDownOutside={keepForControls}
           onFocusOutside={stayOpen}
-          // The task view slides in over the quest; each opens from the end, the way it leaves.
-          key={showTask ? `task-${taskId}` : `quest-${questId}`}
         >
           {found === null ? (
             <SheetTitle tabIndex={-1}>{copy.notFound}</SheetTitle>
           ) : showTask ? (
             <TaskView
+              // Each Task starts its view afresh, its own note and open sections, inside the same sheet.
+              key={shown}
               tree={found.tree}
               task={found.task}
               hobs={hobs}
@@ -107,7 +127,7 @@ export function WorkSheet({
               onWorkbench={(id) => openWorkbench(id, "drawer")}
             />
           ) : (
-            <QuestView tree={found.tree} threadId={threadId} hobs={hobs} pins={pins} onOpen={openTask} />
+            <QuestView key={shown} tree={found.tree} threadId={threadId} hobs={hobs} pins={pins} onOpen={openTask} />
           )}
         </SheetContent>
       </Sheet>

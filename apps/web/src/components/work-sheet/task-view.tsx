@@ -70,7 +70,7 @@ export function TaskView({
         <div className="flex min-w-0 flex-col pb-2">
           {/* A brief's first line can be a paragraph: the heading stops at three lines, and the
               whole brief is under Everything in this task (#874). */}
-          <SheetTitle tabIndex={-1} className="line-clamp-3 text-title">
+          <SheetTitle tabIndex={-1} clamped className="text-title">
             {taskTitle(task)}
           </SheetTitle>
           <SheetDescription>

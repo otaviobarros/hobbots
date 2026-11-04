@@ -59,12 +59,18 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return <div data-slot="sheet-header" className={cn("flex items-center gap-2", className)} {...props} />;
 }
 
-function SheetTitle({ className, ...props }: React.ComponentProps<typeof SheetPrimitive.Title>) {
+/** The sheet's heading. `clamped` stops a long one, such as a brief that is a paragraph, at three lines. */
+function SheetTitle({
+  className,
+  clamped = false,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Title> & { clamped?: boolean }) {
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
       className={cn(
         "m-0 font-(family-name:--font-heading) text-heading font-(--heading-weight) text-text-strong in-[[data-theme^=workshop-]]:text-moonlight",
+        clamped && "line-clamp-3",
         className,
       )}
       {...props}
