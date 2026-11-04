@@ -13,7 +13,7 @@ A theme changes how things look. It never changes where things are, what they sa
 | Workshop Night | `workshop-night` | Workshop | Dark |
 | Workshop Daylight | `workshop-daylight` | Workshop | Light |
 
-Lamplight is smooth: rounded corners, eased motion and Atkinson headings. Workshop is today's pixel look: cut corners, Pixelify headings and stepped motion. First run always uses Workshop Night.
+Lamplight is smooth: rounded corners, eased motion and Atkinson headings. Workshop is today's pixel look: cut corners, Pixelify headings and stepped motion. First run always uses Workshop Night. When first run finishes on a device with no saved theme, the device keeps Lamplight Dusk from its next start. A device with no saved theme that finished setup earlier stays on Workshop Night.
 
 ## What is in themes.json
 
@@ -22,6 +22,7 @@ Lamplight is smooth: rounded corners, eased motion and Atkinson headings. Worksh
 - **fixed**: values that stay the same in every theme. The switch knob is `#fdf9ef` when the switch is on.
 - **skin**: the values each look sets once. Components read them and never use a corner, font or easing directly.
 - **font**, **type**, **space**, **radius**, **size** and **duration**: the same in every theme.
+- **contrast**: the floors every theme meets, as pairs of a text color and the color behind it.
 
 ## Rules
 
@@ -35,22 +36,31 @@ Lamplight is smooth: rounded corners, eased motion and Atkinson headings. Worksh
 
 ## Contrast
 
-Every theme meets these floors against `ground`:
+Every theme meets these floors against `ground`. The pairs and floors live in `contrast` in themes.json, and `apps/web/type-and-contrast.test.ts` checks every pair in every theme. A new color that sets text adds its pair there.
+
+The 12:1 floor for `text` is measured on `ground` only. Reading text means hob replies, which sit on `ground`. Text on a card or panel is UI text and needs 4.5:1.
 
 | Pair | Floor | Lamplight Dusk | Lamplight Paper | Workshop Night | Workshop Daylight |
 | --- | --- | --- | --- | --- | --- |
 | `text` | 12:1 | 12.8 | 12.4 | 13.1 | 14.1 |
 | `text-secondary` | 4.5:1 | 7.6 | 6.9 | 10.9 | 7.6 |
 | `label` | 4.5:1 | 6.6 | 6.0 | 7.8 | 6.4 |
-| `lantern`, `mint`, `rose` | 4.5:1 | 7.3 or more | 5.8 or more | 8.0 or more | 5.5 or more |
+| `text-strong`, `link` | 4.5:1 | 15.0 | 15.3 | 15.3 | 15.6 |
+| `moonlight` | 4.5:1 | 14.0 | 8.8 | 14.9 | 7.2 |
+| `lantern`, `mint`, `rose` | 4.5:1 | 7.3 or more | 5.8 or more | 7.9 or more | 5.5 or more |
+| `star` | 4.5:1 | 10.1 | 5.1 | 11.7 | 6.1 |
 | `control` | 3:1 | 4.1 | 3.5 | 4.3 | 3.5 |
 | `focus-ring` | 3:1 | 10.1 | 5.1 | 14.9 | 7.2 |
 
-`on-lantern` on a `lantern` fill is 6.6:1 or more in every theme.
+`on-lantern` on a `lantern` fill and `on-rose` on a `rose` fill are 6.2:1 or more in every theme.
+
+## Type and spacing
+
+The type scale, the spacing grid and every size are the same in all four themes. `apps/web/src/styles.css` sets each style of `type` as a Tailwind text size with its own line height: `text-display`, `text-heading`, `text-title`, `text-reading`, `text-body`, `text-detail`, `text-meta` and `text-code`. The `label` style is the `lbl` utility, because `text-label` is the label color. No text goes below `meta`, 12px. Spacing uses Tailwind's 4px step, and every `space` value sits on it. No theme or look sets a size, a line height or a spacing value. The same test checks all of this.
 
 ## In the code
 
-`apps/web/src/styles.css` holds the themes. Its `@theme` block and `:root` rule carry Lamplight Dusk, the default when no theme is set, and a `:root[data-theme="…"]` rule per other theme overrides every color and shadow. Two more rules set the skin: Lamplight on `:root`, Workshop on `[data-theme^="workshop-"]`. A unit test checks the file against themes.json. The app opens in Workshop Night (`apps/web/index.html`) until the saved choice lands (#480).
+`apps/web/src/styles.css` holds the themes. Its `@theme` block and `:root` rule carry Lamplight Dusk, the default when no theme is set, and a `:root[data-theme="…"]` rule per other theme overrides every color and shadow. Two more rules set the skin: Lamplight on `:root`, Workshop on `[data-theme^="workshop-"]`. A unit test checks the file against themes.json. The app opens in Workshop Night on first run: `apps/web/index.html` and `apps/web/local.html` set it. `apps/web/src/lib/theme.ts` then applies the theme saved on this device before the first render, and follows a theme picked in another window. Like Reduce motion, the theme belongs to the device it is picked on, not to the hub. A missing or unknown value means Workshop Night. Finishing setup saves Lamplight Dusk when nothing is saved yet (`firstRunFinished`), and the open window keeps Workshop Night until the next start.
 
 Shadows are plain custom properties with their own `shadow-menu` and `shadow-sheet` utilities, so each theme can change their shape. shadcn's `dark:` variant follows the mode: every theme but Lamplight Paper and Workshop Daylight is dark.
 

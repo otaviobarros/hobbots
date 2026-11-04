@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  ApprovalRepository,
   ApprovalService,
   ChatService,
   HobAdmission,
@@ -238,6 +239,14 @@ export const treeWhen = (ready: (tree: TaskTree) => boolean) =>
       return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
     }),
   );
+
+/** The first approval request waiting for you, once one does. */
+export const firstPending = retry(
+  Effect.flatMap(
+    ApprovalRepository.use((approvals) => approvals.listPending),
+    (all) => (all[0] === undefined ? Effect.fail("not yet" as const) : Effect.succeed(all[0])),
+  ),
+);
 
 /** The thread's messages once `ready` holds for them, every reply ended. */
 export const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
