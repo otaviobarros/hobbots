@@ -2,7 +2,6 @@ import { AgentId, ApprovalId, ApprovalRequest, MessageId, ThreadId } from "@hobb
 import { describe, expect, it } from "vitest";
 import {
   expiryText,
-  groupByThread,
   isInboxTab,
   pendingCount,
   selectedRequest,
@@ -61,20 +60,6 @@ describe("tabRequests", () => {
   it("lists everything newest first in All, and only closed requests in History", () => {
     expect(tabRequests(all, "all").map((r) => r.id)).toEqual(["d", "c", "b", "a"]);
     expect(tabRequests(all, "history").map((r) => r.id)).toEqual(["c", "a"]);
-  });
-});
-
-describe("groupByThread", () => {
-  it("groups requests by thread in the order their first request appears", () => {
-    const groups = groupByThread([
-      request("a", "pending", { thread: "t2" }),
-      request("b", "pending", { thread: "t1" }),
-      request("c", "pending", { thread: "t2" }),
-    ]);
-    expect(groups.map((g) => [g.threadId, g.requests.map((r) => r.id)])).toEqual([
-      ["t2", ["a", "c"]],
-      ["t1", ["b"]],
-    ]);
   });
 });
 

@@ -138,7 +138,7 @@ test("[TC-IN-003] a request decided in the chat updates the open Inbox, and one 
   const inbox = await context.newPage();
   await inbox.goto(`${current.url}/#/inbox`);
   const item = inbox.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Push your work/ });
-  await expect(item).toContainText("Waiting on you");
+  await expect(item).toContainText("Expires in 23 hours");
 
   // Denied in the chat: the Inbox hears it from the journal and keeps it in view with its outcome.
   await card.getByRole("button", { name: "Deny" }).click();
