@@ -198,6 +198,11 @@ export interface TaskMoveOptions {
   readonly carried?: ReadonlyArray<CarriedItem>;
   /** Who asked for a cancel this move makes: the hob that cancelled the Task, or you. */
   readonly cancelledBy?: AgentId | "you";
+  /**
+   * Why the hub moves the Task to blocked or failed: recorded as a blocker on it in the same change,
+   * so its lead gets one Failure item that says why, not a blocker and a Failure (#683).
+   */
+  readonly reason?: string;
 }
 
 export class TaskRepository extends Context.Service<

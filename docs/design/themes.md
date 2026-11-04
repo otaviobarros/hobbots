@@ -48,18 +48,23 @@ Every theme meets these floors against `ground`:
 
 `on-lantern` on a `lantern` fill is 6.6:1 or more in every theme.
 
-## From today's tokens
+## In the code
 
-Workshop Night keeps today's palette in `apps/web/src/styles.css`. A few tokens are renamed or added:
+`apps/web/src/styles.css` holds the themes. Its `@theme` block and `:root` rule carry Lamplight Dusk, the default when no theme is set, and a `:root[data-theme="…"]` rule per other theme overrides every color and shadow. Two more rules set the skin: Lamplight on `:root`, Workshop on `[data-theme^="workshop-"]`. A unit test checks the file against themes.json. The app opens in Workshop Night (`apps/web/index.html`) until the saved choice lands (#480).
 
-| Today | In the themes |
+Shadows are plain custom properties with their own `shadow-menu` and `shadow-sheet` utilities, so each theme can change their shape. shadcn's `dark:` variant follows the mode: every theme but Lamplight Paper and Workshop Daylight is dark.
+
+Workshop Night keeps the palette the app had before the themes. These tokens were renamed or added:
+
+| Before | In the themes |
 | --- | --- |
-| `--color-text` (`#ece8ff`) | `text-strong`, for headings, names and button labels |
+| `--color-text` (`#ece8ff`) | `text-strong`, for headings, names and button labels. Every use of the old `text` moved to it, so Workshop Night looks as before |
 | (none) | `text`, a softer color for reading text (`#dcd7f2` in Workshop Night) |
 | `--color-secondary-text` | `text-secondary` |
 | `--color-lantern-shadow` | `lantern-press` |
 | (none) | `tile`, `on-lantern`, `on-rose`, `focus-ring`, `link` |
 | `--color-ring` (moonlight) | `focus-ring`, which is moonlight in Workshop Night and differs in the other themes |
+| `--shadow-drawer` | `shadow-sheet` |
 | `--color-wood` | Kept as it is. It is scene art, not a theme token. |
 
 The shadcn names in `styles.css`, such as `--color-primary` and `--color-border`, keep pointing at these tokens. That way the components in `packages/ui` follow the theme without changes.

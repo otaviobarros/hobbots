@@ -47,10 +47,10 @@ function StripItem({ tree, hobs, onOpen }: { tree: TaskTree; hobs: HobLookup; on
       type="button"
       onClick={() => onOpen(card.top.id)}
       aria-label={copy.open({ name: lead.name })}
-      className="cut flex min-w-0 cursor-pointer items-center gap-2 border-2 border-line-2 bg-panel px-2.5 py-1 text-detail text-text hover:bg-hover"
+      className="cut flex min-w-0 cursor-pointer items-center gap-2 border-2 border-line-2 bg-panel px-2.5 py-1 text-detail text-text-strong hover:bg-hover"
     >
       <HobSprite hob={lead} size={20} state={counts["needs-you"] > 0 ? "needs-you" : "working"} />
-      <span className="whitespace-nowrap text-secondary-text">
+      <span className="whitespace-nowrap text-text-secondary">
         {card.quest === null ? copy.task({ name: lead.name }) : copy.quest({ name: lead.name })}
       </span>
       {card.party.map((id) => (

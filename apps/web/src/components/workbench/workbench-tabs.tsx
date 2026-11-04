@@ -11,10 +11,10 @@ export const tabIds = (base: string, tab: WorkbenchTab) => ({
 
 const labelTone: Record<TabState["kind"], string> = {
   live: "bg-mint text-ground",
-  history: "bg-line-2 text-secondary-text",
+  history: "bg-line-2 text-text-secondary",
   unavailable: "border-2 border-lantern text-lantern",
   "not-used": "text-label",
-  "coming-soon": "bg-line-2 text-secondary-text",
+  "coming-soon": "bg-line-2 text-text-secondary",
 };
 
 /**
@@ -68,7 +68,7 @@ export function WorkbenchTabs({
             className={cn(
               "flex shrink-0 cursor-pointer items-center gap-2 border-0 px-3 py-2.5 text-sm font-bold whitespace-nowrap",
               on ? "bg-line text-moonlight" : "bg-transparent hover:bg-hover",
-              !on && (muted ? "text-label" : "text-secondary-text hover:text-text"),
+              !on && (muted ? "text-label" : "text-text-secondary hover:text-text-strong"),
             )}
           >
             <span>{messages.tab[each]}</span>

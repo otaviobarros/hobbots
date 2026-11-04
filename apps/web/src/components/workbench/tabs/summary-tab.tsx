@@ -155,7 +155,7 @@ function Happened({ line, hobs, onOpen }: { line: HappenedLine; hobs: HobLookup;
         type="button"
         onClick={() => onOpen(line.task.id)}
         aria-label={`${text}, ${copy.mark[line.mark]}. ${copy.openStep({ title })}`}
-        className={cn(row, "w-full cursor-pointer border-0 bg-card text-start text-text hover:bg-hover")}
+        className={cn(row, "w-full cursor-pointer border-0 bg-card text-start text-text-strong hover:bg-hover")}
       >
         {mark}
         <span className="min-w-0 flex-1">{text}</span>
@@ -178,7 +178,7 @@ function Happened({ line, hobs, onOpen }: { line: HappenedLine; hobs: HobLookup;
                 ? copy.endedUnresolved
                 : copy.endedStopped}
         {line.kind === "ended" && line.attempt.outcome !== null && (
-          <span className="block text-secondary-text">{copy.endedWhy({ why: line.attempt.outcome })}</span>
+          <span className="block text-text-secondary">{copy.endedWhy({ why: line.attempt.outcome })}</span>
         )}
       </span>
     </div>
@@ -204,7 +204,7 @@ function Refused({
       {mark}
       <span className="min-w-0 flex-1 whitespace-pre-wrap">
         {copy.refused({ label })}
-        <span className="block text-secondary-text">
+        <span className="block text-text-secondary">
           {copy.refusedTold({ name: hobs(refusal.agentId).name, message: refusal.message })}
         </span>
       </span>
@@ -252,7 +252,7 @@ function Made({
                 type="button"
                 onClick={() => onTab("changes", path)}
                 aria-label={copy.seeChange({ path: change.path })}
-                className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-2.5 py-1 text-start text-detail text-text hover:bg-hover"
+                className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-2.5 py-1 text-start text-detail text-text-strong hover:bg-hover"
               >
                 <span className="w-16 shrink-0 text-xs font-bold text-label">{copy.change[change.kind]}</span>
                 <span className="min-w-0 flex-1 truncate font-mono">{change.path}</span>
@@ -283,10 +283,10 @@ function Artifact({ artifact, onTab }: { artifact: ArtifactRef; onTab: (tab: Wor
         type="button"
         onClick={() => onTab("files", artifact.value)}
         aria-label={copy.seeFile({ label: artifact.label })}
-        className={cn(box, "w-full cursor-pointer text-start text-text hover:bg-hover")}
+        className={cn(box, "w-full cursor-pointer text-start text-text-strong hover:bg-hover")}
       >
         <span className="font-bold">{artifact.label}</span>
-        <span className="font-mono break-all text-secondary-text">{artifact.value}</span>
+        <span className="font-mono break-all text-text-secondary">{artifact.value}</span>
       </button>
     );
   }
@@ -497,5 +497,5 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function Empty({ children }: { children: ReactNode }) {
-  return <p className="m-0 text-detail text-secondary-text">{children}</p>;
+  return <p className="m-0 text-detail text-text-secondary">{children}</p>;
 }

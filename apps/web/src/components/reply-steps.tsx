@@ -76,11 +76,11 @@ export function ReplySteps({
 function StepLine({ step, outcome }: { step: ReplyStep; outcome: StepState }) {
   const mark = MARK[outcome];
   return (
-    <span className="flex items-center gap-2 text-secondary-text">
+    <span className="flex items-center gap-2 text-text-secondary">
       <span aria-hidden className={cn("w-3.5 text-center", mark.className)}>
         {mark.glyph}
       </span>
-      <span className={outcome === "running" ? "text-text" : undefined}>
+      <span className={outcome === "running" ? "text-text-strong" : undefined}>
         {outcome === "running" ? copy.running({ label: step.label }) : step.label}
       </span>
       <span className="sr-only">{copy.outcome[outcome]}</span>
@@ -125,7 +125,7 @@ function ToolStep({
   const note = stepNote(step, outcome);
   return (
     <Collapsible className="flex flex-col gap-0.5">
-      <CollapsibleTrigger className="group flex items-center gap-2 border-0 bg-transparent p-0 text-start text-[13px] text-secondary-text hover:text-text focus-visible:outline-2 focus-visible:outline-ring">
+      <CollapsibleTrigger className="group flex items-center gap-2 border-0 bg-transparent p-0 text-start text-[13px] text-text-secondary hover:text-text-strong focus-visible:outline-2 focus-visible:outline-focus-ring">
         <StepLine step={step} outcome={outcome} />
         <span aria-hidden className="text-label group-data-[state=open]:rotate-90">
           ›
@@ -140,7 +140,7 @@ function ToolStep({
       )}
       {settle}
       <CollapsibleContent>
-        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 pt-0.5 text-xs text-secondary-text">
+        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 pt-0.5 text-xs text-text-secondary">
           <dt className="text-label">{copy.tool}</dt>
           <dd className="m-0">{call.tool}</dd>
           <dt className="text-label">{copy.operation}</dt>

@@ -30,7 +30,7 @@ export function DeviceFacts({ device, now }: { device: WaitingDevice; now: Date 
 /** The code the device shows too, so the user can match the two screens. It is not a secret. */
 export function MatchingCode({ device }: { device: WaitingDevice }) {
   return (
-    <div className="cut flex items-center gap-4 bg-text px-4 py-3 text-ground">
+    <div className="cut flex items-center gap-4 bg-text-strong px-4 py-3 text-ground">
       <div className="flex flex-1 flex-col gap-0.5">
         <span className="lbl text-xs">{copy.matchLabel}</span>
         <span className="text-sm">{copy.matchHint({ name: device.request.name })}</span>

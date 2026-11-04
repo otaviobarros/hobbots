@@ -229,7 +229,7 @@ export function ChatView({
           <span className="flex min-w-0 items-baseline gap-2">
             <span className="font-pixel text-xl font-semibold whitespace-nowrap">{current.name}</span>
             <span className="text-sm font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
-            <span className="truncate text-secondary-text">{title}</span>
+            <span className="truncate text-text-secondary">{title}</span>
           </span>
           <span className="text-xs text-label">{stateLabel[state]}</span>
         </div>
@@ -267,7 +267,7 @@ export function ChatView({
             <span className="font-pixel text-[22px] font-bold text-moonlight">
               {newHob ? copy.hello(current) : copy.freshPage}
             </span>
-            <span className="text-secondary-text">{newHob ? copy.helloBody : copy.freshBody(current)}</span>
+            <span className="text-text-secondary">{newHob ? copy.helloBody : copy.freshBody(current)}</span>
             <div className="flex flex-wrap justify-center gap-1.5">
               {copy.ideas.map((idea) => (
                 <Button key={idea} variant="chip" onClick={() => writeDraft(place, idea)}>

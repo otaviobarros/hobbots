@@ -25,7 +25,7 @@ export function InboxTabs({ tab, waiting }: { tab: InboxTab; waiting: number }) 
             "inline-flex cursor-pointer items-center gap-1.5 border-0 border-b-3 px-3 py-2 text-sm font-bold",
             tab === name
               ? "border-lantern bg-hover text-moonlight"
-              : "border-transparent bg-transparent text-secondary-text hover:bg-hover hover:text-text",
+              : "border-transparent bg-transparent text-text-secondary hover:bg-hover hover:text-text-strong",
           )}
         >
           {copy.tabs[name]}
@@ -105,7 +105,7 @@ function InboxItem({
       activeOptions={{ exact: true, includeSearch: true }}
       data-state={request.state}
       className={cn(
-        "hop-on-hover flex w-full items-start gap-2.5 px-2.5 py-2.5 text-start text-text no-underline hover:text-text",
+        "hop-on-hover flex w-full items-start gap-2.5 px-2.5 py-2.5 text-start text-text-strong no-underline hover:text-text-strong",
         selected ? "bg-line" : "hover:bg-hover",
         !pending && "opacity-70",
       )}
@@ -113,7 +113,7 @@ function InboxItem({
       {hob && <HobSprite hob={hob} size={26} state={pending ? "needs-you" : "idle"} className="mt-0.5" />}
       <span className="flex min-w-0 flex-1 flex-col gap-0.75">
         <span className="flex items-center gap-2">
-          <span className="flex-1 text-sm text-secondary-text">
+          <span className="flex-1 text-sm text-text-secondary">
             {copy.from({ name: directory.hobName(request.agentId) })}
           </span>
           <Badge variant={expired ? "muted" : "needs-you"}>{expired ? copy.kind.expired : copy.kind.approval}</Badge>
