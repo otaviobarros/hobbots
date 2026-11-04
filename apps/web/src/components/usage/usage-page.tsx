@@ -58,9 +58,8 @@ export function UsagePage({ days }: { days: UsagePeriod }) {
   const replies = daily.reduce((sum, day) => sum + day.replies, 0);
 
   return (
-    <Page icon="Usage" title={messages.title} intro={messages.intro}>
+    <Page icon="Usage" title={messages.title} intro={messages.intro} actions={<PeriodPicker days={days} />}>
       <div className="flex w-full max-w-[880px] flex-col gap-7">
-        <PeriodPicker days={days} />
         {report.isError ? (
           <div className="flex items-center gap-3">
             <p className="m-0 text-rose">{messages.failed}</p>

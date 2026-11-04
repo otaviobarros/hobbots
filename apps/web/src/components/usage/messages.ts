@@ -1,7 +1,6 @@
 import {
   formatCompact,
   formatCount,
-  formatDay,
   formatIn,
   formatPercent,
   formatTime,
