@@ -8,6 +8,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p e2e/tsconfig.json",
     "test:e2e": "playwright test",
+    "e2e:durations": "node e2e/record-durations.ts",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
