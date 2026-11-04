@@ -9,6 +9,7 @@ import { useOpenWorkbench } from "../workbench/use-workbench.ts";
 import { messages } from "./messages.ts";
 import { QuestView } from "./quest-view.tsx";
 import { TaskView } from "./task-view.tsx";
+import { useComposerClearance } from "./use-composer-clearance.ts";
 
 const copy = messages;
 
@@ -68,6 +69,8 @@ export function WorkSheet({
   const title = found === null ? copy.notFound : taskTitle(found.task);
   // The sheet mounts in the chat's column, so the panels beside the chat stay in reach.
   const [host, setHost] = useState<HTMLDivElement | null>(null);
+  // It ends above the composer, so what you type stays in view at any width (#515).
+  const clearance = useComposerClearance(host, wanted !== undefined);
   return (
     <>
       <div ref={setHost} className="contents" />
@@ -80,6 +83,7 @@ export function WorkSheet({
           aria-describedby={undefined}
           container={host}
           className="absolute"
+          style={clearance === undefined ? undefined : { bottom: clearance }}
           onOpenAutoFocus={focusTitle}
           onPointerDownOutside={keepForControls}
           onFocusOutside={stayOpen}

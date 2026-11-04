@@ -90,7 +90,7 @@ export function Composer({
   };
 
   return (
-    <div className="flex flex-none flex-col gap-1.5 px-6 pt-2 pb-3.5">
+    <div data-composer="" className="flex flex-none flex-col gap-1.5 px-6 pt-2 pb-3.5">
       <div className="flex items-end gap-2.5">
         <textarea
           ref={input}
