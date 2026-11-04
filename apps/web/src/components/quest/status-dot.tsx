@@ -5,7 +5,7 @@ const tone: Record<RowStatus, string> = {
   "needs-you": "bg-lantern animate-hb-blink",
   failed: "bg-rose",
   blocked: "bg-rose",
-  running: "bg-mint animate-hb-blink",
+  running: "bg-mint",
   waiting: "bg-label",
   done: "bg-mint-deep",
 };

@@ -78,9 +78,7 @@ export function HobCard({
             needs ? "text-lantern" : "text-text-secondary",
           )}
         >
-          {doing?.kind === "live" && (
-            <span aria-hidden className="mt-1.5 size-2 flex-none animate-hb-blink rounded-dot bg-mint" />
-          )}
+          {doing?.kind === "live" && <span aria-hidden className="mt-1.5 size-2 flex-none rounded-dot bg-mint" />}
           {needs && <span aria-hidden className="mt-1.5 size-2 flex-none rotate-45 rounded-[2px] bg-lantern" />}
           <span className="line-clamp-2 min-w-0">{cardLine(doing, threads, fresh)}</span>
         </span>
