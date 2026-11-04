@@ -1,4 +1,5 @@
 import { expect, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #667 in the browser: a step that stops on a finding, with no result, shows as blocked with
@@ -34,13 +35,11 @@ test("[TC-OR-402] the Task card shows a step that stopped on a finding as blocke
   await expect(row).toContainText("step 1 of 2");
   await expect(card).toContainText("0 of 2 done");
   await row.click();
-  await expect(page.getByRole("complementary", { name: "Write the README and SPEC, Task details" })).toContainText(
-    FINDING,
-  );
+  await expect(page.getByRole("dialog", { name: "Write the README and SPEC, Task details" })).toContainText(FINDING);
+  await page.keyboard.press("Escape");
 
   // Step 2 is held by it, and never ran.
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const tasks = page.getByRole("list", { name: "Tasks of Write the docs" });
+  const tasks = await openQuest(page, "Write the docs");
   const notes = tasks.getByRole("button", { name: /Write the notes/ });
   await expect(notes).toContainText("Blocked");
   await expect(tasks.getByRole("button", { name: /Write the README and SPEC/ })).toContainText("Blocked");

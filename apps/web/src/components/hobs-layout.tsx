@@ -2,67 +2,48 @@ import type { AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect } from "react";
 import { threadsQuery } from "../api/queries.ts";
-import { readStored, writeStored } from "../lib/storage.ts";
-import { ArchiveProvider } from "./archive/archive-context.tsx";
 import { ThreadMain, type WorkspaceMainProps } from "./archived-threads/archived-threads.tsx";
-import { HobList } from "./hob-list.tsx";
 import { useNoteDrafts } from "./quest/note-box.tsx";
-import { TaskDrawer } from "./quest/task-drawer.tsx";
 import { usePins } from "./quest/use-work.ts";
-import { SidePanel } from "./side-panel.tsx";
+import { WorkSheet } from "./work-sheet/work-sheet.tsx";
 import type { WorkbenchView } from "./workbench/use-workbench.ts";
 import { Workbench } from "./workbench/workbench.tsx";
-
-const usePersistentToggle = (key: string) => {
-  const [open, setOpen] = useState(() => readStored(key, true));
-  const set = (value: boolean) => {
-    writeStored(key, value);
-    setOpen(value);
-  };
-  return [open, set] as const;
-};
 
 interface WorkspaceProps {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
   /** A message to scroll to and mark, such as a search match. */
   focusMessageId?: string | undefined;
-  /** A Task to show in the drawer beside the chat. */
+  /** A Task to show in the work sheet over the chat. */
   taskId?: TaskId | undefined;
+  /** A request's Quest, by its top Task, to show in the work sheet. */
+  questId?: TaskId | undefined;
   main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
   /** A Task's Workbench to show in the chat's place (ADR 023). */
   workbench?: WorkbenchView | undefined;
-  /** What sits at the end, in place of the Quest panel; `null` leaves it out, as a hob's page does. */
+  /** What sits at the end, such as a hob page's side column. */
   aside?: ReactNode | null;
 }
 
 /**
- * The chat workspace: hob list, its middle, and the Quest panel. Both side panels collapse. The
- * middle is the thread's chat unless the route fills it with `main`, such as the hob's archived
- * threads. Threads are archived from their menus or with ⌃⌘A, with Undo in a toast.
+ * The chat workspace, where the work sheet and the Workbench open over the chat. The middle is the
+ * thread's chat unless the route fills it with `main`, such as the hob's archived threads. Threads
+ * are archived from their menus or with ⌃⌘A, with Undo in a toast that the app shell holds, so it
+ * stays when archiving the last chat opens the hob's fresh page.
  */
-export function HobsLayout(props: WorkspaceProps) {
-  return (
-    <ArchiveProvider hobId={props.hobId} threadId={props.threadId}>
-      <Workspace {...props} />
-    </ArchiveProvider>
-  );
-}
-
-function Workspace({
+export function HobsLayout({
   hobId,
   threadId,
   focusMessageId,
   taskId,
+  questId,
   main = (props) => <ThreadMain {...props} />,
   workbench,
   aside,
 }: WorkspaceProps) {
-  const [navOpen, setNavOpen] = usePersistentToggle("layout.navOpen");
-  const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
-  // Pinned Quests show in the Quest tab of every thread and open in its drawer.
+  // Pinned Quests show in every thread's header and open in its sheet.
   const pins = usePins();
   // The drawer and the Workbench show the same unsent note for a Task, and both outlive each other.
   const drafts = useNoteDrafts();
@@ -71,8 +52,6 @@ function Workspace({
 
   return (
     <div className="flex min-w-0 flex-1">
-      {navOpen && <HobList hobId={hobId} threadId={threadId} onHide={() => setNavOpen(false)} />}
-      {/* The drawer opens over the end of the chat, so the conversation keeps its width. */}
       <div className="relative flex min-w-0 flex-1">
         {/* The Workbench covers the chat without unmounting it, so going back finds the same scroll
             position and unsent message; meanwhile the chat is hidden from sight and focus. */}
@@ -81,32 +60,26 @@ function Workspace({
             hobId,
             threadId,
             focusMessageId,
-            navOpen,
-            panelOpen,
-            onShowNav: () => setNavOpen(true),
-            onTogglePanel: () => setPanelOpen(!panelOpen),
+            pins,
           })}
         </div>
-        {/* The drawer also stays mounted under the Workbench, so Back to the task finds its unsent notes. */}
-        {threadId !== undefined && taskId !== undefined && (
-          <div className={cn(benchOpen && "invisible")} inert={benchOpen}>
-            <TaskDrawer
-              key={threadId}
-              hobId={hobId}
-              threadId={threadId}
-              taskId={taskId}
-              pinned={pins.pinned}
-              drafts={drafts}
-            />
-          </div>
+        {/* The sheet closes while the Workbench covers the chat; Back to the task opens it again. */}
+        {threadId !== undefined && !benchOpen && (
+          <WorkSheet
+            key={threadId}
+            hobId={hobId}
+            threadId={threadId}
+            questId={questId}
+            taskId={taskId}
+            pins={pins}
+            drafts={drafts}
+          />
         )}
         {threadId !== undefined && workbench !== undefined && (
           <Workbench hobId={hobId} threadId={threadId} view={workbench} pinned={pins.pinned} drafts={drafts} />
         )}
       </div>
-      {aside === undefined
-        ? panelOpen && <SidePanel hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />
-        : aside}
+      {aside}
     </div>
   );
 }

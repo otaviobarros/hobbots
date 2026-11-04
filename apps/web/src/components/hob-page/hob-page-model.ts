@@ -1,4 +1,4 @@
-import type { Agent, Thread } from "@hobbots/domain";
+import { type Agent, type HistoryFilter, STARTER_ROLES, type Thread } from "@hobbots/domain";
 import type { HobState } from "../../lib/hob-state.ts";
 import { messages } from "./messages.ts";
 
@@ -11,8 +11,14 @@ export type HobPageTab = (typeof HOB_PAGE_TABS)[number];
 export const isHobPageTab = (value: unknown): value is HobPageTab =>
   typeof value === "string" && (HOB_PAGE_TABS as ReadonlyArray<string>).includes(value);
 
+/** The History tab's filters, in the order they show; Everything is the default and stays out of the URL. */
+export const HISTORY_FILTERS = ["all", "work", "you", "quest"] as const satisfies ReadonlyArray<HistoryFilter>;
+
+export const isHistoryFilter = (value: unknown): value is HistoryFilter =>
+  typeof value === "string" && (HISTORY_FILTERS as ReadonlyArray<string>).includes(value);
+
 /** The badge variants a hob's state tag takes (the four status families of the design system). */
-type StateTagVariant = "needs-you" | "working" | "resting" | "failed";
+type StateTagVariant = "needs-you" | "working" | "resting" | "failed" | "done";
 
 export interface StateTag {
   readonly variant: StateTagVariant;
@@ -21,8 +27,12 @@ export interface StateTag {
   readonly word: string;
 }
 
-/** A hob's state as one tag: needs you, working, resting or failed, with its glyph and word. */
-export const stateTag = (state: HobState): StateTag => {
+/**
+ * A hob's state as one tag: needs you, working, resting or failed, with its glyph and word. A `fresh`
+ * hob, one with no chats yet, rests as New.
+ */
+export const stateTag = (state: HobState, fresh = false): StateTag => {
+  if (fresh && (state === "idle" || state === "asleep")) return { variant: "done", glyph: "✦", word: copy.tags.new };
   switch (state) {
     case "needs-you":
     case "waiting":
@@ -66,4 +76,15 @@ export const doingOf = (
   const thinking = threads.find((thread) => activity[thread.id] === "thinking");
   if (thinking) return { kind: "live", text: copy.doing.thinking({ title: thinking.title }) };
   return null;
+};
+
+/** What a new hob says first: hello, and its role's line when it took a starter role. */
+export const helloOf = (hob: Pick<Agent, "name" | "role">): string =>
+  copy.newHob.hello({ name: hob.name, note: STARTER_ROLES.find((role) => role.id === hob.role)?.note ?? null });
+
+/** Three first asks that fit the hob: its own for an everyday helper, else its role family's. */
+export const startersOf = (hob: Pick<Agent, "role">): ReadonlyArray<string> => {
+  const role = STARTER_ROLES.find((each) => each.id === hob.role);
+  const starters: Readonly<Record<string, ReadonlyArray<string>>> = copy.newHob.starters;
+  return (role && (starters[role.id] ?? starters[role.family])) ?? copy.newHob.starters.assistant;
 };

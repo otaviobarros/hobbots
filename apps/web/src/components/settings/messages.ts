@@ -37,6 +37,12 @@ export const messages = {
       { label: "Menu bar", words: ["close the window", "keep running"], section: "app" },
       { label: "Notifications", words: ["notify", "alerts", "sound"], section: "app" },
       {
+        label: "Appearance",
+        words: ["theme", "look", "lamplight", "workshop", "dark", "light", "mode", "colors"],
+        section: "app",
+      },
+      { label: "Text size", words: ["font", "bigger", "larger", "zoom", "readable"], section: "app" },
+      {
         label: "How careful hobs are",
         words: ["safety", "preset", "permissions", "careful", "trusting"],
         section: "safety",
@@ -61,6 +67,8 @@ export const messages = {
       { label: "Data folder", words: ["where", "files", "storage", "disk"], section: "data" },
       { label: "Diagnostics", words: ["check", "report", "support", "stalled"], section: "help" },
       { label: "Version", words: ["about", "license", "open source"], section: "help" },
+      { label: "Keyboard shortcuts", words: ["keys", "hotkeys", "keyboard"], section: "help" },
+      { label: "Getting started guide", words: ["help", "learn", "docs", "guide"], section: "help" },
     ],
   },
   overview: {
@@ -176,6 +184,18 @@ export const messages = {
     dataFolderElsewhere: "Shown only on the hub's own computer.",
     copy: { idle: "Copy", copied: "Copied", failed: "Could not copy" },
   },
+  appearance: {
+    heading: "Appearance",
+    look: "Look",
+    looks: {
+      lamplight: { label: "Lamplight", hint: "Calm and smooth" },
+      workshop: { label: "Workshop", hint: "Pixel art, more playful" },
+    },
+    mode: "Light or dark",
+    modes: { dark: "Dark", light: "Light" },
+    textSize: "Text size",
+    sizes: { standard: "Standard", larger: "Larger" },
+  },
   thisApp: {
     heading: "This app",
     starts: "When Hobbots starts",
@@ -201,6 +221,25 @@ export const messages = {
     systemSettings: "macOS can also silence Hobbots in System Settings › Notifications.",
     elsewhere: "Notifications come from the Hobbots app on the Mac that runs your hub, and are set there.",
   },
+  shortcuts: {
+    title: "Keyboard shortcuts",
+    intro: "These work anywhere in Hobbots unless a line says where.",
+    close: "Close",
+    list: ({ mac }: { mac: boolean }) =>
+      [
+        { keys: mac ? ["⌘K"] : ["Ctrl+K"], does: "Jump to a hob" },
+        {
+          keys: mac ? ["⌥↑", "⌥↓"] : ["Alt+↑", "Alt+↓"],
+          does: "Open the chat above or below, in a hob's chat list",
+        },
+        { keys: ["Enter"], does: "Send your message" },
+        { keys: ["Shift+Enter"], does: "Start a new line in your message" },
+        { keys: ["↑"], does: "Bring back the last message you sent, in an empty message box" },
+        { keys: mac ? ["⌃⌘A"] : ["Ctrl+Alt+A"], does: "Archive the open chat" },
+        { keys: mac ? ["⌘Z"] : ["Ctrl+Z"], does: "Undo an archive while its notice shows" },
+        { keys: ["Esc"], does: "Close a dialog, menu or question" },
+      ] as const,
+  },
   about: {
     heading: "Help and about",
     failed: "Hobbots could not read the hub's details. Try again in a moment.",
@@ -212,6 +251,9 @@ export const messages = {
     licenses: "Licenses",
     license: "Apache License 2.0",
     libraries: "Open-source libraries",
+    learn: "Learn",
+    guide: "Getting started guide",
+    shortcuts: "Keyboard shortcuts",
     openSource: "Hobbots is free and open source.",
     repository: "Read the code, report a bug or suggest a hob on GitHub",
   },

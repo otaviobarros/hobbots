@@ -5,6 +5,8 @@ import { call } from "./client.ts";
 export const REPOSITORY_URL = "https://github.com/otaviobarros/hobbots";
 export const LICENSE_URL = `${REPOSITORY_URL}/blob/main/LICENSE`;
 export const DEPENDENCIES_URL = `${REPOSITORY_URL}/network/dependencies`;
+/** The getting started guide: how to install Hobbots and summon a first hob. */
+export const GUIDE_URL = `${REPOSITORY_URL}#readme`;
 
 export interface AboutHub {
   /** The hub's version, or `development` for a checkout. */

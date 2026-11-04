@@ -10,7 +10,7 @@ const backpackKey = ["backpack"] as const;
 
 /**
  * What every hob is waiting on (ADR 019): the workspace's open backpack items, kept live by the
- * journal. The hob panel and the Quest tab each take their own view of this one list, so an item
+ * journal. The hob panel and the task sheet each take their own view of this one list, so an item
  * that changes moves in every view at once.
  */
 const backpackQuery = queryOptions({

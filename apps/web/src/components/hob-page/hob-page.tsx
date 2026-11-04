@@ -1,10 +1,10 @@
-import type { Agent } from "@hobbots/domain";
+import type { Agent, HistoryFilter } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@hobbots/ui/components/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useActivity } from "../../api/activity.ts";
+import { useIsNewHob } from "../../api/history.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
@@ -13,8 +13,10 @@ import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { HobAside } from "./hob-aside.tsx";
 import { HobChats } from "./hob-chats.tsx";
 import { HobHero } from "./hob-hero.tsx";
+import { HobHistory } from "./hob-history.tsx";
 import { doingOf, type HobPageTab, isHobPageTab, statsLine } from "./hob-page-model.ts";
 import { messages } from "./messages.ts";
+import { NewHob } from "./new-hob.tsx";
 
 const copy = messages;
 
@@ -22,7 +24,12 @@ const copy = messages;
  * A hob's own page, in the middle of the chat workspace: its hero, then the Chats and History tabs
  * beside a side column. The tab lives in the URL, so a link or Back opens the same one.
  */
-export function HobPage({ tab, ...props }: WorkspaceMainProps & { tab: HobPageTab }) {
+export function HobPage({
+  tab,
+  show,
+  query,
+  ...props
+}: WorkspaceMainProps & { tab: HobPageTab; show: HistoryFilter; query: string }) {
   const hob = useQuery({ ...agentsQuery, select: (hobs) => hobs.find((h) => h.id === props.hobId) });
 
   return (
@@ -30,15 +37,8 @@ export function HobPage({ tab, ...props }: WorkspaceMainProps & { tab: HobPageTa
       aria-label={hob.data ? copy.page({ name: hob.data.name }) : undefined}
       className="flex min-w-0 flex-1 flex-col overflow-y-auto"
     >
-      {!props.navOpen && (
-        <div className="px-4 pt-3">
-          <Button variant="icon" size="icon" onClick={props.onShowNav} aria-label={copy.showNav} title={copy.showNav}>
-            »
-          </Button>
-        </div>
-      )}
       {hob.data ? (
-        <Page hob={hob.data} tab={tab} />
+        <Page hob={hob.data} tab={tab} show={show} query={query} />
       ) : (
         <p role={hob.isPending ? "status" : "alert"} className="m-auto text-text-secondary">
           {hob.isPending ? copy.loading : copy.missing}
@@ -52,22 +52,25 @@ export function HobPage({ tab, ...props }: WorkspaceMainProps & { tab: HobPageTa
   );
 }
 
-function Page({ hob, tab }: { hob: Agent; tab: HobPageTab }) {
+function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: HistoryFilter; query: string }) {
   const threads = useQuery(threadsQuery(hob.id));
   const activity = useActivity();
   const waiting = useWaitingHobs().has(hob.id);
   const navigate = useNavigate();
   const list = threads.data ?? [];
   const state = withRequests(hobState(hob, list, activity), waiting);
+  const fresh = useIsNewHob(hob.id, threads.isSuccess ? list.length : undefined);
 
-  const pick = (next: string) => {
-    if (!isHobPageTab(next)) return;
+  // The tab and the History filter live in the URL; Chats and Everything are the defaults and stay out of it.
+  const go = (next: HobPageTab, filter: HistoryFilter = "all") =>
     void navigate({
       to: "/hobs/$hobId",
       params: { hobId: hob.id },
-      search: next === "chats" ? {} : { tab: next },
+      search: next === "chats" ? {} : { tab: next, ...(filter === "all" ? {} : { show: filter }) },
       replace: true,
     });
+  const pick = (next: string) => {
+    if (isHobPageTab(next)) go(next);
   };
 
   return (
@@ -89,7 +92,13 @@ function Page({ hob, tab }: { hob: Agent; tab: HobPageTab }) {
           {hob.name}
         </span>
       </nav>
-      <HobHero hob={hob} state={state} stats={statsLine(hob, list.length)} doing={doingOf(state, list, activity)} />
+      <HobHero
+        hob={hob}
+        state={state}
+        stats={statsLine(hob, list.length)}
+        doing={doingOf(state, list, activity)}
+        fresh={fresh}
+      />
       <div className="grid items-start gap-7 min-[1120px]:grid-cols-[minmax(0,1fr)_300px]">
         <Tabs value={tab} onValueChange={pick} className="min-w-0 gap-4">
           <TabsList aria-label={copy.tabs.label({ name: hob.name })}>
@@ -102,19 +111,14 @@ function Page({ hob, tab }: { hob: Agent; tab: HobPageTab }) {
             <TabsTrigger value="history">{copy.tabs.history}</TabsTrigger>
           </TabsList>
           <TabsContent value="chats">
-            {list.length === 0 ? (
-              <p className="m-0 text-sm text-text-secondary">{copy.chats.none}</p>
+            {threads.isPending ? null : list.length === 0 ? (
+              <NewHob hob={hob} />
             ) : (
-              <HobChats hob={hob} threads={list} activity={activity} />
+              <HobChats hob={hob} threads={list} activity={activity} initialQuery={query} />
             )}
           </TabsContent>
           <TabsContent value="history">
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>{copy.history.soon}</EmptyTitle>
-                <EmptyDescription>{copy.history.soonBody({ name: hob.name })}</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+            <HobHistory hob={hob} filter={show} onFilter={(next) => go("history", next)} />
           </TabsContent>
         </Tabs>
         <HobAside hob={hob} />

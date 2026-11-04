@@ -19,7 +19,7 @@ export type ArchiveRefusal = ArchiveBlock | "hob-retired";
  * user is still there.
  */
 export interface Place {
-  readonly hobId: AgentId;
+  readonly hobId: AgentId | undefined;
   readonly threadId: ThreadId | undefined;
 }
 
@@ -66,15 +66,18 @@ const showRequest = () => {
 };
 
 /**
- * Archiving for the chat workspace: the actions behind the thread menus, ⌃⌘A for the open thread,
- * and the toast with Undo, which ⌘Z also takes while it shows and focus is not in a text field.
+ * Archiving for every page after setup: the actions behind the thread menus, ⌃⌘A for the open
+ * thread, and the toast with Undo, which ⌘Z also takes while it shows and focus is not in a text
+ * field. It sits above the routes, so a toast outlives the move to another page, as when the hob's
+ * last chat is archived and its fresh page opens.
  */
 export function ArchiveProvider({
   hobId,
   threadId,
   children,
 }: {
-  hobId: AgentId;
+  /** The hob whose page or chat is open, if any. */
+  hobId: AgentId | undefined;
   threadId: ThreadId | undefined;
   children: ReactNode;
 }) {
@@ -141,7 +144,7 @@ export function ArchiveProvider({
       undo(notice.hob, notice.thread, notice.movedTo);
       return;
     }
-    if (!isArchiveKey(event) || threadId === undefined) return;
+    if (!isArchiveKey(event) || hobId === undefined || threadId === undefined) return;
     const hob = queryClient.getQueryData<ReadonlyArray<Agent>>(queryKeys.agents)?.find((a) => a.id === hobId);
     const thread = queryClient
       .getQueryData<ReadonlyArray<Thread>>(queryKeys.threads(hobId))

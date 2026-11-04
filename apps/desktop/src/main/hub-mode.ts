@@ -30,7 +30,7 @@ export interface AppShell {
  * The app on the hub (ADR 012): it runs this installation's server, attached to or launched and
  * owned, and its window loads the hub's pages from it on this computer. Called once the app is ready,
  * or once the user chose Run here in setup, when the first window opens at `firstPage`, a route of
- * the hub's pages such as `/setup/remote`.
+ * the hub's pages such as `/setup/providers`.
  */
 export const startHub = async (
   { settings, loginItem, handleSettingsIpc }: AppShell,

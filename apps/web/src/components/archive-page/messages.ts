@@ -22,6 +22,7 @@ export const messages = {
   scope: {
     label: "Whose chats",
     all: "All hobs",
+    more: "More hobs",
   },
   search: {
     label: "Search archived chats",
@@ -45,10 +46,14 @@ export const messages = {
       `To archive a chat, open its ⋯ menu and pick Archive, or press ${mac ? "⌃⌘A" : "Ctrl+Alt+A"}. A chat with a reply running or an approval waiting can be archived once that's done.`,
   },
   hobs: {
-    intro: "Retired hobs don't work or take new chats. Their chats stay here, read-only, and still show up in search.",
+    intro:
+      "Retired hobs don't work or take new chats. Their chats stay here, read-only, and still show up in search. Bring one back anytime and it picks up with all its chats.",
     list: "Retired hobs",
     read: ({ name }: Named) => `Read ${name}'s chats`,
     tag: "Retired",
+    bringBack: "Bring back",
+    bringingBack: "Bringing back…",
+    bringBackLabel: ({ name }: Named) => `Bring back ${name}`,
     retired: ({ day }: { day: string }) => `Retired ${day}`,
     retiredUnknown: "Retired",
     kept: ({ count }: { count: number }) =>
@@ -69,6 +74,14 @@ export const messages = {
       `Couldn't archive “${title}” again. Hobbots may be reconnecting; try again in a moment.`,
     tryAgain: "Try again",
     tryAgainAlt: ({ title }: Titled) => `Try again for ${title}`,
+    back: ({ name, chats }: Named & { chats: number }) =>
+      chats === 0
+        ? `${name} is back. It rests until you give it something to do.`
+        : `${name} is back, with ${plural(chats, { one: "its chat", other: `all ${formatCount(chats)} chats` })}. It rests until you give it something to do.`,
+    undoBackAlt: ({ name }: Named) => `Undo bringing back ${name}`,
+    backFailed: ({ name }: Named) => `Couldn't bring back ${name}. Hobbots may be reconnecting; try again in a moment.`,
+    retireFailed: ({ name }: Named) =>
+      `Couldn't retire ${name} again. Hobbots may be reconnecting; try again in a moment.`,
   },
   read: {
     withHob: ({ name, day }: Named & { day: string }) => `with ${name} · Archived ${day}`,
@@ -88,13 +101,14 @@ export const messages = {
     page: ({ name }: Named) => `${name}, retired`,
     line: ({ role, day, kept }: { role: string; day: string | null; kept: string }) =>
       [role, day === null ? "retired" : `retired ${day}`, kept].join(" · "),
-    note: ({ name }: Named) => `${name} is retired, so these chats are read-only. They still show up in search.`,
+    note: ({ name }: Named) =>
+      `${name} is retired, so these chats are read-only until you bring it back. They still show up in search.`,
     chats: ({ name }: Named) => `${name}'s chats`,
     open: ({ title }: Titled) => `Read ${title}`,
     readOnly: "Read-only",
     none: ({ name }: Named) => `${name} left no chats.`,
     chatNote: ({ name }: Named) => `${name} is retired, so this chat is read-only. It still shows up in search.`,
-    bar: ({ name }: Named) => `Read-only while ${name} is retired.`,
+    bar: ({ name }: Named) => `Read-only while ${name} is retired. Bring it back to pick up here.`,
     notHere: "This hob is not in the Archive.",
     notTheirs: ({ name }: Named) => `This chat is not one of ${name}'s.`,
     loading: "Loading this hob…",

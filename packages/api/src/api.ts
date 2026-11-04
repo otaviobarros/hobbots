@@ -225,6 +225,12 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       success: Agent,
       error: AgentNotFound,
     }),
+    // Brings a retired hob back, active with all its threads; refused for a paused hob.
+    HttpApiEndpoint.post("bringBack", "/agents/:agentId/bring-back", {
+      params: { agentId: AgentId },
+      success: Agent,
+      error: [AgentNotFound, HobUnavailable],
+    }),
     // Lists the hob's live threads; `?archived=true` lists its archived ones, newest-archived first.
     HttpApiEndpoint.get("threads", "/agents/:agentId/threads", {
       params: { agentId: AgentId },

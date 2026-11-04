@@ -4,7 +4,7 @@ import { restoreStatusQuery, workHeld } from "../../api/backup.ts";
 import { ResumeWorkButton } from "./backup-settings.tsx";
 import { messages } from "./messages.ts";
 
-/** "Work is held after a restore", with Resume work, on Home and the Quest tab (ADR 026). Nothing otherwise. */
+/** "Work is held after a restore", with Resume work, on Home and above the chat's composer (ADR 026). Nothing otherwise. */
 export function WorkHeldNotice({ className }: { className?: string }) {
   const status = useQuery(restoreStatusQuery);
   if (!workHeld(status.data)) return null;

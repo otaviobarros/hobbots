@@ -1,7 +1,8 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
-// Issue #297 in the browser: what a hob is waiting on, in the hob panel and the Quest tab. The read
+// Issue #297 in the browser: what a hob is waiting on, on the hob's card and on the lead's Task. The read
 // reads themselves are tested in packages/persistence/test/backpack.test.ts.
 
 let hub: Hub | undefined;
@@ -50,7 +51,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
 // covers IN-001, IN-002, IN-004, OR-003
-test("[TC-IN-150] Aldric's panel and the Quest tab show Quill's result as awaiting him until his continuation handles it", async ({
+test("[TC-IN-150] Aldric's card and his Task's backpack show Quill's result as awaiting him until his continuation handles it", async ({
   page,
 }) => {
   const current = await startHub(dataDir);
@@ -100,30 +101,47 @@ test("[TC-IN-150] Aldric's panel and the Quest tab show Quill's result as awaiti
   await expect(request.getByRole("status")).toHaveText("✓ Allowed once. Quill carries on.");
   await page.goto(thread);
 
-  // Aldric's panel: the result awaits him, from Quill, still waiting for a turn.
-  const panel = page.getByRole("region", { name: "What Aldric is waiting on" });
-  await expect(panel).toContainText("1 in the backpack", { timeout: 20_000 });
-  const result = panel.getByRole("button", { name: /^Quill's result for "Draft the landing copy"/ });
-  await expect(result).toContainText("Waiting");
-  await expect(page.getByRole("region", { name: "What Quill is waiting on" })).toHaveCount(0);
+  // Aldric's card in the sidebar: the result awaits him, from Quill, still waiting for a turn.
+  const card = async (name: string) => {
+    await page
+      .getByRole("navigation", { name: "Sections" })
+      .getByRole("button", { name: new RegExp(`^${name}, `) })
+      .click();
+    return page.getByRole("dialog", { name }).getByRole("region", { name: "Backpack" });
+  };
+  const quillResult = /^Quill's result for "Draft the landing copy"/;
+  await expect((await card("Aldric")).getByRole("button", { name: quillResult })).toContainText("Waiting", {
+    timeout: 20_000,
+  });
+  await page.keyboard.press("Escape");
+  // Nothing waits on Quill herself.
+  await expect(await card("Quill")).not.toContainText("Waiting");
+  await page.keyboard.press("Escape");
 
-  // The Quest tab says the same, naming who owes the response.
-  const room = page.getByRole("region", { name: "What hobs on Plan the launch are waiting on" });
-  await expect(room).toContainText("awaiting Aldric");
-  await expect(room).toContainText("Waiting");
+  // Aldric's Task says the same in its backpack.
+  const lead = async () => {
+    const tasks = await openQuest(page, "Plan the launch");
+    await tasks.getByRole("button", { name: /^Aldric · Plan the launch/ }).click();
+  };
+  await lead();
+  const room = page.getByRole("region", { name: "Backpack for Plan the launch" });
+  await expect(room.getByRole("button", { name: /^Quill's result for "Draft the landing copy"/ })).toContainText(
+    "Waiting",
+  );
 
-  // Opening it opens Quill's Task in the drawer.
-  await result.click();
+  // Opening it from the card opens Quill's Task.
+  await page.keyboard.press("Escape");
+  await (await card("Aldric")).getByRole("button", { name: quillResult }).click();
   await expect(page.getByRole("heading", { name: "Draft the landing copy" })).toBeVisible();
   await page.keyboard.press("Escape");
 
   // Aldric wakes: his continuation reads the result, which shows as consumed and leaves his count.
   await api(current, "POST", `/api/agents/${aldric.id}/wake`);
   await expect(page.getByText("Hobbots wrote this, not the user.").last()).toBeVisible({ timeout: 20_000 });
-  await expect(result).toContainText("Consumed", { timeout: 20_000 });
-  await expect(panel).not.toContainText("in the backpack");
+  await expect((await card("Aldric")).getByRole("button", { name: quillResult })).toContainText("Consumed", {
+    timeout: 20_000,
+  });
+  await page.keyboard.press("Escape");
+  await lead();
   await expect(room).toContainText("Consumed");
-
-  // Every hob's view, at the end of the Quest tab, has nothing left waiting.
-  await expect(page.getByText("Every hob · 0 waiting")).toBeVisible();
 });

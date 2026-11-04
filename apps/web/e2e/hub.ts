@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
-import { type BrowserContext, test as base } from "@playwright/test";
+import { type BrowserContext, test as base, type Page } from "@playwright/test";
 
 const web = resolve(import.meta.dirname, "..");
 const server = resolve(web, "../server");
@@ -153,6 +153,14 @@ export const test = base.extend<{ readonly hubDevice: undefined }>({
 });
 
 export { expect } from "@playwright/test";
+
+/** Opens the sidebar on every page this context loads, as a user who keeps it expanded would. */
+export const expandSidebar = (context: BrowserContext) =>
+  context.addInitScript(() => localStorage.setItem("sidebar.open", "true"));
+
+/** The open hob's recent threads in the expanded sidebar, each a link named by its title. */
+export const sidebarThread = (page: Page, title: string) =>
+  page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: title, exact: true });
 
 const stopProcess = (child: ChildProcess, signal: NodeJS.Signals = "SIGTERM") =>
   new Promise<void>((done) => {

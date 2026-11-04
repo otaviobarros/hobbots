@@ -16,7 +16,7 @@ import { messages } from "./messages.ts";
 import { type RowStatus, rowStatus, waitsOnOf } from "./work-model.ts";
 
 /**
- * The Quest tab's control room (ADR 018, CH-005): a request's whole Task tree with who owns each
+ * The quest sheet's rows and controls (ADR 018, CH-005): a request's whole Task tree with who owns each
  * Task, where it stands, how old it is and who it waits on, and the controls you may use on it.
  * Everything here comes from the Task records (STD-UI-008).
  */
@@ -93,6 +93,16 @@ const waitingOnOf = (tree: TaskTree, task: Task): ReadonlyArray<Waited> => {
       ? [{ kind: "you" } as const]
       : []),
   ];
+};
+
+/** How many unfinished Tasks a waiting Task's owner waits for; none while it does anything else. */
+export const waitedTaskCount = (tree: TaskTree, task: Task): number => {
+  if (task.state !== "waiting") return 0;
+  const on = tree.waits.find((wait) => wait.taskId === task.id)?.on ?? [];
+  return on.filter((id) => {
+    const each = tree.tasks.find((candidate) => candidate.id === id);
+    return each !== undefined && !isTerminalTask(each.state);
+  }).length;
 };
 
 /**
@@ -255,3 +265,7 @@ export const controlError = (error: unknown, names: Names): string => {
   const known = REFUSALS[String(error.fields.reason ?? "")];
   return known?.(names) ?? refused.other({ message: String(error.fields.message ?? error.message) });
 };
+
+/** Who a row waits on, by name, with you as "you". */
+export const waitingNames = (row: RoomRow, nameOf: (id: AgentId) => string): ReadonlyArray<string> =>
+  row.waitingOn.map((each) => (each.kind === "you" ? messages.room.you : nameOf(each.id)));

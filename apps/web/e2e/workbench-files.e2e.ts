@@ -6,6 +6,9 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
+// Wide enough that the Changes and Files lists sit beside the file; under 720px a picker takes their place.
+test.use({ viewport: { width: 1600, height: 900 } });
+
 /** A one-pixel PNG. */
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -122,7 +125,11 @@ test("[TC-UX-041] the Files tab previews images, PDF and text, with each kind an
 
   await list.getByRole("button", { name: /^sales\.csv/ }).click();
   const sales = files.getByRole("region", { name: "sales.csv" });
-  await expect(sales.getByRole("document", { name: "Preview of sales.csv" })).toHaveText("day,sales\nmon,3\n");
+  // Plain text shows each line with its number.
+  await expect(sales.getByRole("document", { name: "Preview of sales.csv" }).getByRole("row")).toHaveText([
+    "1day,sales",
+    "2mon,3",
+  ]);
   await expect(sales).toContainText("Text · 16 byte");
 });
 

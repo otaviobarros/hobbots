@@ -57,8 +57,7 @@ const openProviders = async (page: Page, current: Hub) => {
   await page.goto(current.url);
   await page.getByRole("link", { name: "Get started" }).click();
   await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
-  await page.getByRole("button", { name: "Skip for now" }).click();
-  await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
 };
 
 // covers AG-005, OP-001, RT-001
@@ -81,7 +80,6 @@ test("[TC-UX-080] onboarding shows a missing Codex with its fix, and a connected
   // Installed and signed in with ChatGPT, Check again finds it without a restart.
   fakeCodexAt(dataDir, "ready");
   await codex.getByRole("button", { name: "Check again" }).click();
-  await expect(codex.getByText("Found", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Connect Codex" }).click();
   await expect(codex.getByText("✓ Connected")).toBeVisible();
   await expect(codex.getByText("Your ChatGPT plan", { exact: true })).toBeVisible();
@@ -90,7 +88,7 @@ test("[TC-UX-080] onboarding shows a missing Codex with its fix, and a connected
   await page.getByRole("button", { name: "Continue" }).click();
 
   // The first hob offers the connected provider, with Codex's own models and efforts.
-  await expect(page.getByRole("heading", { name: "Meet your first hob" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Who should help you first?" })).toBeVisible();
   const providers = page.getByRole("group", { name: "Provider" });
   await expect(providers.getByRole("radio", { name: "Codex", exact: true })).toBeChecked();
   await expect(providers.getByRole("radio", { name: /Claude/ })).toHaveCount(0);
@@ -100,13 +98,14 @@ test("[TC-UX-080] onboarding shows a missing Codex with its fix, and a connected
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Tinker");
   await page.getByRole("button", { name: "Continue" }).click();
 
-  await expect(page.getByRole("heading", { name: "How much should Tinker ask first?" })).toBeVisible();
-  await expect(page.getByText("Codex connected")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How careful should your hobs be?" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "So far" }).getByText("Codex", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
-  // The last step names the provider the hob thinks with.
-  await expect(page.getByText(/^Tinker .* · thinks with Codex GPT-5\.5$/)).toBeVisible();
-  await page.getByRole("button", { name: "Summon Tinker" }).click();
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  // The last step names the provider and model the hob thinks with.
+  await expect(page.getByText("Codex · GPT-5.5", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Light the circle" }).click();
   await expect(page.getByRole("heading", { name: "Tinker is here!" })).toBeVisible();
 
   expect(await hobNamed(hub, "Tinker")).toMatchObject({ runtime: "codex", model: "gpt-5.5", effort: "medium" });
@@ -265,4 +264,28 @@ test("[TC-UX-084] connecting a second provider waits for the first, so both stay
   expect(await api<{ connectedProviders: ReadonlyArray<string> }>(hub, "GET", "/api/setup")).toMatchObject({
     connectedProviders: ["claude-code", "codex"],
   });
+});
+
+// covers AG-001, AG-005
+test("[TC-AG-105] Summon's Ready leads with a signed-out Claude and how to sign in, and Check again recovers once it is", async ({
+  page,
+}) => {
+  hub = await finishedHub({ HOBBOTS_RUNTIME: "claude", HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir) });
+  await page.goto(`${hub.url}/#/summon?step=ready`);
+
+  const blocker = page.getByRole("alert", { name: "Claude is signed out" });
+  await expect(page.getByRole("heading", { name: /can't be summoned yet$/ })).toBeVisible();
+  await expect(blocker.getByText("Needs a fix")).toBeVisible();
+  await expect(blocker.getByText(/Everything you picked is kept/)).toBeVisible();
+  await expect(blocker.getByText(/installed but not signed in/)).toBeVisible();
+  await expect(blocker.getByRole("button", { name: "Copy claude" })).toBeVisible();
+  await expect(blocker.getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", /settings\/connections$/);
+  await expect(page.getByRole("button", { name: /^Summon / })).toHaveAttribute("aria-disabled", "true");
+
+  // Signing in needs no restart: Check again finds Claude ready, and the hob can be summoned.
+  signedInClaudeCode(dataDir);
+  await blocker.getByRole("button", { name: "Check again" }).click();
+  await expect(blocker).toBeHidden();
+  await expect(page.getByRole("heading", { name: /^Ready to summon / })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Summon / })).toHaveAttribute("aria-disabled", "false");
 });

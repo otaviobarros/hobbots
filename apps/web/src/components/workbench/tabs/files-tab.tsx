@@ -6,9 +6,11 @@ import { useState } from "react";
 import { attemptFilesQuery, taskFileUrl } from "../../../api/workbench.ts";
 import { formatBytes } from "../../../lib/reply-steps.ts";
 import { changePath, leavesFile } from "../changes/changes-model.ts";
+import { FilePicker } from "../file-picker.tsx";
 import { FilePreview } from "../files/file-preview.tsx";
 import { canDownload, fileDirectory, fileName, filesStamp, shownFile } from "../files/files-model.ts";
 import { messages } from "../files/messages.ts";
+import { LIST_CARD, listRow } from "../list-row.ts";
 import type { WorkbenchTabProps } from "./tab-props.ts";
 
 /**
@@ -66,10 +68,35 @@ function Files({
   const made = files.filter((file) => file.origin === "made");
   const touched = files.filter((file) => file.origin !== "made");
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2.5 md:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col gap-3.5 @min-[720px]:flex-row @min-[720px]:items-start">
+      <FilePicker
+        label={messages.list}
+        items={[...made, ...touched]}
+        shown={Math.max(
+          0,
+          [...made, ...touched].findIndex((file) => file.id === shown.id),
+        )}
+        current={
+          <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-text-strong">
+            {shown.label ?? fileName(shown)}
+          </span>
+        }
+        row={(file) => (
+          <span className="flex min-w-0 flex-col items-start gap-px">
+            <RowContent file={file} />
+          </span>
+        )}
+        onPick={(index) => {
+          const file = [...made, ...touched][index];
+          if (file !== undefined) setPicked(file.id);
+        }}
+      />
       <nav
         aria-label={messages.list}
-        className="flex shrink-0 flex-col gap-3 bg-panel py-1.5 md:w-[300px] md:overflow-y-auto"
+        className={cn(
+          LIST_CARD,
+          "hidden gap-2 @min-[720px]:sticky @min-[720px]:top-0 @min-[720px]:flex @min-[720px]:w-58",
+        )}
       >
         <FileGroup title={messages.made} files={made} shown={shown} onPick={setPicked} />
         <FileGroup title={messages.touched} files={touched} shown={shown} onPick={setPicked} />
@@ -98,8 +125,8 @@ function FileGroup({
   if (files.length === 0) return null;
   return (
     <section aria-label={title} className="flex flex-col">
-      <h3 className="m-0 px-3 py-1.5 text-xs font-bold tracking-wide text-label uppercase">{title}</h3>
-      <ul className="m-0 flex list-none flex-col p-0">
+      <h3 className="lbl m-0 px-2 pt-2 pb-1 text-xs font-bold text-label">{title}</h3>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         {files.map((file) => (
           <li key={file.id}>
             <FileRow file={file} on={file.id === shown.id} onPick={() => onPick(file.id)} />
@@ -111,20 +138,23 @@ function FileGroup({
 }
 
 function FileRow({ file, on, onPick }: { file: TaskFile; on: boolean; onPick: () => void }) {
+  return (
+    <button type="button" aria-pressed={on} onClick={onPick} className={cn(listRow(on), "flex-col items-start gap-px")}>
+      <RowContent file={file} />
+    </button>
+  );
+}
+
+/** A file as the list and the picker's menu show it: its name, where it is and its status note. */
+function RowContent({ file }: { file: TaskFile }) {
   const folder = fileDirectory(file);
   const note = messages.now[file.now];
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onPick}
-      className={cn(
-        "flex w-full cursor-pointer flex-col items-start gap-0.5 border-0 px-3 py-2 text-left",
-        on ? "bg-line" : "bg-transparent hover:bg-hover",
-      )}
-    >
-      <span className="w-full truncate font-mono text-sm text-text-strong">{file.label ?? fileName(file)}</span>
-      <span className="w-full truncate text-xs text-text-secondary">
+    <>
+      <span className="w-full truncate font-mono text-[13px] leading-[18px] text-text-strong">
+        {file.label ?? fileName(file)}
+      </span>
+      <span className="w-full truncate text-xs text-label">
         {[
           messages.origin[file.origin],
           folder === "" ? null : `${folder}/`,
@@ -134,9 +164,9 @@ function FileRow({ file, on, onPick }: { file: TaskFile; on: boolean; onPick: ()
           .join(" · ")}
       </span>
       {note !== null && (
-        <span className={cn("text-xs", file.now === "gone" ? "text-rose" : "text-lantern")}>{note}</span>
+        <span className={cn("text-xs font-semibold", file.now === "gone" ? "text-rose" : "text-lantern")}>{note}</span>
       )}
-    </button>
+    </>
   );
 }
 
@@ -158,13 +188,19 @@ function FileDetail({
     .filter((part) => part !== null)
     .join(" · ");
   return (
-    <section aria-label={name} className="flex min-h-[320px] min-w-0 flex-1 flex-col bg-panel">
-      <header className="flex flex-wrap items-center gap-2 border-b-2 border-line px-3.5 py-2.5">
+    <section
+      aria-label={name}
+      className="flex min-h-[420px] min-w-0 flex-1 flex-col self-stretch overflow-hidden rounded-card border border-line bg-card"
+    >
+      <header className="flex flex-wrap items-center gap-2 border-b border-line px-3.5 py-2.5">
         <div className="flex min-w-0 flex-1 flex-col">
-          <h3 className="m-0 truncate font-mono text-sm font-bold text-text-strong" title={file.location}>
+          <h3
+            className="m-0 truncate font-mono text-[13.5px] leading-5 font-semibold text-text-strong"
+            title={file.location}
+          >
             {name}
           </h3>
-          <span className="text-xs text-text-secondary">{meta}</span>
+          <span className="text-xs text-label">{meta}</span>
         </div>
         {onSeeChanges !== null && (
           <Button variant="ghost" size="xs" onClick={onSeeChanges}>

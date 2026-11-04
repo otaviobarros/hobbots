@@ -24,7 +24,7 @@ export function ImageView({
   cleared: boolean;
 }) {
   return (
-    <div className="grid min-w-0 gap-3 @2xl:grid-cols-2">
+    <div className="grid min-w-0 gap-3 @min-[720px]:grid-cols-2">
       {before !== null && (
         <Side
           title={messages.before}

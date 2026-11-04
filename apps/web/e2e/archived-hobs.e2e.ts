@@ -72,7 +72,9 @@ test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which
   const retired = page.getByRole("main", { name: "Pip, retired" });
   await expect(retired.getByRole("heading", { name: "Pip" })).toBeVisible();
   await expect(retired).toContainText("Guide · retired");
-  await expect(retired.getByRole("note")).toContainText("Pip is retired, so these chats are read-only");
+  await expect(retired.getByRole("note")).toContainText(
+    "Pip is retired, so these chats are read-only until you bring it back",
+  );
   await retired.getByRole("link", { name: "Read Plan my week" }).click();
 
   await expect(page).toHaveURL(new RegExp(`#/archive/hobs/${hob.id}/${thread.id}$`));
@@ -115,4 +117,90 @@ test("[TC-AG-062] Retired hobs says so when no hob has retired", async ({ page }
   const archive = page.getByRole("main", { name: "Archive" });
   await expect(archive.getByRole("heading", { name: "No retired hobs." })).toBeVisible();
   await expect(archive.getByRole("tab", { name: /Retired hobs/ })).toContainText("0");
+});
+
+// covers AG-006
+test("[TC-AG-116] a retired hob comes back from the Archive with its chats, and Undo retires it again", async ({
+  page,
+}) => {
+  hub = await startHub(dataDir);
+  const current = hub;
+  await api(current, "PATCH", "/setup", { completed: true });
+  const hob = await api<{ id: string }>(current, "POST", "/agents", {
+    name: "Pip",
+    role: null,
+    roleTitle: "Guide",
+    sigil: "assistant",
+    hat: null,
+    tool: null,
+    lookSeed: 7,
+    lookColor: "moss",
+    runtime: "claude-code",
+    model: null,
+    effort: null,
+    instructions: "",
+  });
+  const thread = await api<{ id: string }>(current, "POST", `/agents/${hob.id}/threads`);
+  await api(current, "POST", `/threads/${thread.id}/messages`, { content: "Plan my week" });
+  await expect
+    .poll(async () => (await api<Array<{ status: string }>>(current, "GET", `/threads/${thread.id}/messages`)).length)
+    .toBe(2);
+  await api(current, "POST", `/agents/${hob.id}/retire`, { activeWork: "finish" });
+
+  // Bring back from the card: the hob is active again, and the toast counts its chats.
+  await page.goto(`${current.url}/#/archive?tab=hobs`);
+  const archive = page.getByRole("main", { name: "Archive" });
+  await archive.getByRole("button", { name: "Bring back Pip" }).click();
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Pip is back, with its chat. It rests until you give it something to do." }),
+  ).toBeVisible();
+  await expect(archive.getByRole("heading", { name: "No retired hobs." })).toBeVisible();
+  expect(await api(current, "GET", "/agents")).toMatchObject([{ id: hob.id, status: "active", retiredAt: null }]);
+
+  // Undo retires it again.
+  await page.getByRole("button", { name: "Undo bringing back Pip" }).click();
+  await expect(archive.getByRole("list", { name: "Retired hobs" }).getByText("Pip", { exact: true })).toBeVisible();
+  expect(await api(current, "GET", "/agents")).toEqual([]);
+
+  // Bring back from the hob's own page, then the chat takes messages again.
+  await page.goto(`${current.url}/#/archive/hobs/${hob.id}`);
+  await page.getByRole("main", { name: "Pip, retired" }).getByRole("button", { name: "Bring back Pip" }).click();
+  await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
+  await expect(page.getByRole("status").filter({ hasText: "Pip is back" })).toBeVisible();
+  await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${thread.id}`);
+  const composer = page.getByRole("main", { name: "Chat" }).getByRole("textbox", { name: /^Message Pip/ });
+  await composer.fill("Plan next week too");
+  await composer.press("Enter");
+  await expect(page.getByText("Echo: Plan next week too", { exact: true })).toBeVisible();
+});
+
+// covers AG-006
+test("[TC-AG-117] Settings › Your data brings a retired hob back", async ({ page }) => {
+  hub = await startHub(dataDir);
+  const current = hub;
+  await api(current, "PATCH", "/setup", { completed: true });
+  const hob = await api<{ id: string }>(current, "POST", "/agents", {
+    name: "Pip",
+    role: null,
+    roleTitle: "Guide",
+    sigil: "assistant",
+    hat: null,
+    tool: null,
+    lookSeed: 7,
+    lookColor: "moss",
+    runtime: "claude-code",
+    model: null,
+    effort: null,
+    instructions: "",
+  });
+  await api(current, "POST", `/agents/${hob.id}/retire`, { activeWork: "finish" });
+
+  await page.goto(`${current.url}/#/settings/data`);
+  const panel = page.getByRole("region", { name: "Retired hobs" });
+  await panel.getByRole("button", { name: "Bring back Pip" }).click();
+  await expect(panel.getByRole("status")).toHaveText("Pip is back. It rests until you give it something to do.");
+  await expect(panel.getByRole("list", { name: "Retired hobs" })).toHaveCount(0);
+  expect(await api(current, "GET", "/agents")).toMatchObject([{ id: hob.id, status: "active" }]);
 });

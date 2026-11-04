@@ -1,4 +1,4 @@
-import { AgentId, AttemptId, TaskId, ThreadId } from "@hobbots/domain";
+import { AgentId, AttemptId, type HistoryFilter, TaskId, ThreadId } from "@hobbots/domain";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createHashHistory,
@@ -18,7 +18,7 @@ import { ArchiveNotices } from "./components/archive-page/archive-notices.tsx";
 import { ArchivePage } from "./components/archive-page/archive-page.tsx";
 import { ArchivedChatPage, RetiredChatPage, RetiredHobPage } from "./components/archive-page/archive-read.tsx";
 import { HobPage } from "./components/hob-page/hob-page.tsx";
-import { type HobPageTab, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
+import { type HobPageTab, isHistoryFilter, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
 import { HobProfile } from "./components/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { HobsPage } from "./components/hobs-page/hobs-page.tsx";
@@ -67,7 +67,7 @@ const pairRoute = createRoute({
 });
 
 // A new installation opens on Welcome, outside the app shell, until setup is done:
-// Welcome → Where Hobbots runs → other devices → providers → first hob → safety → folders → summon → Home.
+// Welcome → Where Hobbots runs → providers → first hob → safety → folders → other devices → summon → Home.
 // Once setup is done, each of them opens Home.
 const leaveSetupWhenDone = async ({ context }: { context: { queryClient: QueryClient } }) => {
   if (setupDone(await readSetup(context.queryClient))) throw redirect({ to: "/" });
@@ -85,14 +85,6 @@ const setupWhereRoute = createRoute({
   path: "setup/where",
   beforeLoad: leaveSetupWhenDone,
   component: WhereHobbotsRuns,
-});
-
-// Run Hobbots on this computer asks next whether other devices may use it too (ADR 021).
-const setupRemoteRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "setup/remote",
-  beforeLoad: leaveSetupWhenDone,
-  component: SetupRemoteAccess,
 });
 
 const providersRoute = createRoute({
@@ -127,6 +119,14 @@ const foldersRoute = createRoute({
   path: "setup/folders",
   beforeLoad: afterFirstHob,
   component: OnboardingFolders,
+});
+
+// After Folders, setup asks whether other devices may use Hobbots too (ADR 021). It can be skipped.
+const setupRemoteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "setup/remote",
+  beforeLoad: afterFirstHob,
+  component: SetupRemoteAccess,
 });
 
 const readyRoute = createRoute({
@@ -166,17 +166,24 @@ const hobsRoute = createRoute({
 const hobRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId",
-  validateSearch: (search: Record<string, unknown>): { tab?: HobPageTab | undefined } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: HobPageTab | undefined; show?: HistoryFilter | undefined; q?: string | undefined } => ({
     tab: isHobPageTab(search.tab) && search.tab !== "chats" ? search.tab : undefined,
+    show: isHistoryFilter(search.show) && search.show !== "all" ? search.show : undefined,
+    // A link can open the Chats tab already searching, such as from a chat's own search.
+    q: typeof search.q === "string" && search.q.trim() !== "" ? search.q : undefined,
   }),
   component: function HobPageRoute() {
     const params = hobRoute.useParams();
-    const { tab } = hobRoute.useSearch();
+    const { tab, show, q } = hobRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
         aside={null}
-        main={(props) => <HobPage key={params.hobId} {...props} tab={tab ?? "chats"} />}
+        main={(props) => (
+          <HobPage key={params.hobId} {...props} tab={tab ?? "chats"} show={show ?? "all"} query={q ?? ""} />
+        )}
       />
     );
   },
@@ -200,16 +207,17 @@ const archivedThreadsRoute = createRoute({
   },
 });
 
-// `?message=` names a message to scroll to, as a search result does; `?task=` a Task to open in
-// the drawer beside the chat; `?bench=` a Task whose Workbench shows in the chat's place, with its
+// `?message=` names a message to scroll to, as a search result does; `?quest=` a request's Quest,
+// by its top Task, to open in the work sheet over the chat, and `?task=` a Task to open there; `?bench=` a Task whose Workbench shows in the chat's place, with its
 // `tab`, `attempt`, the `file` a tab shows first and `chat` when its chat drawer is open (ADR 023).
 const threadRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId/threads/$threadId",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { message?: string | undefined; task?: string | undefined } & WorkbenchSearch => ({
+  ): { message?: string | undefined; quest?: string | undefined; task?: string | undefined } & WorkbenchSearch => ({
     message: typeof search.message === "string" ? search.message : undefined,
+    quest: typeof search.quest === "string" ? search.quest : undefined,
     task: typeof search.task === "string" ? search.task : undefined,
     bench: typeof search.bench === "string" ? search.bench : undefined,
     tab: isWorkbenchTab(search.tab) ? search.tab : undefined,
@@ -219,13 +227,14 @@ const threadRoute = createRoute({
   }),
   component: function ThreadPage() {
     const params = threadRoute.useParams();
-    const { message, task, bench, tab, attempt, file, chat } = threadRoute.useSearch();
+    const { message, quest, task, bench, tab, attempt, file, chat } = threadRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
         threadId={ThreadId.make(params.threadId)}
         focusMessageId={message}
         taskId={task === undefined ? undefined : TaskId.make(task)}
+        questId={quest === undefined ? undefined : TaskId.make(quest)}
         workbench={
           bench === undefined
             ? undefined

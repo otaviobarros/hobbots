@@ -47,7 +47,7 @@ const hubWithHobs = async (count: number) => {
     });
     ids[name] = hob.id;
   }
-  return { url: hub.url, ids };
+  return { url: hub.url, ids, api };
 };
 
 // covers UX-001
@@ -157,4 +157,20 @@ test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", asy
   const hobId = (await chosen.getAttribute("id"))?.replace("hob-jump-hob-", "");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`#/hobs/${hobId}$`));
+});
+
+// covers UX-001, CH-002
+test("[TC-UX-092] Pick up where you left off lists a chat with its last line and opens it", async ({ page }) => {
+  const { url, ids, api } = await hubWithHobs(1);
+  const hob = ids["Hob 1"] ?? "";
+  const thread = await api("POST", `/agents/${hob}/threads`, {});
+  await api("POST", `/threads/${thread.id}/messages`, { content: "Draft the release notes" });
+  await page.goto(url);
+
+  const pickUp = page.getByRole("region", { name: "Pick up where you left off" });
+  const row = pickUp.getByRole("link", { name: /Draft the release notes/ });
+  // The fake runtime echoes the prompt, and its reply becomes the chat's last line.
+  await expect(row).toContainText(/Hob 1\s*·\s*Echo: Draft the release notes/);
+  await row.click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${hob}/threads/${thread.id}$`));
 });

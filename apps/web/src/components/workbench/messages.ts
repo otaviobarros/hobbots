@@ -46,6 +46,12 @@ export const messages = {
     "coming-soon": "Coming soon",
   },
   soon: "Soon",
+  picker: {
+    previous: "Previous file",
+    next: "Next file",
+    open: ({ label }: { label: string }) => `${label}: pick a file`,
+    of: ({ index, total }: { index: number; total: number }) => `${formatCount(index)} of ${formatCount(total)}`,
+  },
   unavailable: {
     cleared: "Details were cleared after 30 days.",
     "too-many-files": "This folder is too big to track changes.",
@@ -174,11 +180,16 @@ export const messages = {
     seeTerminal: "See what ran in Terminal",
   },
   chat: {
-    open: ({ name }: { name: string }) => `Talk to ${name}`,
-    hide: "Hide the chat",
+    toggle: "Task chat",
     label: ({ title }: { title: string }) => `Talk about ${title}`,
-    heading: ({ name }: { name: string }) => `Talk to ${name}`,
-    about: ({ title }: { title: string }) => `About “${title}”`,
+    heading: "Task chat",
+    notesGo: ({ name }: { name: string }) => `Notes go to ${name}. They don't answer questions.`,
+    waiting: ({ name }: { name: string }) => `${name} is waiting on your answer.`,
+    asks: ({ name }: { name: string }) => `${name} asks you`,
+    noteInstead: ({ name }: { name: string }) => `Send a note to ${name} instead`,
+    answerInstead: ({ name }: { name: string }) => `Answer ${name} instead`,
+    noteNotAnswerHint: ({ lead, asker }: { lead: string; asker: string }) =>
+      `This goes to ${lead} as a note. It does not answer ${asker}.`,
     close: "Close the chat",
     notes: "Your notes on this task",
     empty: ({ name }: { name: string }) => `Nothing sent about this task yet. ${name} reads what you send here.`,

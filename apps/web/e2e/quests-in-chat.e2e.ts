@@ -1,5 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
+import { openQuest, taskSheet } from "./work-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -17,9 +18,9 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(card).toContainText("Aldric's party: Quill and Ada");
   await expect(card.getByRole("button", { name: "Look inside Build the campaign" })).toContainText("waiting on Quill");
 
-  // The strip keeps it in view; a lead's answer shows as one line; a question for you asks.
+  // The quest button in the header keeps it in view; a lead's answer shows as one line; a question for you asks.
   const strip = page.getByRole("region", { name: "Work in progress" });
-  await expect(strip.getByRole("button", { name: "Show Aldric's work" })).toContainText("Aldric's quest");
+  await expect(strip.getByRole("button", { name: /^Plan the Black Friday campaign/ })).toContainText("of 2 done");
   await expect(page.getByText("Aldric answered Quill for you")).toBeVisible();
   const asks = page.getByRole("region", { name: "Ada asks you" });
   await expect(asks).toContainText("Should international orders get an earlier cutoff");
@@ -28,7 +29,7 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
 
   // The drawer opens a Task beside the chat, by keyboard too, and Escape closes it.
   await card.getByRole("button", { name: "Look inside Build the campaign" }).click();
-  const drawer = page.getByRole("complementary", { name: "Build the campaign, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Build the campaign, Task details" });
   await expect(drawer.getByRole("heading", { name: "Build the campaign" })).toBeFocused();
   await expect(drawer).toContainText("Aldric gave it");
   await expect(drawer).toContainText("Keyword research done");
@@ -37,18 +38,18 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(drawer).toBeHidden();
 
   // A note in the drawer goes to Aldric as a message about that Task, and stays with that Task.
-  await strip.getByRole("button", { name: "Show Aldric's work" }).click();
-  const quest = page.getByRole("complementary", { name: "Plan the Black Friday campaign, Task details" });
+  await strip.getByRole("button", { name: /^Plan the Black Friday campaign/ }).click();
+  const quest = page.getByRole("dialog", { name: "Plan the Black Friday campaign, quest" });
   await quest.getByRole("button", { name: /Draft the landing copy/ }).click();
   const note = page.getByRole("textbox", { name: "Tell Aldric about this task" });
   await note.fill("Keep the headlines short.");
   await page.getByRole("button", { name: "Back to Plan the Black Friday campaign" }).click();
   await expect(quest).toBeVisible();
-  await expect(note).toHaveValue("");
+  await expect(note).toHaveCount(0);
   await quest.getByRole("button", { name: /Draft the landing copy/ }).click();
   await expect(note).toHaveValue("Keep the headlines short.");
   await note.press("Enter");
-  const copyTask = page.getByRole("complementary", { name: "Draft the landing copy, Task details" });
+  const copyTask = page.getByRole("dialog", { name: "Draft the landing copy, Task details" });
   await expect(copyTask).toContainText("Sent to Aldric.");
   await expect(copyTask).toContainText("Your notes");
   await expect(copyTask).toContainText("Keep the headlines short.");
@@ -65,9 +66,12 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(strip).toBeHidden();
   await expect(page.getByText("The Black Friday campaign is ready.")).toBeVisible();
 
-  // Once it ends, the card still opens the Task with its output.
+  // Once it ends, the card still opens the quest, and the lead's own Task shows its output.
   await card.getByRole("button", { name: "Show all" }).click();
-  await expect(quest).toContainText("Black Friday campaign ready");
+  await quest.getByRole("button", { name: /^Aldric · Plan the Black Friday campaign/ }).click();
+  await expect(page.getByRole("dialog", { name: "Plan the Black Friday campaign, Task details" })).toContainText(
+    "Black Friday campaign ready",
+  );
 });
 
 // covers OR-004, IN-002
@@ -120,11 +124,11 @@ test("[TC-IN-154] cancelling the work a question waits on withdraws it from the 
   await expect(answer).toBeVisible({ timeout: 15_000 });
   const chat = page.url();
 
-  // You cancel Ada's Task from the Quest tab before answering her.
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Plan the Black Friday campaign" });
+  // You cancel Ada's Task from its task sheet before answering her.
+  const room = await openQuest(page, "Plan the Black Friday campaign");
   await room.getByRole("button", { name: /Ada · Build the campaign/ }).click();
-  const controls = room.getByRole("region", { name: "Controls for Build the campaign" });
+  const drawer = taskSheet(page, "Build the campaign");
+  const controls = drawer.getByRole("region", { name: "Controls for Build the campaign" });
   await controls.getByRole("button", { name: "Cancel Task" }).click();
   await controls.getByRole("button", { name: "Yes, cancel" }).click();
   await expect(controls.getByRole("status")).toHaveText("Cancelled: the Task confirmed it stopped.", {
@@ -135,7 +139,6 @@ test("[TC-IN-154] cancelling the work a question waits on withdraws it from the 
   const withdrawn = "Withdrawn: the work it was about ended before anyone answered.";
   await expect(asks).toContainText(withdrawn);
   await expect(answer).toHaveCount(0);
-  const drawer = page.getByRole("complementary", { name: "Build the campaign, Task details" });
   await expect(drawer).toContainText("Withdrawn when this Task ended.");
 
   // The question no longer holds Aldric's work open: he wraps up without Ada's part.

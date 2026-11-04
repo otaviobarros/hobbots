@@ -105,7 +105,7 @@ const campaign = (ids: { aldric: string; quill: string; ada: string; pip: string
 };
 
 // covers UX-001, CH-005, OR-001
-test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and open the Quest, never as her thread", async ({
+test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldric's quest and open it, never as her thread", async ({
   page,
 }) => {
   dataDir = emptyDataDir();
@@ -121,42 +121,50 @@ test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and ope
   campaign(ids, thread.id);
   // Every link opens Aldric's thread, with the drawer on the Task it names.
   const questThread = (task: string) => new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?task=${task}$`);
-  const drawer = (brief: string) => page.getByRole("complementary", { name: `${brief}, Task details` });
+  const drawer = (brief: string) => page.getByRole("dialog", { name: `${brief}, Task details` });
 
   await page.goto(hub.url);
-  const quests = page.getByRole("region", { name: "Quests in progress" });
+  const quests = page.getByRole("region", { name: "Pick up where you left off" });
+  // Aldric's chat follows both Quests, so it shows once per Quest and never as a chat of its own.
+  await expect(quests.getByRole("listitem")).toHaveCount(2);
   const entry = quests.getByRole("link", { name: /Black Friday campaign/ });
-  await expect(entry).toContainText("0 of 2 done");
-  await expect(entry).toContainText(/Quill\s*On Aldric's quest\s*Working/);
-  await expect(entry).toContainText(/Ada\s*On Aldric's quest\s*Not started/);
+  await expect(entry).toContainText(/Aldric\s*·\s*0 of 2 done/);
   await entry.click();
   await expect(page).toHaveURL(questThread("campaign"));
   await expect(drawer("Brief for campaign")).toBeVisible();
 
+  // Each member's card in the sidebar names the Quest it works on and opens it.
   await page.goto(`${hub.url}/#/hobs/${ids.quill}`);
-  const panel = page.getByRole("navigation", { name: "Hobs and threads" });
-  const work = panel.getByRole("link", { name: "Quill is on Aldric's quest, Working. Open the Quest" });
-  await expect(work).toBeVisible();
+  const card = async (name: string) => {
+    await page
+      .getByRole("navigation", { name: "Sections" })
+      .getByRole("button", { name: new RegExp(`^${name}, `) })
+      .click();
+    return page.getByRole("dialog", { name });
+  };
   await expect(
-    panel.getByRole("link", { name: "Ada is on Aldric's quest, Not started. Open the Quest" }),
+    (await card("Ada")).getByRole("link", { name: "Ada is on Aldric's quest, Not started. Open the Quest" }),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
   // Aldric leads it, so it is not his work as a member.
-  await expect(panel.getByRole("link", { name: /^Aldric is on/ })).toHaveCount(0);
+  await expect((await card("Aldric")).getByRole("link", { name: /^Aldric is on/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   // Quill's work is not one of her threads.
   expect(await call<ReadonlyArray<unknown>>("GET", `/agents/${ids.quill}/threads`)).toEqual([]);
-  await work.click();
+  await (await card("Quill"))
+    .getByRole("link", { name: "Quill is on Aldric's quest, Working. Open the Quest" })
+    .click();
   await expect(page).toHaveURL(questThread("copy"));
   await expect(drawer("Brief for copy")).toBeVisible();
 
   // Ada leads Pip's nested Quest, but it is followed in Aldric's thread, so the link opens his chat.
-  const nested = panel.getByRole("link", { name: "Pip is on Ada's quest, Working. Open the Quest" });
-  await nested.click();
+  await (await card("Pip")).getByRole("link", { name: "Pip is on Ada's quest, Working. Open the Quest" }).click();
   await expect(page).toHaveURL(questThread("keywords"));
   await expect(drawer("Brief for keywords")).toBeVisible();
   await expect(page.getByRole("main", { name: "Chat" }).locator("header")).toContainText("Aldric");
   await page.goto(hub.url);
   const keywords = quests.getByRole("link", { name: /Landing page keywords/ });
-  await expect(keywords).toContainText(/Pip\s*On Ada's quest\s*Working/);
+  await expect(keywords).toContainText(/Ada\s*·\s*0 of 1 done/);
   await keywords.click();
   await expect(page).toHaveURL(questThread("build"));
   await expect(drawer("Brief for build")).toBeVisible();
@@ -169,4 +177,65 @@ test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and ope
     .click();
   await page.getByRole("dialog", { name: "Quill" }).getByRole("link", { name: "Open Workbench" }).click();
   await expect(page).toHaveURL(new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?bench=copy$`));
+});
+
+// covers UX-001, OR-001
+test("[TC-UX-145] a hob with no chats that has worked on a Quest reads Resting, not New", async ({ page }) => {
+  dataDir = emptyDataDir();
+  hub = await startHub(dataDir);
+  await call("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
+  const ids = {
+    aldric: await summon("Aldric", 1001),
+    quill: await summon("Quill", 1338),
+    ada: await summon("Ada", 1675),
+    pip: await summon("Pip", 2012),
+  };
+  const thread = await call<{ readonly id: string }>("POST", `/agents/${ids.aldric}/threads`);
+  campaign(ids, thread.id);
+  const wick = await summon("Wick", 2349);
+
+  // Ada has no chats, but her Task on Aldric's Quest is in her History, so she is no longer new.
+  await page.goto(`${hub.url}/#/hobs`);
+  const main = page.getByRole("main", { name: "Your hobs" });
+  const ada = main.getByRole("link", { name: "Ada, Resting" });
+  await expect(ada).toBeVisible();
+  await expect(ada).toContainText("Resting");
+  await expect(ada).not.toContainText("Just arrived");
+  // Wick has done nothing yet.
+  await expect(main.getByRole("link", { name: "Wick, New" })).toContainText("Just arrived");
+
+  await page.goto(`${hub.url}/#/hobs/${ids.ada}`);
+  const hero = page.getByRole("main", { name: "Ada's page" }).getByRole("region", { name: "Ada" });
+  await expect(hero).toContainText(/Ada\s*◷\s*Resting/);
+  await page.goto(`${hub.url}/#/hobs/${wick}`);
+  await expect(page.getByRole("main", { name: "Wick's page" }).getByRole("region", { name: "Wick" })).toContainText(
+    /Wick\s*✦\s*New/,
+  );
+});
+
+// covers UX-001, OR-001
+test("[TC-UX-146] a chat on its hob's page shows a chip for each Quest it follows", async ({ page }) => {
+  dataDir = emptyDataDir();
+  hub = await startHub(dataDir);
+  await call("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
+  const ids = {
+    aldric: await summon("Aldric", 1001),
+    quill: await summon("Quill", 1338),
+    ada: await summon("Ada", 1675),
+    pip: await summon("Pip", 2012),
+  };
+  const thread = await call<{ readonly id: string }>("POST", `/agents/${ids.aldric}/threads`);
+  await call("POST", `/agents/${ids.aldric}/threads`);
+  campaign(ids, thread.id);
+
+  await page.goto(`${hub.url}/#/hobs/${ids.aldric}`);
+  const chats = page.getByRole("tabpanel", { name: "Chats" });
+  const rows = chats.getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+  // Aldric's chat follows his Quest and Ada's nested one; his other chat follows none.
+  const followed = rows.filter({ hasText: "Black Friday campaign" });
+  await expect(followed).toContainText("Black Friday campaign · 0 of 2");
+  await expect(followed).toContainText("Landing page keywords · 0 of 1");
+  await expect(followed.getByTitle("Black Friday campaign · 0 of 2")).toBeVisible();
+  await expect(rows.filter({ hasNotText: "Black Friday campaign" })).toHaveCount(1);
 });

@@ -1,6 +1,6 @@
 import { ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { doingOf, isHobPageTab, stateTag, statsLine } from "./hob-page-model.ts";
+import { doingOf, helloOf, isHobPageTab, startersOf, stateTag, statsLine } from "./hob-page-model.ts";
 
 const plan = { id: ThreadId.make("t-plan"), title: "Plan the spring launch" };
 const notes = { id: ThreadId.make("t-notes"), title: "Meeting notes" };
@@ -55,5 +55,26 @@ describe("isHobPageTab", () => {
     expect(isHobPageTab("chats")).toBe(true);
     expect(isHobPageTab("quests")).toBe(false);
     expect(isHobPageTab(undefined)).toBe(false);
+  });
+});
+
+describe("a new hob", () => {
+  it("rests as New until its first chat, and still says when it needs you", () => {
+    expect(stateTag("idle", true)).toMatchObject({ variant: "done", word: "New" });
+    expect(stateTag("idle", false).word).toBe("Resting");
+    expect(stateTag("needs-you", true).word).toBe("Needs you");
+  });
+
+  it("says hello with its role's line, or plainly for a role in your own words", () => {
+    expect(helloOf({ name: "Wren", role: "writer" })).toBe(
+      "Hi! I'm Wren. Drafts emails, posts and documents with you. Where shall we start?",
+    );
+    expect(helloOf({ name: "Wren", role: null })).toBe("Hi! I'm Wren. Where shall we start?");
+  });
+
+  it("offers three starters: its own for an everyday helper, else its role family's", () => {
+    expect(startersOf({ role: "writer" })[0]).toBe("Turn my bullet points into a friendly email");
+    expect(startersOf({ role: "backend" })).toEqual(startersOf({ role: "frontend" }));
+    expect(startersOf({ role: null })).toHaveLength(3);
   });
 });

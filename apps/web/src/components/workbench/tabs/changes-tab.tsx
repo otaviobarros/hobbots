@@ -14,6 +14,8 @@ import {
 import { KindTag } from "../changes/kind-tag.tsx";
 import { messages } from "../changes/messages.ts";
 import { useLineCounts } from "../changes/use-line-counts.ts";
+import { FilePicker } from "../file-picker.tsx";
+import { LIST_CARD, listRow } from "../list-row.ts";
 import type { WorkbenchTabProps } from "./tab-props.ts";
 
 const KINDS: ReadonlyArray<FileChangeKind> = ["added", "edited", "deleted", "moved", "link"];
@@ -44,27 +46,54 @@ export function ChangesTab({ activity, state, hobs, focus, onTab }: WorkbenchTab
   const counts = changeCounts(changes);
   const manyFolders = new Set(changes.map((each) => each.folder)).size > 1;
   return (
-    <div data-slot="changes" className="@container flex flex-col gap-3 px-5 py-4">
+    <div data-slot="changes" className="flex flex-col gap-3 px-5 py-4">
       <p className="m-0 text-detail text-text-secondary">
         {messages.summary({
           total: changes.length,
           parts: KINDS.filter((kind) => counts[kind] > 0).map((kind) => messages.count[kind](counts[kind])),
         })}
       </p>
-      <div className="flex min-w-0 flex-col gap-4 @3xl:flex-row @3xl:items-start">
+      <div className="flex min-w-0 flex-col gap-3.5 @min-[720px]:flex-row @min-[720px]:items-start">
+        <FilePicker
+          label={messages.files}
+          items={changes}
+          shown={Math.max(
+            0,
+            changes.findIndex((each) => each.id === selected?.id),
+          )}
+          current={
+            selected !== null && (
+              <>
+                <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-text-strong">
+                  {splitPath(selected.path).name}
+                </span>
+                {/* Very narrow, the name keeps the room; the menu still tags every file. */}
+                <span className="hidden @min-[240px]/picker:inline-flex">
+                  <KindTag kind={selected.kind} />
+                </span>
+              </>
+            )
+          }
+          row={(change) => <RowContent change={change} activity={activity} dir={changeDir(change, manyFolders)} />}
+          onPick={(index) => {
+            const change = changes[index];
+            if (change !== undefined) setPicked({ id: change.id });
+          }}
+        />
         <nav
           aria-label={messages.files}
-          className="flex shrink-0 flex-col gap-0.5 rounded-card border border-line bg-card p-1.5 @3xl:sticky @3xl:top-0 @3xl:w-58"
+          className={cn(LIST_CARD, "hidden @min-[720px]:sticky @min-[720px]:top-0 @min-[720px]:flex @min-[720px]:w-58")}
         >
           {changes.map((change) => (
-            <FileRow
+            <button
               key={change.id}
-              change={change}
-              activity={activity}
-              dir={changeDir(change, manyFolders)}
-              on={change.id === selected?.id}
-              onPick={() => setPicked({ id: change.id })}
-            />
+              type="button"
+              aria-pressed={change.id === selected?.id}
+              onClick={() => setPicked({ id: change.id })}
+              className={cn(listRow(change.id === selected?.id), "items-center")}
+            >
+              <RowContent change={change} activity={activity} dir={changeDir(change, manyFolders)} />
+            </button>
           ))}
         </nav>
         <div className="min-w-0 flex-1">
@@ -85,34 +114,14 @@ export function ChangesTab({ activity, state, hobs, focus, onTab }: WorkbenchTab
 }
 
 /**
- * A changed file in the list: its name, its folder under it, how it changed and, for text, the
- * lines it added and removed.
+ * A changed file as the list and the picker's menu show it: its name, its folder under it, how it
+ * changed and, for text, the lines it added and removed.
  */
-function FileRow({
-  change,
-  activity,
-  dir,
-  on,
-  onPick,
-}: {
-  change: FileChange;
-  activity: AttemptActivity;
-  dir: string;
-  on: boolean;
-  onPick: () => void;
-}) {
+function RowContent({ change, activity, dir }: { change: FileChange; activity: AttemptActivity; dir: string }) {
   const { name } = splitPath(change.path);
   const counts = useLineCounts(change, activity);
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onPick}
-      className={cn(
-        "flex w-full cursor-pointer items-center gap-2 rounded-control border-0 px-2 py-[7px] text-start text-text transition-colors duration-150",
-        on ? "bg-line" : "bg-transparent hover:bg-hover",
-      )}
-    >
+    <>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate font-mono text-[13px] leading-[18px] text-text-strong">{name}</span>
         {dir !== "" && <span className="truncate font-mono text-[11px] leading-[15px] text-label">{dir}</span>}
@@ -129,6 +138,6 @@ function FileRow({
           </span>
         )}
       </span>
-    </button>
+    </>
   );
 }

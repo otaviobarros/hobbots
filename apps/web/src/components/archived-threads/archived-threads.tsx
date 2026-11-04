@@ -14,6 +14,7 @@ import { ChatView } from "../chat-view.tsx";
 import { HobSprite } from "../hob-sprite.tsx";
 import { MessageRow, messageElementId } from "../message-row.tsx";
 import { messages as chatCopy } from "../messages.ts";
+import { ReconnectingCard } from "../reconnecting.tsx";
 import { messages } from "./messages.ts";
 
 /** What the chat workspace gives whatever fills its middle: the hob, the thread and the side panels' state. */
@@ -76,36 +77,6 @@ function ThreadLookup({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * "Archived · N" at the end of an open hob's thread list. It hides at zero, except while the
- * archived list is open, and is selected while that list or an archived thread is open.
- */
-export function ArchivedEntry({ hobId, threadId }: { hobId: AgentId; threadId?: ThreadId | undefined }) {
-  const archived = useQuery(archivedThreadsQuery(hobId));
-  const matchRoute = useMatchRoute();
-  const listOpen = matchRoute({ to: "/hobs/$hobId/archived", params: { hobId } }) !== false;
-  const count = archived.data?.length ?? 0;
-  const current = listOpen || (threadId !== undefined && archived.data?.some((t) => t.id === threadId) === true);
-  if (count === 0 && !listOpen) return null;
-
-  return (
-    <Link
-      to="/hobs/$hobId/archived"
-      params={{ hobId }}
-      aria-current={current ? "page" : undefined}
-      aria-label={messages.entryLabel({ count })}
-      className={cn(
-        "flex w-full items-center gap-2 py-row-y ps-thread-indent pe-2.5 text-sm text-text-strong no-underline hover:bg-hover hover:text-text-strong",
-        current && "bg-line text-moonlight hover:text-moonlight",
-      )}
-    >
-      <span aria-hidden className="size-2.5 flex-none border-2 border-text-secondary" />
-      <span className="min-w-0 flex-1 truncate">{messages.entry}</span>
-      <span className="text-meta whitespace-nowrap text-label">{count}</span>
-    </Link>
-  );
-}
-
 /** The chat header for an archived view: the hob, what is shown, Edit hob and the panel toggle. */
 function ArchivedHeader({
   hob,
@@ -121,43 +92,26 @@ function ArchivedHeader({
   tagged?: boolean;
 }) {
   return (
-    <header className="flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
-      {!props.navOpen && (
-        <Button
-          variant="icon"
-          size="icon"
-          onClick={props.onShowNav}
-          aria-label={chatCopy.chat.showNav}
-          title={chatCopy.chat.showNav}
-        >
-          »
+    <>
+      <header className="flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
+        <HobSprite hob={hob} size={36} state="idle" badge />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="font-heading text-xl font-semibold whitespace-nowrap">{hob.name}</span>
+            <span className="text-sm font-bold whitespace-nowrap text-moonlight">{hob.roleTitle}</span>
+            <span className="truncate text-text-secondary">{title}</span>
+            {tagged && <Badge variant="archived">{messages.tag}</Badge>}
+          </span>
+          <span className="text-xs text-label">{detail}</span>
+        </div>
+        <Button asChild variant="outline">
+          <Link to="/hobs/$hobId/profile" params={{ hobId: hob.id }}>
+            {messages.editHob}
+          </Link>
         </Button>
-      )}
-      <HobSprite hob={hob} size={36} state="idle" badge />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="flex min-w-0 items-baseline gap-2">
-          <span className="font-heading text-xl font-semibold whitespace-nowrap">{hob.name}</span>
-          <span className="text-sm font-bold whitespace-nowrap text-moonlight">{hob.roleTitle}</span>
-          <span className="truncate text-text-secondary">{title}</span>
-          {tagged && <Badge variant="archived">{messages.tag}</Badge>}
-        </span>
-        <span className="text-xs text-label">{detail}</span>
-      </div>
-      <Button asChild variant="outline">
-        <Link to="/hobs/$hobId/profile" params={{ hobId: hob.id }}>
-          {messages.editHob}
-        </Link>
-      </Button>
-      <Button
-        variant="icon"
-        size="icon"
-        onClick={props.onTogglePanel}
-        aria-label={props.panelOpen ? chatCopy.chat.hidePanel : chatCopy.chat.showPanel}
-        title={props.panelOpen ? chatCopy.chat.hidePanel : chatCopy.chat.showPanel}
-      >
-        {props.panelOpen ? "»" : "«"}
-      </Button>
-    </header>
+      </header>
+      <ReconnectingCard className="mx-6 mt-2.5" />
+    </>
   );
 }
 

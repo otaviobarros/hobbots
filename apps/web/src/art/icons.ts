@@ -172,25 +172,3 @@ export const potionPalette = (fill: string, top: string): PixelPalette => ({
 /** The 5 × 5 name and look die. */
 export const DIE: PixelRows = ["owwwo", "wwwww", "wwoww", "wwwww", "owwwo"];
 export const DIE_PALETTE: PixelPalette = { o: "#141228", w: "#ece8ff" };
-
-/** The Elder Hob, who guides setup. */
-export const ELDER: PixelRows = [
-  "...hhhh...",
-  "..hhhhhh..",
-  ".hhhhhhhh.",
-  "s.ssssss.s",
-  "ssksssskss",
-  ".swwwwwws.",
-  "..wwwwww..",
-  "..cwwwwc..",
-  ".cccwwccc.",
-  "..bb..bb..",
-];
-export const ELDER_PALETTE: PixelPalette = {
-  h: "#4a3a6a",
-  s: "#e8b98f",
-  k: "#141228",
-  w: "#ece8ff",
-  c: "#6b5aa8",
-  b: "#2a1f18",
-};

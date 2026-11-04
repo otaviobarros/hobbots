@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { readStored, writeStored } from "./storage.ts";
-import { createThemeStore, FIRST_RUN_THEME, NEW_DEVICE_THEME, type Theme, type ThemeEnvironment } from "./theme.ts";
+import {
+  createThemeStore,
+  FIRST_RUN_THEME,
+  lookOf,
+  modeOf,
+  NEW_DEVICE_THEME,
+  THEMES,
+  type Theme,
+  type ThemeEnvironment,
+  themeOf,
+} from "./theme.ts";
 
 const environment = (overrides: Partial<ThemeEnvironment> = {}) => {
   const marks: Theme[] = [];
@@ -25,6 +35,17 @@ describe("the theme store", () => {
     expect(store.theme()).toBe("workshop-night");
     expect(FIRST_RUN_THEME).toBe("workshop-night");
     expect(marks).toEqual(["workshop-night"]);
+  });
+
+  it("shows Workshop Night on a first run screen whatever is saved, and gives the page its theme back after", () => {
+    const { env, marks, writes } = environment({ read: () => "lamplight-paper" });
+    const store = createThemeStore(env);
+    const release = store.holdFirstRun();
+    expect(marks.at(-1)).toBe("workshop-night");
+    release();
+    expect(marks.at(-1)).toBe("lamplight-paper");
+    expect(store.theme()).toBe("lamplight-paper");
+    expect(writes).toEqual([]);
   });
 
   it("starts from the saved theme and marks the page with it", () => {
@@ -123,5 +144,15 @@ describe("the theme store", () => {
     // Setup is done, so first run never finishes again here: nothing saved still means Workshop Night.
     const { env } = environment({ read: () => null });
     expect(createThemeStore(env).theme()).toBe("workshop-night");
+  });
+});
+
+describe("looks and modes", () => {
+  it("names each theme's look and mode, and finds the theme again from them", () => {
+    for (const theme of THEMES) expect(themeOf(lookOf(theme), modeOf(theme))).toBe(theme);
+    expect(themeOf("lamplight", "light")).toBe("lamplight-paper");
+    expect(themeOf("workshop", "dark")).toBe("workshop-night");
+    expect(lookOf("workshop-daylight")).toBe("workshop");
+    expect(modeOf("lamplight-dusk")).toBe("dark");
   });
 });

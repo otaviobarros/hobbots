@@ -1,5 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
 // Issue #565 in the browser: a chain of dependent Tasks runs to the end from one message. Each
 // Task starts once the ones it comes after are done, with what they returned, so nobody has to hand
@@ -105,9 +106,8 @@ test("[TC-OR-209] a three-member Quest with a dependency chain runs to finished 
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
 
-  // The Quest tab follows every Task to Done, and the Quest ends: no Cancel Quest is left.
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const tasks = page.getByRole("list", { name: "Tasks of Build and review the app" });
+  // The quest sheet follows every Task to Done, and the Quest ends: no Cancel Quest is left.
+  const tasks = await openQuest(page, "Build and review the app");
   for (const row of [/Quill · Write the backend/, /Rook · Write the frontend/, /Pip · Review the backend/]) {
     await expect(tasks.getByRole("button", { name: row })).toContainText("Done", { timeout: 30_000 });
   }

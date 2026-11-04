@@ -1,5 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
+import { openQuest, taskSheet } from "./work-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -15,22 +16,19 @@ test("[TC-PE-303] the Task drawer and the Workbench header show the folders each
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Make the shop badge" });
-  const tasks = room.getByRole("list", { name: "Tasks of Make the shop badge" });
+  const tasks = await openQuest(page, "Make the shop badge");
   for (const [name, title, folder] of [
     [/Quill · Make the shop badge/, "Make the shop badge", "/fake/shop/web"],
     [/Ada · Review the shop/, "Review the shop", "/fake/shop"],
   ] as const) {
     await tasks.getByRole("button", { name }).click();
-    const drawer = page.getByRole("complementary", { name: `${title}, Task details` });
+    const drawer = taskSheet(page, title);
+    await drawer.getByText("Everything in this task").click();
     await expect(drawer.getByRole("list", { name: "Folders" }).getByRole("listitem")).toHaveText([folder]);
+    await drawer.getByRole("button", { name: "Back to Make the shop badge" }).click();
   }
   await tasks.getByRole("button", { name: /Quill · Make the shop badge/ }).click();
-  await room
-    .getByRole("region", { name: "Controls for Make the shop badge" })
-    .getByRole("button", { name: "Open in Workbench" })
-    .click();
+  await taskSheet(page, "Make the shop badge").getByRole("button", { name: "Open Workbench" }).click();
   const header = page.getByRole("region", { name: "Workbench for Make the shop badge" }).locator("header").first();
   await expect(header).toContainText("Works in web");
   await expect(header.getByText("Works in web")).toHaveAttribute("title", "/fake/shop/web");

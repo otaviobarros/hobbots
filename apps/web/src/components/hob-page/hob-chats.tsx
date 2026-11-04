@@ -7,32 +7,39 @@ import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import type { ActivityMap } from "../../api/activity.ts";
 import { inboxQuery } from "../../api/approvals.ts";
-import { archivedThreadsQuery } from "../../api/queries.ts";
+import { agentsQuery, archivedThreadsQuery } from "../../api/queries.ts";
+import { useQuestWork } from "../../api/quest-work.ts";
 import { useSearch } from "../../api/search.ts";
+import { questsInProgress } from "../../lib/quest-work.ts";
 import { ChatRow } from "./chat-row.tsx";
-import { chatGroups, chatMatches, OLDER_SHOWN, waitingByThread } from "./chats-model.ts";
+import { chatGroups, chatMatches, OLDER_SHOWN, questsByThread, waitingByThread } from "./chats-model.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.chats;
 
 /**
  * The Chats tab: the hob's chats grouped Pinned, Today, Earlier this week and Older, five Older at
- * first. Search finds words in titles and inside messages, and marks them.
+ * first. Search finds words in titles and inside messages, and marks them; a link can open it
+ * already searching.
  */
 export function HobChats({
   hob,
   threads,
   activity,
+  initialQuery = "",
 }: {
   hob: Agent;
   threads: ReadonlyArray<Thread>;
   activity: ActivityMap;
+  initialQuery?: string;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [allOlder, setAllOlder] = useState(false);
   const search = useSearch(query);
   const waiting = useQuery({ ...inboxQuery, select: waitingByThread }).data;
   const searching = query.trim() !== "";
+  const hobs = useQuery(agentsQuery).data ?? [];
+  const quests = questsByThread(questsInProgress(useQuestWork(hobs.map((each) => each.id))));
 
   const row = (thread: Thread, match?: Pick<Parameters<typeof ChatRow>[0], "title" | "snippet">) => (
     <ChatRow
@@ -41,6 +48,7 @@ export function HobChats({
       thread={thread}
       live={activity[thread.id] !== undefined}
       needs={waiting?.get(thread.id) ?? 0}
+      quests={quests.get(thread.id) ?? []}
       {...match}
     />
   );

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 /**
  * Opens a Quest where it is followed: the chat of the request that started it, with its card,
- * strip and Quest tab, with its drawer open on `taskId`. That thread belongs to `threadAgentId`,
+ * header quest button, with its task sheet open on `taskId`. That thread belongs to `threadAgentId`,
  * which for a nested Quest is not its lead. A Quest without a thread opens its lead.
  */
 export function QuestLink({

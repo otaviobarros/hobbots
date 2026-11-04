@@ -7,6 +7,7 @@ import { GeneralSettings } from "../general-settings.tsx";
 import { WaitingDevices } from "../pairing/waiting-devices.tsx";
 import { RemoteAccessSettings } from "../remote-access-settings.tsx";
 import { AboutSettings } from "./about-settings.tsx";
+import { AppearanceGroup } from "./appearance.tsx";
 import { ConnectionsSection } from "./connections-section.tsx";
 import { messages } from "./messages.ts";
 import { NotificationSettings } from "./notification-settings.tsx";
@@ -37,6 +38,7 @@ export function SectionContent({ section, tab }: { section: SettingsSection; tab
 function ThisApp() {
   return (
     <>
+      <AppearanceGroup />
       <SettingsGroup label={messages.thisApp.starts}>
         <GeneralSettings />
         <ReduceMotionRow />

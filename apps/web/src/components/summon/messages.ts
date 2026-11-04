@@ -70,6 +70,18 @@ export const messages = {
   },
   ready: {
     title: ({ name }: { name: string }) => `Ready to summon ${name}?`,
+    blockedTitle: ({ name }: { name: string }) => `${name} can't be summoned yet`,
+    signedOut: ({ provider }: { provider: string }) => `${provider} is signed out`,
+    needsFix: "Needs a fix",
+    signedOutWhy: ({ provider, name }: { provider: string; name: string }) =>
+      `Hobs think with ${provider}, so a new one can't start until ${provider} is signed in again. Sign in to ${provider}, then check again to summon ${name}. Everything you picked is kept.`,
+    checkAgain: "Check again",
+    checking: "Checking…",
+    openSettings: "Open Settings",
+    copy: "Copy",
+    copied: "Copied",
+    copyFailed: "Copy it by hand",
+    copyLabel: ({ command }: { command: string }) => `Copy ${command}`,
     intro: ({ name }: { name: string }) => `Here is ${name} in plain words. Change anything before you summon.`,
     summary: ({ name }: { name: string }) => `${name} in plain words`,
     helpsWith: "Helps with",

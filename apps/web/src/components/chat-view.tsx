@@ -39,14 +39,21 @@ import { sendErrorText } from "../lib/send-error.ts";
 import { ReplyApprovals } from "./approvals/reply-approvals.tsx";
 import { ArchiveToastViewport } from "./archive/archive-toast.tsx";
 import { ThreadHeaderMenu } from "./archive/thread-menu.tsx";
+import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { BrainPicker, BrainSwitchNote, useOtherReadyRuntimes } from "./brain-picker.tsx";
+import { ChatSearch, ChatSearchButton } from "./chat-search/chat-search.tsx";
+import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
+import { EmptyThread } from "./empty-thread.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
-import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
+import { type ContinueReply, MessageRow, messageElementId, QueuedRow, WaitingRow } from "./message-row.tsx";
 import { messages } from "./messages.ts";
 import { NeedsTray } from "./needs-tray/needs-tray.tsx";
 import { useThreadNeeds } from "./needs-tray/use-thread-needs.ts";
-import { ThreadWorkStrip, useWorkMoments } from "./quest/thread-work.tsx";
+import { PinNotes } from "./quest/pin-notes.tsx";
+import { ThreadQuestButton, useWorkMoments } from "./quest/thread-work.tsx";
+import type { Pins } from "./quest/use-work.ts";
+import { ReconnectingCard } from "./reconnecting.tsx";
 
 /**
  * Keeps the transcript's end in view while the composer grows or shrinks, so a long draft never
@@ -72,18 +79,13 @@ export function ChatView({
   hobId,
   threadId,
   focusMessageId,
-  navOpen,
-  panelOpen,
-  onShowNav,
-  onTogglePanel,
+  pins,
 }: {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
   focusMessageId?: string | undefined;
-  navOpen: boolean;
-  panelOpen: boolean;
-  onShowNav: () => void;
-  onTogglePanel: () => void;
+  /** The Quests pinned to every thread's header. */
+  pins: Pins;
 }) {
   const hob = useQuery({ ...agentsQuery, select: (agents) => agents.find((a) => a.id === hobId) });
   const thread = useQuery({
@@ -137,6 +139,13 @@ export function ChatView({
   // A search match opens with its message in view and holds it there while a reply streams, until
   // the user scrolls back down to the end or sends a message.
   const [released, setReleased] = useState<string>();
+  // The search box under the header, opened from its magnifier, belongs to the thread it opened in.
+  const [findingIn, setFindingIn] = useState<string>();
+  const finding = threadId !== undefined && findingIn === threadId;
+  const setFinding = (open: boolean) => setFindingIn(open ? threadId : undefined);
+  const [renamingIn, setRenamingIn] = useState<string>();
+  const renaming = threadId !== undefined && renamingIn === threadId;
+  const setRenaming = (open: boolean) => setRenamingIn(open ? threadId : undefined);
   const holding = focusMessageId !== undefined && released !== focusMessageId;
   const follow = () => setReleased(focusMessageId);
 
@@ -212,39 +221,54 @@ export function ChatView({
 
   return (
     <main aria-label="Chat" className="flex min-w-[360px] flex-1 flex-col">
-      <header className="flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
-        {!navOpen && (
-          <Button variant="icon" size="icon" onClick={onShowNav} aria-label={copy.showNav} title={copy.showNav}>
-            »
-          </Button>
-        )}
-        <HobSprite hob={current} size={36} state={state} badge />
-        <div className="flex min-w-0 flex-1 flex-col">
+      <header className="@container/header flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
+        {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
+        <Link to="/hobs/$hobId" params={{ hobId }} tabIndex={-1} aria-hidden className="shrink-0">
+          <HobSprite hob={current} size={36} state={state} badge />
+        </Link>
+        {/* The hob's name keeps its room when the quest button and the brain picker crowd the header. */}
+        <div className="flex min-w-[120px] flex-1 flex-col overflow-hidden">
           <span className="flex min-w-0 items-baseline gap-2">
-            <span className="font-heading text-xl font-semibold whitespace-nowrap">{current.name}</span>
+            <Link
+              to="/hobs/$hobId"
+              params={{ hobId }}
+              title={copy.openHob({ name: current.name })}
+              className="font-heading text-xl font-semibold whitespace-nowrap text-text-strong no-underline hover:underline"
+            >
+              {current.name}
+            </Link>
             <span className="text-sm font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
-            <span className="truncate text-text-secondary">{title}</span>
+            <ChatTitle thread={thread.data} title={title} renaming={renaming} onDone={() => setRenaming(false)} />
           </span>
           <span className="text-xs text-label">{stateLabel[state]}</span>
         </div>
+        {threadId && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
         <BrainPicker hob={current} thread={thread.data} />
-        {thread.data && <ThreadHeaderMenu hob={current} thread={thread.data} />}
+        {thread.data && <ChatSearchButton open={finding} onToggle={() => setFinding(!finding)} />}
+        {thread.data && (
+          <ThreadHeaderMenu
+            hob={current}
+            thread={thread.data}
+            onRename={() => setRenaming(true)}
+            onSearch={() => setFinding(true)}
+          />
+        )}
         <Button asChild variant="outline">
           <Link to="/hobs/$hobId/profile" params={{ hobId }}>
             Edit hob
           </Link>
         </Button>
-        <Button
-          variant="icon"
-          size="icon"
-          onClick={onTogglePanel}
-          aria-label={panelOpen ? copy.hidePanel : copy.showPanel}
-          title={panelOpen ? copy.hidePanel : copy.showPanel}
-        >
-          {panelOpen ? "»" : "«"}
-        </Button>
       </header>
-      {threadId && <ThreadWorkStrip hobId={hobId} threadId={threadId} />}
+      <ReconnectingCard className="mx-6 mt-2.5" />
+      {threadId && finding && (
+        <ChatSearch
+          hob={current}
+          threadId={threadId}
+          transcript={messages.data ?? []}
+          onClose={() => setFinding(false)}
+        />
+      )}
+      {threadId && <PinNotes threadId={threadId} pins={pins} />}
 
       <div
         onScroll={(event) => {
@@ -256,20 +280,7 @@ export function ChatView({
       >
         {threadId && messages.isPending && <p className="text-label">Loading messages…</p>}
         {empty && !messages.isLoading && (
-          <div className="m-auto flex max-w-[420px] animate-hb-in flex-col items-center gap-3 text-center">
-            <HobSprite hob={current} size={72} state="working" />
-            <span className="font-heading text-[22px] font-bold text-moonlight">
-              {newHob ? copy.hello(current) : copy.freshPage}
-            </span>
-            <span className="text-text-secondary">{newHob ? copy.helloBody : copy.freshBody(current)}</span>
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {copy.ideas.map((idea) => (
-                <Button key={idea} variant="chip" onClick={() => writeDraft(place, idea)}>
-                  {idea}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <EmptyThread hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
         )}
         {transcript && (
           <Transcript
@@ -302,39 +313,18 @@ export function ChatView({
           />
         ))}
         {waiting.map((message, index) => (
-          <section
+          <WaitingRow
             key={message.id}
-            aria-label={copy.waiting}
-            className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end"
-          >
-            <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
-            <span className="text-xs text-label">
-              {outbox.refused && index === 0
-                ? copy.waitingRefused
-                : connection === "live"
-                  ? copy.waitingSending
-                  : copy.waitingOffline}
-            </span>
-            <span className="flex gap-2">
-              <Button
-                variant="outline"
-                size="xs"
-                disabled={outbox.sending === message.id}
-                onClick={() => {
-                  const content = takeBack(place, message.id);
-                  if (content === undefined) return;
-                  appendDraft(place, content);
-                }}
-              >
-                {copy.edit}
-              </Button>
-              {outbox.refused && index === 0 && (
-                <Button variant="outline" size="xs" onClick={() => tryAgain(place)}>
-                  {copy.tryAgain}
-                </Button>
-              )}
-            </span>
-          </section>
+            message={message}
+            refused={outbox.refused && index === 0}
+            live={connection === "live"}
+            sending={outbox.sending === message.id}
+            onEdit={() => {
+              const content = takeBack(place, message.id);
+              if (content !== undefined) appendDraft(place, content);
+            }}
+            onTryAgain={() => tryAgain(place)}
+          />
         ))}
         {continueOn.isError && (
           <p role="alert" className="text-sm text-rose">
@@ -384,6 +374,7 @@ export function ChatView({
         </section>
       )}
       <ArchiveToastViewport />
+      <WorkHeldNotice className="mx-6 mb-2" />
       <NeedsTray entries={needs} className="mx-6 mb-2" />
       <Composer
         placeholder={copy.placeholder({ name: current.name, title })}

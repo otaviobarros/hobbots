@@ -83,3 +83,73 @@ test("[TC-UX-140] the sidebar starts collapsed, expands with its chevron or ⌘\
   await page.reload();
   await expect(sidebar(page)).toHaveAttribute("data-open", "false");
 });
+
+// covers UX-001
+test("[TC-UX-141] every hob shows in the sidebar from any page, and the open hob lists its recent threads", async ({
+  page,
+}) => {
+  const { url, ids } = await hubWithHobs();
+  await page.goto(`${url}/#/usage`);
+  const nav = sidebar(page);
+  await expect(nav.getByRole("button", { name: "Aldric, resting" })).toBeVisible();
+  await expect(nav.getByRole("button", { name: "Ada, resting" })).toBeVisible();
+
+  await nav.getByRole("button", { name: "Expand the sidebar" }).click();
+  await nav.getByRole("button", { name: "Aldric, resting" }).click();
+  await page.getByRole("dialog", { name: "Aldric" }).getByRole("link", { name: "Open page" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Aldric}$`));
+  const thread = nav.getByRole("link", { name: "Plan the spring launch" });
+  await expect(thread).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Draft the release notes" })).toBeVisible();
+
+  await thread.click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Aldric}/threads/`));
+  await expect(nav.getByRole("link", { name: "Plan the spring launch" })).toHaveAttribute("aria-current", "page");
+
+  await expect(nav.getByRole("link", { name: "Summon a hob" })).toBeVisible();
+});
+
+// covers UX-001
+test("[TC-UX-142] the Hobs label above the sidebar's hobs opens Your hobs", async ({ page }) => {
+  const { url } = await hubWithHobs();
+  await page.goto(`${url}/#/usage`);
+  const nav = sidebar(page);
+  // Collapsed, the label is hidden; expanded, it links to Your hobs.
+  await expect(nav.getByRole("link", { name: "Hobs: open Your hobs" })).toBeHidden();
+  await nav.getByRole("button", { name: "Expand the sidebar" }).click();
+  const label = nav.getByRole("link", { name: "Hobs: open Your hobs" });
+  await expect(label).toHaveAttribute("href", /#\/hobs$/);
+  await label.click();
+  await expect(page).toHaveURL(/#\/hobs$/);
+  await expect(page.getByRole("main", { name: "Your hobs" })).toBeVisible();
+});
+
+// covers UX-001
+test("[TC-UX-143] a hob's tile opens its card, whose name, Open page and Profile go to the right places", async ({
+  page,
+}) => {
+  const { url, ids } = await hubWithHobs();
+  await page.goto(`${url}/#/usage`);
+  const nav = sidebar(page);
+  const tile = nav.getByRole("button", { name: "Ada, resting" });
+
+  await tile.click();
+  const card = page.getByRole("dialog", { name: "Ada" });
+  await expect(card).toContainText("Resting");
+  await expect(card.getByRole("region", { name: "Backpack" })).toContainText("Nothing to deal with right now.");
+  await page.keyboard.press("Escape");
+  await expect(card).toBeHidden();
+  await expect(tile).toBeFocused();
+
+  await tile.click();
+  await card.getByRole("link", { name: "Ada", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Ada}$`));
+
+  await tile.click();
+  await card.getByRole("link", { name: "Profile" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Ada}/profile$`));
+
+  await tile.click();
+  await card.getByRole("button", { name: "Close" }).click();
+  await expect(card).toBeHidden();
+});

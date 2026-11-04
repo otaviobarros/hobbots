@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { emptyDataDir, expandSidebar, expect, type Hub, removeDataDir, sidebarThread, startHub, test } from "./hub.ts";
 
 // The archive slice's done-when journey as the user sees it, with the fake runtime: archive from the
 // thread's menu, find it in the Archived list and in search, read it with no composer, restore it.
@@ -47,8 +47,9 @@ const summonPip = async (current: Hub) => {
   });
 };
 
-const threadList = (page: Page) => page.getByRole("navigation", { name: "Hobs and threads" });
-const threadLink = (page: Page, title: string) => threadList(page).getByRole("link", { name: new RegExp(`^${title}`) });
+// The open hob's threads show under it in the expanded sidebar.
+test.beforeEach(({ context }) => expandSidebar(context));
+const threadLink = sidebarThread;
 
 /** Starts a new thread with Pip from the composer and waits for its echo. */
 const chat = async (page: Page, current: Hub, pipId: string, prompt: string) => {
@@ -70,15 +71,18 @@ test("[TC-CH-157] a thread archived from its menu is found in the Archive and in
   await chat(page, current, pip.id, "Rename the newsletter");
   await chat(page, current, pip.id, "Plan my week");
 
-  // Archive it from its row's menu: it leaves the hob's list.
-  await page.getByRole("button", { name: "More for “Rename the newsletter”" }).click();
-  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  // Archive it from its row's menu on the hob's page: it leaves the hob's lists.
+  await page.goto(`${current.url}/#/hobs/${pip.id}`);
+  const chats = page.getByRole("main", { name: "Pip's page" });
+  await chats.getByRole("button", { name: "More for “Rename the newsletter”" }).click();
+  await page.getByRole("menuitem", { name: /Archive chat/ }).click();
   await expect(page.getByRole("status").filter({ hasText: "Archived “Rename the newsletter”." })).toBeVisible();
+  await expect(chats.getByRole("link", { name: "Open Rename the newsletter" })).toHaveCount(0);
   await expect(threadLink(page, "Rename the newsletter")).toHaveCount(0);
   await expect(threadLink(page, "Plan my week")).toBeVisible();
 
   // Found in the Archive, narrowed to the hob, and it opens read-only.
-  await threadList(page).getByRole("link", { name: "Archived, 1 thread" }).click();
+  await chats.getByRole("link", { name: "Archived chats · 1" }).click();
   await expect(page).toHaveURL(new RegExp(`#/archive\\?hob=${pip.id}$`));
   const archived = page.getByRole("list", { name: "Archived chats" });
   await expect(archived.getByRole("listitem")).toHaveCount(1);
@@ -91,8 +95,12 @@ test("[TC-CH-157] a thread archived from its menu is found in the Archive and in
 
   // Found by search too, marked archived, and it opens read-only from there.
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
-  await page.getByRole("searchbox", { name: "Search hobs, threads and messages" }).fill("newsletter");
-  const result = page.getByRole("link", { name: /Rename the newsletter/ });
+  // ⌘K listens once the page is up.
+  await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+k");
+  const finder = page.getByRole("dialog", { name: "Jump anywhere" });
+  await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("newsletter");
+  const result = finder.getByRole("option", { name: /Rename the newsletter/ });
   await expect(result).toContainText("Archived");
   await result.click();
   await expect(main.getByRole("region", { name: "Archived" })).toBeVisible();
@@ -101,7 +109,6 @@ test("[TC-CH-157] a thread archived from its menu is found in the Archive and in
   // Restore: back in the hob's list with its history, and it takes messages again.
   await main.getByRole("button", { name: "Restore “Rename the newsletter”" }).click();
   await expect(threadLink(page, "Rename the newsletter")).toBeVisible();
-  await expect(threadList(page).getByRole("link", { name: /^Archived/ })).toHaveCount(0);
   await expect(main.getByText("Echo: Rename the newsletter", { exact: true })).toBeVisible();
   const composer = main.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("Try a shorter name");

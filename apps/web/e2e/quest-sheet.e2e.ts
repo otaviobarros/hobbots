@@ -1,10 +1,19 @@
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
+import { openQuest, taskSheet } from "./work-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
+/** Goes from a task sheet back to the quest sheet it slid in over. */
+const backTo = (sheet: Locator, title: string) => sheet.getByRole("button", { name: `Back to ${title}` }).click();
+
+/** The quest button for this request in the chat header. */
+const headerQuest = (page: Page, title: string) =>
+  page.getByRole("region", { name: "Work in progress" }).getByRole("button", { name: new RegExp(title) });
+
 // covers CH-005, OR-006, UX-001
-test("[TC-CH-190] the Quest tab shows the whole tree live with its controls and keeps a pinned Quest in every thread", async ({
+test("[TC-CH-190] the quest sheet shows the whole tree live with its controls and keeps a pinned Quest in every thread", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
@@ -14,28 +23,26 @@ test("[TC-CH-190] the Quest tab shows the whole tree live with its controls and 
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  // The tab is the control room: every Task, its owner, where it stands and who it waits on.
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Plan the Black Friday campaign" });
+  // The quest sheet lists every Task, its owner, where it stands and who it waits on.
+  const room = await openQuest(page, "Plan the Black Friday campaign");
   await expect(room).toContainText("Aldric's quest");
-  const tasks = room.getByRole("list", { name: "Tasks of Plan the Black Friday campaign" });
-  await expect(tasks.getByRole("button", { name: /Quill · Draft the landing copy/ })).toBeVisible();
-  const build = tasks.getByRole("button", { name: /Ada · Build the campaign/ });
+  await expect(room.getByRole("button", { name: /Quill · Draft the landing copy/ })).toBeVisible();
+  const build = room.getByRole("button", { name: /Ada · Build the campaign/ });
   await expect(build).toContainText("waiting on Quill");
   await expect(build).toContainText("you", { timeout: 15_000 });
-
-  // A row opens its Task in the drawer and the tab shows the controls that apply to it.
-  await build.click();
-  await expect(page.getByRole("complementary", { name: "Build the campaign, Task details" })).toBeVisible();
-  await expect(build).toHaveAttribute("aria-current", "true");
-  const controls = room.getByRole("region", { name: "Controls for Build the campaign" });
-  await expect(controls.getByRole("button", { name: "Reassign" })).toBeEnabled();
-  await expect(controls.getByRole("button", { name: "Cancel Task" })).toBeEnabled();
-  await expect(controls.getByRole("button", { name: "Retry" })).toHaveCount(0);
   await expect(room.getByRole("button", { name: "Cancel Quest" })).toBeEnabled();
   await expect(room).not.toContainText("arrive once the hub can confirm");
 
-  // Pinned, the Quest stays in the tab of another thread, and its Tasks still open there.
+  // A row opens its task sheet, with the controls that apply to it.
+  await build.click();
+  const sheet = taskSheet(page, "Build the campaign");
+  const controls = sheet.getByRole("region", { name: "Controls for Build the campaign" });
+  await expect(controls.getByRole("button", { name: "Reassign" })).toBeEnabled();
+  await expect(controls.getByRole("button", { name: "Cancel Task" })).toBeEnabled();
+  await expect(controls.getByRole("button", { name: "Retry" })).toHaveCount(0);
+  await backTo(sheet, "Plan the Black Friday campaign");
+
+  // Pinned, the Quest stays in the header of another thread, and its Tasks still open there.
   const pin = room.getByRole("button", { name: "Pin" });
   await expect(pin).toHaveAttribute("aria-pressed", "false");
   await pin.click();
@@ -45,25 +52,30 @@ test("[TC-CH-190] the Quest tab shows the whole tree live with its controls and 
   await page.getByRole("textbox", { name: /^Message Aldric/ }).fill("Something else");
   await page.getByRole("textbox", { name: /^Message Aldric/ }).press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
+  await headerQuest(page, "Plan the Black Friday campaign").click();
   await expect(room).toContainText("Pinned from another thread");
   await room.getByRole("button", { name: /Quill · Draft the landing copy/ }).click();
-  await expect(page.getByRole("complementary", { name: "Draft the landing copy, Task details" })).toBeVisible();
+  const copy = taskSheet(page, "Draft the landing copy");
+  await expect(copy).toBeVisible();
+  await backTo(copy, "Plan the Black Friday campaign");
 
-  // The answer goes back from the card in the Quest's own thread, and the tab follows live.
+  // The answer goes back from the card in the Quest's own thread, and the sheet follows live.
   await room.getByRole("link", { name: "Open its thread" }).click();
   const asks = page.getByRole("region", { name: "Ada asks you" });
   await asks.getByRole("textbox", { name: "Your answer to Ada" }).fill("Yes, Dec 12 for international orders.");
   await asks.getByRole("button", { name: "Send answer" }).click();
-  await expect(tasks.getByRole("button", { name: /Ada · Build the campaign/ })).toContainText("Done", {
+  await openQuest(page, "Plan the Black Friday campaign");
+  await expect(room.getByRole("button", { name: /Ada · Build the campaign/ })).toContainText("Done", {
     timeout: 15_000,
   });
   // The Quest ends only once Aldric's chat has read each member's result, a paced fake reply apiece.
   await expect(room.getByRole("button", { name: "Cancel Quest" })).toHaveCount(0, { timeout: 30_000 });
 
-  // Unpinned, it leaves the other thread's tab.
+  // Unpinned, it leaves the other thread's header.
   await room.getByRole("button", { name: "Pin" }).click();
   await page.goBack();
-  await expect(page.getByText("No Quest in this thread")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /^Message Aldric/ })).toBeVisible();
+  await expect(headerQuest(page, "Plan the Black Friday campaign")).toHaveCount(0);
 
   // A pin the hub no longer has says so and can be unpinned.
   await page.evaluate(() => localStorage.setItem("quest.pinned", JSON.stringify(["gone"])));
@@ -74,7 +86,7 @@ test("[TC-CH-190] the Quest tab shows the whole tree live with its controls and 
 });
 
 // covers CH-005, OR-006, UX-001
-test("[TC-CH-193] the Quest tab says why a Reassign is refused, and cancels the Black Friday Quest until every Task confirms", async ({
+test("[TC-CH-193] the task sheet says why a Reassign is refused, and the quest sheet cancels the Black Friday Quest until every Task confirms", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
@@ -82,18 +94,17 @@ test("[TC-CH-193] the Quest tab says why a Reassign is refused, and cancels the 
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Plan the Black Friday campaign" });
-  const tasks = room.getByRole("list", { name: "Tasks of Plan the Black Friday campaign" });
-  const copy = tasks.getByRole("button", { name: /Quill · Draft the landing copy/ });
-  const build = tasks.getByRole("button", { name: /Ada · Build the campaign/ });
+  const room = await openQuest(page, "Plan the Black Friday campaign");
+  const copy = room.getByRole("button", { name: /Quill · Draft the landing copy/ });
+  const build = room.getByRole("button", { name: /Ada · Build the campaign/ });
   // Quill's copy is done and Ada waits on your answer: two Tasks run when the Quest is cancelled.
   await expect(copy).toContainText("Done", { timeout: 15_000 });
   await expect(build).toContainText("Needs you", { timeout: 15_000 });
 
-  // Reassign offers only the hobs the hub would accept, and a refusal says why in the tab.
+  // Reassign offers only the hobs the hub would accept, and a refusal says why on the sheet.
   await build.click();
-  const controls = room.getByRole("region", { name: "Controls for Build the campaign" });
+  const sheet = taskSheet(page, "Build the campaign");
+  const controls = sheet.getByRole("region", { name: "Controls for Build the campaign" });
   await controls.getByRole("button", { name: "Reassign" }).click();
   const picker = controls.getByRole("group", { name: "Give Build the campaign to" });
   await expect(picker.getByRole("button", { name: "Aldric" })).toHaveCount(0);
@@ -101,9 +112,10 @@ test("[TC-CH-193] the Quest tab says why a Reassign is refused, and cancels the 
   await expect(controls.getByRole("alert")).toHaveText(
     "Ada is working on it right now. Reassign it once that turn ends.",
   );
-  await expect(build).toContainText("Needs you");
   await picker.getByRole("button", { name: "Keep it" }).click();
   await expect(picker).toBeHidden();
+  await backTo(sheet, "Plan the Black Friday campaign");
+  await expect(build).toContainText("Needs you");
 
   // Cancel Quest asks first, then shows Cancelling… until every Task confirms it stopped.
   const cancel = room.getByRole("button", { name: "Cancel Quest" });
@@ -116,24 +128,23 @@ test("[TC-CH-193] the Quest tab says why a Reassign is refused, and cancels the 
   await expect(room.getByRole("status").filter({ hasText: "Cancelled: 2 Tasks confirmed they stopped." })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(tasks.getByRole("button", { name: /Aldric · Plan the Black Friday campaign/ })).toContainText(
+  await expect(room.getByRole("button", { name: /Aldric · Plan the Black Friday campaign/ })).toContainText(
     "Cancelled",
   );
   await expect(build).toContainText("Cancelled");
   await expect(copy).toContainText("Done");
   await expect(room.getByRole("button", { name: /Cancel Quest|Cancelling…/ })).toHaveCount(0);
-  // Once it ended nothing is left to control, but its Workbench still opens.
-  await expect(controls.getByRole("button")).toHaveText(["Open in Workbench"]);
-
-  // The card in the chat and the open drawer follow.
   await expect(page.getByText("Aldric stopped this")).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "Build the campaign, Task details" })).toContainText(
-    "Cancelled",
-  );
+
+  // Once it ended nothing is left to control, but its Workbench still opens.
+  await build.click();
+  await expect(sheet).toContainText("Cancelled");
+  await expect(controls.getByRole("button")).toHaveCount(0);
+  await expect(sheet.getByRole("button", { name: "Open Workbench" })).toBeEnabled();
 });
 
 // covers CH-005, OR-006, EX-001, UX-001
-test("[TC-CH-192] the Quest tab cancels a Task, retries a failed one and gives another to a new hob, each live", async ({
+test("[TC-CH-192] the task sheet cancels a Task, retries a failed one and gives another to a new hob, each live", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
@@ -141,20 +152,20 @@ test("[TC-CH-192] the Quest tab cancels a Task, retries a failed one and gives a
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a spring sale for the shop");
   await composer.press("Enter");
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Plan the spring sale" });
-  const tasks = room.getByRole("list", { name: "Tasks of Plan the spring sale" });
-  const signs = tasks.getByRole("button", { name: /Quill · Order the sale signs/ });
-  const banner = tasks.getByRole("button", { name: /Quill · Write the sale banner/ });
-  const email = tasks.getByRole("button", { name: /· Schedule the sale email/ });
+  const quest = "Plan the spring sale";
+  const room = await openQuest(page, quest);
+  const signs = room.getByRole("button", { name: /Quill · Order the sale signs/ });
+  const banner = room.getByRole("button", { name: /Quill · Write the sale banner/ });
+  const email = room.getByRole("button", { name: /· Schedule the sale email/ });
   await expect(signs).toContainText("Running", { timeout: 15_000 });
   await expect(banner).toContainText("Failed");
   await expect(email).toContainText("Ada");
   await expect(page.getByText("Aldric's party: Quill and Ada")).toBeVisible();
 
-  // Cancel Task asks first, then the Task confirms it stopped; the drawer follows.
+  // Cancel Task asks first, then the Task confirms it stopped; the sheet and the row follow.
   await signs.click();
-  const signsControls = room.getByRole("region", { name: "Controls for Order the sale signs" });
+  const signsSheet = taskSheet(page, "Order the sale signs");
+  const signsControls = signsSheet.getByRole("region", { name: "Controls for Order the sale signs" });
   await expect(signsControls.getByRole("button", { name: "Retry" })).toHaveCount(0);
   await signsControls.getByRole("button", { name: "Cancel Task" }).click();
   await expect(signsControls).toContainText("Cancel Order the sale signs and everything under it?");
@@ -162,36 +173,40 @@ test("[TC-CH-192] the Quest tab cancels a Task, retries a failed one and gives a
   await expect(signsControls.getByRole("status")).toHaveText("Cancelled: the Task confirmed it stopped.", {
     timeout: 15_000,
   });
-  await expect(signs).toContainText("Cancelled");
-  await expect(page.getByRole("complementary", { name: "Order the sale signs, Task details" })).toContainText(
-    "Cancelled",
-  );
+  await expect(signsSheet).toContainText("Cancelled");
   await expect(signsControls.getByRole("button", { name: "Cancel Task" })).toHaveCount(0);
+  await backTo(signsSheet, quest);
+  await expect(signs).toContainText("Cancelled");
 
   // Retry queues the failed Task again for a new Attempt of the same Task.
   await banner.click();
-  const bannerControls = room.getByRole("region", { name: "Controls for Write the sale banner" });
-  await expect(bannerControls).toContainText("Attempt 1");
+  const bannerSheet = taskSheet(page, "Write the sale banner");
+  const bannerControls = bannerSheet.getByRole("region", { name: "Controls for Write the sale banner" });
+  await expect(bannerSheet).toContainText("attempt 1");
   await bannerControls.getByRole("button", { name: "Retry" }).click();
-  await expect(bannerControls).toContainText(/Queued: waiting for Quill to start Attempt 2\.|Attempt 2/);
-  await expect(bannerControls).toContainText("Attempt 2", { timeout: 15_000 });
+  await expect(bannerSheet).toContainText(/Queued: waiting for Quill to start Attempt 2\.|attempt 2/);
+  await expect(bannerSheet).toContainText("attempt 2", { timeout: 15_000 });
+  await backTo(bannerSheet, quest);
   await expect(banner).not.toContainText("Failed");
 
   // Reassign gives Ada's failed Task to Quill, the only hob it can go to, and the party follows.
   await email.click();
-  const emailControls = room.getByRole("region", { name: "Controls for Schedule the sale email" });
+  const emailControls = taskSheet(page, "Schedule the sale email").getByRole("region", {
+    name: "Controls for Schedule the sale email",
+  });
   await emailControls.getByRole("button", { name: "Reassign" }).click();
   const picker = emailControls.getByRole("group", { name: "Give Schedule the sale email to" });
   await expect(picker.getByRole("button")).toHaveText(["Quill", "Keep it"]);
   await picker.getByRole("button", { name: "Quill" }).click();
   await expect(picker).toBeHidden();
-  await expect(tasks.getByRole("button", { name: /Quill · Schedule the sale email/ })).toBeVisible();
   await expect(emailControls.getByRole("alert")).toHaveCount(0);
+  await backTo(taskSheet(page, "Schedule the sale email"), quest);
+  await expect(room.getByRole("button", { name: /Quill · Schedule the sale email/ })).toBeVisible();
   await expect(page.getByText("Aldric's party: Quill", { exact: true })).toBeVisible();
 });
 
 // covers CH-005, OR-004
-test("[TC-CH-191] a nested Quest shows under its member in the Quest tab, and the member names the party it leads", async ({
+test("[TC-CH-191] a nested Quest shows under its member on the quest sheet, and the member names the party it leads", async ({
   page,
 }) => {
   const { url, aldric } = await questHub({ nested: true });
@@ -200,19 +215,14 @@ test("[TC-CH-191] a nested Quest shows under its member in the Quest tab, and th
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
 
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Plan the Black Friday campaign" });
-  const tasks = room.getByRole("list", { name: "Tasks of Plan the Black Friday campaign" });
-  const rook = tasks.getByRole("button", { name: /Rook · Run the ads/ });
-  const pip = tasks.getByRole("button", { name: /Pip · Research the keywords/ });
+  const room = await openQuest(page, "Plan the Black Friday campaign");
+  const rook = room.getByRole("button", { name: /Rook · Run the ads/ });
+  const pip = room.getByRole("button", { name: /Pip · Research the keywords/ });
   await expect(rook).toContainText("Leads Pip");
   await expect(pip).toBeVisible();
-  // Pip sits under Rook, one level further in than Rook sits under Aldric.
-  const left = async (row: typeof rook) =>
-    (await row.evaluate((each) => getComputedStyle(each).paddingInlineStart)) ?? "";
-  const top = tasks.getByRole("button", { name: /Aldric · Plan the Black Friday campaign/ });
-  const [aldricPad, rookPad, pipPad] = await Promise.all([left(top), left(rook), left(pip)]);
-  expect(Number.parseFloat(rookPad)).toBeGreaterThan(Number.parseFloat(aldricPad));
+  // Pip sits under Rook, one level further in.
+  const left = async (row: Locator) => (await row.evaluate((each) => getComputedStyle(each).paddingInlineStart)) ?? "";
+  const [rookPad, pipPad] = await Promise.all([left(rook), left(pip)]);
   expect(Number.parseFloat(pipPad)).toBeGreaterThan(Number.parseFloat(rookPad));
   await expect(pip).toContainText("Done", { timeout: 30_000 });
   await expect(rook).toContainText("Done", { timeout: 30_000 });

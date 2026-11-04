@@ -90,13 +90,14 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   await chief(page).click();
   await expect(page.getByRole("list", { name: "Requests" })).toContainText("Push your work");
 
-  // Home lists it and opens it in the Inbox.
+  // Home's tray holds it, and Open Inbox leads to it there.
   await page.getByRole("link", { name: "Home", exact: true }).click();
-  const needsYou = page.getByRole("region", { name: "Needs you" });
-  await expect(needsYou).toContainText("Pip → you");
-  await needsYou.getByRole("link", { name: /Push your work/ }).click();
+  const needsYou = page.getByRole("region", { name: "Needs you", exact: true });
+  await expect(needsYou.getByRole("region", { name: "Needs you, 1 of 1" })).toContainText("git push origin feature");
+  await needsYou.getByRole("link", { name: "Open Inbox" }).click();
 
   const list = page.getByRole("list", { name: "Requests" });
+  await list.getByRole("link", { name: /Push your work/ }).click();
   await expect(list).toContainText("Pip · ");
   await expect(list.getByRole("link", { name: /Push your work/ })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("tablist", { name: "Inbox filters" })).toContainText("Needs you1");
@@ -310,4 +311,25 @@ test("[TC-UX-090] the count chips on Home filter the scene to the hobs in that s
 
   await chips.getByRole("radio", { name: "All 2" }).click();
   await expect(spot(/^Pip, /)).toHaveCSS("opacity", "1");
+});
+
+// covers UX-001, PE-003
+test("[TC-UX-093] Home's tray decides a request where it waits, then says all clear", async ({ page }) => {
+  await pipAsksToPush(page);
+  await page.getByRole("link", { name: "Home", exact: true }).click();
+  const needsYou = page.getByRole("region", { name: "Needs you", exact: true });
+  const tray = needsYou.getByRole("region", { name: "Needs you, 1 of 1" });
+  await expect(tray).toContainText("Pip asks to");
+  await expect(needsYou.getByText("All clear")).toHaveCount(0);
+
+  await tray.getByRole("button", { name: "Allow once" }).click();
+  await expect(tray).toBeHidden();
+  await expect(needsYou).toContainText("All clear");
+  await expect(needsYou).toContainText("Nothing needs you. Your hobs will ask here first when something does.");
+
+  // The Inbox records the decision as made there, and See history opens it.
+  await needsYou.getByRole("link", { name: "See history" }).click();
+  await expect(page).toHaveURL(/#\/inbox\?tab=history$/);
+  const history = page.getByRole("region", { name: "Decision history" });
+  await expect(history.locator('[data-state="approved"]')).toContainText("in the Inbox");
 });

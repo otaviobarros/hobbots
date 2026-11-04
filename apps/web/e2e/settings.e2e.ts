@@ -272,3 +272,26 @@ test("[TC-UX-123] Your data holds Backups with Restore and Export as files, reti
   await expect(page.getByRole("region", { name: "Retired hobs" })).toContainText("No retired hobs.");
   await expect(page.getByRole("region", { name: "Data folder" }).getByRole("button", { name: "Copy" })).toBeVisible();
 });
+
+// covers UX-005
+test("[TC-UX-125] Help and about links the getting started guide and lists every keyboard shortcut", async ({
+  page,
+}) => {
+  await openSettings(page, "help");
+  const about = page.getByRole("region", { name: "Help and about" });
+  await expect(about.getByRole("link", { name: "Getting started guide" })).toHaveAttribute(
+    "href",
+    "https://github.com/otaviobarros/hobbots#readme",
+  );
+
+  await about.getByRole("button", { name: "Keyboard shortcuts" }).click();
+  const dialog = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+  // The browser here is not a Mac, so the keys use Ctrl and Alt.
+  await expect(dialog.getByRole("definition").filter({ hasText: "Jump to a hob" })).toBeVisible();
+  await expect(dialog).toContainText("Ctrl+K");
+  await expect(dialog).toContainText("Ctrl+Alt+A");
+  await expect(dialog).toContainText("Archive the open chat");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(about.getByRole("button", { name: "Keyboard shortcuts" })).toBeFocused();
+});
