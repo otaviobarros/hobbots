@@ -25,7 +25,7 @@ import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
-import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
+import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
@@ -148,6 +148,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
         old ? upsertNewer(old, event.message, upsertMessage) : old,
       );
       if (event.message.role === "assistant") recordActivity(queryClient, event.message);
+      showLastLine(queryClient, event.message);
       return;
     // The message itself arrives as MessageUpserted just before.
     case "MessageQueued":

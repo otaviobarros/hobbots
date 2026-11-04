@@ -101,11 +101,11 @@ test("[TC-AG-098] three hobs with different models chat at once in the app, an e
   // Pip's instructions change in its profile, in another window, while its reply still runs.
   const profile = await context.newPage();
   await profile.goto(`${current.url}/#/hobs/${pip.id}/profile`);
-  const instructions = profile.getByRole("textbox", { name: "Instructions" });
+  const instructions = profile.getByRole("textbox", { name: "What Pip should do" });
   await expect(instructions).toHaveValue("Write short answers.");
   await instructions.fill("Write long answers.");
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(profile.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
+  await expect(profile.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
   expect((await replies(pipChat.thread)).map((m) => m.status)).toEqual(["streaming"]);
 
   // Every reply completes in its own window, on its own thread.

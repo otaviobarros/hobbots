@@ -1,9 +1,12 @@
 import type { HobGitHubAppDisconnected, HobGitHubAppStarted, HobGitHubAppStatus } from "@hobbots/api";
+import { HOB_COLORS } from "@hobbots/art/look";
 import { type Agent, hobAppBot } from "@hobbots/domain";
+import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ApiError } from "../api/client.ts";
+import { githubStatusQuery } from "../api/github.ts";
 import {
   HOB_APP_WATCH,
   hobGitHubAppQuery,
@@ -12,6 +15,7 @@ import {
   useStartHobGitHubApp,
 } from "../api/hob-github-app.ts";
 import { formatDay } from "../lib/format.ts";
+import { HobSprite } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.charms.github.app;
@@ -95,8 +99,10 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
     });
 
   return (
-    <section aria-label={copy.label} className="flex flex-col gap-2 border-t-2 border-line pt-2.5 ps-[54px]">
-      <h3 className="lbl m-0 text-xs text-label">{copy.label}</h3>
+    <section aria-label={copy.label} className="flex flex-col gap-2.5">
+      <h3 className="lbl m-0 flex items-center gap-2 text-label after:h-px after:flex-1 after:bg-line after:content-['']">
+        {copy.label}
+      </h3>
       {status.isError && (
         <p role="alert" className="m-0 flex flex-wrap items-center gap-3 text-[13px] text-rose">
           {copy.failed}
@@ -148,6 +154,13 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
   );
 }
 
+// The card finishes of the design: a lantern-tinted offer, a quiet wait, and a rose-tinted problem.
+const OFFER =
+  "flex flex-wrap items-center gap-3.5 rounded-control bg-[color-mix(in_srgb,var(--color-lantern)_9%,var(--color-deep))] px-4 py-3.5 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-lantern)_35%,transparent)]";
+const WAIT = "flex flex-col gap-2.5 rounded-control bg-deep px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--color-line-2)]";
+const PROBLEM =
+  "flex flex-col items-start gap-2 rounded-control bg-[color-mix(in_srgb,var(--color-rose)_10%,var(--color-deep))] px-4 py-3.5 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-rose)_40%,transparent)]";
+
 /** What the last change did: a disconnect with where to delete the app, or why a change failed. */
 function Outcome({
   hob,
@@ -163,12 +176,12 @@ function Outcome({
   return (
     <>
       {disconnected !== null && (
-        <span role="status" className="text-[13px] text-text-secondary">
+        <span role="status" className="rounded-control bg-notice px-3 py-2 text-detail text-text">
           {copy.disconnected({ name: hob.name })}
           {disconnected.deleteUrl !== null && (
             <>
               {" "}
-              <a href={disconnected.deleteUrl} target="_blank" rel="noreferrer" className="text-lantern">
+              <a href={disconnected.deleteUrl} target="_blank" rel="noreferrer" className="text-link underline">
                 {copy.deleteOnGitHub}
               </a>
             </>
@@ -176,12 +189,12 @@ function Outcome({
         </span>
       )}
       {startError !== null && (
-        <span role="alert" className="text-[13px] text-rose">
+        <span role="alert" className="text-detail text-rose">
           {refusalOf(startError, copy.startFailed)}
         </span>
       )}
       {changeFailed && (
-        <span role="alert" className="text-[13px] text-rose">
+        <span role="alert" className="text-detail text-rose">
           {copy.changeFailed}
         </span>
       )}
@@ -207,20 +220,48 @@ function Finishing({
   onCancel: () => void;
 }) {
   return (
-    <div className="cut flex flex-col gap-1.5 border-2 border-lantern bg-notice px-3 py-2.5" role="status">
-      <span className="text-[13px]">{copy.finishOnGitHub({ name: hob.name })}</span>
-      <a href={started.url} target="_blank" rel="noreferrer" className="text-[13px] text-lantern">
-        {copy.openAgain}
-      </a>
-      <span className="text-[13px] text-text-secondary">{copy.restartNote}</span>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" disabled={pending} onClick={onRestart}>
+    <div className={WAIT} role="status">
+      <span className="flex items-center gap-2.5">
+        <span
+          aria-hidden
+          className="size-3.5 flex-none animate-spin rounded-dot border-2 border-lantern/30 border-t-lantern motion-reduce:animate-none"
+        />
+        <strong className="text-sm text-text-strong">{copy.finishOnGitHub({ name: hob.name })}</strong>
+      </span>
+      <span className="text-detail text-text-secondary">{copy.restartNote}</span>
+      <span className="flex flex-wrap items-center gap-2">
+        <Button asChild variant="outline" size="sm">
+          <a href={started.url} target="_blank" rel="noreferrer">
+            {copy.openAgain}
+          </a>
+        </Button>
+        <Button variant="ghost" size="sm" disabled={pending} onClick={onRestart}>
           {copy.restart}
         </Button>
-        <Button variant="outline" size="sm" onClick={onCancel}>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
           {copy.cancel}
         </Button>
-      </div>
+      </span>
+    </div>
+  );
+}
+
+/** Who the hob acts as when it has no app of its own: you, with the account connected in Settings. */
+function You({ hob }: { hob: Agent }) {
+  const github = useQuery(githubStatusQuery).data;
+  const login = github?._tag === "Connected" ? github.account.login : null;
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        aria-hidden
+        className="grid size-9 flex-none place-items-center rounded-dot bg-[color-mix(in_srgb,var(--color-moonlight)_26%,var(--color-deep))] font-bold text-text-strong"
+      >
+        {(login ?? "?").slice(0, 1).toUpperCase()}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <strong className="text-text-strong">{login === null ? copy.you : copy.youAs({ login })}</strong>
+        <span className="text-detail text-text-secondary">{copy.asYou({ name: hob.name })}</span>
+      </span>
     </div>
   );
 }
@@ -244,15 +285,18 @@ function NoApp({
 }) {
   return (
     <>
-      <span className="text-[13px] text-text-secondary">{copy.asYou({ name: hob.name })}</span>
-      {cannotCreate === "no-keychain" && <span className="text-[13px] text-label">{copy.noKeychain}</span>}
+      {started === null && <You hob={hob} />}
+      {cannotCreate === "no-keychain" && <span className="text-detail text-label">{copy.noKeychain}</span>}
       {cannotCreate === null && hob.status !== "retired" && started === null && (
-        <div className="flex flex-col items-start gap-1.5">
-          <Button size="sm" disabled={pending} onClick={onGive}>
-            {copy.give({ name: hob.name })}
+        <div className={OFFER}>
+          <span className="flex min-w-[220px] flex-1 flex-col">
+            <strong className="text-sm text-text-strong">{copy.give({ name: hob.name })}</strong>
+            <span className="text-detail text-text-secondary">{copy.giveNote({ name: hob.name })}</span>
+            {expired && <span className="text-detail text-label">{copy.expired}</span>}
+          </span>
+          <Button disabled={pending} onClick={onGive}>
+            {copy.makeApp}
           </Button>
-          <span className="text-[13px] text-label">{copy.giveNote({ name: hob.name })}</span>
-          {expired && <span className="text-[13px] text-label">{copy.expired}</span>}
         </div>
       )}
       {started !== null && (
@@ -283,27 +327,48 @@ function ConnectedApp({
   const { app, needsReconnect } = status;
   return (
     <>
-      <span className="text-[13px] text-text-secondary">
-        {copy.actsAs}{" "}
-        <a href={app.htmlUrl} target="_blank" rel="noreferrer" className="font-bold text-moonlight">
-          {hobAppBot(app)}
-        </a>
-        . {copy.since({ since: formatDay(app.connectedAt) })}
-      </span>
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="grid size-10 flex-none place-items-end overflow-hidden rounded-control"
+          style={{
+            background: `linear-gradient(180deg, color-mix(in srgb, ${HOB_COLORS[hob.lookColor].hat} 30%, var(--color-deep)), color-mix(in srgb, ${HOB_COLORS[hob.lookColor].hat} 12%, var(--color-deep)))`,
+          }}
+        >
+          <HobSprite hob={hob} size={34} />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="flex flex-wrap items-center gap-2">
+            <a
+              href={app.htmlUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-sm font-bold text-text-strong no-underline hover:text-lantern hover:underline"
+            >
+              {hobAppBot(app)}
+            </a>
+            <Badge variant="waiting">{copy.ownApp}</Badge>
+          </span>
+          <span className="text-detail text-text-secondary">{copy.made({ since: formatDay(app.connectedAt) })}</span>
+        </span>
+      </div>
       {needsReconnect !== null && (
-        <div role="alert" className="cut flex flex-col items-start gap-2 border-2 border-rose bg-notice px-3 py-2.5">
-          <span className="text-sm font-bold text-rose">{copy.reconnectTitle}</span>
-          <span className="text-[13px]">
+        <div role="alert" className={PROBLEM}>
+          <span className="flex items-center gap-2">
+            <strong className="text-text-strong">{copy.reconnectTitle}</strong>
+            <Badge variant="failed">{copy.cannotAct}</Badge>
+          </span>
+          <span className="text-sm text-text">
             {needsReconnect.reason === "key"
               ? copy.reconnectKey({ name: hob.name })
               : copy.reconnectInstallation({ name: hob.name })}
           </span>
           {needsReconnect.reason === "key" ? (
-            <Button size="sm" disabled={pending} onClick={onNewApp}>
+            <Button disabled={pending} onClick={onNewApp}>
               {copy.newApp({ name: hob.name })}
             </Button>
           ) : (
-            <Button asChild size="sm">
+            <Button asChild>
               <a href={status.installUrl} target="_blank" rel="noreferrer" onClick={onWatch}>
                 {copy.reinstall}
               </a>
@@ -315,23 +380,21 @@ function ConnectedApp({
         <Installations hob={hob} status={status} watching={watching} onWatch={onWatch} />
       )}
       {confirming ? (
-        <div className="flex flex-col items-start gap-2">
-          <span className="text-[13px]">{copy.confirmDisconnect({ name: hob.name })}</span>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="deny" size="sm" disabled={pending} onClick={onDisconnect}>
+        <div className={PROBLEM}>
+          <span className="text-sm text-text">{copy.confirmDisconnect({ name: hob.name })}</span>
+          <span className="flex flex-wrap gap-2">
+            <Button variant="deny" disabled={pending} onClick={onDisconnect}>
               {copy.disconnect}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setConfirming(false)}>
-              {copy.cancel}
+            <Button variant="outline" onClick={() => setConfirming(false)}>
+              {copy.keep}
             </Button>
-          </div>
+          </span>
         </div>
       ) : (
-        <div>
-          <Button variant="outline" size="sm" disabled={pending} onClick={() => setConfirming(true)}>
-            {copy.disconnect}
-          </Button>
-        </div>
+        <Button variant="ghost" size="sm" className="self-start" disabled={pending} onClick={() => setConfirming(true)}>
+          {copy.disconnectAsk}
+        </Button>
       )}
     </>
   );
@@ -353,7 +416,7 @@ function Installations({
   const listed = installations.data?.installations;
   if (installations.isError) {
     return (
-      <p role="alert" className="m-0 flex flex-wrap items-center gap-3 text-[13px] text-rose">
+      <p role="alert" className="m-0 flex flex-wrap items-center gap-3 text-detail text-rose">
         {copy.installationsFailed}
         <Button variant="outline" size="xs" onClick={() => void installations.refetch()}>
           {copy.retry}
@@ -364,9 +427,12 @@ function Installations({
   if (listed === undefined) return null;
   if (listed.length === 0) {
     return (
-      <div className="flex flex-col items-start gap-1.5">
-        <span className="text-[13px] text-text-secondary">{copy.notInstalled({ name: hob.name })}</span>
-        <Button asChild size="sm">
+      <div className={OFFER}>
+        <span className="flex min-w-[220px] flex-1 flex-col">
+          <strong className="text-sm text-text-strong">{copy.installTitle}</strong>
+          <span className="text-detail text-text-secondary">{copy.notInstalled({ name: hob.name })}</span>
+        </span>
+        <Button asChild>
           <a href={status.installUrl} target="_blank" rel="noreferrer" onClick={onWatch}>
             {copy.install}
           </a>
@@ -375,12 +441,14 @@ function Installations({
     );
   }
   return (
-    <>
-      <span className="lbl pt-1 text-xs text-label">{copy.installedLabel}</span>
-      <ul aria-label={copy.installedLabel} className="m-0 flex list-none flex-col gap-1.5 p-0">
-        {listed.map((installation) => (
-          <li key={installation.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-            <span>
+    <ul
+      aria-label={copy.installedLabel}
+      className="m-0 flex list-none flex-col gap-2 rounded-control bg-deep px-3.5 py-3 p-0"
+    >
+      {listed.map((installation) => (
+        <li key={installation.id} className="flex flex-col gap-2 px-3.5 py-1 first:pt-3 last:pb-3">
+          <span className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="flex-1">
               {copy.installation({ account: installation.account, all: installation.repositorySelection === "all" })}
               {installation.suspended && <span className="ms-1.5 text-rose">{copy.suspended}</span>}
             </span>
@@ -389,17 +457,17 @@ function Installations({
               target="_blank"
               rel="noreferrer"
               onClick={onWatch}
-              className="text-lantern no-underline hover:underline"
+              className="text-detail text-link underline"
             >
               {copy.change}
             </a>
-            {installation.repositories !== null && (
-              <Repositories account={installation.account} names={installation.repositories} />
-            )}
-          </li>
-        ))}
-      </ul>
-    </>
+          </span>
+          {installation.repositories !== null && (
+            <Repositories account={installation.account} names={installation.repositories} />
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -409,18 +477,23 @@ const NAMED_REPOSITORIES = 8;
 /** The repositories one installation reaches, by name, without the account when it is the installation's. */
 function Repositories({ account, names }: { account: string; names: ReadonlyArray<string> }) {
   if (names.length === 0) {
-    return <span className="basis-full text-xs text-text-secondary">{copy.noRepositories}</span>;
+    return <span className="text-xs text-text-secondary">{copy.noRepositories}</span>;
   }
   const shown = names.slice(0, NAMED_REPOSITORIES);
+  const chip =
+    "rounded-tag bg-card px-2 py-0.5 font-mono text-meta text-text-secondary shadow-[inset_0_0_0_1px_var(--color-line)]";
   return (
-    <ul
-      aria-label={copy.reaches({ account })}
-      className="m-0 flex basis-full list-none flex-wrap gap-x-2.5 gap-y-1 p-0 font-mono text-xs text-text-secondary"
-    >
+    <ul aria-label={copy.reaches({ account })} className="m-0 flex list-none flex-wrap gap-1.5 p-0">
       {shown.map((name) => (
-        <li key={name}>{name.startsWith(`${account}/`) ? name.slice(account.length + 1) : name}</li>
+        <li key={name} className={chip}>
+          {name.startsWith(`${account}/`) ? name.slice(account.length + 1) : name}
+        </li>
       ))}
-      {names.length > shown.length && <li>{copy.moreRepositories({ count: names.length - shown.length })}</li>}
+      {names.length > shown.length && (
+        <li className="px-1 text-meta text-text-secondary">
+          {copy.moreRepositories({ count: names.length - shown.length })}
+        </li>
+      )}
     </ul>
   );
 }
@@ -437,18 +510,21 @@ function LeftOver({
   onDismiss: () => void;
 }) {
   return (
-    <div role="alert" className="cut flex flex-col items-start gap-2 border-2 border-rose bg-notice px-3 py-2.5">
-      <span className="text-[13px]">
-        {copy.leftOver({ name: hob.name })} {status.problem}
+    <div role="alert" className={PROBLEM}>
+      <strong className="text-text-strong">{copy.leftOverTitle({ name: hob.name })}</strong>
+      <span className="text-sm text-text">
+        {copy.leftOver} {status.problem}
       </span>
-      <div className="flex flex-wrap items-center gap-3">
-        <a href={status.deleteUrl} target="_blank" rel="noreferrer" className="text-[13px] text-lantern">
-          {copy.deleteOnGitHub}
-        </a>
-        <Button variant="outline" size="sm" disabled={pending} onClick={onDismiss}>
+      <span className="flex flex-wrap items-center gap-3">
+        <Button asChild variant="outline">
+          <a href={status.deleteUrl} target="_blank" rel="noreferrer">
+            {copy.deleteOnGitHub}
+          </a>
+        </Button>
+        <Button variant="ghost" disabled={pending} onClick={onDismiss}>
           {copy.dismiss}
         </Button>
-      </div>
+      </span>
     </div>
   );
 }

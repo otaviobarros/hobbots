@@ -1,15 +1,17 @@
-import { type Agent, brainLabel, type Thread } from "@hobbots/domain";
+import type { Agent } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@hobbots/ui/components/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { type ActivityMap, useActivity } from "../../api/activity.ts";
+import { useActivity } from "../../api/activity.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
-import { formatWhen } from "../../lib/time.ts";
+import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
 import type { WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
 import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
+import { HobAside } from "./hob-aside.tsx";
+import { HobChats } from "./hob-chats.tsx";
 import { HobHero } from "./hob-hero.tsx";
 import { doingOf, type HobPageTab, isHobPageTab, statsLine } from "./hob-page-model.ts";
 import { messages } from "./messages.ts";
@@ -42,6 +44,10 @@ export function HobPage({ tab, ...props }: WorkspaceMainProps & { tab: HobPageTa
           {hob.isPending ? copy.loading : copy.missing}
         </p>
       )}
+      {/* The archive toast with Undo stays in sight at the bottom while the page scrolls. */}
+      <div className="sticky bottom-6 z-10 mx-auto mt-auto w-full max-w-[520px] empty:hidden">
+        <ArchiveToastViewport />
+      </div>
     </main>
   );
 }
@@ -96,7 +102,11 @@ function Page({ hob, tab }: { hob: Agent; tab: HobPageTab }) {
             <TabsTrigger value="history">{copy.tabs.history}</TabsTrigger>
           </TabsList>
           <TabsContent value="chats">
-            <ChatList hob={hob} threads={list} activity={activity} />
+            {list.length === 0 ? (
+              <p className="m-0 text-sm text-text-secondary">{copy.chats.none}</p>
+            ) : (
+              <HobChats hob={hob} threads={list} activity={activity} />
+            )}
           </TabsContent>
           <TabsContent value="history">
             <Empty>
@@ -107,47 +117,8 @@ function Page({ hob, tab }: { hob: Agent; tab: HobPageTab }) {
             </Empty>
           </TabsContent>
         </Tabs>
-        <aside aria-label={copy.aside.label({ name: hob.name })} className="flex min-w-0 flex-col gap-3">
-          <section className="cut flex flex-col gap-2 bg-card p-4">
-            <h2 className="lbl m-0 text-label">{copy.aside.thinksWith}</h2>
-            <span className="text-sm">{brainLabel(hob.runtime, hob.model)}</span>
-            <Link to="/hobs/$hobId/profile" params={{ hobId: hob.id }} className="text-[13px] text-link underline">
-              {copy.aside.change}
-            </Link>
-          </section>
-        </aside>
+        <HobAside hob={hob} />
       </div>
     </div>
-  );
-}
-
-/** The hob's chats, newest first, each opening its chat. */
-function ChatList({ hob, threads, activity }: { hob: Agent; threads: ReadonlyArray<Thread>; activity: ActivityMap }) {
-  if (threads.length === 0) return <p className="m-0 text-sm text-text-secondary">{copy.chats.none}</p>;
-  return (
-    <ul className="cut m-0 flex list-none flex-col bg-card p-0">
-      {threads.map((thread) => (
-        <li key={thread.id} className="border-b border-line last:border-b-0">
-          <Link
-            to="/hobs/$hobId/threads/$threadId"
-            params={{ hobId: hob.id, threadId: thread.id }}
-            aria-label={copy.chats.open({ title: thread.title })}
-            className="flex items-center gap-3 px-4 py-3 text-text-strong no-underline hover:bg-hover hover:text-text-strong"
-          >
-            {activity[thread.id] && (
-              <span
-                role="img"
-                aria-label={copy.chats.working}
-                className="size-2 flex-none animate-hb-blink rounded-(--corner-dot) bg-mint"
-              />
-            )}
-            <span title={thread.title} className="min-w-0 flex-1 truncate font-semibold">
-              {thread.title}
-            </span>
-            <span className="text-xs whitespace-nowrap text-label">{formatWhen(thread.updatedAt)}</span>
-          </Link>
-        </li>
-      ))}
-    </ul>
   );
 }

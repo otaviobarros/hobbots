@@ -6,7 +6,8 @@ import type { Moment } from "./work-model.ts";
 
 /**
  * What the chat shows of a request's work under one message: the Task or Quest card, a question
- * that reached you, or a lead's answer that spared you one. Everything else stays on the card.
+ * you answered or that was withdrawn, or a lead's answer that spared you one. A question still open
+ * waits in the Needs-you tray. Everything else stays on the card.
  */
 export function WorkMoments({
   moments,
@@ -30,13 +31,15 @@ export function WorkMoments({
         onWorkbench={onWorkbench}
       />
     ) : moment.kind === "question" ? (
-      <QuestionCard
-        key={`question-${moment.question.id}`}
-        tree={moment.tree}
-        question={moment.question}
-        hobs={hobs}
-        onOpen={onOpen}
-      />
+      moment.question.state === "open" ? null : (
+        <QuestionCard
+          key={`question-${moment.question.id}`}
+          tree={moment.tree}
+          question={moment.question}
+          hobs={hobs}
+          onOpen={onOpen}
+        />
+      )
     ) : (
       <LeadAnsweredLine key={`answered-${moment.question.id}`} question={moment.question} hobs={hobs} />
     ),

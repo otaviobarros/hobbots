@@ -78,7 +78,63 @@ test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a Hi
   await page.goBack();
   await hero.getByRole("link", { name: "Profile" }).click();
   await expect(page.getByRole("main", { name: "Pip's profile" })).toBeVisible();
-  await page.getByRole("link", { name: "Back to Pip's page" }).click();
+  await page.goBack();
   await hero.getByRole("link", { name: "New chat with Pip" }).click();
   await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/new$`));
+});
+
+// covers CH-001, CH-002, CH-006, CH-009
+test("[TC-UX-130] a hob's chats are grouped, searched inside messages, renamed, pinned and archived with Undo", async ({
+  page,
+}) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  for (const prompt of ["Fix the kettle", "Plan the spring launch", "Weekly report on the discount codes"]) {
+    await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+    const composer = page.getByRole("textbox", { name: /^Message Pip/ });
+    await composer.fill(prompt);
+    await composer.press("Enter");
+    await expect(page.getByText(`Echo: ${prompt}`)).toBeVisible();
+  }
+  await page.goto(`${current.url}/#/hobs/${pip.id}`);
+  const main = page.getByRole("main", { name: "Pip's page" });
+  const today = main.getByRole("region", { name: "Today" });
+  await expect(today.getByRole("link", { name: /^Open / })).toHaveCount(3);
+
+  // Search looks inside messages and marks the words.
+  const search = main.getByRole("searchbox", { name: "Search Pip's chats" });
+  await search.fill("codes");
+  const matches = main.getByRole("region", { name: "Matches" });
+  await expect(matches.getByRole("link", { name: /^Open / })).toHaveCount(1);
+  await expect(matches.locator("mark").first()).toHaveText(/codes/i);
+  await search.fill("nothing like this");
+  await expect(main).toContainText("No chats with Pip mention “nothing like this”.");
+  await main.getByRole("button", { name: "Clear search" }).click();
+
+  // Rename in place from the row menu.
+  await main.getByRole("button", { name: "More for “Fix the kettle”" }).click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  const field = main.getByRole("textbox", { name: "New title for “Fix the kettle”" });
+  await field.fill("Kettle repair");
+  await field.press("Enter");
+  await expect(today.getByRole("link", { name: "Open Kettle repair" })).toBeVisible();
+
+  // Pin to the top, which survives a reload.
+  await main.getByRole("button", { name: "More for “Kettle repair”" }).click();
+  await page.getByRole("menuitem", { name: "Pin to the top" }).click();
+  const pinned = main.getByRole("region", { name: "Pinned" });
+  await expect(pinned.getByRole("link", { name: "Open Kettle repair" })).toBeVisible();
+  await page.reload();
+  await expect(pinned.getByRole("link", { name: "Open Kettle repair" })).toBeVisible();
+  await expect(today.getByRole("link", { name: /^Open / })).toHaveCount(2);
+
+  // Archive, then Undo; Archived chats links to the Archive.
+  await main.getByRole("button", { name: "More for “Plan the spring launch”" }).click();
+  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Archived “Plan the spring launch”." })).toBeVisible();
+  await expect(today.getByRole("link", { name: /^Open / })).toHaveCount(1);
+  await expect(main.getByRole("link", { name: /^Archived chats · 1/ })).toBeVisible();
+  await page.getByRole("button", { name: "Undo archive of Plan the spring launch" }).click();
+  await expect(today.getByRole("link", { name: /^Open / })).toHaveCount(2);
+  await expect(main.getByRole("link", { name: /^Archived chats/ })).toHaveCount(0);
 });

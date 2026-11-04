@@ -32,6 +32,20 @@ const reply = (status: Message["status"], content: string) =>
   });
 
 describe("applyEvent", () => {
+  it("makes a reply that lands its thread's last line in the hob's thread list", () => {
+    const client = new QueryClient();
+    const agentId = AgentId.make("aldric");
+    const thread = new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now });
+    client.setQueryData(queryKeys.threads(agentId), [thread]);
+    const lastLine = () => client.getQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId))?.[0]?.lastLine;
+
+    // A reply with no text yet, such as one still calling tools, leaves the line as it is.
+    applyEvent(client, { _tag: "MessageUpserted", message: reply("streaming", "") });
+    expect(lastLine()).toBeNull();
+    applyEvent(client, { _tag: "MessageUpserted", message: reply("complete", "Done.\nThe copy is ready") });
+    expect(lastLine()).toBe("Done. The copy is ready");
+  });
+
   it("does not create a partial list for a thread that was never loaded", () => {
     const client = new QueryClient();
     applyEvent(client, { _tag: "MessageUpserted", message: reply("streaming", "") });

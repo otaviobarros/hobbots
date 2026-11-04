@@ -1,14 +1,5 @@
 import type { WaitingDevice } from "@hobbots/api";
-import {
-  type AgentId,
-  ApprovalRequest,
-  BackpackBlocker,
-  BackpackItem,
-  BackpackItemId,
-  PairingRequest,
-  type TaskId,
-  ThreadId,
-} from "@hobbots/domain";
+import { type AgentId, ApprovalRequest, PairingRequest, type TaskId, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   ADA,
@@ -20,6 +11,7 @@ import {
   QUILL,
   quest,
   question,
+  stuckItem,
   THREAD,
   task,
   tree,
@@ -47,43 +39,7 @@ const names = (agentId: AgentId) => NAMES[agentId] ?? "A hob";
 const request = (expiresAt: string | null, state: ApprovalRequest["state"] = "pending") =>
   new ApprovalRequest({ ...memberApproval(COPY, QUILL), state, expiresAt });
 
-const stuck = (threadId: ThreadId | null, retired = false) =>
-  new BackpackItem({
-    id: BackpackItemId.make("b1"),
-    recipientId: QUILL,
-    kind: "message",
-    actionable: true,
-    priority: 1,
-    state: "failed",
-    taskId: COPY,
-    questId: null,
-    attemptId: null,
-    threadId,
-    dedupeKey: "b1",
-    payload: { _tag: "message", senderId: null, text: "Hi" },
-    notBefore: null,
-    claim: null,
-    fencingToken: 0,
-    deliveries: [],
-    blockers: [
-      new BackpackBlocker({
-        number: 1,
-        reason: retired ? "recipient-retired" : "retries-exhausted",
-        nextAction: retired ? "dismiss" : "retry",
-        diagnostic: null,
-        lastEnd: null,
-        afterDeliveries: 3,
-        raisedAt: at,
-        decision: null,
-        decidedAt: null,
-      }),
-    ],
-    disposition: null,
-    error: null,
-    createdAt: at,
-    updatedAt: at,
-    revision: 1,
-  });
+const stuck = stuckItem;
 
 const device = (expiresAt: string): WaitingDevice => ({
   request: new PairingRequest({

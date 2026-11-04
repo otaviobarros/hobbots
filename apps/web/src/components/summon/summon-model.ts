@@ -1,4 +1,4 @@
-import { ROLE_HAT_TITLES, ROLE_TOOL_TITLES, starterRole } from "@hobbots/domain";
+import { ROLE_HAT_TITLES, ROLE_TOOL_TITLES, type RoleId, starterRole } from "@hobbots/domain";
 import { type FirstHobDraft, nearbySeeds, pickRole } from "../../api/first-hob.ts";
 import { messages } from "./messages.ts";
 
@@ -49,3 +49,17 @@ export const gearHint = (draft: FirstHobDraft): string => {
     emptyHanded: role.tool === "none",
   });
 };
+
+type Starters = typeof messages.arrived.starters;
+
+/** Three first questions for a new hob: its role's own, else its family's, else a general set. */
+export const startersFor = (role: RoleId | null): ReadonlyArray<string> => {
+  const starters: Starters = messages.arrived.starters;
+  if (role === null) return starters.own;
+  if (role in starters) return starters[role as keyof Starters];
+  return starters[starterRole(role).family];
+};
+
+/** How much longer the summoning plays once the hob exists: none under Reduce motion. */
+export const summoningLeft = (startedAt: number, now: number, duration: number, reduced: boolean): number =>
+  reduced ? 0 : Math.max(0, duration - (now - startedAt));

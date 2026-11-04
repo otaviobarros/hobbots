@@ -16,6 +16,7 @@ import {
   RuntimeHealth,
   RuntimeKind,
   RuntimeModels,
+  THREAD_TITLE_MAX,
   Thread,
   ThreadId,
   Voice,
@@ -139,6 +140,14 @@ export const SetBrainPayload = Schema.Struct({
   makeDefault: Schema.optionalKey(Schema.Boolean),
 });
 export type SetBrainPayload = typeof SetBrainPayload.Type;
+
+/** A chat's new title: trimmed, not empty, and as long as a title made from a first prompt at most. */
+export const RenameThreadPayload = Schema.Struct({
+  title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(THREAD_TITLE_MAX)),
+});
+
+/** Whether a chat is pinned to the top of its hob's chats. */
+export const PinThreadPayload = Schema.Struct({ pinned: Schema.Boolean });
 
 /**
  * What the health endpoint returns: enough for a client to tell this installation's server from
@@ -282,6 +291,19 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       payload: SetBrainPayload,
       success: Thread,
       error: [ThreadNotFound, HobUnavailable, InvalidHob, AgentNotFound, ThreadArchived],
+    }),
+    // Renaming or pinning a chat leaves its place by last activity; an archived chat refuses both.
+    HttpApiEndpoint.put("rename", "/threads/:threadId/title", {
+      params: { threadId: ThreadId },
+      payload: RenameThreadPayload,
+      success: Thread,
+      error: [ThreadNotFound, ThreadArchived],
+    }),
+    HttpApiEndpoint.put("pin", "/threads/:threadId/pinned", {
+      params: { threadId: ThreadId },
+      payload: PinThreadPayload,
+      success: Thread,
+      error: [ThreadNotFound, ThreadArchived],
     }),
     // Archiving again, or restoring a live thread, returns the thread unchanged.
     HttpApiEndpoint.post("archive", "/threads/:threadId/archive", {

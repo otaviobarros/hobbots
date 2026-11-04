@@ -162,11 +162,14 @@ describe("secrets in tool calls", () => {
       }),
     );
 
-    // The user's prompt and the title made from it stay as written, and the reply's text is the
-    // model's (the fake runtime echoes the prompt). Everything Hobbots reports about the tool calls is redacted.
+    // The user's prompt, the title made from it and a thread's last line (its last message's text)
+    // stay as written, and the reply's text is the model's (the fake runtime echoes the prompt).
+    // Everything Hobbots reports about the tool calls is redacted.
     const fromHobbots = (value: unknown) =>
       JSON.parse(
-        JSON.stringify(value, (key, inner) => (["content", "title", "delta"].includes(key) ? undefined : inner)),
+        JSON.stringify(value, (key, inner) =>
+          ["content", "title", "lastLine", "delta"].includes(key) ? undefined : inner,
+        ),
       );
     expect(result.reply.steps.filter((step) => step.kind === "tool").map((step) => step.label)).toEqual([
       "Running echo [redacted: DEPLOY_TOKEN] [redacted: DEPLOY_SECRET]",

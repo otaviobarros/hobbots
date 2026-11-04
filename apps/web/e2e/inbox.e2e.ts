@@ -105,6 +105,17 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   const card = detail.getByRole("region", { name: "Pip asks permission" });
   await expect(card.getByText("git push origin feature", { exact: true })).toBeVisible();
 
+  // At a 960px window the list and the request hold side by side, with nothing cut off.
+  await page.setViewportSize({ width: 960, height: 800 });
+  const aside = await page.getByRole("complementary", { name: "Inbox" }).boundingBox();
+  const shown = await detail.boundingBox();
+  const allow = await card.getByRole("button", { name: "Allow once" }).boundingBox();
+  if (aside === null || shown === null || allow === null) throw new Error("The Inbox is not laid out");
+  expect(aside.x + aside.width).toBeLessThanOrEqual(shown.x);
+  expect(shown.x + shown.width).toBeLessThanOrEqual(960);
+  expect(allow.x + allow.width).toBeLessThanOrEqual(960);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(960);
+
   await card.getByRole("button", { name: "Allow once" }).click();
   await expect(card.getByRole("status")).toHaveText("✓ Allowed once. Pip carries on.");
 

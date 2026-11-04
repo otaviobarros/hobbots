@@ -40,6 +40,27 @@ export const messages = {
     none: "No chats yet. Start one with New chat.",
     open: ({ title }: { title: string }) => `Open ${title}`,
     working: "Working",
+    pinned: "Pinned",
+    groups: { pinned: "Pinned", today: "Today", week: "Earlier this week", older: "Older", matches: "Matches" },
+    search: {
+      label: ({ name }: { name: string }) => `Search ${name}'s chats`,
+      placeholder: "Search chats and messages",
+      clear: "Clear the search",
+      searching: "Searching…",
+      failed: "The search did not answer. Try again.",
+      none: ({ name, query }: { name: string; query: string }) => `No chats with ${name} mention “${query}”.`,
+      archivedHint: "Archived chats are searched in the Archive.",
+      clearButton: "Clear search",
+    },
+    needs: ({ count }: { count: number }) => (count === 1 ? "1 needs you" : `${formatCount(count)} need you`),
+    showOlder: ({ count }: { count: number }) =>
+      plural(count, { one: "Show 1 older chat", other: `Show ${formatCount(count)} older chats` }),
+    archived: ({ count }: { count: number }) => `Archived chats · ${formatCount(count)}`,
+    menu: ({ title }: { title: string }) => `More for “${title}”`,
+    rename: "Rename",
+    renameLabel: ({ title }: { title: string }) => `New title for “${title}”`,
+    pin: "Pin to the top",
+    unpin: "Unpin",
   },
   history: {
     soon: "History is on its way",
@@ -47,6 +68,25 @@ export const messages = {
   },
   aside: {
     label: ({ name }: { name: string }) => `About ${name}`,
+    showFewer: "Show fewer",
+    quests: {
+      label: "Quests it leads",
+      showAll: ({ count }: { count: number }) => `Show all ${formatCount(count)}`,
+      progress: ({ done, total, needs }: { done: number; total: number; needs: number }) =>
+        `${formatCount(done)} of ${formatCount(total)} done${needs > 0 ? ` · ${formatCount(needs)} need you` : ""}`,
+      finished: ({ count }: { count: number }) =>
+        plural(count, { one: "1 finished quest", other: `${formatCount(count)} finished quests` }),
+    },
+    backpack: {
+      label: "Backpack",
+      intro: "What it still has to deal with. You can look; it does the work.",
+      empty: "Empty. Nothing waiting on anyone.",
+      list: ({ name }: { name: string }) => `What ${name} still has to deal with`,
+    },
+    setup: "Setup",
+    worksIn: "Works in",
+    noFolders: "No folders yet.",
+    moreFolders: ({ count }: { count: number }) => `${formatCount(count)} more`,
     thinksWith: "Thinks with",
     change: "Change in Profile",
   },

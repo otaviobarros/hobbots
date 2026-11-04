@@ -34,6 +34,7 @@ import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
 import { type ConnectionsTab, isConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
 import { SettingsPage } from "./components/settings/settings-page.tsx";
 import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
+import { ArrivedPage } from "./components/summon/arrived.tsx";
 import { Summon } from "./components/summon/summon.tsx";
 import { parseStep, type SummonStep } from "./components/summon/summon-model.ts";
 import { UsagePage } from "./components/usage/usage-page.tsx";
@@ -135,7 +136,7 @@ const readyRoute = createRoute({
   component: OnboardingReady,
 });
 
-// Every page after setup shares the rail.
+// Every page after setup shares the sidebar.
 const shellRoute = createRoute({ getParentRoute: () => rootRoute, id: "shell", component: AppShell });
 
 // Home is the landing page; each hob is one click away on its own page.
@@ -249,6 +250,17 @@ const profileRoute = createRoute({
   component: function ProfilePage() {
     const params = profileRoute.useParams();
     return <HobProfile key={params.hobId} hobId={AgentId.make(params.hobId)} />;
+  },
+});
+
+// A hob just summoned, on its own stage with three first questions. A reload keeps it.
+const arrivedRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "hobs/$hobId/arrived",
+  beforeLoad: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
+  component: function ArrivedRoute() {
+    const params = arrivedRoute.useParams();
+    return <ArrivedPage hobId={AgentId.make(params.hobId)} />;
   },
 });
 
@@ -426,6 +438,7 @@ const routeTree = rootRoute.addChildren([
     threadRoute,
     profileRoute,
     summonRoute,
+    arrivedRoute,
     inboxRoute,
     usageRoute,
     settingsRoute,
