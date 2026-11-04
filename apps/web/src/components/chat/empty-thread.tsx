@@ -52,7 +52,7 @@ export function EmptyThread({
             key={idea}
             type="button"
             onClick={() => onIdea(idea)}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-[18px] border border-line-2 bg-card px-3.5 py-2 text-ui leading-5 text-text transition-colors hover:border-lantern hover:text-text-strong"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-line-2 bg-card px-3.5 py-2 text-ui leading-5 text-text transition-colors hover:border-lantern hover:text-text-strong"
           >
             <SparkIcon />
             {idea}

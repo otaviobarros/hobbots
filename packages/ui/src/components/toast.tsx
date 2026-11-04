@@ -22,7 +22,7 @@ function ToastViewport({ className, ...props }: React.ComponentProps<typeof Toas
 }
 
 const toastVariants = cva(
-  "cut flex animate-hb-in items-center gap-3 border-2 border-solid bg-card px-4 py-2.5 text-ui text-text-strong shadow-menu",
+  "cut flex animate-hb-in items-center gap-3 border-(length:--edge) border-solid bg-card px-4 py-2.5 text-ui text-text-strong shadow-menu",
   {
     variants: {
       tone: {
@@ -56,7 +56,7 @@ function ToastAction({ className, ...props }: React.ComponentProps<typeof ToastP
     <ToastPrimitive.Action
       data-slot="toast-action"
       className={cn(
-        "cut-control inline-flex cursor-pointer items-center border-2 border-solid border-control bg-transparent px-2 py-1 text-detail whitespace-nowrap text-text-strong outline-none hover:bg-line",
+        "cut-control inline-flex cursor-pointer items-center border-(length:--edge) border-solid border-control bg-transparent px-2 py-1 text-detail whitespace-nowrap text-text-strong outline-none hover:bg-line",
         className,
       )}
       {...props}

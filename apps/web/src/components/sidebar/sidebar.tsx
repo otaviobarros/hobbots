@@ -99,7 +99,7 @@ function Chief({ waiting }: { waiting: number }) {
       >
         <ChiefMark size={40} mood={mood} looks={looks} />
       </Link>
-      <span aria-hidden className="sidebar-label font-heading text-base font-semibold">
+      <span aria-hidden className="sidebar-label font-heading text-reading font-semibold">
         {copy.wordmark}
       </span>
     </div>

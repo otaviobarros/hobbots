@@ -12,11 +12,11 @@ const buttonVariants = cva(
         default:
           "press bg-lantern font-bold text-ground [--press-color:var(--color-lantern-press)] hover:bg-lantern-hover",
         approve: "press bg-mint font-bold text-ground [--press-color:var(--color-mint-deep)]",
-        outline: "border-2 border-solid border-control bg-transparent text-text-strong hover:bg-line",
-        deny: "border-2 border-solid border-rose bg-transparent text-rose hover:bg-line",
-        chip: "border-2 border-solid border-control bg-transparent text-detail text-text-strong hover:bg-line",
+        outline: "border-(length:--edge) border-solid border-control bg-transparent text-text-strong hover:bg-line",
+        deny: "border-(length:--edge) border-solid border-rose bg-transparent text-rose hover:bg-line",
+        chip: "border-(length:--edge) border-solid border-control bg-transparent text-detail text-text-strong hover:bg-line",
         ghost: "bg-transparent text-text-strong hover:bg-hover",
-        icon: "border-2 border-solid border-line-2 bg-transparent text-text-secondary [clip-path:none] hover:bg-line hover:text-text-strong aria-pressed:bg-line aria-pressed:text-text-strong",
+        icon: "border-(length:--edge) border-solid border-line-2 bg-transparent text-text-secondary [clip-path:none] hover:bg-line hover:text-text-strong aria-pressed:bg-line aria-pressed:text-text-strong",
         // A link that acts: `link`, underlined, and the underline turns lantern on hover.
         link: "bg-transparent text-link underline underline-offset-2 [clip-path:none] hover:decoration-lantern",
         // A text action beside other content, such as Show all: secondary text, underlined.

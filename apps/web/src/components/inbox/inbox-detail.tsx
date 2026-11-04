@@ -169,7 +169,7 @@ function QuestionDetail({
     >
       <div className="flex items-start gap-3">
         <EntryPortrait hob={hob} device={false} waiting={false} />
-        <blockquote className="m-0 min-w-0 flex-1 rounded-[4px_14px_14px_14px] bg-card px-4 py-3 text-base leading-normal whitespace-pre-wrap text-text-strong [overflow-wrap:anywhere]">
+        <blockquote className="m-0 min-w-0 flex-1 rounded-[4px_14px_14px_14px] bg-card px-4 py-3 text-reading leading-normal whitespace-pre-wrap text-text-strong [overflow-wrap:anywhere]">
           {question.text}
         </blockquote>
       </div>

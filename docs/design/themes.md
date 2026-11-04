@@ -120,6 +120,8 @@ Gradients in the hob's color are allowed on the hob hero, card doors and the pix
 
 Corners come from the skin's `corner-*` values. Filter chips are the one exception: they are pills (`radius-round`) in every theme, Workshop included. Bubble corners are fixed by design too.
 
+Edges come from the skin's `edge`: 1px in Lamplight and 2px in Workshop. A bordered control, card, menu or dialog draws its border with `border-(length:--edge)`, never a fixed width.
+
 The focus ring is 2px in every theme. Fields, cards and panels draw it with the `focus-ring` utilities and buttons with `cut-control`, never with their own outline or ring classes.
 
 ## In the code
@@ -158,6 +160,6 @@ Workshop Night keeps the palette the app had before the themes. These tokens wer
 
 The shadcn names in `styles.css`, such as `--color-primary` and `--color-border`, keep pointing at these tokens. That way the components in `packages/ui` follow the theme without changes.
 
-Components never write a color. Scene art keeps the colors the design draws it with in every theme, so `styles.css` names them once beside `wood`: `scene-*` for the village, Home's sky, the words on it and its hall, and setup's ground, `desk` and `desk-edge` for the Workbench desk, and `provider-*` for the tile behind each AI provider's letter mark. Pixel art palettes live in `apps/web/src/art` and `packages/art`, such as the inks of a role's sigil in `packages/art/src/sigil.ts`. Home's sky stays a night sky in every theme: shadcn's `dark:` variant shows the stars and the moon in the dark themes, and the sun in the light ones. A test fails on a hex or `rgb()` color in `apps/web/src/components` or `packages/ui/src/components`.
+Components never write a color. Scene art keeps the colors the design draws it with in every theme, so `styles.css` names them once beside `wood`: `scene-*` for the village, Home's sky, the words on it and its hall, and setup's ground, `desk` and `desk-edge` for the Workbench desk, and `provider-*` for the tile behind each AI provider's letter mark. Pixel art palettes live in `apps/web/src/art` and `packages/art`, such as the inks of a role's sigil in `packages/art/src/sigil.ts`. Home's sky stays a night sky in every theme: shadcn's `dark:` variant shows the stars and the moon in the dark themes, and the sun in the light ones. The token guard, `apps/web/tokens.test.ts`, fails `pnpm check` on any drift in `apps/web/src` and `packages/ui/src`, `styles.css` included outside its token blocks. It names the file and the class for each of: a hex, `rgb()`, `black` or `white` color outside the token blocks and the art palettes, text below 12px or in a Tailwind size the scale replaces (`text-xs`, `text-sm`, `text-base`, `text-lg`), a fixed corner outside its short list of shapes fixed by design, a fixed 2px border instead of `border-(length:--edge)`, a literal duration, an animation that is not an `--animate-hb-*` token, a `--radius` reference, and an `@theme` type size, duration, font or size that differs from themes.json.
 
 The desktop window's background follows the theme too. The preload script reports `ground` each time `data-theme` changes, and the next window opens with the last one. Before any page reports, it uses Workshop Night's ground, since first run always uses Workshop Night.

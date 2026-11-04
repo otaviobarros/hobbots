@@ -93,7 +93,7 @@ function PreviewScene({ preview }: { preview: Preview }) {
       {hob === "ghost" && (
         <span aria-hidden className="absolute bottom-[30px] start-[128px] grid size-[70px] place-items-end opacity-80">
           <span className="mx-auto mb-1 h-[52px] w-10 rounded-t-[14px] bg-line-2" />
-          <span className="absolute inset-x-0 bottom-6 text-center text-lg font-bold text-label">?</span>
+          <span className="absolute inset-x-0 bottom-6 text-center text-title font-bold text-label">?</span>
         </span>
       )}
       {hob && hob !== "ghost" && (

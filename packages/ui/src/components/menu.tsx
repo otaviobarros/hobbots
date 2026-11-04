@@ -9,7 +9,7 @@ import { cn } from "../lib/utils.ts";
 // outline, so keyboard focus shows and Workshop's cut corners don't clip it. A disabled item stays in the menu with its reason and cannot be chosen.
 
 const contentClass =
-  "cut z-50 flex min-w-[220px] max-w-[300px] flex-col border-2 border-solid border-line-2 bg-card p-1 text-text-strong outline-none";
+  "cut z-50 flex min-w-[220px] max-w-[300px] flex-col border-(length:--edge) border-solid border-line-2 bg-card p-1 text-text-strong outline-none";
 
 const itemClass =
   "flex cursor-pointer flex-col gap-0.5 px-2.5 py-2 text-ui outline-none select-none data-highlighted:bg-hover data-highlighted:outline-2 data-highlighted:outline-solid data-highlighted:-outline-offset-2 data-highlighted:outline-focus-ring data-disabled:cursor-default data-disabled:text-label";

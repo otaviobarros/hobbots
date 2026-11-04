@@ -7,7 +7,7 @@ Rules for how UI code is written and how it must look. The [design specification
 Take colors, spacing, radii, type and animations from the theme tokens in `apps/web/src/styles.css`: the `@theme` block and the per-theme `data-theme` rules ([themes](../design/themes.md)). Add a token there, with a value for every theme, when the design needs a new value. Components never hold raw hex colors or one-off pixel values, and never check which theme is on.
 
 - **Why:** one token change restyles every screen, and the palette stays consistent.
-- **Enforced by:** review.
+- **Enforced by:** the token guard, `apps/web/tokens.test.ts`, in `pnpm check`, and review for values it cannot see, such as spacing.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-UI-002 Build on the shared primitives
@@ -31,7 +31,7 @@ Every interactive element is reachable and usable by keyboard, shows the moonlig
 Animate only with the stepped `--animate-hb-*` tokens. Every animation stops with Reduce motion: the system's setting, unless the device chose otherwise in Settings › This app. The Reduce motion rules at the end of `apps/web/src/styles.css` do this for CSS animations, and the `motion-reduce:` variant follows the same choice. Motion driven from script checks `motionReduced()` from `apps/web/src/lib/motion.ts`.
 
 - **Why:** stepped timing is part of the pixel style, and some users get sick from motion.
-- **Enforced by:** review.
+- **Enforced by:** the token guard, `apps/web/tokens.test.ts`, in `pnpm check`, which fails on a literal duration or an animation that is not an `--animate-hb-*` token, and review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-UI-005 Screens match the design specification
