@@ -73,10 +73,11 @@ const stayAtEnd = (view: HTMLDivElement | null) => {
 
 /**
  * While the work sheet is open and the chat has room beside it, the chat's column moves out from
- * under the sheet, so no card in it hides its end there (#874). Narrower, the sheet stays over the
- * end of the chat.
+ * under the sheet, so no card in it hides its end there (#874). It slides as the sheet does.
+ * Narrower, the sheet stays over the end of the chat.
  */
-const besideSheet = "@min-[840px]/chat:group-data-[sheet=open]/work:pe-[calc(var(--spacing-sheet)+--spacing(9))]";
+const besideSheet =
+  "transition-[padding] duration-(--dur-sheet) ease-(--ease-ui) @min-[840px]/chat:group-data-[sheet=open]/work:pe-[calc(var(--spacing-sheet)+--spacing(9))]";
 
 const copy = messages.chat;
 const brainCopy = messages.brain;

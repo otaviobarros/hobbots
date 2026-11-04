@@ -79,14 +79,18 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   // Nothing in the chat is wider than its column, so the transcript never scrolls sideways.
   await expectNoSideScroll(chat);
 
-  // With the sheet open, the quest card's count and Open in Workbench stay clear of it.
+  // With the sheet open, the quest card's count and Open in Workbench stay clear of it, once the
+  // sheet and the column have slid into place.
   await adasRow.click();
   await expect(sheet).toBeVisible();
-  const sheetStart = (await box(sheet)).x;
   for (const end of [card.getByText(/of 2 done$/), card.getByRole("button", { name: "Open in Workbench" })]) {
     await expect(end).toBeVisible();
-    const { x, width } = await box(end);
-    expect(x + width).toBeLessThanOrEqual(sheetStart);
+    await expect
+      .poll(async () => {
+        const [{ x, width }, { x: sheetStart }] = [await box(end), await box(sheet)];
+        return x + width - sheetStart;
+      })
+      .toBeLessThanOrEqual(0);
   }
   await expectNoSideScroll(chat);
 });
