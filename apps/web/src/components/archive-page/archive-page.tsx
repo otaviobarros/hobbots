@@ -77,7 +77,7 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
           <PixelArt rows={ARCHIVE_CHEST} palette={archiveChestPalette} size={36} />
         </span>
         <span className="flex min-w-0 flex-col gap-1">
-          <h1 className="m-0 font-(family-name:--font-heading) text-[32px] leading-[38px] font-(--heading-weight) [font-variant-ligatures:none]">
+          <h1 className="m-0 font-(family-name:--font-heading) text-display font-(--heading-weight) [font-variant-ligatures:none]">
             {copy.title}
           </h1>
           <span className="text-text-secondary">{copy.intro}</span>
@@ -353,7 +353,7 @@ function RetiredCard({ hob }: { hob: Agent }) {
             params={{ hobId: hob.id }}
             aria-label={copy.hobs.read({ name: hob.name })}
             title={hob.name}
-            className="truncate font-(family-name:--font-heading) text-lg leading-6 font-(--heading-weight) text-text-strong no-underline after:absolute after:inset-0 hover:text-text-strong"
+            className="truncate font-(family-name:--font-heading) text-title font-(--heading-weight) text-text-strong no-underline after:absolute after:inset-0 hover:text-text-strong"
           >
             {hob.name}
           </Link>

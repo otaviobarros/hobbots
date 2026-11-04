@@ -65,7 +65,7 @@ export function HobCard({
       </span>
       <span className="flex min-w-0 flex-col gap-2 px-4 pt-3 pb-3.5">
         <span className="flex min-w-0 flex-col">
-          <strong title={hob.name} className="truncate font-heading text-lg leading-6 font-(--heading-weight)">
+          <strong title={hob.name} className="truncate font-heading text-title font-(--heading-weight)">
             {hob.name}
           </strong>
           <span title={hob.roleTitle} className="truncate text-detail leading-[18px] text-label">

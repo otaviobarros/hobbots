@@ -76,7 +76,7 @@ export function HobProfile({ hobId }: { hobId: AgentId }) {
           <span className="text-label">{messages.profile.loading}</span>
         ) : (
           <div className="flex flex-col items-center gap-3 text-center">
-            <span className="font-heading text-[22px] font-bold text-moonlight">{messages.profile.missing}</span>
+            <span className="font-heading text-heading font-bold text-moonlight">{messages.profile.missing}</span>
             <span className="text-text-secondary">{messages.profile.missingNote}</span>
             <div className="flex gap-2.5">
               <Button asChild variant="outline">
@@ -226,7 +226,7 @@ function ProfileHero({
         </span>
       </span>
       <span className="flex min-w-0 flex-[1_1_240px] flex-col gap-0.5">
-        <h1 className="m-0 truncate font-heading text-[26px] leading-8 font-bold">{hob.name}</h1>
+        <h1 className="m-0 truncate font-heading text-heading font-bold">{hob.name}</h1>
         <span className="flex min-w-0 items-center gap-2 text-ui text-text-secondary">
           <span className="flex-none">{hob.roleTitle}</span>
           <Badge variant={tag.variant}>
@@ -682,7 +682,7 @@ function RetireDialog({
       >
         {retired ? (
           <>
-            <DialogTitle className="m-0 font-heading text-xl font-bold">{copy.done({ name })}</DialogTitle>
+            <DialogTitle className="m-0 font-heading text-heading font-bold">{copy.done({ name })}</DialogTitle>
             <p role="status" className="m-0 text-ui text-text-secondary">
               {retiredSummary(name, retired.work, retired.busy)} {copy.find({ name })}
             </p>
@@ -697,7 +697,7 @@ function RetireDialog({
           </>
         ) : (
           <>
-            <DialogTitle className="m-0 font-heading text-xl font-bold">{copy.title({ name })}</DialogTitle>
+            <DialogTitle className="m-0 font-heading text-heading font-bold">{copy.title({ name })}</DialogTitle>
             <span className="text-ui text-text-secondary">{busy ? copy.busy({ name }) : copy.idle({ name })}</span>
             {busy && (
               <ul className="m-0 flex list-none flex-col gap-1 rounded-control bg-deep px-3 py-2 text-ui">

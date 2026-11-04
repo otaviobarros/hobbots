@@ -23,7 +23,7 @@ export function Page({
       <header className="flex flex-wrap items-center gap-3.5">
         <PixelArt rows={ICONS[icon]} palette={iconPalette(true)} size={40} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h1 className="m-0 font-heading text-[28px] font-bold text-moonlight">{title}</h1>
+          <h1 className="m-0 font-heading text-heading font-bold text-moonlight">{title}</h1>
           <p className="m-0 text-text-secondary">{intro}</p>
         </div>
         {actions !== undefined && <div className="flex flex-none items-center gap-2">{actions}</div>}

@@ -217,7 +217,7 @@ function DetailFrame({
           <Chain names={row.chain} />
           <Badge variant={row.tag}>{row.kind}</Badge>
         </span>
-        <h2 className="m-0 font-heading text-[28px] leading-[34px] font-bold text-text-strong [overflow-wrap:anywhere]">
+        <h2 className="m-0 font-heading text-display font-bold text-text-strong [overflow-wrap:anywhere]">
           {row.what}
         </h2>
         <p className="m-0 text-text">{why}</p>

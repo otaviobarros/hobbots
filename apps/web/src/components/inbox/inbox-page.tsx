@@ -254,7 +254,7 @@ function InboxHeader({ waiting }: { waiting: number }) {
           waiting > 0 ? "animate-hb-blink" : "rotate-90",
         )}
       />
-      <h1 className="absolute top-2.5 start-4 m-0 font-heading text-xl font-bold text-moonlight">{copy.title}</h1>
+      <h1 className="absolute top-2.5 start-4 m-0 font-heading text-heading font-bold text-moonlight">{copy.title}</h1>
       <p className="absolute top-9 start-4 m-0 text-meta text-text-secondary">
         {waiting > 0 ? copy.waiting({ count: waiting }) : copy.intro}
       </p>

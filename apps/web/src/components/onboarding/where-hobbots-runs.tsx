@@ -65,7 +65,7 @@ function ChoiceText({
   return (
     <span className="flex min-w-0 flex-col gap-1">
       <span className="flex flex-wrap items-center gap-2">
-        <strong className={cn("text-[17px]", muted && "text-text-secondary")}>{title}</strong>
+        <strong className={cn("text-title", muted && "text-text-secondary")}>{title}</strong>
         {tag}
       </span>
       <span className="leading-normal text-text-secondary">{body}</span>
@@ -106,7 +106,7 @@ export function WhereLayout({ children, footer }: { children: ReactNode; footer?
     <OnboardingFrame step={null} preview={{ house: true, caption: copy.caption, speech: copy.speech }} footer={null}>
       <div className="flex flex-col gap-[18px]">
         <div className="flex flex-col gap-1.5">
-          <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.title}</h1>
+          <h1 className="m-0 font-heading text-display font-bold text-moonlight">{copy.title}</h1>
           <p className="m-0 text-text-secondary">{copy.intro}</p>
         </div>
         <div className="flex flex-col gap-2.5">{children}</div>

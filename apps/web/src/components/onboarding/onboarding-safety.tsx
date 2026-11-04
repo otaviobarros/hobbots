@@ -53,7 +53,7 @@ export function OnboardingSafety() {
       }
     >
       <div className="flex flex-col gap-1.5">
-        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{shared.safety.heading}</h1>
+        <h1 className="m-0 font-heading text-display font-bold text-moonlight">{shared.safety.heading}</h1>
         <p className="m-0 mb-3.5 text-text-secondary">{shared.safety.intro}</p>
         {setup.data ? (
           <PresetPicker
@@ -99,7 +99,7 @@ export function OnboardingFolders() {
       }
     >
       <div className="flex flex-col gap-1.5">
-        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{shared.folders.heading}</h1>
+        <h1 className="m-0 font-heading text-display font-bold text-moonlight">{shared.folders.heading}</h1>
         <p className="m-0 mb-2.5 text-text-secondary">{shared.folders.intro}</p>
         {setup.data ? (
           <FolderPicker folders={folders} />

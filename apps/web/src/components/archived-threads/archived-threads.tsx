@@ -97,7 +97,7 @@ function ArchivedHeader({
         <HobSprite hob={hob} size={36} state="idle" badge />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-baseline gap-2">
-            <span className="font-heading text-xl font-semibold whitespace-nowrap">{hob.name}</span>
+            <span className="font-heading text-title font-semibold whitespace-nowrap">{hob.name}</span>
             <span className="text-ui font-bold whitespace-nowrap text-moonlight">{hob.roleTitle}</span>
             <span className="truncate text-text-secondary">{title}</span>
             {tagged && <Badge variant="archived">{messages.tag}</Badge>}

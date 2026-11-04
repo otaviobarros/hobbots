@@ -154,7 +154,7 @@ function PreviewPanel({ preview }: { preview: Preview }) {
       {preview.caption && <span className="text-center text-detail text-text-secondary">{preview.caption}</span>}
       {hob && (
         <span className="flex flex-col items-center gap-1 text-center">
-          <strong className="max-w-full truncate font-heading text-xl font-bold text-moonlight">{hob.name}</strong>
+          <strong className="max-w-full truncate font-heading text-title font-bold text-moonlight">{hob.name}</strong>
           {hob.title && (
             <span className="max-w-full truncate rounded-tag bg-line-2 px-2 py-0.5 text-detail font-bold">
               {hob.title}

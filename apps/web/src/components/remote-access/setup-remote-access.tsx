@@ -94,7 +94,7 @@ export function SetupRemoteAccess() {
       }
     >
       <div className="flex animate-hb-in flex-col gap-1.5">
-        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.title}</h1>
+        <h1 className="m-0 font-heading text-display font-bold text-moonlight">{copy.title}</h1>
         <p className="m-0 mb-3.5 max-w-[660px] text-text-secondary">{copy.intro}</p>
         {tailscale !== null && tailscale.state !== "running" && (
           <TailscaleNotReady

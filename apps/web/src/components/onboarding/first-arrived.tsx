@@ -59,7 +59,7 @@ export function FirstSummoning({ hob, name }: { hob: SpriteHob; name: string }) 
       </div>
       <strong
         role="status"
-        className="absolute inset-x-4 bottom-9 text-center font-heading text-[22px] leading-7 font-(--heading-weight) break-words"
+        className="absolute inset-x-4 bottom-9 text-center font-heading text-heading font-(--heading-weight) break-words"
       >
         {copy.calling({ name })}
       </strong>

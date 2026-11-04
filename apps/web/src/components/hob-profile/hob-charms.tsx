@@ -86,7 +86,7 @@ function GitHubCharm({ hob, permissions, outdated }: { hob: Agent; permissions: 
         <CharmMark off={!granted} />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="flex flex-wrap items-center gap-2">
-            <label htmlFor={switchId} className="text-[17px] leading-6 font-bold text-text-strong">
+            <label htmlFor={switchId} className="text-title font-bold text-text-strong">
               {copy.name}
             </label>
             <Badge variant={STATE_BADGE[state]}>{copy.state[state]}</Badge>

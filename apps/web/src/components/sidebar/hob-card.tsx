@@ -80,7 +80,7 @@ export function HobCard({ hob, state, threads }: { hob: Agent; state: HobState; 
             <Link
               to="/hobs/$hobId"
               params={{ hobId: hob.id }}
-              className="truncate font-heading text-[20px] leading-[26px] font-(--heading-weight) text-text-strong no-underline hover:underline hover:decoration-lantern"
+              className="truncate font-heading text-title font-(--heading-weight) text-text-strong no-underline hover:underline hover:decoration-lantern"
             >
               {hob.name}
             </Link>

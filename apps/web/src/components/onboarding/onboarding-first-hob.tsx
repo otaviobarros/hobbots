@@ -93,7 +93,7 @@ function LookPreview({
       <div aria-hidden className="absolute inset-x-0 top-[280px] h-[240px] bg-scene-ground" />
       <div aria-hidden className="absolute inset-x-[54px] top-[268px] h-3.5 bg-line-2" />
       <div className="absolute inset-x-0 top-4 flex flex-col items-center gap-0.5 px-4">
-        <span className="max-w-full truncate font-heading text-[26px] font-bold text-moonlight">{name}</span>
+        <span className="max-w-full truncate font-heading text-heading font-bold text-moonlight">{name}</span>
         <span className="max-w-full truncate text-ui text-text-secondary">{roleLine}</span>
       </div>
       <button
@@ -235,7 +235,7 @@ export function OnboardingFirstHob() {
         <legend className="sr-only">{locked ? copy.legendSent({ name: draft.name.trim() }) : copy.legend}</legend>
         <div className="flex min-w-0 flex-1 flex-col gap-3.5">
           <div>
-            <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.heading}</h1>
+            <h1 className="m-0 font-heading text-display font-bold text-moonlight">{copy.heading}</h1>
             <p className="m-0 mt-1 text-text-secondary">{copy.intro}</p>
           </div>
 

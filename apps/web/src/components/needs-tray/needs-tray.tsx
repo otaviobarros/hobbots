@@ -86,7 +86,7 @@ export function NeedsTray({
           {stuck ? copy.eyebrow.stuck : risky ? copy.eyebrow.risk : copy.eyebrow.needs}
         </span>
         <div className="flex items-center gap-2">
-          <h2 className="m-0 min-w-0 flex-1 font-heading text-base leading-[22px] font-bold text-text-strong">
+          <h2 className="m-0 min-w-0 flex-1 font-heading text-title font-bold text-text-strong">
             {titleOf(entry, asker)}
           </h2>
           {count > 1 && (

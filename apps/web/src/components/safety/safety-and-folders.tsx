@@ -54,7 +54,7 @@ export function PresetPicker({
               />
               <FenceArt height={fenceHeight(preset.id)} />
               <span className="flex flex-wrap items-center gap-1.5">
-                <strong className="text-[17px]">{preset.label}</strong>
+                <strong className="text-title">{preset.label}</strong>
                 {preset.recommended && (
                   <span className="rounded-tag bg-line-2 px-2 py-0.5 text-detail font-bold">{copy.recommended}</span>
                 )}

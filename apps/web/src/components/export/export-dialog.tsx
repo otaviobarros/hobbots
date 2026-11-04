@@ -25,7 +25,9 @@ export function ExportDialog({ target, onClose }: { target: ExportTarget; onClos
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
-        <DialogTitle className="m-0 font-heading text-2xl font-bold break-words text-moonlight">{title}</DialogTitle>
+        <DialogTitle className="m-0 font-heading text-heading font-bold break-words text-moonlight">
+          {title}
+        </DialogTitle>
         <DialogDescription className="m-0 text-ui text-text-secondary">
           {intro} {copy.redacted}
         </DialogDescription>

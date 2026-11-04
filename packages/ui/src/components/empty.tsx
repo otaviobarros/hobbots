@@ -94,8 +94,8 @@ function EmptyTitle({ className, asChild = false, ...props }: React.ComponentPro
     <Comp
       data-slot="empty-title"
       className={cn(
-        "m-0 font-heading text-lg leading-6 font-(--heading-weight) text-text-strong",
-        "group-data-[size=page]/empty:text-[32px] group-data-[size=page]/empty:leading-9",
+        "m-0 font-heading text-title font-(--heading-weight) text-text-strong",
+        "group-data-[size=page]/empty:text-display",
         className,
       )}
       {...props}
@@ -108,7 +108,7 @@ function EmptyDescription({ className, ...props }: React.ComponentProps<"p">) {
     <p
       data-slot="empty-description"
       className={cn(
-        "m-0 text-[15px] leading-[23px] text-text-secondary [&>a]:text-link [&>a]:underline [&>a]:underline-offset-[3px] [&>a:hover]:decoration-lantern",
+        "m-0 text-body text-text-secondary [&>a]:text-link [&>a]:underline [&>a]:underline-offset-[3px] [&>a:hover]:decoration-lantern",
         className,
       )}
       {...props}

@@ -131,7 +131,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
             >
               <legend className="sr-only">{copy.steps[index]}</legend>
               <div className="flex flex-col gap-1">
-                <h2 ref={heading} className="m-0 font-heading text-[26px] leading-8 font-(--heading-weight)">
+                <h2 ref={heading} className="m-0 font-heading text-heading font-(--heading-weight)">
                   {stepTitle(step, name, signedOut !== undefined)}
                 </h2>
                 <span className="text-text-secondary">{stepIntro(step, name)}</span>

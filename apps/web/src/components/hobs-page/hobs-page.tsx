@@ -76,7 +76,7 @@ function Crew({
     <>
       <header className="flex flex-wrap items-end gap-3">
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <h1 className="m-0 font-heading text-[32px] leading-[38px] font-(--heading-weight)">{copy.title}</h1>
+          <h1 className="m-0 font-heading text-display font-(--heading-weight)">{copy.title}</h1>
           <span className="text-text-secondary">
             {copy.summary({ needs: counts.needs, working: counts.working, resting: counts.resting })}
           </span>

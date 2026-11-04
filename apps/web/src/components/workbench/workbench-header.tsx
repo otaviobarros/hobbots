@@ -74,7 +74,7 @@ export function WorkbenchHeader({
         <h2
           ref={headingRef}
           tabIndex={-1}
-          className="m-0 min-w-0 truncate font-heading text-lg leading-6 font-(--heading-weight) text-text-strong outline-none"
+          className="m-0 min-w-0 truncate font-heading text-title font-(--heading-weight) text-text-strong outline-none"
         >
           {taskTitle(task)}
         </h2>

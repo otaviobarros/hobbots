@@ -53,7 +53,7 @@ export function Summoning({ hob, name }: { hob: SpriteHob; name: string }) {
   return (
     <div role="status" className="mx-auto flex max-w-[640px] flex-col items-center gap-5 px-10 py-[72px] text-center">
       <SummoningCircle hob={hob} size={140} className="size-60" />
-      <strong className="max-w-full font-heading text-[22px] leading-7 font-(--heading-weight) break-words">
+      <strong className="max-w-full font-heading text-heading font-(--heading-weight) break-words">
         {copy.line({ name })}
       </strong>
       <span className="text-text-secondary">{copy.note}</span>

@@ -74,7 +74,7 @@ export function ConnectForm({
           </>
         }
       >
-        <h1 className="m-0 font-heading text-[32px] font-bold text-moonlight">{copy.form.title}</h1>
+        <h1 className="m-0 font-heading text-display font-bold text-moonlight">{copy.form.title}</h1>
         <p className="m-0 mb-3.5 max-w-[700px] text-text-secondary">{copy.form.intro}</p>
         <label htmlFor={inputId} className="lbl text-label">
           {copy.form.addressLabel}
@@ -118,7 +118,7 @@ export function ConnectWaiting({ waiting, onCancel }: { waiting: WaitingView; on
       }
     >
       <div role="status" className="flex flex-col items-center gap-2.5 pt-6 text-center">
-        <h1 className="m-0 font-heading text-[32px] font-bold text-moonlight">{copy.waiting.title({ computer })}</h1>
+        <h1 className="m-0 font-heading text-display font-bold text-moonlight">{copy.waiting.title({ computer })}</h1>
         <p className="m-0 max-w-column-max text-text-secondary">{copy.waiting.intro({ computer })}</p>
         <p className="m-0 text-detail text-label">
           {copy.waiting.who({ computer, owner: waiting.owner })}
@@ -167,7 +167,7 @@ export function ConnectEnded({
         >
           ✕
         </div>
-        <h1 className="m-0 mt-2 font-heading text-[32px] font-bold text-moonlight">{title}</h1>
+        <h1 className="m-0 mt-2 font-heading text-display font-bold text-moonlight">{title}</h1>
         <p role="status" className="m-0 max-w-column-max text-text-secondary">
           {body}
         </p>
@@ -193,7 +193,7 @@ export function ConnectAllowed({ computer }: { computer: string }) {
         >
           ✓
         </div>
-        <h1 className="m-0 mt-2 font-heading text-[32px] font-bold text-moonlight">{copy.allowed.title}</h1>
+        <h1 className="m-0 mt-2 font-heading text-display font-bold text-moonlight">{copy.allowed.title}</h1>
         <p className="m-0 max-w-column-max leading-normal text-text-secondary">{copy.allowed.body({ computer })}</p>
       </div>
     </SetupStep>
