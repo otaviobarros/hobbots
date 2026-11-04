@@ -1,15 +1,21 @@
-import type { AgentId, Message, MessageId, ThreadId } from "@hobbots/domain";
+import type { AgentId, Message, MessageId, TaskTree, ThreadId } from "@hobbots/domain";
 import { useOpenWorkbench } from "../workbench/use-workbench.ts";
 import { QuestButtons } from "./quest-button.tsx";
-import { useHobLookup, useOpenQuest, useOpenTask, useThreadTrees } from "./use-work.ts";
-import { BEFORE_ALL, placeMoments } from "./work-model.ts";
+import { type Pins, useFollowedTrees, useHobLookup, useOpenQuest, useOpenTask, useThreadTrees } from "./use-work.ts";
+import { BEFORE_ALL, liveTrees, placeMoments } from "./work-model.ts";
 import { WorkMoments } from "./work-moments.tsx";
 
-/** The quest button in a thread's chat header while its work runs. */
-export function ThreadQuestButton({ hobId, threadId }: { hobId: AgentId; threadId: ThreadId }) {
-  const trees = useThreadTrees(threadId);
+/**
+ * The quest buttons in a thread's chat header: each Quest pinned from another thread, then this
+ * thread's work while it runs or while it is pinned.
+ */
+export function ThreadQuestButton({ hobId, threadId, pins }: { hobId: AgentId; threadId: ThreadId; pins: Pins }) {
+  const { thread, elsewhere } = useFollowedTrees(threadId, pins.pinned);
   const open = useOpenQuest(hobId, threadId);
-  return <QuestButtons trees={trees} onOpen={open} />;
+  const pinned = (tree: TaskTree) => tree.tasks[0] !== undefined && pins.pinned.includes(tree.tasks[0].id);
+  const live = new Set(liveTrees(thread));
+  const shown = [...elsewhere, ...thread.filter((tree) => live.has(tree) || pinned(tree))];
+  return <QuestButtons trees={shown} onOpen={open} />;
 }
 
 /**

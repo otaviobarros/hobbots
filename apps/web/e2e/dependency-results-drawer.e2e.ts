@@ -1,5 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
 // Issue #567 in the browser: once the Task Rook's comes after has completed, Rook's Task drawer
 // shows what it returned under Handed to it: Quill's result and the file he made. The prompt side
@@ -96,8 +97,7 @@ test("[TC-OR-215] Rook's Task drawer shows Quill's result and core.py under Hand
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
 
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const tasks = page.getByRole("list", { name: "Tasks of Build the app" });
+  const tasks = await openQuest(page, "Build the app");
   const frontend = tasks.getByRole("button", { name: /Rook · Write the frontend/ });
   await expect(frontend).toContainText("Done", { timeout: 30_000 });
   await frontend.click();

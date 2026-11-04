@@ -1,5 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -16,8 +17,7 @@ test("[TC-OP-053] follows a Quest that delegated to two hobs from Settings › D
   await composer.fill(request);
   await composer.press("Enter");
   // Aldric delegates to Quill and Ada, and Ada asks you a question that waits.
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const tasks = page.getByRole("list", { name: "Tasks of Plan the Black Friday campaign" });
+  const tasks = await openQuest(page, "Plan the Black Friday campaign");
   await expect(tasks.getByRole("button", { name: /Ada · Build the campaign/ })).toContainText("you", {
     timeout: 15_000,
   });

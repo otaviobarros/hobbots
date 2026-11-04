@@ -92,7 +92,7 @@ export function TaskView({
           {copy.openWorkbench}
         </Button>
       </div>
-      <TaskBackpack task={task} hobs={hobs} onOpen={onOpen} />
+      <TaskBackpack tree={tree} task={task} hobs={hobs} onOpen={onOpen} />
       <details className="text-detail">
         <summary className="cursor-pointer text-label">{copy.details}</summary>
         <div className="mt-3">

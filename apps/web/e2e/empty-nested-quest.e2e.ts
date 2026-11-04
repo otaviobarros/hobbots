@@ -1,8 +1,9 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
 // Issue #576 in the browser: a member that started a Quest of its own and brought nobody in shows
-// "No one brought in yet" under its row in the Quest tab. The hub's side is tested in
+// "No one brought in yet" under its row on the quest sheet. The hub's side is tested in
 // apps/server/test/empty-nested-quest.test.ts.
 
 let hub: Hub | undefined;
@@ -51,7 +52,7 @@ const summon = (current: Hub, name: string, lookSeed: number) =>
 const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
 // covers OR-004, UX-001
-test("[TC-OR-247] the Quest tab says a member's own Quest has no one brought in yet", async ({ page }) => {
+test("[TC-OR-247] the quest sheet says a member's own Quest has no one brought in yet", async ({ page }) => {
   const current = await startHub(dataDir);
   hub = current;
   await request(current, "PATCH", "/api/setup", {
@@ -85,8 +86,7 @@ test("[TC-OR-247] the Quest tab says a member's own Quest has no one brought in 
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const tasks = page.getByRole("list", { name: /^Tasks of Review the project/ });
+  const tasks = await openQuest(page, "Review the project");
   const pip = tasks.getByRole("button", { name: /^Pip · Review the work/ });
   await expect(pip).toContainText("Leads a quest", { timeout: 20_000 });
   await expect(pip).toContainText("No one brought in yet");

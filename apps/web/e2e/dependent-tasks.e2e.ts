@@ -1,8 +1,9 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
 // Issue #564 in the browser: a Task delegated with depends_on waits, and shows whom it waits on in
-// the Quest tab, until the Task it depends on is done; only then does it run. The hub-level checks
+// the quest sheet, until the Task it depends on is done; only then does it run. The hub-level checks
 // are in apps/server/test/dependent-tasks-wait.test.ts.
 
 let hub: Hub | undefined;
@@ -51,7 +52,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
 // covers OR-002, OR-003, UX-002
-test("[TC-OR-204] the Quest tab shows Rook's Task waiting on Quill while Quill's runs, and Rook's runs only once Quill's is done", async ({
+test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill's runs, and Rook's runs only once Quill's is done", async ({
   page,
 }) => {
   const current = await startHub(dataDir);
@@ -101,8 +102,7 @@ test("[TC-OR-204] the Quest tab shows Rook's Task waiting on Quill while Quill's
   await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
 
   // While Quill's Task waits on your push, Rook's waits on Quill's and has not run.
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const tasks = page.getByRole("list", { name: "Tasks of Build the app" });
+  const tasks = await openQuest(page, "Build the app");
   const frontend = tasks.getByRole("button", { name: /Rook · Write the frontend/ });
   await expect(frontend).toContainText("waiting on Quill");
   await expect(frontend).toContainText("Waiting");
@@ -118,7 +118,7 @@ test("[TC-OR-204] the Quest tab shows Rook's Task waiting on Quill while Quill's
   await request.getByRole("button", { name: "Allow once" }).click();
   await expect(request.getByRole("status")).toHaveText("✓ Allowed once. Quill carries on.");
   await page.goto(thread);
-  await page.getByRole("tab", { name: "Quest" }).click();
+  await openQuest(page, "Build the app");
   await expect(tasks.getByRole("button", { name: /Quill · Write the backend/ })).toContainText("Done", {
     timeout: 20_000,
   });

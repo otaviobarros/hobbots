@@ -1,7 +1,8 @@
-import type { TaskId, TaskTree } from "@hobbots/domain";
+import type { Task, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SheetCloseButton, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@hobbots/ui/components/sheet";
 import { cn } from "@hobbots/ui/lib/utils";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { formatWhen } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
@@ -16,6 +17,7 @@ import { latestOf, taskTitle, workCard, workCounts } from "../quest/work-model.t
 import { messages } from "./messages.ts";
 
 const copy = messages;
+const room = questCopy.room;
 
 /** Done rows fold into a count once the list is longer than this. */
 const SHOWN_BEFORE_FOLD = 4;
@@ -30,11 +32,14 @@ const INDENT = ["", "ps-4", "ps-8", "ps-12"] as const;
  */
 export function QuestView({
   tree,
+  threadId,
   hobs,
   pins,
   onOpen,
 }: {
   tree: TaskTree;
+  /** The chat the sheet is over; a quest from another thread links to its own. */
+  threadId: ThreadId;
   hobs: HobLookup;
   pins: Pins;
   onOpen: (taskId: TaskId) => void;
@@ -69,11 +74,13 @@ export function QuestView({
           {total > 0 && ` · ${copy.done({ done, total })}`}
           {needs > 0 && <span className="font-bold text-lantern"> · {copy.needYou({ count: needs })}</span>}
         </SheetDescription>
+        <Elsewhere top={top} threadId={threadId} />
       </div>
       {tasks.length > 0 && <StatusStrip statuses={tasks.map((row) => roomTone(row.status))} />}
       <button
         type="button"
         onClick={() => onOpen(top.id)}
+        aria-label={room.row({ name: lead.name, title: taskTitle(top) })}
         className="flex cursor-pointer items-center gap-2.5 rounded-card border-0 bg-card px-3 py-2.5 text-start text-text-strong hover:bg-hover"
       >
         <Tile>
@@ -139,11 +146,7 @@ function TaskRow({
 }) {
   const title = taskTitle(row.task);
   const owner = hobs(row.task.ownerId);
-  const waits = waitingNames(row, (id) => hobs(id).name);
-  const note =
-    waits.length > 0
-      ? questCopy.card.waitingOn({ names: questCopy.names(waits) })
-      : (latestOf(tree, row.task) ?? row.task.result?.summary ?? null);
+  const { note, color } = rowNote(row, tree, hobs);
   const tone = roomTone(row.status);
   return (
     <button
@@ -160,21 +163,65 @@ function TaskRow({
       </Tile>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate font-bold">{title}</span>
-        <span
-          className={cn(
-            "truncate text-detail",
-            waits.length > 0 || tone === "needs-you"
-              ? "text-lantern"
-              : tone === "failed"
-                ? "text-rose"
-                : "text-text-secondary",
-          )}
-        >
+        <span className={cn("truncate text-detail", color)}>
           {note === null ? owner.name : `${owner.name} · ${note}`}
         </span>
+        <RowFlags row={row} hobs={hobs} />
       </span>
       <StatusTag status={tone}>{roomStatusLabel(row.status)}</StatusTag>
     </button>
+  );
+}
+
+/** A row's one-line note and its color: who it waits on first, else its latest step or result. */
+const rowNote = (row: RoomRow, tree: TaskTree, hobs: HobLookup) => {
+  const waits = waitingNames(row, (id) => hobs(id).name);
+  if (waits.length > 0)
+    return { note: questCopy.card.waitingOn({ names: questCopy.names(waits) }), color: "text-lantern" };
+  const note = latestOf(tree, row.task) ?? row.task.result?.summary ?? null;
+  const tone = roomTone(row.status);
+  const color = tone === "needs-you" ? "text-lantern" : tone === "failed" ? "text-rose" : "text-text-secondary";
+  return { note, color };
+};
+
+/**
+ * What else a row says: that its member leads a quest of its own, and whom, or that it has brought
+ * nobody in yet; and that another Task changed a file this one changed too (#570, #576).
+ */
+function RowFlags({ row, hobs }: { row: RoomRow; hobs: HobLookup }) {
+  const party = row.party.map((id) => hobs(id).name);
+  const sameFile = row.sameFileAs.map((id) => hobs(id).name);
+  const leads =
+    row.quest === null ? null : party.length > 0 ? room.leadsParty({ names: questCopy.names(party) }) : room.leads;
+  const nobody = row.quest?.state === "active" && party.length === 0;
+  if (leads === null && sameFile.length === 0) return null;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-meta">
+      {leads !== null && (
+        <span className="shrink-0 truncate rounded-tag bg-line px-1.5 font-bold text-moonlight">{leads}</span>
+      )}
+      {nobody && <span className="shrink-0 text-lantern">{room.nobodyYet}</span>}
+      {sameFile.length > 0 && (
+        <span className="truncate text-rose">{room.sameFile({ names: questCopy.names(sameFile) })}</span>
+      )}
+    </span>
+  );
+}
+
+/** A quest pinned from another thread says so, with a link to its own thread. */
+function Elsewhere({ top, threadId }: { top: Task; threadId: ThreadId }) {
+  if (top.threadId === null || top.threadId === threadId) return null;
+  return (
+    <span className="flex items-center gap-2 text-detail text-label">
+      {room.elsewhere}
+      <Link
+        to="/hobs/$hobId/threads/$threadId"
+        params={{ hobId: top.ownerId, threadId: top.threadId }}
+        className="text-lantern"
+      >
+        {room.openThread}
+      </Link>
+    </span>
   );
 }
 

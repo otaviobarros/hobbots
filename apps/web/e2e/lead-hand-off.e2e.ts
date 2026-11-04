@@ -1,5 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { openQuest } from "./work-sheet.ts";
 
 // Issue #566 in the browser: Rook, running alongside Quill, asks Aldric for Quill's core.py. Aldric,
 // on Quill's result, hands it off and answers, and Rook's Task finishes with core.py under Handed to
@@ -104,8 +105,7 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
 
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const tasks = page.getByRole("list", { name: "Tasks of Build the app" });
+  const tasks = await openQuest(page, "Build the app");
   const frontend = tasks.getByRole("button", { name: /Rook · Write the frontend/ });
   await expect(frontend).toContainText("Done", { timeout: 30_000 });
   await frontend.click();

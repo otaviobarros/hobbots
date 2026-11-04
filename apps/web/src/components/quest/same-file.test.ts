@@ -24,7 +24,7 @@ const sameFile = new Checkpoint({
 const withCheckpoints = (...checkpoints: ReadonlyArray<Checkpoint>) => tree({ ...blackFriday(), checkpoints });
 
 describe("A hub finding on two Tasks changing the same file", () => {
-  it("tags both members' rows in the Quest tab with the other hob, and no one else's", () => {
+  it("tags both members' rows on the quest sheet with the other hob, and no one else's", () => {
     const rows = roomRows(withCheckpoints(sameFile));
     const byTask = new Map(rows.map((row) => [row.task.id, row.sameFileAs]));
     expect(byTask.get(BUILD)).toEqual([QUILL]);

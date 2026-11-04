@@ -16,7 +16,7 @@ import { messages } from "./messages.ts";
 import { type RowStatus, rowStatus, waitsOnOf } from "./work-model.ts";
 
 /**
- * The Quest tab's control room (ADR 018, CH-005): a request's whole Task tree with who owns each
+ * The quest sheet's rows and controls (ADR 018, CH-005): a request's whole Task tree with who owns each
  * Task, where it stands, how old it is and who it waits on, and the controls you may use on it.
  * Everything here comes from the Task records (STD-UI-008).
  */

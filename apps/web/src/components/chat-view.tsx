@@ -39,6 +39,7 @@ import { sendErrorText } from "../lib/send-error.ts";
 import { ReplyApprovals } from "./approvals/reply-approvals.tsx";
 import { ArchiveToastViewport } from "./archive/archive-toast.tsx";
 import { ThreadHeaderMenu } from "./archive/thread-menu.tsx";
+import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { BrainPicker, BrainSwitchNote, useOtherReadyRuntimes } from "./brain-picker.tsx";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
@@ -46,7 +47,9 @@ import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./m
 import { messages } from "./messages.ts";
 import { NeedsTray } from "./needs-tray/needs-tray.tsx";
 import { useThreadNeeds } from "./needs-tray/use-thread-needs.ts";
+import { PinNotes } from "./quest/pin-notes.tsx";
 import { ThreadQuestButton, useWorkMoments } from "./quest/thread-work.tsx";
+import type { Pins } from "./quest/use-work.ts";
 
 /**
  * Keeps the transcript's end in view while the composer grows or shrinks, so a long draft never
@@ -73,17 +76,16 @@ export function ChatView({
   threadId,
   focusMessageId,
   navOpen,
-  panelOpen,
   onShowNav,
-  onTogglePanel,
+  pins,
 }: {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
   focusMessageId?: string | undefined;
   navOpen: boolean;
-  panelOpen: boolean;
   onShowNav: () => void;
-  onTogglePanel: () => void;
+  /** The Quests pinned to every thread's header. */
+  pins: Pins;
 }) {
   const hob = useQuery({ ...agentsQuery, select: (agents) => agents.find((a) => a.id === hobId) });
   const thread = useQuery({
@@ -228,7 +230,7 @@ export function ChatView({
           </span>
           <span className="text-xs text-label">{stateLabel[state]}</span>
         </div>
-        {threadId && <ThreadQuestButton hobId={hobId} threadId={threadId} />}
+        {threadId && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
         <BrainPicker hob={current} thread={thread.data} />
         {thread.data && <ThreadHeaderMenu hob={current} thread={thread.data} />}
         <Button asChild variant="outline">
@@ -236,16 +238,8 @@ export function ChatView({
             Edit hob
           </Link>
         </Button>
-        <Button
-          variant="icon"
-          size="icon"
-          onClick={onTogglePanel}
-          aria-label={panelOpen ? copy.hidePanel : copy.showPanel}
-          title={panelOpen ? copy.hidePanel : copy.showPanel}
-        >
-          {panelOpen ? "»" : "«"}
-        </Button>
       </header>
+      {threadId && <PinNotes threadId={threadId} pins={pins} />}
 
       <div
         onScroll={(event) => {
@@ -385,6 +379,7 @@ export function ChatView({
         </section>
       )}
       <ArchiveToastViewport />
+      <WorkHeldNotice className="mx-6 mb-2" />
       <NeedsTray entries={needs} className="mx-6 mb-2" />
       <Composer
         placeholder={copy.placeholder({ name: current.name, title })}

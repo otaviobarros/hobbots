@@ -117,12 +117,6 @@ export const messages = {
     uncommitted: "Left uncommitted",
   } satisfies Record<CheckpointKind, string>,
   room: {
-    label: ({ title }: { title: string }) => `Control room for ${title}`,
-    emptyTitle: "No Quest in this thread",
-    empty:
-      "When a hob splits work or asks other hobs for help, the Quest shows up here: who is on each Task, what they wait on, and how far it got. Pin a Quest to keep it in view while you chat elsewhere.",
-    summary: ({ whose, done, total }: { whose: string; done: number; total: number }) =>
-      `${whose} · ${formatCount(done)} of ${formatCount(total)} done`,
     elsewhere: "Pinned from another thread",
     openThread: "Open its thread",
     pin: "Pin",
@@ -143,7 +137,6 @@ export const messages = {
     sameFile: ({ names }: { names: string }) => `Same file as ${names}`,
     /** A member that started a Quest of its own but has brought nobody into it (#576). */
     nobodyYet: "No one brought in yet",
-    pick: "Pick a Task to retry, reassign or cancel it.",
     workbench: "Open in Workbench",
     controls: ({ title }: { title: string }) => `Controls for ${title}`,
     attempt: ({ count }: { count: number }) => `Attempt ${formatCount(count)}`,

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { expect, test } from "./hub.ts";
+import { openQuest, questSheet, taskSheet } from "./work-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
@@ -26,10 +27,7 @@ test("[TC-UX-021] a finished Task's Workbench opens on Summary, greys out the Te
   await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  // Pinned, and with a message left unsent, the Workbench opens from the card in the chat's place.
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Tidy the notes" });
-  await room.getByRole("button", { name: "Pin" }).click();
+  // With a message left unsent, the Workbench opens from the card in the chat's place.
   await composer.fill("A thought for later");
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
@@ -68,21 +66,20 @@ test("[TC-UX-021] a finished Task's Workbench opens on Summary, greys out the Te
   );
   await expect(page).toHaveURL(/tab=terminal/);
 
-  // Escape goes back to the same chat, with the message still unsent and the Quest still pinned.
+  // Escape goes back to the same chat, with the message still unsent.
   await page.keyboard.press("Escape");
   await expect(bench).toBeHidden();
   await expect(composer).toHaveValue("A thought for later");
-  await expect(room.getByRole("button", { name: "Pin" })).toHaveAttribute("aria-pressed", "true");
 
   // Opened again it starts on Summary.
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   await expect(bench.getByRole("tab", { name: /^Summary/ })).toHaveAttribute("aria-selected", "true");
-  await bench.getByRole("button", { name: "← Back to chat" }).click();
+  await bench.getByRole("button", { name: /^← Back to/ }).click();
   await expect(bench).toBeHidden();
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-022] the Workbench opens from the Task drawer and the Quest tab, and goes back to the drawer it came from with its unsent note", async ({
+test("[TC-UX-022] the Workbench opens from the task sheet, also reached from the quest sheet, and goes back to the drawer it came from with its unsent note", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -107,10 +104,15 @@ test("[TC-UX-022] the Workbench opens from the Task drawer and the Quest tab, an
   await expect(drawer).toBeVisible();
   await expect(note).toHaveValue("Keep the headings short");
 
-  // From the Quest tab, the open Task's controls open its Workbench.
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const controls = page.getByRole("region", { name: "Controls for Tidy the notes" });
-  await controls.getByRole("button", { name: "Open in Workbench" }).click();
+  // From the quest button in the header, the quest sheet's row opens the Task, and its Workbench.
+  await page
+    .getByRole("region", { name: "Work in progress" })
+    .getByRole("button", { name: /Tidy the notes/ })
+    .click();
+  await questSheet(page, "Tidy the notes")
+    .getByRole("button", { name: /^Aldric · Tidy the notes/ })
+    .click();
+  await drawer.getByRole("button", { name: "Open Workbench" }).click();
   await expect(bench).toBeVisible();
   await expect(bench.getByRole("tab", { name: /^Summary/ })).toHaveAttribute("aria-selected", "true");
 });
@@ -388,8 +390,9 @@ test("[TC-UX-032] a Quest pinned from another thread sends Answer in the chat to
   const questThread = new URL(page.url().replace("/#/", "/")).pathname;
 
   // Pinned, the Quest follows to another thread, where its Workbench opens over that thread's chat.
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Tidy the notes" });
+  const header = page.getByRole("region", { name: "Work in progress" }).getByRole("button", { name: /Tidy the notes/ });
+  await header.click();
+  const room = questSheet(page, "Tidy the notes");
   await room.getByRole("button", { name: "Pin" }).click();
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   await composer.fill("Something else");
@@ -397,12 +400,10 @@ test("[TC-UX-032] a Quest pinned from another thread sends Answer in the chat to
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+  await header.click();
   await expect(room).toContainText("Pinned from another thread");
   await room.getByRole("button", { name: /^Aldric · Tidy the notes/ }).click();
-  await page
-    .getByRole("region", { name: "Controls for Tidy the notes" })
-    .getByRole("button", { name: "Open in Workbench" })
-    .click();
+  await taskSheet(page, "Tidy the notes").getByRole("button", { name: "Open Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
   await expect(open).toContainText("Should the headings be short?");
@@ -474,18 +475,20 @@ test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the w
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Quest" }).click();
-  const room = page.getByRole("region", { name: "Control room for Tidy the notes" });
+  const room = await openQuest(page, "Tidy the notes");
   const step = room.getByRole("button", { name: /^Aldric · Tidy the notes file/ });
   await expect(step).toContainText("Failed", { timeout: 30_000 });
   await step.click();
-  const controls = room.getByRole("region", { name: "Controls for Tidy the notes file" });
-  await controls.getByRole("button", { name: "Retry" }).click();
-  await expect(controls).toContainText("Attempt 2", { timeout: 15_000 });
-  await expect(step).toContainText("Failed", { timeout: 30_000 });
+  const sheet = taskSheet(page, "Tidy the notes file");
+  await sheet
+    .getByRole("region", { name: "Controls for Tidy the notes file" })
+    .getByRole("button", { name: "Retry" })
+    .click();
+  await expect(sheet).toContainText("attempt 2", { timeout: 15_000 });
+  await expect(sheet).toContainText("Failed", { timeout: 30_000 });
 
   // With no Attempt chosen, the Workbench settles on the first, which changed the notes.
-  await controls.getByRole("button", { name: "Open in Workbench" }).click();
+  await sheet.getByRole("button", { name: "Open Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes file" });
   const attempts = bench.getByRole("radiogroup", { name: "Attempts" });
   await expect(attempts.getByRole("radio", { name: "Attempt 1" })).toBeChecked();

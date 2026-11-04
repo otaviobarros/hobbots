@@ -21,7 +21,7 @@ const keepForControls = (event: Event) => {
   if (event.target instanceof Element && event.target.closest(control) !== null) event.preventDefault();
 };
 
-/** Focus may leave the sheet, to the composer or the Quest tab, without closing it. */
+/** Focus may leave the sheet, to the composer or the chat header, without closing it. */
 const stayOpen = (event: Event) => event.preventDefault();
 
 /** Focus lands on the sheet's title, so a screen reader starts at what opened, the way a page does. */
@@ -71,7 +71,7 @@ export function WorkSheet({
   return (
     <>
       <div ref={setHost} className="contents" />
-      {/* Not modal: the chat and the Quest tab beside it stay in reach, and a click on them closes the sheet. */}
+      {/* Not modal: the chat and its header stay in reach, and a click on them closes the sheet. */}
       <Sheet modal={false} open={wanted !== undefined} onOpenChange={(open) => !open && close()}>
         <SheetContent
           aria-label={showTask ? questCopy.drawer.label({ title }) : copy.questLabel({ title })}
@@ -103,7 +103,7 @@ export function WorkSheet({
               onWorkbench={(id) => openWorkbench(id, "drawer")}
             />
           ) : (
-            <QuestView tree={found.tree} hobs={hobs} pins={pins} onOpen={openTask} />
+            <QuestView tree={found.tree} threadId={threadId} hobs={hobs} pins={pins} onOpen={openTask} />
           )}
         </SheetContent>
       </Sheet>

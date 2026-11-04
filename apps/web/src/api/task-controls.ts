@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { applyTaskEvent } from "./tasks.ts";
 
-/** A control from the Quest tab (ADR 018, OR-006): what it acts on, and how it is sent. */
+/** A control from the quest or task sheet (ADR 018, OR-006): what it acts on, and how it is sent. */
 export type TaskControl =
   | { readonly kind: "cancel"; readonly taskId: TaskId }
   | { readonly kind: "cancelQuest"; readonly questId: QuestId }
