@@ -11,6 +11,7 @@ import {
 import { Button } from "@hobbots/ui/components/button";
 import { type ReactNode, useEffect, useRef } from "react";
 import { formatTime } from "../../lib/time.ts";
+import { TaskApprovals, useShownApprovals } from "../approvals/task-approvals.tsx";
 import { HobSprite } from "../hob-sprite.tsx";
 import { useOpenWorkbench } from "../workbench/use-workbench.ts";
 import { roomStatus, roomStatusLabel, roomTone } from "./control-room.ts";
@@ -84,7 +85,7 @@ export function TaskDrawer({
               {copy.back({ title: taskTitle(found.parent) })}
             </Button>
           )}
-          <h2 ref={heading} tabIndex={-1} className="m-0 truncate font-pixel text-title font-semibold outline-none">
+          <h2 ref={heading} tabIndex={-1} className="m-0 truncate font-heading text-title font-semibold outline-none">
             {found === null ? copy.notFound : title}
           </h2>
         </span>
@@ -131,6 +132,7 @@ function Detail({
         <StatusTag status={roomTone(status)}>{roomStatusLabel(status)}</StatusTag>
         <span className="text-detail text-label">{hobs(task.ownerId).name}</span>
       </span>
+      <WaitingApprovals approvals={detail.approvals} />
       <Section title={detail.from === null ? copy.brief : copy.from({ name: hobs(detail.from).name })}>
         <div className="flex flex-col gap-1 border-2 border-line bg-card px-2.5 py-2 text-detail leading-snug">
           <span className="whitespace-pre-wrap">{detail.brief}</span>
@@ -265,6 +267,17 @@ function Detail({
         </Section>
       )}
     </div>
+  );
+}
+
+/** What the Task's turn waits on you to approve, decided right here as in the Inbox, then how it ended (#698). */
+function WaitingApprovals({ approvals }: { approvals: ReturnType<typeof taskDetail>["approvals"] }) {
+  const shown = useShownApprovals(approvals);
+  if (shown.length === 0) return null;
+  return (
+    <Section title={copy.approvals}>
+      <TaskApprovals approvals={shown} />
+    </Section>
   );
 }
 

@@ -1,4 +1,5 @@
 import {
+  type ApprovalRequest,
   type ArtifactRef,
   type Attempt,
   type HobbotsEvent,
@@ -23,9 +24,19 @@ interface ControlRecorded {
   readonly tree: TaskTree;
 }
 
-/** The journal events that change a Task tree (ADR 018), and a control's answer. */
+/**
+ * A newer version of an approval request, from its journal event or the answer to a decision: a
+ * Task's turn waits on its pending requests, so the tree holds them (#698).
+ */
+interface ApprovalRecorded {
+  readonly _tag: "ApprovalRecorded";
+  readonly approval: ApprovalRequest;
+}
+
+/** The journal events that change a Task tree (ADR 018), a control's answer and an approval's new version. */
 export type TaskEvent =
   | ControlRecorded
+  | ApprovalRecorded
   | Extract<
       HobbotsEvent,
       {
@@ -192,6 +203,14 @@ const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
   QuestionEscalated: questionChange,
   QuestionWithdrawn: questionChange,
   NoteLeft: (tree, { note }, ids) => (ids.has(note.taskId) ? { notes: upsertNewer(tree.notes, note) } : null),
+  // An older copy changes nothing, so the tree stays the same.
+  ApprovalRecorded: (tree, { approval }, ids) => {
+    if (approval.taskId === null || !ids.has(approval.taskId)) return null;
+    const known = tree.approvals.find((each) => each.id === approval.id);
+    return known !== undefined && known.revision >= approval.revision
+      ? null
+      : { approvals: upsertNewer(tree.approvals, approval) };
+  },
   // A refusal tried again replaces its record, unless the copy known was refused later.
   ToolCallRefused: (tree, { refusal }, ids) => {
     if (refusal.taskId === null || !ids.has(refusal.taskId)) return null;

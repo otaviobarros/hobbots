@@ -49,7 +49,7 @@ export const useSearchResults = (query: string) => {
   return { results, pending: agents.isPending || search.pending, error: agents.isError || search.error };
 };
 
-/** Where a result leads: the hob's chat, or the thread at its newest matching message. */
+/** Where a result leads: the hob's page, or the thread at its newest matching message. */
 export const resultLink = (result: SearchResult) =>
   result.kind === "hob"
     ? ({ to: "/hobs/$hobId", params: { hobId: result.hob.id } } as const)

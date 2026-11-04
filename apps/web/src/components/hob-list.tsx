@@ -66,7 +66,7 @@ export function HobList({
 
       <div className="mt-auto flex flex-col gap-2">
         <div className="flex items-center gap-2 border-2 border-dashed border-control px-2.5 py-2">
-          <span className="flex-1 font-pixel text-sm font-semibold text-moonlight">{copy.rooms}</span>
+          <span className="flex-1 font-heading text-sm font-semibold text-moonlight">{copy.rooms}</span>
           <Badge variant="later">{copy.later}</Badge>
         </div>
         <Button asChild>
@@ -100,7 +100,7 @@ function HobEntry({ hob, open, threadId }: { hob: Agent; open: boolean; threadId
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex justify-between gap-1.5">
-            <span className="font-pixel text-base font-semibold">{hob.name}</span>
+            <span className="font-heading text-base font-semibold">{hob.name}</span>
             <span className={cn("text-xs", state === "idle" || state === "paused" ? "text-label" : "text-mint")}>
               {stateLabel[state]}
             </span>
@@ -152,7 +152,11 @@ function ThreadLink({ hob, thread, current, live }: { hob: Agent; thread: Thread
       >
         <span className="min-w-0 flex-1 truncate">{thread.title}</span>
         {live && (
-          <span role="img" aria-label={copy.working} className="size-[7px] flex-none animate-hb-blink bg-mint" />
+          <span
+            role="img"
+            aria-label={copy.working}
+            className="size-[7px] flex-none animate-hb-blink rounded-dot bg-mint"
+          />
         )}
         <span className="text-[11px] whitespace-nowrap text-label">{formatWhen(thread.updatedAt)}</span>
       </Link>

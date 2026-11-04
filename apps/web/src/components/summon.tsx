@@ -146,7 +146,7 @@ export function Summon() {
       <form onSubmit={(e) => void summon(e)} className="flex min-h-full flex-col gap-[18px] px-8 py-6">
         <div className="flex items-end gap-4">
           <div className="flex flex-1 flex-col gap-1.5">
-            <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">{copy.heading}</h1>
+            <h1 className="m-0 font-heading text-[32px] font-bold text-moonlight">{copy.heading}</h1>
             <span className="text-text-secondary">{copy.intro}</span>
           </div>
           <Button type="button" variant="outline" onClick={cancel}>
@@ -282,7 +282,7 @@ export function Summon() {
                       const value = e.target.value;
                       setDraft((d) => ({ ...d, name: value, named: true }));
                     }}
-                    className="w-[130px] border-0 border-b-2 border-dashed border-control bg-transparent px-0 py-0.5 font-pixel text-[26px] font-bold text-text-strong"
+                    className="w-[130px] border-0 border-b-2 border-dashed border-control bg-transparent px-0 py-0.5 font-heading text-[26px] font-bold text-text-strong"
                   />
                   <NameDice
                     size={18}
@@ -349,7 +349,8 @@ export function Summon() {
                 aria-describedby="summon-hint"
                 className={cn(
                   "w-full",
-                  problem && "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_#22203f] hover:bg-line-2",
+                  problem &&
+                    "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_color-mix(in_srgb,var(--color-line-2)_60%,black)] hover:bg-line-2",
                 )}
               >
                 {shared.ready.summon({ name })}

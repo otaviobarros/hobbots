@@ -5,6 +5,7 @@ import {
   descendantsOf,
   isTerminalTask,
   partyOf,
+  pendingApprovals,
   type Quest,
   type Task,
   type TaskId,
@@ -20,7 +21,7 @@ import { type RowStatus, rowStatus, waitsOnOf } from "./work-model.ts";
  * Everything here comes from the Task records (STD-UI-008).
  */
 
-/** Who a Task waits on: a hob, or you when a question climbed every lead. */
+/** Who a Task waits on: a hob, or you when a question climbed every lead or an action waits on your approval. */
 type Waited = { readonly kind: "hob"; readonly id: AgentId } | { readonly kind: "you" };
 
 /**
@@ -69,7 +70,8 @@ export const roomStatusLabel = (status: RoomStatus): string =>
 
 /**
  * Who the Task waits on: the owners of unfinished Tasks it depends on or its owner waits for, and
- * whoever holds a question it asked, in that order and once each.
+ * whoever holds a question it asked, in that order and once each, then you for a question or an
+ * approval its turn waits on.
  */
 const waitingOnOf = (tree: TaskTree, task: Task): ReadonlyArray<Waited> => {
   if (isTerminalTask(task.state)) return [];
@@ -87,7 +89,9 @@ const waitingOnOf = (tree: TaskTree, task: Task): ReadonlyArray<Waited> => {
     ...[...new Set([...hobs, ...holders.filter((id): id is AgentId => id !== null)])].map(
       (id): Waited => ({ kind: "hob", id }),
     ),
-    ...(holders.includes(null) ? [{ kind: "you" } as const] : []),
+    ...(holders.includes(null) || pendingApprovals(tree).some((approval) => approval.taskId === task.id)
+      ? [{ kind: "you" } as const]
+      : []),
   ];
 };
 

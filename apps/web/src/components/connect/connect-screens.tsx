@@ -80,7 +80,7 @@ export function ConnectForm({
           </>
         }
       >
-        <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">{copy.form.title}</h1>
+        <h1 className="m-0 font-heading text-[32px] font-bold text-moonlight">{copy.form.title}</h1>
         <p className="m-0 mb-3.5 max-w-[700px] text-text-secondary">{copy.form.intro}</p>
         <label htmlFor={inputId} className="lbl text-label">
           {copy.form.addressLabel}
@@ -124,15 +124,15 @@ export function ConnectWaiting({ waiting, onCancel }: { waiting: WaitingView; on
       }
     >
       <div role="status" className="flex flex-col items-center gap-2.5 pt-6 text-center">
-        <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">{copy.waiting.title({ computer })}</h1>
+        <h1 className="m-0 font-heading text-[32px] font-bold text-moonlight">{copy.waiting.title({ computer })}</h1>
         <p className="m-0 max-w-[560px] text-text-secondary">{copy.waiting.intro({ computer })}</p>
         <p className="m-0 text-[13px] text-label">
           {copy.waiting.who({ computer, owner: waiting.owner })}
           {waiting.hubName !== computer && ` · ${copy.form.calledItself({ name: waiting.hubName })}`}
         </p>
         <div className="cut my-3 flex flex-col items-center gap-1 bg-text-strong px-[34px] py-[18px] text-ground">
-          <span className="lbl text-xs text-[#5b4f9a]">{copy.waiting.codeLabel}</span>
-          <span className="font-pixel text-[44px] font-bold tracking-[0.12em]">{groupedCode(waiting.code)}</span>
+          <span className="lbl text-xs text-ground/70">{copy.waiting.codeLabel}</span>
+          <span className="font-heading text-[44px] font-bold tracking-[0.12em]">{groupedCode(waiting.code)}</span>
         </div>
         <span className="font-bold text-lantern">
           {copy.waiting.knocking}{" "}
@@ -171,7 +171,7 @@ export function ConnectEnded({
         >
           ✕
         </div>
-        <h1 className="m-0 mt-2 font-pixel text-[32px] font-bold text-moonlight">{title}</h1>
+        <h1 className="m-0 mt-2 font-heading text-[32px] font-bold text-moonlight">{title}</h1>
         <p role="status" className="m-0 max-w-[560px] text-text-secondary">
           {body}
         </p>
@@ -197,7 +197,7 @@ export function ConnectAllowed({ computer }: { computer: string }) {
         >
           ✓
         </div>
-        <h1 className="m-0 mt-2 font-pixel text-[32px] font-bold text-moonlight">{copy.allowed.title}</h1>
+        <h1 className="m-0 mt-2 font-heading text-[32px] font-bold text-moonlight">{copy.allowed.title}</h1>
         <p className="m-0 max-w-[560px] leading-normal text-text-secondary">{copy.allowed.body({ computer })}</p>
       </div>
     </SetupStep>

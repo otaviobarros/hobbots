@@ -1,5 +1,6 @@
 import {
   type AgentId,
+  type ApprovalRequest,
   checkpointOn,
   handedFrom,
   isTerminalTask,
@@ -7,6 +8,8 @@ import {
   type MessageId,
   noteRecipientOf,
   partyOf,
+  pendingApprovals,
+  pendingApprovalsOn,
   type Quest,
   type Question,
   saysMore,
@@ -42,6 +45,8 @@ export interface WorkRow {
   readonly step: { readonly index: number; readonly total: number } | null;
   /** What the Task last reported, if anything. */
   readonly latest: string | null;
+  /** The first action its turn waits on you to approve, which the row names (#698). */
+  readonly approval: ApprovalRequest | null;
 }
 
 export interface WorkCard {
@@ -73,10 +78,14 @@ const subtreeIds = (tree: TaskTree, id: TaskId): ReadonlySet<TaskId> => {
 const questionsForYou = (tree: TaskTree): ReadonlyArray<Question> =>
   tree.questions.filter((question) => question.recipientId === null && question.state === "open");
 
-/** Where a Task stands for you: a question waiting for you anywhere under it comes first. */
+/**
+ * Where a Task stands for you: a question or an approval waiting for you anywhere under it comes
+ * first, since its turn cannot go on until you act (#698).
+ */
 export const rowStatus = (tree: TaskTree, task: Task): RowStatus => {
   const under = subtreeIds(tree, task.id);
-  if (questionsForYou(tree).some((question) => under.has(question.taskId))) return "needs-you";
+  const asks = [...questionsForYou(tree), ...pendingApprovals(tree)];
+  if (asks.some((ask) => under.has(ask.taskId))) return "needs-you";
   switch (task.state) {
     case "failed":
       return "failed";
@@ -138,6 +147,7 @@ const workRows = (tree: TaskTree, top: Task): ReadonlyArray<WorkRow> => {
       waitsOn: waitsOnOf(tree, task),
       step: null,
       latest: latestOf(tree, task),
+      approval: pendingApprovalsOn(tree, task.id)[0] ?? null,
     }));
   const current = steps[currentStep(steps)];
   if (current !== undefined) {
@@ -147,6 +157,7 @@ const workRows = (tree: TaskTree, top: Task): ReadonlyArray<WorkRow> => {
       waitsOn: waitsOnOf(tree, current),
       step: { index: steps.indexOf(current) + 1, total: steps.length },
       latest: latestOf(tree, current),
+      approval: pendingApprovalsOn(tree, current.id)[0] ?? null,
     });
   }
   return rows
@@ -187,7 +198,7 @@ export const workCounts = (tree: TaskTree): Readonly<Record<RowStatus, number>> 
   const counts: Record<RowStatus, number> = { "needs-you": 0, failed: 0, blocked: 0, running: 0, waiting: 0, done: 0 };
   const top = tree.tasks[0];
   for (const task of tree.tasks) if (task !== top) counts[rowStatus(tree, task)] += 1;
-  counts["needs-you"] = questionsForYou(tree).length;
+  counts["needs-you"] = questionsForYou(tree).length + pendingApprovals(tree).length;
   return counts;
 };
 
@@ -282,6 +293,7 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
     milestones: tree.milestones.filter((each) => each.taskId === task.id).sort((a, b) => a.position - b.position),
     checkpoints: tree.checkpoints.filter((each) => checkpointOn(each, task.id)),
     questions: tree.questions.filter((each) => each.taskId === task.id),
+    approvals: tree.approvals.filter((each) => each.taskId === task.id),
     // Your notes only: a lead's message to its member's Task is the hobs' own (#574).
     notes: tree.notes.filter((each) => each.taskId === task.id && (each.senderId ?? null) === null),
     output: tree.artifacts.filter((each) => each.taskId === task.id),
@@ -302,6 +314,7 @@ const workRowsAll = (tree: TaskTree, task: Task): ReadonlyArray<WorkRow> =>
     waitsOn: waitsOnOf(tree, child),
     step: null,
     latest: latestOf(tree, child),
+    approval: pendingApprovalsOn(tree, child.id)[0] ?? null,
   }));
 
 /** The first line of a brief, as a Task's title. */

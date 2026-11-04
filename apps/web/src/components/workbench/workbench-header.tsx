@@ -1,4 +1,5 @@
 import { type Attempt, type AttemptId, isLiveAttempt, policySandbox, type Task, type TaskTree } from "@hobbots/domain";
+import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import type { RefObject } from "react";
@@ -63,7 +64,7 @@ export function WorkbenchHeader({
         <h2
           ref={headingRef}
           tabIndex={-1}
-          className="m-0 min-w-0 flex-1 truncate font-pixel text-xl font-semibold text-moonlight outline-none"
+          className="m-0 min-w-0 flex-1 truncate font-heading text-xl font-semibold text-moonlight outline-none"
         >
           {taskTitle(task)}
         </h2>
@@ -141,24 +142,12 @@ function AttemptPicker({
   onAttempt: (attemptId: AttemptId) => void;
 }) {
   return (
-    <fieldset className="m-0 flex flex-wrap items-center gap-1.5 border-0 p-0">
-      <legend className="sr-only">{messages.attempts}</legend>
+    <SegmentedControl size="sm" aria-label={messages.attempts} value={chosen} onValueChange={onAttempt}>
       {attempts.map((each) => (
-        <button
-          key={each.id}
-          type="button"
-          aria-pressed={each.id === chosen}
-          onClick={() => onAttempt(each.id)}
-          className={cn(
-            "cursor-pointer border-2 px-2.5 py-1 text-detail",
-            each.id === chosen
-              ? "border-moonlight bg-line text-moonlight"
-              : "border-line-2 bg-transparent text-label hover:bg-hover hover:text-text-strong",
-          )}
-        >
+        <SegmentedControlItem key={each.id} value={each.id}>
           {messages.attempt({ number: each.number })}
-        </button>
+        </SegmentedControlItem>
       ))}
-    </fieldset>
+    </SegmentedControl>
   );
 }

@@ -22,10 +22,10 @@ const INSTALL_GUIDES: Readonly<Record<RuntimeKind, string>> = {
 
 // Providers from the Hobbots design that arrive in a later slice.
 const LATER = [
-  { ...copy.later.gemini, mark: "G", tile: "#8fb4f0" },
-  { ...copy.later.grok, mark: "X", tile: "#c9c3e8" },
-  { ...copy.later.local, mark: "L", tile: "#f3e9b5" },
-  { ...copy.later.other, mark: "+", tile: "#b79be8" },
+  { ...copy.later.gemini, mark: "G", tile: "bg-provider-gemini" },
+  { ...copy.later.grok, mark: "X", tile: "bg-provider-grok" },
+  { ...copy.later.local, mark: "L", tile: "bg-provider-local" },
+  { ...copy.later.other, mark: "+", tile: "bg-provider-other" },
 ];
 
 /** Found and connected are both a ready provider; only the user's Connect turns one into the other. */
@@ -112,12 +112,11 @@ const codexHow = (state: ProviderState, codex: RuntimeHealth | undefined): React
 const how = (runtime: RuntimeKind, state: ProviderState, health: RuntimeHealth | undefined): ReactNode =>
   runtime === "codex" ? codexHow(state, health) : claudeHow(state, health);
 
-function ProviderMark({ mark, tile, style }: { mark: string; tile?: string; style?: React.CSSProperties }) {
+function ProviderMark({ mark, tile }: { mark: string; tile: string }) {
   return (
     <span
       aria-hidden
       className={cn("cut grid size-9 flex-none place-items-center text-[19px] font-bold text-ground", tile)}
-      style={style}
     >
       {mark}
     </span>
@@ -383,7 +382,9 @@ export function OnboardingProviders() {
             aria-describedby="providers-hint"
             disabled={providers.isPending}
             className={
-              ready ? undefined : "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_#22203f] hover:bg-line-2"
+              ready
+                ? undefined
+                : "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_color-mix(in_srgb,var(--color-line-2)_60%,black)] hover:bg-line-2"
             }
           >
             {shared.continue}
@@ -392,7 +393,7 @@ export function OnboardingProviders() {
       }
     >
       <div className="flex animate-hb-in flex-col gap-1.5">
-        <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{copy.heading}</h1>
+        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.heading}</h1>
         <p className="m-0 mb-3.5 text-text-secondary">{copy.intro}</p>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
           {states.map(([runtime, state]) => (
@@ -416,7 +417,7 @@ export function OnboardingProviders() {
               className="cut flex flex-col gap-2.5 border-2 border-line-2 bg-card p-3.5"
             >
               <div className="flex items-center gap-2.5">
-                <ProviderMark mark={p.mark} style={{ background: p.tile }} />
+                <ProviderMark mark={p.mark} tile={p.tile} />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="text-base font-bold">{p.name}</span>
                   <span className="text-[13px] text-text-secondary">{p.maker}</span>

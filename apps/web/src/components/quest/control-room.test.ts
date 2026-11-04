@@ -10,6 +10,7 @@ import {
   CAMPAIGN,
   COPY,
   delegation,
+  memberApproval,
   QUILL,
   quest,
   question,
@@ -91,6 +92,14 @@ describe("roomRows", () => {
     // The hub keeps a Task's last wait after it moves on; it no longer counts then.
     const movedOn = tree({ ...base, waits: [wait] });
     expect(roomRows(movedOn).find((row) => row.task.id === CAMPAIGN)?.waitingOn).toEqual([]);
+  });
+
+  it("says a member's Task waits on you while its turn waits on your approval, and needs you", () => {
+    const asking = tree({ ...blackFriday(), approvals: [memberApproval(COPY, QUILL)] });
+    const copy = roomRows(asking).find((row) => row.task.id === COPY);
+    expect([copy?.status, copy?.waitingOn]).toEqual(["needs-you", [{ kind: "you" }]]);
+    const decided = tree({ ...blackFriday(), approvals: [memberApproval(COPY, QUILL, { state: "denied" })] });
+    expect(roomRows(decided).find((row) => row.task.id === COPY)?.waitingOn).toEqual([]);
   });
 
   it("shows a cancel as it is, apart from done", () => {

@@ -2,9 +2,9 @@ import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
 import type { Agent, AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
-import { cn } from "@hobbots/ui/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { agentsQuery } from "../api/queries.ts";
 import { readStored, writeStored } from "../lib/storage.ts";
@@ -30,7 +30,6 @@ export function SidePanel({
   pins: Pins;
 }) {
   const [tab, setTab] = useState<Tab>(() => readStored<Tab>("layout.panelTab", "Quest"));
-  const id = useId();
   const pick = (next: Tab) => {
     setTab(next);
     writeStored("layout.panelTab", next);
@@ -41,41 +40,33 @@ export function SidePanel({
       aria-label="Quest and inbox"
       className="flex min-h-0 w-[340px] flex-none flex-col border-l-4 border-line bg-panel"
     >
-      <div role="tablist" aria-label="Panel" className="flex border-b-4 border-line">
-        {TABS.map((name) => (
-          <button
-            key={name}
-            type="button"
-            role="tab"
-            id={`${id}-${name}`}
-            aria-selected={tab === name}
-            aria-controls={`${id}-panel`}
-            onClick={() => pick(name)}
-            className={cn(
-              "flex-1 cursor-pointer border-0 px-1.5 py-[11px] text-sm font-bold",
-              tab === name
-                ? "bg-line text-moonlight"
-                : "bg-transparent text-label hover:bg-hover hover:text-text-strong",
-            )}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
-      <div
-        role="tabpanel"
-        id={`${id}-panel`}
-        aria-labelledby={`${id}-${tab}`}
-        className="min-h-0 flex-1 overflow-y-auto"
+      <Tabs
+        value={tab}
+        onValueChange={(next) => {
+          const found = TABS.find((name) => name === next);
+          if (found) pick(found);
+        }}
+        className="min-h-0 flex-1"
       >
-        {tab === "Quest" && <QuestTab key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />}
-        {tab === "Inbox" && (
+        <TabsList aria-label="Panel">
+          {TABS.map((name) => (
+            <TabsTrigger key={name} value={name} className="flex-1 px-1.5">
+              {name}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value="Quest" className="min-h-0 flex-1 overflow-y-auto">
+          <QuestTab key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />
+        </TabsContent>
+        <TabsContent value="Inbox" className="min-h-0 flex-1 overflow-y-auto">
           <Empty title="Nothing here yet">
             Questions, approvals, problems and results for this thread land here, each with its delivery state.
           </Empty>
-        )}
-        {tab === "Workshop" && <Workshop hobId={hobId} threadId={threadId} />}
-      </div>
+        </TabsContent>
+        <TabsContent value="Workshop" className="min-h-0 flex-1 overflow-y-auto">
+          <Workshop hobId={hobId} threadId={threadId} />
+        </TabsContent>
+      </Tabs>
     </aside>
   );
 }
@@ -83,7 +74,7 @@ export function SidePanel({
 function Empty({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex animate-hb-in flex-col gap-2 px-[18px] py-[22px] leading-normal text-text-secondary">
-      <span className="font-pixel text-lg text-moonlight">{title}</span>
+      <span className="font-heading text-lg text-moonlight">{title}</span>
       <span>{children}</span>
     </div>
   );
@@ -107,7 +98,7 @@ function Workshop({ hobId, threadId }: { hobId: string; threadId?: ThreadId | un
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[50px] border-t-[5px] border-line-2 bg-line" />
         <div className="absolute bottom-[30px] left-[60px] flex items-end gap-2">
           <HobSprite hob={current} size={64} state={now ? "working" : "idle"} />
-          <div aria-hidden className="h-[42px] w-[84px] border-t-8 border-[#8a6240] bg-[#6b4a2f]" />
+          <div aria-hidden className="h-[42px] w-[84px] border-t-8 border-desk-edge bg-desk" />
         </div>
         <span className="absolute top-[54px] left-[110px] max-w-[200px] bg-text-strong px-2.5 py-1.5 text-[13px] text-ground">
           {doing(current, now)}

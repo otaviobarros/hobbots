@@ -24,8 +24,8 @@ import {
   AttemptId as AttemptIdSchema,
   ancestorsOf,
   type Committed,
-  isLiveAttempt,
   isTerminalTask,
+  liveAttemptOn,
   type Task,
   type TaskId,
   TaskReadiness,
@@ -71,10 +71,6 @@ export interface MemberDeps {
 }
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
-
-/** Whether the Task's current Attempt is still starting or running. */
-const liveAttemptOn = (task: Task, tree: TaskTree): boolean =>
-  tree.attempts.some((attempt) => attempt.id === task.currentAttemptId && isLiveAttempt(attempt.state));
 
 /**
  * A member's tools, narrowed by every Delegation on the way down to its Task (ADR 018): each adds

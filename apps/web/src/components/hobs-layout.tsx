@@ -34,6 +34,8 @@ interface WorkspaceProps {
   main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
   /** A Task's Workbench to show in the chat's place (ADR 023). */
   workbench?: WorkbenchView | undefined;
+  /** What sits at the end, in place of the Quest panel; `null` leaves it out, as a hob's page does. */
+  aside?: ReactNode | null;
 }
 
 /**
@@ -56,6 +58,7 @@ function Workspace({
   taskId,
   main = (props) => <ThreadMain {...props} />,
   workbench,
+  aside,
 }: WorkspaceProps) {
   const [navOpen, setNavOpen] = usePersistentToggle("layout.navOpen");
   const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
@@ -101,7 +104,9 @@ function Workspace({
           <Workbench hobId={hobId} threadId={threadId} view={workbench} pinned={pins.pinned} drafts={drafts} />
         )}
       </div>
-      {panelOpen && <SidePanel hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />}
+      {aside === undefined
+        ? panelOpen && <SidePanel hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />
+        : aside}
     </div>
   );
 }

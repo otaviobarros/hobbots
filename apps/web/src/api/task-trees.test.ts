@@ -10,6 +10,7 @@ import {
   COPY,
   checkpoint,
   delegation,
+  memberApproval,
   milestone,
   QUILL,
   quest,
@@ -34,6 +35,18 @@ describe("applyToTree", () => {
     expect(next.milestones.map((each) => each.title)).toEqual(["Headlines"]);
     // Applying it again changes nothing.
     expect(applyToTree(next, created)).toEqual(next);
+  });
+
+  it("keeps a member's approval request live on its Task, its newer version winning, and leaves other trees alone", () => {
+    const asked = applyToTree(blackFriday(), { _tag: "ApprovalRecorded", approval: memberApproval(COPY, QUILL) });
+    expect(asked.approvals.map((each) => [each.id, each.state])).toEqual([["ap-copy", "pending"]]);
+    const approved = memberApproval(COPY, QUILL, { state: "approved", revision: 2 });
+    const decided = applyToTree(asked, { _tag: "ApprovalRecorded", approval: approved });
+    expect(decided.approvals.map((each) => each.state)).toEqual(["approved"]);
+    // A late copy of the pending version never takes the decision back.
+    expect(applyToTree(decided, { _tag: "ApprovalRecorded", approval: memberApproval(COPY, QUILL) })).toBe(decided);
+    const elsewhere = tree();
+    expect(applyToTree(elsewhere, { _tag: "ApprovalRecorded", approval: memberApproval(COPY, QUILL) })).toBe(elsewhere);
   });
 
   it("leaves a tree alone for an event about another tree", () => {

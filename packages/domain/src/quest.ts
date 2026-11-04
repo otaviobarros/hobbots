@@ -1,9 +1,10 @@
 import { Effect, Schema } from "effect";
+import { ApprovalRequest } from "./approval.ts";
 import { DeviceId } from "./device.ts";
 import { AgentId, ThreadId } from "./ids.ts";
 import { PolicyOverrides } from "./policy.ts";
 import { Revision } from "./revision.ts";
-import { Attempt, AttemptId, isTerminalTask, Task, TaskId } from "./task.ts";
+import { Attempt, AttemptId, isLiveAttempt, isTerminalTask, Task, TaskId } from "./task.ts";
 
 /**
  * The records around Tasks in ADR 018: the Quest added to a Task that brings in other hobs, the
@@ -368,7 +369,31 @@ export class TaskTree extends Schema.Class<TaskTree>("TaskTree")({
     Schema.withDecodingDefaultKey(Effect.succeed([])),
     Schema.withConstructorDefault(Effect.succeed([])),
   ),
+  /**
+   * The approval requests that pause its Tasks' turns until you decide them (PE-003), oldest first:
+   * each Task waits on you while one is pending (#698). The hub reads only pending ones; a client may
+   * hold a decided copy until it reads the tree again, so read them through `pendingApprovals`.
+   */
+  approvals: Schema.Array(ApprovalRequest).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
 }) {}
+
+/** The requests anywhere in the tree that wait for you to decide them, oldest first. */
+export const pendingApprovals = (tree: TaskTree): ReadonlyArray<ApprovalRequest & { readonly taskId: TaskId }> =>
+  tree.approvals.filter(
+    (approval): approval is ApprovalRequest & { readonly taskId: TaskId } =>
+      approval.state === "pending" && approval.taskId !== null,
+  );
+
+/** The requests on Task `taskId` that wait for you to decide them, oldest first: its turn is paused on them. */
+export const pendingApprovalsOn = (tree: TaskTree, taskId: TaskId): ReadonlyArray<ApprovalRequest> =>
+  pendingApprovals(tree).filter((approval) => approval.taskId === taskId);
+
+/** Whether a turn runs on `task` now: its current Attempt is still starting or running. */
+export const liveAttemptOn = (task: Task, tree: TaskTree): boolean =>
+  tree.attempts.some((attempt) => attempt.id === task.currentAttemptId && isLiveAttempt(attempt.state));
 
 /**
  * The Tasks whose artifacts were handed to `taskId` in `tree`, once each, in hand-off order: what

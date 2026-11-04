@@ -2,6 +2,8 @@ import type { BackpackItem, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useBlockers } from "../../api/blockers.ts";
+import { operationLabel } from "../../lib/reply-steps.ts";
+import { TaskApprovals, useShownApprovals } from "../approvals/task-approvals.tsx";
 import { BlockerCard } from "../blockers/blocker-card.tsx";
 import { blockersOn } from "../blockers/blocker-model.ts";
 import { HobSprite } from "../hob-sprite.tsx";
@@ -54,6 +56,7 @@ export function QuestCard({
 }) {
   const card = workCard(tree);
   const stuck = useStuck(tree);
+  const asking = useShownApprovals(tree.approvals);
   if (card === null) return null;
   const lead = hobs(card.leadId);
   const title = taskTitle(card.top);
@@ -70,7 +73,7 @@ export function QuestCard({
       <div className="flex items-center gap-2">
         <HobSprite hob={lead} size={20} state={card.status === "running" ? "working" : "idle"} />
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="font-pixel text-base font-semibold">{heading(card, lead.name)}</span>
+          <span className="font-heading text-base font-semibold">{heading(card, lead.name)}</span>
           <span className="truncate text-detail text-text-secondary">{title}</span>
         </span>
         {total > 0 && (
@@ -98,6 +101,8 @@ export function QuestCard({
           ))}
         </ul>
       )}
+      {/* A member's turn asks outside the chat, so its request is decided here, on its lead's card (#698). */}
+      <TaskApprovals approvals={asking} />
       {/* Always there, so a Task without rows still opens its brief and output once it ends. */}
       <div className="flex items-center gap-2 text-detail text-label">
         {card.more > 0 && <span>{copy.moreCount({ count: card.more })}</span>}
@@ -130,11 +135,13 @@ function Row({ row, hobs, onOpen }: { row: WorkRow; hobs: HobLookup; onOpen: (ta
   const owner = hobs(row.task.ownerId);
   const title = taskTitle(row.task);
   const detail =
-    row.waitsOn.length > 0
-      ? copy.waitingOn({ names: messages.names(row.waitsOn.map((id) => hobs(id).name)) })
-      : row.step !== null
-        ? copy.step(row.step)
-        : row.latest;
+    row.approval !== null
+      ? copy.waitingApproval({ action: operationLabel(row.approval.operation) })
+      : row.waitsOn.length > 0
+        ? copy.waitingOn({ names: messages.names(row.waitsOn.map((id) => hobs(id).name)) })
+        : row.step !== null
+          ? copy.step(row.step)
+          : row.latest;
   return (
     <button
       type="button"
@@ -146,7 +153,7 @@ function Row({ row, hobs, onOpen }: { row: WorkRow; hobs: HobLookup; onOpen: (ta
       <HobSprite hob={owner} size={18} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm font-bold">{title}</span>
-        <span className="truncate text-detail text-text-secondary">
+        <span className={cn("truncate text-detail", row.approval === null ? "text-text-secondary" : "text-lantern")}>
           {detail === null ? owner.name : copy.rowDetail({ name: owner.name, detail })}
         </span>
       </span>

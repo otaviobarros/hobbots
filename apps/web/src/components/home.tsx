@@ -8,7 +8,7 @@ import { useRef, useState } from "react";
 import { type ActivityMap, useActivity } from "../api/activity.ts";
 import { agentsQuery, runtimesQuery, threadsQuery } from "../api/queries.ts";
 import { useQuestWork } from "../api/quest-work.ts";
-import { potion, potionPalette } from "../art/icons.ts";
+import { POTION_COLORS, potion, potionPalette } from "../art/icons.ts";
 import {
   type CrewGroup,
   foldsByDefault,
@@ -113,7 +113,7 @@ export function Home() {
             many ? "top-5 left-7 max-w-[420px] gap-2" : "top-[34px] left-9 max-w-[470px] gap-2.5",
           )}
         >
-          <h1 className={cn("m-0 font-pixel font-bold text-moonlight", many ? "text-[28px]" : "text-[34px]")}>
+          <h1 className={cn("m-0 font-heading font-bold text-moonlight", many ? "text-[28px]" : "text-[34px]")}>
             {greeting()}
           </h1>
           <p className={cn("m-0 leading-normal", many ? "text-text-secondary" : "text-[17px]")}>
@@ -140,7 +140,7 @@ export function Home() {
               key={hob.id}
               to="/hobs/$hobId"
               params={{ hobId: hob.id }}
-              aria-label={openChatLabel(hob, state)}
+              aria-label={openPageLabel(hob, state)}
               className="hop-on-hover flex flex-col items-center gap-1.5 text-ground no-underline"
             >
               <span
@@ -200,7 +200,7 @@ export function Home() {
                   params={{ hobId: hob.id, threadId: thread.id }}
                   className="flex gap-2.5 text-sm leading-snug text-text-strong no-underline hover:text-moonlight"
                 >
-                  <span className="w-16 flex-none font-pixel font-semibold text-moonlight">{hob.name}</span>
+                  <span className="w-16 flex-none font-heading font-semibold text-moonlight">{hob.name}</span>
                   <span className="min-w-0 flex-1 truncate text-text-secondary">{thread.title}</span>
                   <span className="text-xs text-label">{formatWhen(thread.updatedAt)}</span>
                 </Link>
@@ -241,7 +241,7 @@ const chipClass = "bg-deep px-2.5 py-1 text-[13px] text-text-strong";
 function LiveDot() {
   return (
     <>
-      <span aria-hidden className="size-2 animate-hb-blink bg-rose" />
+      <span aria-hidden className="size-2 animate-hb-blink rounded-dot bg-rose" />
       <span className="text-xs text-text-secondary">live</span>
     </>
   );
@@ -268,13 +268,13 @@ function HallDoor({ count, peek, onOpen }: { count: number; peek: Agent | undefi
       aria-label={`Open the hall: ${count} more ${count === 1 ? "hob" : "hobs"}`}
       className="hop-on-hover absolute right-9 bottom-[34px] h-[120px] w-[150px] bg-transparent p-0"
     >
-      <span aria-hidden className="absolute inset-x-0 bottom-0 h-[84px] bg-[#3d2f52]" />
+      <span aria-hidden className="absolute inset-x-0 bottom-0 h-[84px] bg-scene-wall" />
       <span
         aria-hidden
-        className="absolute -inset-x-2.5 bottom-[84px] h-9 bg-[#5b3f5e] [clip-path:polygon(50%_0,100%_100%,0_100%)]"
+        className="absolute -inset-x-2.5 bottom-[84px] h-9 bg-scene-roof [clip-path:polygon(50%_0,100%_100%,0_100%)]"
       />
       <span aria-hidden className="absolute bottom-11 left-[18px] h-5 w-6 animate-hb-flicker bg-lantern" />
-      <span aria-hidden className="absolute bottom-0 left-[58px] h-14 w-10 bg-[#241c33]" />
+      <span aria-hidden className="absolute bottom-0 left-[58px] h-14 w-10 bg-scene-door" />
       {peek && (
         <span aria-hidden className="absolute bottom-1 left-[66px]">
           <HobSprite hob={peek} size={24} />
@@ -377,13 +377,13 @@ function AllHobs({
                       key={hob.id}
                       to="/hobs/$hobId"
                       params={{ hobId: hob.id }}
-                      aria-label={openChatLabel(hob, state)}
+                      aria-label={openPageLabel(hob, state)}
                       title={`${hob.name} · ${hob.roleTitle} · ${stateLabel[state]}`}
-                      className="cut hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text-strong no-underline hover:bg-line hover:text-text-strong"
+                      className="cut-control hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text-strong no-underline hover:bg-line hover:text-text-strong"
                     >
                       <HobSprite hob={hob} size={28} state={state} badge className="mr-1.5" />
                       <span className="flex min-w-0 flex-col">
-                        <span className="truncate font-pixel text-sm font-semibold">{hob.name}</span>
+                        <span className="truncate font-heading text-sm font-semibold">{hob.name}</span>
                         <span className="truncate text-xs text-text-secondary">
                           {hob.roleTitle} · {stateLabel[state]}
                         </span>
@@ -453,8 +453,8 @@ function Card({
 }
 
 /** Every reply streaming right now; each opens its thread. */
-const openChatLabel = (hob: Agent, state: HobState) =>
-  messages.home.openChat({ name: hob.name, role: hob.roleTitle, state: stateLabel[state] });
+const openPageLabel = (hob: Agent, state: HobState) =>
+  messages.home.openPage({ name: hob.name, role: hob.roleTitle, state: stateLabel[state] });
 
 function HappeningNowCard({
   live,
@@ -519,7 +519,7 @@ function AiPlans() {
           className="hop-on-hover flex flex-col items-center gap-0.5 text-text-strong no-underline"
         >
           <span className="sprite">
-            <PixelArt rows={potion(ready ? 1 : 0)} palette={potionPalette("#e39a74", "#f3c4a8")} size={36} />
+            <PixelArt rows={potion(ready ? 1 : 0)} palette={potionPalette(...POTION_COLORS["claude-code"])} size={36} />
           </span>
           <span className="text-xs font-bold">Claude</span>
           <span className={cn("pb-1 text-xs", ready ? "text-mint" : "text-rose")}>{left}</span>

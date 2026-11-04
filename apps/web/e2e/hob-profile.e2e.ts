@@ -62,6 +62,13 @@ const hubWithPip = async (env: Record<string, string> = {}): Promise<{ current: 
   return { current, pip };
 };
 
+// Pip's page lists its chats; these tests have one.
+const openOnlyChat = (page: Page) =>
+  page
+    .getByRole("main", { name: "Pip's page" })
+    .getByRole("link", { name: /^Open / })
+    .click();
+
 const send = async (page: Page, content: string) => {
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(content);
@@ -82,16 +89,18 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
   await expect(instructions).toHaveValue("Write short answers.");
   await instructions.fill("Write long answers.");
   await expect(page.getByText(/^Unsaved changes/)).toBeVisible();
-  // Looking at another tab keeps the unsaved edit.
+  // Looking at another tab keeps the unsaved edit. The arrow keys move between the tabs.
   await page.getByRole("tab", { name: "Charms" }).click();
-  await page.getByRole("tab", { name: "Profile" }).click();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("tab", { name: "Profile" })).toHaveAttribute("aria-selected", "true");
   await expect(instructions).toHaveValue("Write long answers.");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
   await expect(page.getByText(/· Version 2$/)).toBeVisible();
 
   // Back in the chat, the same thread's next reply runs on the edited configuration.
-  await page.getByRole("link", { name: "← Back to chat" }).click();
+  await page.getByRole("link", { name: "Back to Pip's page" }).click();
+  await openOnlyChat(page);
   await expect(page.getByText("Echo: first")).toBeVisible();
   await send(page, "second");
 
@@ -172,8 +181,10 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect(profile.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
   await expect(chip).toHaveText("QA engineer");
-  await page.getByRole("link", { name: "← Back to chat" }).click();
+  await page.getByRole("link", { name: "Back to Pip's page" }).click();
   await expect(list.getByRole("link", { name: /^Pip/ })).toContainText("QA engineer");
+  await expect(page.getByRole("region", { name: "Pip", exact: true })).toContainText("QA engineer");
+  await page.getByRole("link", { name: "New chat with Pip" }).click();
   await expect(header).toContainText("QA engineer");
   await page.getByRole("link", { name: "Edit hob" }).click();
 
@@ -186,8 +197,9 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await expect(profile.getByText("Saved as version 3. Pip's next reply uses it.")).toBeVisible();
   await expect(chip).toHaveText("Bug hunter");
 
-  await page.getByRole("link", { name: "← Back to chat" }).click();
+  await page.getByRole("link", { name: "Back to Pip's page" }).click();
   await expect(list.getByRole("link", { name: /^Pip/ })).toContainText("Bug hunter");
+  await page.getByRole("link", { name: "New chat with Pip" }).click();
   await expect(header).toContainText("Bug hunter");
   const [saved] = await api<ReadonlyArray<Hob & { role: string | null; roleTitle: string; sigil: string }>>(
     current,

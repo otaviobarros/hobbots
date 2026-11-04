@@ -50,7 +50,7 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
         <span aria-hidden className={`grid size-5 place-items-center text-xs font-bold text-ground ${look.tile}`}>
           {look.mark}
         </span>
-        <span className="font-pixel flex-1 text-base font-semibold">{name}</span>
+        <span className="font-heading flex-1 text-base font-semibold">{name}</span>
         <Badge variant={availability === "ready" ? "working" : "waiting"}>
           {runtimes.isPending ? copy.checking : copy.availability[availability]}
         </Badge>

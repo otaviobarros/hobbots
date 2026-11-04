@@ -124,7 +124,7 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
       <div className="flex items-center gap-3.5">
         <span
           aria-hidden
-          className="grid size-10 flex-none place-items-center bg-line font-pixel text-lg font-bold text-moonlight"
+          className="grid size-10 flex-none place-items-center bg-line font-heading text-lg font-bold text-moonlight"
         >
           GH
         </span>
@@ -195,7 +195,7 @@ function BuiltInTool({ tool, permissions }: { tool: (typeof BUILT_IN)[number]; p
     <li className="cut flex items-center gap-3.5 border-2 border-line bg-card px-4 py-3.5">
       <span
         aria-hidden
-        className="grid size-10 flex-none place-items-center bg-line font-pixel text-lg font-bold text-moonlight"
+        className="grid size-10 flex-none place-items-center bg-line font-heading text-lg font-bold text-moonlight"
       >
         {tool.mark}
       </span>

@@ -29,7 +29,7 @@ export function InboxHistory({
       <StandingRules />
       <section aria-label={copy.history.heading} className="flex flex-col gap-3">
         <span className="lbl text-xs text-label">{copy.history.heading}</span>
-        <h2 className="m-0 font-pixel text-2xl font-bold text-moonlight">{copy.history.title}</h2>
+        <h2 className="m-0 font-heading text-2xl font-bold text-moonlight">{copy.history.title}</h2>
         <p className="m-0 text-sm text-text-secondary">{copy.history.intro}</p>
         {requests.length === 0 ? (
           <Empty title={copy.emptyHistory} hint={copy.emptyHistoryHint} />
@@ -80,7 +80,7 @@ export function InboxHistory({
 export function Empty({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
-      <span className="font-pixel text-lg font-bold text-moonlight">{title}</span>
+      <span className="font-heading text-lg font-bold text-moonlight">{title}</span>
       <span className="text-sm text-text-secondary">{hint}</span>
     </div>
   );

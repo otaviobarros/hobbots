@@ -9,7 +9,7 @@ import { safeUrl } from "./links.ts";
 import { ReplyImage, ReplyLink } from "./reply-media.tsx";
 import { streamingMarkdown } from "./streaming.ts";
 
-const heading = "font-pixel font-bold text-moonlight";
+const heading = "font-heading font-bold text-moonlight";
 
 // Each element of a reply, styled with the design tokens (docs/design/ui-ux.md). Headings sit two
 // levels down, so a reply's `#` never competes with the screen's own headings.

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { readInstallationId } from "@hobbots/server/installation";
-import { app, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { startMode } from "./app-mode.ts";
 import { startConnected } from "./connected-mode.ts";
 import { startHub } from "./hub-mode.ts";
@@ -11,6 +11,7 @@ import { fileSettingsStore } from "./settings.ts";
 import { registerLocalScheme, startSetup } from "./setup-mode.ts";
 import { claimSingleInstance } from "./single-instance.ts";
 import { thisComputer } from "./tailnet.ts";
+import { handleWindowBackgroundIpc } from "./window-background.ts";
 
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
 app.setName("Hobbots");
@@ -56,6 +57,12 @@ app.whenReady().then(async () => {
       });
       handleKeepRunningIpc({ ipcMain, settings, isTrusted });
       handleNotificationIpc({ ipcMain, settings, isTrusted });
+      handleWindowBackgroundIpc({
+        ipcMain,
+        settings,
+        isTrusted,
+        windowOf: (event) => BrowserWindow.fromWebContents(event.sender),
+      });
     },
   };
 

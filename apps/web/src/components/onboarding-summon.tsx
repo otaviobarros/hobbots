@@ -144,7 +144,7 @@ export function OnboardingReady() {
       }
     >
       <div className="flex animate-hb-in flex-col items-center gap-2.5 pt-1 text-center">
-        <h1 aria-live="polite" className="m-0 font-pixel text-[30px] font-bold text-moonlight">
+        <h1 aria-live="polite" className="m-0 font-heading text-[30px] font-bold text-moonlight">
           {done ? copy.arrived({ name }) : copy.heading}
         </h1>
         <p className="m-0 text-text-secondary">
@@ -173,7 +173,12 @@ export function OnboardingReady() {
             return (
               <span
                 key={`${rune.left}-${rune.top}`}
-                className={cn("absolute", on ? "bg-moonlight shadow-[0_0_12px_3px_rgba(243,233,181,.6)]" : "bg-line-2")}
+                className={cn(
+                  "absolute",
+                  on
+                    ? "bg-moonlight shadow-[0_0_12px_3px_color-mix(in_srgb,var(--color-moonlight)_60%,transparent)]"
+                    : "bg-line-2",
+                )}
                 style={{ left: rune.left, top: rune.top, width: RUNE, height: RUNE }}
               />
             );

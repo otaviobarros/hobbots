@@ -129,6 +129,10 @@ test("[TC-OP-036] backs up from Settings, and Welcome restores it after the data
   await expect(restored).not.toContainText("Work is held after a restore");
 
   await page.goto(`${hub.url}/#/hobs/${party.aldric}`);
+  await page
+    .getByRole("main", { name: "Aldric's page" })
+    .getByRole("link", { name: /^Open / })
+    .click();
   await expect(page.getByText("Plan a Black Friday campaign for the shop").first()).toBeVisible();
   await expect(page.getByRole("region", { name: "Ada asks you" })).toBeVisible();
 });

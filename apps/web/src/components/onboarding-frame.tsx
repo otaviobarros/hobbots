@@ -28,7 +28,7 @@ export function OnboardingFrame({
     <div className="flex min-h-0 flex-1">
       <aside className="relative w-[420px] flex-none overflow-hidden border-r-4 border-line bg-panel">
         <Stars count={22} height={420} />
-        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[150px] bg-[#221d44]" />
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[150px] bg-scene-ground" />
         <div aria-hidden className="absolute inset-x-0 bottom-[150px] h-2 bg-line" />
 
         <div className="absolute top-7 left-7 flex items-center gap-2.5">
@@ -51,7 +51,7 @@ export function OnboardingFrame({
           aria-live="polite"
           className="cut absolute inset-x-7 top-[118px] min-h-[150px] animate-hb-in bg-text-strong px-5 py-[18px] text-[17px] leading-normal text-ground"
         >
-          <span className="mb-1.5 block font-pixel text-sm font-bold tracking-[.08em] text-[#5b4f9a] uppercase">
+          <span className="mb-1.5 block font-pixel text-sm font-bold tracking-[.08em] text-ground/70 uppercase">
             Elder Hob
           </span>
           {guide}
@@ -72,7 +72,7 @@ export function OnboardingFrame({
 
         {sofar.length > 0 && (
           <div className="absolute inset-x-7 bottom-[26px] flex flex-col gap-1.5">
-            <span className="font-pixel text-sm font-bold tracking-[.08em] text-label uppercase">So far</span>
+            <span className="font-heading text-sm font-bold tracking-[.08em] text-label uppercase">So far</span>
             {sofar.map((line) => (
               <span key={line} className="animate-hb-in text-sm text-text-secondary">
                 <span className="font-bold text-mint">✓</span> {line}
@@ -94,7 +94,7 @@ export function OnboardingFrame({
                   className={`flex items-center gap-2 p-1 ${current ? "text-moonlight" : done ? "text-text-strong" : "text-label"}`}
                 >
                   <span
-                    className={`cut grid size-7 place-items-center font-pixel text-[15px] font-bold ${done ? "bg-mint text-ground" : current ? "bg-lantern text-ground" : "bg-line-2 text-text-strong"}`}
+                    className={`cut grid size-7 place-items-center font-heading text-[15px] font-bold ${done ? "bg-mint text-ground" : current ? "bg-lantern text-ground" : "bg-line-2 text-text-strong"}`}
                   >
                     {done ? "✓" : i + 1}
                   </span>

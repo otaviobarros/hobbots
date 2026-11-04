@@ -1,12 +1,14 @@
 import { explicitlyNarrowed, HobbotsRepository, HobTools, operationDecision, TaskRepository } from "@hobbots/agents";
 import {
   type AgentId,
+  type ApprovalRequest,
   ancestorsOf,
   type CarriedItem,
   type Committed,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   type EventEnvelope,
+  exactAction,
   IllegalTaskTransition,
   isTerminalTask,
   POLICY_OPERATIONS,
@@ -116,6 +118,26 @@ export const outcomesShown = (
 /** A hob as the caller's tools name it: "you" for the caller, its id for another hob, and null for the user. */
 export const nameFor = (agentId: string | null, caller: string): string =>
   agentId === caller ? "you" : (agentId ?? "the user");
+
+/**
+ * A request that pauses a Task's turn, as a lead's tools report it: only the user decides it, in the
+ * Quest or the Inbox, so a lead says exactly what waits instead of guessing (#698).
+ */
+export const describeApproval = (approval: ApprovalRequest) => ({
+  approval_id: approval.id as string,
+  hob: approval.agentId as string,
+  operation: approval.operation,
+  action: exactAction(approval),
+  targets: approval.targets,
+  asked_at: approval.createdAt,
+  waits_for: "the user",
+});
+
+/** What a lead's tools say while requests under its Tasks wait for the user, or nothing. */
+export const approvalsWaiting = (count: number) =>
+  count === 0
+    ? ""
+    : `${count === 1 ? "1 action waits" : `${count} actions wait`} for the user's approval: see approvals. Only the user decides them, in the Quest or the Inbox; tell them what waits if they ask.`;
 
 /** A Task of the call's tree, or a refusal naming it. */
 /**

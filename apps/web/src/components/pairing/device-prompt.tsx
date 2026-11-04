@@ -94,12 +94,12 @@ function AskingPrompt({
     <>
       <div className="flex flex-col gap-0.5">
         <span className="lbl flex items-center gap-1.5 text-xs text-lantern">
-          <span aria-hidden className="inline-block size-2 animate-hb-blink bg-lantern" />
+          <span aria-hidden className="inline-block size-2 animate-hb-blink rounded-dot bg-lantern" />
           {copy.kicker}
         </span>
         <DialogTitle
           tabIndex={-1}
-          className="m-0 font-pixel text-2xl font-bold break-words text-moonlight outline-none"
+          className="m-0 font-heading text-2xl font-bold break-words text-moonlight outline-none"
         >
           {copy.title({ name: device.request.name })}
         </DialogTitle>
@@ -117,7 +117,7 @@ function AnsweredPrompt({ answered, onDone }: { answered: Answered; onDone: () =
   const name = answered.device.request.name;
   return (
     <div role="status" className="flex flex-col items-center gap-2.5 py-2 text-center">
-      <DialogTitle className="m-0 font-pixel text-2xl font-bold break-words text-moonlight">
+      <DialogTitle className="m-0 font-heading text-2xl font-bold break-words text-moonlight">
         {allowed ? copy.allowedTitle({ name }) : copy.deniedTitle({ name })}
       </DialogTitle>
       <p className="m-0 text-text-secondary">{allowed ? copy.allowedIntro : copy.deniedIntro}</p>

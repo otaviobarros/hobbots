@@ -50,21 +50,59 @@
   /* The same in every theme: scene art, and the knob of a switch that is on. */
   --color-wood: #7a5b3a;
   --color-switch-knob: #fdf9ef;
+  /*
+   * Scene art keeps the colors the design draws it with in every theme: the village, Home's hall,
+   * the ground under setup's guide and the Workbench desk.
+   */
+  --color-scene-ground: #221d44;
+  --color-scene-wall: #3d2f52;
+  --color-scene-roof: #5b3f5e;
+  --color-scene-chimney: #4a3a6a;
+  --color-scene-smoke: #6a6390;
+  --color-scene-door: #241c33;
+  --color-scene-star: #cfc8ff;
+  --color-desk: #6b4a2f;
+  --color-desk-edge: #8a6240;
+  /* The tile behind each AI provider's letter mark, the same in every theme. */
+  --color-provider-claude: #e39a74;
+  --color-provider-codex: #8fd3a8;
+  --color-provider-gemini: #8fb4f0;
+  --color-provider-grok: #c9c3e8;
+  --color-provider-local: #f3e9b5;
+  --color-provider-other: #b79be8;
 
   --font-sans: "Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif;
   --font-pixel: "Pixelify Sans Variable", "Pixelify Sans", system-ui, sans-serif;
   --font-mono: ui-monospace, Menlo, monospace;
 
-  /* Type and measures of the chat workspace. */
-  --text-meta: 11px;
+  /*
+   * The type scale, the same in every theme (`type` in themes.json). Each style carries its own line
+   * height. The `label` style is the `lbl` utility, since `text-label` is the label color.
+   */
+  --text-display: 32px;
+  --text-display--line-height: 36px;
+  --text-heading: 22px;
+  --text-heading--line-height: 28px;
+  --text-title: 18px;
+  --text-title--line-height: 24px;
+  --text-reading: 16px;
+  --text-reading--line-height: 26px;
+  --text-body: 15px;
+  --text-body--line-height: 23px;
   --text-detail: 13px;
+  --text-detail--line-height: 18px;
+  --text-meta: 12px;
+  --text-meta--line-height: 16px;
+  --text-code: 13px;
+  --text-code--line-height: 20px;
+
+  /* Measures of the chat workspace. */
   --spacing-row-y: 7px;
   --spacing-thread-indent: 34px;
   --spacing-transcript-y: 18px;
   --spacing-chat-min: 360px;
   --spacing-bubble-max: 460px;
   /* A request's work in the chat: the card and question width, the drawer beside it. */
-  --text-title: 17px;
   --spacing-tag-x: 7px;
   --spacing-meter: 5px;
   --spacing-work-max: 604px;
@@ -72,12 +110,13 @@
   /* The Task chat drawer beside the Workbench's tabs. */
   --spacing-workbench-chat: 330px;
 
-  /* Motion is stepped, like pixel art. */
+  /* UI motion reads --ease-ui from the skin; scene and hob art always step, like pixel art. */
+  --default-transition-timing-function: var(--ease-ui);
   --animate-hb-bob: hb-bob 1.2s steps(2) infinite;
   --animate-hb-hop: hb-hop 0.7s steps(6) 1;
   --animate-hb-shake: hb-shake 0.45s steps(5) 1;
-  --animate-hb-in: hb-in 0.35s steps(4) both;
-  --animate-hb-pop: hb-pop 0.45s steps(4) both;
+  --animate-hb-in: hb-in 0.35s var(--ease-ui) both;
+  --animate-hb-pop: hb-pop 0.45s var(--ease-ui) both;
   --animate-hb-blink: hb-blink 1.2s steps(2) infinite;
   --animate-hb-twinkle: hb-twinkle 3s steps(3) infinite;
   --animate-hb-flicker: hb-flicker 2.4s steps(4) infinite;
@@ -372,6 +411,12 @@
   --color-border: var(--color-line);
   --color-input: var(--color-control);
   --color-ring: var(--color-focus-ring);
+  /* Corners come from the skin: rounded-control, rounded-card, rounded-tag, rounded-dot, rounded-tile. */
+  --radius-control: var(--corner-control);
+  --radius-card: var(--corner-card);
+  --radius-tag: var(--corner-tag);
+  --radius-dot: var(--corner-dot);
+  --radius-tile: var(--corner-tile);
 }
 
 :root {
@@ -504,6 +549,15 @@
   --edge: 1px;
   --button-weight: 600;
   --hop: none;
+  --cut: none;
+  --focus-outline: 2px solid var(--color-focus-ring);
+  --control-focus-outline: var(--focus-outline);
+  --control-focus-ring: 0 0 #0000;
+  --press-edge: 0px;
+  --press-edge-down: 0px;
+  --press-move: 1px;
+  --press-dim: brightness(0.94);
+  --ease-press: var(--ease-ui);
 }
 
 :root[data-theme^="workshop-"] {
@@ -520,6 +574,24 @@
   --edge: 2px;
   --button-weight: 700;
   --hop: var(--animate-hb-hop);
+  --cut: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+  --focus-outline: 3px solid var(--color-focus-ring);
+  --control-focus-outline: none;
+  --control-focus-ring: inset 0 0 0 2px var(--color-focus-ring), inset 0 0 0 4px var(--color-ground);
+  --press-edge: 4px;
+  --press-edge-down: 2px;
+  --press-move: 2px;
+  --press-dim: none;
+  --ease-press: steps(2);
 }
 
 html,
@@ -591,43 +663,77 @@ body {
   }
 
   :focus-visible {
-    outline: 3px solid var(--color-focus-ring);
+    outline: var(--focus-outline);
     outline-offset: 2px;
+  }
+
+  /* Text fields take the control corner; check boxes and sliders keep their own shape. */
+  :where(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, select) {
+    border-radius: var(--corner-control);
   }
 }
 
-/* Pixel corners for cards and buttons. */
+/* A card's shape: Lamplight rounds it, Workshop cuts its corners 4px. */
 @utility cut {
-  clip-path: polygon(
-    4px 0,
-    calc(100% - 4px) 0,
-    100% 4px,
-    100% calc(100% - 4px),
-    calc(100% - 4px) 100%,
-    4px 100%,
-    0 calc(100% - 4px),
-    0 4px
-  );
+  clip-path: var(--cut);
+  border-radius: var(--corner-card);
 }
 
-/* Pixelify Sans is for headings, hob names and labels only, never below 14px. */
+/*
+ * A control's shape, such as a button: the cut clip in Workshop, the control corner in Lamplight.
+ * The clip hides an outside outline, so in Workshop focus is drawn inset with a ground gap.
+ */
+@utility cut-control {
+  clip-path: var(--cut);
+  border-radius: var(--corner-control);
+
+  &:focus-visible {
+    outline: var(--control-focus-outline);
+    outline-offset: 2px;
+    box-shadow: var(--control-focus-ring), var(--press-shadow, 0 0 #0000);
+  }
+}
+
+/*
+ * The primary press. Set --press-color to the edge color. Workshop draws a 4px edge inside the
+ * clip that shrinks to 2px as the button moves down 2px; Lamplight darkens and moves down 1px.
+ */
+@utility press {
+  --press-shadow: inset 0 calc(-1 * var(--press-edge)) 0 var(--press-color, transparent);
+  box-shadow: var(--press-shadow);
+
+  &:active {
+    --press-shadow: inset 0 calc(-1 * var(--press-edge-down)) 0 var(--press-color, transparent);
+    translate: 0 var(--press-move);
+    filter: var(--press-dim);
+  }
+}
+
+/* Headings and hob names: Atkinson in Lamplight, Pixelify in Workshop. Never below 14px. */
+@utility font-heading {
+  font-family: var(--font-heading);
+  font-variant-ligatures: none;
+}
+
+/* Pixelify Sans in every look, for the wordmark and marks drawn as part of the art. */
 @utility font-pixel {
   font-family: var(--font-pixel);
   font-variant-ligatures: none;
 }
 
+/* A one- or two-word section label: sentence case in Lamplight, uppercase and tracked in Workshop. */
 @utility lbl {
-  font-family: var(--font-pixel);
+  font-family: var(--font-heading);
   font-variant-ligatures: none;
   font-weight: 700;
   font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: var(--label-track);
+  text-transform: var(--label-case);
 }
 
-/* Hover a hob and it hops. */
+/* Hover a hob and it hops, in the looks that hop. */
 .hop-on-hover:hover .sprite {
-  animation: var(--animate-hb-hop);
+  animation: var(--hop);
 }
 
 /*

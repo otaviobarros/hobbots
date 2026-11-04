@@ -98,8 +98,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
     <div className="flex min-h-0 min-w-0 flex-1">
       <aside aria-label={copy.title} className="flex w-95 flex-none flex-col border-e-4 border-line bg-panel">
         <InboxHeader waiting={waiting} />
-        <InboxTabs tab={tab} waiting={waiting} />
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <InboxTabs tab={tab} waiting={waiting}>
           {inbox.isPending && <p className="px-3 py-4 text-sm text-label">{copy.loading}</p>}
           {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
           {tab === "needs" && <AskingDevices devices={devices} now={now} />}
@@ -109,7 +108,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
           {tab !== "history" && (
             <InboxList tab={tab} requests={requests} selectedId={selected?.id} directory={directory} now={now} />
           )}
-        </div>
+        </InboxTabs>
       </aside>
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {tab === "history" ? (
@@ -231,7 +230,7 @@ function InboxHeader({ waiting }: { waiting: number }) {
           waiting > 0 ? "animate-hb-blink" : "rotate-90",
         )}
       />
-      <h1 className="absolute top-2.5 start-4 m-0 font-pixel text-xl font-bold text-moonlight">{copy.title}</h1>
+      <h1 className="absolute top-2.5 start-4 m-0 font-heading text-xl font-bold text-moonlight">{copy.title}</h1>
       <p className="absolute top-9 start-4 m-0 text-xs text-text-secondary">
         {waiting > 0 ? copy.waiting({ count: waiting }) : copy.intro}
       </p>

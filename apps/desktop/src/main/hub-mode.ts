@@ -15,6 +15,7 @@ import type { SettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
 import { handleShowFileIpc } from "./show-file.ts";
 import { type SystemNotices, showOnLaunch, systemNotices } from "./system-notices.ts";
+import { windowBackground } from "./window-background.ts";
 import { fetchAsWindow, makeWindowKey, WINDOW_COOKIE } from "./window-key.ts";
 
 /** What the hub's app shares with a connected desktop: its settings, its login item and who may use the bridge. */
@@ -101,7 +102,7 @@ export const startHub = async (
   // Only the first window opens at `firstPage`; any later one opens where the hub's pages choose.
   let route = firstPage === undefined ? "" : `#${firstPage}`;
   const createWindow = async () => {
-    const window = newAppWindow({ isAllowedUrl });
+    const window = newAppWindow({ isAllowedUrl, backgroundColor: windowBackground(settings) });
     const page = route;
     route = "";
     const base = !app.isPackaged && (await isUp(devWebUrl)) ? devWebUrl : hub.apiUrl;
