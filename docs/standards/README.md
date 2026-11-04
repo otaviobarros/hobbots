@@ -21,6 +21,7 @@ grep -rn "### STD-REACT-004" docs/standards
 | `STD-REACT` | React state, components and hooks | [react.md](react.md) |
 | `STD-UI` | Styling, design and accessibility | [ui.md](ui.md) |
 | `STD-I18N` | Internationalization | [i18n.md](i18n.md) |
+| `STD-DESKTOP` | The Electron app | [desktop.md](desktop.md) |
 | `STD-TEST` | Tests and verification | [testing.md](testing.md) |
 | `STD-DOCS` | Docs, decisions and workflow | [docs.md](docs.md) |
 
@@ -113,6 +114,12 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-REACT-018 | Context holds only app-wide values | Active |
 | STD-REACT-019 | No any, ts-ignore or double casts | Active |
 | STD-REACT-020 | Every opt-out names its rule and a reason | Active |
+| STD-REACT-021 | Components are never defined inside components | Active |
+| STD-REACT-022 | Conditional rendering never leaks a number | Active |
+| STD-REACT-023 | Routes and heavy features load when they are needed | Active |
+| STD-REACT-024 | Long lists render only what is on screen | Active |
+| STD-REACT-025 | Slow updates never block typing | Active |
+| STD-REACT-026 | Stored data is versioned and parsed | Active |
 | STD-UI-001 | Styles use theme tokens only | Active |
 | STD-UI-002 | Build on the shared primitives | Active |
 | STD-UI-003 | Every control works by keyboard and has a name | Active |
@@ -129,6 +136,15 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-I18N-003 | Dates and numbers use shared locale formatters | Active |
 | STD-I18N-004 | Layout survives longer text and right-to-left scripts | Active |
 | STD-I18N-005 | Server and domain code return codes, not display text | Active |
+| STD-DESKTOP-001 | Renderers are isolated and sandboxed | Active |
+| STD-DESKTOP-002 | The preload exposes a narrow, typed bridge | Active |
+| STD-DESKTOP-003 | Every IPC handler checks its sender and parses its input | Active |
+| STD-DESKTOP-004 | Navigation, new windows and external links are limited | Active |
+| STD-DESKTOP-005 | Permission requests are denied unless allowed | Active |
+| STD-DESKTOP-006 | Pages load over the app protocol with a strict CSP | Active |
+| STD-DESKTOP-007 | The packaged app flips Electron's fuses | Active |
+| STD-DESKTOP-008 | The main process never blocks | Active |
+| STD-DESKTOP-009 | Electron stays on a supported release | Active |
 | STD-TEST-001 | Integration and end-to-end tests carry a case ID | Active |
 | STD-TEST-002 | Fakes first, then the real runtime | Active |
 | STD-TEST-003 | Pure logic has unit tests | Active |

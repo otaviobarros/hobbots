@@ -34,10 +34,18 @@ Keep UI state in the component that owns it, with `useState` or `useReducer`. Li
 
 ### STD-REACT-004 Effects only sync with external systems
 
-Use `useEffect` only to sync with something outside React: a subscription, the DOM, a timer or browser storage. Compute derived values during render, and handle user actions in event handlers. Fetch data with query hooks (STD-REACT-001). React's [You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-an-effect) lists the patterns.
+Use `useEffect` only to sync with something outside React: a subscription, the DOM, a timer or a connection. Compute derived values during render, and handle user actions in event handlers. Fetch data with query hooks (STD-REACT-001). In particular:
 
-- **Why:** an effect that derives state renders twice and hides the data flow.
-- **Enforced by:** review.
+- An effect that subscribes, connects or starts a timer returns a cleanup that undoes it, so it behaves the same when Strict Mode runs it twice in development.
+- Reset a component's state when a prop changes by giving it a `key`, not with an effect.
+- Read an external store with `useSyncExternalStore`, as the outbox and the draft store do ([ADR 016](../decisions/016-client-stores-outside-react.md)).
+- Run work that happens once per app load at module level, not in an effect.
+- Read the latest props or state inside an effect through `useEffectEvent`, never by leaving a dependency out.
+
+React's [You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-an-effect) and [Synchronizing with Effects](https://react.dev/learn/synchronizing-with-effects) explain the patterns.
+
+- **Why:** an effect that derives state renders twice and hides the data flow, and an effect without cleanup leaks or doubles its work.
+- **Enforced by:** Strict Mode in `apps/web/src/main.tsx`, Biome `useExhaustiveDependencies`, and review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ## Components
@@ -120,6 +128,22 @@ Write every component as a plain function. Type its props as `React.ComponentPro
 - **Enforced by:** Biome `noRestrictedImports` on `forwardRef` and `FC` from `react`.
 - **Applies to:** `apps/web`, `packages/ui`.
 
+### STD-REACT-021 Components are never defined inside components
+
+Define every component at the top level of a module. A component declared inside another one is a new type on every render, so React throws away its state and DOM each time.
+
+- **Why:** the nested component loses focus, input and state on every render of its parent.
+- **Enforced by:** Biome `noNestedComponentDefinitions`.
+- **Applies to:** `apps/web`, `packages/ui`.
+
+### STD-REACT-022 Conditional rendering never leaks a number
+
+Render conditionally with a ternary or a boolean, never with a number on the left of `&&`. Write `items.length > 0 && …` or `items.length ? … : null`, not `items.length && …`.
+
+- **Why:** `0 && <List />` renders a stray `0` on screen.
+- **Enforced by:** review.
+- **Applies to:** `apps/web`, `packages/ui`.
+
 ## Loading, errors and input
 
 ### STD-REACT-014 Every route has an error screen
@@ -162,6 +186,32 @@ Use React Context only for values that the whole app shares and that rarely chan
 - **Enforced by:** review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
+## Performance
+
+### STD-REACT-023 Routes and heavy features load when they are needed
+
+Load each route's component lazily with TanStack Router's lazy route loading. Load heavy features that not every screen uses, such as code highlighting in replies or the diff viewer, through a dynamic `import()` at the point of use.
+
+- **Why:** the window opens faster when it does not parse code for screens the user has not opened.
+- **Enforced by:** review of the build's chunk report.
+- **Applies to:** `apps/web`.
+
+### STD-REACT-024 Long lists render only what is on screen
+
+A list that can grow without bound, such as a chat transcript, a hob's history or the archive, renders only the rows near the viewport. Start with CSS `content-visibility: auto` on each row. Add a virtualizer only when a measurement shows that is not enough.
+
+- **Why:** a long thread must scroll and type as smoothly as a new one.
+- **Enforced by:** review.
+- **Applies to:** `apps/web`.
+
+### STD-REACT-025 Slow updates never block typing
+
+When typing or another urgent input triggers a slow render, such as filtering a long list or search results, mark the slow part as non-urgent with `useTransition` or `useDeferredValue`.
+
+- **Why:** the input must answer every key press at once, even while the results catch up.
+- **Enforced by:** review.
+- **Applies to:** `apps/web`.
+
 ## Types and exceptions
 
 ### STD-REACT-019 No any, ts-ignore or double casts
@@ -181,3 +231,11 @@ When a rule allows an exception, mark it with a comment in one form: `// standar
 - **Why:** one form lets an audit list every exception with one search, so none hides.
 - **Enforced by:** the frontend check in `pnpm check`, which fails on an opt-out without a rule ID or a reason.
 - **Applies to:** `apps/web`, `packages/ui`.
+
+### STD-REACT-026 Stored data is versioned and parsed
+
+Data the client keeps in browser storage carries a version in its key or value, and is parsed with an Effect Schema when it is read. Data that fails to parse is dropped or migrated, never trusted. Store only what the client needs.
+
+- **Why:** an older or newer build, or another window, can leave data in a shape the current code does not expect.
+- **Enforced by:** review, and unit tests of each stored shape (STD-TEST-003).
+- **Applies to:** `apps/web`.
