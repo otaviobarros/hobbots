@@ -11,6 +11,7 @@ import { messages as roomCopy } from "../quest-room/messages.ts";
 import { DockChevron } from "../quest-room/room-icons.tsx";
 import type { RoomMoves, RoomView } from "../quest-room/room-search.ts";
 import { DockPanel } from "./dock-panel.tsx";
+import { useTerminalActivity } from "./use-terminal-activity.ts";
 import { WorkbenchHeader } from "./workbench-header.tsx";
 import {
   type ActivityRead,
@@ -92,7 +93,14 @@ function Dock({
     enabled: attempt !== null,
   });
   const activity: ActivityRead = attempt === null ? "none" : (read.data ?? (read.isError ? "failed" : "loading"));
-  const states = tabStates(attempt, activity);
+  // The Terminal replays every hob's commands in the tree, so the others' count toward its label,
+  // and so does each other Task that could not be read, so the Terminal stays open to say so.
+  const terminal = useTerminalActivity(tree, task, attempt);
+  const elsewhere =
+    terminal.activities
+      .filter((each) => each.attempt.id !== attempt?.id)
+      .reduce((sum, each) => sum + each.commands.length, 0) + terminal.unread;
+  const states = tabStates(attempt, activity, elsewhere);
   const open = view.tab !== undefined;
   const shared = {
     tree,

@@ -1,6 +1,7 @@
 import { Schema } from "effect";
-import { type AttemptActivity, type FileChange, isImageFile, isSecretFile } from "./activity.ts";
-import { AttemptId } from "./task.ts";
+import { AttemptActivity, type FileChange, isImageFile, isSecretFile } from "./activity.ts";
+import { AgentId } from "./ids.ts";
+import { AttemptId, TaskId } from "./task.ts";
 
 /**
  * The files a Task made or touched, as the Workbench's Files tab lists them (ADR 023): its file
@@ -58,6 +59,28 @@ export class TaskFile extends Schema.Class<TaskFile>("TaskFile")({
 export class AttemptFiles extends Schema.Class<AttemptFiles>("AttemptFiles")({
   attemptId: AttemptId,
   files: Schema.Array(TaskFile),
+}) {}
+
+/**
+ * One Attempt of a Task tree, as one read of the tree's Workbench gives it (#899): its records and the
+ * files it made or touched as they are now. The Attempt names its Task and the hob that ran it, and
+ * each record names its Attempt and Task, so a client can filter by lane and by attempt.
+ */
+export class TreeAttempt extends Schema.Class<TreeAttempt>("TreeAttempt")({
+  /** The hob that owns the Attempt's Task now; after a reassignment, not the one that ran it. */
+  ownerId: AgentId,
+  activity: AttemptActivity,
+  files: Schema.Array(TaskFile),
+}) {}
+
+/**
+ * What every Attempt under a Task ran, changed and made, as one Workbench for its whole tree shows it
+ * (#899): its steps, members' Tasks and nested Quests, retries included, by Task and then by number.
+ */
+export class TreeActivity extends Schema.Class<TreeActivity>("TreeActivity")({
+  /** The Task the tree was read under. */
+  taskId: TaskId,
+  attempts: Schema.Array(TreeAttempt),
 }) {}
 
 /** The most the hub serves of one file, for a preview or a download; past it, Show in Finder still works. */

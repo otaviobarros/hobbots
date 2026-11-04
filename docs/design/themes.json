@@ -248,6 +248,224 @@
       "value": "rgb(0 0 0 / 0.28)"
     }
   },
+  "terminal": {
+    "$comment": "The Terminal's own palette (#908), the same in every theme: a terminal stays dark in the light themes too. Values are --color-term-<name> in styles.css. ANSI black is only a fill; the terminal raises any text color below 4.5:1 to meet it. apps/web/type-and-contrast.test.ts checks each pair.",
+    "color": {
+      "ground": {
+        "value": "#0c0c11",
+        "use": "The terminal's background."
+      },
+      "bar": {
+        "value": "#15141c",
+        "use": "The strip of terminal tabs above it."
+      },
+      "edge": {
+        "value": "#23222c",
+        "use": "Its border and the rules between split panes. Decorative only."
+      },
+      "text": {
+        "value": "#d4d2de",
+        "use": "What commands printed, in the default color."
+      },
+      "strong": {
+        "value": "#f2f0f8",
+        "use": "The selected terminal tab and the command on a prompt line."
+      },
+      "dim": {
+        "value": "#8c8a99",
+        "use": "Where, when and how long a command ran; idle terminal tabs."
+      },
+      "selection": {
+        "value": "#34324a",
+        "use": "Selected text."
+      },
+      "focus": {
+        "value": "#c9b8ff",
+        "use": "Keyboard focus on the terminal's controls, on its dark ground in every theme."
+      },
+      "black": {
+        "value": "#3a3946",
+        "use": "ANSI black."
+      },
+      "red": {
+        "value": "#ff8f8f",
+        "use": "ANSI red: a failed command's exit code."
+      },
+      "green": {
+        "value": "#7fd1b9",
+        "use": "ANSI green: the hob's name on a prompt line."
+      },
+      "yellow": {
+        "value": "#f2c46b",
+        "use": "ANSI yellow: a command cut off, or one that may have partly failed."
+      },
+      "blue": {
+        "value": "#8fb4ff",
+        "use": "ANSI blue."
+      },
+      "magenta": {
+        "value": "#d7a8ff",
+        "use": "ANSI magenta."
+      },
+      "cyan": {
+        "value": "#7fd6e6",
+        "use": "ANSI cyan."
+      },
+      "white": {
+        "value": "#d4d2de",
+        "use": "ANSI white."
+      },
+      "bright-black": {
+        "value": "#8c8a99",
+        "use": "ANSI bright black."
+      },
+      "bright-red": {
+        "value": "#ffb0b0",
+        "use": "ANSI bright red."
+      },
+      "bright-green": {
+        "value": "#a6e6d2",
+        "use": "ANSI bright green."
+      },
+      "bright-yellow": {
+        "value": "#ffd98f",
+        "use": "ANSI bright yellow."
+      },
+      "bright-blue": {
+        "value": "#b3cdff",
+        "use": "ANSI bright blue."
+      },
+      "bright-magenta": {
+        "value": "#e6c6ff",
+        "use": "ANSI bright magenta."
+      },
+      "bright-cyan": {
+        "value": "#a8e8f2",
+        "use": "ANSI bright cyan."
+      },
+      "bright-white": {
+        "value": "#f2f0f8",
+        "use": "ANSI bright white."
+      }
+    },
+    "pairs": [
+      {
+        "text": "text",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "strong",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "dim",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "red",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "green",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "yellow",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "blue",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "magenta",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "cyan",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "white",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "bright-black",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "bright-red",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "bright-green",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "bright-yellow",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "bright-blue",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "bright-magenta",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "bright-cyan",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "bright-white",
+        "on": "ground",
+        "floor": 4.5
+      },
+      {
+        "text": "dim",
+        "on": "bar",
+        "floor": 4.5
+      },
+      {
+        "text": "strong",
+        "on": "bar",
+        "floor": 4.5
+      },
+      {
+        "text": "text",
+        "on": "selection",
+        "floor": 4.5
+      },
+      {
+        "text": "focus",
+        "on": "bar",
+        "floor": 3
+      },
+      {
+        "text": "focus",
+        "on": "ground",
+        "floor": 3
+      }
+    ]
+  },
   "skin": {
     "lamplight": {
       "corner-control": "8px",

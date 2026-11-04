@@ -571,6 +571,38 @@
   }
 }
 
+/*
+ * The Terminal's own palette, the same in every theme (`terminal` in themes.json): a terminal stays
+ * dark in the light themes too. `static` keeps every one in the stylesheet, since the terminal
+ * reads its ANSI colors from script and no class names them.
+ */
+@theme static {
+  --color-term-ground: #0c0c11;
+  --color-term-bar: #15141c;
+  --color-term-edge: #23222c;
+  --color-term-text: #d4d2de;
+  --color-term-strong: #f2f0f8;
+  --color-term-dim: #8c8a99;
+  --color-term-selection: #34324a;
+  --color-term-focus: #c9b8ff;
+  --color-term-black: #3a3946;
+  --color-term-red: #ff8f8f;
+  --color-term-green: #7fd1b9;
+  --color-term-yellow: #f2c46b;
+  --color-term-blue: #8fb4ff;
+  --color-term-magenta: #d7a8ff;
+  --color-term-cyan: #7fd6e6;
+  --color-term-white: #d4d2de;
+  --color-term-bright-black: #8c8a99;
+  --color-term-bright-red: #ffb0b0;
+  --color-term-bright-green: #a6e6d2;
+  --color-term-bright-yellow: #ffd98f;
+  --color-term-bright-blue: #b3cdff;
+  --color-term-bright-magenta: #e6c6ff;
+  --color-term-bright-cyan: #a8e8f2;
+  --color-term-bright-white: #f2f0f8;
+}
+
 /* The shadcn/ui names point at the tokens, resolved where they are used, so the components in
    packages/ui follow the theme without changes. */
 @theme inline {

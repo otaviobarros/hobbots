@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
+import { hobTerminal, rows } from "./terminal.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #391: the Workbench's done-when checks (ADR 023) in the browser, with the fake runtime. One
@@ -97,15 +98,15 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
   await expect(notes).toContainText("So far: this turn is still running, so this file may change again.");
 
   const terminal = await open("Terminal");
-  const commands = terminal.getByRole("list", { name: "Commands" }).getByRole("listitem");
-  await expect(commands).toHaveCount(2, { timeout: 20_000 });
-  await expect(commands.nth(0)).toContainText("npm run changelog");
-  await expect(commands.nth(0)).toContainText("Succeeded");
-  await expect(commands.nth(0)).toContainText(folder);
-  await expect(commands.nth(0)).toContainText("[redacted: GitHub token]");
-  await expect(commands.nth(0)).not.toContainText("ghp_0123456789");
-  await expect(commands.nth(1)).toContainText("npm test");
-  await expect(commands.nth(1)).toContainText("2 passed");
+  const screen = rows(hobTerminal(terminal, "Aldric"));
+  await expect(terminal).toContainText("2 commands", { timeout: 20_000 });
+  await expect(screen).toContainText("$ npm run changelog");
+  await expect(screen).toContainText("Wrote CHANGELOG.md");
+  await expect(screen).toContainText(`✓ ran in ${folder}`);
+  await expect(screen).toContainText("[redacted: GitHub token]");
+  await expect(screen).not.toContainText("ghp_0123456789");
+  await expect(screen).toContainText("$ npm test");
+  await expect(screen).toContainText("2 passed");
 
   const files = await open("Files");
   const list = files.getByRole("navigation", { name: "Files from this task" });
@@ -136,7 +137,7 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
   await open("Terminal");
   await expect(terminal).toContainText("2 commands");
   await expect(terminal).toContainText("A record of what ran. You cannot type here.");
-  await expect(terminal.getByRole("textbox")).toHaveCount(0);
+  await expect(terminal.getByRole("textbox", { name: "Aldric's terminal, read-only" })).toHaveAttribute("readonly");
 
   // Summary names what the turn changed and the tabs it used, each one click away.
   const summary = await open("Summary");

@@ -24,8 +24,8 @@ const ROOTS = [
 /** Pixel art palettes keep their own inks in every theme (docs/design/themes.md). */
 const ART = /^apps\/web\/src\/art\//;
 
-/** Top-level CSS rules that hold tokens: `@theme`, `@theme inline`, `:root` and each theme's or look's rule. */
-const TOKEN_BLOCK = /^(@theme(\s+inline)?|:root(\[data-theme\^?="[\w-]+"\])?)\s*\{\n[\s\S]*?^\}/gm;
+/** Top-level CSS rules that hold tokens: `@theme`, `@theme inline`, `@theme static`, `:root` and each theme's or look's rule. */
+const TOKEN_BLOCK = /^(@theme(\s+(inline|static))?|:root(\[data-theme\^?="[\w-]+"\])?)\s*\{\n[\s\S]*?^\}/gm;
 
 /** Comments name issues such as (#386), which read like short hex colors, and quote old values. */
 const withoutComments = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
@@ -70,6 +70,8 @@ describe("colors", () => {
   const ALLOWED: Allowed = {
     // The potion's shine and bubbles are light on its liquid in every theme.
     "apps/web/src/components/usage/potion.tsx": ["bg-white"],
+    // The names of the terminal's ANSI colors, which it reads from its `--color-term-*` tokens.
+    "apps/web/src/components/terminal/terminal-options.ts": ["bright-black", "bright-white"],
   };
 
   it("are never hex, rgb(), black or white outside the token blocks and the art palettes", () => {

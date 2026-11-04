@@ -13,10 +13,11 @@ function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
 function DialogContent({
   className,
   children,
+  onOpenAutoFocus,
   onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
-  const closeAutoFocus = useRestoreFocus(onCloseAutoFocus);
+  const autoFocus = useRestoreFocus({ onOpenAutoFocus, onCloseAutoFocus });
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay data-slot="dialog-overlay" className="fixed inset-0 z-50 bg-deep/70" />
@@ -28,7 +29,8 @@ function DialogContent({
           className,
         )}
         {...props}
-        onCloseAutoFocus={closeAutoFocus}
+        onOpenAutoFocus={autoFocus.onOpenAutoFocus}
+        onCloseAutoFocus={autoFocus.onCloseAutoFocus}
       >
         {children}
       </DialogPrimitive.Content>

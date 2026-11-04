@@ -32,7 +32,7 @@ export function DockPanel({
   on: boolean;
   state: WorkbenchTabProps["state"];
   owner: string;
-  props: Omit<WorkbenchTabProps, "state" | "focus">;
+  props: Omit<WorkbenchTabProps, "state" | "focus" | "shown">;
   file: string | undefined;
   onRetry: () => void;
 }) {
@@ -41,7 +41,7 @@ export function DockPanel({
       <TabsContent value={tab} forceMount className="min-h-full">
         <TabNotice tab={tab} state={state} owner={owner} onRetry={onRetry} />
         {tab !== "browser" && state.kind !== "not-used" && (
-          <Panel tab={tab} props={{ ...props, state, focus: on ? file : undefined }} />
+          <Panel tab={tab} props={{ ...props, state, focus: on ? file : undefined, shown: on }} />
         )}
       </TabsContent>
     </div>

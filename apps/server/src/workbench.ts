@@ -7,11 +7,12 @@ import {
   readActivityContent,
   readAttemptActivity,
   readCommandLog,
+  readTreeActivity,
   TaskFiles,
-  type TaskRepository,
+  TaskRepository,
 } from "@hobbots/agents";
-import { ActivityDetailNotFound, AttemptNotFound, HobbotsApi } from "@hobbots/api";
-import type { AttemptId } from "@hobbots/domain";
+import { ActivityDetailNotFound, AttemptNotFound, HobbotsApi, TaskNotFound } from "@hobbots/api";
+import { type AttemptId, type TaskId, TreeActivity } from "@hobbots/domain";
 import { reconcileOverlaps, recordOverlaps } from "@hobbots/orchestration";
 import { EventJournal } from "@hobbots/persistence";
 import { DateTime, Effect, Layer, Option, Schedule, Stream } from "effect";
@@ -29,9 +30,27 @@ export const WorkbenchHandlers = HttpApiBuilder.group(HobbotsApi, "workbench", (
     const store = yield* Effect.serviceOption(ActivityStore);
     const journal = yield* EventJournal;
     const files = yield* Effect.serviceOption(TaskFiles);
+    const tasks = yield* TaskRepository;
+    // Without the Files tab's service, an Attempt's files are none.
+    const filesOf = Option.isNone(files) ? () => Effect.succeed([]) : files.value.filesOf;
     const missing = (attemptId: AttemptId) => Effect.fail(new AttemptNotFound({ attemptId }));
+    // The tree's Attempts have no records: still a 404 for a Task that is not there.
+    const noRecords = (taskId: TaskId) =>
+      Effect.flatMap(tasks.readTree(taskId), (tree) =>
+        Option.isNone(tree)
+          ? Effect.fail(new TaskNotFound({ taskId }))
+          : Effect.succeed(new TreeActivity({ taskId, attempts: [] })),
+      );
     const noDetail = (attemptId: AttemptId) => Effect.fail(new ActivityDetailNotFound({ attemptId }));
     return handlers.handleAll({
+      tree: ({ params }) =>
+        Effect.gen(function* () {
+          const head = yield* journal.head;
+          const activity = Option.isNone(repo)
+            ? yield* noRecords(params.taskId)
+            : yield* readTreeActivity(tasks, repo.value, filesOf, params.taskId);
+          return { cursor: formatCursor(head.epoch, head.sequence), activity };
+        }),
       activity: ({ params }) =>
         Effect.gen(function* () {
           const head = yield* journal.head;

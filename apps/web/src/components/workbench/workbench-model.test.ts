@@ -104,6 +104,10 @@ describe("the Workbench's tab labels", () => {
     });
   });
 
+  it("uses the Terminal when another hob in the tree ran a command, since it replays theirs too", () => {
+    expect(tabStates(done, activity(), 2).terminal).toEqual({ kind: "history" });
+  });
+
   it("keeps every tab Live while the Attempt runs, since it may still use them", () => {
     const states = tabStates(running, activity({ attempt: running }));
     expect([states.summary, states.changes, states.files, states.terminal]).toEqual(Array(4).fill({ kind: "live" }));

@@ -59,7 +59,6 @@ export const messages = {
   },
   comingSoon: "Watching a hob use a browser comes in a later update.",
   terminal: {
-    commands: "Commands",
     tally: ({ total, failed, running }: { total: number; failed: number; running: number }) =>
       [
         plural(total, { one: "1 command", other: `${formatCount(total)} commands` }),
@@ -68,9 +67,14 @@ export const messages = {
       ].join(" · "),
     readOnly: "A record of what ran. You cannot type here.",
     none: "No commands yet. They show here as they run.",
+    /** Another Task's records could not be read, so its hob's commands are missing here. */
+    unread: ({ count }: { count: number }) =>
+      plural(count, {
+        one: "The commands of another task in this quest could not be loaded, so they are missing here.",
+        other: `The commands of ${formatCount(count)} other tasks in this quest could not be loaded, so they are missing here.`,
+      }),
     state: {
       running: ({ time }: { time: string }) => `Running · ${time}`,
-      succeeded: "Succeeded",
       failed: "Failed",
       uncertain: "Cut off",
     },
@@ -78,13 +82,27 @@ export const messages = {
     finishedInSequence: "Finished · an earlier part may have failed",
     exitCode: ({ code }: { code: number }) => `exit code ${formatCount(code)}`,
     uncertain: "The turn ended while this ran, so whether it finished is not known.",
-    folder: "Ran in",
-    sandbox: "Sandbox",
-    started: "Started",
-    took: "Took",
-    inSandbox: "In the sandbox",
-    unsandboxed: "Unsandboxed",
-    liveOutput: "Output",
+    ranIn: ({ folder }: { folder: string }) => `ran in ${folder}`,
+    unsandboxed: "unsandboxed",
+    started: ({ time }: { time: string }) => `started ${time}`,
+    took: ({ time }: { time: string }) => `took ${time}`,
+    omitted: ({ size }: { size: string }) => `${size} left out here`,
+    terminals: "Terminals",
+    screen: ({ name }: { name: string }) => `${name}'s terminal, read-only`,
+    find: "Find in the terminal",
+    findPlaceholder: "Find…",
+    matches: ({ index, count }: { index: number; count: number }) =>
+      index < 0 ? `${formatCount(count)} matches` : `${formatCount(index + 1)} of ${formatCount(count)}`,
+    noMatches: "No matches",
+    split: "◫ Split",
+    unsplit: "▣ One at a time",
+    splitHint: "Show every terminal side by side",
+    unsplitHint: "Show one terminal at a time",
+    /** A terminal tab's name: the hob's, and how its terminal stands when a command runs or failed. */
+    tab: ({ name, mark }: { name: string; mark: "running" | "failed" | "idle" }) =>
+      mark === "running" ? `${name}, running` : mark === "failed" ? `${name}, its last command failed` : name,
+    fullLogs: "Full logs:",
+    logOf: ({ command, size }: { command: string; size: string }) => `${command} (${size})`,
     waiting: "Nothing printed yet.",
     atEnd: "Its output shows when it ends.",
     missed: "Earlier output was not seen live. All of it shows here when the command ends.",

@@ -84,7 +84,6 @@
     "apps/web/src/components/summon/summon.tsx": 2,
     "apps/web/src/components/summon/summoning.tsx": 1,
     "apps/web/src/components/workbench/file-picker.tsx": 4,
-    "apps/web/src/components/workbench/tabs/terminal-tab.tsx": 3,
     "apps/web/src/components/workbench/workbench-header.tsx": 1,
     "apps/web/src/components/workbench/workbench-tabs.tsx": 2
   }

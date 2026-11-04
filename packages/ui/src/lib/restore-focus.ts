@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /** What has focus right now, unless that is only the page itself. */
 export const focusedElement = () =>
@@ -27,16 +27,37 @@ const restoreFocus = (before: HTMLElement | null) => {
 
 /**
  * Focus for a modal layer the app may open by itself, with no trigger. It remembers what had focus
- * while the layer renders, before Radix moves focus inside, and returns an `onCloseAutoFocus` that
- * puts focus back there. Radix alone would focus the trigger, and such a layer has none.
+ * each time the layer opens, before Radix moves focus inside, and puts focus back there when it
+ * closes. Radix alone would focus the trigger, and such a layer has none. The layer's component can
+ * stay mounted while it is closed, as the work sheet does (#895), so what had focus is read when the
+ * layer opens, never when it first renders.
+ *
+ * A layer that animates out gives focus back only once it has gone. If focus moved somewhere else on
+ * the way out, such as to a hob's card in the sidebar, it stays there: taking it back would close
+ * that card the moment it opened.
  */
-export const useRestoreFocus = (onCloseAutoFocus?: (event: Event) => void) => {
-  const [before] = useState(focusedElement);
-  return (event: Event) => {
-    onCloseAutoFocus?.(event);
-    if (event.defaultPrevented) return;
-    event.preventDefault();
-    restoreFocus(before);
+export const useRestoreFocus = ({
+  onOpenAutoFocus,
+  onCloseAutoFocus,
+}: {
+  onOpenAutoFocus?: ((event: Event) => void) | undefined;
+  onCloseAutoFocus?: ((event: Event) => void) | undefined;
+}) => {
+  const before = useRef<HTMLElement | null>(null);
+  return {
+    onOpenAutoFocus: (event: Event) => {
+      // Radix asks before it moves focus inside, so what has focus now is what opened the layer.
+      before.current = focusedElement();
+      onOpenAutoFocus?.(event);
+    },
+    onCloseAutoFocus: (event: Event) => {
+      onCloseAutoFocus?.(event);
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+      const layer = event.currentTarget instanceof Node ? event.currentTarget : null;
+      const now = focusedElement();
+      if (now === null || layer?.contains(now)) restoreFocus(before.current);
+    },
   };
 };
 
