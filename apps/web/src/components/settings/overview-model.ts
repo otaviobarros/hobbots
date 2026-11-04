@@ -18,6 +18,8 @@ export type AreaTone = "ok" | "off" | "busy" | "broken" | "plain";
 export interface OverviewCard {
   readonly id: "ai" | "safety" | "github" | "devices" | "backups" | "appearance";
   readonly section: SettingsSection;
+  /** The Connections tab the card opens, when not the first. */
+  readonly tab?: "charms";
   readonly tone: AreaTone;
   readonly title: string;
   readonly state: string;
@@ -56,7 +58,7 @@ export interface Overview {
 }
 
 /** What stops a provider from thinking, in a few words, or null when nothing does. */
-const providerState = (health: RuntimeHealth | undefined): string | null => {
+export const providerState = (health: RuntimeHealth | undefined): string | null => {
   const problem = signInProblem(health) ?? runtimeProblem(health);
   return problem === null ? null : copy.ai.problem[problem];
 };
@@ -100,7 +102,7 @@ const safetyCard = (preset: SafetyPreset | undefined): OverviewCard => {
 };
 
 const githubCard = (status: GitHubStatus | undefined): OverviewCard => {
-  const base = { id: "github", section: "connections", title: copy.github.title } as const;
+  const base = { id: "github", section: "connections", tab: "charms", title: copy.github.title } as const;
   switch (status?._tag) {
     case "Connected":
       return {

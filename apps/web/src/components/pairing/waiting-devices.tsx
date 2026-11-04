@@ -10,16 +10,17 @@ const copy = messages.settings;
 
 /**
  * Settings › Devices: every device still waiting to be allowed, those decided later included, each
- * until its request runs out (ADR 021).
+ * until its request runs out (ADR 021). With none waiting it shows nothing, so the section starts
+ * with what is set.
  */
 export function WaitingDevices() {
   const waiting = useQuery(waitingDevicesQuery);
   const now = useNow();
   const devices = waiting.data ?? [];
+  if (devices.length === 0) return null;
   return (
     <section aria-label={copy.heading} className="flex flex-col gap-2 pt-2">
       <span className="lbl text-xs text-label">{copy.heading}</span>
-      {waiting.isSuccess && devices.length === 0 && <p className="m-0 text-sm text-label">{copy.none}</p>}
       {devices.map((device) => {
         const deferred = pairingDeferred(device.request);
         return (

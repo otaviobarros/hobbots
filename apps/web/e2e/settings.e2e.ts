@@ -91,11 +91,12 @@ test("[TC-UX-024] a signed-out runtime shows how to fix it in Settings › AI pr
     HOBBOTS_RUNTIME: "claude",
     HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir),
   });
-  const providers = page.getByRole("region", { name: "AI providers" }).getByRole("region", { name: "Claude Code" });
+  const providers = page.getByRole("tabpanel", { name: /AI models/ }).getByRole("region", { name: "Claude Code" });
 
   await expect(providers.getByText("Signed out")).toBeVisible();
   await expect(providers.getByText(/installed but not signed in/)).toBeVisible();
   await expect(providers.getByRole("button", { name: "Check again" })).toBeVisible();
+  await providers.getByText("Technical details").click();
   await expect(providers.getByRole("heading", { name: "Enforcement on this hub" })).toBeVisible();
 });
 
@@ -108,7 +109,7 @@ test("[TC-RT-036] Settings › AI providers shows a ready, signed-in Codex, and 
     HOBBOTS_RUNTIME: "claude",
     HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir),
   });
-  const codex = page.getByRole("region", { name: "AI providers" }).getByRole("region", { name: "Codex" });
+  const codex = page.getByRole("tabpanel", { name: /AI models/ }).getByRole("region", { name: "Codex" });
   const checkAgain = async (state: FakeCodexState) => {
     fakeCodexAt(dataDir, state);
     await codex.getByRole("button", { name: "Check again" }).click();
@@ -134,6 +135,7 @@ test("[TC-RT-036] Settings › AI providers shows a ready, signed-in Codex, and 
   // Signed in with ChatGPT: ready, with nothing left to fix.
   await checkAgain("ready");
   await expect(codex.getByText("Ready")).toBeVisible();
+  await codex.getByText("Technical details").click();
   await expect(codex.getByText("subscription (plus)")).toBeVisible();
   await expect(codex.getByText("0.166.0")).toBeVisible();
   await expect(codex.getByRole("button", { name: "Check again" })).toBeHidden();
@@ -200,4 +202,41 @@ test("[TC-UX-121] Settings opens on an overview that puts what is broken first, 
   // An unknown section opens the overview.
   await page.goto(`${current.url}/#/settings/nowhere`);
   await expect(page).toHaveURL(/#\/settings$/);
+});
+
+// covers UX-005
+test("[TC-UX-122] Safety, Connections and Devices hold what the old panels did, in the redesign's sections", async ({
+  page,
+}) => {
+  const current = await openSettings(page, "safety");
+
+  // Safety: one of three levels, what it means, the folders and the Always rules.
+  const safety = page.getByRole("region", { name: "Safety" });
+  await expect(safety.getByRole("radio", { name: /Balanced/ })).toBeChecked();
+  await expect(safety.getByText("With Balanced, your hobs:")).toBeVisible();
+  await safety.getByText("Trusting", { exact: true }).click();
+  await expect(safety.getByText("With Trusting, your hobs:")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Safety" }).getByRole("radio", { name: /Trusting/ })).toBeChecked();
+  await expect(page.getByRole("region", { name: "Folders hobs can open" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Always allowed" })).toContainText("No standing rules");
+
+  // Connections: AI models and Charms as tabs with counts; the overview's GitHub card opens Charms.
+  await page.goto(`${current.url}/#/settings`);
+  await page
+    .getByRole("list", { name: "Areas" })
+    .getByRole("link", { name: /GitHub/ })
+    .click();
+  await expect(page).toHaveURL(/#\/settings\/connections\?tab=charms$/);
+  await expect(page.getByRole("tab", { name: /Charms/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel", { name: /Charms/ }).getByRole("region", { name: "Charms" })).toBeVisible();
+  await page.getByRole("tab", { name: /AI models/ }).click();
+  await expect(page).toHaveURL(/#\/settings\/connections$/);
+  await expect(
+    page.getByRole("tabpanel", { name: /AI models/ }).getByRole("region", { name: "Claude Code" }),
+  ).toBeVisible();
+
+  // Devices: remote access and the allowed devices.
+  await page.goto(`${current.url}/#/settings/devices`);
+  await expect(page.getByRole("switch", { name: "Use Hobbots from my other devices" })).toBeVisible();
 });

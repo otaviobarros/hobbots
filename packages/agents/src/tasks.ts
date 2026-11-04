@@ -17,6 +17,7 @@ import type {
   DeviceId,
   EventEnvelope,
   HandOff,
+  HistoryRecords,
   IllegalTaskTransition,
   MemberWork,
   MilestoneId,
@@ -339,6 +340,8 @@ export class TaskRepository extends Context.Service<
      * listed once it ends, until its Quest does, so its outcome shows where its work did.
      */
     readonly listMemberWork: (agentId: AgentId) => Effect.Effect<ReadonlyArray<MemberWork>>;
+    /** The records a hob's History is read from, its party's work included when it leads (ADR 018). */
+    readonly readHistoryRecords: (agentId: AgentId) => Effect.Effect<HistoryRecords>;
     /**
      * Steps waiting to start, oldest first: queued Tasks whose parent has the same owner and has not
      * ended. Whether their dependencies have completed is for the caller to check.

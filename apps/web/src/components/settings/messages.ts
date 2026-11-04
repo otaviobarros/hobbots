@@ -48,7 +48,7 @@ export const messages = {
         words: ["claude", "codex", "models", "sign in", "sandbox", "enforcement"],
         section: "connections",
       },
-      { label: "GitHub", words: ["charms", "apps", "repositories", "git"], section: "connections" },
+      { label: "GitHub", words: ["charms", "apps", "repositories", "git"], section: "connections", tab: "charms" },
       {
         label: "Other devices",
         words: ["remote access", "tailscale", "phone", "qr code", "port", "https"],
@@ -135,12 +135,37 @@ export const messages = {
       modes: { dark: "Dark", light: "Light" },
     },
   },
-  groups: {
+  safety: {
     howCareful: "How careful should hobs be?",
+    suggested: "Suggested",
+    withPreset: ({ preset }: { preset: string }) => `With ${preset}, your hobs:`,
+    answers: {
+      Allow: ({ rule }: { rule: string }) => rule,
+      Ask: ({ rule }: { rule: string }) => `${rule}: asks you first`,
+      Never: ({ rule }: { rule: string }) => `${rule}: never`,
+    },
+    unsandboxed: {
+      label: "Let new hobs run without the sandbox",
+      note: "New hobs would start outside the sandbox, so their commands could reach the whole computer.",
+      later: "Off for now. Running without the sandbox arrives in a later update.",
+    },
+    saveFailed: "Hobbots could not save how careful hobs are. Try again in a moment.",
     folders: "Folders hobs can open",
+    foldersIntro: "Every hob can read and change files here. Anything outside asks first.",
     noFolders: "No folders yet.",
-    safetyFailed: "Hobbots could not read your safety settings. Try again in a moment.",
-    later: "Later",
+    failed: "Hobbots could not read your safety settings. Try again in a moment.",
+  },
+  connections: {
+    ai: "AI models",
+    charms: "Charms",
+    connected: ({ count }: { count: number }) => (count === 0 ? "none yet" : `${count} connected`),
+    needFix: ({ count }: { count: number }) => (count === 1 ? "1 needs a fix" : `${count} need a fix`),
+    noneYet: "none yet",
+    later: "Coming later",
+    laterTag: "Later",
+    laterNote: "Once there is more than one, each hob picks the one it thinks with in its profile.",
+  },
+  groups: {
     retiredHobs: "Retired hobs",
     retiredHobsBody: "Retired hobs and their chats live in the Archive, where you can read them.",
     openArchive: "Open the Archive",
@@ -189,6 +214,7 @@ export const messages = {
   },
   providers: {
     heading: "AI providers",
+    technical: "Technical details",
     billing: "Billing",
     version: "Version",
     checking: "Checking",

@@ -11,7 +11,7 @@ import {
   PermissionSummary,
   TaskRepository,
 } from "@hobbots/agents";
-import { BackpackRead, MemberWorkRead, QuestRead, TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
+import { BackpackRead, HistoryRead, MemberWorkRead, QuestRead, TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -444,6 +444,41 @@ describe("Task and Quest reads", () => {
       [],
     );
     expect(await get("/api/agents/nope/quest-work")).toEqual({
+      status: 404,
+      body: { _tag: "AgentNotFound", agentId: "nope" },
+    });
+  });
+});
+
+describe("a hob's History", () => {
+  // covers OR-001, UX-001
+  it("[TC-OR-494] reads a page of a hob's days in your time zone with a cursor, and refuses a zone it does not know", async () => {
+    await runtime.runPromise(quest);
+    const read = async (path: string) => {
+      const response = await get(path);
+      expect(response.status).toBe(200);
+      return Schema.decodeUnknownSync(HistoryRead)(response.body);
+    };
+    const ids = (history: HistoryRead) => history.page.days.map((day) => [day.day, day.events.map((each) => each.id)]);
+
+    // The lead's day holds the Task you asked for, its Quest and the Task it gave Quill.
+    const aldric = await read("/api/agents/aldric/history?timeZone=UTC");
+    expect(ids(aldric)).toEqual([["2026-11-01", ["picked-up:copy", "quest-started:q1", "asked:campaign"]]]);
+    expect(aldric.page).toMatchObject({ before: null, earlierDays: 0 });
+    expect(typeof aldric.cursor).toBe("string");
+    // West of Greenwich, the same events fall on the evening before.
+    expect(ids(await read("/api/agents/aldric/history?timeZone=America%2FSao_Paulo&filter=quest"))).toEqual([
+      ["2026-10-31", ["picked-up:copy", "quest-started:q1"]],
+    ]);
+    expect(ids(await read("/api/agents/quill/history?timeZone=UTC&days=1"))).toEqual([
+      ["2026-11-01", ["picked-up:copy"]],
+    ]);
+
+    const refused = await handler(
+      new Request("http://localhost:4390/api/agents/aldric/history?timeZone=Nowhere%2FAtAll", { headers: AS_WINDOW }),
+    );
+    expect(refused.status).toBe(400);
+    expect(await get("/api/agents/nope/history?timeZone=UTC")).toEqual({
       status: 404,
       body: { _tag: "AgentNotFound", agentId: "nope" },
     });

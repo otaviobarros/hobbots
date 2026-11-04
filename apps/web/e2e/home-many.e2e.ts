@@ -61,12 +61,12 @@ test("[TC-UX-001] with 20 hobs the scene shows six, the hall holds 14 and the fi
   await expect(scene.getByRole("button", { name: stageHob })).toHaveCount(6);
   await expect(scene.getByRole("button", { name: "Open the hall: 14 more hobs" })).toContainText("14 in the hall");
 
-  // Past 12 hobs, Resting starts folded; its count chip unfolds it.
+  // Past 12 hobs, Resting starts folded; its count chip narrows the list to it, open.
   const all = page.getByRole("region", { name: "All hobs" });
   const tiles = all.getByRole("link", { name: /^Open .+'s page,/ });
   await expect(all.getByRole("button", { name: /^Resting/ })).toHaveAttribute("aria-expanded", "false");
   await expect(tiles).toHaveCount(0);
-  await scene.getByRole("button", { name: "20 resting" }).click();
+  await scene.getByRole("radio", { name: "Resting 20" }).click();
   await expect(all.getByRole("button", { name: /^Resting/ })).toHaveAttribute("aria-expanded", "true");
   await expect(tiles).toHaveCount(20);
 
@@ -80,7 +80,7 @@ test("[TC-UX-004] Home tiles show each hob's sigil and role, and the filter find
   const { url } = await hubWithHobs(20);
   await page.goto(url);
   const all = page.getByRole("region", { name: "All hobs" });
-  await page.getByRole("region", { name: "Your hobs right now" }).getByRole("button", { name: "20 resting" }).click();
+  await page.getByRole("region", { name: "Your hobs right now" }).getByRole("radio", { name: "Resting 20" }).click();
 
   await all.getByRole("searchbox", { name: "Find a hob by name or role" }).fill("QA");
   const tiles = all.getByRole("link", { name: /^Open .+'s page,/ });

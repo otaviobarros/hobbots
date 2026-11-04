@@ -12,6 +12,7 @@ export * from "./github.ts";
 export * from "./github-account.ts";
 export * from "./grant.ts";
 export * from "./grant-rule.ts";
+export * from "./history.ts";
 export * from "./ids.ts";
 export * from "./ledger.ts";
 export * from "./local-git.ts";

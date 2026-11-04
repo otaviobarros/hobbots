@@ -201,7 +201,9 @@ test("[TC-CH-093] a brain that cannot think says so in the chat, and Fix it open
   await expect(banner).toHaveText(/Pip can't think right now: Claude Code is signed out\./);
   await banner.getByRole("link", { name: "Fix it in Settings" }).click();
   await expect(page).toHaveURL(/#\/settings\/connections$/);
-  await expect(page.getByRole("region", { name: "AI providers" })).toBeInViewport();
+  await expect(
+    page.getByRole("tabpanel", { name: /AI models/ }).getByRole("region", { name: "Claude Code" }),
+  ).toBeVisible();
 });
 
 // covers CH-004
