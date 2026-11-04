@@ -132,7 +132,13 @@
                     "group": ["node:*"],
                     "message": "Browser code cannot import Node modules (STD-ARCH-001)."
                   }
-                ]
+                ],
+                "paths": {
+                  "react": {
+                    "importNames": ["forwardRef", "FC"],
+                    "message": "Write components as plain functions and pass ref as a prop (STD-REACT-013)."
+                  }
+                }
               }
             }
           },
@@ -141,6 +147,29 @@
           }
         }
       }
+    },
+    {
+      "includes": ["apps/web/src/**", "packages/ui/src/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNestedComponentDefinitions": "error"
+          },
+          "style": {
+            "noDefaultExport": "error"
+          },
+          "suspicious": {
+            "noExplicitAny": "error",
+            "noTsIgnore": "error"
+          }
+        }
+      }
+    }
+  ],
+  "plugins": [
+    {
+      "path": "./scripts/biome/no-double-cast.grit",
+      "includes": ["apps/web/src/**", "packages/ui/src/**", "!**/*.test.ts", "!**/*.test.tsx"]
     }
   ]
 }

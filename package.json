@@ -18,9 +18,10 @@
     "lint:dup": "jscpd",
     "lint:layers": "node scripts/check-layers.mjs",
     "lint:complexity": "node scripts/check-complexity.mjs",
+    "lint:frontend": "node scripts/check-frontend.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "format": "biome check --write .",
-    "check": "node scripts/check-standards.mjs && node scripts/check-layers.mjs && node scripts/check-complexity.mjs && node --test \"scripts/*.test.mjs\" && knip && jscpd && biome check . && turbo run typecheck --concurrency=4 && turbo run test --concurrency=4"
+    "check": "node scripts/check-standards.mjs && node scripts/check-layers.mjs && node scripts/check-complexity.mjs && node scripts/check-frontend.mjs && node --test \"scripts/*.test.mjs\" && knip && jscpd && biome check . && turbo run typecheck --concurrency=4 && turbo run test --concurrency=4"
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {
