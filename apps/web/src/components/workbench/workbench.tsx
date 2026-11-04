@@ -11,6 +11,7 @@ import type { NoteDrafts } from "../quest/note-box.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup } from "../quest/use-work.ts";
 import { findTask, questionForYou, taskTitle } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
+import { ChatPanelIcon } from "./tab-icons.tsx";
 import { ChangesTab } from "./tabs/changes-tab.tsx";
 import { FilesTab } from "./tabs/files-tab.tsx";
 import { SummaryTab } from "./tabs/summary-tab.tsx";
@@ -91,47 +92,47 @@ export function Workbench({
           <p className="m-0 px-6 py-6 text-detail text-label">{reading ? messages.loading : messages.notFound}</p>
         </>
       ) : (
-        <div className="@container/bench relative flex min-h-0 flex-1">
-          {/* Narrower than 480px the task chat sits over the Workbench instead of squeezing it; its ✕ closes it. */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            <Bench
-              key={found.task.id}
-              tree={found.tree}
-              task={found.task}
-              view={view}
-              hobs={hobs}
-              moves={moves}
-              back={back}
-              end={
-                <Button
-                  ref={toggle}
-                  variant="chip"
-                  size="xs"
-                  aria-pressed={view.chatOpen}
-                  aria-controls={view.chatOpen ? chatId : undefined}
-                  onClick={() => (view.chatOpen ? closeChat() : moves.chat(true))}
-                >
-                  {/* While the chat is hidden, a lantern dot says a question in it waits for you. */}
-                  {!view.chatOpen && questionForYou(found.tree, found.task) !== null && (
-                    <span aria-hidden className="size-1.5 rounded-dot bg-lantern" />
-                  )}
-                  {messages.chat.toggle}
-                </Button>
-              }
-            />
-          </div>
-          {view.chatOpen && (
-            <WorkbenchChat
-              key={found.task.id}
-              id={chatId}
-              tree={found.tree}
-              task={found.task}
-              hobs={hobs}
-              drafts={drafts}
-              onClose={closeChat}
-            />
-          )}
-        </div>
+        <Bench
+          key={found.task.id}
+          tree={found.tree}
+          task={found.task}
+          view={view}
+          hobs={hobs}
+          moves={moves}
+          back={back}
+          end={
+            <Button
+              ref={toggle}
+              variant="icon"
+              size="icon"
+              className="relative"
+              aria-label={messages.chat.toggle}
+              title={messages.chat.toggle}
+              aria-pressed={view.chatOpen}
+              aria-controls={view.chatOpen ? chatId : undefined}
+              onClick={() => (view.chatOpen ? closeChat() : moves.chat(true))}
+            >
+              <ChatPanelIcon />
+              {/* While the chat is hidden, a lantern dot says a question in it waits for you. */}
+              {!view.chatOpen && questionForYou(found.tree, found.task) !== null && (
+                <span aria-hidden className="absolute -end-1 -top-1 size-2 rounded-dot bg-lantern" />
+              )}
+            </Button>
+          }
+          chat={
+            view.chatOpen && (
+              <WorkbenchChat
+                key={found.task.id}
+                id={chatId}
+                tree={found.tree}
+                task={found.task}
+                hobs={hobs}
+                drafts={drafts}
+                onClose={closeChat}
+              />
+            )
+          }
+        />
       )}
     </section>
   );
@@ -169,6 +170,7 @@ function Bench({
   moves,
   back,
   end,
+  chat,
 }: {
   tree: TaskTree;
   task: Task;
@@ -177,6 +179,8 @@ function Bench({
   moves: ReturnType<typeof useWorkbenchMoves>;
   back: ReactNode;
   end: ReactNode;
+  /** The task chat, a card beside the views under the header, when it is open. */
+  chat: ReactNode;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const attempts = attemptsOf(tree, task);
@@ -214,38 +218,42 @@ function Bench({
         onAttempt={moves.attempt}
         end={end}
       />
-      <Tabs
-        value={view.tab}
-        onValueChange={(next) => isWorkbenchTab(next) && moves.tab(next)}
-        className="min-h-0 flex-1"
-      >
-        <WorkbenchTabs states={states} />
-        {/* Every panel stays mounted, so each keeps its scroll, selection and folds while another shows. */}
-        <div className="relative min-h-0 flex-1">
-          {WORKBENCH_TABS.map((tab) => {
-            const on = tab === view.tab;
-            return (
-              <TabsContent
-                key={tab}
-                value={tab}
-                forceMount
-                inert={!on}
-                className={cn("@container absolute inset-0 overflow-y-auto", !on && "invisible")}
-              >
-                <TabNotice
-                  tab={tab}
-                  state={states[tab]}
-                  owner={hobs(task.ownerId).name}
-                  onRetry={() => void read.refetch()}
-                />
-                {tab !== "browser" && states[tab].kind !== "not-used" && (
-                  <Panel tab={tab} props={{ ...shared, state: states[tab], focus: on ? view.file : undefined }} />
-                )}
-              </TabsContent>
-            );
-          })}
-        </div>
-      </Tabs>
+      {/* Narrower than 480px the task chat sits over the views instead of squeezing them. */}
+      <div className="@container/bench relative flex min-h-0 flex-1 gap-4 p-4">
+        <Tabs
+          value={view.tab}
+          onValueChange={(next) => isWorkbenchTab(next) && moves.tab(next)}
+          className="min-h-0 min-w-0 flex-1"
+        >
+          <WorkbenchTabs states={states} />
+          {/* Every panel stays mounted, so each keeps its scroll, selection and folds while another shows. */}
+          <div className="relative mt-4 min-h-0 flex-1 overflow-hidden rounded-card border-(length:--edge) border-line bg-panel">
+            {WORKBENCH_TABS.map((tab) => {
+              const on = tab === view.tab;
+              return (
+                <TabsContent
+                  key={tab}
+                  value={tab}
+                  forceMount
+                  inert={!on}
+                  className={cn("@container absolute inset-0 overflow-y-auto", !on && "invisible")}
+                >
+                  <TabNotice
+                    tab={tab}
+                    state={states[tab]}
+                    owner={hobs(task.ownerId).name}
+                    onRetry={() => void read.refetch()}
+                  />
+                  {tab !== "browser" && states[tab].kind !== "not-used" && (
+                    <Panel tab={tab} props={{ ...shared, state: states[tab], focus: on ? view.file : undefined }} />
+                  )}
+                </TabsContent>
+              );
+            })}
+          </div>
+        </Tabs>
+        {chat}
+      </div>
     </>
   );
 }

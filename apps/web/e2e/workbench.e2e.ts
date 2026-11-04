@@ -295,6 +295,10 @@ test("[TC-UX-030] a finished Task's Summary says what was asked, what happened a
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   const summary = bench.getByRole("tabpanel", { name: /^Summary/ });
+  // It leads with the result, then what happened; what you asked waits behind Details.
+  await expect(summary.getByText("The notes are tidy, and the report says what changed.")).toBeVisible();
+  await expect(summary.getByRole("region", { name: "What you asked" })).toHaveCount(0);
+  await summary.getByRole("button", { name: "Details" }).click();
   await expect(summary.getByRole("region", { name: "What you asked" })).toContainText("Tidy the notes");
   await expect(summary.getByRole("region", { name: "What happened" })).toContainText(
     "DoneTwo notes said the same thing.",
@@ -307,9 +311,6 @@ test("[TC-UX-030] a finished Task's Summary says what was asked, what happened a
   ]);
   await expect(summary.getByRole("region", { name: "Still open" })).toContainText(
     "Nothing is waiting on you or anyone else.",
-  );
-  await expect(summary.getByRole("region", { name: "The result" })).toContainText(
-    "The notes are tidy, and the report says what changed.",
   );
   // The buttons at the end name the tabs it used; it ran no command, so none names the Terminal.
   await expect(summary.getByRole("navigation", { name: "Open the other views" }).getByRole("button")).toHaveText([
@@ -330,9 +331,7 @@ test("[TC-UX-030] a finished Task's Summary says what was asked, what happened a
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-031] a question waiting for you shows under Still open, and Answer in the chat goes back to it", async ({
-  page,
-}) => {
+test("[TC-UX-031] a question waiting for you shows in the task chat, not again under Still open", async ({ page }) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -356,21 +355,19 @@ test("[TC-UX-031] a question waiting for you shows under Still open, and Answer 
     .click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
-  await expect(open).toContainText("A question for you");
-  await expect(open).toContainText("Should the headings be short?");
-  await expect(
-    bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "The result" }),
-  ).toContainText("No result yet.");
+  await expect(bench.getByRole("tabpanel", { name: /^Summary/ })).toContainText(
+    "Aldric is waiting on your answer in the task chat.",
+  );
+  await expect(open).not.toContainText("Should the headings be short?");
 
-  await open.getByRole("button", { name: "Answer in the chat" }).click();
-  await expect(bench).toBeHidden();
-  await expect(asks).toBeVisible();
+  // The task chat holds the question, with its answer box.
+  await bench.getByRole("button", { name: "Task chat" }).click();
+  const chat = bench.getByRole("complementary", { name: "Talk about Tidy the notes" });
+  await expect(chat.getByRole("region", { name: "Aldric asks you" })).toContainText("Should the headings be short?");
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-032] a Quest pinned from another thread sends Answer in the chat to the thread its question is in", async ({
-  page,
-}) => {
+test("[TC-UX-032] a Quest pinned from another thread holds its question in the task chat there", async ({ page }) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -405,14 +402,10 @@ test("[TC-UX-032] a Quest pinned from another thread sends Answer in the chat to
   await room.getByRole("button", { name: /^Aldric · Tidy the notes/ }).click();
   await taskSheet(page, "Tidy the notes").getByRole("button", { name: "Open Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
-  const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
-  await expect(open).toContainText("Should the headings be short?");
-
-  // Answer in the chat opens the Quest's own thread, where the question waits.
-  await open.getByRole("button", { name: "Answer in the chat" }).click();
-  await expect(bench).toBeHidden();
-  expect(new URL(page.url().replace("/#/", "/")).pathname).toBe(questThread);
-  await expect(asks).toContainText("Should the headings be short?");
+  await bench.getByRole("button", { name: "Task chat" }).click();
+  const chat = bench.getByRole("complementary", { name: "Talk about Tidy the notes" });
+  await expect(chat.getByRole("region", { name: "Aldric asks you" })).toContainText("Should the headings be short?");
+  expect(new URL(page.url().replace("/#/", "/")).pathname).not.toBe(questThread);
 });
 
 // covers UX-002, UX-006

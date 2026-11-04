@@ -7,6 +7,8 @@ import {
   type Checkpoint,
   descendantsOf,
   type FileChange,
+  isLiveAttempt,
+  isTerminalTask,
   type Milestone,
   type Question,
   type RefusedCall,
@@ -16,6 +18,7 @@ import {
   type TaskState,
   type TaskTree,
 } from "@hobbots/domain";
+import { questionForYou } from "../../quest/work-model.ts";
 
 /**
  * What the Summary tab says about one Task (ADR 023): what it was asked, what happened, what it
@@ -25,6 +28,9 @@ import {
 
 /** Where a line of What happened stands. */
 export type Mark = "done" | "failed" | "waiting" | "running" | "next" | "cancelled" | "unresolved";
+
+/** How an Attempt that ended without finishing is marked. */
+type EndedMark = Extract<Mark, "failed" | "cancelled" | "unresolved">;
 
 export type HappenedLine =
   /** One of the Task's own steps, as "Step 2 of 4", with how many tries it took. */
@@ -53,7 +59,23 @@ interface ChangedFile {
   readonly path: string;
 }
 
+/**
+ * The one line Summary leads with, from the records: the Task's result once it has one, else where
+ * the Attempt shown stands. `earlier` counts the Attempts before it that ended without finishing.
+ */
+export type SummaryLine = (
+  | { readonly kind: "result"; readonly summary: string; readonly from: number | null }
+  | { readonly kind: "not-started" }
+  /** A question waits for your answer in the task chat. */
+  | { readonly kind: "asks"; readonly asker: AgentId }
+  | { readonly kind: "working"; readonly attempt: number }
+  | { readonly kind: "waiting"; readonly attempt: number }
+  | { readonly kind: "ended"; readonly attempt: number; readonly mark: EndedMark }
+  | { readonly kind: "no-result" }
+) & { readonly earlier: number };
+
 export interface Summary {
+  readonly line: SummaryLine;
   readonly asked: {
     readonly brief: string;
     /** The lead whose brief it is, for a member's Task; null for a Task you asked for. */
@@ -66,7 +88,10 @@ export interface Summary {
     readonly changes: ReadonlyArray<ChangedFile>;
   };
   readonly open: {
-    /** Questions nobody has answered yet, from this Task or any under it. */
+    /**
+     * Questions nobody has answered yet, from this Task or any under it, except the one the task
+     * chat holds: that one is answered there, so it shows only once.
+     */
     readonly questions: ReadonlyArray<Question>;
     /** Tool calls in this Task's work that wait for your decision. */
     readonly approvals: ReadonlyArray<ApprovalRequest>;
@@ -119,7 +144,7 @@ const ENDED_EARLY: ReadonlySet<Attempt["state"]> = new Set(["failed", "interrupt
  * How an Attempt that ended early is marked. `unresolved` is a stop Hobbots asked for and could not
  * confirm (OR-006): whether its session stopped is not known, so it is never shown as stopped.
  */
-const endedMark = (state: Attempt["state"]): Mark =>
+const endedMark = (state: Attempt["state"]): EndedMark =>
   state === "failed" ? "failed" : state === "unresolved" ? "unresolved" : "cancelled";
 
 /** A line and the time it goes at; a line with no time yet goes last, in its own order. */
@@ -202,6 +227,28 @@ const happenedOf = (tree: TaskTree, task: Task, attempt: Attempt | null): Readon
   return lines;
 };
 
+const WAITS: ReadonlySet<TaskState> = new Set(["waiting", "blocked"]);
+
+/** Where the Attempt shown stands, or the Task's result once it has one. */
+const lineOf = (tree: TaskTree, task: Task, attempt: Attempt | null, inChat: Question | null): SummaryLine => {
+  const tries = tree.attempts.filter((each) => each.taskId === task.id);
+  const earlier =
+    attempt === null ? 0 : tries.filter((each) => each.number < attempt.number && ENDED_EARLY.has(each.state)).length;
+  if (task.result !== null) {
+    const from = tries.find((each) => each.id === task.result?.attemptId);
+    const other = attempt !== null && from !== undefined && from.id !== attempt.id;
+    return { kind: "result", summary: task.result.summary, from: other ? from.number : null, earlier: 0 };
+  }
+  if (inChat !== null) return { kind: "asks", asker: inChat.askerId, earlier };
+  if (attempt === null) return { kind: isTerminalTask(task.state) ? "no-result" : "not-started", earlier };
+  if (ENDED_EARLY.has(attempt.state)) {
+    return { kind: "ended", attempt: attempt.number, mark: endedMark(attempt.state), earlier };
+  }
+  if (WAITS.has(task.state)) return { kind: "waiting", attempt: attempt.number, earlier };
+  if (isLiveAttempt(attempt.state)) return { kind: "working", attempt: attempt.number, earlier };
+  return { kind: "no-result", earlier };
+};
+
 /** The Attempt's changed files, one per file at its latest record, by path. */
 const changedFiles = (activity: AttemptActivity | null): ReadonlyArray<ChangedFile> => {
   const latest = new Map<string, FileChange>();
@@ -237,7 +284,9 @@ export const summaryOf = (
     (each) => each.taskId === task.id && (attempt === null || each.attemptId === attempt.id),
   );
   const changes = changedFiles(activity);
+  const inChat = isTerminalTask(tree.tasks[0]?.state ?? task.state) ? null : questionForYou(tree, task);
   return {
+    line: lineOf(tree, task, attempt, inChat),
     asked: {
       brief: delegation?.brief ?? task.brief,
       from: delegation?.leadId ?? null,
@@ -246,7 +295,9 @@ export const summaryOf = (
     happened: happenedOf(tree, task, attempt),
     made: { artifacts, changes },
     open: {
-      questions: tree.questions.filter((each) => each.state === "open" && under.has(each.taskId)),
+      questions: tree.questions.filter(
+        (each) => each.state === "open" && under.has(each.taskId) && each.id !== inChat?.id,
+      ),
       approvals: approvals.filter((each) => approvalFor(each, task, under)),
       uncommitted: tree.checkpoints.filter((each) => each.kind === "uncommitted" && under.has(each.taskId)),
     },
