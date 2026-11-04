@@ -362,6 +362,41 @@ describe("a Task's activity", () => {
     expect(types).toEqual(expect.arrayContaining(["CommandRecorded", "FileChangesRecorded", "FolderScanned"]));
   }, 30_000);
 
+  // covers UX-002, UX-006, PE-005 (#902)
+  it("[TC-GEN-157] a colored command keeps its colors in the Workbench, redacted where a color splits a secret, and its reply step reads plain", async () => {
+    const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
+    const green = "\u001b[32m";
+    const bold = "\u001b[1m";
+    const reset = "\u001b[m";
+    // `git diff` as it prints in color, with a token a color code splits in two.
+    const printed = `${bold}diff --git a/.env b/.env${reset}\n${green}+GH=${TOKEN.slice(0, 12)}${bold}${TOKEN.slice(12)}${reset}\n`;
+    const messages = await inHub(
+      say(
+        [
+          "Show the diff",
+          run({ command: "git diff", output: printed }),
+          hub("start_quest", { key: "quest", goal: "Diff" }),
+        ].join("\n"),
+      ),
+    );
+    const tree = await inHub(treeWhen((each) => each.attempts.length > 0));
+    const attempt = tree.attempts[0];
+    if (attempt === undefined) throw new Error("no Attempt");
+    const activity = await inHub(endedActivity(attempt.id));
+
+    const [command] = activity.commands;
+    expect(command?.output?.head).toBe(
+      `${bold}diff --git a/.env b/.env${reset}\n${green}+GH=[redacted: GitHub token]${bold}${reset}\n`,
+    );
+    const reply = messages.find((message) => message.steps.some((step) => step.kind === "tool"));
+    const step = reply?.steps.find((each) => each.kind === "tool");
+    expect(step?.output?.head).toBe("diff --git a/.env b/.env\n+GH=[redacted: GitHub token]\n");
+    // The prompt and its echo carry the command as scripted; what the hub recorded of it does not.
+    const steps = messages.flatMap((message) => message.steps);
+    expect(JSON.stringify(steps)).not.toContain("\\u001b");
+    expect(JSON.stringify({ activity, steps })).not.toContain(TOKEN.slice(12));
+  });
+
   // covers UX-002
   it("[TC-GEN-083] a step records on its own Attempt, keeps a long output as a log, and labels changes made beside another step", async () => {
     const { run: inHub, release, live } = setUp({ "README.md": "# Site\n" });

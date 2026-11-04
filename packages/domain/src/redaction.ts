@@ -1,3 +1,12 @@
+import {
+  type EscapedText,
+  editPlain,
+  escapeCarriesText,
+  joinEscapes,
+  type PlainEdit,
+  splitEscapes,
+} from "./terminal-escapes.ts";
+
 /**
  * Secrets in what Hobbots stores and shows (see the permissions contract). Tool input and output
  * pass through here before they are journaled, stored or sent to a client, so a token a command
@@ -94,41 +103,79 @@ const SHAPES: ReadonlyArray<SecretShape> = [
 
 const MARKER = /\[redacted: [^\]]+\]/;
 
-/** Replaces each match of a shape, or only its `secret` group, with the shape's marker. */
-const replaceShape = (text: string, shape: SecretShape) =>
-  text.replace(shape.pattern, (match: string, ...rest: Array<unknown>) => {
-    const groups = rest.at(-1) as Record<string, string | undefined> | undefined;
-    const secret = typeof groups === "object" ? groups?.secret : undefined;
+/** Where each match of a shape is, or only its `secret` group, to be replaced by the shape's marker. */
+const shapeEdits = (text: string, shape: SecretShape): ReadonlyArray<PlainEdit> =>
+  Array.from(text.matchAll(shape.pattern)).flatMap((match) => {
+    const secret = match.groups?.secret;
     // An earlier shape or a known value already replaced it.
-    if (MARKER.test(secret ?? match)) return match;
-    const marker = redactionMarker(shape.kind);
+    if (MARKER.test(secret ?? match[0])) return [];
     // By position: the secret's text may also appear earlier in the match, as in `postgres:postgres@`.
-    return secret === undefined ? marker : `${groups?.prefix ?? ""}${marker}`;
+    const start = match.index + (secret === undefined ? 0 : (match.groups?.prefix ?? "").length);
+    return [{ start, end: match.index + match[0].length, text: redactionMarker(shape.kind) }];
   });
 
+/** Where each occurrence of a known value is, to be replaced by its marker. */
+const knownEdits = (text: string, secret: KnownSecret): ReadonlyArray<PlainEdit> => {
+  const edits: Array<PlainEdit> = [];
+  for (let at = text.indexOf(secret.value); at !== -1; at = text.indexOf(secret.value, at + secret.value.length)) {
+    edits.push({ start: at, end: at + secret.value.length, text: redactionMarker(secret.kind) });
+  }
+  return edits;
+};
+
+/** The plain text of `text` with every known value and secret shape in it replaced, escapes kept around them. */
+const redactPlain = (text: EscapedText, known: ReadonlyArray<KnownSecret>): EscapedText => {
+  let result = text;
+  for (const secret of [...known].sort((a, b) => b.value.length - a.value.length)) {
+    if (usableSecret(secret.value)) result = editPlain(result, knownEdits(result.plain, secret));
+  }
+  for (const shape of SHAPES) result = editPlain(result, shapeEdits(result.plain, shape));
+  return result;
+};
+
+/** What `text` says once its escape sequences are taken out, and the text they carry, such as a link's address. */
+const readable = (text: string) => {
+  const { plain, escapes } = splitEscapes(text);
+  return [plain, ...escapes.flatMap((sequence) => (escapeCarriesText(sequence.code) ? [sequence.code] : []))].join(
+    "\n",
+  );
+};
+
 /** The kind of the first secret shape `text` holds, or null when it holds none. */
-export const secretShapeIn = (text: string): string | null =>
-  SHAPES.find((shape) => text.search(shape.pattern) !== -1)?.kind ?? null;
+export const secretShapeIn = (text: string): string | null => {
+  const searched = readable(text);
+  return SHAPES.find((shape) => searched.search(shape.pattern) !== -1)?.kind ?? null;
+};
 
 /**
  * What kind of secret `text` holds, a known value or a secret shape, or null when it holds none.
  * Text that was already redacted holds none: a marker matches no shape.
  */
-export const secretIn = (text: string, known: ReadonlyArray<KnownSecret> = []): string | null =>
-  known.find((secret) => usableSecret(secret.value) && text.includes(secret.value))?.kind ?? secretShapeIn(text);
+export const secretIn = (text: string, known: ReadonlyArray<KnownSecret> = []): string | null => {
+  const searched = readable(text);
+  return (
+    known.find((secret) => usableSecret(secret.value) && searched.includes(secret.value))?.kind ?? secretShapeIn(text)
+  );
+};
 
 /**
  * `text` with every known secret and every secret shape replaced by a marker that says what kind
  * of value was there. Known values go first, longest first, so a value one shape also matches is
- * named by what the hub knows it to be.
+ * named by what the hub knows it to be. A command's colored output is redacted as a terminal shows
+ * it: a secret split by a color code is still found, and the codes around and inside it are kept
+ * after its marker. A sequence that carries text, such as a link's address, is redacted on its own.
  */
 export const redactSecrets = (text: string, known: ReadonlyArray<KnownSecret> = []): string => {
-  let result = text;
-  for (const secret of [...known].sort((a, b) => b.value.length - a.value.length)) {
-    if (usableSecret(secret.value)) result = result.replaceAll(secret.value, redactionMarker(secret.kind));
-  }
-  for (const shape of SHAPES) result = replaceShape(result, shape);
-  return result;
+  const redacted = redactPlain(splitEscapes(text), known);
+  if (redacted.escapes.length === 0) return redacted.plain;
+  return joinEscapes({
+    plain: redacted.plain,
+    escapes: redacted.escapes.map((sequence) =>
+      escapeCarriesText(sequence.code)
+        ? { ...sequence, code: redactPlain({ plain: sequence.code, escapes: [] }, known).plain }
+        : sequence,
+    ),
+  });
 };
 
 /** `value` with every string in it redacted, at any depth. Keys and non-string values stay as they are. */

@@ -31,6 +31,7 @@ export * from "./setup.ts";
 export * from "./task.ts";
 export * from "./task-files.ts";
 export * from "./task-tools.ts";
+export * from "./terminal-escapes.ts";
 export * from "./thread.ts";
 export * from "./tone.ts";
 export * from "./tool-output.ts";

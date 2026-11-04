@@ -27,6 +27,7 @@ import {
   RUNTIME_NAMES,
   type RuntimeKind,
   sameBrain,
+  stripEscapes,
   systemInstructions,
   type TaskId,
   Thread,
@@ -559,7 +560,8 @@ export class ChatService extends Context.Service<
                     event.output === undefined
                       ? undefined
                       : yield* keepToolOutput(
-                          event.output,
+                          // The Workbench keeps a command's colors; the reply's step reads as plain text (#902).
+                          stripEscapes(event.output),
                           { threadId: thread.id, messageId: current.id, stepId },
                           toolLogs,
                         );
