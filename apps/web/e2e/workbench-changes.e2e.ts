@@ -62,13 +62,14 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
   await expect(bench.locator("header").first()).toContainText("History");
   await expect(panel).toContainText("4 files changed: 1 added, 2 edited, and 1 deleted");
 
-  // Each file is listed with how it changed; the first, the notes, shows first.
+  // Each file is listed with its folder, how it changed and the lines it added and removed; the
+  // first, the notes, shows first.
   const files = panel.getByRole("navigation", { name: "Changed files" });
   await expect(files.getByRole("button")).toHaveText([
-    "notes.mdEdited",
-    "old.txtDeleted",
-    "app.tssrc/Edited",
-    "new.tssrc/Added",
+    "notes.mdEdited+1 −11 line added, 1 removed",
+    "old.txtDeleted+0 −10 lines added, 1 removed",
+    "app.tssrc/Edited+1 −11 line added, 1 removed",
+    "new.tssrc/Added+1 −01 line added, 0 removed",
   ]);
   await expect(files.getByRole("button", { name: /^notes\.md/ })).toHaveAttribute("aria-pressed", "true");
 
