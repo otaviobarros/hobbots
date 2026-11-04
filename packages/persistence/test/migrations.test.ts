@@ -19,6 +19,7 @@ import backpackBlockers from "../src/migrations/0029_backpack_blockers.ts";
 import withdrawnQuestions from "../src/migrations/0033_withdrawn_questions.ts";
 import taskGrants from "../src/migrations/0035_task_grants.ts";
 import versionedName from "../src/migrations/0047_versioned_name.ts";
+import threadReads from "../src/migrations/0053_thread_reads.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1078,6 +1079,59 @@ describe("0047_versioned_name", () => {
       { agentId: "hob1", version: 2, name: "Wren" },
       { agentId: "hob2", version: 1, name: "Pip" },
       { agentId: "hob2", version: 2, name: "Pip" },
+    ]);
+  });
+});
+
+describe("0053_thread_reads", () => {
+  // covers UX-006, DP-003
+  it("[TC-DP-251] counts every thread from before it as read through its last message", async () => {
+    const threads = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "hob1",
+        name: "Aldric",
+        roleTitle: "Guide",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        configVersion: 1,
+        createdAt: "2026-11-04T00:00:00.000Z",
+      })}`;
+      for (const id of ["t1", "t2"]) {
+        yield* sql`INSERT INTO threads ${sql.insert({
+          id,
+          agentId: "hob1",
+          title: "Plan",
+          createdAt: "2026-11-04T00:00:00.000Z",
+          updatedAt: "2026-11-04T00:00:00.000Z",
+        })}`;
+      }
+      for (const [id, seq, revision] of [
+        ["m1", 1, 7],
+        ["m2", 2, 9],
+      ] as const) {
+        yield* sql`INSERT INTO messages ${sql.insert({
+          id,
+          threadId: "t1",
+          role: id === "m1" ? "user" : "assistant",
+          content: "Hello",
+          status: "complete",
+          createdAt: "2026-11-04T00:00:00.000Z",
+          seq,
+          revision,
+        })}`;
+      }
+      yield* threadReads;
+      const rows = yield* sql<{ id: string; readRevision: unknown }>`SELECT id, read_revision FROM threads ORDER BY id`;
+      // PostgreSQL reads BIGINT as text.
+      return rows.map((row) => ({ ...row, readRevision: row.readRevision === null ? null : Number(row.readRevision) }));
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0053"))), Effect.runPromise);
+
+    expect(threads).toEqual([
+      { id: "t1", readRevision: 9 },
+      { id: "t2", readRevision: null },
     ]);
   });
 });

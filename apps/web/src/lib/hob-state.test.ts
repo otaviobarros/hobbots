@@ -1,6 +1,6 @@
-import { AgentId } from "@hobbots/domain";
+import { AgentId, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { hobNeeds, hobState, sceneOrder, threadState, withRequests } from "./hob-state.ts";
+import { hobNeeds, hobState, leadNeeds, sceneOrder, threadState, withRequests } from "./hob-state.ts";
 
 describe("hobState", () => {
   const hob = { status: "active" } as const;
@@ -80,5 +80,39 @@ describe("hobNeeds", () => {
     });
     expect(needs.get(ada)).toEqual({ kind: "approval", operation: "push" });
     expect(needs.has(pip)).toBe(false);
+  });
+});
+
+describe("leadNeeds", () => {
+  const ada = AgentId.make("ada");
+  const aldric = AgentId.make("aldric");
+  const pip = AgentId.make("pip");
+  const thread = ThreadId.make("t1");
+  const leadOf = (id: ThreadId) => (id === thread ? aldric : undefined);
+
+  // covers UX-002, OR-005
+  it("[TC-UX-191] marks only the lead whose chat a member's request, question, stuck work or failed Task waits in", () => {
+    const needs = leadNeeds({
+      approvals: [
+        { agentId: ada, threadId: thread, state: "pending" },
+        { agentId: pip, threadId: ThreadId.make("t9"), state: "approved" },
+      ],
+      blockers: [{ recipientId: ada, threadId: thread }],
+      questions: [{ question: { askerId: ada, chain: [aldric] } }],
+      failed: [{ task: { id: "build", ownerId: ada, threadId: thread } as never, leadId: aldric }],
+      leadOf,
+    });
+    expect([...needs]).toEqual([aldric]);
+  });
+
+  it("marks the hob itself when its chat is not known, and nobody for decided requests", () => {
+    const needs = leadNeeds({
+      approvals: [{ agentId: pip, threadId: ThreadId.make("t9"), state: "pending" }],
+      blockers: [],
+      questions: [{ question: { askerId: ada, chain: [] } }],
+      failed: [],
+      leadOf,
+    });
+    expect([...needs].sort()).toEqual([ada, pip]);
   });
 });

@@ -9,6 +9,9 @@ import { messages } from "./messages.ts";
 
 const copy = messages.requestNotice;
 const deviceCopy = messages.deviceNotice;
+const questionCopy = messages.questionNotice;
+const failedCopy = messages.failedNotice;
+const finishedCopy = messages.finishedNotice;
 
 /** A request waiting for the user, as the notification needs it. */
 export interface PendingRequest {
@@ -76,20 +79,135 @@ const NOTICE_BYTES = 240;
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
+/** `text` cut with an ellipsis to at most `room` bytes. */
+const cutTo = (text: string, room: number) => {
+  if (bytes(text) <= room) return text;
+  let cut = "";
+  for (const char of text) {
+    if (bytes(`${cut}${char}…`) > room) break;
+    cut += char;
+  }
+  return `${cut}…`;
+};
+
+/** A notification with `body` cut so that it and its title fit. */
+const fitted = (title: string, body: string) => ({ title, body: cutTo(body, NOTICE_BYTES - bytes(title)) });
+
 /** The notification for a request: who asks, or "A hob" while that is unknown, and the exact action, cut to fit. */
 export const noticeText = (
   request: PendingRequest,
   name: string | undefined,
-): { readonly title: string; readonly body: string } => {
-  const title = copy.title({ name: name ?? copy.unknownHob });
-  const room = NOTICE_BYTES - bytes(title);
-  if (bytes(request.action) <= room) return { title, body: request.action };
-  let body = "";
-  for (const char of request.action) {
-    if (bytes(`${body}${char}…`) > room) break;
-    body += char;
-  }
-  return { title, body: `${body}…` };
+): { readonly title: string; readonly body: string } =>
+  fitted(copy.title({ name: name ?? copy.unknownHob }), request.action);
+
+/**
+ * Where a notification about a Quest's work opens: the chat of the lead you talk to, at the Task it
+ * is about, so the room opens with that lane lit (ADR 027).
+ */
+export interface TaskLink {
+  readonly hobId: string;
+  readonly threadId: string;
+  readonly taskId: string;
+}
+
+const record = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+
+const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
+
+const firstLine = (value: string) => value.split("\n", 1)[0]?.trim() ?? "";
+
+/** The link to a Task in a lead's chat, or null when the work has no thread. */
+const taskLink = (hobId: string | null, task: Record<string, unknown> | null): TaskLink | null => {
+  const threadId = text(task?.threadId);
+  const taskId = text(task?.id);
+  return hobId === null || threadId === null || taskId === null ? null : { hobId, threadId, taskId };
+};
+
+/** A question that climbed every lead and waits for you, as its notification needs it. */
+export interface WaitingQuestion {
+  readonly id: string;
+  /** The hob that asked, which the notification names, as the Inbox does. */
+  readonly askerId: string;
+  readonly text: string;
+  readonly link: TaskLink | null;
+}
+
+/** The questions waiting for you in the hub's answer, or null when it is not one. */
+export const waitingQuestions = (body: unknown): ReadonlyArray<WaitingQuestion> | null => {
+  const items = record(body)?.questions;
+  if (!Array.isArray(items)) return null;
+  return items.flatMap((item: unknown) => {
+    const question = record(record(item)?.question);
+    const id = text(question?.id);
+    const askerId = text(question?.askerId);
+    const words = text(question?.text);
+    if (id === null || askerId === null || words === null) return [];
+    const chain = Array.isArray(question?.chain) ? question.chain : [];
+    // The last lead it passed is the one whose chat it waits in.
+    const lead = text(chain.at(-1)) ?? askerId;
+    return [{ id, askerId, text: words, link: taskLink(lead, record(record(item)?.task)) }];
+  });
+};
+
+/** The notification for a question: who asks, or "A hob", and the question, cut to fit. */
+export const questionNoticeText = (question: WaitingQuestion, name: string | undefined) =>
+  fitted(questionCopy.title({ name: name ?? copy.unknownHob }), question.text);
+
+/** A party member's failed Task that waits on you, as its notification needs it. */
+export interface FailedTask {
+  readonly id: string;
+  readonly ownerId: string;
+  readonly brief: string;
+  readonly link: TaskLink | null;
+}
+
+/** The failed Tasks in the hub's answer, or null when it is not one. */
+export const failedTasks = (body: unknown): ReadonlyArray<FailedTask> | null => {
+  const items = record(body)?.tasks;
+  if (!Array.isArray(items)) return null;
+  return items.flatMap((item: unknown) => {
+    const task = record(record(item)?.task);
+    const id = text(task?.id);
+    const ownerId = text(task?.ownerId);
+    if (id === null || ownerId === null) return [];
+    return [
+      { id, ownerId, brief: firstLine(text(task?.brief) ?? ""), link: taskLink(text(record(item)?.leadId), task) },
+    ];
+  });
+};
+
+/** The notification for a failed Task: whose it is, or "A hob", and the first line of its brief, cut to fit. */
+export const failedNoticeText = (task: FailedTask, name: string | undefined) =>
+  fitted(failedCopy.title({ name: name ?? copy.unknownHob }), task.brief);
+
+/** A top Quest that finished, as its notification needs it. */
+export interface FinishedQuest {
+  readonly id: string;
+  readonly goal: string;
+  readonly leadId: string;
+  readonly link: TaskLink | null;
+}
+
+/**
+ * The Quest a `QuestCompleted` entry's payload ended, when it is a top Quest that completed: a
+ * nested Quest's end is routine progress, and one that failed or was cancelled is not a finish.
+ */
+export const finishedQuest = (payload: unknown): FinishedQuest | null => {
+  const quest = record(record(payload)?.quest);
+  const id = text(quest?.id);
+  const goal = text(quest?.goal);
+  const leadId = text(quest?.leadId);
+  if (id === null || goal === null || leadId === null) return null;
+  if (quest?.state !== "completed" || quest.parentQuestId !== null) return null;
+  return { id, goal: firstLine(goal), leadId, link: taskLink(leadId, { id: quest.taskId, threadId: quest.threadId }) };
+};
+
+/** The notification for a finished Quest: its goal is done, cut to fit, and whose chat has the finish. */
+export const finishedNoticeText = (quest: FinishedQuest, name: string | undefined) => {
+  const body = finishedCopy.body({ name: name ?? copy.unknownHob });
+  const room = NOTICE_BYTES - bytes(body) - bytes(finishedCopy.title({ goal: "" }));
+  return { title: finishedCopy.title({ goal: cutTo(quest.goal, room) }), body };
 };
 
 /** A device asking to pair, as its notification needs it (ADR 021). */

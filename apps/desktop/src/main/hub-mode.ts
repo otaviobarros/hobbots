@@ -165,16 +165,14 @@ export const startHub = async (
       canConnect: () => supervisor.mayAnswer,
       onConnected: () => {
         void menuBar.recheck();
-        void notices.requests.check();
-        void notices.devices.check();
+        notices.connected();
       },
       onChange: (change) => {
         if (change._tag === "RemoteAccess") {
           menuBar.remoteAccessChanged(change);
           moveHub(change.port);
-        } else if (change._tag === "Approvals") void notices.requests.check();
-        else if (change._tag === "Pairing") void notices.devices.check();
-        else void menuBar.activityChanged();
+        } else if (change._tag === "Activity") void menuBar.activityChanged();
+        else notices.changed(change);
       },
       onLost: () => {
         followSavedPort();

@@ -70,6 +70,9 @@ export function ChatRow({
       <span className="flex h-[22px] items-center justify-center text-label">
         {live ? (
           <span role="img" aria-label={copy.working} className="size-2 flex-none rounded-dot bg-mint" />
+        ) : thread.unread ? (
+          // The hob wrote since you read the chat on any device (ADR 027).
+          <span role="img" aria-label={copy.unread} className="size-2 flex-none rounded-dot bg-lantern" />
         ) : (
           pinned && <PinIcon label={copy.pinned} />
         )}

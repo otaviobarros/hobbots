@@ -149,6 +149,13 @@ export const RenameThreadPayload = Schema.Struct({
 /** Whether a chat is pinned to the top of its hob's chats. */
 export const PinThreadPayload = Schema.Struct({ pinned: Schema.Boolean });
 
+/** The last message you read in the thread (ADR 027). */
+/**
+ * What you read a thread through (ADR 027): the last message you saw, and the newest message
+ * revision you saw up to it, so a reply continued after that is not counted read.
+ */
+export const MarkThreadReadPayload = Schema.Struct({ messageId: MessageId, revision: Schema.Int });
+
 /**
  * What the health endpoint returns: enough for a client to tell this installation's server from
  * another installation's, or from a program that is not Hobbots at all (ADR 012).
@@ -304,6 +311,13 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       payload: PinThreadPayload,
       success: Thread,
       error: [ThreadNotFound, ThreadArchived],
+    }),
+    // Moves how far you read the thread forward, for every device; never back (ADR 027).
+    HttpApiEndpoint.put("markRead", "/threads/:threadId/read", {
+      params: { threadId: ThreadId },
+      payload: MarkThreadReadPayload,
+      success: Thread,
+      error: ThreadNotFound,
     }),
     // Archiving again, or restoring a live thread, returns the thread unchanged.
     HttpApiEndpoint.post("archive", "/threads/:threadId/archive", {

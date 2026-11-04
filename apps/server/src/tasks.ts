@@ -57,6 +57,11 @@ export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers
           if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId: params.threadId });
           return { cursor: at, trees: yield* tasks.readThreadTrees(params.threadId) };
         }),
+      failed: () =>
+        Effect.gen(function* () {
+          const at = yield* cursor;
+          return { cursor: at, tasks: yield* tasks.listFailedTasks };
+        }),
       questWork: ({ params }) =>
         ofHob(params.agentId, tasks.listMemberWork(params.agentId)).pipe(
           Effect.map(({ at, read }) => ({ cursor: at, work: read })),

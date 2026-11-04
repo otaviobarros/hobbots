@@ -62,6 +62,8 @@ export function HobsLayout({
             focusMessageId,
             pins,
             headerEnd: open ? <FoldButton onFold={() => fold.setFolded(true)} /> : undefined,
+            // Folded away beside the room, the chat is out of view and reads nothing (ADR 027).
+            inView: !(open && fold.folded),
           })}
         </ChatColumn>
       </div>

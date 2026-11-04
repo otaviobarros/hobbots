@@ -1032,6 +1032,7 @@ export const TaskRepositoryLive = Layer.effect(
       escalateQuestion,
       leaveNote,
       listWaitingQuestions: read.waitingQuestions.pipe(Effect.orDie),
+      listFailedTasks: read.failedTasks.pipe(Effect.orDie),
       handOff,
       waitFor,
       readLedger: (taskId) =>

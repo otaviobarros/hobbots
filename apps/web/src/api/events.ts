@@ -20,6 +20,7 @@ import { storeApproval } from "./approvals.ts";
 import { storeBackpackItem } from "./backpack.ts";
 import { API_URL } from "./client.ts";
 import { devicesChanged } from "./devices.ts";
+import { failedTaskChanged } from "./failed-tasks.ts";
 import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
 import type { ConnectionState } from "./live.ts";
@@ -41,6 +42,7 @@ import {
 } from "./sync.ts";
 import type { TaskEvent } from "./task-trees.ts";
 import { applyTaskEvent } from "./tasks.ts";
+import { showUnread } from "./thread-reads.ts";
 import { activityChanged, applyCommandOutput, recordedAttempt } from "./workbench.ts";
 
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
@@ -153,6 +155,8 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       return;
     case "MessageUpserted":
       recordMessage(queryClient, event.message);
+      // Before the transcript takes the new copy, so the copy it held tells a reply that just ended.
+      showUnread(queryClient, event.message);
       queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.message.threadId), (old) =>
         old ? upsertNewer(old, event.message, upsertMessage) : old,
       );
@@ -239,6 +243,7 @@ const applyWorkEvent = (
     case "TaskCompleted":
       applyTaskEvent(queryClient, event);
       void workEnded(queryClient, event.task);
+      void failedTaskChanged(queryClient, event.task);
       return;
     // The rest change Tasks and Quests (ADR 018). A question that reaches you, or leaves you, also
     // changes what waits in your Inbox.
