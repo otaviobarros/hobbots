@@ -222,10 +222,17 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await expect(chip).toHaveText("Writer");
   await profile.getByRole("button", { name: "Change role" }).click();
   const sheet = page.getByRole("dialog", { name: "Pick a role" });
+  // It opens on the hob's own family; QA engineer is in the software team.
   await sheet.getByRole("button", { name: /^Software team/ }).click();
   await sheet.getByText("QA engineer", { exact: true }).click();
   await expect(sheet.getByRole("radio", { name: /^QA engineer/ })).toBeChecked();
-  // Pick keeps the role in the draft; the save bar still decides.
+  // Escape leaves the role as it was; only Pick changes it, and the save bar still decides.
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(chip).toHaveText("Writer");
+  await profile.getByRole("button", { name: "Change role" }).click();
+  await sheet.getByRole("button", { name: /^Software team/ }).click();
+  await sheet.getByText("QA engineer", { exact: true }).click();
   await sheet.getByRole("button", { name: "Pick QA engineer" }).click();
   await expect(sheet).toBeHidden();
   await expect(profile.getByText("QA engineer", { exact: true }).first()).toBeVisible();
