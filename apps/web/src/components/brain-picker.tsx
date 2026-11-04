@@ -31,7 +31,7 @@ export const RuntimeTile = ({ runtime }: { runtime: RuntimeKind }) => (
   <span
     aria-hidden
     className={cn(
-      "grid size-5 flex-none place-items-center text-xs font-bold text-ground",
+      "grid size-5 flex-none place-items-center text-xs font-bold text-provider-ink",
       PROVIDER_MARKS[runtime].tile,
     )}
   >

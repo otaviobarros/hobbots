@@ -93,7 +93,7 @@ test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which
   await expect(row).toContainText("Guide");
   await expect(row).toContainText("1 chat kept");
   await row.getByRole("link", { name: "Read Pip's chats" }).click();
-  await expect(page).toHaveURL(new RegExp(`#/settings/archived/${hob.id}/threads/${thread.id}$`));
+  await expect(page).toHaveURL(new RegExp(`#/archive/hobs/${hob.id}$`));
   await page.goto(`${current.url}/#/settings/data`);
   await yourData.getByRole("link", { name: "Open the Archive" }).click();
   await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);

@@ -63,7 +63,7 @@ export function ConnectionsSection({ tab }: { tab: ConnectionsTab }) {
                 <span
                   aria-hidden
                   className={cn(
-                    "grid size-7 flex-none place-items-center rounded-tile text-detail font-bold text-ground",
+                    "grid size-7 flex-none place-items-center rounded-tile text-detail font-bold text-provider-ink",
                     provider.tile,
                   )}
                 >

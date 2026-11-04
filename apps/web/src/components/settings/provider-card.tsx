@@ -49,7 +49,7 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
       <div className="flex items-center gap-2.5">
         <span
           aria-hidden
-          className={`grid size-7 flex-none place-items-center rounded-tile text-detail font-bold text-ground ${look.tile}`}
+          className={`grid size-7 flex-none place-items-center rounded-tile text-detail font-bold text-provider-ink ${look.tile}`}
         >
           {look.mark}
         </span>
