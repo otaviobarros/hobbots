@@ -1,6 +1,6 @@
 import type { FoundHubView, HubListView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { TailscaleNotReady } from "../tailscale-not-ready.tsx";
 import type { SetupBridge } from "./connect-model.ts";
 import { messages } from "./messages.ts";
@@ -16,7 +16,7 @@ type Scan = { readonly kind: "looking" } | { readonly kind: "failed" } | HubList
 const useHubs = (bridge: SetupBridge) => {
   const [scan, setScan] = useState<Scan>({ kind: "looking" });
   const [checking, setChecking] = useState(true);
-  const look = useCallback(async () => {
+  const look = async () => {
     setChecking(true);
     try {
       setScan(await bridge.findHubs());
@@ -25,16 +25,17 @@ const useHubs = (bridge: SetupBridge) => {
     } finally {
       setChecking(false);
     }
-  }, [bridge]);
+  };
+  const lookFromEffect = useEffectEvent(() => void look());
   useEffect(() => {
-    void look();
-  }, [look]);
+    lookFromEffect();
+  }, []);
   const notReady = scan.kind === "tailscale";
   useEffect(() => {
     if (!notReady) return;
-    const timer = setInterval(() => void look(), RECHECK_MS);
+    const timer = setInterval(lookFromEffect, RECHECK_MS);
     return () => clearInterval(timer);
-  }, [notReady, look]);
+  }, [notReady]);
   return { scan, checking, look };
 };
 

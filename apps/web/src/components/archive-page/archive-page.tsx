@@ -9,7 +9,7 @@ import { SearchField } from "@hobbots/ui/components/search-field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { agentsQuery, archivedAgentsQuery, archivedThreadsQuery, threadsQuery } from "../../api/queries.ts";
 import { useSearch } from "../../api/search.ts";
 import { ARCHIVE_CHEST, archiveChestPalette } from "../../art/icons.ts";
@@ -52,14 +52,12 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
       error: results.some((result) => result.isError),
     }),
   });
-  const chats = useMemo(() => {
-    const byHob = new Map<AgentId, ReadonlyArray<Thread>>();
-    (hobs.data ?? []).forEach((hob, index) => {
-      const list = archived.lists[index];
-      if (list) byHob.set(hob.id, list);
-    });
-    return allArchivedChats(hobs.data ?? [], byHob);
-  }, [hobs.data, archived.lists]);
+  const byHob = new Map<AgentId, ReadonlyArray<Thread>>();
+  (hobs.data ?? []).forEach((hob, index) => {
+    const list = archived.lists[index];
+    if (list) byHob.set(hob.id, list);
+  });
+  const chats = allArchivedChats(hobs.data ?? [], byHob);
 
   const pick = (next: string) => {
     if (!isArchiveTab(next)) return;
@@ -142,9 +140,8 @@ function ArchivedChats({
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const search = useSearch(query);
-  const messageHits = useMemo(
-    () => new Set<ThreadId>(search.hits.filter((hit) => hit.thread.archivedAt !== null).map((hit) => hit.thread.id)),
-    [search.hits],
+  const messageHits = new Set<ThreadId>(
+    search.hits.filter((hit) => hit.thread.archivedAt !== null).map((hit) => hit.thread.id),
   );
   const scope = scopeChips(hobs, chats, hobId);
   const chosen = hobs.find((hob) => hob.id === hobId);

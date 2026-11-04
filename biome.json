@@ -135,8 +135,8 @@
                 ],
                 "paths": {
                   "react": {
-                    "importNames": ["forwardRef", "FC"],
-                    "message": "Write components as plain functions and pass ref as a prop (STD-REACT-013)."
+                    "importNames": ["forwardRef", "FC", "useMemo", "useCallback", "memo"],
+                    "message": "Write components as plain functions and pass ref as a prop (STD-REACT-013). The React Compiler memoizes, so do not write useMemo, useCallback or memo (STD-REACT-010)."
                   }
                 }
               }
