@@ -17,7 +17,11 @@ export function WorkHeldNotice({ className }: { className?: string }) {
       <span className="text-sm text-text-secondary">{messages.latest.heldNote}</span>
       <span className="flex flex-wrap items-center gap-3">
         <ResumeWorkButton />
-        <Link to="/settings" hash="backup" className="text-sm text-lantern no-underline hover:underline">
+        <Link
+          to="/settings/$section"
+          params={{ section: "data" }}
+          className="text-sm text-lantern no-underline hover:underline"
+        >
           {messages.heading}
         </Link>
       </span>
