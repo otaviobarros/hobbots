@@ -195,5 +195,7 @@ test("[TC-PE-445] a party member's request shows on its Task in the Quest card a
   await page.goto(`${current.url}/#/inbox`);
   await expect(page.getByRole("link", { name: /^Inbox, \d+ waiting on you/ })).toHaveCount(0);
   await page.getByRole("tab", { name: "History" }).click();
-  await expect(page.getByRole("region", { name: "Decision history" }).locator('[data-state="approved"]')).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "Decision history" }).locator('[data-state="approved"]')).toHaveCount(
+    1,
+  );
 });
