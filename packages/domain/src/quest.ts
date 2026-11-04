@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { ApprovalRequest } from "./approval.ts";
 import { DeviceId } from "./device.ts";
 import { AgentId, ThreadId } from "./ids.ts";
 import { PolicyOverrides } from "./policy.ts";
@@ -368,7 +369,27 @@ export class TaskTree extends Schema.Class<TaskTree>("TaskTree")({
     Schema.withDecodingDefaultKey(Effect.succeed([])),
     Schema.withConstructorDefault(Effect.succeed([])),
   ),
+  /**
+   * The approval requests that pause its Tasks' turns until you decide them (PE-003), oldest first:
+   * each Task waits on you while one is pending (#698). The hub reads only pending ones; a client may
+   * hold a decided copy until it reads the tree again, so read them through `pendingApprovals`.
+   */
+  approvals: Schema.Array(ApprovalRequest).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
 }) {}
+
+/** The requests anywhere in the tree that wait for you to decide them, oldest first. */
+export const pendingApprovals = (tree: TaskTree): ReadonlyArray<ApprovalRequest & { readonly taskId: TaskId }> =>
+  tree.approvals.filter(
+    (approval): approval is ApprovalRequest & { readonly taskId: TaskId } =>
+      approval.state === "pending" && approval.taskId !== null,
+  );
+
+/** The requests on Task `taskId` that wait for you to decide them, oldest first: its turn is paused on them. */
+export const pendingApprovalsOn = (tree: TaskTree, taskId: TaskId): ReadonlyArray<ApprovalRequest> =>
+  pendingApprovals(tree).filter((approval) => approval.taskId === taskId);
 
 /**
  * The Tasks whose artifacts were handed to `taskId` in `tree`, once each, in hand-off order: what

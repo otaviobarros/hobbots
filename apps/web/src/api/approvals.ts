@@ -11,6 +11,7 @@ import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@ta
 import { call } from "./client.ts";
 import { inboxWindow } from "./inbox-window.ts";
 import { newer, recordApproval, syncedApproval, syncedApprovals, syncedInbox } from "./sync.ts";
+import { applyTaskEvent, taskKeys } from "./tasks.ts";
 
 export const approvalsKey = (threadId: ThreadId) => ["threads", threadId, "approvals"] as const;
 
@@ -21,9 +22,13 @@ export const approvalsQuery = (threadId: ThreadId) =>
     queryFn: syncedApprovals(threadId, () => call((c) => c.approvals.forThread({ params: { threadId } }))),
   });
 
-/** Keeps the newer version of a request in its thread's list, adding it when it is new. */
+/**
+ * Keeps the newer version of a request in its thread's list, adding it when it is new, and in the
+ * Task tree of the Task whose turn asked it.
+ */
 export const storeApproval = (queryClient: QueryClient, approval: ApprovalRequest) => {
   recordApproval(queryClient, approval);
+  if (approval.taskId !== null) applyTaskEvent(queryClient, { _tag: "ApprovalRecorded", approval });
   queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(approval.threadId), (old) =>
     withApproval(old, approval),
   );
@@ -76,6 +81,8 @@ export const useDecideApproval = (approval: ApprovalRequest, via: ApprovalSurfac
       Promise.all([
         queryClient.invalidateQueries({ queryKey: approvalsKey(approval.threadId), exact: true }),
         queryClient.invalidateQueries({ queryKey: inboxKey, exact: true }),
+        // The Task trees hold the request too (#698).
+        queryClient.invalidateQueries({ queryKey: taskKeys.all }),
       ]),
   });
 };

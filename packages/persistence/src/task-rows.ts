@@ -1,5 +1,6 @@
 import {
   AgentId,
+  ApprovalRequest,
   ArtifactRef,
   Attempt,
   Checkpoint,
@@ -21,6 +22,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import type { SqlClient } from "effect/sql";
+import { approvalRow } from "./approvals.ts";
 import { byteOrder, oldestFirst } from "./order.ts";
 
 // The stored shape of each record (migrations 0024 and 0025): JSON text columns, numbers that PostgreSQL
@@ -71,6 +73,7 @@ const fromRow = {
     createdAt: row.createdAt,
     refusedAt: row.refusedAt,
   }),
+  approval: approvalRow,
 };
 
 const decoders = {
@@ -86,6 +89,7 @@ const decoders = {
   note: Schema.decodeUnknownEffect(Schema.Array(TaskNote)),
   wait: Schema.decodeUnknownEffect(Schema.Array(TaskWait)),
   refusal: Schema.decodeUnknownEffect(Schema.Array(RefusedCall)),
+  approval: Schema.decodeUnknownEffect(Schema.Array(ApprovalRequest)),
 };
 
 interface Records {
@@ -101,6 +105,7 @@ interface Records {
   readonly note: TaskNote;
   readonly wait: TaskWait;
   readonly refusal: RefusedCall;
+  readonly approval: ApprovalRequest;
 }
 
 /** Decodes stored rows as records of `kind`. A row that does not decode is a defect: the hub wrote it. */
@@ -232,6 +237,8 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
         refusals: yield* sql<Row>`SELECT * FROM task_tool_refusals WHERE ${inTree("task_id")} ORDER BY ${oldest}`.pipe(
           Effect.flatMap(decodeRows("refusal")),
         ),
+        approvals: yield* sql<Row>`SELECT * FROM approval_requests WHERE ${inTree("task_id")} AND state = 'pending'
+          ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("approval"))),
       });
     });
 

@@ -2,7 +2,13 @@ import { sep } from "node:path";
 import { HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
 import { Agent, type AgentId, AttemptId, type TaskId, type TaskToolDone, Thread, ThreadId } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
-import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "@hobbots/persistence";
+import {
+  ApprovalRepositoryLive,
+  EventJournal,
+  HobbotsRepositoryLive,
+  TaskRepositoryLive,
+  TaskToolCallsLive,
+} from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { EventBus } from "../src/event-bus.ts";
@@ -17,9 +23,13 @@ const NoTools = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succe
 
 const Tools = TaskTools.layer(sep === "\\" ? "\\" : "/").pipe(
   Layer.provideMerge(
-    Layer.mergeAll(HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive, EventJournal.layer).pipe(
-      Layer.provideMerge(TestDatabase),
-    ),
+    Layer.mergeAll(
+      HobbotsRepositoryLive,
+      TaskRepositoryLive,
+      TaskToolCallsLive,
+      ApprovalRepositoryLive,
+      EventJournal.layer,
+    ).pipe(Layer.provideMerge(TestDatabase)),
   ),
   Layer.provideMerge(Layer.mergeAll(EventBus.layer, NodeFolderChecks, NoTools)),
 );

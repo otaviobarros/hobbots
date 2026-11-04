@@ -18,16 +18,17 @@ interface ApprovalRow {
 
 // Targets and arguments are JSON text (migration 0018); the revision is a bigint on PostgreSQL;
 // once_only is 0 or 1 (migration 0019); grantable is 0 or 1 and rules are JSON text (migration 0022).
-export const approvalRows = (rows: ReadonlyArray<ApprovalRow>) =>
-  rows.map((row) => ({
-    ...row,
-    targets: JSON.parse(String(row.targets)),
-    arguments: JSON.parse(String(row.arguments)),
-    revision: Number(row.revision),
-    onceOnly: Number(row.onceOnly) === 1,
-    grantable: Number(row.grantable) === 1,
-    rules: JSON.parse(String(row.rules ?? "[]")),
-  }));
+export const approvalRow = (row: ApprovalRow) => ({
+  ...row,
+  targets: JSON.parse(String(row.targets)),
+  arguments: JSON.parse(String(row.arguments)),
+  revision: Number(row.revision),
+  onceOnly: Number(row.onceOnly) === 1,
+  grantable: Number(row.grantable) === 1,
+  rules: JSON.parse(String(row.rules ?? "[]")),
+});
+
+export const approvalRows = (rows: ReadonlyArray<ApprovalRow>) => rows.map(approvalRow);
 
 // The most recently closed first, bytewise on PostgreSQL as SQLite compares text, like `oldestFirst`.
 const recentlyClosedFirst = (sql: SqlClient.SqlClient) =>
