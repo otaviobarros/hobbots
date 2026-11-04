@@ -36,9 +36,9 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
 
   // Every role is one click further, in the role sheet; a role from there stays in view, checked.
   await page.getByRole("button", { name: "See all 54 roles" }).press("Enter");
-  const allRoles = page.getByRole("dialog", { name: "Choose Pip's role" });
+  const allRoles = page.getByRole("dialog", { name: "Pick a role" });
   await allRoles.getByText("Editor", { exact: true }).click();
-  await allRoles.getByRole("button", { name: "Use Editor" }).click();
+  await allRoles.getByRole("button", { name: "Pick Editor" }).click();
   await expect(allRoles).toBeHidden();
   await expect(roles.getByRole("radio", { name: /^Editor/ })).toBeChecked();
 
@@ -90,21 +90,19 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   const profile = page.getByRole("main", { name: "Fern's profile" });
   await expect(profile.locator("header")).toContainText("Frontend wizard");
 
-  // The profile changes the role from a sheet with every role, a search and a filter per family.
+  // The profile changes the role from the same dialog: families on the left, roles on the right.
   await profile.getByRole("button", { name: "Change role" }).click();
-  const sheet = page.getByRole("dialog", { name: "Choose Fern's role" });
+  const sheet = page.getByRole("dialog", { name: "Pick a role" });
   await expect(sheet.getByRole("radio", { name: /^Your own/ })).toBeChecked();
   await expect(sheet.getByRole("textbox", { name: "Your own role title" })).toHaveValue("Frontend wizard");
-  await sheet.getByRole("radio", { name: "Leadership" }).check({ force: true });
+  await expect(sheet.getByRole("button", { name: "Use your own title" })).toBeEnabled();
+  await sheet.getByRole("button", { name: /^Leadership/ }).click();
   await expect(sheet.getByRole("region", { name: "Leadership" })).toBeVisible();
   await expect(sheet.getByRole("region", { name: "Everyday helpers" })).toBeHidden();
-  await sheet.getByRole("radio", { name: "All roles" }).check({ force: true });
-  await sheet.getByRole("searchbox", { name: "Find a role" }).fill("drafts emails");
-  await expect(sheet.getByRole("radio", { name: /^Writer Drafts/ })).toBeVisible();
-  await expect(sheet.getByRole("radio", { name: /^Assistant Handles/ })).toBeHidden();
+  await sheet.getByRole("button", { name: /^All roles/ }).click();
   await sheet.getByText("Writer", { exact: true }).click();
   await expect(sheet.getByRole("radio", { name: /^Writer Drafts/ })).toBeChecked();
-  await sheet.getByRole("button", { name: "Use Writer" }).click();
+  await sheet.getByRole("button", { name: "Pick Writer" }).click();
   await expect(sheet).toBeHidden();
 
   // The hub tells the hob its role on every turn, so the instructions never name it.

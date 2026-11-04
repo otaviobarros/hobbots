@@ -48,14 +48,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
   const [draft, setDraft] = useState<FirstHobDraft>(() => openSummonDraft(keptSummonDraft(), hobs.data ?? []));
   const models = useQuery(modelsQuery(draft.runtime));
   const [tried, setTried] = useState(false);
-  // A summon that finishes after the user left only joins the hob list; it does not pull them back.
-  const left = useRef(false);
-  useEffect(() => {
-    left.current = false;
-    return () => {
-      left.current = true;
-    };
-  }, []);
+  const { left, summon } = useSummonHob(draft, setDraft, create);
 
   // Leaving and coming back keeps what was chosen, until the hob exists.
   useEffect(() => keepSummonDraft(draft), [draft]);
@@ -75,15 +68,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
     model !== undefined,
   );
   const stepProblem = index === 0 ? roleProblem(draft) : undefined;
-  const hint = create.isPending
-    ? shared.summon.summoning({ name })
-    : rejected
-      ? shared.summon.rejected({ name, reason: rejected.message })
-      : create.isError
-        ? shared.onboarding.ready.failed({ name })
-        : last
-          ? problem
-          : stepProblem;
+  const hint = summonHint({ create, rejected, name, problem: last ? problem : stepProblem });
   const blocked = last ? problem !== undefined || create.isPending : stepProblem !== undefined;
 
   // Cancel drops the draft; leaving any other way keeps it for next time.
@@ -92,25 +77,6 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
     if (!locked) keepSummonDraft(null);
     if (canGoBack) router.history.back();
     else void navigate({ to: "/hobs" });
-  };
-  const summon = async () => {
-    // Once sent, the hob may exist even when no answer comes back, so the choices lock and a
-    // retry repeats the same request; the hub returns the hob it made the first time.
-    const sent = submitDraft(draft);
-    setDraft(sent);
-    try {
-      const made = await create.mutateAsync(sent.submitted);
-      // The hob exists, so the next Summon starts fresh, even when the user already left. A newer
-      // draft started meanwhile belongs to another hob and stays.
-      settleSummonDraft(sent.id, null);
-      if (!left.current) void navigate({ to: "/hobs/$hobId/new", params: { hobId: made.id }, replace: true });
-    } catch (error) {
-      if (error instanceof ApiError && error.tag === "InvalidHob") {
-        const reopened = reopenDraft(sent);
-        setDraft(reopened);
-        settleSummonDraft(sent.id, reopened);
-      }
-    }
   };
   const next = (event: React.FormEvent) => {
     event.preventDefault();
@@ -154,47 +120,28 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
                 <span className="text-text-secondary">{stepIntro(step, name)}</span>
               </div>
               <div key={step} className="animate-hb-in">
-                {step === "role" && <RoleStep draft={draft} onChange={setDraft} name={name} />}
-                {step === "look" && <LookStep draft={draft} onChange={setDraft} name={name} />}
-                {step === "ready" && (
-                  <ReadyStep
-                    draft={draft}
-                    onChange={setDraft}
-                    name={name}
-                    preset={setup.data && presetInfo(setup.data.safetyPreset)}
-                    runtimes={runtimes}
-                    models={models}
-                    onGo={onStep}
-                  />
-                )}
+                <StepBody
+                  step={step}
+                  draft={draft}
+                  onChange={setDraft}
+                  name={name}
+                  preset={setup.data && presetInfo(setup.data.safetyPreset)}
+                  runtimes={runtimes}
+                  models={models}
+                  onStep={onStep}
+                />
               </div>
             </fieldset>
-            <footer className="flex flex-wrap items-center gap-2">
-              {index > 0 && (
-                <Button type="button" variant="outline" onClick={() => onStep(stepAt(index - 1))} disabled={locked}>
-                  {copy.back}
-                </Button>
-              )}
-              <Button
-                type="submit"
-                aria-disabled={blocked}
-                aria-describedby="summon-hint"
-                className={cn(blocked && "opacity-50")}
-              >
-                {last && <span aria-hidden>✦</span>}
-                {last ? copy.ready.summon({ name }) : index === 0 ? copy.role.next : copy.look.next}
-              </Button>
-              <span
-                id="summon-hint"
-                role={create.isError ? "alert" : undefined}
-                className={cn(
-                  "min-h-5 text-sm",
-                  create.isError ? "text-rose" : blocked && tried ? "text-lantern" : "text-text-secondary",
-                )}
-              >
-                {hint}
-              </span>
-            </footer>
+            <SummonFooter
+              index={index}
+              name={name}
+              locked={locked}
+              blocked={blocked}
+              warn={blocked && tried}
+              failed={create.isError}
+              hint={hint}
+              onBack={() => onStep(stepAt(index - 1))}
+            />
           </div>
           <SummonPreview draft={draft} name={name} last={last} />
         </div>
@@ -208,3 +155,116 @@ const stepTitle = (step: SummonStep, name: string) =>
 
 const stepIntro = (step: SummonStep, name: string) =>
   step === "role" ? copy.role.intro : step === "look" ? copy.look.intro : copy.ready.intro({ name });
+
+type Create = ReturnType<typeof useCreateHob>;
+
+const summonHint = ({
+  create,
+  rejected,
+  name,
+  problem,
+}: {
+  create: Create;
+  rejected: ApiError | undefined;
+  name: string;
+  problem: string | undefined;
+}) => {
+  if (create.isPending) return shared.summon.summoning({ name });
+  if (rejected) return shared.summon.rejected({ name, reason: rejected.message });
+  if (create.isError) return shared.onboarding.ready.failed({ name });
+  return problem;
+};
+
+/** Sends the draft once, and opens the new hob's chat unless the user already left. */
+function useSummonHob(
+  draft: FirstHobDraft,
+  setDraft: React.Dispatch<React.SetStateAction<FirstHobDraft>>,
+  create: Create,
+) {
+  const navigate = useNavigate();
+  // A summon that finishes after the user left only joins the hob list; it does not pull them back.
+  const left = useRef(false);
+  useEffect(() => {
+    left.current = false;
+    return () => {
+      left.current = true;
+    };
+  }, []);
+  const summon = async () => {
+    // Once sent, the hob may exist even when no answer comes back, so the choices lock and a
+    // retry repeats the same request; the hub returns the hob it made the first time.
+    const sent = submitDraft(draft);
+    setDraft(sent);
+    try {
+      const made = await create.mutateAsync(sent.submitted);
+      // The hob exists, so the next Summon starts fresh, even when the user already left. A newer
+      // draft started meanwhile belongs to another hob and stays.
+      settleSummonDraft(sent.id, null);
+      if (!left.current) void navigate({ to: "/hobs/$hobId/new", params: { hobId: made.id }, replace: true });
+    } catch (error) {
+      if (error instanceof ApiError && error.tag === "InvalidHob") {
+        const reopened = reopenDraft(sent);
+        setDraft(reopened);
+        settleSummonDraft(sent.id, reopened);
+      }
+    }
+  };
+  return { left, summon };
+}
+
+function StepBody({
+  step,
+  onStep,
+  ...props
+}: { step: SummonStep; onStep: (step: SummonStep) => void } & Omit<React.ComponentProps<typeof ReadyStep>, "onGo">) {
+  if (step === "role") return <RoleStep draft={props.draft} onChange={props.onChange} name={props.name} />;
+  if (step === "look") return <LookStep draft={props.draft} onChange={props.onChange} name={props.name} />;
+  return <ReadyStep {...props} onGo={onStep} />;
+}
+
+function SummonFooter({
+  index,
+  name,
+  locked,
+  blocked,
+  warn,
+  failed,
+  hint,
+  onBack,
+}: {
+  index: number;
+  name: string;
+  locked: boolean;
+  blocked: boolean;
+  warn: boolean;
+  failed: boolean;
+  hint: string | undefined;
+  onBack: () => void;
+}) {
+  const last = index === 2;
+  return (
+    <footer className="flex flex-wrap items-center gap-2">
+      {index > 0 && (
+        <Button type="button" variant="outline" onClick={onBack} disabled={locked}>
+          {copy.back}
+        </Button>
+      )}
+      <Button
+        type="submit"
+        aria-disabled={blocked}
+        aria-describedby="summon-hint"
+        className={cn(blocked && "opacity-50")}
+      >
+        {last && <span aria-hidden>✦</span>}
+        {last ? copy.ready.summon({ name }) : index === 0 ? copy.role.next : copy.look.next}
+      </Button>
+      <span
+        id="summon-hint"
+        role={failed ? "alert" : undefined}
+        className={cn("min-h-5 text-sm", failed ? "text-rose" : warn ? "text-lantern" : "text-text-secondary")}
+      >
+        {hint}
+      </span>
+    </footer>
+  );
+}
