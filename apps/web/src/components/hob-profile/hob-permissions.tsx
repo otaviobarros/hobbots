@@ -9,11 +9,12 @@ import {
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Switch } from "@hobbots/ui/components/switch";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useId } from "react";
+import { type ReactNode, useId } from "react";
 import { ApiError } from "../../api/client.ts";
 import { needsSandbox, sandboxGap } from "../../api/enforcement.ts";
 import { permissionsQuery, useUpdatePermissions } from "../../api/queries.ts";
@@ -54,16 +55,15 @@ export const useHobPermissions = (hob: Agent) => {
   };
 };
 
-export function Loading({ name, failed, retry }: { name: string; failed: boolean; retry: () => void }) {
-  return failed ? (
+/** The inline error when the hob's permissions could not be read, with Try again. */
+export function LoadFailed({ name, retry }: { name: string; retry: () => void }) {
+  return (
     <p role="alert" className="m-0 flex items-center gap-3 text-ui text-rose">
       {messages.permissions.loadFailed({ name })}
       <Button variant="outline" size="xs" onClick={retry}>
         {messages.permissions.tryAgain}
       </Button>
     </p>
-  ) : (
-    <span className="text-label">{messages.permissions.loading}</span>
   );
 }
 
@@ -91,7 +91,11 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
   const update = useUpdatePermissions(hob.id);
   const data = permissions.data;
   if (!data) {
-    return <Loading name={hob.name} failed={permissions.isError} retry={() => void permissions.refetch()} />;
+    return permissions.isError ? (
+      <LoadFailed name={hob.name} retry={() => void permissions.refetch()} />
+    ) : (
+      <PermissionsWaiting name={hob.name} />
+    );
   }
   const sending = update.isPending ? update.variables : undefined;
   const locked = update.isPending || permissions.outdated;
@@ -107,42 +111,22 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
 
   return (
     <div className="flex max-w-form-max flex-col gap-4">
-      <div className="flex items-center gap-3 rounded-card bg-notice px-4 py-3">
-        <span className="flex flex-1 flex-col">
-          <span className="text-ui text-text">{copy.intro({ name: hob.name, preset })}</span>
-          <span className="text-detail text-label">{copy.careful({ count: careful, preset })}</span>
-        </span>
-        <Link
-          to="/settings/$section"
-          params={{ section: "safety" }}
-          className="text-detail whitespace-nowrap text-link underline"
-        >
-          {copy.changeSafety}
-        </Link>
-      </div>
+      <Notice intro={copy.intro({ name: hob.name, preset })} careful={copy.careful({ count: careful, preset })} />
 
-      {RULE_GROUPS.map(([group, operations]) => (
-        <section key={group} aria-label={copy.groups[group]} className="flex flex-col gap-0.5">
-          <h2 className="lbl m-0 pb-1 text-label">{copy.groups[group]}</h2>
-          {operations.flatMap((operation) => {
-            const rule = ruleOf(operation);
-            return rule === undefined
-              ? []
-              : [
-                  <Rule
-                    key={operation}
-                    rule={rule}
-                    permissions={data}
-                    shown={sending?.overrides ? shownAnswer(data, sending.overrides, operation) : undefined}
-                    pending={locked}
-                    onPick={(answer) =>
-                      save({ overrides: pickAnswer(data.policy.overrides, operation, answer, data.preset) })
-                    }
-                  />,
-                ];
-          })}
-        </section>
-      ))}
+      <RuleGroups
+        rule={(rule) => (
+          <Rule
+            key={rule.operation}
+            rule={rule}
+            permissions={data}
+            shown={sending?.overrides ? shownAnswer(data, sending.overrides, rule.operation) : undefined}
+            pending={locked}
+            onPick={(answer) =>
+              save({ overrides: pickAnswer(data.policy.overrides, rule.operation, answer, data.preset) })
+            }
+          />
+        )}
+      />
       {otherError && (
         <p role="alert" className="m-0 text-ui text-rose">
           {otherError instanceof ApiError && otherError.tag === "OverrideWidens"
@@ -179,18 +163,15 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
         <span className="text-detail text-label">{copy.sharedNote}</span>
       </section>
 
-      <section aria-label={copy.sandbox} className="flex flex-col gap-1">
-        <h2 className="lbl m-0 text-label">{copy.sandbox}</h2>
-        <div className="flex flex-col rounded-card bg-card px-4 py-1">
-          <SandboxSwitch name={hob.name} sandbox={data.enforcement.processSandbox} />
-          <SigningSwitch
-            name={hob.name}
-            checked={sending?.signCommits ?? data.policy.signCommits === true}
-            pending={locked}
-            onChange={(signCommits) => save({ signCommits })}
-          />
-        </div>
-      </section>
+      <SandboxCard>
+        <SandboxSwitch name={hob.name} sandbox={data.enforcement.processSandbox} />
+        <SigningSwitch
+          name={hob.name}
+          checked={sending?.signCommits ?? data.policy.signCommits === true}
+          pending={locked}
+          onChange={(signCommits) => save({ signCommits })}
+        />
+      </SandboxCard>
 
       <details className="rounded-control bg-card px-3.5 py-2.5">
         <summary className="cursor-pointer text-ui text-text-strong">{copy.details}</summary>
@@ -202,6 +183,108 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
         </div>
       </details>
     </div>
+  );
+}
+
+/**
+ * The Permissions tab while the hub reads the hob's answers (Patterns › Loading): the notice, every
+ * rule by name with a block where its answer goes, and the folders and sandbox sections in their
+ * places, so the tab keeps its height when the answers land. A hub read adds no wait line.
+ */
+function PermissionsWaiting({ name }: { name: string }) {
+  const copy = messages.permissions;
+  return (
+    <div aria-busy="true" className="flex max-w-form-max flex-col gap-4">
+      <Notice intro={<Skeleton width="44ch" />} careful={<Skeleton width="14ch" />} />
+
+      <RuleGroups rule={(rule) => <RuleWaiting key={rule.operation} rule={rule} />} />
+
+      <section aria-label={copy.folders({ name })} className="flex flex-col gap-1.5">
+        <h2 className="lbl m-0 text-label">{copy.folders({ name })}</h2>
+        <span className="flex flex-col gap-px rounded-control bg-card px-3.5 py-2.5">
+          <span className="text-code">
+            <Skeleton surface="card" width="12ch" />
+          </span>
+          <span className="text-detail">
+            <Skeleton surface="card" width="28ch" />
+          </span>
+        </span>
+        <span className="pt-2 text-ui font-bold text-text-strong">{copy.ownFolders({ name })}</span>
+        <span className="text-ui">
+          <Skeleton width="30ch" />
+        </span>
+        {/* The add field in its place, disabled until the hub answers. */}
+        <FolderList
+          label={copy.ownFolders({ name })}
+          folders={[]}
+          saving={undefined}
+          pending
+          error={null}
+          onSave={() => undefined}
+        />
+        <span className="text-detail text-label">{copy.sharedNote}</span>
+      </section>
+
+      <SandboxCard>
+        {[messages.enforcement.sandboxLabel, messages.signing.label].map((label) => (
+          <div key={label} className="flex items-center gap-4 py-2.5 first:border-b-(length:--edge) first:border-line">
+            <Skeleton shape="dot" surface="card" className="h-6 w-[46px]" />
+            <div className="flex flex-1 flex-col gap-0.5">
+              <span className="font-bold text-text-strong">{label}</span>
+              <span className="flex flex-col text-detail">
+                <Skeleton surface="card" width="60ch" />
+                <Skeleton surface="card" width="24ch" />
+              </span>
+            </div>
+          </div>
+        ))}
+      </SandboxCard>
+
+      <div className="rounded-control bg-card px-3.5 py-2.5 text-ui text-text-strong">{copy.details}</div>
+    </div>
+  );
+}
+
+/** The notice at the top: how the hob follows the safety level, and the way to change it. */
+function Notice({ intro, careful }: { intro: ReactNode; careful: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 rounded-card bg-notice px-4 py-3">
+      <span className="flex flex-1 flex-col">
+        <span className="text-ui text-text">{intro}</span>
+        <span className="text-detail text-label">{careful}</span>
+      </span>
+      <Link
+        to="/settings/$section"
+        params={{ section: "safety" }}
+        className="text-detail whitespace-nowrap text-link underline"
+      >
+        {messages.permissions.changeSafety}
+      </Link>
+    </div>
+  );
+}
+
+/** The rules in their plain-word groups, each drawn by `rule`. */
+function RuleGroups({ rule }: { rule: (rule: RuleInfo) => ReactNode }) {
+  const copy = messages.permissions;
+  return RULE_GROUPS.map(([group, operations]) => (
+    <section key={group} aria-label={copy.groups[group]} className="flex flex-col gap-0.5">
+      <h2 className="lbl m-0 pb-1 text-label">{copy.groups[group]}</h2>
+      {operations.flatMap((operation) => {
+        const found = ruleOf(operation);
+        return found === undefined ? [] : [rule(found)];
+      })}
+    </section>
+  ));
+}
+
+/** The sandbox and signing card. */
+function SandboxCard({ children }: { children: ReactNode }) {
+  return (
+    <section aria-label={messages.permissions.sandbox} className="flex flex-col gap-1">
+      <h2 className="lbl m-0 text-label">{messages.permissions.sandbox}</h2>
+      <div className="flex flex-col rounded-card bg-card px-4 py-1">{children}</div>
+    </section>
   );
 }
 
@@ -367,25 +450,13 @@ export function Rule({
     enforcement(rule.operation, permissions.decisions, policySandbox(permissions.enforcement)) === "checked";
   const narrowed = current !== preset;
   return (
-    <div
-      className={cn(
-        "flex items-center gap-3 rounded-control px-3.5 py-2.5",
-        icon === undefined ? "bg-card" : "bg-deep shadow-[inset_0_0_0_1px_var(--color-line)]",
-      )}
-    >
-      {icon !== undefined && (
-        <span
-          aria-hidden
-          className="grid size-7 flex-none place-items-center rounded-control bg-moonlight/16 text-ui font-bold text-moonlight"
-        >
-          {icon}
-        </span>
-      )}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span id={labelId} className="text-text-strong">
-            {rule.label}
-          </span>
+    <RuleRow
+      rule={rule}
+      icon={icon}
+      labelId={labelId}
+      noteId={noteId}
+      tags={
+        <>
           {checked && <CheckedTag />}
           {blocked && <NeedsSandbox />}
           {narrowed && (
@@ -401,12 +472,15 @@ export function Rule({
               </button>
             </>
           )}
-        </span>
-        <span id={noteId} className="text-detail text-text-secondary">
+        </>
+      }
+      note={
+        <>
           {rule.note}
           {gap !== null && ` ${messages.enforcement.ruleBlocked[gap]}`}
-        </span>
-      </div>
+        </>
+      }
+    >
       <SegmentedControl
         size="sm"
         value={current}
@@ -432,6 +506,67 @@ export function Rule({
           );
         })}
       </SegmentedControl>
+    </RuleRow>
+  );
+}
+
+/**
+ * A rule whose answer is still being read: its name and note straight away, and a still block the
+ * size of Allow, Ask or Never where the control goes, so the row keeps its height.
+ */
+export function RuleWaiting({ rule, icon }: { rule: RuleInfo; icon?: string | undefined }) {
+  return (
+    <RuleRow rule={rule} icon={icon} note={rule.note}>
+      <Skeleton shape="control" surface={icon === undefined ? "card" : "plain"} className="h-[30px] w-[210px]" />
+    </RuleRow>
+  );
+}
+
+/** A rule's row: its mark on the Charm card, its name with any tags, its note, then its control. */
+function RuleRow({
+  rule,
+  icon,
+  labelId,
+  noteId,
+  tags,
+  note,
+  children,
+}: {
+  rule: RuleInfo;
+  icon: string | undefined;
+  labelId?: string;
+  noteId?: string;
+  tags?: ReactNode;
+  note: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-control px-3.5 py-2.5",
+        icon === undefined ? "bg-card" : "bg-deep shadow-[inset_0_0_0_1px_var(--color-line)]",
+      )}
+    >
+      {icon !== undefined && (
+        <span
+          aria-hidden
+          className="grid size-7 flex-none place-items-center rounded-control bg-moonlight/16 text-ui font-bold text-moonlight"
+        >
+          {icon}
+        </span>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span id={labelId} className="text-text-strong">
+            {rule.label}
+          </span>
+          {tags}
+        </span>
+        <span id={noteId} className="text-detail text-text-secondary">
+          {note}
+        </span>
+      </div>
+      {children}
     </div>
   );
 }
