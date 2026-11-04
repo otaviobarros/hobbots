@@ -16,15 +16,15 @@ type SearchFieldProps = Omit<React.ComponentProps<"input">, "type" | "value" | "
   className?: string;
 };
 
-// Corners and edges read the skin variables from the themes (docs/design/themes.md). Until the
-// theme system sets them, the fallbacks keep today's square, 2px look.
+// Corners, edge width and easing read the theme's skin variables (docs/design/themes.md).
 const frame =
-  "h-auto rounded-[var(--corner-control,0)] border-[length:var(--edge,2px)] border-line-2 bg-deep transition-colors duration-150 ease-[var(--ease-ui,steps(4))] hover:border-control dark:bg-deep has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-3 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/20";
+  "h-auto rounded-[var(--corner-control)] border-[length:var(--edge)] border-line-2 bg-deep transition-colors duration-150 ease-[var(--ease-ui)] hover:border-control dark:bg-deep has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-3 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/20";
 
 const input =
   "h-auto py-2 text-sm leading-5 text-text placeholder:text-label md:text-sm [&::-webkit-search-cancel-button]:appearance-none";
 
-const clear = "size-7 rounded-[var(--corner-control,0)] text-label [clip-path:none] hover:bg-hover hover:text-text";
+const clear =
+  "size-7 rounded-[var(--corner-control)] text-label [clip-path:none] hover:bg-hover hover:text-text-strong";
 
 /** A search input with a magnifier and a clear button. Esc clears the text, then calls `onEscape`. */
 function SearchField({
