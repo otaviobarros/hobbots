@@ -34,9 +34,6 @@ export const messages = {
     restore: "Restore",
     restoring: "Restoring…",
     restoreLabel: ({ title }: Titled) => `Restore “${title}”`,
-    restoreFailed: ({ title }: Titled) =>
-      `Couldn't restore “${title}”. Hobbots may be reconnecting; try again in a moment.`,
-    tryAgain: "Try again",
     showMore: ({ count }: { count: number }) => `Show ${formatCount(count)} more`,
     loading: "Loading archived chats…",
     loadFailed: "Hobbots could not read the archived chats. Try again in a moment.",
@@ -60,5 +57,47 @@ export const messages = {
     loadFailed: "Hobbots could not read your retired hobs. Try again in a moment.",
     none: "No retired hobs.",
     noneBody: "When you retire a hob from its profile, it and its chats land here.",
+  },
+  toast: {
+    region: "Archive notifications ({hotkey})",
+    restored: ({ title, name }: Titled & Named) => `Restored “${title}” to ${name}'s chats.`,
+    undo: "Undo",
+    undoAlt: ({ title }: Titled) => `Undo restore of ${title}`,
+    restoreFailed: ({ title }: Titled) =>
+      `Couldn't restore “${title}”. Hobbots may be reconnecting; try again in a moment.`,
+    undoFailed: ({ title }: Titled) =>
+      `Couldn't archive “${title}” again. Hobbots may be reconnecting; try again in a moment.`,
+    tryAgain: "Try again",
+    tryAgainAlt: ({ title }: Titled) => `Try again for ${title}`,
+  },
+  read: {
+    withHob: ({ name, day }: Named & { day: string }) => `with ${name} · Archived ${day}`,
+    banner: ({ name, day }: Named & { day: string }) =>
+      `Archived on ${day}. Read-only: ${name} takes no new messages here until you restore it.`,
+    bar: "Read-only. Restore it to pick up where it left off.",
+    restoreTo: ({ name }: Named) => `Restore to ${name}'s chats`,
+    loading: "Loading this chat…",
+    loadFailed: "Hobbots could not read this chat. Try again in a moment.",
+    tryAgain: "Try again",
+    notArchived: "This chat is no longer archived.",
+    openIt: "Open it",
+    missing: "This chat is not in the Archive.",
+    backToArchive: "Back to the Archive",
+  },
+  retired: {
+    page: ({ name }: Named) => `${name}, retired`,
+    line: ({ role, day, kept }: { role: string; day: string | null; kept: string }) =>
+      [role, day === null ? "retired" : `retired ${day}`, kept].join(" · "),
+    note: ({ name }: Named) => `${name} is retired, so these chats are read-only. They still show up in search.`,
+    chats: ({ name }: Named) => `${name}'s chats`,
+    open: ({ title }: Titled) => `Read ${title}`,
+    readOnly: "Read-only",
+    none: ({ name }: Named) => `${name} left no chats.`,
+    chatNote: ({ name }: Named) => `${name} is retired, so this chat is read-only. It still shows up in search.`,
+    bar: ({ name }: Named) => `Read-only while ${name} is retired.`,
+    notHere: "This hob is not in the Archive.",
+    notTheirs: ({ name }: Named) => `This chat is not one of ${name}'s.`,
+    loading: "Loading this hob…",
+    loadFailed: "Hobbots could not read this hob's chats. Try again in a moment.",
   },
 } as const;
