@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { memberWork, quest } from "../test/member-work.ts";
-import { portraitIds, questsInProgress } from "./quest-work.ts";
+import { questsInProgress } from "./quest-work.ts";
 
 describe("questsInProgress", () => {
   it("groups members' work by Quest, oldest Quest first and each party in the order it joined", () => {
@@ -14,11 +14,6 @@ describe("questsInProgress", () => {
     expect(groups.map((group) => [group.quest.id, group.members.map((each) => each.task.id)])).toEqual([
       ["q1", ["copy", "build"]],
       ["q2", ["keywords"]],
-    ]);
-    // A nested Quest's lead is the member that brought the hob in.
-    expect(groups.map(portraitIds)).toEqual([
-      ["aldric", "quill", "ada"],
-      ["ada", "pip"],
     ]);
   });
 

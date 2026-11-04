@@ -105,7 +105,7 @@ const campaign = (ids: { aldric: string; quill: string; ada: string; pip: string
 };
 
 // covers UX-001, CH-005, OR-001
-test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and open the Quest, never as her thread", async ({
+test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldric's quest and open it, never as her thread", async ({
   page,
 }) => {
   dataDir = emptyDataDir();
@@ -124,11 +124,11 @@ test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and ope
   const drawer = (brief: string) => page.getByRole("complementary", { name: `${brief}, Task details` });
 
   await page.goto(hub.url);
-  const quests = page.getByRole("region", { name: "Quests in progress" });
+  const quests = page.getByRole("region", { name: "Pick up where you left off" });
+  // Aldric's chat follows both Quests, so it shows once per Quest and never as a chat of its own.
+  await expect(quests.getByRole("listitem")).toHaveCount(2);
   const entry = quests.getByRole("link", { name: /Black Friday campaign/ });
-  await expect(entry).toContainText("0 of 2 done");
-  await expect(entry).toContainText(/Quill\s*On Aldric's quest\s*Working/);
-  await expect(entry).toContainText(/Ada\s*On Aldric's quest\s*Not started/);
+  await expect(entry).toContainText(/Aldric\s*·\s*0 of 2 done/);
   await entry.click();
   await expect(page).toHaveURL(questThread("campaign"));
   await expect(drawer("Brief for campaign")).toBeVisible();
@@ -156,7 +156,7 @@ test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and ope
   await expect(page.getByRole("main", { name: "Chat" }).locator("header")).toContainText("Aldric");
   await page.goto(hub.url);
   const keywords = quests.getByRole("link", { name: /Landing page keywords/ });
-  await expect(keywords).toContainText(/Pip\s*On Ada's quest\s*Working/);
+  await expect(keywords).toContainText(/Ada\s*·\s*0 of 1 done/);
   await keywords.click();
   await expect(page).toHaveURL(questThread("build"));
   await expect(drawer("Brief for build")).toBeVisible();
