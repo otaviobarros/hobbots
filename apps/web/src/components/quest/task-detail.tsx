@@ -7,7 +7,7 @@ import { roomStatus, roomStatusLabel, roomTone } from "./control-room.ts";
 import { messages } from "./messages.ts";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import type { HobLookup } from "./use-work.ts";
-import { noteRecipient, taskDetail, taskTitle } from "./work-model.ts";
+import { noteRecipient, questionForYou, taskDetail, taskTitle } from "./work-model.ts";
 import { yourAnswer } from "./your-answer.ts";
 
 const copy = messages.drawer;
@@ -191,10 +191,8 @@ function OpenQuestion({ question, hobs }: { question: Question; hobs: HobLookup 
  * points at the answer box, so nobody types an answer into it.
  */
 export const notAnAnswer = (tree: TaskTree, task: Task, hobs: HobLookup) => {
-  const waiting = tree.questions.find(
-    (question) => question.taskId === task.id && question.state === "open" && question.recipientId === null,
-  );
-  if (waiting === undefined) return {};
+  const waiting = questionForYou(tree, task);
+  if (waiting === null) return {};
   const lead = hobs(noteRecipient(tree, task)).name;
   return {
     label: copy.noteNotAnswer({ name: lead }),

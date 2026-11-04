@@ -132,9 +132,11 @@ test("[TC-UX-050] a nudge from the Workbench chat reaches Aldric as a note on th
   // The chat drawer opens beside the tabs, in the address, with focus in it.
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
-  await bench.getByRole("button", { name: "Talk to Aldric" }).click();
+  await bench.getByRole("button", { name: "Task chat" }).click();
   const chat = bench.getByRole("complementary", { name: "Talk about Tidy the notes" });
-  await expect(chat.getByRole("heading", { name: "Talk to Aldric" })).toBeFocused();
+  await expect(chat.getByRole("heading", { name: "Task chat" })).toBeFocused();
+  await expect(bench.getByRole("button", { name: "Task chat" })).toHaveAttribute("aria-pressed", "true");
+  await expect(chat).toContainText("Notes go to Aldric. They don't answer questions.");
   await expect(chat).toContainText("Nothing sent about this task yet.");
   await expect(chat).toContainText("Goes to Aldric as a note on this task.");
   await expect(page).toHaveURL(/chat=open/);
@@ -151,7 +153,7 @@ test("[TC-UX-050] a nudge from the Workbench chat reaches Aldric as a note on th
   // Escape closes the chat first, then leaves the Workbench.
   await page.keyboard.press("Escape");
   await expect(chat).toBeHidden();
-  await expect(bench.getByRole("button", { name: "Talk to Aldric" })).toBeFocused();
+  await expect(bench.getByRole("button", { name: "Task chat" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(bench).toBeHidden();
 
@@ -183,14 +185,14 @@ test("[TC-UX-052] a finished Task's Workbench chat offers no nudges or note box,
 
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
-  await bench.getByRole("button", { name: "Talk to Aldric" }).click();
+  await bench.getByRole("button", { name: "Task chat" }).click();
   const chat = bench.getByRole("complementary", { name: "Talk about Tidy the notes" });
   await expect(chat).toContainText("This work has ended. Tell Aldric in the chat instead.");
   await expect(chat.getByRole("group", { name: "Quick nudges" })).toHaveCount(0);
   await expect(chat.getByRole("textbox")).toHaveCount(0);
 
-  // Hide the chat closes it, and the address forgets it.
-  await bench.getByRole("button", { name: "Hide the chat" }).click();
+  // Task chat again closes it, and the address forgets it.
+  await bench.getByRole("button", { name: "Task chat" }).click();
   await expect(chat).toBeHidden();
   await expect(page).not.toHaveURL(/chat=open/);
 });
@@ -218,7 +220,7 @@ test("[TC-UX-053] a nudge whose reply was lost goes out once when tapped again, 
   });
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
-  const talk = bench.getByRole("button", { name: "Talk to Aldric" });
+  const talk = bench.getByRole("button", { name: "Task chat" });
   await talk.click();
   const chat = bench.getByRole("complementary", { name: "Talk about Tidy the notes" });
   const keepGoing = chat.getByRole("group", { name: "Quick nudges" }).getByRole("button", { name: "Keep going" });
@@ -228,7 +230,7 @@ test("[TC-UX-053] a nudge whose reply was lost goes out once when tapped again, 
 
   // Closed and opened again, the same nudge goes out under the same key: the hub keeps it once.
   await page.unroute("**/api/tasks/*/notes");
-  await bench.getByRole("button", { name: "Hide the chat" }).click();
+  await bench.getByRole("button", { name: "Task chat" }).click();
   await expect(chat).toBeHidden();
   await talk.click();
   await keepGoing.click();
