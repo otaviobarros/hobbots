@@ -275,10 +275,10 @@
     }
   },
   "font": {
-    "sans": "\"Atkinson Hyperlegible Next\", system-ui, sans-serif",
-    "pixel": "\"Pixelify Sans\", system-ui, sans-serif",
+    "sans": "\"Atkinson Hyperlegible Next Variable\", \"Atkinson Hyperlegible Next\", system-ui, sans-serif",
+    "pixel": "\"Pixelify Sans Variable\", \"Pixelify Sans\", system-ui, sans-serif",
     "mono": "ui-monospace, SFMono-Regular, Menlo, monospace",
-    "serif": "\"Literata\", Georgia, serif"
+    "serif": "\"Literata Variable\", \"Literata\", Georgia, serif"
   },
   "type": {
     "reading": {
@@ -293,7 +293,7 @@
       "lineHeight": "23px",
       "weight": 400,
       "family": "sans",
-      "use": "UI text: rows, fields, menus, cards. Buttons use it at 700."
+      "use": "UI text: rows, fields, menus, cards. Buttons use it at the skin's button-weight."
     },
     "detail": {
       "size": "13px",

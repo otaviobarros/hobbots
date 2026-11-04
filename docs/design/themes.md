@@ -31,6 +31,7 @@ Lamplight is smooth: rounded corners, eased motion and Atkinson headings. Worksh
 - `tile`, the square behind a hob portrait, stays dark in every theme so the pixel art reads the same.
 - `lantern` marks what needs you and the one primary action in a view. Nothing else uses it.
 - The type scale, spacing, sizes and layout never change with the theme.
+- Fonts ship with the app. Each font stack starts with the family name its `@fontsource-variable` package registers, such as `Atkinson Hyperlegible Next Variable`. Literata is optional and not bundled yet. Add `@fontsource-variable/literata` before replies can use it.
 
 ## Contrast
 
