@@ -1,5 +1,6 @@
 import { ENFORCEMENT_CAPABILITIES, type EnforcementCapability, type RuntimeEnforcement } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@hobbots/ui/components/tooltip";
 import { messages } from "../messages.ts";
 
 const copy = messages.enforcement;
@@ -33,4 +34,27 @@ export function EnforcementList({ enforcement }: { enforcement: RuntimeEnforceme
 /** The tag on an action the hub blocks because the sandbox cannot start. */
 export function NeedsSandbox() {
   return <Badge variant="blocked">{copy.needsSandbox}</Badge>;
+}
+
+/**
+ * The tag on a rule Hobbots decides but a permitted command could get around (ADR 014). The tag
+ * alone does not say that, so it explains itself on hover and on keyboard focus.
+ */
+export function CheckedTag() {
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge asChild variant="muted">
+            <button type="button" className="cursor-default border-0">
+              {messages.permissions.checked}
+            </button>
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={6}>
+          <span className="whitespace-normal">{messages.permissions.checkedHint}</span>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }

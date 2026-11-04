@@ -491,19 +491,19 @@ export const messages = {
     alwaysIntro: ({ name }: { name: string }) =>
       `Hobbots saves this rule, and ${name} stops asking for what it covers. You can remove it later.`,
     /** The middle lifetime (ADR 018): This Task, or This Quest once a party joins the Task. */
-    forWork: { task: "This Task", quest: "This Quest" },
+    forWork: { task: "This task", quest: "This quest" },
     forWorkIntro: {
       task: ({ name }: { name: string }) =>
-        `Hobbots saves this rule for this Task only. ${name} stops asking for what it covers, in every step, until the Task ends.`,
+        `Hobbots saves this rule for this task only. ${name} stops asking for what it covers, in every step, until the task ends.`,
       quest: ({ name }: { name: string }) =>
-        `Hobbots saves this rule for this Quest only. ${name} stops asking for what it covers until the Quest ends. Other hobs on the Quest still ask.`,
+        `Hobbots saves this rule for this quest only. ${name} stops asking for what it covers until the quest ends. Other hobs on the quest still ask.`,
     },
-    saveForWork: { task: "Save for this Task and allow", quest: "Save for this Quest and allow" },
+    saveForWork: { task: "Save for this task and allow", quest: "Save for this quest and allow" },
     /** A rule in words, by how long it lasts. */
     ruleFor: {
       always: ({ rule }: { rule: string }) => `Always ${rule}`,
-      task: ({ rule }: { rule: string }) => `For this Task, ${rule}`,
-      quest: ({ rule }: { rule: string }) => `For this Quest, ${rule}`,
+      task: ({ rule }: { rule: string }) => `For this task, ${rule}`,
+      quest: ({ rule }: { rule: string }) => `For this quest, ${rule}`,
     },
     rulesLabel: "The rule to save",
     narrowLabel: "What the rule covers",
@@ -549,7 +549,7 @@ export const messages = {
     approved: ({ name }: { name: string }) => `✓ Allowed once. ${name} carries on.`,
     approvedAlways: ({ name }: { name: string }) => `✓ Allowed, and the rule is saved. ${name} carries on.`,
     approvedForTask: ({ name }: { name: string }) =>
-      `✓ Allowed for the rest of this Task. ${name} carries on, and asks again once the Task ends.`,
+      `✓ Allowed for the rest of this task. ${name} carries on, and asks again once the task ends.`,
     denied: ({ name }: { name: string }) => `✕ Denied. ${name} was told it may not.`,
     deniedWithReason: ({ name, reason }: { name: string; reason: string }) =>
       `✕ Denied: “${reason}”. ${name} was told why.`,
@@ -865,7 +865,7 @@ export const messages = {
     },
     connect: {
       title: "Connect to Hobbots on another computer",
-      body: "Already have a hub? Use it from here with chat, Quests, approvals and the Workbench.",
+      body: "Already have a hub? Use it from here with chat, quests, approvals and the Workbench.",
       onHub: "This computer is the hub already. To use it from another computer, open Hobbots there and choose this.",
     },
     starting: "Starting Hobbots…",
@@ -960,6 +960,7 @@ export const messages = {
     changeSafety: "Change safety level",
     groups: { files: "Files", commands: "Commands", internet: "Internet", outside: "Outside its folders" },
     checked: "Checked",
+    checkedHint: "Hobbots decides this rule, but a command the hob may run could still do it another way.",
     moreCareful: "More careful",
     reset: ({ preset, answer }: { preset: string; answer: string }) => `${preset} says ${answer} · reset`,
     wider: "Wider than your safety level allows. Change it in Settings › Safety.",

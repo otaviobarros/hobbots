@@ -91,7 +91,7 @@ test("[TC-OP-036] backs up from Settings, and Welcome restores it after the data
   await dialog.getByRole("textbox", { name: "Backup folder" }).fill(backup);
   await dialog.getByRole("button", { name: "Read the backup" }).click();
   await expect(dialog).toContainText("This backup holds");
-  await expect(dialog).toContainText(/3 hobs, 1 thread, 1 Quest and \d+ Tasks/);
+  await expect(dialog).toContainText(/3 hobs, 1 thread, 1 quest and \d+ tasks/);
   await expect(dialog).toContainText("Devices, keychain items and runtime sign-ins do not come back");
   await dialog.getByRole("button", { name: "Restore and restart" }).click();
   await expect(dialog.getByRole("status")).toContainText("Restoring");

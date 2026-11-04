@@ -50,7 +50,7 @@ export function HobCard({
       aria-label={copy.card.open({ name: hob.name, state: stateTag(state, fresh).word })}
       style={tint(hob)}
       className={cn(
-        "hop-on-hover cut relative flex min-w-0 flex-col overflow-hidden bg-card text-text-strong no-underline transition-[translate,box-shadow,background-color] duration-150 hover:-translate-y-0.5 hover:bg-hover hover:text-text-strong hover:shadow-menu focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+        "hop-on-hover cut relative flex min-w-0 flex-col overflow-hidden bg-card text-text-strong no-underline transition-[translate,box-shadow,background-color] duration-150 hover:-translate-y-0.5 hover:bg-hover hover:text-text-strong hover:shadow-menu focus-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0",
         needs &&
           "shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-lantern)_70%,transparent)] hover:shadow-[inset_0_0_0_1.5px_var(--color-lantern),var(--shadow-menu)]",
       )}

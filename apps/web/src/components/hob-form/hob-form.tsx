@@ -84,10 +84,6 @@ export function NameDice({
   );
 }
 
-/** A focus ring drawn inside the pixel corners, which would clip one drawn outside. */
-export const focusWithin =
-  "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight has-[:focus-visible]:-outline-offset-4";
-
 /**
  * One option of a radio group, drawn as a chip. A native radio underneath gives arrow keys,
  * Space and screen readers the group's real behavior.
@@ -116,7 +112,7 @@ export function Choice({
       className={cn(
         "cut flex cursor-pointer items-center gap-2 border-2 px-3 py-[7px] text-ui",
         checked ? "border-lantern bg-lantern text-ground" : "border-control text-text-strong hover:bg-line",
-        focusWithin,
+        "focus-ring-within",
         className,
       )}
     >
@@ -147,11 +143,11 @@ export function RadioLabel({ name, checked, onPick, label, className, children }
 }
 
 /**
- * A text field's look: the control edge, a focus glow in the focus-ring color, and the skin's corner
- * and edge width, so it fits every theme.
+ * A text field's look: the control edge, the focus ring, and the skin's corner and edge width, so it
+ * fits every theme.
  */
 export const FIELD =
-  "rounded-control border-(length:--edge) border-solid border-control bg-card px-2.5 py-2 text-text placeholder:text-label focus:border-focus-ring focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-focus-ring)_22%,transparent)] focus:outline-none";
+  "rounded-control border-(length:--edge) border-solid border-control bg-card px-2.5 py-2 text-body text-text placeholder:text-label focus-ring";
 
 /** The chores in the user's own words, filled in from the role until they write their own. */
 export function ChoresField<D extends FirstHobDraft>({
@@ -219,7 +215,7 @@ function RoleOption({
       className={cn(
         "cut relative flex min-w-0 cursor-pointer items-start gap-2.5 border-2 px-2.5 py-2 text-start",
         checked ? "border-lantern bg-line" : "border-line hover:bg-hover",
-        focusWithin,
+        "focus-ring-within",
         className,
       )}
     >
@@ -427,11 +423,7 @@ export function SigilPicker({
               key={id}
               title={starterRole(id).title}
               data-on={on || undefined}
-              className={cn(
-                "relative grid cursor-pointer place-items-center",
-                "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
-                tileClassName,
-              )}
+              className={cn("relative grid cursor-pointer place-items-center", "focus-ring-within", tileClassName)}
             >
               <input
                 type="radio"
@@ -531,7 +523,7 @@ export function ColorSwatches({
             className={cn(
               "size-8 cursor-pointer border-[3px]",
               on ? "border-moonlight" : "border-line",
-              "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
+              "focus-ring-within",
             )}
             style={{ background: color.hat, boxShadow: `inset 0 -11px 0 ${color.coat}` }}
           >
@@ -577,7 +569,7 @@ export function NearbyLooks({
               className={cn(
                 "hop-on-hover grid cursor-pointer place-items-center border-2 bg-line hover:border-moonlight",
                 seed === draft.lookSeed ? "border-moonlight" : "border-line-2",
-                "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
+                "focus-ring-within",
               )}
               style={{ width: tile, height: tile }}
             >
@@ -707,7 +699,7 @@ function Brain<D extends BrainChoice>({
                     className={cn(
                       "flex cursor-pointer items-center gap-2.5 px-2.5 py-1.5 text-ui",
                       on ? "bg-line" : "hover:bg-hover",
-                      "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight has-[:focus-visible]:-outline-offset-3",
+                      "focus-ring-within focus-inset",
                     )}
                   >
                     <input
@@ -748,7 +740,7 @@ function Brain<D extends BrainChoice>({
                   className={cn(
                     "flex cursor-pointer items-center gap-1.5 px-[11px] py-1.5 text-ui whitespace-nowrap",
                     on ? "bg-lantern text-ground" : "text-text-strong hover:bg-line",
-                    "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight has-[:focus-visible]:-outline-offset-3",
+                    "focus-ring-within focus-inset",
                   )}
                 >
                   <input

@@ -128,7 +128,7 @@ function SummonCard() {
   return (
     <Link
       to="/summon"
-      className="cut flex min-h-[220px] flex-col items-center justify-center gap-2.5 border-[1.5px] border-dashed border-line-2 px-4 text-center text-text-secondary no-underline transition-colors duration-150 hover:border-lantern hover:text-text-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+      className="cut flex min-h-[220px] flex-col items-center justify-center gap-2.5 border-[1.5px] border-dashed border-line-2 px-4 text-center text-text-secondary no-underline transition-colors duration-150 hover:border-lantern hover:text-text-strong focus-ring"
     >
       <span
         aria-hidden

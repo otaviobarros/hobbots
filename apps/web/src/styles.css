@@ -621,7 +621,10 @@
   --button-weight: 600;
   --hop: none;
   --cut: none;
-  --focus-outline: 2px solid var(--color-focus-ring);
+  --focus-width: 2px;
+  --focus-outline: var(--focus-width) solid var(--color-focus-ring);
+  /* Where a card's ring sits: outside it here, inside it where the cut clip would hide it. */
+  --cut-focus-offset: 2px;
   --control-focus-outline: var(--focus-outline);
   --control-focus-ring: 0 0 #0000;
   --press-edge: 0px;
@@ -658,7 +661,9 @@
     0 calc(100% - 4px),
     0 4px
   );
-  --focus-outline: 2px solid var(--color-focus-ring);
+  --focus-width: 2px;
+  --focus-outline: var(--focus-width) solid var(--color-focus-ring);
+  --cut-focus-offset: calc(-2px - var(--focus-width));
   --control-focus-outline: none;
   --control-focus-ring: inset 0 0 0 2px var(--color-focus-ring), inset 0 0 0 4px var(--color-ground);
   --press-edge: 4px;
@@ -765,6 +770,40 @@ body {
 @utility cut {
   clip-path: var(--cut);
   border-radius: var(--corner-card);
+  --focus-offset: var(--cut-focus-offset);
+}
+
+/*
+ * The focus ring of fields, cards and panels: the skin's outline in `focus-ring`, 2px outside the
+ * shape. `focus-ring` rings the element when it has keyboard focus; `focus-ring-within` rings a
+ * label, card or field frame when the form control inside it does, such as a visually hidden radio
+ * or the input of an input group, and leaves the ring of a button inside it to the button. On a `cut` card
+ * the ring moves inside the clip in Workshop, and `focus-inset` draws it just inside the edge, for a
+ * row or panel that a scroller would clip. Buttons and pressed rows take `cut-control` instead.
+ * The offset does not inherit, so an inset card does not move the rings of what it holds.
+ */
+@property --focus-offset {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 2px;
+}
+
+@utility focus-ring {
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+}
+
+@utility focus-ring-within {
+  &:has(:is(input, textarea, select):focus-visible) {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+}
+
+@utility focus-inset {
+  --focus-offset: calc(-1 * var(--focus-width));
 }
 
 /*

@@ -1,6 +1,7 @@
 import type { Agent } from "@hobbots/domain";
+import { focusElement, focusedElement } from "@hobbots/ui/lib/restore-focus";
 import { cn } from "@hobbots/ui/lib/utils";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useFirstRunTheme } from "../../lib/theme.ts";
 import { ChiefMark } from "../chief/chief-mark.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
@@ -241,6 +242,40 @@ function Stepper({ step }: { step: number }) {
 }
 
 /**
+ * How tall the step's sticky footer is, so the scroller keeps that much room at its bottom and a
+ * field that takes focus is never hidden under the footer (WCAG 2.4.11). It follows the footer as
+ * its buttons wrap.
+ */
+const useFooterClearance = () => {
+  const [footer, setFooter] = useState<HTMLElement | null>(null);
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (footer === null) return;
+    const measure = () => setHeight(footer.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(footer);
+    return () => observer.disconnect();
+  }, [footer]);
+  return { footer: setFooter, height };
+};
+
+/**
+ * Each setup step opens at the top, and when the step before it took the focus away with it, focus
+ * moves to the new step's heading, so a keyboard user starts there and not on the page (WCAG 2.4.3).
+ * A field the step focuses by itself keeps the focus.
+ */
+const useStepHeadingFocus = () => {
+  const scroller = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focusedElement() !== null) return;
+    const heading = scroller.current?.querySelector<HTMLElement>("h1");
+    if (heading) focusElement(heading);
+  }, []);
+  return scroller;
+};
+
+/**
  * The frame every setup step shares, always in Workshop Night: what stage of setup this is and the
  * steps along the top, the step's own content with its footer, and the preview beside it, where the
  * Chief talks and the scene builds up with each choice.
@@ -262,6 +297,8 @@ export function OnboardingFrame({
   footer: ReactNode;
 }) {
   useFirstRunTheme();
+  const scroller = useStepHeadingFocus();
+  const clearance = useFooterClearance();
   const stage =
     step === null
       ? copy.stage
@@ -269,7 +306,12 @@ export function OnboardingFrame({
         ? copy.stageExtra
         : copy.stageStep({ step: step + 1, of: copy.stepNames.length });
   return (
-    <main aria-label={copy.stage} className="min-h-0 flex-1 overflow-y-auto bg-ground">
+    <main
+      ref={scroller}
+      aria-label={copy.stage}
+      className="min-h-0 flex-1 overflow-y-auto bg-ground"
+      style={{ scrollPaddingBottom: clearance.height }}
+    >
       <div className="mx-auto box-border flex min-h-full max-w-[1040px] flex-col gap-[22px] px-10 pt-7 max-md:px-4">
         <header className="flex flex-col gap-3.5">
           <span className="lbl text-label">{stage}</span>
@@ -279,7 +321,10 @@ export function OnboardingFrame({
           <div className="flex min-w-0 flex-1 flex-col gap-4">
             <div className="animate-hb-in">{children}</div>
             {footer && (
-              <footer className="sticky bottom-0 z-[2] mt-auto flex flex-wrap items-center gap-2 bg-ground pt-3.5 pb-6">
+              <footer
+                ref={clearance.footer}
+                className="sticky bottom-0 z-[2] mt-auto flex flex-wrap items-center gap-2 bg-ground pt-3.5 pb-6"
+              >
                 {footer}
               </footer>
             )}

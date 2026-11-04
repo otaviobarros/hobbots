@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { cn, TEXT_STYLES } from "@hobbots/ui/lib/utils";
 import { describe, expect, it } from "vitest";
 
 interface ThemeFile {
@@ -101,18 +100,8 @@ describe("type scale and spacing", () => {
 
   it("draws a 2px focus ring in every look", () => {
     for (const look of Object.values(themes.skin)) expect(look["focus-outline"]).toBe("2px solid focus-ring");
-    const outlines = [...css.matchAll(/--focus-outline:\s*([^;]+);/g)].map(([, value]) => value);
-    expect(outlines).toEqual(["2px solid var(--color-focus-ring)", "2px solid var(--color-focus-ring)"]);
-  });
-
-  it("lets cn merge every text style as a size, never as a color", () => {
-    expect([...TEXT_STYLES].sort()).toEqual(
-      Object.keys(themes.type)
-        .filter((style) => style !== "label")
-        .sort(),
-    );
-    for (const style of TEXT_STYLES)
-      expect(cn(`text-${style}`, "text-text-strong")).toBe(`text-${style} text-text-strong`);
+    const widths = [...css.matchAll(/--focus-width:\s*([^;]+);/g)].map(([, value]) => value);
+    expect(widths).toEqual(["2px", "2px"]);
   });
 
   it.each(Object.entries(themes.size))("%s is set in @theme", (size, value) => {

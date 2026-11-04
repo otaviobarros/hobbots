@@ -96,11 +96,11 @@ export interface RuleInfo {
 
 /** Every operation the policy decides, in the order the Permissions tab lists them. */
 export const RULES: ReadonlyArray<RuleInfo> = [
-  { operation: "read-files", label: "Read files", note: "Reading and searching files in its folders." },
-  { operation: "edit-files", label: "Create and edit files", note: "Writing, creating and renaming files." },
+  { operation: "read-files", label: "Look at files", note: "Reading and searching files in its folders." },
+  { operation: "edit-files", label: "Change files", note: "Writing, creating and renaming files." },
   { operation: "delete-files", label: "Delete files", note: "Removing files in its folders." },
-  { operation: "run-commands", label: "Run commands", note: "Shell commands, tests and builds." },
-  { operation: "local-git", label: "Local Git", note: "Status, diff, branches and commits on the hub." },
+  { operation: "run-commands", label: "Run commands and tests", note: "Shell commands, tests and builds." },
+  { operation: "local-git", label: "Save versions with Git", note: "Status, diff, branches and commits on the hub." },
   { operation: "push", label: "Push your work", note: "Sending commits to a remote." },
   { operation: "use-web", label: "Use the web", note: "Fetching pages, package installs and downloads." },
   {

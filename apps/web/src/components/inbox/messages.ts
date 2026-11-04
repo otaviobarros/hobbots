@@ -37,7 +37,7 @@ export const messages = {
     pendingNoExpiry: "Waiting on you",
     approved: "You allowed this",
     approvedAlways: "You allowed this always",
-    approvedForTask: "You allowed this for its Task",
+    approvedForTask: "You allowed this for its task",
     denied: "You denied this",
     expired: "Expired · nothing ran",
   },
@@ -104,9 +104,9 @@ export const messages = {
         unknown: ({ device }: { device: string }) => `Allowed always from ${device}`,
       },
       task: {
-        chat: ({ device }: { device: string }) => `Allowed for its Task from ${device} in the chat`,
-        inbox: ({ device }: { device: string }) => `Allowed for its Task from ${device} in the Inbox`,
-        unknown: ({ device }: { device: string }) => `Allowed for its Task from ${device}`,
+        chat: ({ device }: { device: string }) => `Allowed for its task from ${device} in the chat`,
+        inbox: ({ device }: { device: string }) => `Allowed for its task from ${device} in the Inbox`,
+        unknown: ({ device }: { device: string }) => `Allowed for its task from ${device}`,
       },
       denied: {
         chat: ({ device }: { device: string }) => `Denied from ${device} in the chat`,

@@ -93,7 +93,7 @@ test("[TC-UX-022] the Workbench opens from the task sheet, also reached from the
 
   // From the drawer, Back to the task reopens the drawer with its unsent note.
   await card.getByRole("button", { name: "Show details" }).click();
-  const drawer = page.getByRole("dialog", { name: "Tidy the notes, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Tidy the notes, task details" });
   const note = drawer.getByRole("textbox", { name: "Tell Aldric about this task" });
   await note.fill("Keep the headings short");
   await drawer.getByRole("button", { name: "Open Workbench" }).click();

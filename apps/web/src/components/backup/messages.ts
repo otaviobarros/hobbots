@@ -3,7 +3,7 @@ import { formatCount, plural } from "../../lib/format.ts";
 /** User-facing copy for backup and restore (STD-I18N-001, ADR 026). */
 export const messages = {
   heading: "Backups",
-  intro: "Your hobs, chats, Quests and settings. Never your passwords or keys: you sign in again after a restore.",
+  intro: "Your hobs, chats, quests and settings. Never your passwords or keys: you sign in again after a restore.",
   tag: {
     idle: "Not backed up yet",
     running: "Backing up…",
@@ -40,7 +40,7 @@ export const messages = {
     title: "What a backup holds",
     kept: [
       "Chats and threads",
-      "Quests, Tasks and backpack history",
+      "Quests, tasks and backpack history",
       "What hobs made, and the Workbench",
       "Hob settings, looks and permissions",
     ],
@@ -60,7 +60,7 @@ export const messages = {
     counts: ({ hobs, threads, quests, tasks }: { hobs: number; threads: number; quests: number; tasks: number }) => {
       const count = (n: number, one: string, other: string) =>
         plural(n, { one: `${formatCount(n)} ${one}`, other: `${formatCount(n)} ${other}` });
-      return `${count(hobs, "hob", "hobs")}, ${count(threads, "thread", "threads")}, ${count(quests, "Quest", "Quests")} and ${count(tasks, "Task", "Tasks")}`;
+      return `${count(hobs, "hob", "hobs")}, ${count(threads, "thread", "threads")}, ${count(quests, "quest", "quests")} and ${count(tasks, "task", "tasks")}`;
     },
     missing: "Not on this computer, so set these hobs' folders again after the restore:",
     notBack:
