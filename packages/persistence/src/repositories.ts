@@ -58,6 +58,7 @@ const policyColumns = (policy: HobPolicy) => ({
 });
 // The columns one configuration version sets, on the hob and in its history.
 const configColumns = (agent: Agent) => ({
+  name: agent.name,
   role: agent.role,
   role_title: agent.roleTitle,
   sigil: agent.sigil,
@@ -235,7 +236,6 @@ export const HobbotsRepositoryLive = Layer.effect(
           const agent = new Agent({ ...input, revision });
           const inserted = yield* sql`INSERT INTO agents ${sql.insert({
             id: agent.id,
-            name: agent.name,
             ...configColumns(agent),
             config_version: agent.configVersion,
             status: agent.status,

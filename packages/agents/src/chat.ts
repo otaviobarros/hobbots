@@ -402,7 +402,8 @@ export class ChatService extends Context.Service<
           );
           for (const version of versions) {
             const config = yield* repo.findAgentConfig(agent.id, version);
-            if (Option.isNone(config) || systemInstructions(agent.name, config.value) !== instructions) return true;
+            if (Option.isNone(config) || systemInstructions(config.value.name, config.value) !== instructions)
+              return true;
           }
           return false;
         });
@@ -458,7 +459,6 @@ export class ChatService extends Context.Service<
         carry: Carry,
       ) =>
         Effect.gen(function* () {
-          const name = agent.name;
           const adapter = adapters(brain.runtime);
           if (adapter === undefined) {
             yield* transition(
@@ -615,7 +615,7 @@ export class ChatService extends Context.Service<
                 prompt,
                 briefing: [briefing, taskTurn?.briefing ?? null].filter((part) => part !== null).join("\n\n") || null,
                 sessionId: thread.sessions.find((s) => s.runtime === brain.runtime)?.sessionId ?? null,
-                instructions: systemInstructions(name, config),
+                instructions: systemInstructions(config.name, config),
                 instructionsChanged: changed,
                 model: brain.model,
                 effort: brain.effort,
@@ -746,7 +746,7 @@ export class ChatService extends Context.Service<
             thread,
             brain.runtime,
             agent,
-            systemInstructions(agent.name, config),
+            systemInstructions(config.name, config),
           );
           busy.add(thread.id);
           // Registered before the turn starts, so a stop sent right away still reaches it.
