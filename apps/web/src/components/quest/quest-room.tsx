@@ -3,6 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { formatWhen } from "../../lib/time.ts";
+import { TaskApprovals, useShownApprovals } from "../approvals/task-approvals.tsx";
 import { RoomBackpack } from "../backpack/quest-backpack.tsx";
 import { HobSprite } from "../hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
@@ -46,6 +47,7 @@ export function QuestRoom({
 }) {
   const now = useNow();
   const { open, workbench } = useOpeners(tree.tasks[0], onOpen, onWorkbench);
+  const asking = useShownApprovals(tree.approvals);
   const card = workCard(tree);
   if (card === null) return null;
   const { top } = card;
@@ -96,6 +98,12 @@ export function QuestRoom({
           </li>
         ))}
       </ul>
+      {/* What waits on your approval, decided right here as in the Inbox (#698). */}
+      {asking.length > 0 && (
+        <div className="flex flex-col gap-2 px-3.5 pb-2">
+          <TaskApprovals approvals={asking} />
+        </div>
+      )}
       <RoomBackpack tree={tree} hobs={hobs} onOpen={open} />
       <RoomControls
         tree={tree}

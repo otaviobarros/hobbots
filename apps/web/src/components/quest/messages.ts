@@ -15,6 +15,8 @@ export const messages = {
       `${formatCount(done)} of ${formatCount(total)} done`,
     step: ({ index, total }: { index: number; total: number }) => `step ${formatCount(index)} of ${formatCount(total)}`,
     waitingOn: ({ names }: { names: string }) => `waiting on ${names}`,
+    /** A Task whose turn waits on you to approve an action, named as the request names it (#698). */
+    waitingApproval: ({ action }: { action: string }) => `waiting on your approval: ${action}`,
     doneCount: ({ count }: { count: number }) => plural(count, { one: "1 done", other: `${formatCount(count)} done` }),
     moreCount: ({ count }: { count: number }) => plural(count, { one: "1 more", other: `${formatCount(count)} more` }),
     rowDetail: ({ name, detail }: { name: string; detail: string }) => `${name} · ${detail}`,
@@ -88,6 +90,7 @@ export const messages = {
     checkpoints: "Checkpoints",
     noCheckpoints: "Nothing reported yet.",
     questions: "Questions",
+    approvals: "Waiting on your approval",
     output: "Output",
     given: "Handed to it",
     returned: ({ name, summary }: { name: string; summary: string }) => `${name}'s result: ${summary}`,

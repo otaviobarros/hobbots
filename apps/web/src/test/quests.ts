@@ -1,5 +1,7 @@
 import {
   AgentId,
+  ApprovalId,
+  ApprovalRequest,
   Attempt,
   AttemptId,
   Checkpoint,
@@ -150,6 +152,35 @@ export const attempt = (taskId: TaskId, state: Attempt["state"]): Attempt =>
     outcome: null,
     startedAt: at(3),
     endedAt: null,
+  });
+
+/** A request a member's turn made on its Task, which pauses that turn until you decide it (#698). */
+export const memberApproval = (
+  taskId: TaskId,
+  agentId: AgentId,
+  fields: Partial<{ state: ApprovalRequest["state"]; revision: number; second: number }> = {},
+): ApprovalRequest =>
+  new ApprovalRequest({
+    id: ApprovalId.make(`ap-${taskId}`),
+    agentId,
+    threadId: THREAD,
+    messageId: null,
+    taskId,
+    rootTaskId: CAMPAIGN,
+    stepId: "tool-1",
+    tool: "Bash",
+    operation: "delete-files",
+    targets: ["/work/scratch/tmp-notes.txt"],
+    arguments: { command: "rm scratch/tmp-notes.txt" },
+    label: "Running rm scratch/tmp-notes.txt",
+    reason: "Deleting files asks first.",
+    actionDigest: "d".repeat(64),
+    policyVersion: "r1",
+    state: fields.state ?? "pending",
+    denyReason: null,
+    createdAt: at(fields.second ?? 5),
+    decidedAt: null,
+    revision: fields.revision ?? 1,
   });
 
 export const tree = (fields: Partial<ConstructorParameters<typeof TaskTree>[0]> = {}): TaskTree =>

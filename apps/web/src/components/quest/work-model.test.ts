@@ -9,6 +9,7 @@ import {
   COPY,
   checkpoint,
   delegation,
+  memberApproval,
   QUILL,
   question,
   THREAD,
@@ -35,6 +36,27 @@ describe("workCard", () => {
       [BUILD, "needs-you"],
       [COPY, "running"],
     ]);
+  });
+
+  it("puts a member's Task whose turn waits on your approval under needs you, naming the action", () => {
+    const quest = blackFriday();
+    const asking = tree({ ...quest, approvals: [memberApproval(COPY, QUILL)] });
+    const card = workCard(asking);
+    expect(card?.rows.map((row) => [row.task.id, row.status, row.approval?.operation ?? null])).toEqual([
+      [COPY, "needs-you", "delete-files"],
+      [BUILD, "waiting", null],
+    ]);
+    expect(card?.status).toBe("needs-you");
+    expect(workCounts(asking)["needs-you"]).toBe(1);
+    expect(taskDetail(asking, task(COPY, { ownerId: QUILL })).approvals.map((each) => each.id)).toEqual(["ap-copy"]);
+
+    // Once you decide it, the Task runs again and nothing needs you.
+    const decided = tree({ ...quest, approvals: [memberApproval(COPY, QUILL, { state: "approved", revision: 2 })] });
+    expect(workCard(decided)?.rows.map((row) => [row.task.id, row.status, row.approval])).toEqual([
+      [COPY, "running", null],
+      [BUILD, "waiting", null],
+    ]);
+    expect(workCounts(decided)["needs-you"]).toBe(0);
   });
 
   it("shows only the current step of a Task with steps, as step 3 of 4", () => {

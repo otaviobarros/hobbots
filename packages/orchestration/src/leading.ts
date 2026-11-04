@@ -5,6 +5,7 @@ import {
   isTerminalTask,
   liveAttemptOn,
   NoteId,
+  pendingApprovalsOn,
   type Question,
   type Task,
   TaskReadiness,
@@ -14,7 +15,9 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import {
+  approvalsWaiting,
   type CallScope,
+  describeApproval,
   fromRecords,
   journalOf,
   ledTask,
@@ -82,6 +85,8 @@ const describeTask = (task: Task, tree: TaskTree, caller: string) => {
     questions: tree.questions
       .filter((question) => question.taskId === task.id)
       .map((question) => describeQuestion(question, caller)),
+    // Its turn is paused on these until the user decides them (#698).
+    approvals: pendingApprovalsOn(tree, task.id).map(describeApproval),
     recent_checkpoints: reported.map((each) => ({ kind: each.kind, summary: each.summary, at: each.createdAt })),
     ...(task.result === null ? {} : { result: task.result.summary }),
   };
@@ -144,7 +149,7 @@ export const makeLeading = ({ tasks }: Deps) => ({
                   ended === undefined
                     ? ""
                     : ` Task ${ended.id} ended as ${ended.state}, so nothing under it changes now.`
-                }`,
+                } ${approvalsWaiting(listed.reduce((sum, task) => sum + task.approvals.length, 0))}`.trimEnd(),
           details: { tasks: listed },
         },
         entries: [],

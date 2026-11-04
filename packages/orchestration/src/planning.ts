@@ -7,6 +7,7 @@ import {
   isTerminalTask,
   liveAttemptOn,
   MilestoneId,
+  pendingApprovals,
   QuestId,
   type Task,
   TaskId,
@@ -19,7 +20,9 @@ import { Effect } from "effect";
 import type { Authority, PathSeparator } from "./authority.ts";
 import { cut } from "./briefs.ts";
 import {
+  approvalsWaiting,
   type CallScope,
+  describeApproval,
   fromRecords,
   journalOf,
   ledTask,
@@ -61,14 +64,18 @@ const END_TURN =
   "End your turn now. Hobbots wakes you when they end, or sooner when something arrives for you, such as a question. Calling wait_for again only to check changes nothing.";
 
 /**
- * What the awaited Tasks, or Tasks under them, hold open: the questions that wait on an answer, and
- * the blockers of those that are blocked or last reported one. A hob that waits on a Task that asked it something answers
- * instead of waiting on itself (#573).
+ * What the awaited Tasks, or Tasks under them, hold open: the questions that wait on an answer, the
+ * actions that wait for the user's approval (#698), and the blockers of those that are blocked or
+ * last reported one. A hob that waits on a Task that asked it something answers instead of waiting
+ * on itself (#573).
  */
 const openOnAwaited = (scope: CallScope, awaited: ReadonlyArray<Task>) => {
-  const within = new Set<string>(
+  const within = new Set<TaskId>(
     awaited.flatMap((each) => [each.id, ...descendantsOf(each, scope.tree.tasks).map((under) => under.id)]),
   );
+  const approvals = pendingApprovals(scope.tree)
+    .filter((approval) => within.has(approval.taskId))
+    .map((approval) => ({ task_id: approval.taskId as string, ...describeApproval(approval) }));
   const questions = scope.tree.questions
     .filter((question) => question.state === "open" && within.has(question.taskId))
     .map((question) => ({
@@ -98,7 +105,7 @@ const openOnAwaited = (scope: CallScope, awaited: ReadonlyArray<Task>) => {
       },
     ];
   });
-  return { questions, blockers };
+  return { questions, approvals, blockers };
 };
 
 /** What the hob does after a wait: answer what waits on it, then end its turn. */
@@ -112,13 +119,15 @@ const afterWaiting = (open: ReturnType<typeof openOnAwaited>) => {
           `${yours === 1 ? "A question from them waits" : `${yours} questions from them wait`} for you: answer each with answer, or pass it up with escalate, before you end your turn.`,
         ]),
     ...(blocked === 0 ? [] : [`${blocked === 1 ? "One of them is" : `${blocked} of them are`} blocked: see blockers.`]),
+    ...(open.approvals.length === 0 ? [] : [approvalsWaiting(open.approvals.length)]),
     END_TURN,
   ].join(" ");
 };
 
-/** The questions and blockers in a wait's details, only when there are any. */
+/** The questions, approvals and blockers in a wait's details, only when there are any. */
 const openDetails = (open: ReturnType<typeof openOnAwaited>) => ({
   ...(open.questions.length === 0 ? {} : { questions: open.questions }),
+  ...(open.approvals.length === 0 ? {} : { approvals: open.approvals }),
   ...(open.blockers.length === 0 ? {} : { blockers: open.blockers }),
 });
 
