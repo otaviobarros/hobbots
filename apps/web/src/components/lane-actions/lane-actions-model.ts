@@ -1,4 +1,4 @@
-import type { Attempt, AttemptId, Question, Task, TaskTree } from "@hobbots/domain";
+import { type Attempt, type AttemptId, type Question, saysMore, type Task, type TaskTree } from "@hobbots/domain";
 import { taskControls, topCancel } from "../quest/control-room.ts";
 import { questionForYou } from "../quest/work-model.ts";
 
@@ -75,6 +75,27 @@ export const laneTries = (tree: TaskTree, task: Task, picked: AttemptId | undefi
     failed: FAILED.includes(attempt.state),
     picked: attempt.id === shown?.id,
   }));
+};
+
+/** An earlier try picked in the lane's picker: which it was, and where it left the Task. */
+export interface PickedTry {
+  readonly number: number;
+  /** The last thing the try reported, else how it ended; null while it said nothing. */
+  readonly line: string | null;
+}
+
+/**
+ * What a lane shows for a Task while an earlier try of it is picked: the try's number and its own
+ * last report in place of the latest one's. Null while no try of this Task is picked, or the
+ * picked one is the latest, so the lane shows the Task as it stands.
+ */
+export const pickedTry = (tree: TaskTree, task: Task, picked: AttemptId | undefined): PickedTry | null => {
+  const attempts = triesOf(tree, task);
+  const attempt = attempts.find((each) => each.id === picked);
+  if (attempt === undefined || attempt === attempts[attempts.length - 1]) return null;
+  const report = tree.checkpoints.findLast((each) => each.attemptId === attempt.id && saysMore(each));
+  const result = task.result?.attemptId === attempt.id ? task.result.summary : undefined;
+  return { number: attempt.number, line: result ?? report?.summary ?? attempt.outcome };
 };
 
 /** A question that climbed every lead to you from one of the lane's Tasks, with the Task it is on. */

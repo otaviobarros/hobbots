@@ -1,4 +1,4 @@
-import type { AgentId, Task, TaskTree } from "@hobbots/domain";
+import type { AgentId, Task, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { type ReactNode, useEffect, useRef } from "react";
 import { controlError } from "../quest/control-room.ts";
@@ -20,12 +20,15 @@ const room = questCopy.room;
  */
 export function LaneCards({
   tree,
+  lane,
   hobId,
   tasks,
   hobs,
   actions,
 }: {
   tree: TaskTree;
+  /** The Task the lane's header names, whose menu Reassign… opens. */
+  lane: TaskId;
   hobId: AgentId;
   /** The hob's Tasks on the Quest, in order, without its steps. */
   tasks: ReadonlyArray<Task>;
@@ -40,7 +43,14 @@ export function LaneCards({
         <LaneAsk key={question.id} question={question} hobs={hobs} />
       ))}
       {failures.map((failure) => (
-        <FailCard key={failure.task.id} failure={failure} titled={tasks.length > 1} hobs={hobs} actions={actions} />
+        <FailCard
+          key={failure.task.id}
+          lane={lane}
+          failure={failure}
+          titled={tasks.length > 1}
+          hobs={hobs}
+          actions={actions}
+        />
       ))}
       {/* A step a cancel was asked about keeps its question and outcome in its owner's lane too. */}
       {tree.tasks
@@ -54,11 +64,13 @@ export function LaneCards({
 
 /** A failed Task: what stopped it, and Retry and Reassign… where the hub would accept them. */
 function FailCard({
+  lane,
   failure,
   titled,
   hobs,
   actions,
 }: {
+  lane: TaskId;
   failure: LaneFailure;
   /** The lane holds more than one Task, so the card says which failed. */
   titled: boolean;
@@ -93,7 +105,7 @@ function FailCard({
               variant="outline"
               size="sm"
               disabled={actions.busy}
-              onClick={() => actions.openMenu(task.id, "reassign")}
+              onClick={() => actions.openMenu(lane, "reassign", task.id)}
             >
               {messages.reassign}
             </Button>

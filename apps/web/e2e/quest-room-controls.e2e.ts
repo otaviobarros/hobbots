@@ -192,6 +192,13 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   await expect(bannerFailed).toContainText("Write the sale banner failed");
   await expect(bannerFailed).toContainText("The image service timed out.");
   await expect(bannerFailed.getByRole("button")).toHaveText(["Retry", "Reassign…"]);
+  // Quill's lane names the signs, still running, so Reassign… on the banner opens his menu on the banner.
+  await expect(laneHead(page, "Quill")).toContainText("Order the sale signs");
+  await bannerFailed.getByRole("button", { name: "Reassign…" }).click();
+  const quillMenu = page.getByRole("menu", { name: "Quill's task" });
+  await expect(quillMenu).toContainText("Reassign “Write the sale banner” to");
+  await page.keyboard.press("Escape");
+  await expect(quillMenu).toBeHidden();
 
   // Cancel task… in Quill's menu asks about the signs, his one Task still open, then the Task
   // confirms it stopped; the lane follows.
@@ -218,10 +225,17 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   await tries.getByRole("button", { name: "Attempt 1, failed" }).click();
   await expect(tries.getByRole("button", { name: "Attempt 1, failed" })).toHaveAttribute("aria-pressed", "true");
   await expect(page).toHaveURL(/attempt=/);
+  // The lane shows what the first try did: its number and how it ended.
+  await expect(banner).toContainText("attempt 1");
+  await expect(banner).toContainText("The image service timed out.");
   await room.getByRole("tab", { name: /Changes/ }).click();
   const bench = dock(page);
   await expect(bench.getByRole("heading", { name: "Write the sale banner" })).toBeVisible();
   await expect(bench.getByRole("radio", { name: "Attempt 1" })).toBeChecked();
+  // Picking the latest try again shows the Task as it stands.
+  await tries.getByRole("button", { name: "Attempt 2" }).click();
+  await expect(banner).toContainText("attempt 2");
+  await expect(banner).not.toContainText("The image service timed out.");
 
   // Reassign… on Ada's failed Task opens her menu on the hobs it can go to: Quill is the only one.
   const emailFailed = lane(page, "Ada").getByRole("region", { name: "Ada's task failed" });

@@ -52,7 +52,10 @@ export function LaneMenu({
   onWorkbench: () => void;
 }) {
   const owner = hobs(task.ownerId).name;
-  const view = actions.menuOf(task.id);
+  const open = actions.menuOf(task.id);
+  const view = open?.view ?? null;
+  // Reassign… on one of the hob's other failed Tasks gives that Task, not the header's.
+  const target = tree.tasks.find((each) => each.id === open?.taskId) ?? task;
   const menu = laneMenu(tree, task);
   // Cancel… opens its question in the lane, which takes focus, so the menu does not hand it back.
   const asked = useRef(false);
@@ -80,7 +83,7 @@ export function LaneMenu({
         }}
       >
         {view === "reassign" ? (
-          <ReassignItems tree={tree} task={task} actions={actions} />
+          <ReassignItems tree={tree} lane={task} task={target} actions={actions} />
         ) : view === "cancel" ? (
           <CancelItems task={task} cancel={menu.cancel} actions={actions} ask={ask} />
         ) : (
@@ -185,7 +188,18 @@ function CancelItems({
 }
 
 /** Reassign…'s view: the hobs the hub would give the Task to, each with its sprite, then Back. */
-function ReassignItems({ tree, task, actions }: { tree: TaskTree; task: Task; actions: LaneActions }) {
+function ReassignItems({
+  tree,
+  lane,
+  task,
+  actions,
+}: {
+  tree: TaskTree;
+  /** The Task the lane's header names, whose menu Back returns to. */
+  lane: Task;
+  task: Task;
+  actions: LaneActions;
+}) {
   const active = (useQuery(agentsQuery).data ?? NO_HOBS).filter((hob) => hob.status !== "retired");
   const targets = reassignTargets(tree, task, active);
   return (
@@ -203,7 +217,7 @@ function ReassignItems({ tree, task, actions }: { tree: TaskTree; task: Task; ac
           {hob.name}
         </DropdownMenuItem>
       ))}
-      <BackItem task={task} actions={actions} />
+      <BackItem task={lane} actions={actions} />
     </>
   );
 }

@@ -132,6 +132,7 @@ function Lane({
             key={row.task.id}
             tree={tree}
             row={row}
+            tried={acted.tried(row.task)}
             titled={lane.rows.length > 1}
             hobs={hobs}
             onOpen={(taskId) => moves.lane(taskId)}

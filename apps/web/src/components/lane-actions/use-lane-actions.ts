@@ -17,17 +17,25 @@ export type MenuView = "items" | "reassign" | "cancel";
  */
 export const useLaneActions = () => {
   const control = useTaskControl();
-  const [menu, setMenu] = useState<{ readonly taskId: TaskId; readonly view: MenuView } | null>(null);
+  // The lane whose menu is open, named by its header's Task, and the Task the view acts on.
+  const [menu, setMenu] = useState<{ readonly lane: TaskId; readonly taskId: TaskId; readonly view: MenuView } | null>(
+    null,
+  );
   const [asking, setAsking] = useState<TaskId | null>(null);
   // The lane Task the last control was sent from, and the hob a Reassign picked.
   const [sent, setSent] = useState<{ readonly taskId: TaskId; readonly target: Agent | null } | null>(null);
   const on = (taskId: TaskId) => sent?.taskId === taskId;
   return {
-    /** The view of the Task's menu while it is open, else null. */
-    menuOf: (taskId: TaskId): MenuView | null => (menu?.taskId === taskId ? menu.view : null),
-    openMenu: (taskId: TaskId, view: MenuView = "items") => {
+    /** The view of a lane's menu while it is open, and the Task it acts on; else null. */
+    menuOf: (lane: TaskId): { readonly view: MenuView; readonly taskId: TaskId } | null =>
+      menu?.lane === lane ? { view: menu.view, taskId: menu.taskId } : null,
+    /**
+     * Opens a lane's menu on a view, acting on the lane's header Task or, for Reassign… on one of
+     * the hob's other failed Tasks, on that one.
+     */
+    openMenu: (lane: TaskId, view: MenuView = "items", taskId: TaskId = lane) => {
       control.reset();
-      setMenu({ taskId, view });
+      setMenu({ lane, taskId, view });
     },
     closeMenu: () => setMenu(null),
     /** Whether the Task's cancel waits for Yes. */

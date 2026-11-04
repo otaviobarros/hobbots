@@ -2,6 +2,7 @@ import type { AgentId, Task, TaskTree } from "@hobbots/domain";
 import type { ReactNode } from "react";
 import type { HobLookup, Pins } from "../quest/use-work.ts";
 import type { RoomMoves, RoomView } from "../quest-room/room-search.ts";
+import { type PickedTry, pickedTry } from "./lane-actions-model.ts";
 import { LaneCards } from "./lane-cards.tsx";
 import { LaneMenu } from "./lane-menu.tsx";
 import { LaneTries } from "./lane-tries.tsx";
@@ -14,11 +15,13 @@ export interface ActedLane {
   readonly tasks: ReadonlyArray<Task>;
 }
 
-/** The parts acting adds to a lane: the ⋯ menu beside its header, the attempt picker under it and the cards in its body. */
+/** The parts acting adds to a lane: the ⋯ menu beside its header, the attempt picker under it, the cards in its body and the try it shows. */
 export interface LaneSlots {
   readonly actions: ReactNode;
   readonly tries: ReactNode;
   readonly cards: ReactNode;
+  /** The earlier try of one of the lane's Tasks that is picked, which the lane shows in its place. */
+  readonly tried: (task: Task) => PickedTry | null;
 }
 
 /**
@@ -58,6 +61,9 @@ export const useLaneSlots = ({
         onPick={(attemptId) => moves.pick(lane.task.id, attemptId)}
       />
     ),
-    cards: <LaneCards tree={tree} hobId={lane.hobId} tasks={lane.tasks} hobs={hobs} actions={actions} />,
+    cards: (
+      <LaneCards tree={tree} lane={lane.task.id} hobId={lane.hobId} tasks={lane.tasks} hobs={hobs} actions={actions} />
+    ),
+    tried: (task) => pickedTry(tree, task, view.attemptId),
   });
 };

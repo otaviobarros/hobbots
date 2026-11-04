@@ -14,7 +14,7 @@ import {
   task,
   tree,
 } from "../../test/quests.ts";
-import { failureReason, laneFailures, laneMenu, laneQuestions, laneTries } from "./lane-actions-model.ts";
+import { failureReason, laneFailures, laneMenu, laneQuestions, laneTries, pickedTry } from "./lane-actions-model.ts";
 
 const find = (from: TaskTree, id: Task["id"]): Task => {
   const found = from.tasks.find((each) => each.id === id);
@@ -104,6 +104,27 @@ describe("laneTries", () => {
     expect(laneTries(two, copy, first.id).map((each) => each.picked)).toEqual([true, false]);
     // A try of another Task does not pick one here.
     expect(laneTries(two, copy, AttemptId.make("a-build-1")).map((each) => each.picked)).toEqual([false, true]);
+  });
+});
+
+describe("pickedTry", () => {
+  it("shows an earlier try's own last report, else how it ended, and nothing for the latest or another Task's", () => {
+    const first = nth(COPY, 1, "failed", "The image service timed out.");
+    const second = nth(COPY, 2, "running");
+    const two = tree({ ...blackFriday(), attempts: [first, second] });
+    const copy = find(two, COPY);
+    expect(pickedTry(two, copy, first.id)).toEqual({ number: 1, line: "The image service timed out." });
+    expect(pickedTry(two, copy, second.id)).toBeNull();
+    expect(pickedTry(two, copy, undefined)).toBeNull();
+    expect(pickedTry(two, find(two, BUILD), first.id)).toBeNull();
+    const reported = tree({
+      ...two,
+      checkpoints: [
+        new Checkpoint({ ...checkpoint(COPY, "progress", "Drafted the hero line", 3), attemptId: first.id }),
+        new Checkpoint({ ...checkpoint(COPY, "progress", "Started over", 4), attemptId: second.id }),
+      ],
+    });
+    expect(pickedTry(reported, find(reported, COPY), first.id)).toEqual({ number: 1, line: "Drafted the hero line" });
   });
 });
 

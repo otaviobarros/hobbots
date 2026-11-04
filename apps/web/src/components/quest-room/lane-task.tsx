@@ -2,6 +2,7 @@ import type { TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { formatWhen } from "../../lib/time.ts";
 import { TaskBackpack } from "../backpack/quest-backpack.tsx";
+import type { PickedTry } from "../lane-actions/lane-actions-model.ts";
 import { attemptCount, type RoomRow, roomStatusLabel, roomTone, waitingNames } from "../quest/control-room.ts";
 import { messages as questCopy } from "../quest/messages.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
@@ -21,6 +22,7 @@ const room = questCopy.room;
 export function LaneTask({
   tree,
   row,
+  tried,
   titled,
   hobs,
   onOpen,
@@ -28,6 +30,8 @@ export function LaneTask({
 }: {
   tree: TaskTree;
   row: RoomRow;
+  /** An earlier try picked in the lane, which the Task shows in place of its latest. */
+  tried: PickedTry | null;
   /** Whether the lane holds more than one Task, so each says which it is. */
   titled: boolean;
   hobs: HobLookup;
@@ -36,7 +40,7 @@ export function LaneTask({
 }) {
   const { task } = row;
   const waits = waitingNames(row, (id) => hobs(id).name);
-  const line = task.result?.summary ?? latestOf(tree, task);
+  const line = tried === null ? (task.result?.summary ?? latestOf(tree, task)) : tried.line;
   return (
     <section aria-label={taskTitle(task)} className="flex min-w-0 flex-col gap-2 text-detail wrap-anywhere">
       {titled && (
@@ -46,7 +50,7 @@ export function LaneTask({
         </span>
       )}
       <p className="m-0 text-meta text-label">
-        {messages.taskMeta({ attempt: attemptCount(tree, task), age: formatWhen(task.createdAt) })}
+        {messages.taskMeta({ attempt: tried?.number ?? attemptCount(tree, task), age: formatWhen(task.createdAt) })}
       </p>
       {waits.length > 0 && (
         <p className="m-0 text-lantern">{questCopy.card.waitingOn({ names: questCopy.names(waits) })}</p>
