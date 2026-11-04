@@ -105,6 +105,14 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-REACT-010 | Memoize only for a measured problem | Active |
 | STD-REACT-011 | Hooks follow the rules of hooks | Active |
 | STD-REACT-012 | A live event cancels a list's read before it reads it again | Active |
+| STD-REACT-013 | Components are plain functions with typed props | Active |
+| STD-REACT-014 | Every route has an error screen | Active |
+| STD-REACT-015 | Data sections show their loading, empty and error states | Active |
+| STD-REACT-016 | Mutations show progress and keep the user's input | Active |
+| STD-REACT-017 | Forms validate with an Effect Schema | Active |
+| STD-REACT-018 | Context holds only app-wide values | Active |
+| STD-REACT-019 | No any, ts-ignore or double casts | Active |
+| STD-REACT-020 | Every opt-out names its rule and a reason | Active |
 | STD-UI-001 | Styles use theme tokens only | Active |
 | STD-UI-002 | Build on the shared primitives | Active |
 | STD-UI-003 | Every control works by keyboard and has a name | Active |
@@ -113,6 +121,9 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-UI-006 | Selection uses a fill, never a left-edge accent | Active |
 | STD-UI-007 | The UI calls agents hobs | Active |
 | STD-UI-008 | Durable records drive every status | Active |
+| STD-UI-009 | Every failure says what went wrong and how to recover | Active |
+| STD-UI-010 | Only primitives take a className, and only for layout | Active |
+| STD-UI-011 | Visual variants come from cva | Active |
 | STD-I18N-001 | User-facing copy lives in message modules | Active |
 | STD-I18N-002 | Messages are whole sentences with placeholders | Active |
 | STD-I18N-003 | Dates and numbers use shared locale formatters | Active |
@@ -124,6 +135,8 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-TEST-004 | Each user flow has an end-to-end test | Active |
 | STD-TEST-005 | Component tests only where end-to-end cannot reach | Active |
 | STD-TEST-006 | Database tests run on SQLite and PostgreSQL | Active |
+| STD-TEST-007 | Every end-to-end screen passes an accessibility scan | Active |
+| STD-TEST-008 | Each main flow works by keyboard alone | Active |
 | STD-DOCS-001 | Decided choices change only through an ADR | Active |
 | STD-DOCS-002 | Read the contract before changing its area | Active |
 | STD-DOCS-003 | Public text links only public sources | Active |

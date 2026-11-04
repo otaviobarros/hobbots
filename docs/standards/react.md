@@ -1,6 +1,8 @@
 # React standards
 
-Rules for React code in the web client and the UI package. The client uses React 19, TanStack Router, TanStack Query and shadcn on Radix and Tailwind.
+Rules for React code in the web client and the UI package. The client uses React 19 with the React Compiler, TanStack Router, TanStack Query, Effect Schema, and shadcn on Radix and Tailwind.
+
+Every rule names the tool that enforces it. A rule says "review" only when it needs judgment that a tool cannot make. Where a rule allows an exception, the exception is a comment in the form of [STD-REACT-020](#std-react-020-every-opt-out-names-its-rule-and-a-reason). The checks for the React, UI, i18n and testing rules land in [#803](https://github.com/otaviobarros/hobbots/issues/803). Until then, review enforces them.
 
 ## State
 
@@ -14,10 +16,12 @@ Read and change server data only through the TanStack Query hooks in `apps/web/s
 
 ### STD-REACT-002 Route-level state lives in the URL
 
-Put state that defines the view, such as the selected hob, tab or filter, in route params or search params. Validate search params with a schema in the route.
+Put state that defines the view, such as the selected hob, tab or filter, in route params or search params. Each route's `validateSearch` is an Effect Schema, passed through `Schema.toStandardSchemaV1`, which TanStack Router accepts without an adapter. A missing or invalid param falls back to its default and never shows an error screen.
 
-- **Why:** a link, a reload or the back button restores the same view.
-- **Enforced by:** review.
+- ✅ `validateSearch: Schema.toStandardSchemaV1(HobsSearch)`
+- ❌ `validateSearch: (search) => ({ show: isHobFilter(search.show) ? search.show : undefined })`
+- **Why:** a link, a reload or the back button restores the same view, and one schema states what the URL may hold (STD-DUP-004).
+- **Enforced by:** the frontend check in `pnpm check`, which fails on a `validateSearch` that is not a schema.
 - **Applies to:** `apps/web`.
 
 ### STD-REACT-003 Local UI state stays local
@@ -40,18 +44,18 @@ Use `useEffect` only to sync with something outside React: a subscription, the D
 
 ### STD-REACT-005 Components are grouped by feature
 
-Group web components in a folder per feature, for example `components/hob-profile/` or `components/onboarding/`. Put product-neutral primitives in `packages/ui`.
+Put every web component in a folder per feature, for example `components/hob-profile/` or `components/onboarding/`. No `.tsx` file sits at the root of `components/`. Put product-neutral primitives in `packages/ui`.
 
 - **Why:** a feature's components, helpers and tests sit together and move together.
-- **Enforced by:** review.
+- **Enforced by:** the frontend check in `pnpm check`, which fails on a `.tsx` file at the root of `apps/web/src/components`.
 - **Applies to:** `apps/web/src/components`.
 
 ### STD-REACT-006 Component files stay small
 
-Split a component file when it passes about 300 lines or holds several unrelated components. Small private subcomponents may stay in the file of the component that uses them.
+A `.tsx` file has at most 250 lines, and its JSX nests at most 6 elements deep. Split a file that grows past either limit. Small private subcomponents may stay in the file of the component that uses them. A file that must stay longer carries an opt-out with its reason (STD-REACT-020).
 
-- **Why:** a small file is easy to read, review and test.
-- **Enforced by:** review.
+- **Why:** a small, shallow file is easy to read, review and test.
+- **Enforced by:** the frontend check in `pnpm check`.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-REACT-007 Kebab-case files and named exports
@@ -59,7 +63,7 @@ Split a component file when it passes about 300 lines or holds several unrelated
 Name files in kebab-case, for example `hob-profile.tsx`. Export with named exports only. Config files that a tool requires to use a default export are the exception.
 
 - **Why:** names match across imports, search results and file trees.
-- **Enforced by:** review.
+- **Enforced by:** Biome `noDefaultExport`, with an override for config files, and the frontend check in `pnpm check` for file names.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-REACT-008 Composition over boolean props
@@ -84,10 +88,10 @@ Move non-trivial derivation and decisions out of the component into pure functio
 
 ### STD-REACT-010 Memoize only for a measured problem
 
-Use `useMemo`, `useCallback` or `memo` only to fix a performance problem you measured. Add a comment that names the problem. The React Compiler is planned to memoize the rest automatically.
+The React Compiler memoizes components and hooks at build time. Do not write `useMemo`, `useCallback` or `memo` by hand. Use one only to fix a performance problem you measured that the compiler does not solve, with a `biome-ignore` comment that names the problem (STD-REACT-020).
 
-- **Why:** manual memoization adds code and dependency bugs, and usually saves nothing.
-- **Enforced by:** review.
+- **Why:** the compiler memoizes more precisely than hand-written code, and manual memoization adds code and dependency bugs.
+- **Enforced by:** the React Compiler in the web app's Vite config, and Biome `noRestrictedImports` on `useMemo`, `useCallback` and `memo` from `react`.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-REACT-011 Hooks follow the rules of hooks
@@ -105,3 +109,75 @@ When a live event invalidates a list query, first `await queryClient.cancelQueri
 - **Why:** while a list has no data yet, TanStack Query hands back the read already in flight instead of starting another. That read may have been taken before the change, so the screen shows the old list until something reads it again.
 - **Enforced by:** review, and a unit test per list that answers the first read after the event.
 - **Applies to:** `apps/web`.
+
+## Component API
+
+### STD-REACT-013 Components are plain functions with typed props
+
+Write every component as a plain function. Type its props as `React.ComponentProps<"element">` or the props of the component it wraps, plus its own props. Pass `ref` as a normal prop, as React 19 allows. Do not use `forwardRef` or `React.FC`.
+
+- **Why:** one shape for every component keeps them easy to read and to compose, and the old wrappers add nothing in React 19.
+- **Enforced by:** Biome `noRestrictedImports` on `forwardRef` and `FC` from `react`.
+- **Applies to:** `apps/web`, `packages/ui`.
+
+## Loading, errors and input
+
+### STD-REACT-014 Every route has an error screen
+
+Every route sets an `errorComponent`, and the router sets a `defaultErrorComponent` for anything a route does not catch. The error screen follows STD-UI-009: it says what went wrong and offers a way to recover, such as retrying, going back or going Home. A render error never leaves a blank window.
+
+- **Why:** an error in one screen must not take down the whole app, and the user always needs a way out.
+- **Enforced by:** the frontend check in `pnpm check`, which fails on a route without `errorComponent` or a router without `defaultErrorComponent`.
+- **Applies to:** `apps/web`.
+
+### STD-REACT-015 Data sections show their loading, empty and error states
+
+Read data with `useQuery` and handle its states explicitly. Do not use Suspense for data. Each section that shows server data has a loading state, an empty state and an error state with a retry, built from the shared primitives in `packages/ui`, such as `Empty`, not from one-off markup.
+
+- **Why:** the user always sees what is happening, and every section handles the same states the same way.
+- **Enforced by:** review, and end-to-end tests that cover the empty and error states of each flow (STD-TEST-004).
+- **Applies to:** `apps/web`.
+
+### STD-REACT-016 Mutations show progress and keep the user's input
+
+Change server data with TanStack Query mutations, not React form actions. While a mutation is pending, its control shows progress and cannot be triggered again. When it fails, the user's input stays where it was, and the error follows STD-UI-009. Update the cache optimistically only for actions that rarely fail, such as archive or pin, and roll back on failure.
+
+- **Why:** a double submit or a lost draft costs the user's trust, and mutations already feed the query cache and the live events (STD-REACT-001).
+- **Enforced by:** review, and end-to-end tests of the pending and failure paths.
+- **Applies to:** `apps/web`.
+
+### STD-REACT-017 Forms validate with an Effect Schema
+
+Each form keeps its field rules in an Effect Schema next to it, and checks them in the client before it sends. A field shows its error inline, in plain words, when it loses focus and again on submit. Server errors map to the field they belong to when they can.
+
+- **Why:** one schema states the rules once (STD-DUP-004), and the user learns what to fix where they are typing.
+- **Enforced by:** review, and unit tests of each form schema (STD-TEST-003).
+- **Applies to:** `apps/web`.
+
+### STD-REACT-018 Context holds only app-wide values
+
+Use React Context only for values that the whole app shares and that rarely change, such as the theme or the API client. Pass everything else as props, or keep it in the URL or local state (STD-REACT-002, STD-REACT-003).
+
+- **Why:** context hides where data comes from, and a changing context re-renders every reader.
+- **Enforced by:** review.
+- **Applies to:** `apps/web`, `packages/ui`.
+
+## Types and exceptions
+
+### STD-REACT-019 No any, ts-ignore or double casts
+
+Do not write `any`, `@ts-ignore` or `as unknown as`. Parse untrusted data with an Effect Schema instead: browser storage, URL params and messages from the desktop app. Use `@ts-expect-error` only with a reason on the same line.
+
+- **Why:** each escape hatch turns off the strict compiler settings exactly where data is least trusted.
+- **Enforced by:** Biome `noExplicitAny` and `noTsIgnore` at error level, and the frontend check in `pnpm check` for `as unknown as`.
+- **Applies to:** `apps/web`, `packages/ui`.
+
+### STD-REACT-020 Every opt-out names its rule and a reason
+
+When a rule allows an exception, mark it with a comment in one form: `// standards-allow STD-XXX-NNN: <reason>`. A `biome-ignore` or `@ts-expect-error` comment also gives its reason, and names the rule when one applies.
+
+- ✅ `// standards-allow STD-REACT-006: the generated table of every charm stays in one file`
+- ❌ `// biome-ignore lint/style/noJsxLiterals: ok`
+- **Why:** one form lets an audit list every exception with one search, so none hides.
+- **Enforced by:** the frontend check in `pnpm check`, which fails on an opt-out without a rule ID or a reason.
+- **Applies to:** `apps/web`, `packages/ui`.

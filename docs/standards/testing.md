@@ -50,3 +50,19 @@ Take the test database from `TestDatabase` in `@hobbots/persistence/testing`, so
 - **Why:** a query that works on one engine can fail on the other (STD-DATA-002).
 - **Enforced by:** the CI jobs.
 - **Applies to:** suites that use a database.
+
+### STD-TEST-007 Every end-to-end screen passes an accessibility scan
+
+Every end-to-end spec scans each screen it visits with `@axe-core/playwright`, through a shared fixture. A serious or critical violation fails the test.
+
+- **Why:** the scan catches missing names, contrast and ARIA mistakes that role selectors alone miss (STD-UI-003).
+- **Enforced by:** the shared Playwright fixture and the end-to-end CI job.
+- **Applies to:** `apps/web/e2e`.
+
+### STD-TEST-008 Each main flow works by keyboard alone
+
+Onboarding, summoning a hob, chatting and deciding an approval each have an end-to-end spec that runs from start to finish with the keyboard only. A new main flow adds its own.
+
+- **Why:** a flow that needs a mouse at one step is closed to keyboard and screen-reader users (STD-UI-003).
+- **Enforced by:** the keyboard-only specs and the end-to-end CI job.
+- **Applies to:** `apps/web/e2e`.
