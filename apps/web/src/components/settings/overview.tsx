@@ -11,7 +11,7 @@ import { githubStatusQuery } from "../../api/github.ts";
 import { runtimesQuery } from "../../api/queries.ts";
 import { remoteAccessQuery } from "../../api/remote-access.ts";
 import { setupQuery } from "../../api/setup.ts";
-import { useTheme } from "../../lib/theme.ts";
+import { useThemeChoice } from "../../lib/theme.ts";
 import { ProviderFixActions, providerFix } from "../providers/provider-fix.tsx";
 import { messages } from "./messages.ts";
 import {
@@ -35,7 +35,7 @@ export const useOverview = (): { readonly overview: Overview; readonly loading: 
   const remote = useQuery({ ...remoteAccessQuery, enabled: connectionBridge === undefined });
   const devices = useQuery(devicesQuery);
   const backup = useQuery(backupQuery);
-  const theme = useTheme();
+  const theme = useThemeChoice();
   const overview = overviewOf({
     runtimes: runtimes.data,
     connected: setup.data?.connectedProviders,
@@ -114,8 +114,22 @@ function AreaCard({ card }: { card: OverviewCard }) {
           {glyph}
         </span>
         <span className="flex-1 font-semibold">{card.title}</span>
-        <span className="text-meta text-label group-hover:text-text-strong">
-          {sectionName(card.section)} <span aria-hidden>›</span>
+        <span className="inline-flex items-center gap-1 text-meta text-label group-hover:text-text-strong">
+          {sectionName(card.section)}
+          <svg
+            aria-hidden
+            viewBox="0 0 16 16"
+            width={12}
+            height={12}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="flex-none"
+          >
+            <path d="M3 8h10M9 4l4 4-4 4" />
+          </svg>
         </span>
       </span>
       <span className={cn("text-ui font-semibold", tone.color)}>{card.state}</span>

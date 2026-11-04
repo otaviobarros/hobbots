@@ -134,7 +134,7 @@ const allowAnotherDevice = async (current: Hub, name: string) => {
 };
 
 // covers DP-004
-test("[TC-DP-126] Settings lists the allowed devices, and Revoke asks first and signs one out", async ({ page }) => {
+test("[TC-DP-126] Settings lists the allowed devices, and Remove asks first and signs one out", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
   await finishSetup(current);
@@ -149,14 +149,14 @@ test("[TC-DP-126] Settings lists the allowed devices, and Revoke asks first and 
   const phone = allowed.getByRole("listitem").filter({ hasText: "Safari on iPhone" });
   await expect(phone).toContainText("A browser · iOS · on this computer · allowed");
 
-  // Revoke… asks first; Keep takes the question back.
-  await phone.getByRole("button", { name: "Revoke Safari on iPhone" }).click();
-  await expect(phone.getByText("Sign Safari on iPhone out now?")).toBeVisible();
+  // Remove asks first; Keep takes the question back.
+  await phone.getByRole("button", { name: "Remove Safari on iPhone" }).click();
+  await expect(phone.getByText("Remove Safari on iPhone? It is signed out now and has to ask again.")).toBeVisible();
   await phone.getByRole("button", { name: "Keep" }).click();
-  await expect(phone.getByRole("button", { name: "Revoke Safari on iPhone" })).toBeFocused();
+  await expect(phone.getByRole("button", { name: "Remove Safari on iPhone" })).toBeFocused();
 
-  await phone.getByRole("button", { name: "Revoke Safari on iPhone" }).click();
-  await phone.getByRole("button", { name: "Revoke", exact: true }).click();
+  await phone.getByRole("button", { name: "Remove Safari on iPhone" }).click();
+  await phone.getByRole("button", { name: "Remove", exact: true }).click();
   await expect(allowed.getByRole("listitem")).toHaveCount(2);
   await expect(allowed.getByText("Safari on iPhone")).toHaveCount(0);
 
