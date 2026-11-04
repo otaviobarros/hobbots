@@ -27,7 +27,7 @@ export function CharmsTab({ hob }: { hob: Agent }) {
     return <Loading name={hob.name} failed={permissions.isError} retry={() => void permissions.refetch()} />;
   }
   return (
-    <div className="flex max-w-[760px] flex-col gap-4">
+    <div className="flex max-w-form-max flex-col gap-4">
       <span className="text-text-secondary">{copy.intro({ name: hob.name })}</span>
       <GitHubCharm hob={hob} permissions={data} outdated={permissions.outdated} />
       <div className="flex items-center gap-3 rounded-card border-(length:--edge) border-dashed border-line-2 px-4 py-3.5">

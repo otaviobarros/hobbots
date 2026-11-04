@@ -56,7 +56,11 @@ export function ApprovalCard({ approval, hob, via }: { approval: ApprovalRequest
       onBlur={(event) => {
         hadFocus.current = card.current?.contains(event.relatedTarget) ?? false;
       }}
-      className={cn("cut flex max-w-[560px] flex-col gap-2.5 border-[3px] bg-card px-4 py-3.5", tone.ring, tone.motion)}
+      className={cn(
+        "cut flex max-w-column-max flex-col gap-2.5 border-[3px] bg-card px-4 py-3.5",
+        tone.ring,
+        tone.motion,
+      )}
     >
       <header className="flex flex-wrap items-center gap-2">
         <HobSprite hob={hob} size={22} state={pending ? "needs-you" : "idle"} />

@@ -74,7 +74,7 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-6 pt-5 pb-12">
+    <div className="mx-auto flex w-full max-w-page-max flex-col gap-6 px-6 pt-5 pb-12">
       <nav
         aria-label={copy.crumbs}
         className="-mb-2 flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-label"
