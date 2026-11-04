@@ -1,7 +1,7 @@
-import { cn } from "cn";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type * as React from "react";
 import { useRestoreFocus } from "../lib/restore-focus.ts";
+import { cn } from "../lib/utils.ts";
 
 // A Hobbots modal: a panel with pixel corners over a dimmed page. Radix keeps focus inside while it
 // is open and hides the page behind it from assistive technology. When it closes, focus goes back to
@@ -24,7 +24,7 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           // standards-allow STD-I18N-004: left-1/2 with -translate-x-1/2 centers the box, and translate has no logical form
-          "cut fixed top-1/2 left-1/2 z-50 flex w-[calc(100vw-32px)] max-w-[560px] -translate-x-1/2 -translate-y-1/2 flex-col gap-3.5 border-2 border-control bg-panel px-7 py-6 text-text-strong outline-none",
+          "cut fixed top-1/2 left-1/2 z-50 flex w-[calc(100vw-32px)] max-w-column-max -translate-x-1/2 -translate-y-1/2 flex-col gap-3.5 border-2 border-control bg-panel px-7 py-6 text-text-strong outline-none",
           className,
         )}
         {...props}

@@ -268,7 +268,7 @@ describe("controlError", () => {
       "Ada is working on it right now. Reassign it once that turn ends.",
     );
     expect(controlError(refusal("lineage-owner"), names)).toBe(
-      "Quill works on a Task above this one, so it cannot take it.",
+      "Quill works on a task above this one, so it cannot take it.",
     );
     expect(controlError(refusal("task-ended"), names)).toBe("This work already ended, so there is nothing to cancel.");
     expect(controlError(new ApiError("HobUnavailable", "HobUnavailable"), names)).toBe(

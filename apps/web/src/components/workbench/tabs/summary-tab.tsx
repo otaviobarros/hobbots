@@ -267,7 +267,7 @@ function Made({
         </ul>
       )}
       {changes.length > shown.length && (
-        <Button variant="link" size="xs" className="self-start" onClick={() => onTab("changes")}>
+        <Button variant="text" size="xs" className="self-start" onClick={() => onTab("changes")}>
           {copy.moreChanges({ count: changes.length - shown.length })}
         </Button>
       )}
@@ -294,7 +294,7 @@ function Artifact({ artifact, onTab }: { artifact: ArtifactRef; onTab: (tab: Wor
     <div className={box}>
       <span className="font-bold">{artifact.label}</span>
       {artifact.kind === "link" ? (
-        <a href={artifact.value} target="_blank" rel="noreferrer" className="break-all text-lantern">
+        <a href={artifact.value} target="_blank" rel="noreferrer" className="break-all text-link">
           {artifact.value}
         </a>
       ) : (

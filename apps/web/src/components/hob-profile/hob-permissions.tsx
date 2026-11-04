@@ -31,7 +31,7 @@ import {
 import { watchedSetupQuery } from "../../api/setup.ts";
 import { messages } from "../messages.ts";
 import { FolderList, LockedSwitch } from "../safety/safety-and-folders.tsx";
-import { EnforcementList, NeedsSandbox } from "./enforcement.tsx";
+import { CheckedTag, EnforcementList, NeedsSandbox } from "./enforcement.tsx";
 
 /**
  * The hob's permissions as the hub works them out. They change with the hob's configuration
@@ -106,7 +106,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
   ).length;
 
   return (
-    <div className="flex max-w-[760px] flex-col gap-4">
+    <div className="flex max-w-form-max flex-col gap-4">
       <div className="flex items-center gap-3 rounded-card bg-notice px-4 py-3">
         <span className="flex flex-1 flex-col">
           <span className="text-sm text-text">{copy.intro({ name: hob.name, preset })}</span>
@@ -241,6 +241,13 @@ function SigningSwitch({
   const noteId = useId();
   return (
     <div className="flex items-center gap-4 py-2.5">
+      <Switch
+        aria-labelledby={labelId}
+        aria-describedby={noteId}
+        checked={checked}
+        disabled={pending}
+        onCheckedChange={onChange}
+      />
       <div className="flex flex-1 flex-col gap-0.5">
         <span id={labelId} className="font-bold text-text-strong">
           {messages.signing.label}
@@ -249,13 +256,6 @@ function SigningSwitch({
           {checked ? messages.signing.on({ name }) : messages.signing.off({ name })}
         </span>
       </div>
-      <Switch
-        aria-labelledby={labelId}
-        aria-describedby={noteId}
-        checked={checked}
-        disabled={pending}
-        onCheckedChange={onChange}
-      />
     </div>
   );
 }
@@ -386,7 +386,7 @@ export function Rule({
           <span id={labelId} className="text-text-strong">
             {rule.label}
           </span>
-          {checked && <Badge variant="muted">{copy.checked}</Badge>}
+          {checked && <CheckedTag />}
           {blocked && <NeedsSandbox />}
           {narrowed && (
             <>

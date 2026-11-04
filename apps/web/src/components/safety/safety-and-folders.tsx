@@ -6,7 +6,6 @@ import { useId, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { addFolder, folderName, PRESETS, removeFolder } from "../../api/safety.ts";
 import { useUpdateSetup } from "../../api/setup.ts";
-import { focusWithin } from "../hob-form/hob-form.tsx";
 import { messages } from "../messages.ts";
 
 const copy = messages.safety;
@@ -42,7 +41,7 @@ export function PresetPicker({
               className={cn(
                 "flex cursor-pointer flex-col gap-2 rounded-card bg-card p-4 transition-colors hover:bg-hover",
                 on && "shadow-[inset_0_0_0_2px_var(--color-moonlight)]",
-                focusWithin,
+                "focus-ring-within",
               )}
             >
               <input
@@ -151,6 +150,7 @@ export function LockedSwitch({
   const noteId = useId();
   return (
     <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+      <Switch aria-labelledby={labelId} aria-describedby={noteId} checked={checked} disabled />
       <div className="flex flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-2">
           <span id={labelId} className="font-bold">
@@ -162,7 +162,6 @@ export function LockedSwitch({
           {note} {later}
         </span>
       </div>
-      <Switch aria-labelledby={labelId} aria-describedby={noteId} checked={checked} disabled />
     </div>
   );
 }

@@ -29,7 +29,7 @@ export function HobsPage({ filter }: { filter: HobFilter }) {
 
   return (
     <main aria-label={copy.title} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-6 pt-5 pb-12">
+      <div className="mx-auto flex w-full max-w-page-max flex-col gap-6 px-6 pt-5 pb-12">
         {agents.data ? (
           <Crew hobs={agents.data} filter={filter} query={query} onQuery={setQuery} />
         ) : (
@@ -128,7 +128,7 @@ function SummonCard() {
   return (
     <Link
       to="/summon"
-      className="cut flex min-h-[220px] flex-col items-center justify-center gap-2.5 border-[1.5px] border-dashed border-line-2 px-4 text-center text-text-secondary no-underline transition-colors duration-150 hover:border-lantern hover:text-text-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+      className="cut flex min-h-[220px] flex-col items-center justify-center gap-2.5 border-[1.5px] border-dashed border-line-2 px-4 text-center text-text-secondary no-underline transition-colors duration-150 hover:border-lantern hover:text-text-strong focus-ring"
     >
       <span
         aria-hidden

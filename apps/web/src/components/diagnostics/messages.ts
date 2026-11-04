@@ -2,7 +2,7 @@
 export const messages = {
   heading: "Diagnostics",
   intro:
-    "What is wrong right now, and one Quest followed step by step across hobs. Secrets, keys and passwords are always hidden.",
+    "What is wrong right now, and one quest followed step by step across hobs. Secrets, keys and passwords are always hidden.",
   failed: "Hobbots could not read its diagnostics. Try again in a moment.",
   now: {
     heading: "Right now",
@@ -12,7 +12,7 @@ export const messages = {
     recovery: "Last start",
     recovered: ({ when }: { when: string }) => `Hobbots started ${when} and recovered everything it found.`,
     held: "Work is held after a restore. Nothing that was waiting runs until you resume it.",
-    followQuest: "Follow its Quest",
+    followQuest: "Follow its quest",
   },
   availability: {
     ready: "Ready",
@@ -36,24 +36,24 @@ export const messages = {
     triesExhausted: ({ hob, since }: { hob: string; since: string }) =>
       `${hob} could not take this work after every try, ${since}. Retry it, give it to another hob or dismiss it from the Inbox.`,
     noProgress: ({ hob, since }: { hob: string; since: string }) =>
-      `${hob} has recorded nothing on this Task since ${since}. Open its Quest to check on it, or cancel the Task and retry it.`,
+      `${hob} has recorded nothing on this task since ${since}. Open its quest to check on it, or cancel the task and retry it.`,
   },
   recovery: {
     endAttempt: ({ tag, message }: { tag: string; message: string }) =>
-      `Hobbots could not end a try left running before it stopped (${tag}: ${message}). Open its Quest and cancel or retry the Task.`,
+      `Hobbots could not end a try left running before it stopped (${tag}: ${message}). Open its quest and cancel or retry the task.`,
     endStep: ({ tag, message }: { tag: string; message: string }) =>
-      `Hobbots could not end a step left open before it stopped (${tag}: ${message}). Open its Quest and cancel or retry the Task.`,
+      `Hobbots could not end a step left open before it stopped (${tag}: ${message}). Open its quest and cancel or retry the task.`,
   },
   follow: {
     idsLine: ({ ids }: { ids: string }) => `IDs: ${ids}`,
     sequence: ({ n }: { n: number }) => `#${n}`,
-    heading: "Follow a Quest",
+    heading: "Follow a quest",
     pick: "Quest to follow",
-    none: "No Quests yet. A Quest appears here once a hob leads one.",
-    choose: "Choose a Quest",
+    none: "No quests yet. A quest appears here once a hob leads one.",
+    choose: "Choose a quest",
     option: ({ title, lead, when }: { title: string; lead: string; when: string }) => `${title} · ${lead} · ${when}`,
-    loading: "Reading the Quest…",
-    gone: "That Quest is no longer on this hub.",
+    loading: "Reading the quest…",
+    gone: "That quest is no longer on this hub.",
     tasks: ({ title }: { title: string }) => `Tasks of ${title}`,
     delegated: ({ lead, member }: { lead: string; member: string }) => `Given by ${lead} to ${member}`,
     attempt: ({ number, state, runtime }: { number: number; state: string; runtime: string }) =>
@@ -64,7 +64,7 @@ export const messages = {
       `In ${hob}'s backpack: ${kind}, ${state}, ${tries}`,
     tries: { one: "1 try", other: (count: string) => `${count} tries` },
     events: "Recent events",
-    noEvents: "No events kept for this Quest.",
+    noEvents: "No events kept for this quest.",
     taskId: ({ id }: { id: string }) => `task ${id}`,
     delegationId: ({ id }: { id: string }) => `delegation ${id}`,
     attemptId: ({ id }: { id: string }) => `attempt ${id}`,
@@ -73,10 +73,10 @@ export const messages = {
     heading: "Report",
     note: "The report holds versions, states, times, IDs and redacted error messages. It never holds what you or a hob wrote, and Hobbots never sends it. Read it before you share it.",
     includeTitles: "Include titles",
-    includeTitlesNote: "Adds each Task's and the Quest's title. Off unless you turn it on.",
+    includeTitlesNote: "Adds each task's and the quest's title. Off unless you turn it on.",
     make: "Make report",
     making: "Making…",
-    forQuest: "The report follows the Quest chosen above.",
+    forQuest: "The report follows the quest chosen above.",
     view: "Diagnostics report",
     copy: { idle: "Copy report", copied: "Report copied", failed: "Could not copy" },
     save: "Save as file",
@@ -96,7 +96,7 @@ export const messages = {
     cancelled: "Cancelled",
   },
   itemKinds: {
-    task: "a Task",
+    task: "a task",
     result: "a result",
     failure: "a failure",
     checkpoint: "a milestone",

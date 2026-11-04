@@ -47,7 +47,7 @@ export function FilePicker<Item>({
           <span className="hidden shrink-0 text-xs whitespace-nowrap text-label @min-[300px]/picker:inline">
             {position}
           </span>
-          <span aria-hidden className="shrink-0 text-[11px] text-label">
+          <span aria-hidden className="shrink-0 text-meta text-label">
             ▾
           </span>
         </DropdownMenuTrigger>

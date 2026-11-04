@@ -73,7 +73,7 @@ describe("statusText and expiryText", () => {
   it("says how a closed request ended", () => {
     expect(statusText(request("a", "approved", { lifetime: "once" }), now)).toBe("You allowed this");
     expect(statusText(request("a", "approved", { lifetime: "always" }), now)).toBe("You allowed this always");
-    expect(statusText(request("a", "approved", { lifetime: "task" }), now)).toBe("You allowed this for its Task");
+    expect(statusText(request("a", "approved", { lifetime: "task" }), now)).toBe("You allowed this for its task");
     expect(statusText(request("a", "denied"), now)).toBe("You denied this");
     expect(statusText(request("a", "expired"), now)).toBe("Expired · nothing ran");
   });

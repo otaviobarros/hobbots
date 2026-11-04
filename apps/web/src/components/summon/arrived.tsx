@@ -11,11 +11,12 @@ import { startersFor } from "./summon-model.ts";
 
 const copy = messages.arrived;
 
+/** Where each twinkle sits on the stage, and its size: two full stars and two small ones. */
 const TWINKLES = [
-  "top-9 left-[70px]",
-  "top-6 right-[78px] [animation-delay:0.6s]",
-  "top-24 left-24 text-[10px] [animation-delay:1.2s]",
-  "top-22 right-16 text-[11px] [animation-delay:1.8s]",
+  "top-9 left-[70px] size-3.5",
+  "top-6 right-[78px] size-3.5 [animation-delay:0.6s]",
+  "top-24 left-24 size-2.5 [animation-delay:1.2s]",
+  "top-22 right-16 size-[11px] [animation-delay:1.8s]",
 ];
 
 /** The Arrived screen for a hob by its id; a hob that is gone opens its page, which says so. */
@@ -48,9 +49,14 @@ function Arrived({ hob }: { hob: Agent }) {
             className="absolute -top-8 left-1/2 size-65 -translate-x-1/2 rounded-full bg-[radial-gradient(circle,color-mix(in_srgb,var(--hob)_34%,transparent)_0%,transparent_65%)]"
           />
           {TWINKLES.map((spot) => (
-            <span key={spot} aria-hidden className={`absolute z-10 animate-hb-twinkle text-sm text-lantern ${spot}`}>
-              ✦
-            </span>
+            <svg
+              key={spot}
+              aria-hidden
+              viewBox="0 0 10 10"
+              className={`absolute z-10 animate-hb-twinkle fill-current text-lantern ${spot}`}
+            >
+              <path d="M5 0 6 4 10 5 6 6 5 10 4 6 0 5 4 4Z" />
+            </svg>
           ))}
           <span className="relative z-[1] mb-2.5 animate-hb-hop">
             <HobSprite hob={hob} size={112} />
@@ -76,7 +82,7 @@ function Arrived({ hob }: { hob: Agent }) {
                   to="/hobs/$hobId/new"
                   params={{ hobId: hob.id }}
                   onClick={() => writeDraft(place, question)}
-                  className="flex items-center gap-3 px-3.5 py-3 text-text-strong no-underline transition-colors duration-150 hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring"
+                  className="flex items-center gap-3 px-3.5 py-3 text-text-strong no-underline transition-colors duration-150 hover:bg-hover focus-ring focus-inset"
                 >
                   <span
                     aria-hidden

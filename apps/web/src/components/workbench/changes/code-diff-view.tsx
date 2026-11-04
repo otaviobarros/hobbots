@@ -46,7 +46,7 @@ export function CodeDiffView({
           {folds.length > 0 && (
             <>
               <span aria-hidden>·</span>
-              <Button variant="link" size="xs" onClick={() => setOpened(new Set(allOpen ? [] : folds))}>
+              <Button variant="text" size="xs" onClick={() => setOpened(new Set(allOpen ? [] : folds))}>
                 {allOpen ? messages.fold : messages.whole}
               </Button>
             </>

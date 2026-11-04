@@ -61,7 +61,7 @@ export function PairingActions({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-3">
         {canDefer && (
-          <Button variant="link" size="sm" disabled={decide.isPending} onClick={() => answer("later")}>
+          <Button variant="text" size="sm" disabled={decide.isPending} onClick={() => answer("later")}>
             {copy.later}
           </Button>
         )}

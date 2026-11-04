@@ -45,7 +45,7 @@ describe("Diagnostics copy", () => {
       since: "2026-11-02T10:00:00.000Z",
     };
     expect(stalledText(stalled, hobName, now)).toBe(
-      "Ada has recorded nothing on this Task since 2 hours ago. Open its Quest to check on it, or cancel the Task and retry it.",
+      "Ada has recorded nothing on this task since 2 hours ago. Open its quest to check on it, or cancel the task and retry it.",
     );
     expect(stalledText({ ...stalled, agentId: AgentId.make("gone") }, hobName, now)).toMatch(/^a hob has/);
   });
@@ -61,7 +61,7 @@ describe("Diagnostics copy", () => {
         at: now.toISOString(),
       }),
     ).toBe(
-      "Hobbots could not end a try left running before it stopped (SqlError: database is locked). Open its Quest and cancel or retry the Task.",
+      "Hobbots could not end a try left running before it stopped (SqlError: database is locked). Open its quest and cancel or retry the task.",
     );
     expect(eventLabel("QuestStarted")).toBe("Quest started");
     expect(eventLabel("SomethingNew")).toBe("SomethingNew");

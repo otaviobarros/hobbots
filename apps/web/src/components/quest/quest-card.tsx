@@ -102,12 +102,12 @@ export function QuestCard({
       <div className="flex items-center gap-2 text-detail text-label">
         {card.more > 0 && <span>{copy.moreCount({ count: card.more })}</span>}
         {card.done > 0 && <span>{copy.doneCount({ count: card.done })}</span>}
-        <Button variant="link" size="xs" className="ms-auto" onClick={() => onWorkbench(card.top.id)}>
+        <Button variant="text" size="xs" className="ms-auto" onClick={() => onWorkbench(card.top.id)}>
           {copy.workbench}
         </Button>
         {/* With no Task under it there is nothing to list: Details opens the Task itself. */}
         <Button
-          variant="link"
+          variant="text"
           size="xs"
           onClick={() => (tree.tasks.length === 1 ? onOpen(card.top.id) : onQuest(card.top.id))}
         >
@@ -124,7 +124,7 @@ const useStuck = (tree: TaskTree): ReadonlyArray<BackpackItem> =>
 
 function Progress({ done, total }: { done: number; total: number }) {
   return (
-    <div aria-hidden className="h-meter bg-deep">
+    <div aria-hidden className="h-1.5 bg-deep">
       <div className="h-full bg-mint" style={{ width: `${Math.round((done / total) * 100)}%` }} />
     </div>
   );

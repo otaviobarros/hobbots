@@ -4,6 +4,7 @@ import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockers } from "../../api/blockers.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
 import { useWaitingQuestions } from "../../api/questions.ts";
+import { type HobNeed, hobNeeds } from "../../lib/hob-state.ts";
 import { pendingCount } from "./inbox-items.ts";
 
 /**
@@ -18,21 +19,13 @@ export const useWaitingCount = (): number =>
   usePromptedDevices().length;
 
 /**
- * The hobs with a request, a question or stuck work waiting for the user. A question lights the
- * lead whose chat it waits in: the last to pass it up, or the asker when nobody leads it.
+ * The hobs with a request, a question or stuck work waiting for the user, and what each waits for.
+ * A question marks the hob that asked and the lead whose chat it waits in.
  */
-export const useWaitingHobs = (): ReadonlySet<AgentId> => {
-  const asking = useQuery({ ...inboxQuery, select: waitingHobs }).data ?? NONE;
-  const questions = useWaitingQuestions();
-  const stuck = useBlockers();
-  if (stuck.length === 0 && questions.length === 0) return asking;
-  return new Set([
-    ...asking,
-    ...questions.map(({ question }) => question.chain.at(-1) ?? question.askerId),
-    ...stuck.map((item) => item.recipientId),
-  ]);
-};
-const NONE: ReadonlySet<AgentId> = new Set();
-
-const waitingHobs = (approvals: ReadonlyArray<ApprovalRequest>): ReadonlySet<AgentId> =>
-  new Set(approvals.flatMap((approval) => (approval.state === "pending" ? [approval.agentId] : [])));
+export const useWaitingHobs = (): ReadonlyMap<AgentId, HobNeed> =>
+  hobNeeds({
+    approvals: useQuery(inboxQuery).data ?? NONE,
+    blockers: useBlockers(),
+    questions: useWaitingQuestions(),
+  });
+const NONE: ReadonlyArray<ApprovalRequest> = [];

@@ -1,6 +1,6 @@
-import { cn } from "cn";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // A Hobbots panel that opens from a control: a card with pixel corners and the line-2 border.
 // Radix keeps focus inside while it is open, closes it on Escape or a click outside, and returns

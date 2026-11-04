@@ -85,7 +85,7 @@ export function ChatSearch({
           aria-label={copy.close}
           title={copy.close}
           onClick={close}
-          className="size-7"
+          className="size-hit-min"
         >
           <CloseIcon />
         </Button>
@@ -116,7 +116,7 @@ export function ChatSearch({
                 to="/hobs/$hobId"
                 params={{ hobId: hob.id }}
                 search={{ q: query.trim() }}
-                className="text-lantern underline"
+                className="text-text-secondary hover:text-text-strong hover:decoration-current"
               >
                 {copy.everywhere({ name: hob.name })}
               </Link>
@@ -134,11 +134,11 @@ function Who({ hob, message }: { hob: Agent; message: Message }) {
   return (
     <span className="flex items-center gap-2 text-xs text-label">
       {mine ? (
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-[6px] bg-lantern/35 text-[11px] font-bold text-text-strong">
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-[max(0px,calc(var(--corner-tile)-3px))] bg-lantern/35 text-meta font-bold text-text-strong">
           {copy.you[0]}
         </span>
       ) : (
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-[6px] bg-tile">
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-[max(0px,calc(var(--corner-tile)-3px))] bg-tile">
           <HobSprite hob={hob} size={16} />
         </span>
       )}

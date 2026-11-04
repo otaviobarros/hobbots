@@ -13,10 +13,10 @@ import { ApiError } from "../../api/client.ts";
 import { settleBrain } from "../../api/first-hob.ts";
 import {
   aboutLine,
+  changeCount,
   draftProblem,
   goodAt,
   INSTRUCTIONS_MAX,
-  isDirty,
   type ProfileDraft,
   pickRole,
   profileDraft,
@@ -313,7 +313,8 @@ function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
   const [draft, setDraft] = useState<ProfileDraft>(base);
   const [saved, setSaved] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const dirty = isDirty(base, draft);
+  const count = changeCount(base, draft);
+  const dirty = count > 0;
   const baseRef = useRef(base);
   baseRef.current = base;
   // The draft a save sent, until that save answers.
@@ -452,7 +453,7 @@ function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
       <SaveBar
         name={name}
         dirty={dirty}
-        count={Object.keys(edit).length}
+        count={count}
         pending={update.isPending}
         problem={problem}
         failure={failure}
@@ -503,9 +504,18 @@ function RoleLine({ draft }: { draft: ProfileDraft }) {
   );
 }
 
+// The save bar is the inverted surface, like the toasts: light in the dark themes and dark in the
+// light ones. The theme's focus ring is chosen to show on ground, so here focus is a ground ring
+// drawn inside the button in every theme.
+const BAR =
+  "cut sticky bottom-4 z-10 flex animate-hb-in items-center gap-3 bg-text-strong px-4 py-3 text-ground shadow-menu [--control-focus-outline:none] [--control-focus-ring:inset_0_0_0_2px_var(--color-ground)]";
+// Undo and Save changes: text buttons on the inverted bar.
+const BAR_ACTION =
+  "cut-control cursor-pointer border-0 bg-transparent px-2 py-1 font-bold whitespace-nowrap text-ground underline underline-offset-2 hover:no-underline disabled:cursor-default disabled:no-underline disabled:opacity-50";
+
 /**
  * Floats at the bottom of the page while anything is unsaved: how many changes, Undo and Save.
- * Once saved it says so in mint until the next edit.
+ * Once saved it says so with a check mark until the next edit.
  */
 function SaveBar({
   name,
@@ -529,12 +539,10 @@ function SaveBar({
   onUndo: () => void;
 }) {
   const copy = messages.profile;
-  const bar =
-    "sticky bottom-4 z-10 flex animate-hb-in items-center gap-3 rounded-card border-s-[3px] bg-card px-4 py-3 shadow-sheet";
   if (!dirty && !pending && failure === undefined) {
     return saved ? (
-      <div role="status" className={cn(bar, "border-mint")}>
-        <span aria-hidden className="text-mint">
+      <div role="status" className={BAR}>
+        <span aria-hidden className="font-bold">
           ✓
         </span>
         <span className="text-sm">{copy.savedNow({ name })}</span>
@@ -543,19 +551,22 @@ function SaveBar({
   }
   const headline = problem ?? (pending ? copy.saving : copy.notSaved({ count: Math.max(count, 1) }));
   return (
-    <div role={failure ? "alert" : "status"} className={cn(bar, failure ? "border-rose" : "border-lantern")}>
+    <div role={failure ? "alert" : "status"} className={BAR}>
+      {failure && (
+        <span aria-hidden className="font-bold">
+          !
+        </span>
+      )}
       <span className="flex min-w-0 flex-1 flex-col">
         <strong>{headline}</strong>
-        <span className={cn("text-detail", failure ? "text-rose" : "text-text-secondary")}>
-          {failure ?? copy.nextReply({ name })}
-        </span>
+        <span className={cn("text-detail", failure && "font-semibold")}>{failure ?? copy.nextReply({ name })}</span>
       </span>
-      <Button type="button" variant="ghost" disabled={!dirty || pending} onClick={onUndo}>
+      <button type="button" disabled={!dirty || pending} onClick={onUndo} className={BAR_ACTION}>
         {copy.undo}
-      </Button>
-      <Button type="submit" disabled={!canSave || pending}>
+      </button>
+      <button type="submit" disabled={!canSave || pending} className={BAR_ACTION}>
         {copy.save}
-      </Button>
+      </button>
     </div>
   );
 }
@@ -667,7 +678,7 @@ function RetireDialog({
     <Dialog open onOpenChange={(open) => !open && close()}>
       <DialogContent
         aria-describedby={undefined}
-        className="max-w-[460px] animate-hb-in gap-3 rounded-card border-0 bg-ground p-5 shadow-sheet"
+        className="max-w-bubble-max animate-hb-in gap-3 rounded-card border-0 bg-ground p-5 shadow-sheet"
       >
         {retired ? (
           <>

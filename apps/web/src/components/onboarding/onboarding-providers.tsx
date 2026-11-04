@@ -58,9 +58,9 @@ const TAG: Record<ProviderState, { label: string; className: string } | null> = 
   found: { label: copy.tags.found, className: "bg-moonlight text-ground" },
   connected: { label: copy.tags.connected, className: "bg-moonlight text-ground" },
   notFound: { label: copy.tags.notFound, className: "bg-line-2 text-text-strong" },
-  notStarted: { label: copy.tags.notStarted, className: "bg-rose text-ground" },
-  outdated: { label: copy.tags.outdated, className: "bg-rose text-ground" },
-  signedOut: { label: copy.tags.signedOut, className: "bg-lantern text-ground" },
+  notStarted: { label: copy.tags.notStarted, className: "bg-rose text-on-rose" },
+  outdated: { label: copy.tags.outdated, className: "bg-rose text-on-rose" },
+  signedOut: { label: copy.tags.signedOut, className: "bg-rose text-on-rose" },
   unknown: { label: copy.tags.unknown, className: "bg-line-2 text-text-strong" },
 };
 

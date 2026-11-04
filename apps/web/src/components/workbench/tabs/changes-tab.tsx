@@ -129,12 +129,12 @@ function RowContent({ change, activity, dir }: { change: FileChange; activity: A
     <>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate font-mono text-[13px] leading-[18px] text-text-strong">{name}</span>
-        {dir !== "" && <span className="truncate font-mono text-[11px] leading-[15px] text-label">{dir}</span>}
+        {dir !== "" && <span className="truncate font-mono text-meta text-label">{dir}</span>}
       </span>
       <span className="flex shrink-0 flex-col items-end gap-[3px]">
         <KindTag kind={change.kind} />
         {counts !== null && (
-          <span className="font-mono text-[11px] leading-[14px] whitespace-nowrap">
+          <span className="font-mono text-meta whitespace-nowrap">
             <span aria-hidden>
               <span className="text-mint">+{formatCount(counts.added)}</span>{" "}
               <span className="text-rose">−{formatCount(counts.removed)}</span>

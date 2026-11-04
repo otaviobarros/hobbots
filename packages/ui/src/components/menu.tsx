@@ -1,17 +1,18 @@
-import { cn } from "cn";
 import { ContextMenu as ContextMenuPrimitive, DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // Hobbots menus (docs/design/ui-ux.md): a card with pixel corners and the line-2 border, opened from
 // a ⋯ button (DropdownMenu) or by right-click, Shift+F10 or the context-menu key (ContextMenu).
 // Radix moves focus into the menu, moves it with the arrow keys, closes it on Escape and returns
-// focus to where it was. A disabled item stays in the menu with its reason and cannot be chosen.
+// focus to where it was. The highlighted item keeps the hover fill and adds an inset focus-ring
+// outline, so keyboard focus shows and Workshop's cut corners don't clip it. A disabled item stays in the menu with its reason and cannot be chosen.
 
 const contentClass =
   "cut z-50 flex min-w-[220px] max-w-[300px] flex-col border-2 border-solid border-line-2 bg-card p-1 text-text-strong outline-none";
 
 const itemClass =
-  "flex cursor-pointer flex-col gap-0.5 px-2.5 py-2 text-sm outline-none select-none data-highlighted:bg-hover data-disabled:cursor-default data-disabled:text-label";
+  "flex cursor-pointer flex-col gap-0.5 px-2.5 py-2 text-sm outline-none select-none data-highlighted:bg-hover data-highlighted:outline-2 data-highlighted:outline-solid data-highlighted:-outline-offset-2 data-highlighted:outline-focus-ring data-disabled:cursor-default data-disabled:text-label";
 
 function DropdownMenu(props: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;

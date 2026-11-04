@@ -101,7 +101,7 @@ test("[TC-OR-215] Rook's Task drawer shows Quill's result and core.py under Hand
   const frontend = tasks.getByRole("button", { name: /Rook · Write the frontend/ });
   await expect(frontend).toContainText("Done", { timeout: 30_000 });
   await frontend.click();
-  const drawer = page.getByRole("dialog", { name: "Write the frontend, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Write the frontend, task details" });
   await expect(drawer).toBeVisible();
   await drawer.getByText("Everything in this task").click();
   await expect(drawer.getByRole("heading", { name: "Handed to it" })).toBeVisible();

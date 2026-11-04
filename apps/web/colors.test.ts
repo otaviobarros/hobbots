@@ -20,3 +20,11 @@ describe("hard-coded colors", () => {
     expect(found).toEqual([]);
   });
 });
+
+describe("hard-coded colors in styles.css", () => {
+  it("keeps hex colors in the theme and scene token blocks: @theme and each theme's own rule", () => {
+    const css = withoutComments(readFileSync(new URL("./src/styles.css", import.meta.url), "utf8"));
+    const tokenBlock = /^(@theme(\s+inline)?|:root\[data-theme="[\w-]+"\])\s*\{\n[\s\S]*?^\}/gm;
+    expect(css.replace(tokenBlock, "").match(/#[0-9a-f]{3,8}(?![\w-])/gi) ?? []).toEqual([]);
+  });
+});

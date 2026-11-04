@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { firstHobPayload, newDraft } from "./first-hob.ts";
 import {
   aboutLine,
+  changeCount,
   draftProblem,
   goodAt,
   isDirty,
@@ -82,6 +83,19 @@ describe("hob profile", () => {
 
     expect(profileEdit(pip, { ...draft, model: "opus", effort: "high" })).toEqual({ model: "opus", effort: "high" });
     expect(profileEdit(hob({ model: "opus" }), { ...draft, model: "default" })).toEqual({ model: null });
+  });
+
+  it("counts only what the user changed, not the model and effort the form settles on its own", () => {
+    // A hob saved with no model or effort: the form settles both, so they differ from the saved hob.
+    const pip = hob({ model: null, effort: null });
+    const base = profileDraft(pip, offered);
+    expect(Object.keys(profileEdit(pip, base))).toEqual(["effort"]);
+    expect(changeCount(base, base)).toBe(0);
+
+    const typed = { ...base, instructions: `${base.instructions}!` };
+    expect(changeCount(base, typed)).toBe(1);
+    expect(changeCount(base, { ...typed, voice: "wizard", length: "brief" })).toBe(3);
+    expect(isDirty(base, typed)).toBe(true);
   });
 
   it("moves the hob to another provider with that provider's model and effort, as one edit", () => {

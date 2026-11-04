@@ -267,7 +267,9 @@
       "show-line-icon": "inline-flex",
       "show-pixel-icon": "none",
       "cut": "none",
+      "focus-width": "2px",
       "focus-outline": "2px solid focus-ring",
+      "cut-focus-offset": "2px",
       "control-focus-outline": "focus-outline",
       "control-focus-ring": "none",
       "press-edge": "0px",
@@ -297,7 +299,9 @@
       "show-line-icon": "none",
       "show-pixel-icon": "inline-flex",
       "cut": "4px cut corners",
+      "focus-width": "2px",
       "focus-outline": "2px solid focus-ring",
+      "cut-focus-offset": "-4px, inside the clip with a 2px gap",
       "control-focus-outline": "none",
       "control-focus-ring": "inset 2px focus-ring, then a 2px ground gap",
       "press-edge": "4px",
@@ -419,10 +423,15 @@
     "sidebar": "72px",
     "sidebar-open": "256px",
     "sheet": "340px",
+    "workbench-chat": "300px",
     "chat-min": "360px",
     "measure": "70ch",
     "bubble-max": "460px",
     "work-max": "604px",
+    "column-max": "560px",
+    "form-max": "760px",
+    "home-max": "880px",
+    "page-max": "1080px",
     "hob-tile": "36px",
     "row-min": "36px",
     "hit-min": "28px"
@@ -482,7 +491,7 @@
         "text": "lantern",
         "on": "ground",
         "floor": 4.5,
-        "use": "Links and what needs you."
+        "use": "What needs you."
       },
       {
         "text": "mint",
@@ -519,6 +528,36 @@
         "on": "rose",
         "floor": 4.5,
         "use": "Text on a rose fill."
+      },
+      {
+        "text": "mint",
+        "on": "line",
+        "floor": 4.5,
+        "use": "Working and Running tags."
+      },
+      {
+        "text": "text-secondary",
+        "on": "line",
+        "floor": 4.5,
+        "use": "Done and quiet tags."
+      },
+      {
+        "text": "text-secondary",
+        "on": "line-2",
+        "floor": 4.5,
+        "use": "Waiting, Resting and Cancelled tags."
+      },
+      {
+        "text": "text-strong",
+        "on": "line-2",
+        "floor": 4.5,
+        "use": "Queued tags."
+      },
+      {
+        "text": "label",
+        "on": "line",
+        "floor": 4.5,
+        "use": "Later tags."
       },
       {
         "text": "control",

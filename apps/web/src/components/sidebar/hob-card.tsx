@@ -14,6 +14,7 @@ import { waitingCount, waitingView } from "../backpack/backpack-model.ts";
 import { useOpenItem } from "../backpack/use-open-item.ts";
 import { WaitingList } from "../backpack/waiting-list.tsx";
 import { doingOf, stateTag } from "../hob-page/hob-page-model.ts";
+import { useNeedLine } from "../hob-page/use-need-line.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
 import { useHobLookup } from "../quest/use-work.ts";
@@ -49,7 +50,7 @@ const DOT: Record<"needs-you" | "live" | "quiet", string> = {
  */
 export function HobCard({ hob, state, threads }: { hob: Agent; state: HobState; threads: ReadonlyArray<Thread> }) {
   const tag = stateTag(state);
-  const doing = doingOf(state, threads, useActivity());
+  const doing = doingOf(state, threads, useActivity(), useNeedLine(hob.id));
   return (
     <PopoverContent
       side="right"
@@ -68,7 +69,7 @@ export function HobCard({ hob, state, threads }: { hob: Agent; state: HobState; 
           {tag.word}
         </Badge>
         <PopoverClose asChild>
-          <Button variant="ghost" size="icon" aria-label={copy.close} className="absolute top-2 end-2 size-7">
+          <Button variant="ghost" size="icon" aria-label={copy.close} className="absolute top-2 end-2 size-hit-min">
             <span aria-hidden>×</span>
           </Button>
         </PopoverClose>
@@ -79,7 +80,7 @@ export function HobCard({ hob, state, threads }: { hob: Agent; state: HobState; 
             <Link
               to="/hobs/$hobId"
               params={{ hobId: hob.id }}
-              className="truncate font-heading text-[20px] leading-[26px] font-(--heading-weight) text-text-strong no-underline hover:text-lantern hover:underline"
+              className="truncate font-heading text-[20px] leading-[26px] font-(--heading-weight) text-text-strong no-underline hover:underline hover:decoration-lantern"
             >
               {hob.name}
             </Link>

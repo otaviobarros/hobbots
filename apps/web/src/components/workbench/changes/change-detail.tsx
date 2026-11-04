@@ -44,7 +44,7 @@ export function ChangeDetail({
         <div className="flex min-h-[30px] min-w-0 flex-wrap items-center gap-2">
           <span className="flex min-w-0 flex-col">
             <h3 className="m-0 font-mono text-[13.5px] leading-5 font-semibold break-all text-text-strong">{name}</h3>
-            {dir !== "" && <span className="font-mono text-[11px] leading-[15px] text-label">{dir}</span>}
+            {dir !== "" && <span className="font-mono text-meta text-label">{dir}</span>}
           </span>
           <KindTag kind={change.kind} />
           <span className="flex-1" />

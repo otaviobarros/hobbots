@@ -112,7 +112,7 @@ test("[TC-CH-111] a reply shows the tools it used, a refused one with its reason
       await expect(steps.getByText(/^Not allowed by the hob's permissions: /)).toBeVisible();
       // Details on demand: the tool, the action and its target.
       await steps.getByRole("button", { name: "Editing cart.ts done" }).click();
-      await expect(steps.getByText("Create and edit files")).toBeVisible();
+      await expect(steps.getByText("Change files")).toBeVisible();
       await expect(steps.getByText(join(work, "cart.ts"))).toBeVisible();
     };
     await shows();
@@ -145,7 +145,7 @@ test("[TC-EX-013] a tool call cut off by a hub crash comes back uncertain, with 
     await expect(step).toBeVisible();
     await expect(steps.getByText(/^Cut off while it ran, so it may or may not have taken effect\./)).toBeVisible();
     await step.click();
-    await expect(steps.getByText("Run commands")).toBeVisible();
+    await expect(steps.getByText("Run commands and tests")).toBeVisible();
     await expect(steps.getByText("Started")).toBeVisible();
     // Nothing runs it again: the reply stays interrupted with the one uncertain step.
     await expect.poll(async () => (await replies(hub as Hub, page)).map((r) => r.status)).toEqual(["interrupted"]);

@@ -65,7 +65,7 @@ export function WorkbenchHeader({
       {back}
       <span
         aria-hidden
-        className="flex size-9 shrink-0 items-center justify-center rounded-tile bg-[color-mix(in_srgb,var(--hob)_30%,var(--color-card))]"
+        className="flex size-hob-tile shrink-0 items-center justify-center rounded-tile bg-[color-mix(in_srgb,var(--hob)_30%,var(--color-card))]"
         style={{ "--hob": HOB_COLORS[owner.lookColor].hat } as CSSProperties}
       >
         <HobSprite hob={owner} size={27} state={running ? "working" : "idle"} />
@@ -188,8 +188,8 @@ function Where({ runtime, read }: { runtime: Attempt["runtime"]; read: ActivityR
       <span
         title={messages.sandboxHint[sandbox]}
         className={cn(
-          sandbox === "off" && "rounded-tag border border-rose px-tag-x text-xs font-bold text-rose",
-          sandbox === "unavailable" && "rounded-tag bg-line-2 px-tag-x text-xs font-bold text-text-secondary",
+          sandbox === "off" && "rounded-tag border border-rose px-1.5 text-xs font-bold text-rose",
+          sandbox === "unavailable" && "rounded-tag bg-line-2 px-1.5 text-xs font-bold text-text-secondary",
         )}
       >
         {sandbox === "on" ? messages.inSandboxLower : sandboxWords[sandbox]}
@@ -219,7 +219,7 @@ function AttemptPicker({
             key={each.id}
             value={each.id}
             aria-label={messages.attempt({ number: each.number })}
-            className="min-w-7 px-2"
+            className="min-w-hit-min px-2"
           >
             {formatCount(each.number)}
           </SegmentedControlItem>

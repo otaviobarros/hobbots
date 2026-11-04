@@ -220,10 +220,10 @@ export function ChatView({
   const empty = threadId === undefined || messages.data?.length === 0;
 
   return (
-    <main aria-label={copy.landmark} className="flex min-w-[360px] flex-1 flex-col">
+    <main aria-label={copy.landmark} className="flex min-w-chat-min flex-1 flex-col">
       <header className="@container/header flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
         {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
-        <Link to="/hobs/$hobId" params={{ hobId }} tabIndex={-1} aria-hidden className="shrink-0">
+        <Link to="/hobs/$hobId" params={{ hobId }} tabIndex={-1} aria-hidden className="shrink-0 no-underline">
           <HobSprite hob={current} size={36} state={state} badge />
         </Link>
         {/* The hob's name keeps its room when the quest button and the brain picker crowd the header. */}

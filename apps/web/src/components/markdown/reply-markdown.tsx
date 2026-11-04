@@ -12,14 +12,15 @@ import { streamingMarkdown } from "./streaming.ts";
 
 const copy = messages;
 
-const heading = "font-heading font-bold text-moonlight";
+const heading = "font-heading text-title font-(--heading-weight) text-moonlight";
 
-// Each element of a reply, styled with the design tokens (docs/design/ui-ux.md). Headings sit two
-// levels down, so a reply's `#` never competes with the screen's own headings.
+// Each element of a reply, styled with the design tokens (docs/design/themes.md). Headings sit two
+// levels down, so a reply's `#` never competes with the screen's own headings, and all three take
+// the `title` size: a reply is read, not outlined.
 const components: Components = {
-  h1: ({ node: _, ...props }) => <h3 className={cn(heading, "text-xl")} {...props} />,
-  h2: ({ node: _, ...props }) => <h4 className={cn(heading, "text-lg")} {...props} />,
-  h3: ({ node: _, ...props }) => <h5 className={cn(heading, "text-base")} {...props} />,
+  h1: ({ node: _, ...props }) => <h3 className={heading} {...props} />,
+  h2: ({ node: _, ...props }) => <h4 className={heading} {...props} />,
+  h3: ({ node: _, ...props }) => <h5 className={heading} {...props} />,
   h4: ({ node: _, ...props }) => <h6 className="font-bold" {...props} />,
   h5: ({ node: _, ...props }) => <h6 className="font-bold" {...props} />,
   h6: ({ node: _, ...props }) => <h6 className="font-bold text-text-secondary" {...props} />,
@@ -75,10 +76,16 @@ const components: Components = {
   img: ({ src, alt }) => <ReplyImage src={typeof src === "string" ? src : undefined} alt={alt} />,
 };
 
+// Joined by hand: `cn` reads a theme size such as `text-reading` as a color, so it would drop it
+// beside `text-text`.
+const body = "hb-markdown flex max-w-measure min-w-0 flex-col gap-2.5 text-reading text-text break-words";
+
 /**
  * A hob's reply, formatted from its Markdown: CommonMark with GitHub tables, task lists and
  * strikethrough. HTML shows as text, links only reach web addresses, and code is highlighted.
  * While it streams, unfinished syntax is held back or closed, so the layout never flickers.
+ * It is reading text: the `reading` size in the `text` color, at most `measure` wide, with tables
+ * and code blocks scrolling in their own box instead of widening it.
  */
 export function ReplyMarkdown({
   content,
@@ -95,7 +102,7 @@ export function ReplyMarkdown({
   remarkPlugins?: Options["remarkPlugins"];
 }) {
   return (
-    <div className={cn("hb-markdown flex min-w-0 flex-col gap-2.5 leading-normal break-words", caret && "hb-caret")}>
+    <div className={caret ? `${body} hb-caret` : body}>
       <Markdown
         components={components}
         remarkPlugins={[remarkGfm, ...(remarkPlugins ?? []), remarkHtmlAsText]}

@@ -92,9 +92,9 @@ test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in the Workb
     await task.click();
     const sheet = taskSheet(page, title);
     const controls = sheet.getByRole("region", { name: `Controls for ${title}` });
-    await controls.getByRole("button", { name: "Cancel Task" }).click();
+    await controls.getByRole("button", { name: "Cancel task" }).click();
     await controls.getByRole("button", { name: "Yes, cancel" }).click();
-    await expect(controls.getByRole("status")).toHaveText("Cancelled: the Task confirmed it stopped.", {
+    await expect(controls.getByRole("status")).toHaveText("Cancelled: the task confirmed it stopped.", {
       timeout: 30_000,
     });
 

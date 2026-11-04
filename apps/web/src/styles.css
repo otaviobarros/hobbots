@@ -106,23 +106,26 @@
   --text-code: 13px;
   --text-code--line-height: 20px;
 
-  /* Measures of the chat workspace. */
-  --spacing-row-y: 7px;
-  --spacing-thread-indent: 34px;
-  --spacing-transcript-y: 18px;
-  --spacing-chat-min: 360px;
-  --spacing-bubble-max: 460px;
-  /* A request's work in the chat: the card and question width, the drawer beside it. */
-  --spacing-tag-x: 7px;
-  --spacing-meter: 5px;
-  --spacing-work-max: 604px;
-  --spacing-drawer: 420px;
-  /* The Task chat drawer beside the Workbench's tabs. */
-  --spacing-workbench-chat: 300px;
-  /* The sidebar on every screen after setup: collapsed, expanded, and its rows. */
+  /*
+   * Sizes, the same in every theme (`size` in themes.json): the window, the sidebar, the chat and
+   * the widths that screens share. A test checks the two lists match.
+   */
+  --spacing-title-strip: 30px;
   --spacing-sidebar: 72px;
   --spacing-sidebar-open: 256px;
+  --spacing-sheet: 340px;
+  --spacing-workbench-chat: 300px;
+  --spacing-chat-min: 360px;
+  --spacing-measure: 70ch;
+  --spacing-bubble-max: 460px;
+  --spacing-work-max: 604px;
+  --spacing-column-max: 560px;
+  --spacing-form-max: 760px;
+  --spacing-home-max: 880px;
+  --spacing-page-max: 1080px;
+  --spacing-hob-tile: 36px;
   --spacing-row-min: 36px;
+  --spacing-hit-min: 28px;
   /* From this width the expanded sidebar pushes the page aside; below it, it opens over the page. */
   --breakpoint-wide: 1100px;
 
@@ -615,9 +618,12 @@
   --button-weight: 600;
   --hop: none;
   --cut: none;
-  --focus-outline: 2px solid var(--color-focus-ring);
+  --focus-width: 2px;
+  --focus-outline: var(--focus-width) solid var(--color-focus-ring);
+  /* Where a card's ring sits: outside it here, inside it where the cut clip would hide it. */
+  --cut-focus-offset: 2px;
   --control-focus-outline: var(--focus-outline);
-  --control-focus-ring: 0 0 #0000;
+  --control-focus-ring: 0 0 transparent;
   --press-edge: 0px;
   --press-edge-down: 0px;
   --press-move: 1px;
@@ -652,7 +658,9 @@
     0 calc(100% - 4px),
     0 4px
   );
-  --focus-outline: 3px solid var(--color-focus-ring);
+  --focus-width: 3px;
+  --focus-outline: var(--focus-width) solid var(--color-focus-ring);
+  --cut-focus-offset: calc(-2px - var(--focus-width));
   --control-focus-outline: none;
   --control-focus-ring: inset 0 0 0 2px var(--color-focus-ring), inset 0 0 0 4px var(--color-ground);
   --press-edge: 4px;
@@ -736,12 +744,15 @@ body {
 
 /* Base layer, so utility classes on a link still win. */
 @layer base {
+  /* Links read in `link`, underlined; the underline turns lantern on hover (docs/design/themes.md). */
   a {
-    color: var(--color-lantern);
+    color: var(--color-link);
+    text-decoration-line: underline;
+    text-underline-offset: 2px;
   }
 
   a:hover {
-    color: #ffc477;
+    text-decoration-color: var(--color-lantern);
   }
 
   :focus-visible {
@@ -759,6 +770,40 @@ body {
 @utility cut {
   clip-path: var(--cut);
   border-radius: var(--corner-card);
+  --focus-offset: var(--cut-focus-offset);
+}
+
+/*
+ * The focus ring of fields, cards and panels: the skin's outline in `focus-ring`, 2px outside the
+ * shape. `focus-ring` rings the element when it has keyboard focus; `focus-ring-within` rings a
+ * label, card or field frame when the form control inside it does, such as a visually hidden radio
+ * or the input of an input group, and leaves the ring of a button inside it to the button. On a `cut` card
+ * the ring moves inside the clip in Workshop, and `focus-inset` draws it just inside the edge, for a
+ * row or panel that a scroller would clip. Buttons and pressed rows take `cut-control` instead.
+ * The offset does not inherit, so an inset card does not move the rings of what it holds.
+ */
+@property --focus-offset {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 2px;
+}
+
+@utility focus-ring {
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+}
+
+@utility focus-ring-within {
+  &:has(:is(input, textarea, select):focus-visible) {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-offset);
+  }
+}
+
+@utility focus-inset {
+  --focus-offset: calc(-1 * var(--focus-width));
 }
 
 /*
@@ -772,7 +817,7 @@ body {
   &:focus-visible {
     outline: var(--control-focus-outline);
     outline-offset: 2px;
-    box-shadow: var(--control-focus-ring), var(--press-shadow, 0 0 #0000);
+    box-shadow: var(--control-focus-ring), var(--press-shadow, 0 0 transparent);
   }
 }
 

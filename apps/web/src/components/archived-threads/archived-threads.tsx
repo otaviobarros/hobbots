@@ -191,7 +191,7 @@ function ArchivedThreadView({ thread, ...props }: ChatProps & { thread: Thread }
           onRestore={() => restore.mutate(thread.id)}
         />
       </section>
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-transcript-y">
+      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-4">
         {transcript.isPending && <p className="text-label">{messages.loadingMessages}</p>}
         {transcript.isError && <p className="text-sm text-rose">{messages.loadMessagesFailed}</p>}
         {transcript.data?.map((message) => (
@@ -210,7 +210,7 @@ function ReadOnlyFooter({ hobId, children }: { hobId: AgentId; children: ReactNo
   return (
     <p role="note" className="m-0 flex-none border-t-4 border-line px-6 py-3.5 text-sm text-text-secondary">
       {children} ·{" "}
-      <Link to="/archive" search={{ hob: hobId }} className="text-lantern underline">
+      <Link to="/archive" search={{ hob: hobId }} className="text-link">
         {messages.backToArchived}
       </Link>
     </p>

@@ -168,14 +168,19 @@ export const rebaseDraft = (
   };
 };
 
+// Every part of the form, each counted as one change when the draft moves it.
+const DRAFT_KEYS = [...OWN_KEYS, ...ROLE_KEYS, "instructions", "runtime", "model", "effort"] as const;
+
+/**
+ * How many parts of the form the draft changes from where the form started. It compares with the
+ * form's starting point, not the saved hob, so a model and effort the form settles on its own do
+ * not count as the user's edits.
+ */
+export const changeCount = (base: ProfileDraft, draft: ProfileDraft): number =>
+  DRAFT_KEYS.filter((key) => base[key] !== draft[key]).length;
+
 /** Whether the draft differs from where the form started. */
-export const isDirty = (base: ProfileDraft, draft: ProfileDraft): boolean =>
-  ROLE_KEYS.some((key) => base[key] !== draft[key]) ||
-  OWN_KEYS.some((key) => base[key] !== draft[key]) ||
-  base.instructions !== draft.instructions ||
-  base.runtime !== draft.runtime ||
-  base.model !== draft.model ||
-  base.effort !== draft.effort;
+export const isDirty = (base: ProfileDraft, draft: ProfileDraft): boolean => changeCount(base, draft) > 0;
 
 // Summon and onboarding fold the chores into the instructions under this line (see first-hob.ts).
 const CHORES_HEADING = "Your chores, in the user's words:\n";

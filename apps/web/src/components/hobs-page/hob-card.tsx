@@ -9,6 +9,7 @@ import type { HobState } from "../../lib/hob-state.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { HobStateTag } from "../hob-page/hob-hero.tsx";
 import { doingOf, stateTag } from "../hob-page/hob-page-model.ts";
+import { useNeedLine } from "../hob-page/use-need-line.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { cardLine, lastChat } from "./hobs-page-model.ts";
 import { messages } from "./messages.ts";
@@ -39,7 +40,7 @@ export function HobCard({
   threads: ReadonlyArray<Thread>;
   activity: ActivityMap;
 }) {
-  const doing = doingOf(state, threads, activity);
+  const doing = doingOf(state, threads, activity, useNeedLine(hob.id));
   const last = lastChat(threads);
   const needs = doing?.kind === "needs-you";
   const fresh = useIsNewHob(hob.id, threads.length);
@@ -50,7 +51,7 @@ export function HobCard({
       aria-label={copy.card.open({ name: hob.name, state: stateTag(state, fresh).word })}
       style={tint(hob)}
       className={cn(
-        "hop-on-hover cut relative flex min-w-0 flex-col overflow-hidden bg-card text-text-strong no-underline transition-[translate,box-shadow,background-color] duration-150 hover:-translate-y-0.5 hover:bg-hover hover:text-text-strong hover:shadow-menu focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+        "hop-on-hover cut relative flex min-w-0 flex-col overflow-hidden bg-card text-text-strong no-underline transition-[translate,box-shadow,background-color] duration-150 hover:-translate-y-0.5 hover:bg-hover hover:text-text-strong hover:shadow-menu focus-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0",
         needs &&
           "shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-lantern)_70%,transparent)] hover:shadow-[inset_0_0_0_1.5px_var(--color-lantern),var(--shadow-menu)]",
       )}

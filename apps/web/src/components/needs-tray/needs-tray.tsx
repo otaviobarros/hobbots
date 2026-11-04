@@ -66,7 +66,7 @@ export function NeedsTray({
       {/* A new item hops its hob in the looks that hop, and fades in in the others. */}
       <span
         key={entry.key}
-        className="flex size-9 shrink-0 animate-hb-in items-center justify-center self-start rounded-tile bg-tile [&_.sprite]:[animation:var(--hop)]"
+        className="flex size-hob-tile shrink-0 animate-hb-in items-center justify-center self-start rounded-tile bg-tile [&_.sprite]:[animation:var(--hop)]"
       >
         <HobSprite hob={asker} size={28} />
       </span>
