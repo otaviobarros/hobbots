@@ -14,7 +14,7 @@ export const hastText = (node: HastNode): string =>
 /** The language a fenced code block names, such as `ts` from ```` ```ts ````. */
 export const codeLanguage = (pre: HastNode): string | null => {
   const code = pre.children?.find((child) => child.tagName === "code");
-  const classes = code?.properties?.["className"];
+  const classes = code?.properties?.className;
   if (!Array.isArray(classes)) return null;
   const language = classes.find((name): name is string => typeof name === "string" && name.startsWith("language-"));
   return language ? language.slice("language-".length) : null;
