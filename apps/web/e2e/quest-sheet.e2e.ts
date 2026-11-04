@@ -16,7 +16,8 @@ const headerQuest = (page: Page, title: string) =>
 test("[TC-CH-190] the quest sheet shows the whole tree live with its controls and keeps a pinned Quest in every thread", async ({
   page,
 }) => {
-  const { url, aldric } = await questHub();
+  // Ada waits on Quill for only a few steps: slower steps keep that in view on a busy machine.
+  const { url, aldric } = await questHub({ stepMs: 1500 });
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");

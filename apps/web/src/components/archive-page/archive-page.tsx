@@ -285,7 +285,7 @@ function ChatRow({ chat: { hob, thread } }: { chat: ArchivedChat }) {
           size="sm"
           className="relative z-[1]"
           disabled={busy}
-          aria-label={copy.chats.restoreLabel({ title: thread.title })}
+          aria-label={(busy ? copy.chats.restoringLabel : copy.chats.restoreLabel)({ title: thread.title })}
           onClick={() => actions.restore(hob, thread)}
         >
           <RestoreIcon />

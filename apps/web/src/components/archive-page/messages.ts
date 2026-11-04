@@ -35,6 +35,7 @@ export const messages = {
     restore: "Restore",
     restoring: "Restoring…",
     restoreLabel: ({ title }: Titled) => `Restore “${title}”`,
+    restoringLabel: ({ title }: Titled) => `Restoring… “${title}”`,
     showMore: ({ count }: { count: number }) => `Show ${formatCount(count)} more`,
     loading: "Loading archived chats…",
     loadFailed: "Hobbots could not read the archived chats. Try again in a moment.",

@@ -21,7 +21,7 @@ import {
   TaskId,
   type Thread,
 } from "@hobbots/domain";
-import { DateTime, Duration, Effect, FiberMap, Layer, Option, Schedule, Stream } from "effect";
+import { DateTime, type Duration, Effect, FiberMap, Layer, Option, Schedule, Stream } from "effect";
 import { EventBus } from "./event-bus.ts";
 
 /**
@@ -626,5 +626,3 @@ export const FakeQuestLive = (step: Duration.Input) =>
       );
     }),
   );
-
-export const FAKE_QUEST_STEP = Duration.millis(600);

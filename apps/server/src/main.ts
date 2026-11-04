@@ -68,7 +68,7 @@ import {
   ProcessSandbox,
 } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
-import { Deferred, Effect, Layer, Option, References } from "effect";
+import { Deferred, Duration, Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
 import { BackupHolds, HeldActivityStore, HeldRuntimes } from "./backup-holds.ts";
@@ -81,7 +81,7 @@ import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { ExportFoldersLive } from "./exports.ts";
-import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
+import { FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
 import { ApiRoutes } from "./http.ts";
@@ -273,7 +273,7 @@ const ServerLive = Layer.unwrap(
             HubBackups.layer,
             HubRestores.layer,
             config.runtime === "fake" && config.fakeQuest === "black-friday"
-              ? FakeQuestLive(FAKE_QUEST_STEP)
+              ? FakeQuestLive(Duration.millis(config.fakeQuestStepMs))
               : Layer.empty,
           ),
         ),
