@@ -8,12 +8,15 @@ import { endedActivity, hub, say, setUp, treeWhen } from "./workbench-hub.ts";
 
 const write = (path: string, text: string) => `fake:write ${path} ${JSON.stringify(text)}`;
 
-/** The folders each of the Task's Attempts scanned, start and end alike, oldest Attempt first. */
+/**
+ * The folders each of the Task's Attempts scanned, start and end alike, oldest Attempt first. Each
+ * Attempt's are sorted: scans started in the same millisecond are read back in either order.
+ */
 const scanned = async (run: ReturnType<typeof setUp>["run"], tree: TaskTree) => {
   const folders = [];
   for (const attempt of tree.attempts) {
     const activity = await run(endedActivity(attempt.id as AttemptId));
-    folders.push([...new Set(activity.scans.map((scan) => scan.folder))]);
+    folders.push([...new Set(activity.scans.map((scan) => scan.folder))].sort());
   }
   return folders;
 };
@@ -56,6 +59,6 @@ describe("a lead's turns on its Quest", () => {
     await unnamed.run(say(["Build it", hub("start_quest", { key: "quest", goal: "Build the site" })].join("\n")));
     const whole = await unnamed.run(treeWhen((tree) => tree.attempts.length === 1));
     expect(whole.quests[0]?.limits.folders).toBeUndefined();
-    expect(await scanned(unnamed.run, whole)).toEqual([[unnamed.folder, ...unnamed.others]]);
+    expect(await scanned(unnamed.run, whole)).toEqual([[unnamed.folder, ...unnamed.others].sort()]);
   }, 30_000);
 });
