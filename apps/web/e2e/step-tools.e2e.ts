@@ -1,5 +1,5 @@
 import { expect, test } from "./hub.ts";
-import { lane, laneMenu, laneTask, openRoom, showInWorkbench, taskSummary } from "./quest-room.ts";
+import { lane, laneMenu, laneTask, openRoom, taskSummary } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #892 in the browser: a planned step's turn runs outside any chat, so the summary in its lane

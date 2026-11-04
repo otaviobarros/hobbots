@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { lane, laneHead, laneMenu, laneTask, openRoom, showInWorkbench, taskSummary } from "./quest-room.ts";
+import { lane, laneHead, laneMenu, laneTask, openRoom, taskSummary } from "./quest-room.ts";
 
 // Issues #669 and #674 in the browser: a member's Task and a step cancelled while their turns run
 // each end with a cancelled Attempt, and their Workbench says so. The decision is tested in
