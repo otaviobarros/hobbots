@@ -1,27 +1,44 @@
-import { ROLE_FAMILIES, type RoleFamily, type RoleId, starterRole } from "@hobbots/domain";
+import { ROLE_FAMILIES, type RoleFamily, type RoleId, STARTER_ROLES, starterRole } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useId, useState } from "react";
 import { roleGroups, roleRequestUrl } from "../api/first-hob.ts";
-import { Choice, OwnRole, RoleOption, type RolePick } from "./hob-form.tsx";
+import { OwnRole, RadioLabel, type RolePick } from "./hob-form.tsx";
+import { RoleSigil } from "./role-sigil.tsx";
+
+const copy = {
+  title: "Pick a role",
+  families: "Role families",
+  all: "All roles",
+  own: "Your own",
+  ownNote: "Give it a title in your words and pick a sigil.",
+  suggest: "Missing a role? Suggest one",
+  cancel: "Cancel",
+  close: "Close",
+  pick: ({ role }: { role: string }) => `Pick ${role}`,
+  pickOwn: "Use your own title",
+};
+
+const OPTION =
+  "flex min-w-0 cursor-pointer items-start gap-3 rounded-control bg-card p-3 text-left text-text-strong transition-colors duration-150 hover:bg-hover has-checked:shadow-[inset_0_0_0_2px_var(--color-focus-ring)] has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus-ring";
 
 /**
- * Every starter role in one sheet, for changing a hob's role from its profile: a search over titles
- * and notes, a filter per family, the roles in four columns, and "Your own". A pick applies to the
- * draft at once, so the profile's card follows it; the profile's save bar still decides when it is
- * saved. It is the shared dialog, so focus stays inside it, Escape closes it, and focus goes back
- * where it was.
+ * The role dialog, for Summon and for the profile's Change role: the families on the left with
+ * their counts, the family's roles as two columns of cards, and a footer with the picked role's
+ * note, Cancel and Pick. "Your own" closes the list for a title in the user's words. Nothing
+ * changes until Pick, so Cancel, Escape and Close leave the hob as it was. It is the shared
+ * dialog, so focus stays inside it and goes back where it was when it closes.
  */
 export function RoleSheet({
-  name,
   value,
   onPick,
   onOwnTitle,
   onOwnSigil,
   onClose,
 }: {
-  name: string;
+  /** The hob's name; the dialog's words do not use it, but callers pass it for its title one day. */
+  name?: string;
   value: RolePick;
   onPick: (role: RoleId | null) => void;
   onOwnTitle: (title: string) => void;
@@ -29,13 +46,23 @@ export function RoleSheet({
   onClose: () => void;
 }) {
   const radios = useId();
-  const families = useId();
-  const [search, setSearch] = useState("");
-  const [family, setFamily] = useState<RoleFamily | "all">("all");
+  const [family, setFamily] = useState<RoleFamily | "all">(() =>
+    value.role === null ? "all" : starterRole(value.role).family,
+  );
+  const [pending, setPending] = useState<RolePick>(value);
   const [ownPicked, setOwnPicked] = useState(false);
-  const groups = roleGroups(search, family);
-  const own = value.role === null;
-  const picked = own ? value.ownTitle.trim() || "Your own" : starterRole(value.role).title;
+  const groups = roleGroups("", family);
+  const own = pending.role === null;
+  const confirm = () => {
+    if (own) {
+      onPick(null);
+      onOwnTitle(pending.ownTitle);
+      onOwnSigil(pending.ownSigil);
+    } else onPick(pending.role);
+    onClose();
+  };
+  const note = own ? copy.ownNote : starterRole(pending.role as RoleId).note;
+  const canPick = !own || pending.ownTitle.trim() !== "";
 
   return (
     <Dialog
@@ -46,97 +73,120 @@ export function RoleSheet({
     >
       <DialogContent
         aria-describedby={undefined}
-        className="h-[min(720px,calc(100vh-48px))] w-[min(1000px,calc(100vw-32px))] max-w-none animate-hb-in gap-0 p-0"
+        className="h-[min(640px,calc(100vh-48px))] w-[min(920px,calc(100vw-32px))] max-w-none animate-hb-in gap-0 overflow-hidden rounded-card border-0 bg-panel p-0 shadow-sheet"
       >
-        <div className="flex flex-wrap items-center gap-3.5 border-b-2 border-line px-5 py-4">
-          <DialogTitle className="m-0 flex-1 font-heading text-[22px] font-bold text-moonlight">
-            Choose {name}'s role
+        <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+          <DialogTitle className="m-0 flex-1 font-heading text-heading font-(--heading-weight)">
+            {copy.title}
           </DialogTitle>
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Find a role"
-            placeholder="Find a role, like “taxes” or “code”"
-            className="w-[340px] max-w-full border-2 border-control bg-deep px-3 py-2 text-text-strong placeholder:text-label"
-          />
+          <DialogClose asChild>
+            <Button type="button" variant="ghost" size="icon" aria-label={copy.close}>
+              ×
+            </Button>
+          </DialogClose>
         </div>
 
-        <fieldset className="m-0 flex flex-wrap gap-1.5 border-0 border-b-2 border-line px-5 py-3">
-          <legend className="sr-only">Show roles from</legend>
-          {[{ id: "all" as const, title: "All roles" }, ...ROLE_FAMILIES].map((f) => (
-            <Choice
-              key={f.id}
-              name={families}
-              checked={family === f.id}
-              onPick={() => setFamily(f.id)}
-              className="px-2.5 py-1 text-[13px]"
-            >
-              {f.title}
-            </Choice>
-          ))}
-        </fieldset>
+        <div className="flex min-h-0 flex-1 max-[720px]:flex-col">
+          <nav
+            aria-label={copy.families}
+            className="flex w-[244px] flex-none flex-col gap-0.5 overflow-y-auto border-r border-line p-3 max-[720px]:w-full max-[720px]:flex-row max-[720px]:flex-wrap max-[720px]:border-r-0 max-[720px]:border-b"
+          >
+            {[{ id: "all" as const, title: copy.all }, ...ROLE_FAMILIES].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                aria-pressed={family === f.id}
+                onClick={() => setFamily(f.id)}
+                className={cn(
+                  "flex min-h-9 cursor-pointer items-center gap-2 rounded-control border-0 px-2.5 text-left text-sm text-text-strong hover:bg-hover",
+                  family === f.id ? "bg-card" : "bg-transparent",
+                )}
+              >
+                <span className="flex-1">{f.title}</span>
+                <span className="text-meta text-label">
+                  {f.id === "all" ? STARTER_ROLES.length : roleGroups("", f.id)[0]?.roles.length}
+                </span>
+              </button>
+            ))}
+          </nav>
 
-        <fieldset className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto border-0 px-5 py-4">
-          <legend className="sr-only">Role</legend>
-          {groups.length === 0 && (
-            <p role="status" className="m-0 text-sm text-text-secondary">
-              No role matches “{search.trim()}”. Give {name} a title of your own below, or suggest the role.
-            </p>
-          )}
-          {groups.map((group) => (
-            <section key={group.family} aria-label={group.title} className="flex flex-col gap-2">
-              <h3 className="lbl m-0 text-xs text-label">{group.title}</h3>
-              <div className="grid grid-cols-4 gap-1.5 max-[900px]:grid-cols-2">
-                {group.roles.map((id) => {
-                  const role = starterRole(id);
-                  return (
-                    <RoleOption
-                      key={id}
-                      name={radios}
-                      checked={value.role === id}
-                      onPick={() => onPick(id)}
-                      sigil={id}
-                      title={role.title}
-                      note={role.note}
-                    />
-                  );
-                })}
-              </div>
+          <fieldset className="m-0 flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto border-0 p-5">
+            <legend className="sr-only">Role</legend>
+            {groups.map((group) => (
+              <section key={group.family} aria-label={group.title} className="flex flex-col gap-2">
+                <h3 className="lbl m-0 text-label">{group.title}</h3>
+                <div className="grid grid-cols-2 gap-2 max-[720px]:grid-cols-1">
+                  {group.roles.map((id) => {
+                    const role = starterRole(id);
+                    return (
+                      <RadioLabel
+                        key={id}
+                        name={radios}
+                        checked={pending.role === id}
+                        onPick={() => setPending((p) => ({ ...p, role: id }))}
+                        className={OPTION}
+                      >
+                        <span aria-hidden className="grid size-8 flex-none place-items-center rounded-control bg-tile">
+                          <RoleSigil sigil={id} size={24} />
+                        </span>
+                        <span className="flex min-w-0 flex-col">
+                          <strong>{role.title}</strong>
+                          <span className="text-detail text-text-secondary">{role.note}</span>
+                        </span>
+                      </RadioLabel>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+            <section aria-label={copy.own} className="flex flex-col gap-2">
+              <RadioLabel
+                name={radios}
+                checked={own}
+                onPick={() => {
+                  setOwnPicked(true);
+                  setPending((p) => ({ ...p, role: null }));
+                }}
+                className={cn(OPTION, "max-w-[340px]", !own && "border border-dashed border-line-2")}
+              >
+                <span
+                  aria-hidden
+                  className="grid size-8 flex-none place-items-center rounded-control border border-dashed border-control text-label"
+                >
+                  +
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <strong>{copy.own}</strong>
+                  <span className="text-detail text-text-secondary">{copy.ownNote}</span>
+                </span>
+              </RadioLabel>
+              {own && (
+                <OwnRole
+                  value={pending}
+                  onTitle={(ownTitle) => setPending((p) => ({ ...p, ownTitle }))}
+                  onSigil={(ownSigil) => setPending((p) => ({ ...p, ownSigil }))}
+                  autoFocus={ownPicked}
+                />
+              )}
+              <a
+                href={roleRequestUrl(own ? pending.ownTitle : "")}
+                target="_blank"
+                rel="noreferrer"
+                className="self-start text-detail text-link underline underline-offset-3"
+              >
+                {copy.suggest}
+              </a>
             </section>
-          ))}
-          <section aria-label="Your own" className="flex flex-col gap-2">
-            <RoleOption
-              name={radios}
-              checked={own}
-              onPick={() => {
-                setOwnPicked(true);
-                onPick(null);
-              }}
-              sigil={own ? value.ownSigil : null}
-              title="Your own"
-              note="Give it a title in your words and pick a sigil."
-              className={cn("max-w-[320px]", !own && "border-dashed")}
-            />
-            {own && <OwnRole value={value} onTitle={onOwnTitle} onSigil={onOwnSigil} autoFocus={ownPicked} />}
-            <a
-              href={roleRequestUrl(own ? value.ownTitle : search)}
-              target="_blank"
-              rel="noreferrer"
-              className="self-start text-[13px]"
-            >
-              Missing a role? Suggest one
-            </a>
-          </section>
-        </fieldset>
+          </fieldset>
+        </div>
 
-        <div className="flex items-center gap-3 border-t-2 border-line px-5 py-3.5">
-          <span className="flex-1 text-sm text-text-secondary">
-            {name} is told its role before every reply. A role changes how {name} looks and works, never what {name} may
-            do.
-          </span>
-          <Button type="button" onClick={onClose}>
-            Use {picked}
+        <div className="flex flex-wrap items-center gap-3 border-t border-line px-5 py-3.5">
+          <span className="min-w-0 flex-1 truncate text-detail text-text-secondary">{note}</span>
+          <Button type="button" variant="outline" onClick={onClose}>
+            {copy.cancel}
+          </Button>
+          <Button type="button" onClick={confirm} disabled={!canPick}>
+            {own ? copy.pickOwn : copy.pick({ role: starterRole(pending.role as RoleId).title })}
           </Button>
         </div>
       </DialogContent>

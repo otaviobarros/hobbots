@@ -90,7 +90,7 @@ test("[TC-IN-132] a question no lead could answer waits in the Inbox's Needs you
   await expect(questions).toContainText("Ada → Aldric → you");
   const asks = page.getByRole("article", { name: "Question from Ada" });
   await expect(asks).toContainText("Should international orders get an earlier cutoff");
-  await expect(asks).toContainText("For Build the campaign");
+  await expect(asks).toContainText("Build the campaign");
   await expect(asks).toContainText("Passed up to you by Aldric.");
   await expect(page.getByText("1 waiting on you")).toBeVisible();
 

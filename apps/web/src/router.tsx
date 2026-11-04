@@ -5,16 +5,18 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  Outlet,
   redirect,
 } from "@tanstack/react-router";
 import { keptDraftOrStored } from "./api/first-hob.ts";
 import { needsPairing } from "./api/pairing.ts";
-import { agentsQuery, archivedAgentsQuery, threadsQuery } from "./api/queries.ts";
+import { agentsQuery } from "./api/queries.ts";
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
 import { type ArchiveTab, isArchiveTab } from "./components/archive-page/archive-model.ts";
+import { ArchiveNotices } from "./components/archive-page/archive-notices.tsx";
 import { ArchivePage } from "./components/archive-page/archive-page.tsx";
-import { ArchivedHobView } from "./components/archived-hobs.tsx";
+import { ArchivedChatPage, RetiredChatPage, RetiredHobPage } from "./components/archive-page/archive-read.tsx";
 import { HobPage } from "./components/hob-page/hob-page.tsx";
 import { type HobPageTab, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
 import { HobProfile } from "./components/hob-profile.tsx";
@@ -29,10 +31,11 @@ import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
-import { isSettingsSection } from "./components/settings/sections.ts";
+import { type ConnectionsTab, isConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
 import { SettingsPage } from "./components/settings/settings-page.tsx";
 import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
-import { Summon } from "./components/summon.tsx";
+import { Summon } from "./components/summon/summon.tsx";
+import { parseStep, type SummonStep } from "./components/summon/summon-model.ts";
 import { UsagePage } from "./components/usage/usage-page.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
@@ -249,12 +252,26 @@ const profileRoute = createRoute({
   },
 });
 
-// Summon names the new hob apart from the hobs already there, so it loads them first.
+// Summon names the new hob apart from the hobs already there, so it loads them first. `?step=` is
+// the step on screen, so Back and a reload keep it; the first step needs none.
 const summonRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "summon",
+  validateSearch: (search: Record<string, unknown>): { step?: SummonStep | undefined } => {
+    const step = parseStep(search.step);
+    return { step: step === "role" ? undefined : step };
+  },
   beforeLoad: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
-  component: Summon,
+  component: function SummonRoute() {
+    const { step } = summonRoute.useSearch();
+    const navigate = summonRoute.useNavigate();
+    return (
+      <Summon
+        step={step ?? "role"}
+        onStep={(next) => void navigate({ search: { step: next === "role" ? undefined : next } })}
+      />
+    );
+  },
 });
 
 // `?tab=` picks Needs you, All or History and `?request=` the request shown beside the list.
@@ -295,23 +312,68 @@ const settingsSectionRoute = createRoute({
   beforeLoad: ({ params }) => {
     if (!isSettingsSection(params.section)) throw redirect({ to: "/settings" });
   },
+  // `?tab=charms` opens Connections on its Charms tab.
+  validateSearch: (search: Record<string, unknown>): { tab?: ConnectionsTab | undefined } => ({
+    tab: isConnectionsTab(search.tab) && search.tab !== "ai" ? search.tab : undefined,
+  }),
   component: function SettingsSectionPage() {
     const { section } = settingsSectionRoute.useParams();
-    return <SettingsPage section={isSettingsSection(section) ? section : null} />;
+    const { tab } = settingsSectionRoute.useSearch();
+    return <SettingsPage section={isSettingsSection(section) ? section : null} tab={tab ?? "ai"} />;
   },
 });
-// The Archive: archived chats across every hob and retired hobs (CH-009, AG-006). `?tab=hobs`
-// opens Retired hobs and `?hob=` narrows the archived chats to one hob.
+// The Archive: archived chats across every hob and retired hobs (CH-009, AG-006). Its pages share
+// one toast, so a Restore made in a chat still offers Undo on the list it goes back to.
 const archiveRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "archive",
+  component: () => (
+    <ArchiveNotices>
+      <Outlet />
+    </ArchiveNotices>
+  ),
+});
+
+// `?tab=hobs` opens Retired hobs and `?hob=` narrows the archived chats to one hob.
+const archiveListRoute = createRoute({
+  getParentRoute: () => archiveRoute,
+  path: "/",
   validateSearch: (search: Record<string, unknown>): { tab?: ArchiveTab | undefined; hob?: string | undefined } => ({
     tab: isArchiveTab(search.tab) && search.tab !== "chats" ? search.tab : undefined,
     hob: typeof search.hob === "string" ? search.hob : undefined,
   }),
   component: function Archive() {
-    const { tab, hob } = archiveRoute.useSearch();
+    const { tab, hob } = archiveListRoute.useSearch();
     return <ArchivePage tab={tab ?? "chats"} hobId={hob === undefined ? undefined : AgentId.make(hob)} />;
+  },
+});
+
+// An archived chat, read-only, with Restore.
+const archiveChatRoute = createRoute({
+  getParentRoute: () => archiveRoute,
+  path: "chats/$hobId/$threadId",
+  component: function ArchiveChat() {
+    const params = archiveChatRoute.useParams();
+    return <ArchivedChatPage hobId={AgentId.make(params.hobId)} threadId={ThreadId.make(params.threadId)} />;
+  },
+});
+
+// A retired hob and its chats, read-only.
+const retiredHobRoute = createRoute({
+  getParentRoute: () => archiveRoute,
+  path: "hobs/$hobId",
+  component: function RetiredHob() {
+    const params = retiredHobRoute.useParams();
+    return <RetiredHobPage hobId={AgentId.make(params.hobId)} />;
+  },
+});
+
+const retiredChatRoute = createRoute({
+  getParentRoute: () => archiveRoute,
+  path: "hobs/$hobId/$threadId",
+  component: function RetiredChat() {
+    const params = retiredChatRoute.useParams();
+    return <RetiredChatPage hobId={AgentId.make(params.hobId)} threadId={ThreadId.make(params.threadId)} />;
   },
 });
 
@@ -324,35 +386,24 @@ const archivedRoute = createRoute({
   },
 });
 
-// A retired hob opens on its most recent thread.
+// A retired hob's old addresses lead to its page and chats in the Archive.
 const archivedHobRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "settings/archived/$hobId",
-  beforeLoad: async ({ context, params }) => {
-    const hobId = AgentId.make(params.hobId);
-    const [threads, archived] = await Promise.all([
-      context.queryClient.ensureQueryData(threadsQuery(hobId)).catch(() => []),
-      context.queryClient.ensureQueryData(archivedAgentsQuery),
-    ]);
-    // Only a retired hob's threads open here; any other id shows that it is not archived.
-    if (!archived.some((hob) => hob.id === hobId)) return;
-    const target = threads[0];
-    if (target) {
-      throw redirect({ to: "/settings/archived/$hobId/threads/$threadId", params: { hobId, threadId: target.id } });
-    }
-  },
-  component: function ArchivedHobPage() {
-    const params = archivedHobRoute.useParams();
-    return <ArchivedHobView hobId={AgentId.make(params.hobId)} />;
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/archive/hobs/$hobId", params: { hobId: params.hobId }, replace: true });
   },
 });
 
 const archivedThreadRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "settings/archived/$hobId/threads/$threadId",
-  component: function ArchivedThreadPage() {
-    const params = archivedThreadRoute.useParams();
-    return <ArchivedHobView hobId={AgentId.make(params.hobId)} threadId={ThreadId.make(params.threadId)} />;
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: "/archive/hobs/$hobId/$threadId",
+      params: { hobId: params.hobId, threadId: params.threadId },
+      replace: true,
+    });
   },
 });
 
@@ -379,7 +430,7 @@ const routeTree = rootRoute.addChildren([
     usageRoute,
     settingsRoute,
     settingsSectionRoute,
-    archiveRoute,
+    archiveRoute.addChildren([archiveListRoute, archiveChatRoute, retiredHobRoute, retiredChatRoute]),
     archivedRoute,
     archivedHobRoute,
     archivedThreadRoute,

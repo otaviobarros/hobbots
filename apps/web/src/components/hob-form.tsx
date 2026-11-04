@@ -108,7 +108,11 @@ export function Choice({
   children: React.ReactNode;
 }) {
   return (
-    <label
+    <RadioLabel
+      name={name}
+      checked={checked}
+      onPick={onPick}
+      label={label}
       className={cn(
         "cut flex cursor-pointer items-center gap-2 border-2 px-3 py-[7px] text-sm",
         checked ? "border-lantern bg-lantern text-ground" : "border-control text-text-strong hover:bg-line",
@@ -116,11 +120,38 @@ export function Choice({
         className,
       )}
     >
+      {children}
+    </RadioLabel>
+  );
+}
+
+/** What a label over a native radio takes: the group, whether it is on, and what picking it does. */
+export interface RadioLabelProps {
+  name: string;
+  checked: boolean;
+  onPick: () => void;
+  /** The radio's name when the visible text is not enough, such as a look drawn as a picture. */
+  label?: string | undefined;
+  className?: string | undefined;
+  children: React.ReactNode;
+}
+
+/** A label over a visually hidden native radio, so the browser gives the group its keys and names. */
+export function RadioLabel({ name, checked, onPick, label, className, children }: RadioLabelProps) {
+  return (
+    <label className={className}>
       <input type="radio" name={name} checked={checked} onChange={onPick} aria-label={label} className="sr-only" />
       {children}
     </label>
   );
 }
+
+/**
+ * A text field's look: the control edge, a focus glow in the focus-ring color, and the skin's corner
+ * and edge width, so it fits every theme.
+ */
+export const FIELD =
+  "rounded-control border-(length:--edge) border-solid border-control bg-card px-2.5 py-2 text-text placeholder:text-label focus:border-focus-ring focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-focus-ring)_22%,transparent)] focus:outline-none";
 
 /** The chores in the user's own words, filled in from the role until they write their own. */
 export function ChoresField<D extends FirstHobDraft>({
@@ -152,7 +183,7 @@ export function ChoresField<D extends FirstHobDraft>({
         }}
         aria-describedby="hob-chores-note"
         placeholder="Tell it about the chores, like you would tell a friend who is helping out."
-        className="resize-none border-2 border-control bg-deep px-3 py-2.5 leading-normal text-text-strong placeholder:text-label"
+        className={cn("resize-none leading-normal", FIELD)}
       />
       <span id="hob-chores-note" className="text-[13px] text-label">
         {draft.choresEdited
@@ -166,7 +197,7 @@ export function ChoresField<D extends FirstHobDraft>({
 }
 
 /** One role in the picker: its sigil, title and one-line note, over a native radio. */
-export function RoleOption({
+function RoleOption({
   checked,
   onPick,
   sigil,
@@ -344,7 +375,6 @@ export function OwnRole({
   onTitle: (title: string) => void;
   onSigil: (sigil: RoleId) => void;
 }) {
-  const name = useId();
   return (
     <div className="flex animate-hb-in flex-col gap-2.5 border-2 border-line p-2.5">
       <input
@@ -357,36 +387,66 @@ export function OwnRole({
         aria-label="Your own role title"
         className="border-2 border-lantern bg-deep px-[11px] py-[9px] text-[15px] text-text-strong"
       />
-      <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-        <legend className="mb-1.5 text-[13px] text-text-secondary">Sigil</legend>
-        <div className="flex flex-wrap gap-1">
-          {ALL_ROLES.map((id) => {
-            const on = value.ownSigil === id;
-            return (
-              <label
-                key={id}
-                title={starterRole(id).title}
-                className={cn(
-                  "relative grid size-8 cursor-pointer place-items-center border-2 bg-deep",
-                  on ? "border-lantern" : "border-line hover:border-control",
-                  "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
-                )}
-              >
-                <input
-                  type="radio"
-                  name={name}
-                  checked={on}
-                  onChange={() => onSigil(id)}
-                  aria-label={`${starterRole(id).title}'s sigil`}
-                  className="sr-only"
-                />
-                <RoleSigil sigil={id} size={20} />
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
+      <SigilPicker
+        value={value.ownSigil}
+        onPick={onSigil}
+        legend={<legend className="mb-1.5 text-[13px] text-text-secondary">Sigil</legend>}
+        className="flex flex-wrap gap-1"
+        tileClassName="size-8 border-2 border-line bg-deep hover:border-control data-on:border-lantern data-on:hover:border-lantern"
+      />
     </div>
+  );
+}
+
+/**
+ * Any starter role's sigil, for a title in the user's words. One radio group, so arrow keys move
+ * from sigil to sigil and Tab enters it on the one picked.
+ */
+export function SigilPicker({
+  value,
+  onPick,
+  legend,
+  className,
+  tileClassName,
+}: {
+  value: RoleId;
+  onPick: (sigil: RoleId) => void;
+  legend: React.ReactNode;
+  className?: string | undefined;
+  tileClassName?: string | undefined;
+}) {
+  const name = useId();
+  return (
+    <fieldset className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
+      {legend}
+      <div className={className}>
+        {ALL_ROLES.map((id) => {
+          const on = value === id;
+          return (
+            <label
+              key={id}
+              title={starterRole(id).title}
+              data-on={on || undefined}
+              className={cn(
+                "relative grid cursor-pointer place-items-center",
+                "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
+                tileClassName,
+              )}
+            >
+              <input
+                type="radio"
+                name={name}
+                checked={on}
+                onChange={() => onPick(id)}
+                aria-label={`${starterRole(id).title}'s sigil`}
+                className="sr-only"
+              />
+              <RoleSigil sigil={id} size={20} />
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 

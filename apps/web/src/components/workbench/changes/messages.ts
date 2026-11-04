@@ -29,6 +29,7 @@ export const messages = {
   sharedUnknown: "Changed while another hob was also working here.",
   soFar: "So far: this turn is still running, so this file may change again.",
   showAs: "Show as",
+  openInFiles: "Open in Files",
   before: "Before",
   after: "After",
   rendered: "Rendered",

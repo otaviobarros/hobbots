@@ -236,7 +236,7 @@
       "value": "#fdf9ef"
     },
     "provider-ink": {
-      "use": "The letter on an AI provider's tile, in every theme.",
+      "use": "The letter on an AI provider's tile. The tiles are fixed pastels, so the ink is fixed too.",
       "value": "#141228"
     }
   },

@@ -268,7 +268,7 @@ test("[TC-PE-125] an Always rule shows in Inbox History and Settings, and removi
 
   // Settings › Permissions lists it with when it was saved and the request that saved it.
   await page.goto(`${current.url}/#/settings/safety`);
-  const settings = page.getByRole("region", { name: "Standing rules" });
+  const settings = page.getByRole("region", { name: "Always allowed" });
   await expect(settings.getByRole("listitem")).toHaveCount(1);
   await expect(settings.getByRole("listitem")).toContainText(rule);
   await expect(settings.getByRole("listitem")).toContainText(/Saved .+ · last used .+/);

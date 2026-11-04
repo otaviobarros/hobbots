@@ -47,23 +47,27 @@ function StandingRuleList() {
 
 /** The standing rules at the top of Inbox History, above the decisions. */
 export function StandingRules() {
+  const grants = useQuery(grantsQuery);
+  const count = grants.data === undefined ? undefined : standingRules(grants.data).length;
   return (
-    <section aria-label={copy.heading} className="flex flex-col gap-3">
-      <span className="lbl text-xs text-label">{copy.heading}</span>
-      <h2 className="m-0 font-heading text-2xl font-bold text-moonlight">{copy.history.title}</h2>
+    <section aria-label={copy.heading} className="flex flex-col gap-2.5">
+      <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-text-strong">
+        {copy.history.title}
+        {count !== undefined && <span className="text-xs font-normal text-label">{count}</span>}
+      </h2>
       <p className="m-0 text-sm text-text-secondary">{copy.history.intro}</p>
-      <div className="cut bg-panel px-4 py-2">
+      <div className="rounded-card bg-card px-3.5 py-1">
         <StandingRuleList />
       </div>
     </section>
   );
 }
 
-/** Settings › Permissions › Standing rules: the same rules, across hobs. */
+/** Settings › Safety › Always allowed: the same rules, across hobs. */
 export function StandingRuleSettings() {
   return (
-    <section aria-label={copy.heading} className="flex flex-col gap-2 pt-2">
-      <span className="lbl text-label">{copy.heading}</span>
+    <section aria-label={copy.settings.heading} className="flex flex-col gap-3">
+      <h3 className="lbl m-0 text-label">{copy.settings.heading}</h3>
       <p className="m-0 text-sm text-text-secondary">{copy.settings.intro}</p>
       <StandingRuleList />
     </section>

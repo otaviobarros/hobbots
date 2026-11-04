@@ -66,25 +66,43 @@ test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which
   await expect(card).toContainText("1 chat kept");
   await expect(card).toContainText(/Retired .+/);
 
+  // The card opens Pip's page: its chats, read-only, each opening on its own.
   await card.getByRole("link", { name: "Read Pip's chats" }).click();
-  await expect(page).toHaveURL(new RegExp(`#/settings/archived/${hob.id}/threads/${thread.id}$`));
-  const chat = page.getByRole("main", { name: "Chat" });
-  // The thread's title in the header and the user's message both read "Plan my week".
-  await expect(chat.getByText("Plan my week", { exact: true })).toHaveCount(2);
+  await expect(page).toHaveURL(new RegExp(`#/archive/hobs/${hob.id}$`));
+  const retired = page.getByRole("main", { name: "Pip, retired" });
+  await expect(retired.getByRole("heading", { name: "Pip" })).toBeVisible();
+  await expect(retired).toContainText("Guide · retired");
+  await expect(retired.getByRole("note")).toContainText("Pip is retired, so these chats are read-only");
+  await retired.getByRole("link", { name: "Read Plan my week" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`#/archive/hobs/${hob.id}/${thread.id}$`));
+  const chat = page.getByRole("main", { name: "Plan my week" });
   await expect(chat.getByText("Echo: Plan my week", { exact: true })).toBeVisible();
-  await expect(chat.getByRole("note")).toHaveText("Pip is retired, so this chat is read-only.");
+  await expect(chat.getByRole("note")).toHaveText(
+    "Pip is retired, so this chat is read-only. It still shows up in search.",
+  );
   await expect(page.getByRole("textbox")).toHaveCount(0);
 
-  // The thread list leads back to Retired hobs, and Settings points to the Archive.
-  await page.getByRole("link", { name: "‹ Retired hobs" }).click();
+  // The breadcrumb leads back, and Settings points to the Archive.
+  await chat.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Retired hobs" }).click();
   await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
+  // Settings › Your data lists Pip with its role and kept chats, and Read chats opens them.
   await page.goto(`${current.url}/#/settings/data`);
-  await page.getByRole("region", { name: "Retired hobs" }).getByRole("link", { name: "Open the Archive" }).click();
+  const retired = page.getByRole("region", { name: "Retired hobs" });
+  const row = retired.getByRole("list", { name: "Retired hobs" }).getByRole("listitem").filter({ hasText: "Pip" });
+  await expect(row).toContainText("Guide");
+  await expect(row).toContainText("1 chat kept");
+  await row.getByRole("link", { name: "Read Pip's chats" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/settings/archived/${hob.id}/threads/${thread.id}$`));
+  await page.goto(`${current.url}/#/settings/data`);
+  await retired.getByRole("link", { name: "Open the Archive" }).click();
   await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
   expect(await api(current, "GET", "/agents")).toEqual([]);
 
-  // A link that pairs Pip with a thread Pip never had shows no transcript.
-  await page.goto(`${current.url}/#/settings/archived/${hob.id}/threads/thread_not_pips`);
+  // An old address leads to the same chat, and one that pairs Pip with a thread Pip never had shows no transcript.
+  await page.goto(`${current.url}/#/settings/archived/${hob.id}/threads/${thread.id}`);
+  await expect(page).toHaveURL(new RegExp(`#/archive/hobs/${hob.id}/${thread.id}$`));
+  await page.goto(`${current.url}/#/archive/hobs/${hob.id}/thread_not_pips`);
   await expect(page.getByText("This chat is not one of Pip's.")).toBeVisible();
   await expect(page.getByText("Echo: Plan my week", { exact: true })).toHaveCount(0);
 });

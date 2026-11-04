@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { attemptFilesQuery, taskFileUrl } from "../../../api/workbench.ts";
 import { formatBytes } from "../../../lib/reply-steps.ts";
+import { changePath, leavesFile } from "../changes/changes-model.ts";
 import { FilePreview } from "../files/file-preview.tsx";
 import { canDownload, fileDirectory, fileName, filesStamp, shownFile } from "../files/files-model.ts";
 import { messages } from "../files/messages.ts";
@@ -17,7 +18,9 @@ import type { WorkbenchTabProps } from "./tab-props.ts";
 export function FilesTab(props: WorkbenchTabProps) {
   return (
     <div data-slot="files" className="flex h-full min-h-0 flex-col gap-3 px-5 py-4">
-      {props.activity !== null && <Files activity={props.activity} focus={focusOf(props)} />}
+      {props.activity !== null && (
+        <Files activity={props.activity} focus={focusOf(props)} onSeeChanges={(path) => props.onTab("changes", path)} />
+      )}
     </div>
   );
 }
@@ -26,11 +29,26 @@ export function FilesTab(props: WorkbenchTabProps) {
 const focusOf = (props: WorkbenchTabProps): string | undefined =>
   "focus" in props && typeof props.focus === "string" ? props.focus : undefined;
 
-function Files({ activity, focus }: { activity: AttemptActivity; focus: string | undefined }) {
+function Files({
+  activity,
+  focus,
+  onSeeChanges,
+}: {
+  activity: AttemptActivity;
+  focus: string | undefined;
+  /** Opens Changes on the file, by where it is on the hub. */
+  onSeeChanges: (location: string) => void;
+}) {
   const attemptId = activity.attempt.id;
   const stamp = filesStamp(activity);
   const read = useQuery(attemptFilesQuery(attemptId, stamp));
   const [picked, setPicked] = useState<TaskFileId | null>(null);
+  // A file another tab asks for wins over the one picked here before.
+  const [asked, setAsked] = useState(focus);
+  if (focus !== asked) {
+    setAsked(focus);
+    if (focus !== undefined) setPicked(null);
+  }
   if (read.isPending) return <p className="m-0 text-detail text-label">{messages.loading}</p>;
   if (read.isError) {
     return (
@@ -56,7 +74,12 @@ function Files({ activity, focus }: { activity: AttemptActivity; focus: string |
         <FileGroup title={messages.made} files={made} shown={shown} onPick={setPicked} />
         <FileGroup title={messages.touched} files={touched} shown={shown} onPick={setPicked} />
       </nav>
-      <FileDetail key={shown.id} activity={activity} file={shown} />
+      <FileDetail
+        key={shown.id}
+        activity={activity}
+        file={shown}
+        onSeeChanges={hasChange(activity, shown) ? () => onSeeChanges(shown.location) : null}
+      />
     </div>
   );
 }
@@ -117,7 +140,19 @@ function FileRow({ file, on, onPick }: { file: TaskFile; on: boolean; onPick: ()
   );
 }
 
-function FileDetail({ activity, file }: { activity: AttemptActivity; file: TaskFile }) {
+/** Whether Changes has a change that left this file, so See changes can open it there. */
+const hasChange = (activity: AttemptActivity, file: TaskFile): boolean =>
+  activity.changes.some((change) => leavesFile(change) && changePath(change) === file.location);
+
+function FileDetail({
+  activity,
+  file,
+  onSeeChanges,
+}: {
+  activity: AttemptActivity;
+  file: TaskFile;
+  onSeeChanges: (() => void) | null;
+}) {
   const name = fileName(file);
   const meta = [messages.kind[file.preview], file.size === null ? null : formatBytes(file.size), messages.now[file.now]]
     .filter((part) => part !== null)
@@ -131,6 +166,11 @@ function FileDetail({ activity, file }: { activity: AttemptActivity; file: TaskF
           </h3>
           <span className="text-xs text-text-secondary">{meta}</span>
         </div>
+        {onSeeChanges !== null && (
+          <Button variant="ghost" size="xs" onClick={onSeeChanges}>
+            {messages.seeChanges}
+          </Button>
+        )}
         <FileActions attemptId={activity.attempt.id} file={file} name={name} />
       </header>
       <FilePreview attemptId={activity.attempt.id} file={file} />

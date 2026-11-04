@@ -1,5 +1,7 @@
 import type { BackupState } from "@hobbots/api";
+import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
+import { Progress } from "@hobbots/ui/components/progress";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -12,8 +14,10 @@ import {
   useStartBackup,
 } from "../../api/backup.ts";
 import { ApiError } from "../../api/client.ts";
-import { formatMoment } from "../../lib/format.ts";
+import { formatAgo, formatMoment } from "../../lib/format.ts";
 import { formatBytes } from "../../lib/reply-steps.ts";
+import { ExportSettings } from "../export/export-settings.tsx";
+import { messages as exportMessages } from "../export/messages.ts";
 import { FolderField } from "./folder-field.tsx";
 import { messages } from "./messages.ts";
 import { RestoreFlow } from "./restore-flow.tsx";
@@ -27,7 +31,7 @@ const refusal = (error: Error | null) => {
   return typeof reason === "string" ? reason : typeof message === "string" ? message : error.message;
 };
 
-function Progress({ state }: { state: BackupState }) {
+function BackupProgress({ state }: { state: BackupState }) {
   if (state._tag === "Waiting") {
     return (
       <span role="status" className="text-sm text-lantern">
@@ -36,7 +40,6 @@ function Progress({ state }: { state: BackupState }) {
     );
   }
   if (state._tag !== "Copying") return null;
-  const percent = state.totalBytes === 0 ? 0 : Math.min(100, Math.round((state.copiedBytes / state.totalBytes) * 100));
   return (
     <div className="flex flex-col gap-1">
       <span role="status" className="text-sm">
@@ -45,28 +48,23 @@ function Progress({ state }: { state: BackupState }) {
           {copy.backup.progress({ copied: formatBytes(state.copiedBytes), total: formatBytes(state.totalBytes) })}
         </span>
       </span>
-      <div
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent}
+      <Progress
+        value={state.copiedBytes}
+        max={state.totalBytes}
         aria-label={copy.backup.copying[state.step]}
-        className="h-2 w-full max-w-[320px] bg-deep"
-      >
-        <div className="h-2 bg-mint" style={{ width: `${percent}%` }} />
-      </div>
+        className="max-w-[320px]"
+      />
     </div>
   );
 }
 
+/** Where the last backup went, or why it did not finish. */
 function Outcome({ state }: { state: BackupState }) {
   if (state._tag === "Done") {
     return (
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="font-bold text-mint">
-          {copy.backup.done({ when: formatMoment(state.finishedAt), size: formatBytes(state.size) })}
-        </span>
-        <span className="font-mono text-[13px] break-all text-text-secondary">{state.path}</span>
+      <div className="flex min-w-0 flex-col gap-0.5 text-sm">
+        <span className="text-text-secondary">{copy.backup.saved({ size: formatBytes(state.size) })}</span>
+        <span className="font-mono text-detail break-all text-text">{state.path}</span>
       </div>
     );
   }
@@ -80,63 +78,33 @@ function Outcome({ state }: { state: BackupState }) {
   return null;
 }
 
-/** Back up now: where to save it, its progress while it runs, and how the last one went. */
-function BackupNow() {
-  const status = useQuery(backupQuery);
-  const start = useStartBackup();
-  const cancel = useCancelBackup();
-  const [typed, setTyped] = useState<string | null>(null);
-  if (status.isError) return <p className="m-0 text-sm text-rose">{copy.failedToRead}</p>;
-  if (!status.data) return null;
-  const { state, defaultDestination } = status.data;
-  const destination = typed ?? defaultDestination;
-  const running = backupRunning(state);
-  return (
-    <div className="cut flex flex-col gap-3 border-2 border-line bg-card px-4 py-3.5">
-      <span className="font-bold">{copy.backup.title}</span>
-      <FolderField
-        label={copy.backup.destination}
-        hint={copy.backup.destinationHint}
-        chooseLabel={copy.backup.choose}
-        purpose="save"
-        value={destination}
-        disabled={running || start.isPending}
-        onChange={(next) => {
-          setTyped(next);
-          start.reset();
-        }}
-      />
-      <Progress state={state} />
-      {!running && <Outcome state={state} />}
-      {start.isError && (
-        <p role="alert" className="m-0 text-sm text-rose">
-          {refusal(start.error)}
-        </p>
-      )}
-      <div className="flex flex-wrap gap-2">
-        {running ? (
-          <Button variant="outline" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
-            {copy.backup.cancel}
-          </Button>
-        ) : (
-          <Button
-            disabled={start.isPending || destination.trim() === ""}
-            onClick={() => start.mutate(destination.trim())}
-          >
-            {start.isPending ? copy.backup.starting : copy.backup.start}
-          </Button>
-        )}
-      </div>
-      <span className="text-[13px] text-text-secondary">{copy.backup.privacy}</span>
-    </div>
-  );
+/** The tag beside Backups: never backed up, backing up, when the last one finished, or that it failed. */
+function BackupTag({ state }: { state: BackupState }) {
+  switch (state._tag) {
+    case "Waiting":
+    case "Copying":
+      return <Badge variant="running">{copy.tag.running}</Badge>;
+    case "Done":
+      return (
+        <Badge variant="done">
+          <span aria-hidden data-slot="badge-glyph">
+            ✓
+          </span>
+          {copy.tag.done({ when: formatAgo(state.finishedAt) })}
+        </Badge>
+      );
+    case "Failed":
+      return <Badge variant="failed">{copy.tag.failed}</Badge>;
+    default:
+      return <Badge variant="muted">{copy.tag.idle}</Badge>;
+  }
 }
 
 function WhatItHolds() {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="lbl pt-1 text-xs text-label">{copy.holds.title}</span>
-      <ul className="m-0 grid list-none grid-cols-1 gap-x-5 gap-y-1.5 p-0 text-sm sm:grid-cols-2">
+    <details className="text-sm">
+      <summary className="cursor-pointer text-text-secondary hover:text-text-strong">{copy.holds.title}</summary>
+      <ul className="m-0 mt-2 grid list-none grid-cols-1 gap-x-5 gap-y-1.5 p-0 sm:grid-cols-2">
         {copy.holds.kept.map((item) => (
           <li key={item}>
             <span aria-hidden className="text-mint">
@@ -148,13 +116,13 @@ function WhatItHolds() {
         {copy.holds.left.map((item) => (
           <li key={item}>
             <span aria-hidden className="text-rose">
-              ✗{" "}
+              ✕{" "}
             </span>
             {item}
           </li>
         ))}
       </ul>
-    </div>
+    </details>
   );
 }
 
@@ -195,7 +163,7 @@ function SetAside({ path, size }: { path: string; size: number }) {
         <fieldset
           disabled={remove.isPending}
           aria-label={copy.latest.deleteConfirm}
-          className="cut m-0 flex animate-hb-in flex-wrap items-center gap-2 border-2 border-solid border-rose bg-deep px-3 py-2.5"
+          className="m-0 flex animate-hb-in flex-wrap items-center gap-2 rounded-control border-0 bg-rose/18 px-3 py-2.5"
         >
           <span className="flex-1 text-rose">{copy.latest.deleteConfirm}</span>
           <Button variant="outline" size="sm" onClick={() => setAsking(false)}>
@@ -223,7 +191,7 @@ function LatestRestore() {
         </p>
       )}
       {latest !== null && (
-        <div className="cut flex flex-col gap-2.5 border-2 border-line bg-card px-4 py-3.5">
+        <div className="flex flex-col gap-2.5 rounded-control bg-panel px-3.5 py-3">
           <span className="text-sm">
             {copy.latest.restored({ when: formatMoment(latest.restoredAt), made: formatMoment(latest.backupMadeAt) })}
           </span>
@@ -253,30 +221,86 @@ function LatestRestore() {
   );
 }
 
-/** Settings › Backup & export: Back up now, what a backup holds, and Restore (ADR 026). */
+type Open = "restore" | "export" | null;
+
+/**
+ * Settings › Your data › Backups, one card: how the last backup went, where to save the next, Back
+ * up now, Restore from a backup and Export as files (ADR 026).
+ */
 export function BackupSettings() {
-  const [restoring, setRestoring] = useState(false);
+  const status = useQuery(backupQuery);
+  const start = useStartBackup();
+  const cancel = useCancelBackup();
+  const [typed, setTyped] = useState<string | null>(null);
+  const [open, setOpen] = useState<Open>(null);
+  const toggle = (next: Exclude<Open, null>) => setOpen((now) => (now === next ? null : next));
+  if (status.isError) return <p className="m-0 text-sm text-rose">{copy.failedToRead}</p>;
+  if (!status.data) return null;
+  const { state, defaultDestination } = status.data;
+  const destination = typed ?? defaultDestination;
+  const running = backupRunning(state);
   return (
-    <>
-      <p className="m-0 text-text-secondary">{copy.intro}</p>
+    <section aria-label={copy.heading} className="flex flex-col gap-3 rounded-card bg-card p-4">
+      <span className="flex flex-wrap items-center gap-2.5">
+        <strong className="flex-1 text-text-strong">{copy.heading}</strong>
+        <BackupTag state={state} />
+      </span>
+      <span className="text-sm text-text-secondary">{copy.intro}</span>
       <LatestRestore />
-      <BackupNow />
+      <FolderField
+        label={copy.backup.destination}
+        hint={copy.backup.destinationHint}
+        chooseLabel={copy.backup.choose}
+        purpose="save"
+        value={destination}
+        disabled={running || start.isPending}
+        onChange={(next) => {
+          setTyped(next);
+          start.reset();
+        }}
+      />
+      <BackupProgress state={state} />
+      {!running && <Outcome state={state} />}
+      {start.isError && (
+        <p role="alert" className="m-0 text-sm text-rose">
+          {refusal(start.error)}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {running ? (
+          <Button variant="outline" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
+            {copy.backup.cancel}
+          </Button>
+        ) : (
+          <Button
+            disabled={start.isPending || destination.trim() === ""}
+            onClick={() => start.mutate(destination.trim())}
+          >
+            {start.isPending ? copy.backup.starting : copy.backup.start}
+          </Button>
+        )}
+        <Button variant="outline" aria-expanded={open === "restore"} onClick={() => toggle("restore")}>
+          {copy.restore.open}
+        </Button>
+        <Button variant="ghost" aria-expanded={open === "export"} onClick={() => toggle("export")}>
+          {copy.exportOpen}
+        </Button>
+      </div>
+      <span className="text-detail text-text-secondary">{copy.backup.privacy}</span>
       <WhatItHolds />
-      {restoring ? (
-        <div className="flex flex-col gap-2 pt-2">
-          <span className="font-bold">{copy.restore.title}</span>
-          <RestoreFlow onCancel={() => setRestoring(false)} />
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1.5 pt-2">
-          <div>
-            <Button variant="outline" onClick={() => setRestoring(true)}>
-              {copy.restore.open}
-            </Button>
-          </div>
-          <span className="text-[13px] text-label">{copy.restore.note}</span>
+      {open === "restore" && (
+        <div className="flex flex-col gap-2 rounded-control bg-panel p-3.5">
+          <span className="font-bold text-text-strong">{copy.restore.title}</span>
+          <span className="text-detail text-label">{copy.restore.note}</span>
+          <RestoreFlow onCancel={() => setOpen(null)} />
         </div>
       )}
-    </>
+      {open === "export" && (
+        <section aria-label={exportMessages.heading} className="flex flex-col gap-3 rounded-control bg-panel p-3.5">
+          <span className="font-bold text-text-strong">{exportMessages.heading}</span>
+          <ExportSettings />
+        </section>
+      )}
+    </section>
   );
 }
