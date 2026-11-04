@@ -74,10 +74,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server
 
-  first-launch:
-    name: First launch in a browser
+  # The browser tests run in four shards side by side, so the suite finishes well inside the timeout.
+  browser-tests:
+    name: Browser tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -100,12 +105,27 @@ jobs:
       # The system libraries are not in the cache.
       - if: steps.browsers.outputs.cache-hit == 'true'
         run: pnpm --filter @hobbots/web exec playwright install-deps chromium
-      - run: pnpm test:e2e
+      - run: pnpm --filter @hobbots/web build
+      - run: pnpm --filter @hobbots/web exec playwright test --shard=${{ matrix.shard }}/4
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: first-launch-report
+          name: first-launch-report-${{ matrix.shard }}
           path: |
             apps/web/playwright-report/
             apps/web/test-results/
           retention-days: 7
+
+  # One result for the whole browser suite under its usual name: green only when every shard is.
+  first-launch:
+    name: First launch in a browser
+    needs: browser-tests
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: needs.browser-tests.result != 'success'
+        run: |
+          echo "A browser test shard ended ${{ needs.browser-tests.result }}."
+          exit 1
+      - run: echo "Every browser test shard passed."

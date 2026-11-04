@@ -95,6 +95,16 @@ const waitingOnOf = (tree: TaskTree, task: Task): ReadonlyArray<Waited> => {
   ];
 };
 
+/** How many unfinished Tasks a waiting Task's owner waits for; none while it does anything else. */
+export const waitedTaskCount = (tree: TaskTree, task: Task): number => {
+  if (task.state !== "waiting") return 0;
+  const on = tree.waits.find((wait) => wait.taskId === task.id)?.on ?? [];
+  return on.filter((id) => {
+    const each = tree.tasks.find((candidate) => candidate.id === id);
+    return each !== undefined && !isTerminalTask(each.state);
+  }).length;
+};
+
 /**
  * The owners of the other Tasks a hub finding pairs with this one: two Tasks of the work changed
  * the same file. The finding sits on the Task that changed it last and names the other.
