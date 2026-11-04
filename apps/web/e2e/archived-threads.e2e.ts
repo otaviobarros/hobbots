@@ -166,9 +166,12 @@ test("[TC-CH-162] ⌘K marks an archived thread and opens it read-only in the Ar
   await expect(result).toContainText("Archived");
   await result.click();
 
-  // An archived chat is read in the Archive, never as a chat in the hob's workspace.
-  await expect(page).toHaveURL(new RegExp(`#/archive/chats/${hob.id}/${archived.id}$`));
+  // An archived chat is read in the Archive, never as a chat in the hob's workspace, on the match.
+  await expect(page).toHaveURL(new RegExp(`#/archive/chats/${hob.id}/${archived.id}\\?message=`));
   const read = page.getByRole("main", { name: "Rename the newsletter" });
+  const match = new URL(page.url().replace("#/", "")).searchParams.get("message") ?? "";
+  await expect(read.locator(`[id$="${match}"]`)).toHaveClass(/outline-lantern/);
+  await expect(read.locator(`[id$="${match}"]`)).toBeInViewport();
   await expect(read.getByRole("note")).toContainText("Pip takes no new messages here until you restore it");
   await expect(read.getByRole("textbox")).toHaveCount(0);
 });

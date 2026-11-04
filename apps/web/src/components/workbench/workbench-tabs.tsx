@@ -26,6 +26,7 @@ export function WorkbenchTabs({
           <TabsTrigger
             key={each}
             value={each}
+            variant="chip"
             title={hint(each, state)}
             className={cn(state.kind === "not-used" && "opacity-45")}
           >

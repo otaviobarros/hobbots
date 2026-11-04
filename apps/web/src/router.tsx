@@ -390,14 +390,22 @@ const archiveListRoute = createRoute({
   },
 });
 
-// An archived chat, read-only, with Restore.
+// An archived chat, read-only, with Restore. `?message=` opens it on a search match.
 const archiveChatRoute = createRoute({
   getParentRoute: () => archiveRoute,
   errorComponent: (props) => <PageError error={props.error} way="archive" />,
   path: "chats/$hobId/$threadId",
+  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ message: searchParam(Schema.String) })),
   component: function ArchiveChat() {
     const params = archiveChatRoute.useParams();
-    return <ArchivedChatPage hobId={AgentId.make(params.hobId)} threadId={ThreadId.make(params.threadId)} />;
+    const { message } = archiveChatRoute.useSearch();
+    return (
+      <ArchivedChatPage
+        hobId={AgentId.make(params.hobId)}
+        threadId={ThreadId.make(params.threadId)}
+        focusMessageId={message}
+      />
+    );
   },
 });
 
