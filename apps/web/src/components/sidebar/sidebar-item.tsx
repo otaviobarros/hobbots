@@ -1,8 +1,9 @@
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@hobbots/ui/components/tooltip";
+import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { ReactElement } from "react";
-import { ICONS, type IconName, iconPalette } from "../../art/icons.ts";
+import { ICONS, LINE_ICONS, type SectionName } from "../../art/icons.ts";
 import { messages as inboxCopy } from "../inbox/messages.ts";
 
 /** A sidebar row: a 48px icon column, then the label once the sidebar is expanded. */
@@ -40,7 +41,7 @@ export function SidebarLink({
   expanded,
   badge = 0,
 }: {
-  label: IconName;
+  label: SectionName;
   to: string;
   active: boolean;
   expanded: boolean;
@@ -54,8 +55,8 @@ export function SidebarLink({
         aria-label={badge > 0 ? inboxCopy.sidebar({ count: badge }) : undefined}
         className={sidebarItem}
       >
-        <span className={sidebarIcon}>
-          <PixelArt rows={ICONS[label]} palette={iconPalette(active)} size={24} />
+        <span className={cn(sidebarIcon, active ? "text-text-strong" : "text-text-secondary")}>
+          <SectionIcon name={label} />
         </span>
         <span className="sidebar-label flex-1">{label}</span>
         {badge > 0 && (
@@ -68,5 +69,29 @@ export function SidebarLink({
         )}
       </Link>
     </SidebarTip>
+  );
+}
+
+/** Pixel art keeps its accent; the main color follows the row's text, so it dims when inactive. */
+const PIXEL_PALETTE = { "#": "currentColor", o: "var(--color-control)" };
+
+/** A section's icon: the skin shows the line icon in Lamplight and the pixel icon in Workshop. */
+function SectionIcon({ name }: { name: SectionName }) {
+  return (
+    <>
+      <svg
+        aria-hidden
+        viewBox="0 0 20 20"
+        className="line-icon size-5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d={LINE_ICONS[name]} />
+      </svg>
+      <PixelArt rows={ICONS[name]} palette={PIXEL_PALETTE} size={24} className="pixel-icon" />
+    </>
   );
 }
