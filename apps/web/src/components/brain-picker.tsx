@@ -27,7 +27,7 @@ import { providerFix } from "./provider-fix.tsx";
 const copy = messages.brain;
 
 /** The runtime's square mark, as the chat header and the picker show it. */
-export const RuntimeTile = ({ runtime }: { runtime: RuntimeKind }) => (
+const RuntimeTile = ({ runtime }: { runtime: RuntimeKind }) => (
   <span
     aria-hidden
     className={cn(
