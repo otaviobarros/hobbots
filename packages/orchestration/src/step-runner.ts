@@ -221,21 +221,6 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           recorder,
         );
 
-      /** Records why a step could not complete as a blocker on it, so its failure says what was left open. */
-      const explain = (stepId: TaskId, reason: string, at: string) =>
-        attempt(
-          tasks.recordCheckpoint({
-            id: CheckpointId.make(newId()),
-            taskId: stepId,
-            source: "unplanned",
-            kind: "blocker",
-            milestoneId: null,
-            summary: cut(reason, RESULT_LIMIT),
-            createdAt: at,
-          }),
-          "record why a step could not complete",
-        );
-
       /**
        * Records how the step's session ended, by the one turn-end decision (#674). A step that
        * replied completes with that reply first, unless it returned a result itself, and its Attempt
@@ -247,10 +232,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       const settle = (stepId: TaskId, attemptId: AttemptId, ending: TurnEnding, carried: ReadonlyArray<CarriedItem>) =>
         Effect.gen(function* () {
           const at = yield* nowIso;
-          yield* endTurn(
-            { tasks, attempt, explain },
-            { runner: "step", taskId: stepId, attemptId, ending, carried, at },
-          );
+          yield* endTurn({ tasks, attempt }, { runner: "step", taskId: stepId, attemptId, ending, carried, at });
         });
 
       /** How a step's session ended, for the turn-end decision: its reply cut to a result's length. */
@@ -398,7 +380,6 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             announce,
             attempt,
             recordToolStart,
-            explain,
             settleCancels,
             notify: signal.notify,
           });

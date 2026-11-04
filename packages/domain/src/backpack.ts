@@ -45,8 +45,11 @@ export const BackpackPayload = Schema.Union([
   Schema.TaggedStruct("task", { task: Task, delegation: Schema.NullOr(Delegation) }),
   /** A Task under the recipient's passed the completion gate, with what it made. */
   Schema.TaggedStruct("result", { task: Task, artifacts: Schema.Array(ArtifactRef) }),
-  /** A Task under the recipient's failed, was blocked or was cancelled. */
-  Schema.TaggedStruct("failure", { task: Task }),
+  /**
+   * A Task under the recipient's failed, was blocked or was cancelled, with why when the hub moved
+   * it for a reason: the blocker it recorded with the move, so the lead hears of it once (#683).
+   */
+  Schema.TaggedStruct("failure", { task: Task, reason: Schema.optionalKey(Schema.String) }),
   /** A milestone, finding, blocker or question a member reported. */
   Schema.TaggedStruct("checkpoint", { checkpoint: Checkpoint }),
   Schema.TaggedStruct("question", { question: Question }),

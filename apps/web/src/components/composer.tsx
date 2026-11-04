@@ -102,7 +102,7 @@ export function Composer({
           placeholder={paused && closed ? copy.pausedPlaceholder(paused) : placeholder}
           onChange={(event) => writeDraft(place, event.target.value)}
           onKeyDown={onKeyDown}
-          className="field-sizing-content max-h-40 min-h-[47px] flex-1 resize-none overflow-y-auto border-2 border-control bg-deep px-3.5 py-[11px] [overflow-wrap:anywhere] whitespace-pre-wrap text-text [tab-size:4] placeholder:text-label disabled:cursor-not-allowed disabled:border-line disabled:opacity-70"
+          className="field-sizing-content max-h-40 min-h-[47px] flex-1 resize-none overflow-y-auto border-2 border-control bg-deep px-3.5 py-[11px] [overflow-wrap:anywhere] whitespace-pre-wrap text-text-strong [tab-size:4] placeholder:text-label disabled:cursor-not-allowed disabled:border-line disabled:opacity-70"
         />
         {busy && (
           <Button variant="deny" onClick={onStop} disabled={stopping} className="px-4 py-[9px]">

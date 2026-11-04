@@ -44,12 +44,12 @@ export function TerminalTab({ activity, attempt }: WorkbenchTabProps) {
   if (activity === null) return <div data-slot="terminal" />;
   return (
     <div data-slot="terminal" className="flex flex-col gap-3 px-5 py-4">
-      <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-detail text-secondary-text">
-        {commands.length > 0 && <span className="text-text">{copy.tally(tallyCommands(commands))}</span>}
+      <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-detail text-text-secondary">
+        {commands.length > 0 && <span className="text-text-strong">{copy.tally(tallyCommands(commands))}</span>}
         <span className="text-label">{copy.readOnly}</span>
       </p>
       {commands.length === 0 ? (
-        <p className="m-0 text-detail text-secondary-text">{copy.none}</p>
+        <p className="m-0 text-detail text-text-secondary">{copy.none}</p>
       ) : (
         <ol aria-label={copy.commands} className="m-0 flex list-none flex-col gap-2 p-0">
           {commands.map((command) => (
@@ -69,7 +69,7 @@ function CommandEntry({ command, now, live }: { command: CommandRecord; now: Dat
   const duration = commandDuration(command, now);
   return (
     <Collapsible defaultOpen className="flex flex-col gap-1.5 border-2 border-line bg-panel px-3 py-2">
-      <CollapsibleTrigger className="group flex min-w-0 items-start gap-2 border-0 bg-transparent p-0 text-start text-detail text-text hover:text-moonlight focus-visible:outline-2 focus-visible:outline-ring">
+      <CollapsibleTrigger className="group flex min-w-0 items-start gap-2 border-0 bg-transparent p-0 text-start text-detail text-text-strong hover:text-moonlight focus-visible:outline-2 focus-visible:outline-focus-ring">
         <span aria-hidden className={cn("w-3.5 shrink-0 text-center", mark.className)}>
           {mark.glyph}
         </span>
@@ -86,7 +86,7 @@ function CommandEntry({ command, now, live }: { command: CommandRecord; now: Dat
       </CollapsibleTrigger>
       {command.state === "uncertain" && <span className="ps-5.5 text-xs text-lantern">{copy.uncertain}</span>}
       <CollapsibleContent className="flex flex-col gap-1.5">
-        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 text-xs text-secondary-text">
+        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 text-xs text-text-secondary">
           <dt className="text-label">{copy.folder}</dt>
           <dd className="m-0 font-mono break-all">{command.folder}</dd>
           <dt className="text-label">{copy.sandbox}</dt>

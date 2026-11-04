@@ -36,7 +36,7 @@ function QuestPicker({
   onPick: (questId: QuestId | null) => void;
 }) {
   const id = useId();
-  if (quests.length === 0) return <p className="m-0 text-sm text-secondary-text">{copy.none}</p>;
+  if (quests.length === 0) return <p className="m-0 text-sm text-text-secondary">{copy.none}</p>;
   return (
     <label htmlFor={id} className="flex flex-col gap-1 text-sm">
       <span className="text-label">{copy.pick}</span>
@@ -44,7 +44,7 @@ function QuestPicker({
         id={id}
         value={value ?? ""}
         onChange={(event) => onPick(event.target.value === "" ? null : (event.target.value as QuestId))}
-        className="cut max-w-full border-2 border-line bg-card px-2 py-1.5 text-text"
+        className="cut max-w-full border-2 border-line bg-card px-2 py-1.5 text-text-strong"
       >
         <option value="">{copy.choose}</option>
         {quests.map((quest) => (
@@ -67,7 +67,7 @@ function FollowedQuest({ questId, hobName }: { questId: QuestId; hobName: HobNam
     const gone = trace.error instanceof ApiError && trace.error.tag === "QuestNotFound";
     return <p className="m-0 text-sm text-rose">{gone ? copy.gone : messages.failed}</p>;
   }
-  if (!trace.data) return <p className="m-0 text-sm text-secondary-text">{copy.loading}</p>;
+  if (!trace.data) return <p className="m-0 text-sm text-text-secondary">{copy.loading}</p>;
   return <QuestTraceView trace={trace.data} hobName={hobName} />;
 }
 
@@ -84,7 +84,7 @@ export function DiagnosticsSettings() {
   if (!now.data || !quests.data) return null;
   return (
     <>
-      <p className="m-0 text-secondary-text">{messages.intro}</p>
+      <p className="m-0 text-text-secondary">{messages.intro}</p>
       <DiagnosticsNowView now={now.data} hobName={hobName} onFollow={setFollowed} />
       <section aria-label={copy.heading} className="flex flex-col gap-2">
         <span className="lbl pt-2 text-label">{copy.heading}</span>

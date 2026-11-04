@@ -255,7 +255,7 @@ function TabNotice({
           : null;
   if (text === null) return null;
   return (
-    <p className="m-0 flex items-center gap-3 px-5 pt-4 text-detail text-secondary-text">
+    <p className="m-0 flex items-center gap-3 px-5 pt-4 text-detail text-text-secondary">
       <span>{text}</span>
       {state.kind === "unavailable" && state.reason === "unread" && (
         <Button variant="chip" size="xs" onClick={onRetry}>

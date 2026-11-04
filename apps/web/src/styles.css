@@ -15,48 +15,41 @@
   }
 }
 
-/* Hobbots design tokens (docs/design/ui-ux.md). The shadcn/ui names map onto them so
-   generated components pick up the theme; the named tokens are for everything else. */
+/*
+ * Hobbots design tokens (docs/design/themes.md, values in docs/design/themes.json). A theme is set
+ * with data-theme on the root element: the values here and in the :root rule below are Lamplight
+ * Dusk, the default, and each other theme overrides every color and shadow. Token names never change between themes.
+ */
 @theme {
-  --color-ground: #141228;
-  --color-deep: #0d0c1c;
-  --color-panel: #1b1835;
-  --color-card: #1f1c3e;
-  --color-hover: #25224a;
-  --color-line: #2c2a5a;
-  --color-line-2: #3a3666;
-  --color-control: #7770c4;
-  --color-text: #ece8ff;
-  --color-secondary-text: #c9c3e8;
-  --color-label: #a9a2e0;
-  --color-moonlight: #f3e9b5;
-  --color-lantern: #f2a541;
-  --color-lantern-hover: #ffb75c;
-  --color-lantern-shadow: #9a5f16;
-  --color-mint: #7fd1b9;
-  --color-mint-deep: #3f8a75;
-  --color-rose: #ee9292;
-  --color-star: #cfc8ff;
+  --color-ground: #17161f;
+  --color-deep: #121118;
+  --color-panel: #1c1b26;
+  --color-card: #22212d;
+  --color-hover: #2a2936;
+  --color-tile: #2f2d3c;
+  --color-line: #34323f;
+  --color-line-2: #3d3b4a;
+  --color-control: #7a7690;
+  --color-text-strong: #ece9f3;
+  --color-text: #dcd8e6;
+  --color-text-secondary: #aaa6b9;
+  --color-label: #9e9aae;
+  --color-moonlight: #efe3c2;
+  --color-lantern: #e8a54b;
+  --color-lantern-hover: #f2b665;
+  --color-lantern-press: #9a6a2a;
+  --color-mint: #7cc4a8;
+  --color-mint-deep: #3e7e68;
+  --color-rose: #e58e8e;
+  --color-star: #c9b8ff;
+  --color-notice: #2a2533;
+  --color-on-lantern: #17161f;
+  --color-on-rose: #17161f;
+  --color-focus-ring: #c9b8ff;
+  --color-link: #ece9f3;
+  /* The same in every theme: scene art, and the knob of a switch that is on. */
   --color-wood: #7a5b3a;
-  --color-notice: #2a2140;
-
-  --color-background: var(--color-ground);
-  --color-foreground: var(--color-text);
-  --color-card-foreground: var(--color-text);
-  --color-popover: var(--color-panel);
-  --color-popover-foreground: var(--color-text);
-  --color-muted: var(--color-line);
-  --color-muted-foreground: var(--color-label);
-  --color-accent: var(--color-line);
-  --color-accent-foreground: var(--color-text);
-  --color-primary: var(--color-lantern);
-  --color-primary-foreground: var(--color-ground);
-  --color-secondary: var(--color-line);
-  --color-secondary-foreground: var(--color-text);
-  --color-destructive: var(--color-rose);
-  --color-border: var(--color-line);
-  --color-input: var(--color-control);
-  --color-ring: var(--color-moonlight);
+  --color-switch-knob: #fdf9ef;
 
   --font-sans: "Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif;
   --font-pixel: "Pixelify Sans Variable", "Pixelify Sans", system-ui, sans-serif;
@@ -76,7 +69,6 @@
   --spacing-meter: 5px;
   --spacing-work-max: 604px;
   --spacing-drawer: 420px;
-  --shadow-drawer: -14px 0 34px rgb(0 0 0 / 0.5);
   /* The Task chat drawer beside the Workbench's tabs. */
   --spacing-workbench-chat: 330px;
 
@@ -360,6 +352,176 @@
   }
 }
 
+/* The shadcn/ui names point at the tokens, resolved where they are used, so the components in
+   packages/ui follow the theme without changes. */
+@theme inline {
+  --color-background: var(--color-ground);
+  --color-foreground: var(--color-text-strong);
+  --color-card-foreground: var(--color-text-strong);
+  --color-popover: var(--color-panel);
+  --color-popover-foreground: var(--color-text-strong);
+  --color-muted: var(--color-line);
+  --color-muted-foreground: var(--color-label);
+  --color-accent: var(--color-line);
+  --color-accent-foreground: var(--color-text-strong);
+  --color-primary: var(--color-lantern);
+  --color-primary-foreground: var(--color-on-lantern);
+  --color-secondary: var(--color-line);
+  --color-secondary-foreground: var(--color-text-strong);
+  --color-destructive: var(--color-rose);
+  --color-border: var(--color-line);
+  --color-input: var(--color-control);
+  --color-ring: var(--color-focus-ring);
+}
+
+:root {
+  color-scheme: dark;
+  --shadow-menu: 0 6px 18px rgba(0, 0, 0, 0.28);
+  --shadow-sheet: 0 16px 48px rgba(0, 0, 0, 0.28);
+}
+
+/* Shadows change shape between looks, so their utilities read the token where they are used. */
+@utility shadow-menu {
+  box-shadow: var(--shadow-menu);
+}
+
+@utility shadow-sheet {
+  box-shadow: var(--shadow-sheet);
+}
+
+/* The other three themes. Each sets every color and shadow token (docs/design/themes.md). */
+:root[data-theme="lamplight-paper"] {
+  color-scheme: light;
+  --color-ground: #f7f4ef;
+  --color-deep: #f1ede6;
+  --color-panel: #efebe4;
+  --color-card: #ffffff;
+  --color-hover: #e9e4dc;
+  --color-tile: #2f2d3c;
+  --color-line: #e2ddd4;
+  --color-line-2: #d6d0c5;
+  --color-control: #857f91;
+  --color-text-strong: #1f1c26;
+  --color-text: #2f2c38;
+  --color-text-secondary: #57525f;
+  --color-label: #605b67;
+  --color-moonlight: #4b3a7a;
+  --color-lantern: #8f4c00;
+  --color-lantern-hover: #a35800;
+  --color-lantern-press: #5e3300;
+  --color-mint: #21664e;
+  --color-mint-deep: #1f5a46;
+  --color-rose: #a63a35;
+  --color-star: #6b4fd8;
+  --color-notice: #fbeedb;
+  --color-on-lantern: #ffffff;
+  --color-on-rose: #ffffff;
+  --color-focus-ring: #6b4fd8;
+  --color-link: #1f1c26;
+  --shadow-menu: 0 6px 18px rgba(40, 30, 20, 0.12);
+  --shadow-sheet: 0 16px 48px rgba(40, 30, 20, 0.14);
+}
+
+:root[data-theme="workshop-night"] {
+  color-scheme: dark;
+  --color-ground: #141228;
+  --color-deep: #0d0c1c;
+  --color-panel: #1b1835;
+  --color-card: #1f1c3e;
+  --color-hover: #25224a;
+  --color-tile: #2c2a5a;
+  --color-line: #2c2a5a;
+  --color-line-2: #3a3666;
+  --color-control: #7770c4;
+  --color-text-strong: #ece8ff;
+  --color-text: #dcd7f2;
+  --color-text-secondary: #c9c3e8;
+  --color-label: #a9a2e0;
+  --color-moonlight: #f3e9b5;
+  --color-lantern: #f2a541;
+  --color-lantern-hover: #ffb75c;
+  --color-lantern-press: #9a5f16;
+  --color-mint: #7fd1b9;
+  --color-mint-deep: #3f8a75;
+  --color-rose: #ee9292;
+  --color-star: #cfc8ff;
+  --color-notice: #2a2140;
+  --color-on-lantern: #141228;
+  --color-on-rose: #141228;
+  --color-focus-ring: #f3e9b5;
+  --color-link: #ece8ff;
+  --shadow-menu: 0 6px 0 #0d0c1c;
+  --shadow-sheet: -14px 0 34px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="workshop-daylight"] {
+  color-scheme: light;
+  --color-ground: #f6f1e7;
+  --color-deep: #f1e9da;
+  --color-panel: #ede6d8;
+  --color-card: #fffdf8;
+  --color-hover: #e6dccb;
+  --color-tile: #2c2a5a;
+  --color-line: #e2d9c9;
+  --color-line-2: #cfc4ae;
+  --color-control: #837b99;
+  --color-text-strong: #1b1728;
+  --color-text: #241f33;
+  --color-text-secondary: #4f4863;
+  --color-label: #5a536d;
+  --color-moonlight: #6a4a00;
+  --color-lantern: #8f4c00;
+  --color-lantern-hover: #a35800;
+  --color-lantern-press: #5e3300;
+  --color-mint: #1f644f;
+  --color-mint-deep: #1a5444;
+  --color-rose: #a83c3c;
+  --color-star: #5a4bb0;
+  --color-notice: #fbeccf;
+  --color-on-lantern: #ffffff;
+  --color-on-rose: #ffffff;
+  --color-focus-ring: #6a4a00;
+  --color-link: #1b1728;
+  --shadow-menu: 0 4px 0 #cfc4ae;
+  --shadow-sheet: -14px 0 34px rgba(36, 31, 51, 0.14);
+}
+
+/*
+ * Skin: the values each look sets once (docs/design/themes.md). Lamplight is smooth and rounded;
+ * Workshop is the pixel look. Components read these, never a corner, font or easing directly.
+ */
+:root {
+  --corner-control: 8px;
+  --corner-card: 16px;
+  --corner-tag: 6px;
+  --corner-dot: 999px;
+  --corner-tile: 9px;
+  --font-heading: var(--font-sans);
+  --heading-weight: 700;
+  --label-case: none;
+  --label-track: 0;
+  --ease-ui: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --edge: 1px;
+  --button-weight: 600;
+  --hop: none;
+}
+
+:root[data-theme^="workshop-"] {
+  --corner-control: 0;
+  --corner-card: 0;
+  --corner-tag: 0;
+  --corner-dot: 0;
+  --corner-tile: 0;
+  --font-heading: var(--font-pixel);
+  --heading-weight: 600;
+  --label-case: uppercase;
+  --label-track: 0.08em;
+  --ease-ui: steps(4);
+  --edge: 2px;
+  --button-weight: 700;
+  --hop: var(--animate-hb-hop);
+}
+
 html,
 body,
 #root {
@@ -369,7 +531,7 @@ body,
 body {
   margin: 0;
   background: var(--color-ground);
-  color: var(--color-text);
+  color: var(--color-text-strong);
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.45;
@@ -429,7 +591,7 @@ body {
   }
 
   :focus-visible {
-    outline: 3px solid var(--color-moonlight);
+    outline: 3px solid var(--color-focus-ring);
     outline-offset: 2px;
   }
 }

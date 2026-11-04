@@ -28,14 +28,14 @@ export function SettleCharmCall({
   if (charmCall === undefined) return null;
   if (charmCall.state !== "uncertain" && charmCall.state !== "sending") {
     return (
-      <span role="status" className="ps-5.5 text-xs text-secondary-text">
+      <span role="status" className="ps-5.5 text-xs text-text-secondary">
         {copy.settled[charmCall.state]}
       </span>
     );
   }
   return (
     <div className="flex flex-col gap-1.5 ps-5.5 pt-1">
-      <span className="text-xs text-secondary-text">{copy.ask}</span>
+      <span className="text-xs text-text-secondary">{copy.ask}</span>
       <div className="flex flex-wrap gap-2">
         <Button size="xs" variant="chip" disabled={settle.isPending} onClick={() => settle.mutate("applied")}>
           {copy.applied}

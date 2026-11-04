@@ -33,11 +33,11 @@ export function WaitingRequests({ empty }: { empty: React.ReactNode }) {
             <Link
               to="/inbox"
               search={{ tab: "needs", request: request.id }}
-              className="hop-on-hover flex items-start gap-2.5 text-text no-underline hover:text-moonlight"
+              className="hop-on-hover flex items-start gap-2.5 text-text-strong no-underline hover:text-moonlight"
             >
               {hob && <HobSprite hob={hob} size={26} state="needs-you" className="mt-0.5" />}
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-xs text-secondary-text">
+                <span className="text-xs text-text-secondary">
                   {copy.from({ name: directory.hobName(request.agentId) })}
                 </span>
                 <span className="text-sm leading-snug">{title.what}</span>

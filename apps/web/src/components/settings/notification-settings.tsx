@@ -31,7 +31,7 @@ function ChoiceRow({
         <span id={labelId} className="font-bold">
           {label}
         </span>
-        <span className="text-[13px] text-secondary-text">{note}</span>
+        <span className="text-[13px] text-text-secondary">{note}</span>
       </div>
       <Switch aria-labelledby={labelId} checked={checked} disabled={disabled} onCheckedChange={onChange} />
     </div>
@@ -76,6 +76,6 @@ export function NotificationSettings() {
   return bridge ? (
     <NotificationRows notifications={bridge} />
   ) : (
-    <p className="m-0 text-secondary-text">{copy.elsewhere}</p>
+    <p className="m-0 text-text-secondary">{copy.elsewhere}</p>
   );
 }

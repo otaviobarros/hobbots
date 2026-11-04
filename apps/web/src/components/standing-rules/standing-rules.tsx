@@ -32,7 +32,7 @@ function StandingRuleList() {
     return (
       <div className="flex flex-col gap-0.5">
         <span className="font-bold">{copy.empty}</span>
-        <span className="text-sm text-secondary-text">{copy.emptyHint}</span>
+        <span className="text-sm text-text-secondary">{copy.emptyHint}</span>
       </div>
     );
   }
@@ -51,7 +51,7 @@ export function StandingRules() {
     <section aria-label={copy.heading} className="flex flex-col gap-3">
       <span className="lbl text-xs text-label">{copy.heading}</span>
       <h2 className="m-0 font-pixel text-2xl font-bold text-moonlight">{copy.history.title}</h2>
-      <p className="m-0 text-sm text-secondary-text">{copy.history.intro}</p>
+      <p className="m-0 text-sm text-text-secondary">{copy.history.intro}</p>
       <div className="cut bg-panel px-4 py-2">
         <StandingRuleList />
       </div>
@@ -64,7 +64,7 @@ export function StandingRuleSettings() {
   return (
     <section aria-label={copy.heading} className="flex flex-col gap-2 pt-2">
       <span className="lbl text-label">{copy.heading}</span>
-      <p className="m-0 text-sm text-secondary-text">{copy.settings.intro}</p>
+      <p className="m-0 text-sm text-text-secondary">{copy.settings.intro}</p>
       <StandingRuleList />
     </section>
   );
