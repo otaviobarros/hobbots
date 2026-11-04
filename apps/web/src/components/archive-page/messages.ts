@@ -36,7 +36,6 @@ export const messages = {
     restoring: "Restoring…",
     restoreLabel: ({ title }: Titled) => `Restore “${title}”`,
     showMore: ({ count }: { count: number }) => `Show ${formatCount(count)} more`,
-    loading: "Loading archived chats…",
     loadFailed: "Hobbots could not read the archived chats. Try again in a moment.",
     none: "Nothing archived yet.",
     noneAll: "No archived chats.",
@@ -60,7 +59,6 @@ export const messages = {
     lastDid: ({ title }: { title: string }) => `Last helped with “${title}”.`,
     kept: ({ count }: { count: number }) =>
       plural(count, { one: "1 chat kept", other: `${formatCount(count)} chats kept` }),
-    loading: "Loading retired hobs…",
     loadFailed: "Hobbots could not read your retired hobs. Try again in a moment.",
     none: "No retired hobs.",
     noneBody: "When you retire a hob from its profile, it and its chats land here.",

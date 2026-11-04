@@ -34,6 +34,6 @@ export const messages = {
     resting: "Every hob is busy.",
   },
   retired: ({ count }: { count: number }) => `Retired hobs · ${formatCount(count)}`,
-  loading: "Loading your hobs…",
+  retiredLabel: "Retired hobs ·",
   loadFailed: "Your hobs could not be loaded. Check the connection and try again.",
 } as const;

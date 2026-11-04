@@ -1,8 +1,8 @@
 import type { Agent, HistoryFilter } from "@hobbots/domain";
-import { Button } from "@hobbots/ui/components/button";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useActivity } from "../../api/activity.ts";
 import { useIsNewHob } from "../../api/history.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
@@ -11,10 +11,11 @@ import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
 import type { WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
 import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { HobAside } from "./hob-aside.tsx";
-import { HobChats } from "./hob-chats.tsx";
+import { ChatsLoading, HobChats } from "./hob-chats.tsx";
 import { HobHero } from "./hob-hero.tsx";
 import { HobHistory } from "./hob-history.tsx";
 import { doingOf, type HobPageTab, isHobPageTab, statsLine } from "./hob-page-model.ts";
+import { HobCrumbs, HobPageSkeleton } from "./hob-page-skeleton.tsx";
 import { messages } from "./messages.ts";
 import { NewHob } from "./new-hob.tsx";
 import { useNeedLine } from "./use-need-line.ts";
@@ -40,9 +41,11 @@ export function HobPage({
     >
       {hob.data ? (
         <Page hob={hob.data} tab={tab} show={show} query={query} />
+      ) : hob.isPending ? (
+        <HobPageSkeleton onRetry={() => void hob.refetch()} />
       ) : (
-        <p role={hob.isPending ? "status" : "alert"} className="m-auto text-text-secondary">
-          {hob.isPending ? copy.loading : copy.missing}
+        <p role="alert" className="m-auto text-text-secondary">
+          {copy.missing}
         </p>
       )}
       {/* The archive toast with Undo stays in sight at the bottom while the page scrolls. */}
@@ -77,27 +80,12 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
 
   return (
     <div className="mx-auto flex w-full max-w-page-max flex-col gap-6 px-6 pt-5 pb-12">
-      <nav
-        aria-label={copy.crumbs}
-        className="-mb-2 flex min-w-0 items-center gap-1.5 text-detail leading-[18px] text-label"
-      >
-        <Link
-          to="/hobs"
-          className="rounded-control px-1 py-0.5 text-text-secondary no-underline hover:bg-hover hover:text-text-strong"
-        >
-          {copy.yourHobs}
-        </Link>
-        <span aria-hidden className="text-label">
-          /
-        </span>
-        <span aria-current="page" title={hob.name} className="truncate text-text-strong">
-          {hob.name}
-        </span>
-      </nav>
+      <HobCrumbs name={hob.name} />
       <HobHero
         hob={hob}
         state={state}
-        stats={statsLine(hob, list.length)}
+        // The chat count is unknown until the chats are read: never "No chats yet" while asking.
+        stats={threads.isPending ? undefined : statsLine(hob, list.length)}
         doing={doingOf(state, list, activity, need)}
         fresh={fresh}
       />
@@ -106,14 +94,14 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
           <TabsList aria-label={copy.tabs.label({ name: hob.name })}>
             <TabsTrigger value="chats">
               {copy.tabs.chats}
-              <span className="rounded-full bg-line px-[7px] py-px text-meta font-semibold text-text-secondary">
-                {list.length}
-              </span>
+              <ChatCount count={threads.isPending ? undefined : list.length} />
             </TabsTrigger>
             <TabsTrigger value="history">{copy.tabs.history}</TabsTrigger>
           </TabsList>
           <TabsContent value="chats">
-            {threads.isPending ? null : list.length === 0 ? (
+            {threads.isPending ? (
+              <ChatsLoading onRetry={() => void threads.refetch()} />
+            ) : list.length === 0 ? (
               <NewHob hob={hob} />
             ) : (
               <HobChats hob={hob} threads={list} activity={activity} initialQuery={query} />
@@ -126,5 +114,14 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
         <HobAside hob={hob} />
       </div>
     </div>
+  );
+}
+
+/** The Chats tab's count, a skeleton while the chats are read: never 0 while asking. */
+function ChatCount({ count }: { count: number | undefined }) {
+  return (
+    <span className="rounded-full bg-line px-[7px] py-px text-meta font-semibold text-text-secondary">
+      {count ?? <Skeleton surface="card" width="1ch" />}
+    </span>
   );
 }

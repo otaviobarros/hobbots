@@ -1,7 +1,9 @@
 import type { ApprovalRequest } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { formatWhen } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../loading/hub-wait.tsx";
 import { StandingRules } from "../standing-rules/standing-rules.tsx";
 import { deciderText, requestTitle, verdictText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
@@ -20,9 +22,12 @@ const VERDICT: Record<ApprovalRequest["state"], "done" | "failed" | "muted"> = {
 export function InboxHistory({
   requests,
   directory,
+  onRetry,
 }: {
-  requests: ReadonlyArray<ApprovalRequest>;
+  /** The decisions, or undefined while the Inbox is read: then three rows in skeleton. */
+  requests: ReadonlyArray<ApprovalRequest> | undefined;
   directory: InboxDirectory;
+  onRetry: () => void;
 }) {
   return (
     <div className="flex max-w-205 flex-col gap-7 px-8 pt-6 pb-8">
@@ -30,10 +35,19 @@ export function InboxHistory({
       <section aria-label={copy.history.heading} className="flex flex-col gap-2.5">
         <h2 className="m-0 flex items-center gap-2 text-ui font-semibold text-text-strong">
           {copy.history.title}
-          <span className="text-meta font-normal text-label">{copy.count({ count: requests.length })}</span>
+          {requests === undefined ? (
+            <Skeleton width="3ch" />
+          ) : (
+            <span className="text-meta font-normal text-label">{copy.count({ count: requests.length })}</span>
+          )}
         </h2>
         <p className="m-0 text-ui text-text-secondary">{copy.history.intro}</p>
-        {requests.length === 0 ? (
+        {requests === undefined ? (
+          <div aria-busy="true" className="flex flex-col gap-2">
+            <DecisionsSkeleton />
+            <HubWait pending onRetry={onRetry} />
+          </div>
+        ) : requests.length === 0 ? (
           <Empty title={copy.emptyHistory} hint={copy.emptyHistoryHint} />
         ) : (
           <ul className="m-0 flex list-none flex-col overflow-hidden rounded-card bg-card p-0">
@@ -45,6 +59,27 @@ export function InboxHistory({
         <p className="m-0 text-detail text-label">{copy.history.expiredNote}</p>
       </section>
     </div>
+  );
+}
+
+/** Three decision rows while the Inbox is read: a verdict tag, who asked and what, and when. */
+function DecisionsSkeleton() {
+  return (
+    <ul aria-hidden className="m-0 flex list-none flex-col overflow-hidden rounded-card bg-card p-0">
+      {SKELETON_ROWS.map((row) => (
+        <li key={row} className="flex items-center gap-3 border-b border-line px-3.5 py-3 last:border-b-0">
+          <Skeleton shape="block" surface="card" className="w-18" />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-ui">
+              <Skeleton surface="card" width={ROW_WIDTHS[row]} className="max-w-full" />
+            </span>
+            <span className="text-meta">
+              <Skeleton surface="card" width="18ch" className="max-w-full" />
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

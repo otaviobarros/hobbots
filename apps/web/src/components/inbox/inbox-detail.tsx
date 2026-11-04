@@ -12,6 +12,7 @@ import {
 } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -253,6 +254,30 @@ function DeviceDetail({ device, row, now }: { device: WaitingDevice; row: InboxR
 }
 
 /** The frame every kind shares: who asked, the kind, the title and why, then the kind's own parts. */
+/**
+ * The detail's frame while the entry is read: the portrait, the chain and the tag, the title and
+ * the reason in skeleton, where the entry lands, so the column keeps its shape.
+ */
+export function DetailSkeleton() {
+  return (
+    <article aria-busy="true" className="flex max-w-170 flex-col gap-4 px-8 pt-6 pb-8">
+      <header aria-hidden className="flex flex-col gap-2.5">
+        <span className="flex items-center gap-3">
+          <Skeleton shape="tile" className="size-11" />
+          <span className="flex-1 text-ui">
+            <Skeleton width="20ch" className="max-w-full" />
+          </span>
+          <Skeleton shape="block" width="8ch" />
+        </span>
+        <span className="font-heading text-display">
+          <Skeleton width="24ch" className="max-w-full" />
+        </span>
+        <Skeleton width="40ch" className="max-w-full" />
+      </header>
+    </article>
+  );
+}
+
 function DetailFrame({
   label,
   portrait,

@@ -12,7 +12,6 @@ export const messages = {
   },
   empty: "No standing rules",
   emptyHint: "When you pick “Always for this site” on a request, the rule it saves shows here.",
-  loading: "Reading the rules…",
   failed: "Hobbots could not read the standing rules.",
   retry: "Try again",
   unknownHob: "A hob",

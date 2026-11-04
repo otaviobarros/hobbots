@@ -6,6 +6,7 @@ import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@hobbots/ui/components/menu";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { SearchField } from "@hobbots/ui/components/search-field";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -17,6 +18,7 @@ import { formatCount } from "../../lib/format.ts";
 import { formatDay } from "../../lib/time.ts";
 import { isMac } from "../archive/archive-rules.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../loading/hub-wait.tsx";
 import {
   type ArchivedChat,
   type ArchiveTab,
@@ -51,6 +53,9 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
       lists: results.map((result) => result.data),
       pending: results.some((result) => result.isPending),
       error: results.some((result) => result.isError),
+      refetch: () => {
+        for (const result of results) void result.refetch();
+      },
     }),
   });
   const byHob = new Map<AgentId, ReadonlyArray<Thread>>();
@@ -87,11 +92,15 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
         <TabsList aria-label={copy.tabs.label}>
           <TabsTrigger value="chats">
             {copy.tabs.chats}
-            <span className={countPill}>{chats.length}</span>
+            <span className={countPill}>
+              {hobs.isPending || archived.pending ? <Skeleton surface="card" width="1ch" /> : chats.length}
+            </span>
           </TabsTrigger>
           <TabsTrigger value="hobs">
             {copy.tabs.hobs}
-            <span className={countPill}>{retired.data?.length ?? 0}</span>
+            <span className={countPill}>
+              {retired.isPending ? <Skeleton surface="card" width="1ch" /> : (retired.data?.length ?? 0)}
+            </span>
           </TabsTrigger>
         </TabsList>
         <TabsContent value="chats" className="flex flex-col gap-4">
@@ -100,9 +109,16 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
               {copy.chats.loadFailed}
             </p>
           ) : hobs.isPending || archived.pending ? (
-            <p role="status" className="m-0 text-ui text-label">
-              {copy.chats.loading}
-            </p>
+            <div aria-busy="true" className="flex flex-col gap-2">
+              <ChatsSkeleton />
+              <HubWait
+                pending
+                onRetry={() => {
+                  void hobs.refetch();
+                  archived.refetch();
+                }}
+              />
+            </div>
           ) : (
             <ArchivedChats hobs={hobs.data} chats={chats} hobId={hobId} tab={tab} />
           )}
@@ -114,9 +130,10 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
               {copy.hobs.loadFailed}
             </p>
           ) : retired.isPending ? (
-            <p role="status" className="m-0 text-ui text-label">
-              {copy.hobs.loading}
-            </p>
+            <div aria-busy="true" className="flex flex-col gap-2">
+              <RetiredSkeleton />
+              <HubWait pending onRetry={() => void retired.refetch()} />
+            </div>
           ) : (
             <RetiredHobs hobs={retired.data} />
           )}
@@ -306,6 +323,55 @@ function ChatRow({ chat: { hob, thread }, focus }: { chat: ArchivedChat; focus: 
 }
 
 /** The Retired hobs tab: a card for each retired hob, most recently retired first. */
+/** Three archived chat rows while they are read: a dim tile, a title, a last line and a date. */
+function ChatsSkeleton() {
+  return (
+    <ul aria-hidden className="cut m-0 flex list-none flex-col bg-card p-0">
+      {SKELETON_ROWS.map((row) => (
+        <li
+          key={row}
+          className="grid grid-cols-[36px_minmax(0,1fr)] items-center gap-3 border-b border-line px-3.5 py-3 last:border-b-0"
+        >
+          <Skeleton shape="tile" surface="card" className="size-9" />
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <Skeleton surface="card" width={ROW_WIDTHS[row]} className="max-w-full" />
+            <span className="text-ui">
+              <Skeleton surface="card" width="36ch" className="max-w-full" />
+            </span>
+            <span className="text-meta">
+              <Skeleton surface="card" width="12ch" />
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Three retired hob cards while they are read: the doorway, a tile, a name and a role. */
+function RetiredSkeleton() {
+  return (
+    <ul aria-hidden className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))] gap-4 p-0">
+      {SKELETON_ROWS.map((row) => (
+        <li key={row} className="cut flex min-w-0 flex-col overflow-hidden bg-card">
+          <span className="relative flex h-[104px] items-end justify-center">
+            <Skeleton shape="tile" surface="card" className="mb-2.5 size-18" />
+            <span className="absolute inset-x-0 bottom-0 h-2.5 bg-line-2" />
+          </span>
+          <span className="flex min-w-0 flex-col p-4">
+            <span className="font-heading text-title">
+              <Skeleton surface="card" width={ROW_WIDTHS[row]} className="max-w-full" />
+            </span>
+            <span className="text-meta">
+              <Skeleton surface="card" width="10ch" />
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function RetiredHobs({ hobs }: { hobs: ReadonlyArray<Agent> }) {
   if (hobs.length === 0) {
     return (

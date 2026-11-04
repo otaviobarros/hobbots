@@ -3,6 +3,7 @@ import type { Agent, HistoryDay, HistoryFilter } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@hobbots/ui/components/empty";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -13,6 +14,7 @@ import { useQuestWork } from "../../api/quest-work.ts";
 import { formatTime } from "../../lib/format.ts";
 import { ledQuests } from "../../lib/led-quests.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
+import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../loading/hub-wait.tsx";
 import { dayLabel, type HistoryMark, type HistoryRow, historyRow } from "./history-model.ts";
 import { HISTORY_FILTERS as FILTERS } from "./hob-page-model.ts";
 import { messages } from "./messages.ts";
@@ -111,12 +113,7 @@ function Days({
 }) {
   const list = useQuery(agentsQuery).data ?? [];
   const hobs = new Map(list.map((each) => [each.id, each]));
-  if (history.isPending)
-    return (
-      <p role="status" className="m-0 text-ui text-label">
-        {copy.loading}
-      </p>
-    );
+  if (history.isPending) return <HistorySkeleton onRetry={() => void history.refetch()} />;
   if (history.isError && days.length === 0)
     return (
       <div role="alert" className="flex items-center gap-3 text-ui text-rose">
@@ -197,6 +194,31 @@ function EventRow({ row }: { row: HistoryRow }) {
       </span>
       <EventActions row={row} />
     </li>
+  );
+}
+
+/** Three event rows while the History is read: a time, an empty mark and a line, on the day's line. */
+function HistorySkeleton({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div aria-busy="true" className="flex flex-col gap-3.5">
+      <ol aria-hidden className="m-0 flex list-none flex-col p-0">
+        {SKELETON_ROWS.map((row) => (
+          <li
+            key={row}
+            className="grid grid-cols-[48px_24px_minmax(0,1fr)] items-start gap-2.5 px-3 py-2.5 max-[640px]:grid-cols-[40px_24px_minmax(0,1fr)]"
+          >
+            <span className="flex justify-end text-meta leading-6">
+              <Skeleton width="5ch" />
+            </span>
+            <span className="size-6 rounded-dot border border-solid border-line-2 bg-card" />
+            <span className="text-[15px] leading-[22px]">
+              <Skeleton width={ROW_WIDTHS[row]} className="max-w-full" />
+            </span>
+          </li>
+        ))}
+      </ol>
+      <HubWait pending onRetry={onRetry} />
+    </div>
   );
 }
 

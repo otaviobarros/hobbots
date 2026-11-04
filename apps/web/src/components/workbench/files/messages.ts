@@ -32,10 +32,8 @@ export const messages = {
   seeChanges: "See changes",
   downloadFor: ({ name }: { name: string }) => `Download ${name}`,
   preview: ({ name }: { name: string }) => `Preview of ${name}`,
-  loading: "Reading the files…",
   failed: "Hobbots could not read this task's files.",
   tryAgain: "Try again",
-  previewLoading: "Opening the file…",
   previewFailed: "Hobbots could not open this file.",
   cut: ({ size }: { size: string }) => `Showing the first ${size}.`,
   unshownTag: {

@@ -45,6 +45,5 @@ export const messages = {
   openChat: "Open in the chat",
   failed: "Hobbots could not save that. The blocker is read again.",
   retired: ({ name }: { name: string }) => `${name} retired, so this cannot be retried. Dismiss it instead.`,
-  loading: "Reading stuck work…",
   loadFailed: "Hobbots could not read stuck work, so something may still need you.",
 } as const;

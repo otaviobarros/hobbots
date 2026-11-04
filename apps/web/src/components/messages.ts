@@ -317,7 +317,6 @@ export const messages = {
   chat: {
     landmark: "Chat",
     editHob: "Edit hob",
-    loadingMessages: "Loading messages…",
     ideas: ["Plan a product launch", "Sum up this week's inbox", "Tidy my Downloads folder"],
     askWhat: "What are we making?",
     newThread: "New thread",
