@@ -121,6 +121,7 @@ Attempt is the record the agent model also calls Execution. Approvals stay the r
 | `CheckpointRecorded` | A Checkpoint is recorded, including a reached Milestone |
 | `QuestionAsked`, `QuestionAnswered`, `QuestionEscalated`, `QuestionWithdrawn` | A Question is asked, answered, passed up, or withdrawn when its Task is cancelled or fails first |
 | `NoteLeft` | You leave a note on a Task for its lead |
+| `NotePickedUp` | A turn of a note's recipient picks the note up ([#900](https://github.com/otaviobarros/hobbots/issues/900)) |
 | `HandedOff` | The lead gives one Task's result to another as an Artifact reference |
 | `TaskCompleted` | A Task passes the completion gate, with its result and Artifact references |
 | `QuestCompleted` | The Task that holds a Quest passes the completion gate |

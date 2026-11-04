@@ -250,6 +250,29 @@ describe("applyToTree with notes", () => {
     const elsewhere = { _tag: "NoteLeft", note: new TaskNote({ ...note, taskId: TaskId.make("other") }) } as const;
     expect(applyToTree(start, elsewhere)).toBe(start);
   });
+
+  it("shows a note picked up in its place, and an older copy changes nothing", () => {
+    const left = (id: string, revision: number) =>
+      new TaskNote({
+        id: NoteId.make(id),
+        taskId: COPY,
+        recipientId: ALDRIC,
+        text: "Keep it short",
+        createdAt: "2026-11-01T00:00:30.000Z",
+        revision,
+      });
+    const start = applyToTree(applyToTree(blackFriday(), { _tag: "NoteLeft", note: left("n1", 20) }), {
+      _tag: "NoteLeft",
+      note: left("n2", 21),
+    });
+    const picked = new TaskNote({ ...left("n1", 30), pickedUpBy: "turn-1", pickedUpAt: "2026-11-01T00:01:00.000Z" });
+    const after = applyToTree(start, { _tag: "NotePickedUp", note: picked });
+    expect(after.notes.map((note) => [note.id, note.pickedUpBy])).toEqual([
+      ["n1", "turn-1"],
+      ["n2", null],
+    ]);
+    expect(applyToTree(after, { _tag: "NoteLeft", note: left("n1", 20) }).notes[0]?.pickedUpBy).toBe("turn-1");
+  });
 });
 
 describe("applyToThreadTrees", () => {

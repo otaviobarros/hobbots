@@ -17,6 +17,8 @@ export interface ChatTurn {
   readonly threadId: ThreadId;
   /** The reply the turn writes. A key is idempotent within it, Continue included. */
   readonly messageId: MessageId;
+  /** The message of yours the turn answers; null for a continuation (ADR 019). */
+  readonly promptId?: MessageId | null;
   /** The turn's prompt, which becomes the brief of a Task the turn starts. */
   readonly prompt: string;
   readonly runtime: RuntimeKind;
