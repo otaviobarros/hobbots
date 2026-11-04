@@ -106,7 +106,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
   ).length;
 
   return (
-    <div className="flex max-w-[760px] flex-col gap-4">
+    <div className="flex max-w-form-max flex-col gap-4">
       <div className="flex items-center gap-3 rounded-card bg-notice px-4 py-3">
         <span className="flex flex-1 flex-col">
           <span className="text-sm text-text">{copy.intro({ name: hob.name, preset })}</span>

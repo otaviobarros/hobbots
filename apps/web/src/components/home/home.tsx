@@ -108,7 +108,7 @@ export function Home() {
       </section>
       <WorkHeldNotice className="mx-7 mt-5" />
 
-      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-7 px-8 pt-6 pb-8">
+      <div className="mx-auto flex w-full max-w-home-max flex-col gap-7 px-8 pt-6 pb-8">
         <NeedsYou />
         <PickUp chats={recent} quests={quests} hobs={byId} activity={activity} />
         <HappeningNowCard live={live} activity={activity} />

@@ -20,7 +20,7 @@ export function WindowFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen min-h-[610px] flex-col bg-ground text-text-strong">
       {/* Window chrome: macOS draws the traffic lights over the left of this bar in Electron. */}
-      <header className="flex h-[30px] flex-none items-center justify-center bg-deep text-[13px] text-label [-webkit-app-region:drag]">
+      <header className="flex h-title-strip flex-none items-center justify-center bg-deep text-[13px] text-label [-webkit-app-region:drag]">
         Hobbots
       </header>
       {children}

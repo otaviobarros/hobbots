@@ -67,6 +67,31 @@ The type scale, the spacing grid and every size are the same in all four themes.
 
 The same test checks all of this.
 
+## Sizes
+
+Every size in `size` is a `--spacing-*` token in `styles.css`, so Tailwind reads it in any width, height or size class: `max-w-bubble-max`, `h-title-strip`, `size-hob-tile`. A component never writes one of these values by hand, and a test checks that `@theme` and themes.json hold the same sizes.
+
+| Size | Value | Used for |
+| --- | --- | --- |
+| `title-strip` | 30px | The title strip with the window controls |
+| `sidebar` | 72px | The sidebar, collapsed |
+| `sidebar-open` | 256px | The sidebar, expanded |
+| `sheet` | 340px | The work sheet that opens over the chat |
+| `workbench-chat` | 300px | The Task chat panel beside the Workbench's tabs |
+| `chat-min` | 360px | The narrowest the chat gets |
+| `measure` | 70ch | The longest line of reply prose, the tray and the composer |
+| `bubble-max` | 460px | Your own message bubble and what waits beside it; the hob profile dialog |
+| `work-max` | 604px | Task and question cards in the transcript |
+| `column-max` | 560px | Dialogs, centered notices and empty states, the approval card |
+| `form-max` | 760px | Long single-column content, such as a hob's charms and permissions |
+| `home-max` | 880px | Home and Usage |
+| `page-max` | 1080px | The Hobs page and a hob's page |
+| `hob-tile` | 36px | A hob's portrait tile |
+| `row-min` | 36px | The smallest sidebar row |
+| `hit-min` | 28px | The smallest pointer target anywhere |
+
+A width that two or more screens share gets a size here before it is used.
+
 ## Motion
 
 Durations come from `duration`. `styles.css` sets each one in `@theme` as `--dur-press`, `--dur-fade`, `--dur-enter`, `--dur-sheet`, `--dur-shake`, `--dur-hop` and `--dur-loop-cap`, and a test checks them against themes.json. A transition reads them as `duration-(--dur-fade)`.

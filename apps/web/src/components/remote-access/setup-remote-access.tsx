@@ -104,7 +104,7 @@ export function SetupRemoteAccess() {
           />
         )}
         {status !== undefined && ready && (
-          <div className="flex max-w-[760px] flex-col gap-3.5">
+          <div className="flex max-w-form-max flex-col gap-3.5">
             <div className="cut flex items-center gap-3.5 border-2 border-mint-deep bg-card px-4 py-3">
               <span aria-hidden className="size-2.5 flex-none bg-mint" />
               <span className="flex flex-col gap-0.5">

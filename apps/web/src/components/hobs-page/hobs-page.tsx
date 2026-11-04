@@ -29,7 +29,7 @@ export function HobsPage({ filter }: { filter: HobFilter }) {
 
   return (
     <main aria-label={copy.title} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-6 pt-5 pb-12">
+      <div className="mx-auto flex w-full max-w-page-max flex-col gap-6 px-6 pt-5 pb-12">
         {agents.data ? (
           <Crew hobs={agents.data} filter={filter} query={query} onQuery={setQuery} />
         ) : (

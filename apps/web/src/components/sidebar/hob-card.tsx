@@ -68,7 +68,7 @@ export function HobCard({ hob, state, threads }: { hob: Agent; state: HobState; 
           {tag.word}
         </Badge>
         <PopoverClose asChild>
-          <Button variant="ghost" size="icon" aria-label={copy.close} className="absolute top-2 end-2 size-7">
+          <Button variant="ghost" size="icon" aria-label={copy.close} className="absolute top-2 end-2 size-hit-min">
             <span aria-hidden>×</span>
           </Button>
         </PopoverClose>

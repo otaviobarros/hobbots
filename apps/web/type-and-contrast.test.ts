@@ -10,6 +10,7 @@ interface ThemeFile {
   readonly type: Readonly<Record<string, { readonly size: string; readonly lineHeight: string }>>;
   readonly space: Readonly<Record<string, string>>;
   readonly duration: Readonly<Record<string, string>>;
+  readonly size: Readonly<Record<string, string>>;
 }
 
 const themes: ThemeFile = JSON.parse(readFileSync(new URL("../../docs/design/themes.json", import.meta.url), "utf8"));
@@ -84,6 +85,15 @@ describe("type scale and spacing", () => {
 
   it.each(Object.entries(themes.duration))("%s is set in @theme", (token, value) => {
     expect(theme).toContain(`--${token}: ${value};`);
+  });
+
+  it.each(Object.entries(themes.size))("%s is set in @theme", (size, value) => {
+    expect(theme).toContain(`--spacing-${size}: ${value};`);
+  });
+
+  it("sets no size in @theme that themes.json lacks", () => {
+    const sizes = [...theme.matchAll(/--spacing-([\w-]+):/g)].map(([, name]) => name);
+    expect(sizes.filter((name) => name !== undefined && !(name in themes.size))).toEqual([]);
   });
 
   it("lets no theme or look change type, spacing or sizes", () => {

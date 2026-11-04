@@ -116,7 +116,7 @@ function Tile({ hob }: { hob: Agent }) {
   return (
     <span
       aria-hidden
-      className="flex size-9 items-center justify-center rounded-tile bg-[color-mix(in_srgb,var(--hob)_30%,var(--color-card))]"
+      className="flex size-hob-tile items-center justify-center rounded-tile bg-[color-mix(in_srgb,var(--hob)_30%,var(--color-card))]"
       style={{ "--hob": HOB_COLORS[hob.lookColor].hat } as CSSProperties}
     >
       <HobSprite hob={hob} size={27} />

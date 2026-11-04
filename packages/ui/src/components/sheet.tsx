@@ -40,7 +40,7 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed inset-y-3 end-3 z-50 flex w-[calc(100vw-24px)] max-w-[340px] flex-col gap-3.5 overflow-y-auto *:shrink-0 cut border-(length:--edge) border-line bg-panel p-[18px] text-text-strong shadow-sheet outline-none",
+          "fixed inset-y-3 end-3 z-50 flex w-[calc(100vw-24px)] max-w-sheet flex-col gap-3.5 overflow-y-auto *:shrink-0 cut border-(length:--edge) border-line bg-panel p-[18px] text-text-strong shadow-sheet outline-none",
           "duration-[220ms] ease-(--ease-ui) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-end-6 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-end-6",
           className,
         )}
@@ -97,7 +97,7 @@ function SheetCloseButton({
       data-slot="sheet-close"
       aria-label={label}
       className={cn(
-        "ms-auto inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-control border-0 bg-transparent p-0 text-text-secondary hover:bg-hover hover:text-text-strong",
+        "ms-auto inline-flex size-hit-min shrink-0 cursor-pointer items-center justify-center rounded-control border-0 bg-transparent p-0 text-text-secondary hover:bg-hover hover:text-text-strong",
         className,
       )}
       {...props}

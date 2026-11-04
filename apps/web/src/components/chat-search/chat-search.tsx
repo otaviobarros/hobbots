@@ -85,7 +85,7 @@ export function ChatSearch({
           aria-label={copy.close}
           title={copy.close}
           onClick={close}
-          className="size-7"
+          className="size-hit-min"
         >
           <CloseIcon />
         </Button>
