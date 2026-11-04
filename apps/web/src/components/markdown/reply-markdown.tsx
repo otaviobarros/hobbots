@@ -72,10 +72,6 @@ const components: Components = {
   img: ({ src, alt }) => <ReplyImage src={typeof src === "string" ? src : undefined} alt={alt} />,
 };
 
-// Joined by hand: `cn` reads a theme size such as `text-reading` as a color, so it would drop it
-// beside `text-text`.
-const body = "hb-markdown flex max-w-measure min-w-0 flex-col gap-2.5 text-reading text-text break-words";
-
 /**
  * A hob's reply, formatted from its Markdown: CommonMark with GitHub tables, task lists and
  * strikethrough. HTML shows as text, links only reach web addresses, and code is highlighted.
@@ -98,7 +94,12 @@ export function ReplyMarkdown({
   remarkPlugins?: Options["remarkPlugins"];
 }) {
   return (
-    <div className={caret ? `${body} hb-caret` : body}>
+    <div
+      className={cn(
+        "hb-markdown flex max-w-measure min-w-0 flex-col gap-2.5 text-reading text-text break-words",
+        caret && "hb-caret",
+      )}
+    >
       <Markdown
         components={components}
         remarkPlugins={[remarkGfm, ...(remarkPlugins ?? []), remarkHtmlAsText]}
