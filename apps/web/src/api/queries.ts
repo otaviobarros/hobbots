@@ -13,10 +13,10 @@ import type {
   MessageId,
   RetireWork,
   RuntimeKind,
-  Thread,
   ThreadId,
   UsagePeriod,
 } from "@hobbots/domain";
+import { messagePreview, Thread } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { periodStart } from "../lib/usage.ts";
 import { ApiError, call } from "./client.ts";
@@ -255,6 +255,25 @@ export const placeThread = (queryClient: QueryClient, thread: Thread) => {
   const order = archived ? sortArchivedThreads : sortThreads;
   queryClient.setQueryData<ReadonlyArray<Thread>>(into, (old) => (old ? order(upsertById(old, thread)) : old));
   queryClient.setQueryData<ReadonlyArray<Thread>>(outOf, (old) => old?.filter((t) => t.id !== thread.id));
+};
+
+/**
+ * A message the transcript shows becomes its thread's last line in the hob's thread lists, so a
+ * list of chats follows a reply as it lands. The hub works out the same line when it reads them.
+ */
+export const showLastLine = (queryClient: QueryClient, message: Message) => {
+  const lastLine = messagePreview(message);
+  if (lastLine === null) return;
+  const lists = queryClient.getQueriesData<ReadonlyArray<Thread>>({
+    predicate: (query) =>
+      query.queryKey[0] === "agents" && /^(threads|archivedThreads)$/.test(String(query.queryKey[2])),
+  });
+  for (const [key, threads] of lists) {
+    if (!threads?.some((thread) => thread.id === message.threadId && thread.lastLine !== lastLine)) continue;
+    queryClient.setQueryData<ReadonlyArray<Thread>>(key, (old) =>
+      old?.map((thread) => (thread.id === message.threadId ? new Thread({ ...thread, lastLine }) : thread)),
+    );
+  }
 };
 
 /**
