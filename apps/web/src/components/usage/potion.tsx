@@ -29,7 +29,7 @@ export function PotionBottle({ fill }: { fill: PotionFill | null }) {
           <span
             data-slot="potion-liquid"
             data-tone={fill.level}
-            className={cn("absolute inset-x-0 bottom-0 transition-[height] duration-600", LIQUID[fill.level])}
+            className={cn("absolute inset-x-0 bottom-0 transition-[height] duration-(--dur-hop)", LIQUID[fill.level])}
             style={{ height: height(fill) }}
           >
             <i className="absolute inset-x-0 top-0 h-1 bg-white/25" />

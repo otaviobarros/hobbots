@@ -24,7 +24,7 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           // standards-allow STD-I18N-004: left-1/2 with -translate-x-1/2 centers the box, and translate has no logical form
-          "cut fixed top-1/2 left-1/2 z-50 flex w-[calc(100vw-32px)] max-w-column-max -translate-x-1/2 -translate-y-1/2 flex-col gap-3.5 border-2 border-control bg-panel px-7 py-6 text-text-strong outline-none",
+          "cut fixed top-1/2 left-1/2 z-50 flex w-[calc(100vw-32px)] max-w-column-max -translate-x-1/2 -translate-y-1/2 flex-col gap-3.5 border-(length:--edge) border-control bg-panel px-7 py-6 text-text-strong outline-none",
           className,
         )}
         {...props}

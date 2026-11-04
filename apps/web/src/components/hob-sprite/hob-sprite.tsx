@@ -58,7 +58,7 @@ export function HobSprite({
           aria-hidden
           className={cn(
             "absolute -top-2 -end-1.5 font-pixel font-bold",
-            size >= 48 ? "text-lg" : "text-ui",
+            size >= 48 ? "text-title" : "text-ui",
             mark.className,
           )}
         >

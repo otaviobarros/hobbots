@@ -17,7 +17,7 @@ let introPlayed = false;
 /** The classes of Welcome's two actions: Get started, and the quieter second one. */
 export const welcomeActionClass = {
   primary: "px-[26px] py-3.5 text-[17px] text-ground no-underline hover:text-ground",
-  secondary: "px-[22px] py-3 text-base text-text-secondary hover:text-text-strong",
+  secondary: "px-[22px] py-3 text-reading text-text-secondary hover:text-text-strong",
 };
 
 /** The scene's own size: everything in it is placed in these pixels, then scaled to cover the window. */

@@ -78,7 +78,7 @@ function Step({ label, onClick, children }: { label: string; onClick: () => void
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="h-[34px] w-8 shrink-0 cursor-pointer rounded-control border border-line-2 bg-card text-lg leading-none text-text-secondary hover:border-lantern hover:text-text-strong"
+      className="h-[34px] w-8 shrink-0 cursor-pointer rounded-control border border-line-2 bg-card text-title leading-none text-text-secondary hover:border-lantern hover:text-text-strong"
     >
       <span aria-hidden>{children}</span>
     </button>
