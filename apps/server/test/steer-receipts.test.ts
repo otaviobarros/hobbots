@@ -14,6 +14,7 @@ import {
   partyHub,
   QUILL,
   send,
+  threadId,
   treeWhen,
 } from "./party-hub.ts";
 
@@ -58,12 +59,21 @@ const pickedUp = (messageId: string, count: number) =>
     return traced.length === count && traced.every(picked);
   });
 
-/** Every journaled note event, in order, as its type and note id. */
+/** Every journaled note event, in order, with the note's revision and the event's sequence and correlation. */
 const noteEvents = EventJournal.use((journal) => journal.readAfter(0, 10_000)).pipe(
   Effect.map((entries) =>
     entries.flatMap((entry) =>
       entry.payload._tag === "NoteLeft" || entry.payload._tag === "NotePickedUp"
-        ? [[entry.payload._tag, entry.payload.note.id, entry.correlation.messageId] as const]
+        ? [
+            {
+              type: entry.payload._tag,
+              noteId: entry.payload.note.id,
+              revision: entry.payload.note.revision,
+              sequence: entry.sequence,
+              messageId: entry.correlation.messageId,
+              threadId: entry.correlation.threadId,
+            },
+          ]
         : [],
     ),
   ),
@@ -116,10 +126,14 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(passed.receipt.at).toBe(passed.note.pickedUpAt);
 
     // The journal says so too, each event correlated with your message (ADR 013).
-    expect(await run(noteEvents)).toEqual([
-      ["NoteLeft", passed.note.id, message.id],
-      ["NotePickedUp", passed.note.id, message.id],
+    // Each event carries the note at its own sequence, and is in the thread of your message.
+    const events = await run(noteEvents);
+    expect(events.map(({ type, noteId, messageId, threadId: thread }) => [type, noteId, messageId, thread])).toEqual([
+      ["NoteLeft", passed.note.id, message.id, threadId],
+      ["NotePickedUp", passed.note.id, message.id, threadId],
     ]);
+    expect(events.every((each) => each.revision === each.sequence)).toBe(true);
+    expect(events.at(-1)?.revision).toBe(passed.note.revision);
   }, 30_000);
 
   // covers OR-002, IN-001, UX-006

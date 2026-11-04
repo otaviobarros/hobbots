@@ -243,8 +243,8 @@ export class TaskNote extends Schema.Class<TaskNote>("TaskNote")({
   text: Schema.String,
   createdAt: Schema.String,
   /**
-   * The chat message of yours it traces back to (#900): the one whose turn sent it, or the one
-   * behind the note a nested lead passed on. Null for a note you left on a Task, and for one a lead
+   * The chat message of yours it traces back to (#900): the one whose turn sent it, or, for a nested
+   * lead's note, that of the latest note from its own lead its turn picked up (`fromNoteId`). Null for a note you left on a Task, and for one a lead
    * sent on its own, or before this was recorded.
    */
   messageId: Schema.NullOr(MessageId).pipe(
@@ -257,8 +257,9 @@ export class TaskNote extends Schema.Class<TaskNote>("TaskNote")({
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
   /**
-   * The turn of its recipient that picked it up last: a reply's message id or an Attempt's id, as
-   * the backpack delivered it (ADR 019). Null until a turn did; see `noteReceipt` for what it waits on.
+   * The turn of its recipient that picked it up last: a reply's message id or an Attempt's id, once
+   * the backpack put it into that turn and the runtime accepted the turn (ADR 019). Null until a
+   * turn did; see `noteReceipt` for what it waits on.
    */
   pickedUpBy: Schema.NullOr(Schema.String).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),

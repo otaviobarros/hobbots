@@ -96,7 +96,7 @@ const QuestionEscalated = Schema.TaggedStruct("QuestionEscalated", { question: Q
 const QuestionWithdrawn = Schema.TaggedStruct("QuestionWithdrawn", { question: Question });
 /** You left a note on a Task; it goes to the Task's nearest lead (ADR 018). */
 const NoteLeft = Schema.TaggedStruct("NoteLeft", { note: TaskNote });
-/** A turn of a note's recipient picked it up: the backpack put it into that turn (#900, ADR 019). */
+/** A turn of a note's recipient picked it up: the backpack put it into that turn, which its runtime accepted (#900, ADR 019). */
 const NotePickedUp = Schema.TaggedStruct("NotePickedUp", { note: TaskNote });
 /** A lead gave one Task's artifact to another Task. */
 const HandedOff = Schema.TaggedStruct("HandedOff", { handOff: HandOff, artifact: ArtifactRef });

@@ -187,7 +187,9 @@ const makeJournalWriter = (sql: SqlClient.SqlClient) => {
           const thread =
             taskId === null
               ? sql`${threadId}`
-              : sql`COALESCE(${threadId}, (SELECT thread_id FROM tasks WHERE id = ${taskId}))`;
+              : // A note on a member's Task is in the thread of the message of yours it traces back to (#900).
+                sql`COALESCE(${threadId}, (SELECT thread_id FROM messages WHERE id = ${messageId}),
+                  (SELECT thread_id FROM tasks WHERE id = ${taskId}))`;
           const [row] = yield* sql<{
             readonly agentId: string | null;
             readonly threadId: string | null;

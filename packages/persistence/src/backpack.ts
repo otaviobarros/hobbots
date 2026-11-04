@@ -86,8 +86,8 @@ export const BackpackLive = Layer.effect(
       options: {
         readonly ends?: boolean;
         readonly columns?: Record<string, string | null>;
-        /** Given the revision its own events start at, after the item's; returns them. */
-        readonly also?: (next: number) => Effect.Effect<ReadonlyArray<JournaledEvent> | void, SqlError.SqlError>;
+        /** Given the revision its own events start at, after the item's; returns those events. */
+        readonly also?: (next: number) => Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError>;
       } = {},
     ) =>
       change((revision) =>
@@ -105,7 +105,7 @@ export const BackpackLive = Layer.effect(
               AND ${clock.leaseLive} AND ${sql.in("state", from)}
             RETURNING id`;
           if (updated.length === 0) return yield* refuse(itemId, held, step);
-          const also = options.also === undefined ? [] : ((yield* options.also(revision + 1)) ?? []);
+          const also = options.also === undefined ? [] : yield* options.also(revision + 1);
           const item = yield* changed(itemId);
           return { value: item.value, events: [...item.events, ...also] };
         }),
@@ -144,15 +144,19 @@ export const BackpackLive = Layer.effect(
       );
 
     /**
-     * Records on the note a message item carries that the turn `turnId` picked it up (#900), with
-     * the revision `next`. Nothing for any other item, or for a note left before items named theirs.
+     * Records on the note a message item carries that a turn picked it up (#900): the turn of the
+     * item's latest delivery, once its runtime accepted that turn, with the revision `next`. A
+     * delivery whose turn never started is no pick-up. Nothing for any other item, or for a note
+     * left before items named theirs.
      */
-    const pickUp = (itemId: BackpackItemId, turnId: string, at: string, next: number) =>
+    const pickUp = (itemId: BackpackItemId, at: string, next: number) =>
       Effect.gen(function* () {
         const item = yield* reads.item(itemId);
         if (item?.payload._tag !== "message" || item.payload.noteId === undefined) return [];
         const noteId = item.payload.noteId;
-        yield* sql`UPDATE task_notes SET picked_up_by = ${turnId}, picked_up_at = ${at}, revision = ${next}
+        yield* sql`UPDATE task_notes SET picked_up_at = ${at}, revision = ${next},
+            picked_up_by = (SELECT turn_id FROM backpack_deliveries WHERE item_id = ${itemId}
+              AND number = (SELECT MAX(number) FROM backpack_deliveries WHERE item_id = ${itemId}))
           WHERE id = ${noteId}`;
         const [note] = yield* notes.note(noteId);
         return note === undefined ? [] : [{ _tag: "NotePickedUp", note } as const];
@@ -162,13 +166,11 @@ export const BackpackLive = Layer.effect(
       isoNow.pipe(
         Effect.flatMap((at) =>
           guarded(itemId, held, "deliver", {
-            also: (next) =>
+            also: () =>
               sql`INSERT INTO backpack_deliveries
                 (item_id, number, claim_token, target, turn_id, delivered_at, acknowledged_session_id, acknowledged_at)
               SELECT ${itemId}, COALESCE(MAX(number), 0) + 1, ${held.token}, ${delivery.target}, ${delivery.turnId}, ${at}, NULL, NULL
-              FROM backpack_deliveries WHERE item_id = ${itemId}`.pipe(
-                Effect.andThen(pickUp(itemId, delivery.turnId, at, next)),
-              ),
+              FROM backpack_deliveries WHERE item_id = ${itemId}`.pipe(Effect.as([])),
           }),
         ),
       );
@@ -177,11 +179,11 @@ export const BackpackLive = Layer.effect(
       isoNow.pipe(
         Effect.flatMap((at) =>
           guarded(itemId, held, "acknowledge", {
-            also: () =>
+            also: (next) =>
               sql`UPDATE backpack_deliveries SET acknowledged_session_id = ${sessionId}, acknowledged_at = ${at}
               WHERE item_id = ${itemId}
                 AND number = (SELECT MAX(number) FROM backpack_deliveries WHERE item_id = ${itemId})`.pipe(
-                Effect.asVoid,
+                Effect.andThen(pickUp(itemId, at, next)),
               ),
           }),
         ),
@@ -325,7 +327,7 @@ export const BackpackLive = Layer.effect(
         guarded(itemId, held, "fail", {
           ends: true,
           columns: { error: ending?.diagnostic ?? null },
-          also: () => raiseBlocker(itemId, "retries-exhausted", ending),
+          also: () => raiseBlocker(itemId, "retries-exhausted", ending).pipe(Effect.as([])),
         }),
       abandon,
       decide,
