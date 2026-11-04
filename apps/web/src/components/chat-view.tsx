@@ -42,6 +42,7 @@ import { ThreadHeaderMenu } from "./archive/thread-menu.tsx";
 import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { BrainPicker, BrainSwitchNote, useOtherReadyRuntimes } from "./brain-picker.tsx";
 import { ChatSearch, ChatSearchButton } from "./chat-search/chat-search.tsx";
+import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
 import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
@@ -144,6 +145,9 @@ export function ChatView({
   const [findingIn, setFindingIn] = useState<string>();
   const finding = threadId !== undefined && findingIn === threadId;
   const setFinding = (open: boolean) => setFindingIn(open ? threadId : undefined);
+  const [renamingIn, setRenamingIn] = useState<string>();
+  const renaming = threadId !== undefined && renamingIn === threadId;
+  const setRenaming = (open: boolean) => setRenamingIn(open ? threadId : undefined);
   const holding = focusMessageId !== undefined && released !== focusMessageId;
   const follow = () => setReleased(focusMessageId);
 
@@ -241,14 +245,21 @@ export function ChatView({
               {current.name}
             </Link>
             <span className="text-sm font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
-            <span className="truncate text-text-secondary">{title}</span>
+            <ChatTitle thread={thread.data} title={title} renaming={renaming} onDone={() => setRenaming(false)} />
           </span>
           <span className="text-xs text-label">{stateLabel[state]}</span>
         </div>
         {threadId && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
         <BrainPicker hob={current} thread={thread.data} />
         {thread.data && <ChatSearchButton open={finding} onToggle={() => setFinding(!finding)} />}
-        {thread.data && <ThreadHeaderMenu hob={current} thread={thread.data} />}
+        {thread.data && (
+          <ThreadHeaderMenu
+            hob={current}
+            thread={thread.data}
+            onRename={() => setRenaming(true)}
+            onSearch={() => setFinding(true)}
+          />
+        )}
         <Button asChild variant="outline">
           <Link to="/hobs/$hobId/profile" params={{ hobId }}>
             Edit hob

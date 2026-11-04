@@ -80,7 +80,11 @@ export function ChatRow({
       </span>
       <span className="pointer-events-none flex min-w-0 flex-col gap-0.5">
         {renaming ? (
-          <RenameField thread={thread} onDone={() => setRenaming(false)} />
+          <RenameField
+            thread={thread}
+            onDone={() => setRenaming(false)}
+            className="pointer-events-auto relative z-[1]"
+          />
         ) : (
           <span title={thread.title} className="truncate text-[15px] leading-[22px] font-semibold text-text-strong">
             {title ? <Marked parts={title} /> : thread.title}
@@ -146,8 +150,8 @@ export function ChatRow({
   );
 }
 
-/** The title as a field: Enter or leaving it saves, Esc keeps the old title. */
-function RenameField({ thread, onDone }: { thread: Thread; onDone: () => void }) {
+/** The title as a field: Enter or leaving it saves, Esc keeps the old title. The chat header uses it too. */
+export function RenameField({ thread, onDone, className }: { thread: Thread; onDone: () => void; className?: string }) {
   const [typed, setTyped] = useState(thread.title);
   const rename = useRenameThread();
   const save = () => {
@@ -175,12 +179,16 @@ function RenameField({ thread, onDone }: { thread: Thread; onDone: () => void })
           onDone();
         }
       }}
-      className="pointer-events-auto relative z-[1] -my-px min-w-0 border-(length:--edge) border-ring bg-deep px-1.5 text-[15px] leading-[22px] font-semibold text-text-strong outline-none"
+      className={cn(
+        "-my-px min-w-0 border-(length:--edge) border-ring bg-deep px-1.5 text-[15px] leading-[22px] font-semibold text-text-strong outline-none",
+        className,
+      )}
     />
   );
 }
 
-function PinIcon({ label }: { label: string }) {
+/** The lantern pin beside a chat pinned to the top. */
+export function PinIcon({ label }: { label: string }) {
   return (
     <svg
       role="img"
