@@ -7,6 +7,8 @@ import {
   THREAD_TITLE_MAX,
   type Thread,
 } from "@hobbots/domain";
+import type { QuestInProgress } from "../../lib/quest-work.ts";
+import { messages } from "./messages.ts";
 
 /** The groups a hob's chats sit in, in the order they show. */
 export type ChatGroup = "pinned" | "today" | "week" | "older";
@@ -86,6 +88,21 @@ export const waitingByThread = (
     if (approval.state === "pending") counts.set(approval.threadId, (counts.get(approval.threadId) ?? 0) + 1);
   }
   return counts;
+};
+
+/**
+ * The Quests each chat follows, as its row's chips: the goal and how many of its party's Tasks are
+ * done. A nested Quest followed in the same chat gets a chip of its own.
+ */
+export const questsByThread = (quests: ReadonlyArray<QuestInProgress>): ReadonlyMap<string, ReadonlyArray<string>> => {
+  const chips = new Map<string, Array<string>>();
+  for (const { quest, members } of quests) {
+    if (quest.threadId === null) continue;
+    const done = members.filter((each) => each.task.state === "completed").length;
+    const chip = messages.chats.quest({ goal: quest.goal, done, total: members.length });
+    chips.set(quest.threadId, [...(chips.get(quest.threadId) ?? []), chip]);
+  }
+  return chips;
 };
 
 /** A typed title as it is saved: one line, trimmed and cut to the longest title; null when empty. */

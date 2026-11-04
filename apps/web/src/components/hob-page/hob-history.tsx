@@ -16,6 +16,7 @@ import { questsInProgress } from "../../lib/quest-work.ts";
 import { dayLabel, type HistoryMark, type HistoryRow, historyRow } from "./history-model.ts";
 import { HISTORY_FILTERS as FILTERS } from "./hob-page-model.ts";
 import { messages } from "./messages.ts";
+import { QuestChip } from "./quest-chip.tsx";
 
 const copy = messages.history;
 
@@ -185,7 +186,7 @@ function EventRow({ row }: { row: HistoryRow }) {
         {(row.who !== null || row.quest !== null || row.waiting) && (
           <span className="flex flex-wrap items-center gap-1.5">
             {row.who !== null && <Who name={row.who.name} hob={row.who.hob} />}
-            {row.quest !== null && <QuestChip goal={row.quest} />}
+            {row.quest !== null && <QuestChip label={row.quest} />}
             {row.waiting && (
               <span className="rounded-tag bg-lantern px-2 py-px text-xs leading-4 font-semibold text-on-lantern">
                 {copy.waiting}
@@ -207,29 +208,6 @@ function Who({ name, hob }: { name: string; hob: Agent | null }) {
       className="inline-flex items-center gap-1.5 text-xs leading-4 font-semibold text-text-secondary before:size-2 before:rounded-[3px] before:bg-(--hob)"
     >
       {name}
-    </span>
-  );
-}
-
-function QuestChip({ goal }: { goal: string }) {
-  return (
-    <span
-      title={goal}
-      className="inline-flex max-w-[260px] min-w-0 items-center gap-1 rounded-tag border border-solid border-[color-mix(in_srgb,var(--color-star)_45%,transparent)] px-1.5 py-px text-xs leading-4 text-text-secondary"
-    >
-      <svg
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        className="size-3 shrink-0 text-star"
-      >
-        <path d="M3.5 14V2.5M3.5 3h8l-2 3 2 3h-8" />
-      </svg>
-      <span className="truncate">{goal}</span>
     </span>
   );
 }

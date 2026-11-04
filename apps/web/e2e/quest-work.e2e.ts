@@ -204,3 +204,30 @@ test("[TC-UX-145] a hob with no chats that has worked on a Quest reads Resting, 
     /Wick\s*✦\s*New/,
   );
 });
+
+// covers UX-001, OR-001
+test("[TC-UX-146] a chat on its hob's page shows a chip for each Quest it follows", async ({ page }) => {
+  dataDir = emptyDataDir();
+  hub = await startHub(dataDir);
+  await call("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
+  const ids = {
+    aldric: await summon("Aldric", 1001),
+    quill: await summon("Quill", 1338),
+    ada: await summon("Ada", 1675),
+    pip: await summon("Pip", 2012),
+  };
+  const thread = await call<{ readonly id: string }>("POST", `/agents/${ids.aldric}/threads`);
+  await call("POST", `/agents/${ids.aldric}/threads`);
+  campaign(ids, thread.id);
+
+  await page.goto(`${hub.url}/#/hobs/${ids.aldric}`);
+  const chats = page.getByRole("tabpanel", { name: "Chats" });
+  const rows = chats.getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+  // Aldric's chat follows his Quest and Ada's nested one; his other chat follows none.
+  const followed = rows.filter({ hasText: "Black Friday campaign" });
+  await expect(followed).toContainText("Black Friday campaign · 0 of 2");
+  await expect(followed).toContainText("Landing page keywords · 0 of 1");
+  await expect(followed.getByTitle("Black Friday campaign · 0 of 2")).toBeVisible();
+  await expect(rows.filter({ hasNotText: "Black Friday campaign" })).toHaveCount(1);
+});

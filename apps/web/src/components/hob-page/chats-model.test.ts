@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { chatGroups, chatMatches, cleanTitle, groupOf, waitingByThread } from "./chats-model.ts";
+import type { QuestInProgress } from "../../lib/quest-work.ts";
+import { chatGroups, chatMatches, cleanTitle, groupOf, questsByThread, waitingByThread } from "./chats-model.ts";
 
 // A Wednesday, so Earlier this week reaches back to the Thursday before.
 const now = new Date(2026, 10, 4, 15, 0);
@@ -73,6 +74,23 @@ describe("waitingByThread", () => {
       { threadId: "b", state: "approved" },
     ] as never);
     expect([...counts]).toEqual([["a", 2]]);
+  });
+});
+
+describe("questsByThread", () => {
+  const quest = (id: string, goal: string, threadId: string | null, states: ReadonlyArray<string>) =>
+    ({
+      quest: { id, goal, threadId },
+      members: states.map((state) => ({ task: { state } })),
+    }) as unknown as QuestInProgress;
+  it("gives each chat a chip per Quest it follows, with how many of its Tasks are done", () => {
+    const chips = questsByThread([
+      quest("q1", "Spring launch", "th1", ["completed", "active", "queued"]),
+      quest("q2", "Keywords", "th1", ["completed"]),
+      quest("q3", "Nowhere", null, ["active"]),
+    ]);
+    expect(chips.get("th1")).toEqual(["Spring launch · 1 of 3", "Keywords · 1 of 1"]);
+    expect(chips.size).toBe(1);
   });
 });
 
