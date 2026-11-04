@@ -155,7 +155,7 @@ export const headlineMeter = (plan: PlanUsage): PlanMeter | undefined =>
 export type PlanLevel = "ok" | "low" | "out";
 
 /** From this much of a window used, it is running low. */
-export const LOW_FROM_PERCENT = 80;
+const LOW_FROM_PERCENT = 80;
 
 const LEVEL_RANK: Record<PlanLevel, number> = { ok: 0, low: 1, out: 2 };
 
