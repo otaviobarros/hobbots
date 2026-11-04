@@ -1,5 +1,6 @@
 import type { Agent, Message, SnippetPart, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { SearchField } from "@hobbots/ui/components/search-field";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { formatWhen } from "../../lib/time.ts";
@@ -8,6 +9,11 @@ import { findInChat, MIN_QUERY } from "./chat-search-model.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages;
+
+// The box opens focused and stays lit while open, so the glow does not wait for focus. Its text is
+// the 15px body style, a step up from the other search fields, since it sits over a chat.
+const glow =
+  "border-focus-ring hover:border-focus-ring shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-focus-ring)_22%,transparent)] [&_input]:text-body [&_input]:text-text-strong";
 
 /** The magnifier in the chat header: pressed while the search box is open. */
 export function ChatSearchButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
@@ -29,7 +35,8 @@ export function ChatSearchButton({ open, onToggle }: { open: boolean; onToggle: 
 /**
  * The search box under the chat header: a count of the messages that match, and below it a list of
  * them, each with who said it, when, and the match marked in lantern. Picking one scrolls the chat to
- * it; nothing found offers a search across all of the hob's chats. Escape or ✕ closes it.
+ * it; nothing found offers a search across all of the hob's chats. The first Escape clears the text
+ * and the next closes it, as ✕ does.
  */
 export function ChatSearch({
   hob,
@@ -62,33 +69,38 @@ export function ChatSearch({
   };
   return (
     <div className="relative z-10 animate-hb-in px-6 pt-2.5">
-      <search className="flex items-center gap-2.5 rounded-control border-(length:--edge) border-solid border-focus-ring bg-deep py-1 ps-3 pe-1.5 text-text-secondary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-focus-ring)_22%,transparent)]">
-        <SearchIcon size={14} />
-        <input
+      <search>
+        <SearchField
           ref={input}
-          type="search"
           aria-label={copy.label}
           placeholder={copy.label}
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => event.key === "Escape" && close()}
-          className="min-w-0 flex-1 border-0 bg-transparent text-[15px] [&::-webkit-search-cancel-button]:appearance-none leading-[22px] text-text-strong outline-none placeholder:text-label"
+          onValueChange={setQuery}
+          clearLabel={copy.clear}
+          onEscape={close}
+          slashKey={false}
+          clearButton={false}
+          trailing={
+            <>
+              {searching && (
+                <span role="status" className="text-xs whitespace-nowrap text-label">
+                  {copy.count({ count: hits.length })}
+                </span>
+              )}
+              <Button
+                variant="icon"
+                size="icon"
+                aria-label={copy.close}
+                title={copy.close}
+                onClick={close}
+                className="size-hit-min"
+              >
+                <CloseIcon />
+              </Button>
+            </>
+          }
+          className={glow}
         />
-        {searching && (
-          <span role="status" className="text-xs whitespace-nowrap text-label">
-            {copy.count({ count: hits.length })}
-          </span>
-        )}
-        <Button
-          variant="icon"
-          size="icon"
-          aria-label={copy.close}
-          title={copy.close}
-          onClick={close}
-          className="size-hit-min"
-        >
-          <CloseIcon />
-        </Button>
       </search>
       {searching && (
         <div className="absolute inset-x-6 top-[calc(100%+6px)] flex max-h-80 flex-col gap-0.5 overflow-y-auto rounded-card border border-line-2 bg-card p-1.5 shadow-menu">
