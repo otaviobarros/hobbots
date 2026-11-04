@@ -45,12 +45,6 @@ export const messages = {
   openChat: "Open in the chat",
   failed: "Hobbots could not save that. The blocker is read again.",
   retired: ({ name }: { name: string }) => `${name} retired, so this cannot be retried. Dismiss it instead.`,
-  section: "Stuck work",
   loading: "Reading stuck work…",
   loadFailed: "Hobbots could not read stuck work, so something may still need you.",
-  count: ({ count }: { count: number }) =>
-    plural(count, {
-      one: `${formatCount(count)} piece of work is stuck`,
-      other: `${formatCount(count)} pieces of work are stuck`,
-    }),
 } as const;

@@ -51,7 +51,7 @@ test("[TC-UX-085] a question waiting for you is answered in the Task drawer, goe
   // Nothing waits for you in the Inbox any more.
   await page.goto(`${url}/#/inbox?tab=needs`);
   await expect(page.getByText("Nothing needs you")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Questions for you" })).toBeHidden();
+  await expect(page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Question/ })).toHaveCount(0);
 });
 
 // covers OR-004, IN-002, UX-001
@@ -76,9 +76,9 @@ test("[TC-UX-086] while a question waits for you, the drawer's note box says it 
   await expect(page.getByRole("region", { name: "Ada asks you" }).getByRole("textbox")).toBeVisible();
 
   await page.goto(`${url}/#/inbox?tab=needs`);
-  const questions = page.getByRole("region", { name: "Questions for you" });
-  await expect(questions).toContainText("1 question for you");
-  await expect(questions.getByRole("region", { name: "Question from Ada" })).toContainText(QUESTION);
+  const row = page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Question/ });
+  await expect(row).toHaveCount(1);
+  await expect(page.getByRole("article", { name: "Question from Ada" })).toContainText(QUESTION);
 });
 
 // covers OR-004, IN-002, UX-001
@@ -95,7 +95,7 @@ test("[TC-IN-489] an answer given in the Inbox says so in the Task drawer and on
   const asked = page.getByRole("region", { name: "Question from Ada" });
   await asked.getByRole("textbox", { name: "Your answer to Ada" }).fill("Yes, Dec 12.");
   await asked.getByRole("button", { name: "Send answer" }).click();
-  await expect(page.getByRole("region", { name: "Questions for you" })).toBeHidden();
+  await expect(page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Question/ })).toHaveCount(0);
 
   await page.goto(thread);
   const asks = page.getByRole("region", { name: "Ada asks you" });

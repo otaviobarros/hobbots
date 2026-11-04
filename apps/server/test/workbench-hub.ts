@@ -14,6 +14,7 @@ import {
   TaskRepository,
 } from "@hobbots/agents";
 import {
+  type ActivityLimits,
   Agent,
   AgentId,
   type AttemptId,
@@ -123,13 +124,13 @@ const Seed = Layer.effectDiscard(
   }),
 );
 
-const makeApp = (gate: Deferred.Deferred<void>, prompts: Array<string>) =>
+const makeApp = (gate: Deferred.Deferred<void>, prompts: Array<string>, limits: Partial<ActivityLimits> = {}) =>
   ChatService.layer.pipe(
     Layer.provideMerge(
       StepRunnerLive().pipe(Layer.provideMerge(TaskTools.layer("/")), Layer.provideMerge(TaskSignal.layer)),
     ),
     Layer.provideMerge(
-      ActivityRecorder.layer({ ...DEFAULT_ACTIVITY_LIMITS, retentionDays: 0 }).pipe(
+      ActivityRecorder.layer({ ...DEFAULT_ACTIVITY_LIMITS, retentionDays: 0, ...limits }).pipe(
         Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataFolder, "activity")))),
       ),
     ),
@@ -160,8 +161,15 @@ afterEach(async () => {
 });
 
 let projects = 0;
-/** A fresh project folder with `files`, Aldric's folders named `more` beside it, and the hub around them. */
-export const setUp = (files: Record<string, string>, more: ReadonlyArray<string> = []) => {
+/**
+ * A fresh project folder with `files`, Aldric's folders named `more` beside it, and the hub around
+ * them, its turns' scans held to `limits` over the defaults.
+ */
+export const setUp = (
+  files: Record<string, string>,
+  more: ReadonlyArray<string> = [],
+  limits: Partial<ActivityLimits> = {},
+) => {
   project = join(temp, `project-${++projects}`);
   others = more.map((name) => join(temp, `${name}-${projects}`));
   for (const folder of [project, ...others]) mkdirSync(folder, { recursive: true });
@@ -172,7 +180,7 @@ export const setUp = (files: Record<string, string>, more: ReadonlyArray<string>
   const gate = Deferred.makeUnsafe<void>();
   // Every prompt the runtime was sent, each once its turn's baseline was taken.
   const prompts: Array<string> = [];
-  const app = ManagedRuntime.make(makeApp(gate, prompts));
+  const app = ManagedRuntime.make(makeApp(gate, prompts, limits));
   runtime = app;
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<App>>) => app.runPromise(effect);
   /** Waits until `count` turns holding `HOLD` have taken their baselines. */

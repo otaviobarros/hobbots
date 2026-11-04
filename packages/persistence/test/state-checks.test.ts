@@ -26,8 +26,11 @@ const agent = new Agent({
   createdAt: at,
 });
 
+// Keeps 0047 too: the repository that seeds the hob writes its name with each version.
 const migrationsBefore = (id: string) =>
-  Object.fromEntries(Object.entries(migrations).filter(([key]) => key < id)) as typeof migrations;
+  Object.fromEntries(
+    Object.entries(migrations).filter(([key]) => key < id || key === "0047_versioned_name"),
+  ) as typeof migrations;
 
 /** One row in each of the four tables, written as raw SQL so nothing but the database checks it. */
 const seed = (taskState = "active") =>

@@ -92,11 +92,18 @@ export interface NewAttempt {
 
 /**
  * What happened to a live Attempt: the runtime took it in its session, or it ended, and why. The
- * record decides the state it ends in from why and its Task (`AttemptTransitions.end`).
+ * record decides the state it ends in from why and its Task (`AttemptTransitions.end`). A
+ * `policyVersion` is the one its first turn's tools ran under: an Attempt keeps the first it is given.
  */
 export type AttemptChange =
-  | { readonly _tag: "Running"; readonly sessionId?: string; readonly at: string }
-  | { readonly _tag: "Ended"; readonly end: AttemptEnd; readonly sessionId?: string; readonly at: string };
+  | { readonly _tag: "Running"; readonly sessionId?: string; readonly policyVersion?: string; readonly at: string }
+  | {
+      readonly _tag: "Ended";
+      readonly end: AttemptEnd;
+      readonly sessionId?: string;
+      readonly policyVersion?: string;
+      readonly at: string;
+    };
 
 /** The turn that resumes a Task's Attempt: when, and the brain and configuration it runs on. */
 export interface AttemptResume {

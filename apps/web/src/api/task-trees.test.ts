@@ -71,6 +71,21 @@ describe("applyToTree", () => {
     const replaced = applyToTree(first, waiting([COPY, BUILD], 6));
     expect(replaced.waits.map((each) => each.on)).toEqual([[COPY, BUILD]]);
     expect(applyToTree(replaced, waiting([BUILD], 5)).waits.map((each) => each.on)).toEqual([[COPY, BUILD]]);
+    // A Task that ended waits for nothing, as the hub drops its wait (#702).
+    const failed = applyToTree(replaced, {
+      _tag: "TaskStateChanged",
+      task: task(CAMPAIGN, { state: "failed", revision: 7 }),
+      attempt: null,
+      quest: null,
+      wait: null,
+    });
+    expect(failed.waits).toEqual([]);
+    const completed = applyToTree(replaced, {
+      _tag: "TaskCompleted",
+      task: task(CAMPAIGN, { state: "completed", revision: 7 }),
+      artifacts: [],
+    });
+    expect(completed.waits).toEqual([]);
   });
 
   it("never moves a Task, its Attempt or a Question back to an older version", () => {

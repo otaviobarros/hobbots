@@ -1424,3 +1424,121 @@ describe("waits and Task tool calls", () => {
     expect(result.quillWork).toEqual([]);
   });
 });
+
+// Issue #702: what the third run's records left out or got wrong.
+describe("Task records the third run found gaps in", () => {
+  // covers EX-001, PE-008
+  it("[TC-DP-240] an Attempt started with no policy version takes the first one its session reports, and keeps it", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = yield* latest("copy");
+        const a1 = AttemptId.make("a1");
+        yield* tasks.startAttempt(copy.id, copy.revision, { ...attempt("a1"), policyVersion: null });
+        const unknown = Option.getOrThrow(yield* tasks.readTree(copy.id)).attempts[0]?.policyVersion;
+        yield* tasks.updateAttempt(a1, { _tag: "Running", sessionId: "s1", policyVersion: "r3-first", at: now });
+        yield* tasks.updateAttempt(a1, {
+          _tag: "Ended",
+          end: { _tag: "Finished", outcome: "The turn finished." },
+          sessionId: "s1",
+          policyVersion: "r3-second",
+          at: later,
+        });
+        return { unknown, ended: Option.getOrThrow(yield* tasks.readTree(copy.id)).attempts[0] };
+      }),
+    );
+    expect(result.unknown).toBeNull();
+    expect(result.ended).toMatchObject({
+      policyVersion: "r3-first",
+      outcome: "The turn finished.",
+      state: "completed",
+    });
+  });
+
+  // covers OR-003
+  it("[TC-OR-520] a Task that ends drops its wait, whether it completes or fails", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const top = yield* latest("campaign");
+        const started = yield* tasks.startAttempt(top.id, top.revision, attempt("a-lead"));
+        const on = [TaskId.make("copy"), TaskId.make("build")];
+        yield* tasks.waitFor(top.id, started.value.task.revision, { on, mode: "all", at: now, keepActive: true });
+        const waiting = Option.getOrThrow(yield* tasks.readTree(top.id)).waits.map((each) => each.taskId);
+        for (const id of ["build", "copy"]) {
+          const each = yield* latest(id);
+          yield* tasks.moveTask(each.id, each.revision, "cancelled", now);
+        }
+        const lead = yield* latest("campaign");
+        yield* tasks.completeTask(lead.id, lead.revision, {
+          summary: "Done without them",
+          attemptId: AttemptId.make("a-lead"),
+          artifacts: [],
+          at: later,
+          carried: yield* carryAll("campaign"),
+        });
+        const completed = Option.getOrThrow(yield* tasks.readTree(top.id)).waits;
+
+        // A Task that waits on its own step, then fails, drops its wait too.
+        const quill = yield* tasks.createTask({ task: newTask("solo", QUILL, null), delegation: null, milestones: [] });
+        const solo = yield* tasks.startAttempt(quill.value.id, quill.value.revision, attempt("a-solo"));
+        yield* tasks.createTask({ task: newTask("draft", QUILL, "solo"), delegation: null, milestones: [] });
+        const open = yield* latest("solo");
+        yield* tasks.waitFor(open.id, open.revision, { on: [TaskId.make("draft")], mode: "all", at: now });
+        const draft = yield* latest("draft");
+        yield* tasks.moveTask(draft.id, draft.revision, "cancelled", now);
+        yield* tasks.updateAttempt(solo.value.attempt.id, {
+          _tag: "Ended",
+          end: { _tag: "Stopped", reason: "Stopped" },
+          at: now,
+        });
+        const before = yield* latest("solo");
+        yield* tasks.moveTask(before.id, before.revision, "failed", later, { reason: "Its hob was retired." });
+        const failed = Option.getOrThrow(yield* tasks.readTree(before.id)).waits;
+        return { waiting, completed, failed };
+      }),
+    );
+    expect(result.waiting).toEqual(["campaign"]);
+    expect(result.completed).toEqual([]);
+    expect(result.failed).toEqual([]);
+  });
+
+  // covers OR-004, OR-005
+  it("[TC-OR-521] the reason the hub records with a move is the hub's own blocker, which no report can claim", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = yield* latest("copy");
+        const started = yield* tasks.startAttempt(copy.id, copy.revision, attempt("a1"));
+        const ended = yield* tasks.updateAttempt(started.value.attempt.id, {
+          _tag: "Ended",
+          end: { _tag: "Finished", outcome: "The turn finished." },
+          at: now,
+        });
+        yield* tasks.moveTask(copy.id, ended.value.task.revision, "blocked", now, {
+          reason: "Its member ended a turn without completing it.",
+        });
+        const forged = yield* tasks
+          .recordCheckpoint({
+            id: CheckpointId.make("forged"),
+            taskId: copy.id,
+            source: "automatic",
+            kind: "blocker",
+            milestoneId: null,
+            summary: "Not the hub",
+            createdAt: later,
+          })
+          .pipe(Effect.flip);
+        const tree = Option.getOrThrow(yield* tasks.readTree(copy.id));
+        return { blockers: tree.checkpoints.filter((each) => each.kind === "blocker"), forged };
+      }),
+    );
+    expect(result.blockers.map((each) => [each.source, each.summary])).toEqual([
+      ["automatic", "Its member ended a turn without completing it."],
+    ]);
+    expect(result.forged).toMatchObject({ _tag: "TaskRefused", reason: "checkpoint-kind" });
+  });
+});

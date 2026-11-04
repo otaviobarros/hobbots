@@ -116,9 +116,13 @@ export const TaskRepositoryLive = Layer.effect(
         ),
       );
 
+    /** Saves the Task. One that ended waits for nothing any more, so its wait goes with it (#702). */
     const saveTask = (task: Task) => {
       const { id, ...columns } = taskColumns(task);
-      return sql`UPDATE tasks SET ${sql.update(columns)} WHERE id = ${id}`;
+      const saved = sql`UPDATE tasks SET ${sql.update(columns)} WHERE id = ${id}`;
+      return isTerminalTask(task.state)
+        ? saved.pipe(Effect.andThen(sql`DELETE FROM task_waits WHERE task_id = ${id}`))
+        : saved;
     };
 
     const insertCheckpoint = (checkpoint: Checkpoint) =>
@@ -436,11 +440,13 @@ export const TaskRepositoryLive = Layer.effect(
             ...before,
             state: ended?.state ?? "running",
             sessionId: update.sessionId ?? before.sessionId,
+            policyVersion: before.policyVersion ?? update.policyVersion ?? null,
             outcome: ended?.outcome ?? before.outcome,
             endedAt: ended === null ? null : update.at,
           });
           yield* sql`UPDATE attempts SET state = ${attempt.state}, session_id = ${attempt.sessionId},
-            outcome = ${attempt.outcome}, ended_at = ${attempt.endedAt} WHERE id = ${attempt.id}`;
+            policy_version = ${attempt.policyVersion}, outcome = ${attempt.outcome}, ended_at = ${attempt.endedAt}
+            WHERE id = ${attempt.id}`;
           const task = new Task({ ...owner, updatedAt: update.at, revision });
           yield* saveTask(task);
           return {
@@ -535,7 +541,7 @@ export const TaskRepositoryLive = Layer.effect(
               id: CheckpointId.make(crypto.randomUUID()),
               taskId: task.id,
               attemptId: task.currentAttemptId,
-              source: "unplanned",
+              source: "automatic",
               kind: "blocker",
               milestoneId: null,
               summary: reason,

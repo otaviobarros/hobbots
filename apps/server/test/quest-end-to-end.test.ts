@@ -618,6 +618,10 @@ describe("the Black Friday Quest end to end", () => {
     expect(replies).not.toContain("Twelve keywords");
     expect(rook.result?.summary).toBe("Ads ready around 'doorbuster'");
 
+    // Every Attempt names the policy its tools ran under, and the root's says how it ended (#702).
+    expect(done.attempts.filter((each) => each.policyVersion?.startsWith("r") !== true)).toEqual([]);
+    expect(done.attempts.filter((each) => each.outcome === null)).toEqual([]);
+
     // Nothing is left for anyone to deal with.
     await run(nothingOpen);
   }, 60_000);
