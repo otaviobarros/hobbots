@@ -38,8 +38,11 @@ function QuestButton({ tree, onOpen }: { tree: TaskTree; onOpen: (taskId: TaskId
       className="flex h-9 min-w-0 cursor-pointer items-center gap-2.5 rounded-dot border-(length:--edge) border-line bg-card ps-3 pe-1.5 text-detail text-text-strong hover:bg-hover"
     >
       <FlagIcon size={16} className="text-star" />
-      {/* A narrow header keeps the strip and the chip, and says the rest to a screen reader only. */}
-      <span className="sr-only max-w-[220px] truncate font-bold @5xl/header:not-sr-only">{taskTitle(card.top)}</span>
+      {/* A narrow header keeps the strip and the chip, and says the rest to a screen reader only.
+          not-sr-only lets text wrap again, so the title truncates on a span of its own (#874). */}
+      <span className="sr-only min-w-0 font-bold @5xl/header:not-sr-only">
+        <span className="block max-w-[220px] truncate">{taskTitle(card.top)}</span>
+      </span>
       <StatusStrip statuses={segments} small className="shrink-0" />
       {total > 0 && (
         <span className="sr-only whitespace-nowrap text-text-secondary @4xl/header:not-sr-only">

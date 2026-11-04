@@ -49,10 +49,12 @@ export function HobsLayout({
   const drafts = useNoteDrafts();
   useThreadKeys(hobId, threadId);
   const benchOpen = threadId !== undefined && workbench !== undefined;
+  const sheetOpen = threadId !== undefined && !benchOpen && (taskId ?? questId) !== undefined;
 
   return (
     <div className="flex min-w-0 flex-1">
-      <div className="relative flex min-w-0 flex-1">
+      {/* The chat reads data-sheet to keep its transcript clear of the open work sheet. */}
+      <div className="group/work relative flex min-w-0 flex-1" data-sheet={sheetOpen ? "open" : undefined}>
         {/* The Workbench covers the chat without unmounting it, so going back finds the same scroll
             position and unsent message; meanwhile the chat is hidden from sight and focus. */}
         <div className={cn("flex min-w-0 flex-1", benchOpen && "invisible")} inert={benchOpen}>

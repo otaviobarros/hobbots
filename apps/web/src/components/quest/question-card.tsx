@@ -45,8 +45,10 @@ export function QuestionCard({
         <HobSprite hob={asker} size={20} state={open ? "needs-you" : "idle"} />
         <span className="lbl text-lantern">{copy.asks({ name: asker.name })}</span>
         {task !== undefined && (
-          <Button variant="text" size="xs" onClick={() => onOpen(task.id)}>
-            {copy.about({ title: taskTitle(task) })}
+          // A brief can run to a paragraph with a long path in it: the line wraps inside the card and
+          // stops at two lines, and the whole brief is in the task it opens (#874).
+          <Button variant="text" size="xs" className="max-w-full shrink" onClick={() => onOpen(task.id)}>
+            <span className="line-clamp-2 text-start whitespace-normal">{copy.about({ title: taskTitle(task) })}</span>
           </Button>
         )}
       </div>

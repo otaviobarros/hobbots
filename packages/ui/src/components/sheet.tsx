@@ -37,10 +37,11 @@ function SheetContent({
     <SheetPrimitive.Portal container={container}>
       {/* No dimming: the chat stays readable beside the sheet. The overlay only catches the click that closes it. */}
       <SheetPrimitive.Overlay data-slot="sheet-overlay" className="fixed inset-0 z-50" />
+      {/* Long words and paths wrap inside the sheet, so nothing in it is wider than the sheet. */}
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed inset-y-3 end-3 z-50 flex w-[calc(100vw-24px)] max-w-sheet flex-col gap-3.5 overflow-y-auto *:shrink-0 cut border-(length:--edge) border-line bg-panel p-[18px] text-text-strong shadow-sheet outline-none",
+          "fixed inset-y-3 end-3 z-50 flex w-[calc(100vw-24px)] max-w-sheet flex-col gap-3.5 overflow-y-auto *:shrink-0 cut border-(length:--edge) border-line bg-panel p-[18px] text-text-strong wrap-anywhere shadow-sheet outline-none",
           "duration-(--dur-sheet) ease-(--ease-ui) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-end-6 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-end-6",
           className,
         )}
