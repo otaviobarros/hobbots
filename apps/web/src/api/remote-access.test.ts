@@ -1,7 +1,7 @@
 import type { RemoteAccessStatus } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { serveAsk } from "../components/devices/https-settings.tsx";
-import { remoteAccessWhy, remoteAddress } from "../components/remote-access-settings.tsx";
+import { remoteAccessWhy, remoteAddress } from "../components/remote-access/remote-access-settings.tsx";
 import { movedPage, plainPage, securePage } from "./remote-access.ts";
 
 const status = (change: Partial<RemoteAccessStatus>): RemoteAccessStatus => ({

@@ -4,7 +4,7 @@ import { useId } from "react";
 import { type BrainChoice, pickRuntime } from "../../api/first-hob.ts";
 import { PROVIDER_MAKERS, PROVIDER_MARKS, PROVIDER_NAMES, PROVIDERS } from "../../lib/providers.ts";
 import { messages } from "../messages.ts";
-import { BlockedProviders, UnavailableProvider } from "../provider-choices.tsx";
+import { BlockedProviders, UnavailableProvider } from "../providers/provider-choices.tsx";
 import { messages as settingsMessages } from "../settings/messages.ts";
 import { PickCard } from "./pick.tsx";
 

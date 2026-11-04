@@ -1,10 +1,10 @@
-/** User-facing copy for a hob's archived threads (STD-I18N-001). */
-const plural = new Intl.PluralRules("en");
+import { plural } from "../../lib/format.ts";
 
+/** User-facing copy for a hob's archived threads (STD-I18N-001). */
 export const messages = {
   entry: "Archived",
   entryLabel: ({ count }: { count: number }) =>
-    plural.select(count) === "one" ? "Archived, 1 thread" : `Archived, ${count} threads`,
+    plural(count, { one: "Archived, 1 thread", other: `Archived, ${count} threads` }),
   restore: "Restore",
   restoring: "Restoring…",
   restoreThread: ({ title }: { title: string }) => `Restore “${title}”`,

@@ -1,6 +1,6 @@
 import type { Agent } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 
 /**
  * Who an Inbox entry comes from, on a tile: the hob's portrait, or a screen on a stand for a device

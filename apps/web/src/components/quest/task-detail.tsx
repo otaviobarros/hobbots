@@ -2,7 +2,7 @@ import { type Question, saysMore, type Task, type TaskId, type TaskTree } from "
 import type { ReactNode } from "react";
 import { formatTime } from "../../lib/time.ts";
 import { TaskApprovals, useShownApprovals } from "../approvals/task-approvals.tsx";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { roomStatus, roomStatusLabel, roomTone } from "./control-room.ts";
 import { messages } from "./messages.ts";
 import { StatusDot, StatusTag } from "./status-dot.tsx";

@@ -9,7 +9,7 @@ import type { HobState } from "../../lib/hob-state.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { HobStateTag } from "../hob-page/hob-hero.tsx";
 import { doingOf, stateTag } from "../hob-page/hob-page-model.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { cardLine, lastChat } from "./hobs-page-model.ts";
 import { messages } from "./messages.ts";
 
@@ -58,7 +58,7 @@ export function HobCard({
       <span className={door}>
         <HobSprite hob={hob} size={64} state={state} className="z-[1] -mb-0.5" />
         <span aria-hidden className={ground} />
-        <span className="absolute top-3 right-3">
+        <span className="absolute top-3 end-3">
           <HobStateTag state={state} fresh={fresh} />
         </span>
       </span>

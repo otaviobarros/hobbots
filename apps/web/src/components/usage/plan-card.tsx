@@ -23,7 +23,7 @@ import {
   refillOf,
   reportedCredits,
 } from "../../lib/usage.ts";
-import { RuntimeTile } from "../brain-picker.tsx";
+import { RuntimeTile } from "../providers/brain-picker.tsx";
 import { messages } from "./messages.ts";
 import { leftText, refillSentence, windowName } from "./plan-summary.ts";
 

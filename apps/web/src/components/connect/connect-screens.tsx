@@ -2,7 +2,7 @@ import type { AddressRefusal, ConnectEnd, WaitingView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { type FormEvent, type ReactNode, useId } from "react";
 import { formatTime } from "../../lib/time.ts";
-import { OnboardingFrame } from "../onboarding-frame.tsx";
+import { OnboardingFrame } from "../onboarding/onboarding-frame.tsx";
 import { groupedCode } from "../pairing/device-request-model.ts";
 import { endedText, refusalText, type SetupBridge } from "./connect-model.ts";
 import { FoundHubs } from "./found-hubs.tsx";

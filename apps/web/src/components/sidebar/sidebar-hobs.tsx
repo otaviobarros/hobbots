@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { useActivity } from "../../api/activity.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { HobCard } from "./hob-card.tsx";
 import { type SidebarState, sidebarState } from "./hob-mark.ts";

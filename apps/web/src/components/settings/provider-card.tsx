@@ -3,9 +3,9 @@ import { Badge } from "@hobbots/ui/components/badge";
 import { useQuery } from "@tanstack/react-query";
 import { runtimesQuery } from "../../api/queries.ts";
 import { PROVIDER_MARKS } from "../../lib/providers.ts";
-import { EnforcementList } from "../enforcement.tsx";
+import { EnforcementList } from "../hob-profile/enforcement.tsx";
 import { messages as sharedMessages } from "../messages.ts";
-import { ProviderFixActions, providerFix } from "../provider-fix.tsx";
+import { ProviderFixActions, providerFix } from "../providers/provider-fix.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.providers;

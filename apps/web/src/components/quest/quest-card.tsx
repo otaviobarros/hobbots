@@ -4,7 +4,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useBlockers } from "../../api/blockers.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
 import { blockersOn } from "../blockers/blocker-model.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import type { HobLookup } from "./use-work.ts";

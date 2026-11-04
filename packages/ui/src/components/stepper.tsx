@@ -87,7 +87,7 @@ function StepperStep({
         <button
           type="button"
           onClick={onPick}
-          className={cn(row, "cursor-pointer border-0 bg-transparent text-left hover:bg-hover hover:text-text-strong")}
+          className={cn(row, "cursor-pointer border-0 bg-transparent text-start hover:bg-hover hover:text-text-strong")}
         >
           {body}
         </button>

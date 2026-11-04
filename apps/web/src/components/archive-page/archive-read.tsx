@@ -12,8 +12,8 @@ import {
   threadsQuery,
 } from "../../api/queries.ts";
 import { formatDay, formatWhen } from "../../lib/time.ts";
-import { HobSprite } from "../hob-sprite.tsx";
-import { MessageRow } from "../message-row.tsx";
+import { MessageRow } from "../chat/message-row.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { useArchiveActions } from "./archive-notices.tsx";
 import {
   ArchiveFrame,

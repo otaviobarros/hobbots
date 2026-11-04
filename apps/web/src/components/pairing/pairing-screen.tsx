@@ -11,8 +11,8 @@ import {
 } from "../../api/pairing.ts";
 import { useFirstRunTheme } from "../../lib/theme.ts";
 import { formatTime } from "../../lib/time.ts";
-import { ChiefMark } from "../chief-mark.tsx";
-import { Stars } from "../scene.tsx";
+import { ChiefMark } from "../chief/chief-mark.tsx";
+import { Stars } from "../scene/scene.tsx";
 import { groupedCode } from "./device-request-model.ts";
 import { messages } from "./messages.ts";
 

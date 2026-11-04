@@ -4,11 +4,10 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { commandLogUrl } from "../../../api/client.ts";
 import { type LiveOutput, liveOutputQuery } from "../../../api/workbench.ts";
-import { formatDuration } from "../../../lib/format.ts";
-import { formatBytes } from "../../../lib/reply-steps.ts";
+import { formatBytes, formatDuration } from "../../../lib/format.ts";
 import { formatTime } from "../../../lib/time.ts";
+import { LogLink, OUTPUT_TEXT, OutputBlock } from "../../chat/tool-output.tsx";
 import { useNow } from "../../inbox/use-now.ts";
-import { LogLink, OUTPUT_TEXT, OutputBlock } from "../../tool-output.tsx";
 import { messages } from "../messages.ts";
 import {
   anyRunning,

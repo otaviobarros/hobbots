@@ -4,7 +4,7 @@ import { Badge } from "@hobbots/ui/components/badge";
 import { cn } from "@hobbots/ui/lib/utils";
 import { formatDay } from "../../lib/format.ts";
 import { type BrainShare, busiestDay, type DayUsage, type HobShare } from "../../lib/usage.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.hobs;

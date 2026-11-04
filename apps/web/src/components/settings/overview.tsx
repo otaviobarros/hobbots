@@ -12,7 +12,7 @@ import { runtimesQuery } from "../../api/queries.ts";
 import { remoteAccessQuery } from "../../api/remote-access.ts";
 import { setupQuery } from "../../api/setup.ts";
 import { useTheme } from "../../lib/theme.ts";
-import { ProviderFixActions, providerFix } from "../provider-fix.tsx";
+import { ProviderFixActions, providerFix } from "../providers/provider-fix.tsx";
 import { messages } from "./messages.ts";
 import {
   type AreaTone,

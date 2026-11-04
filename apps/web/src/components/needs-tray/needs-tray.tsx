@@ -11,7 +11,7 @@ import { decisionErrorText, expiryText } from "../approvals/approval-text.ts";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages as appCopy } from "../messages.ts";
 import { messages as questMessages } from "../quest/messages.ts";
 import { AnswerForm } from "../quest/question-card.tsx";

@@ -120,6 +120,7 @@ export function ArchiveNotices({ children }: { children: ReactNode }) {
         )}
         <ToastViewport
           label={copy.region}
+          // standards-allow STD-I18N-004: left-1/2 with -translate-x-1/2 centers the box, and translate has no logical form
           className="fixed bottom-4 left-1/2 z-50 w-[min(520px,calc(100%-32px))] -translate-x-1/2"
         />
       </ToastProvider>

@@ -954,9 +954,10 @@ export const messages = {
     careful: ({ count, preset }: { count: number; preset: string }) =>
       count === 0
         ? `Same as ${preset}`
-        : new Intl.PluralRules("en").select(count) === "one"
-          ? `1 rule is more careful than ${preset}`
-          : `${count} rules are more careful than ${preset}`,
+        : pluralForm(count, {
+            one: `1 rule is more careful than ${preset}`,
+            other: `${count} rules are more careful than ${preset}`,
+          }),
     changeSafety: "Change safety level",
     groups: { files: "Files", commands: "Commands", internet: "Internet", outside: "Outside its folders" },
     checked: "Checked",

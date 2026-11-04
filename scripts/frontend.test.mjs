@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { check } from "./frontend.mjs";
+import { applyBaseline, check, shrinkBaseline } from "./frontend.mjs";
 
 const files = (texts) => [Object.keys(texts), (file) => texts[file]];
 
@@ -13,9 +13,12 @@ test("kebab-case file names pass", () => {
 });
 
 test("a file name that is not kebab-case fails", () => {
-  const [names, read] = files({ "apps/web/src/components/HobProfile.tsx": "", "packages/ui/src/lib/use_copy.ts": "" });
+  const [names, read] = files({
+    "apps/web/src/components/hob-profile/HobProfile.tsx": "",
+    "packages/ui/src/lib/use_copy.ts": "",
+  });
   assert.deepEqual(check(names, read), [
-    "apps/web/src/components/HobProfile.tsx: name the file in kebab-case (STD-REACT-007)",
+    "apps/web/src/components/hob-profile/HobProfile.tsx: name the file in kebab-case (STD-REACT-007)",
     "packages/ui/src/lib/use_copy.ts: name the file in kebab-case (STD-REACT-007)",
   ]);
 });
@@ -80,4 +83,130 @@ test("a route without an error screen or with a hand-written validateSearch fail
     "apps/web/src/router.tsx:6: give the router a defaultErrorComponent (STD-REACT-014)",
     "apps/web/src/router.tsx:3: pass validateSearch an Effect Schema through Schema.toStandardSchemaV1 (STD-REACT-002)",
   ]);
+});
+
+const long = (count) => Array.from({ length: count }, (_, index) => `export const line${index} = ${index};`).join("\n");
+const nested = (depth) => "<a>".repeat(depth) + "</a>".repeat(depth);
+
+test("a component inside a feature folder passes, one at the root of components fails", () => {
+  const [names, read] = files({
+    "apps/web/src/components/chat/chat-view.tsx": "",
+    "apps/web/src/components/messages.ts": "",
+    "apps/web/src/components/chat-view.tsx": "",
+  });
+  assert.deepEqual(check(names, read), [
+    "apps/web/src/components/chat-view.tsx: move the component into a feature folder under components/ (STD-REACT-005)",
+  ]);
+});
+
+test("a .tsx file over 250 lines or nested over 6 elements fails, unless it opts out", () => {
+  const [names, read] = files({
+    "apps/web/src/components/a/short.tsx": `export const A = () => ${nested(6)};`,
+    "apps/web/src/components/a/long.tsx": long(251),
+    "apps/web/src/components/a/deep.tsx": `export const A = () => (\n  ${nested(7)}\n);`,
+    "apps/web/src/components/a/kept.tsx": `// standards-allow STD-REACT-006: the generated table stays in one file\n${long(300)}`,
+    "apps/web/src/lib/long.ts": long(300),
+  });
+  assert.deepEqual(check(names, read), [
+    "apps/web/src/components/a/long.tsx: split the file, it has 251 lines and the limit is 250 (STD-REACT-006)",
+    "apps/web/src/components/a/deep.tsx:2: move this JSX into a component, it nests 7 elements deep and the limit is 6 (STD-REACT-006)",
+  ]);
+});
+
+test("physical classes fail in className, cn and cva, and logical ones pass", () => {
+  const [names, read] = files({
+    "apps/web/src/components/a/a.tsx": [
+      "export const A = () => (",
+      '  <div className="ms-2 pe-4 start-0 text-end border-s rounded-e mx-2 inset-x-0" title="ml-2">',
+      '    <span className={cn("hover:ml-2", open && "md:!-right-1", { "text-left": open })} />',
+      "  </div>",
+      ");",
+      'const look = cva("pl-2", { variants: { side: { "inline-start": "border-r" } } });',
+      'const marks = { done: { className: "rounded-tl-sm" } };',
+      "// standards-allow STD-I18N-004: the arrow always points right",
+      'export const B = () => <i className="left-0" />;',
+    ].join("\n"),
+  });
+  assert.deepEqual(
+    check(names, read).map((error) => error.replace(/, such as .*/, "")),
+    [
+      'apps/web/src/components/a/a.tsx:3: use the logical class for "hover:ml-2"',
+      'apps/web/src/components/a/a.tsx:3: use the logical class for "md:!-right-1"',
+      'apps/web/src/components/a/a.tsx:3: use the logical class for "text-left"',
+      'apps/web/src/components/a/a.tsx:6: use the logical class for "pl-2"',
+      'apps/web/src/components/a/a.tsx:6: use the logical class for "border-r"',
+      'apps/web/src/components/a/a.tsx:7: use the logical class for "rounded-tl-sm"',
+    ],
+  );
+});
+
+test("a primitive takes layout classes only", () => {
+  const [names, read] = files({
+    "apps/web/src/components/a/a.tsx": [
+      'import { Button } from "@hobbots/ui/components/button";',
+      'import { Dialog } from "@hobbots/ui/components/dialog";',
+      "export const A = () => (",
+      "  <>",
+      '    <Button className={cn("ms-auto w-full md:hidden", wide && "max-w-80")} variant="ghost" />',
+      '    <Dialog.Content className="flex gap-2 bg-rose" />',
+      '    <div className="bg-rose px-6" />',
+      "  </>",
+      ");",
+    ].join("\n"),
+  });
+  assert.deepEqual(check(names, read), [
+    'apps/web/src/components/a/a.tsx:6: give Dialog.Content a variant for "flex gap-2 bg-rose", a className passed to a primitive holds layout classes only (STD-UI-010)',
+  ]);
+});
+
+test("a feature component with a className prop fails, a primitive may take one", () => {
+  const [names, read] = files({
+    "apps/web/src/components/a/a.tsx": [
+      "type CardProps = { title: string; className?: string };",
+      "export function Card({ title }: CardProps) { return <p>{title}</p>; }",
+      "export const Tag = ({ className }: { className: string }) => <i className={className} />;",
+      'const marks = { done: { text: "!", className: "text-lantern" } };',
+    ].join("\n"),
+    "packages/ui/src/components/badge.tsx":
+      "export function Badge({ className }: { className?: string }) { return <i className={className} />; }",
+  });
+  assert.deepEqual(check(names, read), [
+    "apps/web/src/components/a/a.tsx:1: take the className prop off CardProps, feature components set their own look (STD-UI-010)",
+    "apps/web/src/components/a/a.tsx:3: take the className prop off Tag, feature components set their own look (STD-UI-010)",
+  ]);
+});
+
+test("dates and numbers are formatted only in the shared formatters", () => {
+  const [names, read] = files({
+    "apps/web/src/lib/format.ts": "export const f = (n) => new Intl.NumberFormat().format(n);",
+    "apps/web/src/api/a.ts": [
+      "export const a = (d) => d.toLocaleDateString();",
+      "export const b = (n) => new Intl.NumberFormat().format(n);",
+      "export const c = (s) => s.toLocaleLowerCase();",
+    ].join("\n"),
+    "apps/desktop/src/main/a.ts": "export const d = (n) => n.toLocaleString();",
+  });
+  assert.deepEqual(check(names, read), [
+    "apps/web/src/api/a.ts:1: format through apps/web/src/lib/format.ts or time.ts (STD-I18N-003)",
+    "apps/web/src/api/a.ts:2: format through apps/web/src/lib/format.ts or time.ts (STD-I18N-003)",
+    "apps/desktop/src/main/a.ts:1: format through apps/web/src/lib/format.ts or time.ts (STD-I18N-003)",
+  ]);
+});
+
+test("the baseline lets listed problems pass, fails on a new one and asks to shrink when one is fixed", () => {
+  const rule = "(STD-REACT-006)";
+  const baseline = { "STD-REACT-006": { "a.tsx": 1, "b.tsx": 2 } };
+  assert.deepEqual(
+    applyBaseline([`a.tsx: long ${rule}`, `b.tsx: long ${rule}`, `b.tsx:3: deep ${rule}`], baseline),
+    [],
+  );
+  assert.deepEqual(applyBaseline([`a.tsx: long ${rule}`, `a.tsx:9: deep ${rule}`, `c.tsx: long ${rule}`], baseline), [
+    `a.tsx: long ${rule}`,
+    `a.tsx:9: deep ${rule}`,
+    `c.tsx: long ${rule}`,
+    'b.tsx: 0 of 2 baselined STD-REACT-006 problems are left, run "node scripts/check-frontend.mjs --shrink-baseline"',
+  ]);
+  assert.deepEqual(shrinkBaseline([`a.tsx: long ${rule}`, `a.tsx:2: deep ${rule}`], baseline), {
+    "STD-REACT-006": { "a.tsx": 1 },
+  });
 });

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { agentsQuery } from "../../api/queries.ts";
 import { type TaskControl, useTaskControl } from "../../api/task-controls.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import {
   attemptCount,
   cancelOutcome,

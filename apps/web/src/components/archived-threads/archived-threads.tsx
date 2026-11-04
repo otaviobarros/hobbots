@@ -10,11 +10,11 @@ import { ApiError } from "../../api/client.ts";
 import { readDraft } from "../../api/drafts.ts";
 import { agentsQuery, archivedThreadsQuery, messagesQuery, threadsQuery } from "../../api/queries.ts";
 import { formatDay } from "../../lib/time.ts";
-import { ChatView } from "../chat-view.tsx";
-import { HobSprite } from "../hob-sprite.tsx";
-import { MessageRow, messageElementId } from "../message-row.tsx";
+import { ChatView } from "../chat/chat-view.tsx";
+import { MessageRow, messageElementId } from "../chat/message-row.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages as chatCopy } from "../messages.ts";
-import { ReconnectingCard } from "../reconnecting.tsx";
+import { ReconnectingCard } from "../shell/reconnecting.tsx";
 import { messages } from "./messages.ts";
 
 /** What the chat workspace gives whatever fills its middle: the hob, the thread and the side panels' state. */

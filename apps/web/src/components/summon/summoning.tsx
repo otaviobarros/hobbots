@@ -1,6 +1,6 @@
 import type { Agent } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.summoning;

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { agentsQuery } from "../../api/queries.ts";
 import { useHobQuestWork } from "../../api/quest-work.ts";
 import { type WorkTone, workTone } from "../../lib/quest-work.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { QuestLink } from "./quest-link.tsx";
 

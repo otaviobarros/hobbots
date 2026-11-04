@@ -10,7 +10,7 @@ import { useHobQuestWork } from "../../api/quest-work.ts";
 import { threadTasksQuery } from "../../api/tasks.ts";
 import type { HobState } from "../../lib/hob-state.ts";
 import { doingOf, stateTag } from "../hob-page/hob-page-model.ts";
-import { HobSprite, stateLabel } from "../hob-sprite.tsx";
+import { HobSprite, stateLabel } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
 import { peekBench, peekThread } from "./home-model.ts";
 

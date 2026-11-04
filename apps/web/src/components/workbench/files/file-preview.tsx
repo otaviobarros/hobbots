@@ -3,7 +3,7 @@ import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { taskFileTextQuery, taskFileUrl } from "../../../api/workbench.ts";
-import { formatBytes } from "../../../lib/reply-steps.ts";
+import { formatBytes } from "../../../lib/format.ts";
 import { ReplyMarkdown } from "../../markdown/reply-markdown.tsx";
 import { fileName, fileView } from "./files-model.ts";
 import { messages } from "./messages.ts";

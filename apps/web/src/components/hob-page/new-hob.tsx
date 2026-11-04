@@ -1,7 +1,7 @@
 import type { Agent } from "@hobbots/domain";
 import { Link } from "@tanstack/react-router";
 import { writeDraft } from "../../api/drafts.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { helloOf, startersOf } from "./hob-page-model.ts";
 import { messages } from "./messages.ts";
 

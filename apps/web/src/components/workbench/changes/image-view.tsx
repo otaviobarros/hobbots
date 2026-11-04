@@ -1,7 +1,7 @@
 import type { AttemptId, FileVersion } from "@hobbots/domain";
 import { useState } from "react";
 import { attemptContentUrl } from "../../../api/workbench.ts";
-import { formatBytes } from "../../../lib/reply-steps.ts";
+import { formatBytes } from "../../../lib/format.ts";
 import { messages } from "./messages.ts";
 import { NotKeptNote } from "./not-kept-note.tsx";
 
