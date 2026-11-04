@@ -22,7 +22,7 @@ const copy = {
 };
 
 const OPTION =
-  "flex min-w-0 cursor-pointer items-start gap-3 rounded-control bg-card p-3 text-left text-text-strong transition-colors duration-150 hover:bg-hover has-checked:shadow-[inset_0_0_0_2px_var(--color-focus-ring)] focus-ring-within";
+  "flex min-w-0 cursor-pointer items-start gap-3 rounded-control bg-card p-3 text-left text-text-strong transition-colors duration-(--dur-fade) hover:bg-hover has-checked:shadow-[inset_0_0_0_2px_var(--color-focus-ring)] focus-ring-within";
 
 /**
  * The role dialog, for Summon and for the profile's Change role: the families on the left with

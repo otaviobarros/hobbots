@@ -5,6 +5,7 @@ export const messages = {
   open: "Search this chat",
   label: "Search this chat",
   close: "Close search",
+  clear: "Clear the search",
   matches: "Matches in this chat",
   count: ({ count }: { count: number }) => plural(count, { one: "1 message", other: `${formatCount(count)} messages` }),
   nothing: ({ query }: { query: string }) => `Nothing in this chat says “${query}”.`,

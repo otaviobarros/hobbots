@@ -53,16 +53,5 @@ export const isArchiveKey = (event: KeyLike): boolean =>
 export const isUndoKey = (event: KeyLike): boolean =>
   event.code === "KeyZ" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
 
-/** Whether the element takes text, so ⌘Z there undoes typing rather than an archive. */
-export const isTextField = (element: Element | null): boolean => {
-  if (element === null) return false;
-  if ((element as { isContentEditable?: boolean }).isContentEditable === true) return true;
-  const tag = element.tagName;
-  if (tag === "TEXTAREA") return true;
-  if (tag !== "INPUT") return false;
-  const type = (element as HTMLInputElement).type;
-  return !["button", "checkbox", "radio", "submit", "reset", "range", "color", "file"].includes(type);
-};
-
 /** Whether this is a Mac, whose shortcuts read ⌃⌘A and ⌘Z. */
 export const isMac = (): boolean => /Mac|iPhone|iPad/.test(globalThis.navigator?.userAgent ?? "");

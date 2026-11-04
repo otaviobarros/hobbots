@@ -237,6 +237,8 @@ export const messages = {
         { keys: ["↑"], does: "Bring back the last message you sent, in an empty message box" },
         { keys: mac ? ["⌃⌘A"] : ["Ctrl+Alt+A"], does: "Archive the open chat" },
         { keys: mac ? ["⌘Z"] : ["Ctrl+Z"], does: "Undo an archive while its notice shows" },
+        { keys: ["↑", "↓", "J", "K"], does: "Move through Needs you, in the Inbox" },
+        { keys: ["A", "D"], does: "Allow once or deny the request shown, in the Inbox" },
         { keys: ["Esc"], does: "Close a dialog, menu or question" },
       ] as const,
   },

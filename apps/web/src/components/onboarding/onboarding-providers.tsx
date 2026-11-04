@@ -125,7 +125,7 @@ function Busy({ children }: { children: ReactNode }) {
     <span className="flex items-center gap-2 text-ui text-text-secondary">
       <span
         aria-hidden
-        className="size-3.5 animate-spin rounded-full border-2 border-line-2 border-t-moonlight motion-reduce:animate-none"
+        className="size-3.5 animate-hb-spin rounded-full border-2 border-line-2 border-t-moonlight motion-reduce:animate-none"
       />
       {children}
     </span>

@@ -12,6 +12,7 @@ import {
   MessageId,
   Question,
   QuestionId,
+  Task,
   type TaskId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
@@ -231,12 +232,53 @@ describe("summaryOf", () => {
     expect(summary.open.questions.map((each) => each.text)).toEqual(["Which tone?"]);
     expect(summary.open.approvals.map((each) => each.taskId)).toEqual([null, BUILD]);
 
+    // The question the task chat holds for you shows there, not again under Still open.
+    const asked = tree({
+      ...withQuestions,
+      questions: [question(CAMPAIGN, ALDRIC, "Short headings?", { recipientId: null })],
+    });
+    const withAsk = summaryOf(asked, campaign, null, null, []);
+    expect(withAsk.open.questions).toEqual([]);
+    expect(withAsk.line).toEqual({ kind: "asks", asker: ALDRIC, earlier: 0 });
+
     // A member's own Summary keeps only what is under it.
     const build = withQuestions.tasks.find((each) => each.id === BUILD) ?? task(BUILD);
     const member = summaryOf(withQuestions, build, null, null, [approval({}), approval({ taskId: BUILD })]);
     expect(member.open.questions).toEqual([]);
     expect(member.open.approvals.map((each) => each.taskId)).toEqual([BUILD]);
     expect(member.asked).toEqual({ brief: "Build the campaign", from: ALDRIC, expected: null });
+  });
+});
+
+describe("summaryOf's line", () => {
+  const lineOf = (state: Task["state"], tries: ReadonlyArray<Attempt>, shown: Attempt | null, result = false) => {
+    const own = new Task({
+      ...task(CAMPAIGN, { state }),
+      result: result ? { summary: "Tidied.", attemptId: tries[0]?.id ?? done.id } : null,
+    });
+    return summaryOf(tree({ tasks: [own], attempts: [...tries] }), own, shown, null, []).line;
+  };
+
+  it("leads with the result, saying which Attempt it came from when another is shown", () => {
+    const first = tryOf(CAMPAIGN, 1);
+    const second = tryOf(CAMPAIGN, 2, "failed");
+    expect(lineOf("completed", [first, second], first, true)).toEqual({
+      kind: "result",
+      summary: "Tidied.",
+      from: null,
+      earlier: 0,
+    });
+    expect(lineOf("completed", [first, second], second, true)).toMatchObject({ kind: "result", from: 1 });
+  });
+
+  it("says where the Attempt shown stands while there is no result, counting the tries before it that ended early", () => {
+    const failed = tryOf(CAMPAIGN, 1, "failed");
+    const running = tryOf(CAMPAIGN, 2, "running");
+    expect(lineOf("queued", [], null)).toEqual({ kind: "not-started", earlier: 0 });
+    expect(lineOf("active", [failed, running], running)).toEqual({ kind: "working", attempt: 2, earlier: 1 });
+    expect(lineOf("waiting", [failed, running], running)).toEqual({ kind: "waiting", attempt: 2, earlier: 1 });
+    expect(lineOf("failed", [failed], failed)).toEqual({ kind: "ended", attempt: 1, mark: "failed", earlier: 0 });
+    expect(lineOf("cancelled", [], null)).toEqual({ kind: "no-result", earlier: 0 });
   });
 });
 

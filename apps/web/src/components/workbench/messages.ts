@@ -106,6 +106,25 @@ export const messages = {
   },
   names: (names: ReadonlyArray<string>) => formatList(names),
   summary: {
+    line: {
+      notStarted: ({ name }: { name: string }) => `${name} has not started yet.`,
+      asks: ({ name }: { name: string }) => `${name} is waiting on your answer in the task chat.`,
+      working: ({ name, number }: { name: string; number: number }) => `${name} is on attempt ${formatCount(number)}.`,
+      waiting: ({ name, number }: { name: string; number: number }) =>
+        `${name} is on attempt ${formatCount(number)} and is waiting before going on.`,
+      ended: {
+        failed: ({ number }: { number: number }) => `Attempt ${formatCount(number)} failed.`,
+        cancelled: ({ number }: { number: number }) => `Attempt ${formatCount(number)} stopped before it finished.`,
+        unresolved: ({ number }: { number: number }) =>
+          `Hobbots asked attempt ${formatCount(number)} to stop but could not confirm that it did.`,
+      },
+      earlier: ({ count }: { count: number }) =>
+        plural(count, {
+          one: "An earlier try ended early.",
+          other: `${formatCount(count)} earlier tries ended early.`,
+        }),
+    },
+    details: "Details",
     asked: "What you asked",
     askedBy: ({ name }: { name: string }) => `What ${name} asked`,
     expected: ({ text }: { text: string }) => `Expected back: ${text}`,
@@ -168,7 +187,6 @@ export const messages = {
     answerInChat: "Answer in the chat",
     decideInChat: "Decide in the chat",
     waitingList: "What the hobs on this task are waiting on",
-    result: "The result",
     noResult: "No result yet.",
     resultFrom: ({ number }: { number: number }) => `From attempt ${formatCount(number)}.`,
     tabs: "Open the other views",
@@ -192,7 +210,6 @@ export const messages = {
     answerInstead: ({ name }: { name: string }) => `Answer ${name} instead`,
     noteNotAnswerHint: ({ lead, asker }: { lead: string; asker: string }) =>
       `This goes to ${lead} as a note. It does not answer ${asker}.`,
-    close: "Close the chat",
     notes: "Your notes on this task",
     empty: ({ name }: { name: string }) => `Nothing sent about this task yet. ${name} reads what you send here.`,
     hintOwner: ({ name }: { name: string }) => `Goes to ${name} as a note on this task.`,

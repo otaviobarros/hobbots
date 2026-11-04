@@ -87,7 +87,7 @@ function ApprovalDetail({
           [copy.detail.decided, request.decidedAt === null ? undefined : formatWhen(request.decidedAt, now)],
         ]}
       />
-      <ApprovalCard approval={request} hob={hob} via="inbox" />
+      <ApprovalCard approval={request} hob={hob} via="inbox" keys />
     </DetailFrame>
   );
 }

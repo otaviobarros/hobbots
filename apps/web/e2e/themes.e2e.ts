@@ -158,4 +158,14 @@ test("[TC-UX-124] This app picks the look, Dark or Light and the text size by ha
   await expect(page.locator("html")).toHaveAttribute("data-text-size", "larger");
   await page.getByRole("region", { name: "Appearance" }).getByRole("radio", { name: "Standard" }).click();
   await expect(page.locator("html")).not.toHaveAttribute("data-text-size", /.*/);
+
+  // The arrow keys pick the segment they move to, as in every segmented control.
+  const sizes = page.getByRole("region", { name: "Appearance" }).getByRole("radiogroup", { name: "Text size" });
+  await page.keyboard.press("ArrowRight");
+  await expect(sizes.getByRole("radio", { name: "Larger" })).toBeFocused();
+  await expect(sizes.getByRole("radio", { name: "Larger" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-text-size", "larger");
+  await page.keyboard.press("ArrowLeft");
+  await expect(sizes.getByRole("radio", { name: "Standard" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("html")).not.toHaveAttribute("data-text-size", /.*/);
 });

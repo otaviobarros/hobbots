@@ -1,4 +1,3 @@
-import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
 import type { Agent, Thread } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
@@ -10,6 +9,7 @@ import { useState } from "react";
 import { type ActivityMap, useActivity } from "../../api/activity.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { useQuestWork } from "../../api/quest-work.ts";
+import { HOME_VILLAGE, HOME_VILLAGE_PALETTE } from "../../art/home-village.ts";
 import { type CrewGroup, groupOf, SCENE_LIMIT, splitScene } from "../../lib/crew.ts";
 import { sceneOrder, withRequests } from "../../lib/hob-state.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
@@ -59,20 +59,16 @@ export function Home() {
     <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <section
         aria-label={messages.home.landmark}
-        className="@container relative h-[262px] flex-none overflow-hidden border-b-4 border-line bg-panel"
+        className="@container relative h-[262px] flex-none overflow-hidden bg-scene-sky"
       >
-        <Stars count={28} height={190} />
-        <PixelArt
-          rows={MOON}
-          palette={MOON_PALETTE}
-          size={60}
-          className={cn("absolute top-[26px] animate-hb-flicker", many ? "end-[230px]" : "end-[60px]")}
-        />
-        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[62px] border-t-[6px] border-line-2 bg-line" />
-
+        <Sky />
         <div className="absolute top-[34px] start-9 flex max-w-[470px] flex-col gap-2.5">
-          <h1 className="m-0 font-heading text-[34px] font-bold text-moonlight">{greeting()}</h1>
-          <p className="m-0 text-[17px] leading-normal">{summary(crew.length, busy, paused, hall, crew[0]?.hob)}</p>
+          <h1 className="m-0 font-heading text-[34px] font-bold text-scene-title text-shadow-[0_2px_0_var(--color-scene-sky)]">
+            {greeting()}
+          </h1>
+          <p className="m-0 text-[17px] leading-normal text-scene-text">
+            {summary(crew.length, busy, paused, hall, crew[0]?.hob)}
+          </p>
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <FilterChips
               aria-label={messages.home.chips.label}
@@ -80,7 +76,7 @@ export function Home() {
               onValueChange={(value) => setPicked(value as HobFilter)}
             >
               {chips.map(({ value, count }) => (
-                <FilterChip key={value} value={value} count={count}>
+                <FilterChip key={value} value={value} count={count} className="data-[state=off]:bg-card">
                   {messages.home.chips[value]}
                 </FilterChip>
               ))}
@@ -89,9 +85,7 @@ export function Home() {
           </div>
         </div>
 
-        <div
-          className={cn("absolute bottom-[34px] flex items-end gap-3 @5xl:gap-7", many ? "end-[200px]" : "end-[150px]")}
-        >
+        <div className={cn("absolute bottom-2.5 flex items-end gap-3 @5xl:gap-7", many ? "end-[200px]" : "end-12")}>
           {stage.map(({ hob, state, threads }) => (
             <StageHob
               key={hob.id}
@@ -116,6 +110,36 @@ export function Home() {
         <PlanLine />
       </div>
     </main>
+  );
+}
+
+/**
+ * Home's night sky and village, in every theme: the village with its lit windows and the lane the hobs
+ * stand in, a shade on the left so the greeting reads, and the moon over the stars, or the sun in the
+ * light themes.
+ */
+function Sky() {
+  return (
+    <>
+      <PixelArt
+        rows={HOME_VILLAGE}
+        palette={HOME_VILLAGE_PALETTE}
+        size={160}
+        preserveAspectRatio="xMidYMax slice"
+        className="absolute inset-0 size-full"
+      />
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-linear-to-r from-scene-sky/82 from-0% via-scene-sky/55 via-32% to-transparent to-55%"
+      />
+      <div aria-hidden className="hidden dark:contents">
+        <Stars count={16} height={100} tone="moonlight" />
+      </div>
+      <div
+        aria-hidden
+        className="absolute end-12 top-7 size-10 rounded-dot bg-scene-sun shadow-[0_0_0_8px_color-mix(in_srgb,var(--color-scene-sun)_25%,transparent)] dark:bg-moonlight dark:shadow-[0_0_0_8px_color-mix(in_srgb,var(--color-moonlight)_8%,transparent)]"
+      />
+    </>
   );
 }
 

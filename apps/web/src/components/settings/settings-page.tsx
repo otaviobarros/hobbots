@@ -57,7 +57,7 @@ function SectionHeader({ section, titleId }: { section: SettingsSection; titleId
 }
 
 const rowClass =
-  "flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-ui text-text-secondary no-underline transition-colors duration-150 hover:bg-hover hover:text-text-strong";
+  "flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-ui text-text-secondary no-underline transition-colors duration-(--dur-fade) hover:bg-hover hover:text-text-strong";
 
 /** The section list, with Find a setting above it; a section with something broken carries a rose dot. */
 function SettingsNav({ current }: { current: SettingsSection | null }) {

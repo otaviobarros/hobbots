@@ -5,7 +5,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockersQuery } from "../../api/blockers.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
@@ -17,10 +17,13 @@ import { EntryDetail } from "./inbox-detail.tsx";
 import { entryAsker, type InboxEntry, namesRequest, needsEntries, selectedEntry } from "./inbox-entries.ts";
 import { InboxHistory } from "./inbox-history.tsx";
 import { type InboxTab, type InboxView, isInboxView, pendingCount, tabRequests } from "./inbox-items.ts";
+import { InboxKeyHints } from "./inbox-key-hints.tsx";
+import { shownOrder } from "./inbox-keys.ts";
 import { InboxList, InboxTabs, InboxViewPicker } from "./inbox-list.tsx";
 import { messages } from "./messages.ts";
 import { type ShownHold, useWithShown } from "./shown-request.ts";
 import { type InboxDirectory, useEntryQuests, useInboxDirectory } from "./use-inbox-directory.ts";
+import { useListKeys } from "./use-list-keys.ts";
 import { useNow } from "./use-now.ts";
 
 const copy = messages;
@@ -105,6 +108,8 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
   // The entry shown goes into the address as soon as it shows, so it stays in view while it is
   // decided here or elsewhere, and a click never lands on an entry that took its place.
   const shownKey = selected?.key;
+  const list = useRef<HTMLUListElement>(null);
+  useListKeys(shownOrder(entries, view, questOf), shownKey, list);
   useEffect(() => {
     if (shownKey !== undefined && shownKey !== requestId) {
       void navigate({ to: "/inbox", search: { tab, request: shownKey }, replace: true });
@@ -134,9 +139,11 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
               selectedKey={selected?.key}
               directory={directory}
               now={now}
+              listRef={list}
             />
           )}
         </InboxTabs>
+        {tab === "needs" && entries.length > 0 && <InboxKeyHints />}
       </aside>
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {tab === "history" ? (

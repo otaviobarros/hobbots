@@ -96,7 +96,7 @@ function FenceArt({ height }: { height: number }) {
     >
       <span className="absolute inset-x-0 bottom-0 h-2 border-t-2 border-scene-chimney bg-scene-ground" />
       <span
-        className="absolute inset-x-2.5 bottom-2 bg-[repeating-linear-gradient(90deg,var(--color-wood)_0_5px,transparent_5px_11px)] transition-[height] duration-300"
+        className="absolute inset-x-2.5 bottom-2 bg-[repeating-linear-gradient(90deg,var(--color-wood)_0_5px,transparent_5px_11px)] transition-[height] duration-(--dur-sheet)"
         style={{ height }}
       />
     </span>

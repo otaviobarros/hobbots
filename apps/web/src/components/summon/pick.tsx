@@ -10,10 +10,10 @@ import { RadioLabel, type RadioLabelProps } from "../hob-form/hob-form.tsx";
 const focus = "focus-ring-within";
 
 const CARD =
-  "flex min-w-0 cursor-pointer items-start gap-3 rounded-control bg-card p-3 text-left text-text-strong transition-colors duration-150 hover:bg-hover has-checked:shadow-[inset_0_0_0_2px_var(--color-focus-ring)]";
+  "flex min-w-0 cursor-pointer items-start gap-3 rounded-control bg-card p-3 text-left text-text-strong transition-colors duration-(--dur-fade) hover:bg-hover has-checked:shadow-[inset_0_0_0_2px_var(--color-focus-ring)]";
 
 const CHIP =
-  "inline-flex h-[26px] cursor-pointer items-center rounded-dot border border-line-2 px-2.5 text-detail text-text-secondary transition-colors duration-150 hover:border-control has-checked:border-text-strong has-checked:bg-text-strong has-checked:text-ground";
+  "inline-flex h-[26px] cursor-pointer items-center rounded-dot border border-line-2 px-2.5 text-detail text-text-secondary transition-colors duration-(--dur-fade) hover:border-control has-checked:border-text-strong has-checked:bg-text-strong has-checked:text-ground";
 
 export function PickCard({ className, ...props }: RadioLabelProps) {
   return <RadioLabel {...props} className={cn(CARD, focus, className)} />;

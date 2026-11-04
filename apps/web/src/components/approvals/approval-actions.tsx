@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import type { Decision } from "../../api/approvals.ts";
 import { messages } from "../messages.ts";
 import { canNarrow, offersAlways, type RuleScope, rulesToSave, ruleText, runnerNote } from "./approval-rules.ts";
+import { useDecideKeys } from "./use-decide-keys.ts";
 import { useWorkScope } from "./use-work-scope.ts";
 
 const copy = messages.approval;
@@ -26,7 +27,9 @@ const VARIANTS = {
  * (PE-007). This Task and Always open the exact rule they save, narrowable where the hub allows,
  * before anything is sent. This Task is offered for a request made in a Task, and reads This Quest
  * once a party joins that Task. The `tray` look is the Needs-you tray's: Allow once is the primary
- * button, Deny a secondary one, and a high-risk request's box sits in a rose block.
+ * button, Deny a secondary one, and a high-risk request's box sits in a rose block. With `keys`,
+ * A and D pressed anywhere on the page allow once and open Deny; on a high-risk request A only
+ * moves focus to the box until it is ticked.
  */
 export function ApprovalActions({
   approval,
@@ -34,12 +37,15 @@ export function ApprovalActions({
   pending,
   onDecide,
   look = "card",
+  keys,
 }: {
   approval: ApprovalRequest;
   hob: Pick<Agent, "name">;
   pending: boolean;
   onDecide: (decision: Decision) => void;
   look?: "card" | "tray";
+  /** Whether A and D act on this request from anywhere on the page, as in the Inbox. */
+  keys?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("choose");
   const [confirmed, setConfirmed] = useState(false);
@@ -47,6 +53,7 @@ export function ApprovalActions({
   const denyButton = useRef<HTMLButtonElement>(null);
   const alwaysButton = useRef<HTMLButtonElement>(null);
   const workButton = useRef<HTMLButtonElement>(null);
+  const confirmBox = useRef<HTMLInputElement>(null);
   const work = useWorkScope(approval);
   // The buttons stay enabled while a decision is sent, so they keep keyboard focus; repeats are ignored.
   const send = (decision: Decision) => {
@@ -59,6 +66,12 @@ export function ApprovalActions({
     button.current?.focus();
   };
   const open = (next: Mode) => () => !pending && setMode(next);
+  const allowOnce = () => send({ decision: "approve", confirmed: approval.onceOnly ? confirmed : undefined });
+  useDecideKeys(keys && mode === "choose", (key) => {
+    if (key === "deny") open("deny")();
+    else if (approval.onceOnly && !confirmed) confirmBox.current?.focus();
+    else allowOnce();
+  });
   if (mode === "deny") {
     return (
       <DenyForm
@@ -90,14 +103,11 @@ export function ApprovalActions({
   const variant = VARIANTS[look];
   return (
     <div className="flex flex-col gap-2">
-      {onceOnly && <ConfirmBox name={hob.name} checked={confirmed} onChange={setConfirmed} tray={tray} />}
+      {onceOnly && (
+        <ConfirmBox ref={confirmBox} name={hob.name} checked={confirmed} onChange={setConfirmed} tray={tray} />
+      )}
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant={variant.allow}
-          disabled={onceOnly && !confirmed}
-          aria-disabled={pending}
-          onClick={() => send({ decision: "approve", confirmed: onceOnly ? confirmed : undefined })}
-        >
+        <Button variant={variant.allow} disabled={onceOnly && !confirmed} aria-disabled={pending} onClick={allowOnce}>
           {copy.allowOnce}
         </Button>
         {work !== null && (
@@ -121,11 +131,13 @@ export function ApprovalActions({
 
 /** The check box a high-risk action needs before Allow once. */
 function ConfirmBox({
+  ref,
   name,
   checked,
   onChange,
   tray,
 }: {
+  ref: RefObject<HTMLInputElement | null>;
   name: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -134,6 +146,7 @@ function ConfirmBox({
   const box = (
     <label className="flex cursor-pointer items-center gap-2 text-ui">
       <input
+        ref={ref}
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}

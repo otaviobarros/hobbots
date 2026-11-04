@@ -1,4 +1,4 @@
-import type * as React from "react";
+import * as React from "react";
 import { cn } from "../lib/utils.ts";
 
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "./input-group.tsx";
@@ -10,32 +10,79 @@ type SearchFieldProps = Omit<React.ComponentProps<"input">, "type" | "value" | "
   clearLabel: string;
   /** Esc on an empty field, for example to close a search bar. Esc with text clears it instead. */
   onEscape?: () => void;
-  /** Shown before the clear button, such as a match count or a key hint. */
+  /** Shown before the clear button, such as a match count. */
   trailing?: React.ReactNode;
+  /**
+   * Whether "/" anywhere on the page focuses the field, with the "/" keycap shown while it is
+   * empty. On by default; a field that opens already focused, such as a search bar, turns it off.
+   */
+  slashKey?: boolean;
+  /** Whether text shows a clear button. Turn it off when `trailing` already holds a close button. */
+  clearButton?: boolean;
   /** Classes for the field's frame. Other props go to the input. */
   className?: string;
 };
 
 // Corners, edge width and easing read the theme's skin variables (docs/design/themes.md).
 const frame =
-  "h-auto rounded-control border-[length:var(--edge)] border-line-2 bg-deep transition-colors duration-150 ease-[var(--ease-ui)] hover:border-control dark:bg-deep";
+  "h-auto rounded-control border-[length:var(--edge)] border-line-2 bg-deep transition-colors duration-(--dur-fade) ease-[var(--ease-ui)] hover:border-control dark:bg-deep";
 
 const input = "h-auto py-2 text-ui text-text placeholder:text-label [&::-webkit-search-cancel-button]:appearance-none";
 
 const clear = "size-hit-min rounded-control text-label [clip-path:none] hover:bg-hover hover:text-text-strong";
 
-/** A search input with a magnifier and a clear button. Esc clears the text, then calls `onEscape`. */
+const keycap = "rounded-[4px] border border-line-2 px-[5px] font-sans text-meta leading-4 text-label";
+
+const SLASH = "/";
+
+/** Whether a key press belongs to whatever has focus, so "/" types there instead of jumping. */
+const typingIn = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  (target.isContentEditable || target.closest("input, textarea, select, [contenteditable=true]") !== null);
+
+/**
+ * "/" focuses the field, unless something else takes the key: a field being typed in, a shortcut
+ * with a modifier, another search field that answered first, or a dialog that hides this one.
+ */
+function useSlashFocus(target: React.RefObject<HTMLInputElement | null>, enabled: boolean) {
+  React.useEffect(() => {
+    if (!enabled) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const field = target.current;
+      if (event.key !== SLASH || event.defaultPrevented || field === null || field.disabled) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || typingIn(event.target)) return;
+      if (field.closest("[aria-hidden=true], [inert]") !== null) return;
+      event.preventDefault();
+      field.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [target, enabled]);
+}
+
+/**
+ * A search input with a magnifier, a clear button and the "/" hint. Esc clears the text, then calls
+ * `onEscape`; "/" elsewhere on the page focuses it.
+ */
 function SearchField({
   value,
   onValueChange,
   clearLabel,
   onEscape,
   trailing,
+  slashKey = true,
+  clearButton = true,
   className,
   onKeyDown,
   disabled,
+  ref,
   ...props
 }: SearchFieldProps) {
+  const field = React.useRef<HTMLInputElement>(null);
+  React.useImperativeHandle(ref, () => field.current as HTMLInputElement);
+  useSlashFocus(field, slashKey);
+  const hint = slashKey && value === "" && !disabled;
+  const clears = clearButton && value !== "" && !disabled;
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     onKeyDown?.(event);
     if (event.defaultPrevented || event.key !== "Escape") return;
@@ -49,9 +96,9 @@ function SearchField({
     onValueChange("");
   };
 
-  const handleClear = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleClear = () => {
     onValueChange("");
-    event.currentTarget.closest("[data-slot=input-group]")?.querySelector("input")?.focus();
+    field.current?.focus();
   };
 
   return (
@@ -61,17 +108,25 @@ function SearchField({
       </InputGroupAddon>
       <InputGroupInput
         {...props}
+        ref={field}
         type="search"
+        aria-keyshortcuts={slashKey ? SLASH : undefined}
         value={value}
         disabled={disabled}
         onChange={(event) => onValueChange(event.target.value)}
         onKeyDown={handleKeyDown}
         className={input}
       />
-      {(trailing !== undefined || value !== "") && (
+      {(trailing !== undefined || hint || clears) && (
         <InputGroupAddon align="inline-end" className="gap-1.5 py-0 pe-1 text-label">
           {trailing}
-          {value !== "" && !disabled && (
+          {hint && (
+            // The input names its shortcut with aria-keyshortcuts, so the keycap is only seen.
+            <span aria-hidden="true" className="me-1.5 flex">
+              <kbd className={keycap}>{SLASH}</kbd>
+            </span>
+          )}
+          {clears && (
             <InputGroupButton
               size="icon-xs"
               aria-label={clearLabel}

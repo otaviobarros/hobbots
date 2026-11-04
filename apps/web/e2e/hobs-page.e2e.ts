@@ -84,6 +84,16 @@ test("[TC-UX-089] Your hobs shows every hob as a card, filters by state, finds b
   await main.getByRole("button", { name: "Clear the search" }).click();
   await expect(cards).toHaveCount(24);
 
+  // "/" anywhere on the page jumps to the search, and its keycap says so while it is empty.
+  const find = main.getByRole("searchbox", { name: "Find a hob" });
+  await expect(find).toHaveAttribute("aria-keyshortcuts", "/");
+  await expect(main.locator("kbd", { hasText: "/" })).toBeVisible();
+  await main.getByRole("heading", { name: "Your hobs", level: 1 }).click();
+  await expect(find).not.toBeFocused();
+  await page.keyboard.press("/");
+  await expect(find).toBeFocused();
+  await expect(find).toHaveValue("");
+
   // A card opens the hob's page, and its breadcrumb comes back.
   await main.getByRole("link", { name: "Wick, New" }).click();
   await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Wick}$`));

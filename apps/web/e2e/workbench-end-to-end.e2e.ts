@@ -140,6 +140,7 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
 
   // Summary names what the turn changed and the tabs it used, each one click away.
   const summary = await open("Summary");
+  await summary.getByRole("button", { name: "Details" }).click();
   await expect(summary.getByRole("region", { name: "What you asked" })).toContainText("Write the release notes");
   await expect(summary.getByRole("region", { name: "What it made" }).getByRole("button")).toHaveText([
     /^Added.*CHANGELOG\.md$/,
@@ -187,7 +188,8 @@ test("[TC-UX-063] a Task that changed no file and ran no command greys out Chang
     "BrowserSoon",
   ]);
   const summary = await open("Summary");
-  await expect(summary.getByRole("region", { name: "The result" })).toContainText("Call it Lantern.");
+  // Summary leads with the result.
+  await expect(summary.getByText("Call it Lantern.")).toBeVisible();
   await expect(summary.getByRole("navigation", { name: "Open the other views" }).getByRole("button")).toHaveCount(0);
 
   // Each greyed-out tab still opens, and says in a sentence why it is empty.

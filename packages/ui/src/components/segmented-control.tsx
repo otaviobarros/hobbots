@@ -4,13 +4,16 @@ import * as React from "react";
 import { cn } from "../lib/utils.ts";
 
 // A segmented control (docs/design/ui-ux.md): one choice from a few, on a sunken track. Built from
-// the shadcn Toggle Group, kept to a single choice so one segment is always on.
+// the shadcn Toggle Group, kept to a single choice so one segment is always on. It is a radio group,
+// so selection follows focus: the arrow keys, Home and End pick the segment they move to, as native
+// radios and Radix Radio Group do. Radix moves focus a tick after the key, so the item remembers
+// that a move key started it and picks on the focus that follows.
 //
 // Corners read the `--corner-control` skin variable. The track's corner is the segment's scaled to
 // cover its 3px padding (8px gives 11px), so it stays square when the segment is square.
 
 const segmentVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-control border-0 bg-transparent whitespace-nowrap text-text-secondary transition-colors duration-150 outline-none select-none hover:text-text-strong focus-visible:z-10 focus-visible:shadow-[inset_0_0_0_2px_var(--color-ring)] disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-card data-[state=on]:text-text-strong data-[state=on]:shadow-segment data-[state=on]:focus-visible:shadow-[inset_0_0_0_2px_var(--color-ring)] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-control border-0 bg-transparent whitespace-nowrap text-text-secondary transition-colors duration-(--dur-fade) outline-none select-none hover:text-text-strong focus-visible:z-10 focus-visible:shadow-[inset_0_0_0_2px_var(--color-ring)] disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-card data-[state=on]:text-text-strong data-[state=on]:shadow-segment data-[state=on]:focus-visible:shadow-[inset_0_0_0_2px_var(--color-ring)] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       size: {
@@ -24,7 +27,22 @@ const segmentVariants = cva(
 
 type SegmentSize = VariantProps<typeof segmentVariants>["size"];
 
-const SegmentedControlContext = React.createContext<{ size: SegmentSize }>({ size: "default" });
+// The keys Radix's roving focus moves between segments with.
+const MOVE_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
+
+type SegmentedControlContextValue = {
+  size: SegmentSize;
+  /** Picks a segment the keyboard moved focus to. */
+  pick: (value: string) => void;
+  /** Set by a move key until the focus it causes, so focus from a click or Tab does not pick. */
+  moving: React.RefObject<boolean>;
+};
+
+const SegmentedControlContext = React.createContext<SegmentedControlContextValue>({
+  size: "default",
+  pick: () => {},
+  moving: { current: false },
+});
 
 type SegmentedControlProps<Value extends string> = Omit<
   React.ComponentProps<typeof ToggleGroup.Root>,
@@ -50,6 +68,10 @@ function SegmentedControl<Value extends string>({
   children,
   ...props
 }: SegmentedControlProps<Value>) {
+  const moving = React.useRef(false);
+  const pick = (next: string) => {
+    if (next !== value) onValueChange(next as Value);
+  };
   return (
     <ToggleGroup.Root
       data-slot="segmented-control"
@@ -67,17 +89,38 @@ function SegmentedControl<Value extends string>({
       )}
       {...props}
     >
-      <SegmentedControlContext.Provider value={{ size }}>{children}</SegmentedControlContext.Provider>
+      <SegmentedControlContext.Provider value={{ size, pick, moving }}>{children}</SegmentedControlContext.Provider>
     </ToggleGroup.Root>
   );
 }
 
-function SegmentedControlItem({ className, ...props }: React.ComponentProps<typeof ToggleGroup.Item>) {
-  const { size } = React.useContext(SegmentedControlContext);
+function SegmentedControlItem({
+  className,
+  onKeyDown,
+  onPointerDown,
+  onFocus,
+  ...props
+}: React.ComponentProps<typeof ToggleGroup.Item>) {
+  const { size, pick, moving } = React.useContext(SegmentedControlContext);
   return (
     <ToggleGroup.Item
       data-slot="segmented-control-item"
       className={cn(segmentVariants({ size }), className)}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        const modified = event.metaKey || event.ctrlKey || event.altKey || event.shiftKey;
+        moving.current = MOVE_KEYS.has(event.key) && !modified;
+      }}
+      onPointerDown={(event) => {
+        onPointerDown?.(event);
+        moving.current = false;
+      }}
+      onFocus={(event) => {
+        onFocus?.(event);
+        if (!moving.current) return;
+        moving.current = false;
+        pick(props.value);
+      }}
       {...props}
     />
   );

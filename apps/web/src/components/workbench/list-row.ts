@@ -6,6 +6,6 @@ export const LIST_CARD = "flex shrink-0 flex-col gap-0.5 rounded-card border bor
 /** A row in those lists: on a line fill while its file is the one shown (STD-UI-006). */
 export const listRow = (on: boolean): string =>
   cn(
-    "flex w-full cursor-pointer gap-2 rounded-control border-0 px-2 py-[7px] text-start text-text transition-colors duration-150",
+    "flex w-full cursor-pointer gap-2 rounded-control border-0 px-2 py-[7px] text-start text-text transition-colors duration-(--dur-fade)",
     on ? "bg-line" : "bg-transparent hover:bg-hover",
   );
