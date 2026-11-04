@@ -1,6 +1,6 @@
 import type { AttemptActivity, FileChange } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { cn } from "@hobbots/ui/lib/utils";
+import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { useState } from "react";
 import { formatBytes } from "../../../lib/reply-steps.ts";
 import type { HobLookup } from "../../quest/use-work.ts";
@@ -123,21 +123,13 @@ function TextChange({
       {before.kind === "not-kept" && <NotKeptNote side="before" reason={before.reason} />}
       {after.kind === "not-kept" && <NotKeptNote side="after" reason={after.reason} />}
       {document && (was !== null || now !== null) && (
-        <fieldset className="m-0 flex gap-1 border-0 p-0">
-          <legend className="sr-only">{messages.view}</legend>
+        <SegmentedControl size="sm" aria-label={messages.view} value={view} onValueChange={setView}>
           {(["rendered", "source"] as const).map((each) => (
-            <Button
-              key={each}
-              variant="chip"
-              size="xs"
-              aria-pressed={view === each}
-              onClick={() => setView(each)}
-              className={cn(view === each && "bg-line text-moonlight")}
-            >
+            <SegmentedControlItem key={each} value={each}>
               {messages[each]}
-            </Button>
+            </SegmentedControlItem>
           ))}
-        </fieldset>
+        </SegmentedControl>
       )}
       {was === null && now === null ? null : document && view === "rendered" ? (
         <DocumentView before={was} after={now} />
