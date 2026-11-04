@@ -1,10 +1,12 @@
 import type { Quest, TaskId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { RefObject } from "react";
 import { firstLine } from "../../lib/format.ts";
+import { ROW_WIDTHS, SKELETON_ROWS } from "../loading/hub-wait.tsx";
 import { FlagIcon } from "../quest/flag-icon.tsx";
 import { EntryPortrait } from "./entry-portrait.tsx";
 import {
@@ -205,5 +207,32 @@ function InboxItem({
         </span>
       </span>
     </Link>
+  );
+}
+
+/** Three entry rows while Needs you is read: a portrait, who asked and a tag, what, and when. */
+export function InboxRowsSkeleton() {
+  return (
+    <ul aria-hidden className="m-0 flex list-none flex-col gap-1 p-0">
+      {SKELETON_ROWS.map((row) => (
+        <li key={row} className="flex items-start gap-2.5 p-2.5">
+          <Skeleton shape="tile" className="mt-0.5 size-7.5" />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="flex items-center gap-2 text-detail">
+              <span className="min-w-0 flex-1">
+                <Skeleton width="14ch" className="max-w-full" />
+              </span>
+              <Skeleton shape="block" width="7ch" />
+            </span>
+            <span className="text-ui">
+              <Skeleton width={ROW_WIDTHS[row]} className="max-w-full" />
+            </span>
+            <span className="text-meta">
+              <Skeleton width="10ch" />
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

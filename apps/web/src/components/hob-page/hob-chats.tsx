@@ -2,6 +2,7 @@ import type { Agent, Thread } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@hobbots/ui/components/empty";
 import { SearchField } from "@hobbots/ui/components/search-field";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
@@ -11,6 +12,7 @@ import { agentsQuery, archivedThreadsQuery } from "../../api/queries.ts";
 import { useQuestWork } from "../../api/quest-work.ts";
 import { useSearch } from "../../api/search.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
+import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../loading/hub-wait.tsx";
 import { ChatRow } from "./chat-row.tsx";
 import { chatGroups, chatMatches, OLDER_SHOWN, questsByThread, waitingByThread } from "./chats-model.ts";
 import { messages } from "./messages.ts";
@@ -182,5 +184,42 @@ function ArchivedLink({ hob }: { hob: Agent }) {
       {copy.archived({ count })}
       <span aria-hidden>→</span>
     </Link>
+  );
+}
+
+/** The Chats tab while the chats are read: the skeleton rows, and Try again after 10 seconds. */
+export function ChatsLoading({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div aria-busy="true" className="flex flex-col gap-3.5">
+      <ChatsSkeleton />
+      <HubWait pending onRetry={onRetry} />
+    </div>
+  );
+}
+
+/**
+ * Three chat rows while the chats are read: no dot, a title and a last line in skeleton, on the
+ * same card as the groups, so the tab keeps its shape when the rows land.
+ */
+function ChatsSkeleton() {
+  return (
+    <ul aria-hidden className="cut m-0 flex list-none flex-col overflow-hidden bg-card p-0">
+      {SKELETON_ROWS.map((row) => (
+        <li
+          key={row}
+          className="grid grid-cols-[16px_minmax(0,1fr)] gap-x-2.5 border-t border-line py-3 ps-3 pe-3.5 first:border-t-0"
+        >
+          <span />
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[15px] leading-[22px]">
+              <Skeleton surface="card" width={ROW_WIDTHS[row]} className="max-w-full" />
+            </span>
+            <span className="text-ui leading-5">
+              <Skeleton surface="card" width="44ch" className="max-w-full" />
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

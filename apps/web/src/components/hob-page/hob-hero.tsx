@@ -2,6 +2,7 @@ import { HOB_COLORS } from "@hobbots/art/look";
 import type { Agent } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
@@ -40,7 +41,8 @@ export function HobHero({
 }: {
   hob: Agent;
   state: HobState;
-  stats: string;
+  /** The stats line, or undefined while the chats are still read: then it is a skeleton. */
+  stats: string | undefined;
   doing: Doing | null;
   /** A hob with no chats yet, whose tag says New. */
   fresh: boolean;
@@ -66,11 +68,14 @@ export function HobHero({
             <HobStateTag state={state} fresh={fresh} />
           </span>
           <span
-            title={copy.roleStats({ role: hob.roleTitle, stats })}
+            title={stats === undefined ? hob.roleTitle : copy.roleStats({ role: hob.roleTitle, stats })}
             className="truncate text-[15px] text-text-secondary"
           >
             {hob.roleTitle}
-            <span className="text-label"> · {stats}</span>
+            <span className="text-label">
+              {" · "}
+              {stats ?? <Skeleton surface="card" width="24ch" />}
+            </span>
           </span>
           {doing && <DoingBubble doing={doing} />}
         </div>

@@ -1,6 +1,7 @@
 import { AgentId, type ArtifactRef, isLiveAttempt, TASK_TOOLS, type TaskId, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@hobbots/ui/components/collapsible";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -12,6 +13,7 @@ import { formatCount } from "../../../lib/format.ts";
 import { bothRead, waitingView } from "../../backpack/backpack-model.ts";
 import { WaitingList } from "../../backpack/waiting-list.tsx";
 import { useNow } from "../../inbox/use-now.ts";
+import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../../loading/hub-wait.tsx";
 import { type HobLookup, useOpenTask } from "../../quest/use-work.ts";
 import { taskTitle } from "../../quest/work-model.ts";
 import { messages } from "../messages.ts";
@@ -525,7 +527,7 @@ function StillOpen({
           label={copy.waitingList}
         />
       )}
-      {reads.status === "pending" && <Empty>{copy.readingOpen}</Empty>}
+      {reads.status === "pending" && none && <OpenSkeleton onRetry={reads.retry} />}
       {reads.status === "error" && (
         <p role="alert" className="m-0 flex items-center gap-2 text-detail text-rose">
           <span className="flex-1">{copy.openUnread}</span>
@@ -594,6 +596,28 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <h3 className="lbl m-0 text-meta text-label">{title}</h3>
       {children}
     </section>
+  );
+}
+
+/** Three open rows while what is still open is read: a label and a line, on the rows' card. */
+function OpenSkeleton({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div aria-busy="true" className="flex flex-col gap-1.5">
+      <ul aria-hidden className="m-0 flex list-none flex-col gap-1 p-0">
+        {SKELETON_ROWS.map((row) => (
+          <li
+            key={row}
+            className="flex flex-col gap-0.5 border-(length:--edge) border-line bg-card px-3 py-2 text-detail leading-snug"
+          >
+            <span className="text-meta">
+              <Skeleton surface="card" width="12ch" />
+            </span>
+            <Skeleton surface="card" width={ROW_WIDTHS[row]} className="max-w-full" />
+          </li>
+        ))}
+      </ul>
+      <HubWait pending onRetry={onRetry} />
+    </div>
   );
 }
 

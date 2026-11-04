@@ -1,9 +1,11 @@
 import { type AttemptId, PREVIEW_TEXT_BYTES, type TaskFile } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { taskFileTextQuery, taskFileUrl } from "../../../api/workbench.ts";
 import { formatBytes } from "../../../lib/format.ts";
+import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../../loading/hub-wait.tsx";
 import { ReplyMarkdown } from "../../markdown/reply-markdown.tsx";
 import { fileName, fileView } from "./files-model.ts";
 import { messages } from "./messages.ts";
@@ -45,7 +47,7 @@ export function FilePreview({ attemptId, file }: { attemptId: AttemptId; file: T
 
 function TextPreview({ attemptId, file, markdown }: { attemptId: AttemptId; file: TaskFile; markdown: boolean }) {
   const read = useQuery(taskFileTextQuery(attemptId, file.id, file.hash));
-  if (read.isPending) return <p className={NOTE}>{messages.previewLoading}</p>;
+  if (read.isPending) return <TextSkeleton onRetry={() => void read.refetch()} />;
   if (read.isError) {
     return (
       <p className={`${NOTE} flex items-center gap-3`}>
@@ -105,6 +107,20 @@ function Sentence({ kind }: { kind: Unshown }) {
     <div className="flex flex-1 flex-col items-center justify-center gap-2.5 px-6 py-12 text-center text-detail text-text-secondary">
       <Badge variant="resting">{messages.unshownTag[kind]}</Badge>
       <p className="m-0 max-w-[420px]">{messages.unshown[kind]}</p>
+    </div>
+  );
+}
+
+/** A text file while it is read: a few lines of code in skeleton, where the text lands. */
+function TextSkeleton({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div aria-busy="true" className="flex min-h-0 flex-1 flex-col gap-2 px-4 py-3">
+      <span aria-hidden className="flex flex-col font-mono text-code">
+        {SKELETON_ROWS.map((row) => (
+          <Skeleton key={row} width={ROW_WIDTHS[row]} className="max-w-full" />
+        ))}
+      </span>
+      <HubWait pending onRetry={onRetry} />
     </div>
   );
 }

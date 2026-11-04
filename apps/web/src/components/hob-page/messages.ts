@@ -7,7 +7,6 @@ export const messages = {
   page: ({ name }: { name: string }) => `${name}'s page`,
   crumbs: "Breadcrumb",
   yourHobs: "Your hobs",
-  loading: "Loading this hob…",
   missing: "This hob is not here. It may have been retired.",
   tags: {
     needsYou: "Needs you",
@@ -156,7 +155,6 @@ export const messages = {
     },
     noteLead: "Includes the work of the hobs on its quests",
     note: ({ name }: { name: string }) => `Across all of ${name}'s chats`,
-    loading: "Reading the history…",
     failed: "The history did not load. Try again.",
     retry: "Try again",
     today: "Today",

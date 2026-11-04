@@ -9,6 +9,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@hobbots/ui/components/empty";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type RefObject, useEffect, useRef, useState } from "react";
@@ -21,8 +22,9 @@ import { readStored, writeStored } from "../../lib/storage.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
 import { ChiefMark } from "../chief/chief-mark.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { HubWait } from "../loading/hub-wait.tsx";
 import { PageHeader } from "../shell/pages.tsx";
-import { EntryDetail } from "./inbox-detail.tsx";
+import { DetailSkeleton, EntryDetail } from "./inbox-detail.tsx";
 import {
   entryAsker,
   type InboxEntry,
@@ -36,7 +38,7 @@ import { InboxHistory } from "./inbox-history.tsx";
 import { expiryText, type InboxTab, type InboxView, isInboxView, pendingCount, tabRequests } from "./inbox-items.ts";
 import { InboxKeyHints } from "./inbox-key-hints.tsx";
 import { shownOrder } from "./inbox-keys.ts";
-import { InboxList, InboxViewPicker } from "./inbox-list.tsx";
+import { InboxList, InboxRowsSkeleton, InboxViewPicker } from "./inbox-list.tsx";
 import { InboxPanel, InboxTabList, InboxTabs } from "./inbox-tabs.tsx";
 import { messages } from "./messages.ts";
 import { type ShownHold, useWithShown } from "./shown-request.ts";
@@ -145,7 +147,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
         size="bar"
         icon="Inbox"
         title={copy.title}
-        intro={headLine(waiting, soonest, now)}
+        intro={inbox.isPending ? <Skeleton width="28ch" className="max-w-full" /> : headLine(waiting, soonest, now)}
         introClassName={soonest?.urgent === true ? "text-lantern" : undefined}
         actions={<InboxTabList tab={tab} waiting={waiting} />}
       />
@@ -180,12 +182,14 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
                 now={now}
               />
             )
+          ) : inbox.isError ? (
+            <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />
           ) : (
-            <>
-              {inbox.isPending && <p className="m-0 px-8 py-6 text-ui text-label">{copy.loading}</p>}
-              {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
-              {inbox.isSuccess && <InboxHistory requests={requests} directory={directory} />}
-            </>
+            <InboxHistory
+              requests={inbox.isSuccess ? requests : undefined}
+              directory={directory}
+              onRetry={() => void inbox.refetch()}
+            />
           )}
         </main>
       </InboxPanel>
@@ -229,13 +233,27 @@ function NeedsList({
   now: Date;
   listRef: RefObject<HTMLUListElement | null>;
 }) {
+  // Until the reads land, the list holds three rows in skeleton, never a line in their place.
+  const reading = entries.length === 0 && (inbox.isPending || questions.isPending || blockers.isPending);
   return (
     <aside aria-label={copy.title} className="flex w-95 flex-none flex-col border-e border-line bg-panel">
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
-        {inbox.isPending && <p className="px-3 py-4 text-ui text-label">{copy.loading}</p>}
         {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
-        <ReadState read={questions} loading={copy.question.loading} failed={copy.question.loadFailed} />
-        <ReadState read={blockers} loading={blockerCopy.loading} failed={blockerCopy.loadFailed} />
+        <ReadState read={questions} failed={copy.question.loadFailed} />
+        <ReadState read={blockers} failed={blockerCopy.loadFailed} />
+        {reading && (
+          <div aria-busy="true" className="flex flex-col gap-2 px-2.5 py-1">
+            <InboxRowsSkeleton />
+            <HubWait
+              pending
+              onRetry={() => {
+                void inbox.refetch();
+                void questions.refetch();
+                void blockers.refetch();
+              }}
+            />
+          </div>
+        )}
         {entries.length > 0 && <InboxViewPicker view={view} onChange={onView} />}
         <InboxList
           tab="needs"
@@ -296,7 +314,7 @@ function Selected({
   ready: boolean;
   now: Date;
 }) {
-  if (hold === "loading") return <p className="m-0 px-7 py-6 text-label">{copy.loadingRequest}</p>;
+  if (hold === "loading") return <DetailSkeleton />;
   if (hold === "failed") {
     return (
       <div className="px-7 py-6">
@@ -305,23 +323,20 @@ function Selected({
     );
   }
   if (entry === undefined) {
-    return ready ? <p className="m-0 px-7 py-6 text-text-secondary">{copy.pickOne}</p> : null;
+    return ready ? <p className="m-0 px-7 py-6 text-text-secondary">{copy.pickOne}</p> : <DetailSkeleton />;
   }
   const asker = entryAsker(entry);
   const hob = asker === undefined ? undefined : directory.hob(asker);
   // A request shows once the hob that asked is read, retired hobs included.
-  if (entry.kind === "approval" && hob === undefined) {
-    return <p className="m-0 px-7 py-6 text-label">{copy.loadingRequest}</p>;
-  }
+  if (entry.kind === "approval" && hob === undefined) return <DetailSkeleton />;
   return <EntryDetail entry={entry} hob={hob} directory={directory} questOf={questOf} now={now} />;
 }
 
 /**
- * A read Needs you lists from besides the requests: a line while it is read, and a failure with a
- * way to read it again. A read again that failed keeps what was read before in the list.
+ * A read Needs you lists from besides the requests, when it failed: a way to read it again. While
+ * it is read the list's skeleton rows stand in. A read again that failed keeps what was read before.
  */
-function ReadState({ read, loading, failed }: { read: BlockersRead | QuestionsRead; loading: string; failed: string }) {
-  if (read.isPending) return <p className="m-0 px-3 pt-4 text-ui text-label">{loading}</p>;
+function ReadState({ read, failed }: { read: BlockersRead | QuestionsRead; failed: string }) {
   return read.isError ? <LoadFailed message={failed} onRetry={() => void read.refetch()} /> : null;
 }
 

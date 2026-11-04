@@ -10,6 +10,7 @@ import { attemptActivityQuery } from "../../api/workbench.ts";
 import type { NoteDrafts } from "../quest/note-box.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup } from "../quest/use-work.ts";
 import { findTask, questionForYou, taskTitle } from "../quest/work-model.ts";
+import { BenchSkeleton } from "./bench-skeleton.tsx";
 import { messages } from "./messages.ts";
 import { ChatPanelIcon } from "./tab-icons.tsx";
 import { ChangesTab } from "./tabs/changes-tab.tsx";
@@ -63,7 +64,8 @@ export function Workbench({
   drafts: NoteDrafts;
 }) {
   const followed = useFollowedTrees(threadId, pinned);
-  const reading = useQuery(threadTasksQuery(threadId)).isPending;
+  const tasks = useQuery(threadTasksQuery(threadId));
+  const reading = tasks.isPending;
   const found = findTask([...followed.thread, ...followed.elsewhere], view.taskId);
   const hobs = useHobLookup();
   const moves = useWorkbenchMoves(hobId, threadId);
@@ -86,10 +88,12 @@ export function Workbench({
       }}
       className="absolute inset-0 z-10 flex min-w-0 animate-hb-in flex-col bg-ground"
     >
-      {found === null ? (
+      {found === null && reading ? (
+        <BenchSkeleton back={back} onRetry={() => void tasks.refetch()} />
+      ) : found === null ? (
         <>
           <div className="flex items-center border-b border-line px-6 py-3">{back}</div>
-          <p className="m-0 px-6 py-6 text-detail text-label">{reading ? messages.loading : messages.notFound}</p>
+          <p className="m-0 px-6 py-6 text-detail text-label">{messages.notFound}</p>
         </>
       ) : (
         <Bench

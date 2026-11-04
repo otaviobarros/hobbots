@@ -55,6 +55,7 @@ import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
 import { EmptyThread } from "./empty-thread.tsx";
 import { type ContinueReply, MessageRow, messageElementId, QueuedRow, WaitingRow } from "./message-row.tsx";
+import { TranscriptSkeleton } from "./transcript-skeleton.tsx";
 
 /**
  * Keeps the transcript's end in view while the composer grows or shrinks, so a long draft never
@@ -282,7 +283,7 @@ export function ChatView({
         {/* The transcript, the tray and the composer share one centered column (A2-01). Long words
             and paths wrap inside it, so nothing in it is wider than the column (#874). */}
         <div className="mx-auto flex w-full max-w-measure flex-1 flex-col gap-3.5 wrap-anywhere">
-          {threadId && messages.isPending && <p className="text-label">{copy.loadingMessages}</p>}
+          {threadId && messages.isPending && <TranscriptSkeleton onRetry={() => void messages.refetch()} />}
           {empty && !messages.isLoading && (
             <EmptyThread hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
           )}

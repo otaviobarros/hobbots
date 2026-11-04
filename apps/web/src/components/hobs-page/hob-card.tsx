@@ -1,5 +1,6 @@
 import { HOB_COLORS } from "@hobbots/art/look";
 import type { Agent, Thread } from "@hobbots/domain";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
@@ -92,6 +93,38 @@ export function HobCard({
         </span>
       </span>
     </Link>
+  );
+}
+
+/**
+ * A card while the hobs are read: the doorway with a tile in skeleton, a name, a role and a line,
+ * and the last-chat rule. `name` is the name's likely length, so the three cards differ a little.
+ */
+export function HobCardSkeleton({ name }: { name: string }) {
+  return (
+    <span className="cut flex min-w-0 flex-col overflow-hidden bg-card">
+      <span className="relative flex h-[84px] items-end px-4">
+        <Skeleton shape="tile" surface="card" className="mb-1.5 size-16" />
+        <span className="absolute inset-x-0 bottom-0 h-1.5 bg-line-2" />
+      </span>
+      <span className="flex min-w-0 flex-col gap-2 px-4 pt-3 pb-3.5">
+        <span className="flex min-w-0 flex-col">
+          <span className="font-heading text-title">
+            <Skeleton surface="card" width={name} className="max-w-full" />
+          </span>
+          <span className="text-detail leading-[18px]">
+            <Skeleton surface="card" width="10ch" />
+          </span>
+        </span>
+        <span className="flex min-h-10 items-start text-ui leading-5">
+          <Skeleton surface="card" width="24ch" className="max-w-full" />
+        </span>
+        <span className="flex min-w-0 items-center gap-2 border-t border-line pt-2.5 text-detail leading-[18px] text-label">
+          <ChatIcon />
+          <Skeleton surface="card" width="16ch" className="max-w-full" />
+        </span>
+      </span>
+    </span>
   );
 }
 

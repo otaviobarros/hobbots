@@ -1,10 +1,12 @@
 import type { AttemptActivity, TaskFile, TaskFileId } from "@hobbots/domain";
 import { Button, buttonVariants } from "@hobbots/ui/components/button";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { attemptFilesQuery, taskFileUrl } from "../../../api/workbench.ts";
 import { formatBytes } from "../../../lib/format.ts";
+import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../../loading/hub-wait.tsx";
 import { changePath, leavesFile } from "../changes/changes-model.ts";
 import { FilePicker } from "../file-picker.tsx";
 import { FilePreview } from "../files/file-preview.tsx";
@@ -51,7 +53,7 @@ function Files({
     setAsked(focus);
     if (focus !== undefined) setPicked(null);
   }
-  if (read.isPending) return <p className="m-0 text-detail text-label">{messages.loading}</p>;
+  if (read.isPending) return <FilesSkeleton onRetry={() => void read.refetch()} />;
   if (read.isError) {
     return (
       <p className="m-0 flex items-center gap-3 text-detail text-text-secondary">
@@ -254,5 +256,26 @@ function FileActions({
     >
       {messages.download}
     </a>
+  );
+}
+
+/** The file list's card while the files are read: three rows, each a name and a size in skeleton. */
+function FilesSkeleton({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div aria-busy="true" className="flex flex-col gap-2">
+      <div aria-hidden className={cn(LIST_CARD, "@min-[720px]:w-58")}>
+        {SKELETON_ROWS.map((row) => (
+          <span key={row} className="flex flex-col gap-px px-2 py-[7px]">
+            <span className="font-mono text-code leading-[18px]">
+              <Skeleton surface="card" width={ROW_WIDTHS[row]} className="max-w-full" />
+            </span>
+            <span className="text-meta">
+              <Skeleton surface="card" width="8ch" />
+            </span>
+          </span>
+        ))}
+      </div>
+      <HubWait pending onRetry={onRetry} />
+    </div>
   );
 }

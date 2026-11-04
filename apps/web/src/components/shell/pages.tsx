@@ -71,7 +71,8 @@ export function PageHeader({
 }: {
   icon: IconName;
   title: string;
-  intro: string;
+  /** The line under the title, or a skeleton of it while what it counts is read. */
+  intro: ReactNode;
   actions?: ReactNode;
   size?: "page" | "bar";
   introClassName?: string | undefined;

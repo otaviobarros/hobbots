@@ -58,8 +58,6 @@ export const messages = {
   emptyHistory: "No decisions yet",
   emptyHistoryHint: "Requests you allow or deny, and ones that expire, show here.",
   pickOne: "Pick a request to see what it would do.",
-  loadingRequest: "Reading the request…",
-  loading: "Reading the Inbox…",
   failed: "Hobbots could not read the Inbox.",
   requestFailed: "Hobbots could not read this request. It stays open here until you try again or pick another.",
   retry: "Try again",
@@ -131,7 +129,6 @@ export const messages = {
     openChat: ({ name }: { name: string }) => `Open ${name}'s chat`,
     goesBack: ({ name }: { name: string }) => `Goes back to ${name}, who passes it to the hob that asked.`,
     goesStraight: ({ name }: { name: string }) => `Goes straight back to ${name}.`,
-    loading: "Reading the questions for you…",
     loadFailed: "Hobbots could not read the questions for you.",
   },
   /** The keycaps under the list in Needs you. */
