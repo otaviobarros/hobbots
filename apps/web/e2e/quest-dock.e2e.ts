@@ -162,8 +162,15 @@ test("[TC-UX-282] a file two hobs changed opens the hob's own record when Files 
     /^notes\.md, by Quill/,
   ]);
 
-  // Quill's notes in Files open Quill's change to them, not Aldric's.
+  // Files lists each hob's notes too.
   await bench.getByRole("tab", { name: /^Files/ }).click();
+  await expect(files.getByRole("button")).toHaveText([
+    /^notes\.md, by Aldric/,
+    /^copy\.md, by Quill/,
+    /^notes\.md, by Quill/,
+  ]);
+
+  // Quill's notes in Files open Quill's change to them, not Aldric's.
   await files.getByRole("button", { name: /^notes\.md, by Quill/ }).click();
   await bench
     .getByRole("tabpanel", { name: /^Files/ })
