@@ -91,10 +91,19 @@ test("[TC-IN-062] a party member's request waits in the Inbox under its lead's t
   await expect(tray.getByRole("region", { name: "Quill asks permission" })).toHaveCount(1);
   await expect(page.getByRole("region", { name: "Aldric asks permission" })).toHaveCount(0);
   await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
-  await page
-    .getByRole("list", { name: "Requests" })
-    .getByRole("link", { name: /Push your work/ })
-    .click();
+  // It waits under Aldric's quest, as asked by Quill through Aldric.
+  const requests = page.getByRole("list", { name: "Requests" });
+  await expect(requests).toContainText("Aldric's quest · ");
+  await expect(requests).toContainText("You → Aldric → Quill");
+  // By urgency lists it on its own, naming its quest, and the choice stays after a reload.
+  await page.getByRole("radio", { name: "By urgency" }).click();
+  await expect(requests).not.toContainText("Aldric's quest · ");
+  await expect(requests.getByRole("link", { name: /Push your work/ })).toContainText("· Aldric's quest");
+  await page.reload();
+  await expect(page.getByRole("radio", { name: "By urgency" })).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("radio", { name: "By quest" }).click();
+  await expect(requests).toContainText("Aldric's quest · ");
+  await requests.getByRole("link", { name: /Push your work/ }).click();
   const detail = page.getByRole("article", { name: "Request from Quill: Push your work" });
   const card = detail.getByRole("region", { name: "Quill asks permission" });
   await expect(card.getByText("git push origin feature", { exact: true })).toBeVisible();
@@ -187,6 +196,8 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on its T
   // The Inbox shows the request settled.
   await page.goto(`${current.url}/#/inbox`);
   await expect(page.getByRole("link", { name: /^Inbox, \d+ waiting on you/ })).toHaveCount(0);
-  await page.getByRole("tab", { name: "All" }).click();
-  await expect(page.getByRole("list", { name: "Requests" })).toContainText("You allowed this");
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByRole("region", { name: "Decision history" }).locator('[data-state="approved"]')).toHaveCount(
+    1,
+  );
 });

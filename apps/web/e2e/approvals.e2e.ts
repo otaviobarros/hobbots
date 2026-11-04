@@ -267,7 +267,7 @@ test("[TC-PE-125] an Always rule shows in Inbox History and Settings, and removi
   const rule = `Always let Pip delete ${shared}/old.txt`;
 
   // Settings › Permissions lists it with when it was saved and the request that saved it.
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/safety`);
   const settings = page.getByRole("region", { name: "Standing rules" });
   await expect(settings.getByRole("listitem")).toHaveCount(1);
   await expect(settings.getByRole("listitem")).toContainText(rule);
@@ -278,7 +278,7 @@ test("[TC-PE-125] an Always rule shows in Inbox History and Settings, and removi
   const history = page.getByRole("region", { name: "Standing rules" });
   await expect(history.getByRole("listitem")).toContainText(rule);
   await history.getByRole("link", { name: `See the request that saved: ${rule}` }).click();
-  await expect(page).toHaveURL(/tab=all&request=/);
+  await expect(page).toHaveURL(/tab=needs&request=/);
   await expect(page.getByRole("article", { name: /^Request from Pip/ })).toBeVisible();
   await page.goBack();
 

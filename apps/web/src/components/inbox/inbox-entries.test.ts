@@ -1,25 +1,33 @@
 import type { WaitingDevice } from "@hobbots/api";
-import {
-  type AgentId,
-  ApprovalRequest,
-  BackpackBlocker,
-  BackpackItem,
-  BackpackItemId,
-  PairingRequest,
-  ThreadId,
-} from "@hobbots/domain";
+import { type AgentId, ApprovalRequest, PairingRequest, type TaskId, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { ADA, ALDRIC, COPY, memberApproval, QUILL, question, stuckItem, THREAD, task } from "../../test/quests.ts";
+import {
+  ADA,
+  ALDRIC,
+  BUILD,
+  CAMPAIGN,
+  COPY,
+  memberApproval,
+  QUILL,
+  quest,
+  question,
+  stuckItem,
+  THREAD,
+  task,
+  tree,
+} from "../../test/quests.ts";
 import {
   approvalEntry,
+  byUrgency,
   deviceEntry,
   entryRow,
-  groupByThread,
+  groupByPlace,
   namesRequest,
   needsEntries,
   questionEntry,
   selectedEntry,
   stuckEntry,
+  topQuests,
 } from "./inbox-entries.ts";
 
 const now = new Date("2026-11-01T10:00:00.000Z");
@@ -116,6 +124,29 @@ describe("entryRow", () => {
   });
 });
 
+describe("topQuests", () => {
+  it("finds the outermost Quest above each Task in the tree", () => {
+    const top = quest();
+    const found = topQuests([tree({ tasks: [task(CAMPAIGN), task(COPY)], quests: [top] })]);
+    expect(found.get(COPY)).toBe(top);
+    expect(found.get(CAMPAIGN)).toBe(top);
+    expect(topQuests([tree({ tasks: [task(CAMPAIGN), task(COPY)] })]).size).toBe(0);
+  });
+});
+
+describe("byUrgency", () => {
+  it("puts high-risk requests first, then what expires soonest, then what waited longest, and decided ones last", () => {
+    const risky = approvalEntry(
+      new ApprovalRequest({ ...memberApproval(BUILD, ADA), onceOnly: true, expiresAt: "2026-11-01T15:00:00.000Z" }),
+    );
+    const soon = approvalEntry(request("2026-11-01T10:20:00.000Z"));
+    const old = questionEntry(asked);
+    const decided = approvalEntry(new ApprovalRequest({ ...memberApproval(CAMPAIGN, ADA), state: "denied" }));
+    const sorted = [decided, old, soon, risky].sort(byUrgency);
+    expect(sorted).toEqual([risky, soon, old, decided]);
+  });
+});
+
 describe("entries", () => {
   const other = ThreadId.make("other");
   const entries = needsEntries({
@@ -130,12 +161,17 @@ describe("entries", () => {
     expect(entries.map((entry) => namesRequest(entry.key))).toEqual([false, false, false, true]);
   });
 
-  it("groups by thread in the order each thread first appears, with this hub's devices apart", () => {
-    expect(groupByThread(entries).map((group) => [group.threadId, group.entries.map((entry) => entry.kind)])).toEqual([
-      [null, ["device"]],
-      [THREAD, ["question", "approval"]],
-      [other, ["stuck"]],
+  it("groups by quest, or by thread outside one, with this hub's devices apart, the most urgent first", () => {
+    const top = quest();
+    const questOf = (taskId: TaskId) => (taskId === COPY ? top : undefined);
+    expect(
+      groupByPlace(entries, questOf).map((group) => [group.key, group.entries.map((entry) => entry.kind)]),
+    ).toEqual([
+      ["hub", ["device"]],
+      ["quest:quest-bf", ["stuck", "approval", "question"]],
     ]);
+    const outside = groupByPlace(entries, () => undefined).map((group) => group.key);
+    expect(outside).toEqual(["hub", "thread:other", `thread:${THREAD}`]);
   });
 
   it("shows the entry the address names when the list has it, otherwise the first", () => {
