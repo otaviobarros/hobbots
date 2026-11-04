@@ -111,7 +111,7 @@ export const rowStatus = (tree: TaskTree, task: Task): RowStatus => {
  * What the Task's owner last reported, or a finding the hub made about it, such as another Task
  * changing a file it changed; the other automatic checkpoints only repeat its state.
  */
-const latestOf = (tree: TaskTree, task: Task): string | null =>
+export const latestOf = (tree: TaskTree, task: Task): string | null =>
   tree.checkpoints.findLast((checkpoint) => checkpointOn(checkpoint, task.id) && saysMore(checkpoint))?.summary ?? null;
 
 /** The hobs whose Tasks this one comes after and that have not completed, failed ones included. */

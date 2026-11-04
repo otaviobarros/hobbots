@@ -26,7 +26,7 @@ test("[TC-CH-190] the Quest tab shows the whole tree live with its controls and 
 
   // A row opens its Task in the drawer and the tab shows the controls that apply to it.
   await build.click();
-  await expect(page.getByRole("complementary", { name: "Build the campaign, Task details" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Build the campaign, Task details" })).toBeVisible();
   await expect(build).toHaveAttribute("aria-current", "true");
   const controls = room.getByRole("region", { name: "Controls for Build the campaign" });
   await expect(controls.getByRole("button", { name: "Reassign" })).toBeEnabled();
@@ -47,7 +47,7 @@ test("[TC-CH-190] the Quest tab shows the whole tree live with its controls and 
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(room).toContainText("Pinned from another thread");
   await room.getByRole("button", { name: /Quill · Draft the landing copy/ }).click();
-  await expect(page.getByRole("complementary", { name: "Draft the landing copy, Task details" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Draft the landing copy, Task details" })).toBeVisible();
 
   // The answer goes back from the card in the Quest's own thread, and the tab follows live.
   await room.getByRole("link", { name: "Open its thread" }).click();
@@ -127,9 +127,7 @@ test("[TC-CH-193] the Quest tab says why a Reassign is refused, and cancels the 
 
   // The card in the chat and the open drawer follow.
   await expect(page.getByText("Aldric stopped this")).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "Build the campaign, Task details" })).toContainText(
-    "Cancelled",
-  );
+  await expect(page.getByRole("dialog", { name: "Build the campaign, Task details" })).toContainText("Cancelled");
 });
 
 // covers CH-005, OR-006, EX-001, UX-001
@@ -163,9 +161,7 @@ test("[TC-CH-192] the Quest tab cancels a Task, retries a failed one and gives a
     timeout: 15_000,
   });
   await expect(signs).toContainText("Cancelled");
-  await expect(page.getByRole("complementary", { name: "Order the sale signs, Task details" })).toContainText(
-    "Cancelled",
-  );
+  await expect(page.getByRole("dialog", { name: "Order the sale signs, Task details" })).toContainText("Cancelled");
   await expect(signsControls.getByRole("button", { name: "Cancel Task" })).toHaveCount(0);
 
   // Retry queues the failed Task again for a new Attempt of the same Task.

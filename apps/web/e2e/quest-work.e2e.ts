@@ -121,7 +121,7 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
   campaign(ids, thread.id);
   // Every link opens Aldric's thread, with the drawer on the Task it names.
   const questThread = (task: string) => new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?task=${task}$`);
-  const drawer = (brief: string) => page.getByRole("complementary", { name: `${brief}, Task details` });
+  const drawer = (brief: string) => page.getByRole("dialog", { name: `${brief}, Task details` });
 
   await page.goto(hub.url);
   const quests = page.getByRole("region", { name: "Pick up where you left off" });

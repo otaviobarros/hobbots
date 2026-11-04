@@ -19,11 +19,11 @@ test("[TC-UX-051] the Workbench chat of Quill's Task talks to Aldric, who leads 
   // A note begun in Quill's Task drawer is the same unsent note in its Workbench chat.
   const strip = page.getByRole("region", { name: "Work in progress" });
   await strip.getByRole("button", { name: "Show Aldric's work" }).click();
-  const quest = page.getByRole("complementary", { name: "Plan the Black Friday campaign, Task details" });
+  const quest = page.getByRole("dialog", { name: "Plan the Black Friday campaign, quest" });
   await quest.getByRole("button", { name: /Draft the landing copy/ }).click();
-  const drawer = page.getByRole("complementary", { name: "Draft the landing copy, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Draft the landing copy, Task details" });
   await drawer.getByRole("textbox", { name: "Tell Aldric about this task" }).fill("Keep the headlines short.");
-  await drawer.getByRole("button", { name: "Open in Workbench" }).click();
+  await drawer.getByRole("button", { name: "Open Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Draft the landing copy" });
 
   // Quill owns the Task, but you talk to Aldric, who leads the work.

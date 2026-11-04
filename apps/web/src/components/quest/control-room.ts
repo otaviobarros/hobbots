@@ -255,3 +255,7 @@ export const controlError = (error: unknown, names: Names): string => {
   const known = REFUSALS[String(error.fields.reason ?? "")];
   return known?.(names) ?? refused.other({ message: String(error.fields.message ?? error.message) });
 };
+
+/** Who a row waits on, by name, with you as "you". */
+export const waitingNames = (row: RoomRow, nameOf: (id: AgentId) => string): ReadonlyArray<string> =>
+  row.waitingOn.map((each) => (each.kind === "you" ? messages.room.you : nameOf(each.id)));

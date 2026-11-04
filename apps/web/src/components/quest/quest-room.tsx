@@ -7,7 +7,7 @@ import { TaskApprovals, useShownApprovals } from "../approvals/task-approvals.ts
 import { RoomBackpack } from "../backpack/quest-backpack.tsx";
 import { HobSprite } from "../hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
-import { type RoomRow, roomRows, roomStatusLabel, roomTone, topCancel } from "./control-room.ts";
+import { type RoomRow, roomRows, roomStatusLabel, roomTone, topCancel, waitingNames } from "./control-room.ts";
 import { messages } from "./messages.ts";
 import { RoomControls } from "./room-controls.tsx";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
@@ -169,7 +169,7 @@ function Row({
 }) {
   const owner = hobs(row.task.ownerId);
   const title = taskTitle(row.task);
-  const waits = row.waitingOn.map((each) => (each.kind === "you" ? copy.you : hobs(each.id).name));
+  const waits = waitingNames(row, (id) => hobs(id).name);
   const party = row.party.map((id) => hobs(id).name);
   const sameFile = row.sameFileAs.map((id) => hobs(id).name);
   return (

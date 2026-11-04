@@ -203,16 +203,17 @@ const archivedThreadsRoute = createRoute({
   },
 });
 
-// `?message=` names a message to scroll to, as a search result does; `?task=` a Task to open in
-// the drawer beside the chat; `?bench=` a Task whose Workbench shows in the chat's place, with its
+// `?message=` names a message to scroll to, as a search result does; `?quest=` a request's Quest,
+// by its top Task, to open in the work sheet over the chat, and `?task=` a Task to open there; `?bench=` a Task whose Workbench shows in the chat's place, with its
 // `tab`, `attempt`, the `file` a tab shows first and `chat` when its chat drawer is open (ADR 023).
 const threadRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId/threads/$threadId",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { message?: string | undefined; task?: string | undefined } & WorkbenchSearch => ({
+  ): { message?: string | undefined; quest?: string | undefined; task?: string | undefined } & WorkbenchSearch => ({
     message: typeof search.message === "string" ? search.message : undefined,
+    quest: typeof search.quest === "string" ? search.quest : undefined,
     task: typeof search.task === "string" ? search.task : undefined,
     bench: typeof search.bench === "string" ? search.bench : undefined,
     tab: isWorkbenchTab(search.tab) ? search.tab : undefined,
@@ -222,13 +223,14 @@ const threadRoute = createRoute({
   }),
   component: function ThreadPage() {
     const params = threadRoute.useParams();
-    const { message, task, bench, tab, attempt, file, chat } = threadRoute.useSearch();
+    const { message, quest, task, bench, tab, attempt, file, chat } = threadRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
         threadId={ThreadId.make(params.threadId)}
         focusMessageId={message}
         taskId={task === undefined ? undefined : TaskId.make(task)}
+        questId={quest === undefined ? undefined : TaskId.make(quest)}
         workbench={
           bench === undefined
             ? undefined
