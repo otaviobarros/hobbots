@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ActivityRepository,
@@ -12,16 +16,21 @@ import {
   HobTools,
   type NewAttempt,
   PermissionSummary,
+  SecretRedaction,
+  TaskFiles,
   TaskRepository,
 } from "@hobbots/agents";
 import { AttemptActivityRead, TreeActivityRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  ArtifactId,
+  AttemptFiles,
   AttemptId,
   CommandId,
   type Committed,
   ContentId,
+  carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   type EventEnvelope,
@@ -46,10 +55,11 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { HobFilesLive } from "@hobbots/workbench";
 import { Effect, Layer, ManagedRuntime, Option, Schedule, Schema } from "effect";
 import { makeParser } from "effect/encoding/Sse";
 import { HttpRouter } from "effect/http";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { EventStream, type StreamFrame } from "../src/event-stream.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
@@ -63,9 +73,15 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // retried; Ada builds the campaign as a nested Quest with Pip on the keywords. Another request of
 // Aldric's sits beside it in the same thread and never shows in the campaign's Workbench.
 
+/** The campaign's project folder, where Pip leaves the keywords. */
+const project = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-workbench-tree-")));
+writeFileSync(join(project, "keywords.txt"), "sale\n");
+afterAll(() => rmSync(project, { recursive: true, force: true }));
+
 const App = HobLifecycle.layer.pipe(
   Layer.provideMerge(
     Layer.mergeAll(
+      TaskFiles.layer,
       ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
       ApprovalService.layer,
       GrantService.layer,
@@ -89,6 +105,8 @@ const App = HobLifecycle.layer.pipe(
       EventBus.layer,
       HobAdmission.layer,
       NodeFolderChecks,
+      HobFilesLive,
+      SecretRedaction.layer([]),
       FakeRuntimeLayer(),
       Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
     ),
@@ -207,6 +225,7 @@ const start = (taskId: string, attemptId: string) =>
 
 /** The campaign, its party and their records, and another request of Aldric's beside it. */
 const campaign = Effect.gen(function* () {
+  yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [project] });
   const repo = yield* HobbotsRepository;
   for (const [id, name] of [
     [ALDRIC, "Aldric"],
@@ -280,14 +299,20 @@ const campaign = Effect.gen(function* () {
   yield* activity.saveCommand(command("a-copy-2", "c-copy-2", "npm run draft -- --again"));
   yield* start("build", "a-build");
   yield* start("keywords", "a-keywords");
-  yield* activity.saveChanges(AttemptId.make("a-keywords"), "/work/campaign", [
+  yield* activity.saveChanges(AttemptId.make("a-keywords"), project, [
     {
       id: FileChangeId.make("f-keywords"),
       path: "keywords.txt",
       kind: "added",
       movedFrom: null,
       before: null,
-      after: { hash: "h1", size: 4, kind: "text", contentId: null, notKept: "too-large" },
+      after: {
+        hash: createHash("sha256").update("sale\n").digest("hex"),
+        size: 5,
+        kind: "text",
+        contentId: null,
+        notKept: "too-large",
+      },
       sharedWith: [],
       settled: true,
       recordedAt: later,
@@ -366,10 +391,16 @@ describe("a Quest's whole Workbench", () => {
     expect(nested.activity.attempts.map(({ activity }) => activity.attempt.id)).toEqual(["a-build", "a-keywords"]);
 
     // Each Attempt reads as the per-Attempt endpoint reads it.
-    for (const { activity } of read.activity.attempts) {
+    // Each Attempt reads as the per-Attempt endpoints read it, its files included.
+    for (const { activity, files } of read.activity.attempts) {
       const one = await get(`/api/attempts/${activity.attempt.id}/activity`);
       expect(Schema.decodeUnknownSync(AttemptActivityRead)(one.body).activity).toEqual(activity);
+      const listed = await get(`/api/attempts/${activity.attempt.id}/files`);
+      expect(Schema.decodeUnknownSync(AttemptFiles)(listed.body).files).toEqual(files);
     }
+    expect(read.activity.attempts.find(({ activity }) => activity.attempt.id === "a-keywords")?.files).toMatchObject([
+      { path: "keywords.txt", origin: "added", now: "same" },
+    ]);
   });
 
   // covers UX-002, UX-006
@@ -461,18 +492,35 @@ describe("a Quest's whole Workbench", () => {
           ),
         );
         yield* announce(yield* activity.saveCommand(command("a-research", "c-research", "curl example.com")));
+        // Pip finishes the research with an artifact: the read's artifacts change.
+        yield* announce(
+          yield* tasks.completeTask(TaskId.make("research"), (yield* latest("research")).revision, {
+            summary: "Researched",
+            attemptId: AttemptId.make("a-research"),
+            artifacts: [{ id: ArtifactId.make("art-research"), kind: "text", label: "Notes", value: "Sources" }],
+            at: later,
+            // Pip's turn read the work it was handed, so it was taken up.
+            carried: carriedFrom(Option.getOrThrow(yield* tasks.readLedger(TaskId.make("research"))), () => true),
+          }),
+        );
+        // Quill's retry fails too and you give the copy to Ada: the read's owner changes.
+        yield* announce(
+          yield* tasks.updateAttempt(AttemptId.make("a-copy-2"), {
+            _tag: "Ended",
+            end: { _tag: "Failed", reason: "It broke again." },
+            at: later,
+          }),
+        );
+        yield* announce(yield* tasks.moveTask(TaskId.make("copy"), (yield* latest("copy")).revision, "failed", later));
+        yield* announce(yield* tasks.reassignTask(TaskId.make("copy"), (yield* latest("copy")).revision, ADA, later));
       }),
     );
 
-    const frames = await eventually(() =>
-      stream.frames.some(
-        (frame) =>
-          (frame.data.payload as { _tag?: string } | undefined)?._tag === "CommandRecorded" &&
-          (frame.data.payload as { command: { id: string } }).command.id === "c-research",
-      )
-        ? stream.frames
-        : undefined,
-    );
+    const reassigned = (frame: (typeof stream.frames)[number]) => {
+      const payload = frame.data.payload as { readonly _tag?: string; readonly control?: { readonly _tag: string } };
+      return payload?._tag === "TaskStateChanged" && payload.control?._tag === "Reassigned";
+    };
+    const frames = await eventually(() => (stream.frames.some(reassigned) ? stream.frames : undefined));
     await stream.stop();
 
     const shown = frames.flatMap(({ event, data }) => {
@@ -480,10 +528,29 @@ describe("a Quest's whole Workbench", () => {
       if (data._tag === "CommandOutput") return [`output ${data.taskId}`];
       const payload = data.payload as { readonly _tag: string; readonly [key: string]: unknown };
       if (payload._tag === "CommandRecorded") return [`command ${(payload.command as { id: string }).id}`];
-      if (payload._tag === "TaskStateChanged") return [`attempt ${(payload.task as { id: string }).id}`];
-      return [payload._tag];
+      const task = payload.task as { readonly id: string; readonly ownerId: string; readonly state: string };
+      return [`${payload._tag} ${task.id} ${task.ownerId} ${task.state}`];
     });
-    expect(shown).toEqual(["ready", "output keywords", "command c-copy-3", "attempt research", "command c-research"]);
+    expect(shown).toEqual([
+      "ready",
+      "output keywords",
+      "command c-copy-3",
+      "TaskCreated research pip queued",
+      "TaskStateChanged research pip active",
+      "command c-research",
+      "TaskCompleted research pip completed",
+      "TaskStateChanged copy quill active",
+      "TaskStateChanged copy quill failed",
+      "TaskStateChanged copy ada queued",
+    ]);
+
+    // What the stream brought is what the tree reads now.
+    const after = await readTree("campaign");
+    const research = after.activity.attempts.find(({ activity }) => activity.attempt.id === "a-research");
+    expect(research?.activity.artifacts.map((artifact) => artifact.id)).toEqual(["art-research"]);
+    expect(
+      after.activity.attempts.filter(({ activity }) => activity.attempt.taskId === "copy").map((each) => each.ownerId),
+    ).toEqual([ADA, ADA]);
   });
 });
 
@@ -512,8 +579,15 @@ describe("a tree's Workbench frames", () => {
       _tag: "TaskCreated",
       task: { id: TaskId.make("copy"), parentId: TaskId.make("campaign") },
     } as unknown as EventEnvelope["payload"]);
-    expect(treeFrame(created, tree)).toEqual({ _tag: "Passed", cursor: "e.2" });
+    // A Task made under the tree joins it, and its creation is sent: it is a new lane.
+    expect(treeFrame(created, tree)).toBe(created);
     expect(tree.has(TaskId.make("copy"))).toBe(true);
+    const elsewhere = entry(3, {
+      _tag: "TaskCreated",
+      task: { id: TaskId.make("lunch"), parentId: TaskId.make("other") },
+    } as unknown as EventEnvelope["payload"]);
+    expect(treeFrame(elsewhere, tree)).toEqual({ _tag: "Passed", cursor: "e.3" });
+    expect(tree.has(TaskId.make("lunch"))).toBe(false);
 
     const inside = entry(3, { _tag: "FolderScanned", scan: scan("copy") });
     expect(treeFrame(inside, tree)).toBe(inside);

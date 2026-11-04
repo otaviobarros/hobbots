@@ -31,8 +31,9 @@ export type AttemptActivityRead = typeof AttemptActivityRead.Type;
 
 /**
  * The records of every Attempt under a Task, with the event stream cursor taken just before the read
- * (#899). Following `GET /api/tasks/:taskId/workbench/events` from `cursor` brings each record the
- * tree's Attempts make since, and the output of every command running in the tree.
+ * (#899). Following `GET /api/tasks/:taskId/workbench/events` from `cursor` brings each change to it
+ * since: the records the tree's Attempts make, new Tasks and Attempts, reassignments and completions,
+ * and the output of every command running in the tree.
  */
 export const TreeActivityRead = Schema.Struct({ cursor: Schema.String, activity: TreeActivity });
 export type TreeActivityRead = typeof TreeActivityRead.Type;

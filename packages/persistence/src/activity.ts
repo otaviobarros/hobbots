@@ -266,7 +266,11 @@ export const ActivityRepositoryLive = Layer.effect(
     /** Rows of `rows` by their Attempt, each Attempt's in the order they came. */
     const byAttempt = <A extends { readonly attemptId: AttemptId }>(rows: ReadonlyArray<A>) => {
       const grouped = new Map<AttemptId, Array<A>>();
-      for (const row of rows) grouped.set(row.attemptId, [...(grouped.get(row.attemptId) ?? []), row]);
+      for (const row of rows) {
+        const its = grouped.get(row.attemptId);
+        if (its === undefined) grouped.set(row.attemptId, [row]);
+        else its.push(row);
+      }
       return (attemptId: AttemptId): ReadonlyArray<A> => grouped.get(attemptId) ?? [];
     };
 

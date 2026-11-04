@@ -6,7 +6,7 @@ import { forApprovedDevice } from "./devices.ts";
 import type { HubTransientEvent } from "./event-bus.ts";
 import { EventStream, encodeFrame, resumeCursor, type StreamFrame, sseResponse } from "./event-stream.ts";
 
-/** The Task of an event a tree's Workbench follows, or null for any other event. */
+/** The Task of an event that changes what a tree's Workbench read returns, or null for any other event. */
 const workbenchTask = (event: HobbotsEvent | HubTransientEvent): TaskId | null => {
   switch (event._tag) {
     case "CommandRecorded":
@@ -17,9 +17,12 @@ const workbenchTask = (event: HobbotsEvent | HubTransientEvent): TaskId | null =
       return event.taskId;
     case "FolderScanned":
       return event.scan.taskId;
-    // A new Attempt, a retry or an Attempt that ended, so the attempt picker follows them.
+    // A new Task, an Attempt that starts or ends, a reassignment that changes an Attempt's owner, and a
+    // completion that adds its artifacts: each changes what the tree's read returns.
+    case "TaskCreated":
     case "TaskStateChanged":
-      return event.attempt === null ? null : event.task.id;
+    case "TaskCompleted":
+      return event.task.id;
     default:
       return null;
   }
@@ -30,7 +33,7 @@ export type TreeFrame = StreamFrame | { readonly _tag: "Passed"; readonly cursor
 
 /**
  * Narrows a connection's frames to one Task tree's Workbench (#899): `Ready` and keep-alives, the
- * journal entries that record what the tree's Attempts did, and the output of every command running
+ * journal entries that change what the tree's read returns, and the output of every command running
  * in the tree; null drops a transient event outside it. `tree` holds the tree's Tasks, and grows as
  * Tasks are created under them. Every other entry becomes `Passed`, which moves the client's cursor
  * past it without an event, so a client that reconnects resumes after it rather than replaying it.
