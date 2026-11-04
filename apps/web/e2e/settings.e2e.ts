@@ -262,7 +262,9 @@ test("[TC-UX-123] Your data holds Backups with Restore and Export as files, reti
   const exportButton = backups.getByRole("button", { name: "Export as files" });
   await exportButton.click();
   await expect(exportButton).toHaveAttribute("aria-expanded", "true");
-  await expect(backups.getByRole("region", { name: "Export" }).getByRole("radio", { name: "Everything" })).toBeChecked();
+  await expect(
+    backups.getByRole("region", { name: "Export" }).getByRole("radio", { name: "Everything" }),
+  ).toBeChecked();
   await backups.getByRole("button", { name: "Restore from a backup…" }).click();
   await expect(backups.getByRole("region", { name: "Export" })).toHaveCount(0);
   await expect(backups.getByRole("textbox", { name: "Backup folder" })).toBeVisible();
