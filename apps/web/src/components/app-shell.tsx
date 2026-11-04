@@ -1,32 +1,19 @@
 import { AgentId, ThreadId } from "@hobbots/domain";
-import { Button } from "@hobbots/ui/components/button";
-import { Outlet, useParams } from "@tanstack/react-router";
+import { Outlet, useParams, useRouterState } from "@tanstack/react-router";
 import { reasonOf, useDesktopConnection, useFollowDesktopConnection } from "../api/connected-desktop.ts";
 import { useHobbotsEvents } from "../api/events.ts";
 import { useDeviceAccess } from "../api/live.ts";
-import { hubNameOf, isLoopbackHost } from "../lib/hub-name.ts";
 import { ArchiveProvider } from "./archive/archive-context.tsx";
 import { ConnectionBanner } from "./connection-banner.tsx";
 import { DeviceRemoved } from "./device-removed.tsx";
 import { HobJump } from "./hob-jump.tsx";
 import { useOpenRequests } from "./inbox/use-open-requests.ts";
-import { messages } from "./messages.ts";
 import { DevicePrompt } from "./pairing/device-prompt.tsx";
+import { ReconnectingCard, ReconnectingProvider } from "./reconnecting.tsx";
 import { Sidebar } from "./sidebar/sidebar.tsx";
 
-const copy = messages.deviceAccess;
-
-/**
- * Why the stream is down, in the banner's words. A device on the tailnet that gets no answer at all
- * says the hub may be off or remote access paused (ADR 021); on the hub's own computer, pausing
- * changes nothing, so it only reconnects.
- */
-const reconnectingText = (unreachable: boolean) => {
-  const hostname = globalThis.location?.hostname ?? "";
-  if (!unreachable || isLoopbackHost(hostname)) return copy.reconnecting;
-  const hub = hubNameOf(hostname);
-  return hub === null ? copy.unreachableNoName : copy.unreachable({ hub });
-};
+/** A hob's chat or its fresh page, whose header holds the reconnecting card. */
+const CHAT_PATH = /^\/hobs\/[^/]+\/(new|threads\/[^/]+)$/;
 
 /** The window: its title bar and whichever page fills it, with or without the sidebar. */
 export function AppWindow() {
@@ -51,35 +38,27 @@ export function AppShell() {
   useFollowDesktopConnection();
   const reason = reasonOf(useDesktopConnection().data);
   useOpenRequests();
+  const inChat = useRouterState({ select: (s) => CHAT_PATH.test(s.location.pathname) });
 
   return (
     <>
       {reason !== null && <ConnectionBanner view={reason} onRetry={connection.retry} />}
-      {reason === null && connection.state === "reconnecting" && (
-        <div
-          role="status"
-          className="flex flex-none items-center gap-2 bg-lantern px-3 py-1.5 text-xs font-bold text-ground"
-        >
-          <span aria-hidden className="animate-hb-blink">
-            ●
-          </span>
-          <span className="flex-1">{reconnectingText(unreachable)}</span>
-          <Button
-            variant="outline"
-            size="xs"
-            className="border-ground text-ground hover:bg-lantern-hover"
-            onClick={connection.retry}
-          >
-            {copy.tryNow}
-          </Button>
+      <ReconnectingProvider
+        value={{ down: reason === null && connection.state === "reconnecting", unreachable, retry: connection.retry }}
+      >
+        <div className="flex min-h-0 flex-1">
+          <Sidebar />
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* A chat shows the card under its own header; every other page shows it at the top. */}
+            {!inChat && <ReconnectingCard className="mx-6 mt-2.5" />}
+            <div className="flex min-h-0 flex-1">
+              <ShellArchive>
+                <Outlet />
+              </ShellArchive>
+            </div>
+          </div>
         </div>
-      )}
-      <div className="flex min-h-0 flex-1">
-        <Sidebar />
-        <ShellArchive>
-          <Outlet />
-        </ShellArchive>
-      </div>
+      </ReconnectingProvider>
       <HobJump />
       <DevicePrompt />
     </>
