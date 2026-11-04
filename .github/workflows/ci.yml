@@ -24,19 +24,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      # Reads the version from `packageManager`.
-      - uses: pnpm/action-setup@v6
-      # Reads the version from `engines.node`.
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: package.json
-          cache: pnpm
+      - uses: ./.github/actions/setup
       - uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
-      - run: pnpm install --frozen-lockfile
       - run: pnpm check
 
   postgres:
@@ -61,20 +54,17 @@ jobs:
       HOBBOTS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: package.json
-          cache: pnpm
+      - uses: ./.github/actions/setup
       - uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
-      - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server
 
-  # The browser tests run in four shards side by side, so the suite finishes well inside the timeout.
+  # The browser tests run in four shards side by side, balanced by recorded test times
+  # (apps/web/e2e/shards.ts). Each shard is a Turbo task with its own cache, so a change that
+  # touches neither the web client nor the server and its packages replays the last result.
   browser-tests:
     name: Browser tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
@@ -83,30 +73,40 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4]
+    env:
+      HOBBOTS_E2E_SHARD: ${{ matrix.shard }}/4
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/setup
+      - uses: actions/cache@v6
         with:
-          node-version-file: package.json
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ matrix.shard }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-${{ github.job }}-${{ matrix.shard }}-
+      # A cached result needs no browser, so the browser steps are skipped.
+      - id: turbo
+        name: Look for a cached result
+        run: |
+          status=$(pnpm turbo run test:e2e --filter=@hobbots/web --dry=json |
+            jq -r '.tasks[] | select(.taskId == "@hobbots/web#test:e2e") | .cache.status')
+          echo "Cache: $status"
+          echo "hit=$([[ "$status" == "HIT" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - id: playwright
+        if: steps.turbo.outputs.hit != 'true'
         name: Read the Playwright version
         run: echo "version=$(pnpm --filter @hobbots/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      # The tests run headless, so the headless shell is the only browser they need.
+      # The tests run headless, so the headless shell is the only browser they need. The runner
+      # image already has the system libraries it uses.
       - id: browsers
+        if: steps.turbo.outputs.hit != 'true'
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
-      - if: steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm --filter @hobbots/web exec playwright install --with-deps --only-shell chromium
-      # The system libraries are not in the cache.
-      - if: steps.browsers.outputs.cache-hit == 'true'
-        run: pnpm --filter @hobbots/web exec playwright install-deps chromium
-      - run: pnpm --filter @hobbots/web build
-      - run: pnpm --filter @hobbots/web exec playwright test --shard=${{ matrix.shard }}/4
+      - if: steps.turbo.outputs.hit != 'true' && steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @hobbots/web exec playwright install --only-shell chromium
+      # Builds the web client and the server, then runs this shard's tests.
+      - run: pnpm turbo run test:e2e --filter=@hobbots/web
       - if: failure()
         uses: actions/upload-artifact@v7
         with:

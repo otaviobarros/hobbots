@@ -9,6 +9,8 @@ on:
       - apps/site/**
       - packages/art/**
       - .github/workflows/site.yml
+      - .github/actions/setup/**
+      - .node-version
       # Dependency bumps, such as wrangler or workerd, change only the lockfile.
       - pnpm-lock.yaml
   push:
@@ -17,6 +19,8 @@ on:
       - apps/site/**
       - packages/art/**
       - .github/workflows/site.yml
+      - .github/actions/setup/**
+      - .node-version
       # Dependency bumps, such as wrangler or workerd, change only the lockfile.
       - pnpm-lock.yaml
 
@@ -37,12 +41,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: package.json
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
       # Cloudflare's published Turnstile test secret; the local D1 database comes from wrangler.jsonc.
       # Copied before the build, which puts .dev.vars into dist/server for astro preview.
       - run: cp apps/site/.dev.vars.example apps/site/.dev.vars
@@ -55,10 +54,9 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
+      # The runner image already has the system libraries the headless shell uses.
       - if: steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm --filter @hobbots/site exec playwright install --with-deps --only-shell chromium
-      - if: steps.browsers.outputs.cache-hit == 'true'
-        run: pnpm --filter @hobbots/site exec playwright install-deps chromium
+        run: pnpm --filter @hobbots/site exec playwright install --only-shell chromium
       - run: pnpm --filter @hobbots/site test:e2e
       - if: failure()
         uses: actions/upload-artifact@v7

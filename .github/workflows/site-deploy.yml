@@ -46,12 +46,7 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: package.json
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
       # The environment is fixed at build time; later wrangler commands read the generated config.
       - run: pnpm turbo run build --filter=@hobbots/site
         env:
@@ -98,12 +93,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: package.json
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - run: pnpm turbo run build --filter=@hobbots/site
         env:
           CLOUDFLARE_ENV: ${{ github.ref_type == 'tag' && 'production' || 'staging' }}
