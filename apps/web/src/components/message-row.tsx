@@ -3,12 +3,13 @@ import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import type { ReactNode } from "react";
 import { toolLogUrl } from "../api/client.ts";
-import { formatTime, refillText } from "../lib/time.ts";
+import { formatTime } from "../lib/time.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { ReplyMarkdown } from "./markdown/reply-markdown.tsx";
 import { messages } from "./messages.ts";
 import { ReplySteps } from "./reply-steps.tsx";
 import { SettleCharmCall } from "./settle-charm-call.tsx";
+import { limitRefill, planOf, usePlans } from "./usage/plan-summary.ts";
 
 const copy = messages.reply;
 
@@ -120,15 +121,7 @@ function ReplyRow({
             {message.error === null ? copy.interrupted({ name: hob.name }) : copy.cutOff({ error: message.error })}
           </span>
         )}
-        {message.status === "limited" && (
-          <span role="status" className="animate-hb-in text-[13px] text-lantern">
-            {copy.limited({
-              name: hob.name,
-              provider: providerName(message),
-              refill: refillText(message.resetsAt),
-            })}
-          </span>
-        )}
+        {message.status === "limited" && <LimitedNote message={message} name={hob.name} />}
         {resume && <ResumeControls resume={resume} name={hob.name} />}
         {message.status === "failed" && (
           <span className="animate-hb-in text-[13px] text-rose">{copy.failed({ error: message.error })}</span>
@@ -140,6 +133,17 @@ function ReplyRow({
 
 /** The provider whose limit ended a reply, in the user's words. */
 const providerName = (message: Message) => (message.runtime === "codex" ? "Codex" : "Claude");
+
+/** A reply the provider's limit stopped, and when it refills, from the same plan the Usage screen reads. */
+function LimitedNote({ message, name }: { message: Message; name: string }) {
+  const plans = usePlans();
+  const plan = planOf(plans, message.runtime ?? "claude-code");
+  return (
+    <span role="status" className="animate-hb-in text-[13px] text-lantern">
+      {copy.limited({ name, provider: providerName(message), refill: limitRefill(plan, message.resetsAt, new Date()) })}
+    </span>
+  );
+}
 
 /** Continue for a reply that ended early, and Continue with each other ready brain. */
 function ResumeControls({ resume, name }: { resume: ContinueReply; name: string }) {

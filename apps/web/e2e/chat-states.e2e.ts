@@ -185,9 +185,7 @@ test("[TC-CH-092] a provider limit says when the allowance refills and can be co
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(page, "fake:limit please");
 
-  await expect(
-    page.getByText(/Pip used up the Claude allowance for now\. It refills at .+, in 1 hour\./),
-  ).toBeVisible();
+  await expect(page.getByText(/Pip used up the Claude allowance for now\. Refills in 1 hour, at .+\./)).toBeVisible();
   expect((await replies(current, page)).map((r) => r.status)).toEqual(["limited"]);
   await page.getByRole("button", { name: "Continue from here" }).click();
   await expect.poll(async () => (await replies(current, page)).map((r) => r.status)).toEqual(["complete"]);

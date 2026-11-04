@@ -1,5 +1,5 @@
 import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
-import type { Agent, Thread } from "@hobbots/domain";
+import type { Agent, RuntimeHealth, Thread } from "@hobbots/domain";
 import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -24,6 +24,7 @@ import { StageHob } from "./home/stage-hob.tsx";
 import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
 import { messages } from "./messages.ts";
 import { Stars } from "./scene.tsx";
+import { planOf, planSummary, usePlans } from "./usage/plan-summary.ts";
 
 /** Home, the landing page: what your hobs are doing, what needs you, and what is left of each AI plan. */
 export function Home() {
@@ -256,17 +257,12 @@ function HappeningNow({
 
 function AiPlans() {
   const runtimes = useQuery(runtimesQuery);
+  const plans = usePlans();
   const claude = runtimes.data?.[0];
   const ready = claude?.availability === "ready";
-  const left = runtimes.isPending
-    ? "Checking…"
-    : ready
-      ? planLabel(claude?.billing ?? null)
-      : claude?.availability === "outdated"
-        ? "Update needed"
-        : claude?.availability === "signedOut"
-          ? "Sign-in needed"
-          : "Not connected";
+  // The same plan, and the same words, as the Usage screen.
+  const summary = ready ? planSummary(planOf(plans, "claude-code"), new Date()) : null;
+  const left = runtimes.isPending ? "Checking…" : providerState(claude);
 
   return (
     <Card label="AI plans">
@@ -277,18 +273,30 @@ function AiPlans() {
           className="hop-on-hover flex flex-col items-center gap-0.5 text-text-strong no-underline"
         >
           <span className="sprite">
-            <PixelArt rows={potion(ready ? 1 : 0)} palette={potionPalette(...POTION_COLORS["claude-code"])} size={36} />
+            <PixelArt
+              rows={potion(summary?.left ?? (ready ? 1 : 0))}
+              palette={potionPalette(...POTION_COLORS["claude-code"])}
+              size={36}
+            />
           </span>
           <span className="text-xs font-bold">Claude</span>
           <span className={cn("pb-1 text-xs", ready ? "text-mint" : "text-rose")}>{left}</span>
         </Link>
       </div>
       <span className="text-[13px] text-text-secondary">
-        Plan limits show here once Claude reports them. More providers arrive with the MVP.
+        {summary === null ? "Plan limits show here once Claude reports them." : `Claude Code plan · ${summary.line}`}
       </span>
     </Card>
   );
 }
+
+/** Claude's state under its potion: how it bills when ready, else what it needs. */
+const providerState = (claude: RuntimeHealth | undefined) => {
+  if (claude?.availability === "ready") return planLabel(claude.billing ?? null);
+  if (claude?.availability === "outdated") return "Update needed";
+  if (claude?.availability === "signedOut") return "Sign-in needed";
+  return "Not connected";
+};
 
 const planLabel = (billing: string | null) => {
   if (!billing) return "Connected";

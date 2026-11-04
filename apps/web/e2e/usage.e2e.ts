@@ -66,6 +66,8 @@ test("[TC-OP-073] the Usage screen shows each plan's potion and each hob's share
   await chat(current, bramble.id, "Hello");
 
   await page.goto(`${current.url}/#/`);
+  // Home's plan line reads the same plan, in the same words, as the Usage screen.
+  await expect(page.getByText(/^Claude Code plan · 62% left · This session · refills \d/)).toBeVisible();
   await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Usage" }).click();
   await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
 
