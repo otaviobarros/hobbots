@@ -220,7 +220,7 @@ export function ChatView({
   const empty = threadId === undefined || messages.data?.length === 0;
 
   return (
-    <main aria-label="Chat" className="flex min-w-[360px] flex-1 flex-col">
+    <main aria-label={copy.landmark} className="flex min-w-[360px] flex-1 flex-col">
       <header className="@container/header flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
         {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
         <Link to="/hobs/$hobId" params={{ hobId }} tabIndex={-1} aria-hidden className="shrink-0">
@@ -255,7 +255,7 @@ export function ChatView({
         )}
         <Button asChild variant="outline">
           <Link to="/hobs/$hobId/profile" params={{ hobId }}>
-            Edit hob
+            {copy.editHob}
           </Link>
         </Button>
       </header>
@@ -281,7 +281,7 @@ export function ChatView({
         tabIndex={0}
         className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-[18px]"
       >
-        {threadId && messages.isPending && <p className="text-label">Loading messages…</p>}
+        {threadId && messages.isPending && <p className="text-label">{copy.loadingMessages}</p>}
         {empty && !messages.isLoading && (
           <EmptyThread hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
         )}

@@ -6,13 +6,12 @@ import {
   type PlanMeter,
   type PlanUsage,
   type RuntimeKind,
-  UsagePeriod,
   usageTokens,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 
-/** Whether a search param names one of the Usage screen's periods. */
-export const isUsagePeriod = Schema.is(UsagePeriod);
+/** The Usage screen's periods in its address, `?days=7` or `?days=30`, which the router reads as numbers. */
+export const UsageDays = Schema.Literals([7, 30]);
 
 // The Usage screen's arithmetic (OP-002): each hob's share of the period's tokens, the period's
 // replies by the reader's own days, and what a plan's headline meter says. Nothing is estimated.

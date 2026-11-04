@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { messages } from "./messages.ts";
 
 /** The sections of Settings after the overview, in the order the section list shows them. */
@@ -11,10 +12,10 @@ export const isSettingsSection = (value: unknown): value is SettingsSection =>
 /** The tabs of Settings › Connections: the AI hobs think with, and the Charms they use. */
 const CONNECTIONS_TABS = ["ai", "charms"] as const;
 
-export type ConnectionsTab = (typeof CONNECTIONS_TABS)[number];
+export const ConnectionsTab = Schema.Literals(CONNECTIONS_TABS);
+export type ConnectionsTab = typeof ConnectionsTab.Type;
 
-export const isConnectionsTab = (value: unknown): value is ConnectionsTab =>
-  CONNECTIONS_TABS.some((tab) => tab === value);
+export const isConnectionsTab = Schema.is(ConnectionsTab);
 
 /** A section's name, as the section list and its heading say it. */
 export const sectionName = (section: SettingsSection): string => messages.sections[section].name;

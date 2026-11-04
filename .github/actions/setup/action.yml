@@ -1,0 +1,14 @@
+name: Set up the workspace
+description: Installs pnpm, the Node version in .node-version and the workspace's dependencies. Run it after actions/checkout.
+runs:
+  using: composite
+  steps:
+    # Reads the version from `packageManager`.
+    - uses: pnpm/action-setup@v6
+    # An exact version, so every job and every run uses the same Node until it is bumped on purpose.
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
+        cache: pnpm
+    - run: pnpm install --frozen-lockfile
+      shell: bash

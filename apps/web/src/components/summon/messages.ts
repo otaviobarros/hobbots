@@ -3,6 +3,7 @@ export const messages = {
   heading: "Summon a hob",
   steps: ["What it helps with", "Name and look", "Ready"],
   stepsLabel: "Summon steps",
+  stepDone: "(done)",
   cancel: "Cancel",
   back: "Back",
   role: {
@@ -11,6 +12,7 @@ export const messages = {
     legend: "Role",
     seeAll: ({ count }: { count: number }) => `See all ${count} roles`,
     ownLabel: "Or call it something of your own",
+    ownTitle: "Your own role title",
     ownPlaceholder: "Like “Garden planner” or “Wedding helper”",
     sigil: "Its sigil",
     sigilFrom: ({ role }: { role: string }) => `Borrowed from ${role}. Any role's sigil works.`,
@@ -23,6 +25,7 @@ export const messages = {
     intro: "Just for fun, and so you can tell your hobs apart. Roll the dice if you can't decide.",
     name: "Name",
     rollName: "Roll a name",
+    nameLabel: "Hob name",
     look: "Look",
     lookN: ({ n }: { n: number }) => `Look ${n}`,
     surprise: "Surprise me",

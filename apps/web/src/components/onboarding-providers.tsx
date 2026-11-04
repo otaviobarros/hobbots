@@ -127,7 +127,7 @@ function Busy({ children }: { children: ReactNode }) {
         aria-hidden
         className="size-3.5 animate-spin rounded-full border-2 border-line-2 border-t-moonlight motion-reduce:animate-none"
       />
-      {children}…
+      {children}
     </span>
   );
 }

@@ -1,9 +1,7 @@
-import { useMemo } from "react";
-
 /** Twinkling pixel stars across the full width and the top `height` pixels. */
 export function Stars({ count, height }: { count: number; height: number }) {
   // A fixed seed keeps the sky the same on every render.
-  const stars = useMemo(() => {
+  const stars = (() => {
     let a = 7;
     const next = () => {
       a = (a * 16807) % 2147483647;
@@ -15,7 +13,7 @@ export function Stars({ count, height }: { count: number; height: number }) {
       z: next() < 0.3 ? 3 : 2,
       d: (next() * 3).toFixed(1),
     }));
-  }, [count, height]);
+  })();
 
   return stars.map((s) => (
     <span

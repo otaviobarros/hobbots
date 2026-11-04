@@ -7,6 +7,8 @@ import { AccessibilityWatch, report } from "./a11y.ts";
 
 const web = resolve(import.meta.dirname, "..");
 const server = resolve(web, "../server");
+/** The server bundle that `global-setup.ts` builds before the tests run. */
+const serverBuild = join(server, "dist", "main.js");
 
 /** Where test hubs keep their data: under the checkout and git-ignored, never the user's Hobbots data. */
 const dataRoot = resolve(web, "../../.data/e2e");
@@ -36,13 +38,15 @@ export const emptyDataDir = (): string => {
 export const removeDataDir = (dataDir: string) => rmSync(dataDir, { recursive: true, force: true });
 
 /**
- * Starts the hub from source on `dataDir`, serving the web client's build, and waits until it
- * answers. The fake runtime is the default; `env` picks another runtime or Claude Code binary.
- * Fails when another hub answers on the port, so a test never acts on someone else's data.
+ * Starts the hub on `dataDir` from the server build that the global setup makes from source,
+ * serving the web client's build, and waits until it answers. The fake runtime is the default;
+ * `env` picks another runtime or Claude Code binary. Fails when another hub answers on the port,
+ * so a test never acts on someone else's data.
  */
 export const startHub = async (dataDir: string, env: Record<string, string> = {}): Promise<Hub> => {
-  // Node runs the server itself, with tsx as a loader rather than a parent process, so a kill reaches it.
-  const child = spawn(process.execPath, ["--import", "tsx", "src/main.ts"], {
+  // Node runs the bundled server itself, with nothing to transpile and no parent process, so it
+  // answers within a second and a kill reaches it.
+  const child = spawn(process.execPath, [serverBuild], {
     cwd: server,
     env: {
       ...process.env,
@@ -193,9 +197,9 @@ export interface Relay {
   readonly close: () => Promise<void>;
 }
 
-/** Relays TCP connections to the hub's port, on the next port up from the worker's hub port. */
+/** Relays TCP connections to the hub's port, 2000 above it: clear of every hub and serve port. */
 export const startRelay = async (): Promise<Relay> => {
-  const relayPort = port + 1000;
+  const relayPort = port + 2000;
   const open = new Set<Socket>();
   let accepting = true;
   const server = createServer((client) => {

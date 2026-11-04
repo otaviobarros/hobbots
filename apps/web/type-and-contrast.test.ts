@@ -9,6 +9,7 @@ interface ThemeFile {
   };
   readonly type: Readonly<Record<string, { readonly size: string; readonly lineHeight: string }>>;
   readonly space: Readonly<Record<string, string>>;
+  readonly duration: Readonly<Record<string, string>>;
 }
 
 const themes: ThemeFile = JSON.parse(readFileSync(new URL("../../docs/design/themes.json", import.meta.url), "utf8"));
@@ -79,6 +80,10 @@ describe("type scale and spacing", () => {
   it("keeps every space step on Tailwind's grid", () => {
     expect(theme).not.toMatch(/--spacing:/);
     for (const [step, value] of Object.entries(themes.space)) expect(Number.parseFloat(value) % 2, step).toBe(0);
+  });
+
+  it.each(Object.entries(themes.duration))("%s is set in @theme", (token, value) => {
+    expect(theme).toContain(`--${token}: ${value};`);
   });
 
   it("lets no theme or look change type, spacing or sizes", () => {

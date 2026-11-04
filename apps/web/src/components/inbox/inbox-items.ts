@@ -1,4 +1,5 @@
 import { type ApprovalRequest, type DeviceId, exactAction } from "@hobbots/domain";
+import { Schema } from "effect";
 import { byClosing } from "../../api/inbox-window.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
 import { messages } from "./messages.ts";
@@ -7,7 +8,8 @@ const copy = messages;
 
 /** The Inbox's tabs: what needs you now, and what was decided or expired. */
 export const INBOX_TABS = ["needs", "history"] as const;
-export type InboxTab = (typeof INBOX_TABS)[number];
+export const InboxTab = Schema.Literals(INBOX_TABS);
+export type InboxTab = typeof InboxTab.Type;
 
 /** How Needs you lists what waits: grouped by quest, or as one list by urgency. */
 export const INBOX_VIEWS = ["quest", "urgency"] as const;
@@ -16,8 +18,7 @@ export type InboxView = (typeof INBOX_VIEWS)[number];
 export const isInboxView = (value: unknown): value is InboxView =>
   typeof value === "string" && (INBOX_VIEWS as ReadonlyArray<string>).includes(value);
 
-export const isInboxTab = (value: unknown): value is InboxTab =>
-  typeof value === "string" && (INBOX_TABS as ReadonlyArray<string>).includes(value);
+export const isInboxTab = Schema.is(InboxTab);
 
 /** How many requests wait for the user's decision. */
 export const pendingCount = (approvals: ReadonlyArray<ApprovalRequest>): number =>

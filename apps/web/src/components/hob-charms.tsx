@@ -151,6 +151,7 @@ const CharmMark = ({ off }: { off: boolean }) => (
       off && "opacity-55",
     )}
   >
+    {/* biome-ignore lint/style/noJsxLiterals: a decorative GitHub monogram, hidden from screen readers and never translated. */}
     G
   </span>
 );

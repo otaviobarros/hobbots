@@ -2,6 +2,8 @@ import { formatCount, formatDay, plural } from "../../lib/format.ts";
 
 /** User-facing copy for a hob's page (STD-I18N-001). */
 export const messages = {
+  /** The hero's role and stats line, such as "Writer · 3 chats". */
+  roleStats: ({ role, stats }: { role: string; stats: string }) => `${role} · ${stats}`,
   page: ({ name }: { name: string }) => `${name}'s page`,
   crumbs: "Breadcrumb",
   yourHobs: "Your hobs",

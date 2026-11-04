@@ -25,11 +25,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: package.json
-          cache: pnpm
+      - uses: ./.github/actions/setup
       - id: version
         name: Read the version from the tag
         run: |
@@ -39,7 +35,6 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - run: pnpm install --frozen-lockfile
       # The tag is the version the app and installers carry.
       - run: pnpm package:mac -c.extraMetadata.version=${{ steps.version.outputs.version }}
       - uses: actions/upload-artifact@v7
@@ -81,7 +76,7 @@ jobs:
       # The end-to-end checks run on Node's test runner, which runs TypeScript from Node 22.18.
       - uses: actions/setup-node@v7
         with:
-          node-version-file: package.json
+          node-version-file: .node-version
       - name: Close the window mid-reply, launch twice, check the login item, quit
         env:
           HOBBOTS_E2E_APP: ${{ runner.temp }}/Hobbots.app

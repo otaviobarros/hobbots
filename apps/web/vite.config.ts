@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { hubProxy } from "./hub-proxy.ts";
 
@@ -9,7 +10,9 @@ export default defineConfig({
   // relative paths would resolve below them. Every client, Electron included, loads the build from
   // the server (ADR 012).
   base: "/",
-  plugins: [react(), tailwindcss()],
+  // The React Compiler memoizes components and hooks, so the code has no useMemo, useCallback or
+  // memo (STD-REACT-010).
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
   // Two entries: the hub's pages, and setup's local pages that the desktop app serves from its own
   // resources before this computer is a hub or connected to one (ADR 025).
   build: {

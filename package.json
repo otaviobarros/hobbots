@@ -10,9 +10,10 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test --concurrency=4",
     "test:pg": "node scripts/test-pg.mjs",
-    "test:e2e": "pnpm --filter @hobbots/web build && pnpm --filter @hobbots/web test:e2e",
+    "test:e2e": "turbo run test:e2e --filter=@hobbots/web",
     "pg:up": "docker compose -f infrastructure/local/compose.yaml up --detach --wait",
     "pg:down": "docker compose -f infrastructure/local/compose.yaml down",
+    "check:standards": "node scripts/check-standards.mjs",
     "lint": "biome check .",
     "lint:unused": "knip",
     "lint:dup": "jscpd",
@@ -21,7 +22,7 @@
     "lint:frontend": "node scripts/check-frontend.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "format": "biome check --write .",
-    "check": "node scripts/check-standards.mjs && node scripts/check-layers.mjs && node scripts/check-complexity.mjs && node scripts/check-frontend.mjs && node --test \"scripts/*.test.mjs\" && knip && jscpd && biome check . && turbo run typecheck --concurrency=4 && turbo run test --concurrency=4"
+    "check": "turbo run check:standards lint:layers lint:complexity lint:frontend test:scripts lint:unused lint:dup lint typecheck test --concurrency=4"
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {

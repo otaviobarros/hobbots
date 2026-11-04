@@ -1,6 +1,6 @@
 import type { AddressRefusal, ConnectEnd, WaitingView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { messages as appMessages } from "../messages.ts";
 import { WelcomeVillage, welcomeActionClass } from "../welcome-village.tsx";
 import { ConnectChoice, choiceOpenClass, RunHereChoice, WhereLayout } from "../where-hobbots-runs.tsx";
@@ -95,20 +95,17 @@ export function LocalSetup({ bridge, start = "welcome" }: { bridge: SetupBridge;
   // Each Connect is one attempt; leaving Connect or starting another makes the earlier one's answer stale.
   const attempt = useRef(0);
 
-  const connect = useCallback(
-    async (address: string) => {
-      const mine = ++attempt.current;
-      setScreen({ name: "connect", address, busy: true });
-      let end: ConnectEnd;
-      try {
-        end = await bridge.connect(address);
-      } catch {
-        end = { kind: "ended", computer: address, address, outcome: { kind: "noAnswer" } };
-      }
-      if (attempt.current === mine) setScreen(afterConnect(address, end));
-    },
-    [bridge],
-  );
+  const connect = async (address: string) => {
+    const mine = ++attempt.current;
+    setScreen({ name: "connect", address, busy: true });
+    let end: ConnectEnd;
+    try {
+      end = await bridge.connect(address);
+    } catch {
+      end = { kind: "ended", computer: address, address, outcome: { kind: "noAnswer" } };
+    }
+    if (attempt.current === mine) setScreen(afterConnect(address, end));
+  };
 
   /** Back from Connect stops a request still under way, so nothing it answers later can connect. */
   const leaveConnect = () => {

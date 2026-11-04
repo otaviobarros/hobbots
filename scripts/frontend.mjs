@@ -24,5 +24,70 @@ const optOuts = (file, text) =>
     return [];
   });
 
+const ROUTE_CALL = /\b(createRoute|createRootRoute|createRootRouteWithContext<[^>]*>\(\)|createRouter)\(\s*\{/g;
+const VALIDATE_SEARCH = /\bvalidateSearch\s*:\s*/g;
+const SCHEMA_VALIDATOR = /^Schema\.toStandardSchemaV1\(/;
+
+/** Where the string, comment or other single character at `index` ends, so a brace in it is not counted. */
+const tokenEnd = (text, index) => {
+  const char = text[index];
+  if (char === '"' || char === "'" || char === "`") {
+    let end = index + 1;
+    while (end < text.length && text[end] !== char) end += text[end] === "\\" ? 2 : 1;
+    return end;
+  }
+  if (char === "/" && text[index + 1] === "/") {
+    const end = text.indexOf("\n", index);
+    return end === -1 ? text.length : end;
+  }
+  if (char === "/" && text[index + 1] === "*") {
+    const end = text.indexOf("*/", index);
+    return end === -1 ? text.length : end + 1;
+  }
+  return index;
+};
+
+/** Where the object literal that opens at `start` closes. */
+const closingBrace = (text, start) => {
+  let depth = 0;
+  for (let index = start; index < text.length; index = tokenEnd(text, index) + 1) {
+    if (text[index] === "{") depth++;
+    else if (text[index] === "}" && --depth === 0) return index;
+  }
+  return text.length;
+};
+
+const lineAt = (text, index) => text.slice(0, index).split("\n").length;
+
+/**
+ * Every route has an error screen and the router a default one (STD-REACT-014), and every
+ * `validateSearch` is an Effect Schema (STD-REACT-002).
+ */
+const routes = (file, text) => {
+  const errors = [];
+  for (const match of text.matchAll(ROUTE_CALL)) {
+    const open = match.index + match[0].length - 1;
+    const options = text.slice(open, closingBrace(text, open) + 1);
+    const at = `${file}:${lineAt(text, match.index)}`;
+    if (match[1] === "createRouter") {
+      if (!/\bdefaultErrorComponent\s*:/.test(options))
+        errors.push(`${at}: give the router a defaultErrorComponent (STD-REACT-014)`);
+    } else if (!/\berrorComponent\s*:/.test(options)) {
+      errors.push(`${at}: give the route an errorComponent (STD-REACT-014)`);
+    }
+  }
+  for (const match of text.matchAll(VALIDATE_SEARCH)) {
+    if (!SCHEMA_VALIDATOR.test(text.slice(match.index + match[0].length)))
+      errors.push(
+        `${file}:${lineAt(text, match.index)}: pass validateSearch an Effect Schema through Schema.toStandardSchemaV1 (STD-REACT-002)`,
+      );
+  }
+  return errors;
+};
+
 /** Returns one message per problem. `read` returns a repository-relative file's text. */
-export const check = (files, read) => files.flatMap((file) => [...fileName(file), ...optOuts(file, read(file))]);
+export const check = (files, read) =>
+  files.flatMap((file) => {
+    const text = read(file);
+    return [...fileName(file), ...optOuts(file, text), ...routes(file, text)];
+  });

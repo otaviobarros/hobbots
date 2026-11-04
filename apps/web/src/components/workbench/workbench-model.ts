@@ -7,13 +7,14 @@ import {
   type Task,
   type TaskTree,
 } from "@hobbots/domain";
+import { Schema } from "effect";
 
 /** The Workbench's tabs, in their order (ADR 023). Summary is the one it opens on. */
 export const WORKBENCH_TABS = ["summary", "changes", "files", "terminal", "browser"] as const;
-export type WorkbenchTab = (typeof WORKBENCH_TABS)[number];
+export const WorkbenchTab = Schema.Literals(WORKBENCH_TABS);
+export type WorkbenchTab = typeof WorkbenchTab.Type;
 
-export const isWorkbenchTab = (value: unknown): value is WorkbenchTab =>
-  typeof value === "string" && (WORKBENCH_TABS as ReadonlyArray<string>).includes(value);
+export const isWorkbenchTab = Schema.is(WorkbenchTab);
 
 /** Why a tab's records cannot be shown: cleared past the window, or a folder no longer tracked. */
 export type UnavailableReason = "cleared" | ScanStop | "unread";

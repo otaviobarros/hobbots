@@ -1,4 +1,5 @@
 import { ROLE_HAT_TITLES, ROLE_TOOL_TITLES, type RoleId, starterRole } from "@hobbots/domain";
+import { Schema } from "effect";
 import { type FirstHobDraft, nearbySeeds, pickRole } from "../../api/first-hob.ts";
 import { messages } from "./messages.ts";
 
@@ -8,7 +9,8 @@ import { messages } from "./messages.ts";
  */
 
 const SUMMON_STEPS = ["role", "look", "ready"] as const;
-export type SummonStep = (typeof SUMMON_STEPS)[number];
+export const SummonStep = Schema.Literals(SUMMON_STEPS);
+export type SummonStep = typeof SummonStep.Type;
 
 /** The step an address names, or the first one when it names none or an unknown one. */
 export const parseStep = (value: unknown): SummonStep => SUMMON_STEPS.find((step) => step === value) ?? SUMMON_STEPS[0];

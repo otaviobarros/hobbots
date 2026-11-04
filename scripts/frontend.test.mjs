@@ -44,3 +44,40 @@ test("opt-outs without a rule or a reason fail", () => {
     'apps/web/src/a.ts:3: write "standards-allow STD-XXX-NNN: <reason>" (STD-REACT-020)',
   ]);
 });
+
+test("routes with an error screen and schema search pass", () => {
+  const [names, read] = files({
+    "apps/web/src/router.tsx": [
+      "const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({",
+      "  component: AppWindow,",
+      "  errorComponent: AppError,",
+      "});",
+      "const hobsRoute = createRoute({",
+      '  path: "hobs", // a comment with a } brace',
+      "  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ show: searchParam(HobFilter) })),",
+      '  component: () => <HobsPage filter="}" />,',
+      "  errorComponent: (props) => <PageError error={props.error} />,",
+      "});",
+      "createRouter({ routeTree, defaultErrorComponent: ScreenError });",
+    ].join("\n"),
+  });
+  assert.deepEqual(check(names, read), []);
+});
+
+test("a route without an error screen or with a hand-written validateSearch fails", () => {
+  const [names, read] = files({
+    "apps/web/src/router.tsx": [
+      "const hobsRoute = createRoute({",
+      '  path: "hobs",',
+      "  validateSearch: (search) => ({ show: search.show }),",
+      "  component: () => <HobsPage errorComponent={1} />,",
+      "});",
+      "createRouter({ routeTree });",
+    ].join("\n"),
+  });
+  assert.deepEqual(check(names, read), [
+    "apps/web/src/router.tsx:1: give the route an errorComponent (STD-REACT-014)",
+    "apps/web/src/router.tsx:6: give the router a defaultErrorComponent (STD-REACT-014)",
+    "apps/web/src/router.tsx:3: pass validateSearch an Effect Schema through Schema.toStandardSchemaV1 (STD-REACT-002)",
+  ]);
+});
