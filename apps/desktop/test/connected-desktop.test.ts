@@ -201,6 +201,7 @@ describe("the connected desktop", () => {
     expect(paired.kind).toBe("allowed");
     if (paired.kind !== "allowed") return;
     settings.update({ mode: "connected", connection: paired.connection });
+    await settings.saved();
 
     // Pairing asked as the desktop app: `kind: "desktop"`, no `Origin`, the secret as a bearer token.
     const opened = hub.sent.find((request) => request.method === "POST" && request.path === "/api/pairing");

@@ -48,6 +48,32 @@ test("opt-outs without a rule or a reason fail", () => {
   ]);
 });
 
+test("the desktop main process registers IPC only through trusted-ipc.ts", () => {
+  const [names, read] = files({
+    "apps/desktop/src/main/trusted-ipc.ts": "ipcMain.handle(channel, listener);",
+    "apps/desktop/src/main/folder-dialog.ts": "  options.ipcMain.handle(channel, listener);",
+    "apps/desktop/src/preload/index.ts": "ipcRenderer.invoke(channel);",
+  });
+  assert.deepEqual(check(names, read), [
+    "apps/desktop/src/main/folder-dialog.ts:1: register IPC handlers with handleTrusted from trusted-ipc.ts (STD-DESKTOP-003)",
+  ]);
+});
+
+test("the desktop main process makes Sync calls only with a startup opt-out", () => {
+  const [names, read] = files({
+    "apps/desktop/src/main/settings.ts": [
+      "// standards-allow STD-DESKTOP-008: read once when the app starts",
+      'const text = readFileSync(file, "utf8");',
+      "writeFileSync(file, text);",
+      'import { readFileSync } from "node:fs";',
+    ].join("\n"),
+    "apps/web/src/a.ts": "const value = decodeUnknownSync(schema)(input);",
+  });
+  assert.deepEqual(check(names, read), [
+    "apps/desktop/src/main/settings.ts:3: use the asynchronous call, the main process never blocks (STD-DESKTOP-008)",
+  ]);
+});
+
 test("routes with an error screen and schema search pass", () => {
   const [names, read] = files({
     "apps/web/src/router.tsx": [

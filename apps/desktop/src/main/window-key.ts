@@ -4,35 +4,35 @@
  * sends it as a bearer token and sets it as the window's session cookie; it reads the file again
  * after the server restarts or answers 401. Electron stays out of this file; index.ts passes it in.
  */
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { windowKeyFile } from "@hobbots/server/window-key";
 
 /** The cookie the window's pages carry: the same name a paired browser's device cookie has. */
 export const WINDOW_COOKIE = "hobbots_device";
 
 export interface WindowKey {
-  /** The key as last read; undefined while the hub has written none. */
+  /** The key as last read; undefined before the first read and while the hub has written none. */
   readonly current: () => string | undefined;
-  /** Reads the file again, as after a restart or a 401. */
-  readonly reload: () => string | undefined;
+  /** Reads the file again, as once the server answers, after a restart or on a 401. */
+  readonly reload: () => Promise<string | undefined>;
   /** The headers that make a main-process request the window's. */
   readonly headers: () => Record<string, string>;
 }
 
 export const makeWindowKey = (
   dataDir: string,
-  read: (path: string) => string = (path) => readFileSync(path, "utf8"),
+  read: (path: string) => Promise<string> = (path) => readFile(path, "utf8"),
 ) => {
   let key: string | undefined;
-  const reload = () => {
+  const reload = async () => {
     try {
-      key = read(windowKeyFile(dataDir)).trim() || undefined;
+      key = (await read(windowKeyFile(dataDir))).trim() || undefined;
     } catch {
       key = undefined;
     }
     return key;
   };
-  const current = () => key ?? reload();
+  const current = () => key;
   const window: WindowKey = {
     current,
     reload,
@@ -56,7 +56,7 @@ export const fetchAsWindow =
     const response = await send();
     if (response.status !== 401) return response;
     const before = key.current();
-    if (key.reload() === before) return response;
+    if ((await key.reload()) === before) return response;
     onNewKey();
     return send();
   };

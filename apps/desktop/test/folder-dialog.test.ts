@@ -53,7 +53,7 @@ describe("the folder dialog bridge", () => {
   // covers DP-001
   it("[TC-DP-026] refuses pages the window is not allowed to show", async () => {
     const { shown, choose } = setup({ canceled: false, filePaths: ["/"] });
-    await expect(choose(stranger)).rejects.toThrow("Not allowed from this page");
+    await expect(choose(stranger)).resolves.toEqual({ refused: "notAllowed" });
     expect(shown).toEqual([]);
   });
 
@@ -64,6 +64,6 @@ describe("the folder dialog bridge", () => {
     await expect(chooseOn(backupDialogChannels.restore, trusted)).resolves.toBe("/Users/me/Backups");
     expect(shown.map((each) => each.options)).toEqual([backupDialogOptions.save, backupDialogOptions.restore]);
     for (const options of Object.values(backupDialogOptions)) expect(options.properties).not.toContain("openFile");
-    await expect(chooseOn(backupDialogChannels.restore, stranger)).rejects.toThrow("Not allowed from this page");
+    await expect(chooseOn(backupDialogChannels.restore, stranger)).resolves.toEqual({ refused: "notAllowed" });
   });
 });

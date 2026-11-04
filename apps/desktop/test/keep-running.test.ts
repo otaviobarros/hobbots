@@ -11,12 +11,13 @@ afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
 describe("keep running in the menu bar", () => {
   // covers EX-005
-  it("is on by default and keeps the login-item choice beside it", () => {
+  it("is on by default and keeps the login-item choice beside it", async () => {
     const file = join(temp, "settings.json");
     const settings = fileSettingsStore(file);
     expect(keepsRunning(settings)).toBe(true);
     settings.update({ openAtLogin: false });
     settings.update({ keepRunningInMenuBar: false });
+    await settings.saved();
     expect(keepsRunning(fileSettingsStore(file))).toBe(false);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ openAtLogin: false, keepRunningInMenuBar: false });
   });
@@ -31,15 +32,17 @@ describe("keep running in the menu bar", () => {
     });
     const trusted = { senderFrame: { url: "http://127.0.0.1:4317/" } } as IpcMainInvokeEvent;
     const stranger = { senderFrame: { url: "https://example.com/" } } as IpcMainInvokeEvent;
-    expect(handlers.get(keepRunningChannels.set)?.(trusted, false)).toBe(false);
-    expect(handlers.get(keepRunningChannels.get)?.(trusted)).toBe(false);
-    expect(() => handlers.get(keepRunningChannels.set)?.(stranger, true)).toThrow("Not allowed from this page");
+    await expect(handlers.get(keepRunningChannels.set)?.(trusted, false)).resolves.toBe(false);
+    await expect(handlers.get(keepRunningChannels.get)?.(trusted)).resolves.toBe(false);
+    await expect(handlers.get(keepRunningChannels.set)?.(stranger, true)).resolves.toEqual({ refused: "notAllowed" });
+    // Only a boolean is taken.
+    await expect(handlers.get(keepRunningChannels.set)?.(trusted, "yes")).resolves.toEqual({ refused: "malformed" });
     expect(keepsRunning(settings)).toBe(false);
   });
 });
 
 describe("the mode in the app's settings", () => {
-  it("keeps a connected desktop's connection, and reads a broken one as nothing chosen", () => {
+  it("keeps a connected desktop's connection, and reads a broken one as nothing chosen", async () => {
     const file = join(temp, "mode.json");
     const settings = fileSettingsStore(file);
     const connection = {
@@ -50,10 +53,13 @@ describe("the mode in the app's settings", () => {
       deviceId: "dev1",
     };
     settings.update({ mode: "connected", connection });
+    await settings.saved();
     expect(desktopMode(fileSettingsStore(file).read())).toEqual({ mode: "connected", connection });
     settings.update({ connection: { ...connection, nodeId: "" } });
+    await settings.saved();
     expect(desktopMode(fileSettingsStore(file).read())).toBeUndefined();
     settings.update({ mode: "hub", connection: undefined });
+    await settings.saved();
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ mode: "hub" });
   });
 });

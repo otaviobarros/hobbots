@@ -1,5 +1,7 @@
-import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from "electron";
+import { Schema } from "effect";
+import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 import type { SettingsStore } from "./settings.ts";
+import { handleTrusted, type SettingsIpcOptions, withArgs } from "./trusted-ipc.ts";
 
 /**
  * The window's own background, which shows before the page paints and while it resizes. It follows
@@ -20,15 +22,17 @@ export const windowBackground = (settings: SettingsStore) => settings.read().win
  * Sets the sending window's background to the ground its page reports, and keeps it for the next
  * window. Only pages the window may show are heard, and only a plain hex color is taken.
  */
-export const handleWindowBackgroundIpc = (options: {
-  readonly ipcMain: Pick<IpcMain, "handle">;
-  readonly settings: SettingsStore;
-  readonly isTrusted: (event: IpcMainInvokeEvent) => boolean;
-  readonly windowOf: (event: IpcMainInvokeEvent) => Pick<BrowserWindow, "setBackgroundColor"> | null;
-}) =>
-  options.ipcMain.handle(windowBackgroundChannel, (event, color: unknown) => {
-    if (!options.isTrusted(event)) throw new Error("Not allowed from this page");
-    if (typeof color !== "string" || !HEX_COLOR.test(color)) return;
-    options.windowOf(event)?.setBackgroundColor(color);
-    if (options.settings.read().windowBackground !== color) options.settings.update({ windowBackground: color });
+export const handleWindowBackgroundIpc = (
+  options: SettingsIpcOptions & {
+    readonly windowOf: (event: IpcMainInvokeEvent) => Pick<BrowserWindow, "setBackgroundColor"> | null;
+  },
+) =>
+  handleTrusted(options, {
+    [windowBackgroundChannel]: withArgs(
+      Schema.Tuple([Schema.String.check(Schema.isPattern(HEX_COLOR))]),
+      ([color], event) => {
+        options.windowOf(event)?.setBackgroundColor(color);
+        if (options.settings.read().windowBackground !== color) options.settings.update({ windowBackground: color });
+      },
+    ),
   });

@@ -1,5 +1,7 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { messages } from "./messages.ts";
 
 /**
  * The hub a connected desktop uses (ADR 025). None of it is a secret: the device token is only in
@@ -47,8 +49,13 @@ interface DesktopSettings {
 
 export interface SettingsStore {
   readonly read: () => DesktopSettings;
-  /** Merges `patch` into the file; a key set to undefined is removed. */
+  /** Merges `patch` into the settings and saves them in the background; a key set to undefined is removed. */
   readonly update: (patch: DesktopSettings) => DesktopSettings;
+  /**
+   * Resolves once every update made so far is on disk, as before the app quits or starts again, and
+   * rejects when the latest save failed, so a caller never reports a change the file does not hold.
+   */
+  readonly saved: () => Promise<void>;
 }
 
 const CONNECTION_KEYS = ["address", "name", "nodeId", "nodeName", "deviceId"] as const satisfies ReadonlyArray<
@@ -95,24 +102,71 @@ const parse = (raw: string): DesktopSettings => {
   };
 };
 
-/** A small JSON file in the app's data folder. A missing or unreadable file reads as no choices made. */
-export const fileSettingsStore = (file: string): SettingsStore => {
-  const read = () => {
-    try {
-      return parse(readFileSync(file, "utf8"));
-    } catch {
-      return {};
-    }
-  };
+/** The settings as the file holds them; a missing or unreadable file reads as no choices made. */
+const load = (file: string): DesktopSettings => {
+  try {
+    // standards-allow STD-DESKTOP-008: read once when the app starts, before any window opens
+    return parse(readFileSync(file, "utf8"));
+  } catch {
+    return {};
+  }
+};
+
+/** Written beside the file and renamed over it, so a crash never leaves half a file. */
+const save = async (file: string, settings: DesktopSettings) => {
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(`${file}.tmp`, `${JSON.stringify(settings, null, 2)}\n`);
+  await rename(`${file}.tmp`, file);
+};
+
+const withoutUnset = (settings: DesktopSettings): DesktopSettings =>
+  Object.fromEntries(Object.entries(settings).filter(([, value]) => value !== undefined));
+
+/**
+ * A small JSON file in the app's data folder, read once when the store is made and kept in memory
+ * after that. The app is its only writer, so each update changes the copy in memory at once and is
+ * saved without blocking the main process (STD-DESKTOP-008), one save after another in order. Each
+ * save writes every setting, so the latest one decides whether the file holds them all.
+ */
+export const fileSettingsStore = (file: string, write: typeof save = save): SettingsStore => {
+  let current = load(file);
+  let saving: Promise<void> = Promise.resolve();
   return {
-    read,
+    read: () => current,
     update: (patch) => {
-      const next = { ...read(), ...patch };
-      mkdirSync(dirname(file), { recursive: true });
-      // Written beside the file and renamed over it, so a crash never leaves half a file.
-      writeFileSync(`${file}.tmp`, `${JSON.stringify(next, null, 2)}\n`);
-      renameSync(`${file}.tmp`, file);
+      const next = withoutUnset({ ...current, ...patch });
+      current = next;
+      saving = saving.catch(() => undefined).then(() => write(file, next));
+      saving.catch((error: unknown) => console.error("Hobbots could not save its desktop settings", error));
       return next;
     },
+    saved: () => saving,
   };
+};
+
+/**
+ * Waits for the settings to be on disk before the app quits. A save that failed, as on a full disk,
+ * is said in words and tried again for as long as the user asks; Quit anyway leaves the last change
+ * unsaved. `ask` answers with the index of the button chosen.
+ */
+export const saveBeforeQuit = async (
+  settings: SettingsStore,
+  ask: (prompt: { message: string; detail: string; buttons: ReadonlyArray<string> }) => Promise<number>,
+) => {
+  const copy = messages.settings;
+  for (;;) {
+    try {
+      await settings.saved();
+      return;
+    } catch {
+      const choice = await ask({
+        message: copy.notSaved,
+        detail: copy.notSavedDetail,
+        buttons: [copy.tryAgain, copy.quit],
+      });
+      if (choice !== 0) return;
+      // Saves every setting again.
+      settings.update({});
+    }
+  }
 };

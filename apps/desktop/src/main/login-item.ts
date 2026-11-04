@@ -1,5 +1,6 @@
-import type { IpcMain, IpcMainInvokeEvent } from "electron";
+import { Schema } from "effect";
 import type { SettingsStore } from "./settings.ts";
+import { handleTrusted, noArgs, type TrustedIpcOptions, withArgs } from "./trusted-ipc.ts";
 
 /**
  * What macOS reports for the login item (`SMAppService.mainApp`), or `unavailable` where this
@@ -9,7 +10,7 @@ import type { SettingsStore } from "./settings.ts";
 type LoginItemStatus = "enabled" | "requires-approval" | "not-registered" | "not-found" | "unavailable";
 
 /** The choice in Settings › General and what macOS made of it. */
-export interface LoginItemState {
+interface LoginItemState {
   readonly openAtLogin: boolean;
   readonly status: LoginItemStatus;
 }
@@ -24,7 +25,8 @@ export interface LoginItem {
   /** True when macOS opened the app at login, so it starts without a window. */
   readonly openedAtLogin: boolean;
   readonly state: () => LoginItemState;
-  readonly setOpenAtLogin: (openAtLogin: boolean) => LoginItemState;
+  /** Answers once the choice is saved; rejects when it could not be. */
+  readonly setOpenAtLogin: (openAtLogin: boolean) => Promise<LoginItemState>;
 }
 
 const statuses = new Set<string>(["enabled", "requires-approval", "not-registered", "not-found"]);
@@ -59,9 +61,10 @@ export const makeLoginItem = (options: {
   return {
     openedAtLogin,
     state,
-    setOpenAtLogin: (openAtLogin) => {
+    setOpenAtLogin: async (openAtLogin) => {
       settings.update({ openAtLogin });
       if (supported) items.write(openAtLogin);
+      await settings.saved();
       // Read back rather than assumed: an unsigned build can be refused without an error.
       return state();
     },
@@ -79,29 +82,21 @@ export const loginItemChannels = {
 export const loginItemsSettingsUrl = "x-apple.systempreferences:com.apple.LoginItems-Settings.extension";
 
 /** Answers the bridge's calls, only from pages the window is allowed to show. */
-export const handleLoginItemIpc = (options: {
-  readonly ipcMain: Pick<IpcMain, "handle">;
-  readonly loginItem: LoginItem;
-  readonly isTrusted: (event: IpcMainInvokeEvent) => boolean;
-  readonly openSystemSettings: () => Promise<void>;
-}) => {
-  const { ipcMain, loginItem, isTrusted, openSystemSettings } = options;
-  const guarded =
-    <A extends unknown[]>(f: (...args: A) => LoginItemState | Promise<LoginItemState>) =>
-    (event: IpcMainInvokeEvent, ...args: A) => {
-      if (!isTrusted(event)) throw new Error("Not allowed from this page");
-      return f(...args);
-    };
-  ipcMain.handle(loginItemChannels.get, guarded(loginItem.state));
-  ipcMain.handle(
-    loginItemChannels.set,
-    guarded((openAtLogin: unknown) => loginItem.setOpenAtLogin(openAtLogin === true)),
-  );
-  ipcMain.handle(
-    loginItemChannels.openSystemSettings,
-    guarded(async () => {
+export const handleLoginItemIpc = (
+  options: TrustedIpcOptions & {
+    readonly loginItem: LoginItem;
+    readonly openSystemSettings: () => Promise<void>;
+  },
+) => {
+  const { loginItem, openSystemSettings } = options;
+  return handleTrusted(options, {
+    [loginItemChannels.get]: noArgs(() => loginItem.state()),
+    [loginItemChannels.set]: withArgs(Schema.Tuple([Schema.Boolean]), ([openAtLogin]) =>
+      loginItem.setOpenAtLogin(openAtLogin),
+    ),
+    [loginItemChannels.openSystemSettings]: noArgs(async () => {
       await openSystemSettings();
       return loginItem.state();
     }),
-  );
+  });
 };

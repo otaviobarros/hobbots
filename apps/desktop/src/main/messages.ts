@@ -62,4 +62,23 @@ export const messages = {
       `Hobbots could not reach ${hub}, so it still lists this Mac. Revoke it there, in Settings › Devices.`,
     ok: "OK",
   },
+  settings: {
+    notSaved: "Hobbots could not save its settings",
+    notSavedDetail:
+      "The disk may be full, or the Hobbots data folder may not be writable. Free some space and try again, or quit and lose the last change.",
+    tryAgain: "Try again",
+    quit: "Quit anyway",
+  },
+  window: {
+    stopped: "This Hobbots window stopped working",
+    stoppedDetail: "It stopped several times in a row. Reload it to try again, or close it and open Hobbots again.",
+    notResponding: "This Hobbots window isn't responding",
+    notRespondingDetail: "Wait for it to catch up, or reload it. Your hobs keep working either way.",
+    notLoaded: "Hobbots could not load this window",
+    notLoadedDetail: "Hobbots may still be starting, or the hub may be out of reach. Try again, or close the window.",
+    reload: "Reload",
+    wait: "Wait",
+    tryAgain: "Try again",
+    close: "Close window",
+  },
 } as const;

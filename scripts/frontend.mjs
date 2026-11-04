@@ -26,6 +26,31 @@ const optOuts = (file, text) =>
     return [];
   });
 
+const DESKTOP_MAIN = "apps/desktop/src/main/";
+const TRUSTED_IPC = `${DESKTOP_MAIN}trusted-ipc.ts`;
+const IPC_HANDLE = /\bipcMain\.handle(?:Once)?\(/;
+const SYNC_CALL = /\b\w+Sync\(/;
+const SYNC_ALLOW = "standards-allow STD-DESKTOP-008:";
+
+/**
+ * The desktop main process registers IPC handlers only through trusted-ipc.ts (STD-DESKTOP-003), and
+ * makes no `*Sync(` call unless an opt-out on its line or the line above says why it runs at startup
+ * (STD-DESKTOP-008).
+ */
+const desktopMain = (file, text) => {
+  if (!file.startsWith(DESKTOP_MAIN)) return [];
+  const lines = text.split("\n");
+  return lines.flatMap((line, index) => {
+    const at = `${file}:${index + 1}`;
+    const problems = [];
+    if (file !== TRUSTED_IPC && IPC_HANDLE.test(line))
+      problems.push(`${at}: register IPC handlers with handleTrusted from trusted-ipc.ts (STD-DESKTOP-003)`);
+    if (SYNC_CALL.test(line) && !line.includes(SYNC_ALLOW) && !(lines[index - 1] ?? "").includes(SYNC_ALLOW))
+      problems.push(`${at}: use the asynchronous call, the main process never blocks (STD-DESKTOP-008)`);
+    return problems;
+  });
+};
+
 const ROUTE_CALL = /\b(createRoute|createRootRoute|createRootRouteWithContext<[^>]*>\(\)|createRouter)\(\s*\{/g;
 const VALIDATE_SEARCH = /\bvalidateSearch\s*:\s*/g;
 const SCHEMA_VALIDATOR = /^Schema\.toStandardSchemaV1\(/;
@@ -91,7 +116,13 @@ const routes = (file, text) => {
 export const check = (files, read) =>
   files.flatMap((file) => {
     const text = read(file);
-    return [...fileName(file), ...optOuts(file, text), ...routes(file, text), ...checkSource(file, text)];
+    return [
+      ...fileName(file),
+      ...optOuts(file, text),
+      ...desktopMain(file, text),
+      ...routes(file, text),
+      ...checkSource(file, text),
+    ];
   });
 
 const RULE = /\((STD-[A-Z0-9]+-\d{3})\)$/;

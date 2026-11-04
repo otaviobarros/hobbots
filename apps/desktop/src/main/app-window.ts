@@ -1,12 +1,14 @@
 import { join } from "node:path";
-import { BrowserWindow, screen, shell } from "electron";
+import { BrowserWindow, dialog, screen, shell } from "electron";
 import { FIRST_RUN_GROUND } from "./window-background.ts";
+import { watchWindow } from "./window-recovery.ts";
 import { initialWindowBounds } from "./window-size.ts";
 
 /**
  * A new Hobbots window, not loaded yet: on the display the pointer is on, in the Hobbots title
  * strip, sandboxed, and kept on the pages `isAllowedUrl` accepts. External links open in the
- * default browser. `additionalArguments` reach the preload script, never the page.
+ * default browser. `additionalArguments` reach the preload script, never the page. A page that
+ * crashes, hangs or fails to load is logged and recovered (STD-DESKTOP-010).
  */
 export const newAppWindow = (options: {
   readonly isAllowedUrl: (url: string) => boolean;
@@ -46,6 +48,22 @@ export const newAppWindow = (options: {
   // A redirect, such as the hub's between its HTTP and HTTPS addresses, is held to the same pages.
   window.webContents.on("will-redirect", (event, url) => {
     if (!options.isAllowedUrl(url)) event.preventDefault();
+  });
+  watchWindow({
+    page: window.webContents,
+    isAllowedUrl: options.isAllowedUrl,
+    ask: async ({ message, detail, buttons, signal }) =>
+      (
+        await dialog.showMessageBox(window, {
+          type: "warning",
+          message,
+          detail,
+          buttons: [...buttons],
+          defaultId: 0,
+          ...(signal !== undefined && { signal }),
+        })
+      ).response,
+    close: () => window.close(),
   });
   return window;
 };

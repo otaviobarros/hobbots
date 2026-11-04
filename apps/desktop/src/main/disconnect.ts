@@ -62,5 +62,7 @@ export const disconnectFromHub = async (options: DisconnectOptions): Promise<Dis
   const revoked =
     refused || (token !== undefined && (await revokeOnHub(options.hub, options.connection.deviceId, token)));
   options.settings.update({ mode: undefined, connection: undefined, leftHub: true });
+  // The app starts again only once the file says so; otherwise it would come back connected.
+  await options.settings.saved();
   return { stillListed: !revoked };
 };

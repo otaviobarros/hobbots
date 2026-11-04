@@ -34,12 +34,13 @@ describe("the window background", () => {
     const handler = handlers.get(windowBackgroundChannel);
 
     await handler?.(trusted, "#f7f4ef");
+    await settings.saved();
     expect(painted).toEqual(["#f7f4ef"]);
     expect(windowBackground(fileSettingsStore(file))).toBe("#f7f4ef");
 
     // Anything but a plain hex color is ignored, and other pages are refused.
-    await handler?.(trusted, "red; background: url(x)");
-    expect(() => handler?.(stranger, "#000000")).toThrow("Not allowed from this page");
+    await expect(handler?.(trusted, "red; background: url(x)")).resolves.toEqual({ refused: "malformed" });
+    await expect(handler?.(stranger, "#000000")).resolves.toEqual({ refused: "notAllowed" });
     expect(painted).toEqual(["#f7f4ef"]);
     expect(windowBackground(fileSettingsStore(file))).toBe("#f7f4ef");
   });
