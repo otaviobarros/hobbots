@@ -4,8 +4,8 @@ import {
   type AttemptId,
   cancelMoves,
   descendantsOf,
-  isLiveAttempt,
   isTerminalTask,
+  liveAttemptOn,
   MilestoneId,
   pendingApprovals,
   QuestId,
@@ -250,9 +250,7 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, au
         };
       }
       // The turn making the call still runs: the Task shows waiting once it ends (#572).
-      const turnRunning =
-        task.state === "active" &&
-        scope.tree.attempts.some((each) => each.id === task.currentAttemptId && isLiveAttempt(each.state));
+      const turnRunning = task.state === "active" && liveAttemptOn(task, scope.tree);
       const journal = journalOf();
       journal.keep(
         yield* fromRecords(

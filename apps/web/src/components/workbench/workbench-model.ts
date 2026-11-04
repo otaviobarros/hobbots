@@ -151,22 +151,3 @@ export const askedBy = (tree: TaskTree, task: Task): ReadonlyArray<Task["ownerId
   }
   return chain;
 };
-
-/** The tab one key press moves to from `tab`: arrows wrap around, Home and End go to the ends. */
-export const tabAfterKey = (tab: WorkbenchTab, key: string): WorkbenchTab | null => {
-  const index = WORKBENCH_TABS.indexOf(tab);
-  const last = WORKBENCH_TABS.length - 1;
-  const at = (i: number) => WORKBENCH_TABS[i] ?? null;
-  switch (key) {
-    case "ArrowRight":
-      return at(index === last ? 0 : index + 1);
-    case "ArrowLeft":
-      return at(index === 0 ? last : index - 1);
-    case "Home":
-      return at(0);
-    case "End":
-      return at(last);
-    default:
-      return null;
-  }
-};

@@ -1,5 +1,6 @@
 import { type Agent, type AgentId, type RetireWork, starterRole } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -188,25 +189,32 @@ function Profile({
         </div>
       </header>
 
-      <Tabs tab={tab} onTab={setTab} />
-
-      <div
-        role="tabpanel"
-        id="profile-panel"
-        aria-labelledby={`profile-tab-${tab}`}
+      <Tabs
+        value={tab}
+        onValueChange={(next) => {
+          const found = TABS.find(([id]) => id === next);
+          if (found) setTab(found[0]);
+        }}
         className="flex min-h-0 flex-1 flex-col"
       >
+        <TabsList aria-label="Profile" className="px-6">
+          {TABS.map(([id, label]) => (
+            <TabsTrigger key={id} value={id} className="px-[18px]">
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
         {/* Kept mounted, so looking at another tab never drops unsaved edits. */}
-        <div hidden={tab !== "profile"} className="flex min-h-0 flex-1 flex-col">
+        <TabsContent value="profile" forceMount className="flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
           <ProfileTab hob={hob} />
-        </div>
-        {tab !== "profile" && (
-          <div className="relative min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
-            {tab === "charms" && <CharmsTab hob={hob} onPermissions={() => setTab("permissions")} />}
-            {tab === "permissions" && <PermissionsTab hob={hob} />}
-          </div>
-        )}
-      </div>
+        </TabsContent>
+        <TabsContent value="charms" className="relative min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
+          <CharmsTab hob={hob} onPermissions={() => setTab("permissions")} />
+        </TabsContent>
+        <TabsContent value="permissions" className="relative min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
+          <PermissionsTab hob={hob} />
+        </TabsContent>
+      </Tabs>
 
       {exportOpen && <ExportDialog target={{ hob }} onClose={() => setExportOpen(false)} />}
       {(retireOpen || retired) && (
@@ -220,51 +228,6 @@ function Profile({
         />
       )}
     </main>
-  );
-}
-
-/** The three profile tabs; arrow keys move between them, as a tab list does. */
-function Tabs({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
-  const refs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
-  const move = (event: React.KeyboardEvent, index: number) => {
-    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-    if (step === 0) return;
-    event.preventDefault();
-    const next = TABS[(index + step + TABS.length) % TABS.length];
-    if (!next) return;
-    onTab(next[0]);
-    refs.current[next[0]]?.focus();
-  };
-  return (
-    <div role="tablist" aria-label="Profile" className="flex gap-1 border-b-2 border-line px-6">
-      {TABS.map(([id, label], index) => {
-        const on = tab === id;
-        return (
-          <button
-            key={id}
-            ref={(el) => {
-              refs.current[id] = el;
-            }}
-            type="button"
-            role="tab"
-            id={`profile-tab-${id}`}
-            aria-selected={on}
-            aria-controls="profile-panel"
-            tabIndex={on ? 0 : -1}
-            onClick={() => onTab(id)}
-            onKeyDown={(e) => move(e, index)}
-            className={cn(
-              "cursor-pointer border-0 bg-transparent px-[18px] py-3 font-bold focus-visible:outline-3 focus-visible:-outline-offset-3 focus-visible:outline-moonlight",
-              on
-                ? "text-moonlight shadow-[inset_0_-4px_0_var(--color-lantern)]"
-                : "text-text-secondary hover:text-text-strong",
-            )}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 

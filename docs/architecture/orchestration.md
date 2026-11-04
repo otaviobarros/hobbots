@@ -36,7 +36,7 @@ Expose controlled Hobbots tools through MCP or a supported equivalent adapter in
 | `hand_off` | A lead | Gives one Task's result to another Task as an artifact reference |
 | `wait_for` | A Task's owner | Waits for any or all of its child Tasks without blocking its chat, and lists what the awaited Tasks hold open: questions, blockers and actions waiting for your approval ([#698](https://github.com/otaviobarros/hobbots/issues/698)) |
 | `read_tasks` | A Task's owner | Reads the state of every Task under its own, at any depth, with each question's state and answer and each action waiting for your approval ([#698](https://github.com/otaviobarros/hobbots/issues/698)); after the request ends, its lead still reads it ([#666](https://github.com/otaviobarros/hobbots/issues/666)) |
-| `message_task` | A lead | Sends a message to a member's Task directly under its own, which wakes the member |
+| `message_task` | A lead | Sends a message to a member's Task directly under its own, which wakes the member. While a turn runs on that Task, the message waits for the turn to end, and the result says so and why, such as an approval request the turn waits on ([#701](https://github.com/otaviobarros/hobbots/issues/701)) |
 | `complete_task` | A Task's owner | Returns the result, subject to the completion gate |
 | `cancel_task` | A Task's owner | Cancels one of its child Tasks and that Task's subtree |
 

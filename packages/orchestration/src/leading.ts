@@ -1,8 +1,9 @@
 import type { TaskRepository } from "@hobbots/agents";
 import {
+  type ApprovalRequest,
   descendantsOf,
-  isLiveAttempt,
   isTerminalTask,
+  liveAttemptOn,
   NoteId,
   pendingApprovalsOn,
   type Question,
@@ -12,7 +13,7 @@ import {
   type TaskToolRefused,
   type TaskTree,
 } from "@hobbots/domain";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import {
   approvalsWaiting,
   type CallScope,
@@ -73,14 +74,13 @@ const describeTask = (task: Task, tree: TaskTree, caller: string) => {
     .filter((each) => each.taskId === task.id && each.source !== "automatic")
     .toSorted((a, b) => b.revision - a.revision)
     .slice(0, RECENT_CHECKPOINTS);
-  const attempt = tree.attempts.find((each) => each.id === task.currentAttemptId);
   return {
     task_id: task.id as string,
     parent_id: task.parentId as string | null,
     owner: task.ownerId as string,
     brief: firstLine(task.brief),
     state: task.state,
-    turn_running: attempt !== undefined && isLiveAttempt(attempt.state),
+    turn_running: liveAttemptOn(task, tree),
     waiting_on: waitingOn(task, tree),
     questions: tree.questions
       .filter((question) => question.taskId === task.id)
@@ -90,6 +90,37 @@ const describeTask = (task: Task, tree: TaskTree, caller: string) => {
     recent_checkpoints: reported.map((each) => ({ kind: each.kind, summary: each.summary, at: each.createdAt })),
     ...(task.result === null ? {} : { result: task.result.summary }),
   };
+};
+
+/** Why a message to a member's Task is not read yet; undefined when no turn runs, so it wakes the member. */
+type Held =
+  | { readonly held: "turn-running" }
+  | { readonly held: "approval-pending"; readonly approval: ApprovalRequest };
+
+/**
+ * A turn running on a member's Task reads only what it was started with, so a message waits for
+ * that turn to end (ADR 019), however long the user takes over an approval request it waits on (#701).
+ */
+const heldBy = (tasks: TaskRepository["Service"], task: Task, tree: TaskTree): Effect.Effect<Held | undefined> =>
+  !liveAttemptOn(task, tree)
+    ? Effect.succeed(undefined)
+    : Effect.map(tasks.readLedger(task.id), (ledger): Held => {
+        const approval = Option.getOrUndefined(ledger)?.open.flatMap((entry) =>
+          entry._tag === "Approval" ? [entry.approval] : [],
+        )[0];
+        return approval === undefined ? { held: "turn-running" } : { held: "approval-pending", approval };
+      });
+
+/** What `message_task` tells its sender: that the member reads it next, or why it waits until then. */
+const sentText = (task: Task, held: Held | undefined) => {
+  const to = `hob ${task.ownerId} on Task ${task.id}`;
+  if (held === undefined)
+    return `Sent to ${to}. It reaches them in their next turn, and wakes them if they are not working.`;
+  const why =
+    held.held === "turn-running"
+      ? "they are in a turn now, which reads only what it started with"
+      : `their turn waits for the user to decide their request "${held.approval.label}"`;
+  return `Held for ${to}: ${why}. They read your message once that turn ends, as their next turn starts. It is kept, so do not send it again.`;
 };
 
 /** The Task `read_tasks` reads under: one the caller owns, or one under a Task of its own. */
@@ -152,10 +183,16 @@ export const makeLeading = ({ tasks }: Deps) => ({
           }),
         ),
       );
+      const held = yield* heldBy(tasks, task, scope.tree);
       return {
         done: {
-          message: `Sent to hob ${task.ownerId} on Task ${task.id}. It reaches them in their next turn, and wakes them if they are not working.`,
-          details: { message_id: note.id, recipient: note.recipientId },
+          message: sentText(task, held),
+          details: {
+            message_id: note.id,
+            recipient: note.recipientId,
+            ...(held !== undefined && { held: held.held }),
+            ...(held?.held === "approval-pending" && { approval_id: held.approval.id }),
+          },
         },
         entries: journal.entries,
       };

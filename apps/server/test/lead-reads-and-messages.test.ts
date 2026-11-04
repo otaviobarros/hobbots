@@ -1,6 +1,20 @@
+import { ApprovalService } from "@hobbots/agents";
 import { NoteId, TaskId } from "@hobbots/domain";
 import { afterEach, describe, expect, it } from "vitest";
-import { FRODO, hub, messagesWhen, NETTLE, ownedBy, PIP, partyHub, QUILL, ROOK, send, treeWhen } from "./party-hub.ts";
+import {
+  FRODO,
+  firstPending,
+  hub,
+  messagesWhen,
+  NETTLE,
+  ownedBy,
+  PIP,
+  partyHub,
+  QUILL,
+  ROOK,
+  send,
+  treeWhen,
+} from "./party-hub.ts";
 import { toolsHub } from "./tools-hub.ts";
 
 // Issue #574: Frodo could not see Nettle's Task under Pip's nested Quest, and had no way to tell Pip
@@ -202,6 +216,73 @@ describe("a lead reads its subtree and messages its members", () => {
     expect(requests.filter((each) => each.prompt.includes("Hob frodo sent you a message"))).toHaveLength(1);
     expect(requests.filter((each) => each.prompt.includes("Hob pip sent you a message"))).toHaveLength(1);
   }, 30_000);
+});
+
+describe("a message to a member waiting on an approval", () => {
+  // covers OR-002, IN-001, PE-003
+  it("[TC-OR-487] Frodo's message to Quill while Quill's turn waits for your approval says it is held and why, and reaches Quill once you decide", async () => {
+    const hubbed = partyHub();
+    dispose = hubbed.dispose;
+    const { run, requests, answers, reactions } = hubbed;
+    reactions.push({
+      on: "Hob frodo sent you a message",
+      lines: [hub("complete_task", { key: "ship-done", summary: "Shipped with the new name" })],
+    });
+    await run(
+      send([
+        "Ship the copy",
+        hub("delegate_task", { key: "ship", hob: "Quill", brief: "Ship it\nfake:tool Bash git push origin feature" }),
+        hub("wait_for", { key: "wait", tasks: ["$ship.task_id"] }),
+      ]),
+    );
+    // Balanced asks you before Quill pushes; his turn waits on it.
+    const pending = await run(firstPending);
+    const quill = ownedBy(await run(treeWhen(() => true)), QUILL);
+    if (quill === undefined) throw new Error("no member Task");
+    expect(pending.taskId).toBe(quill.id);
+
+    await run(messagesWhen((all) => all.length >= 2));
+    await run(
+      send([
+        "Tell Quill the product is renamed",
+        hub("message_task", { key: "rename", task_id: quill.id, text: "The product is now Hobbots." }),
+      ]),
+    );
+    await run(messagesWhen(() => answers.has("rename")));
+    const held = answers.get("rename") ?? "";
+    expect(held).toContain(`Held for hob quill on Task ${quill.id}`);
+    expect(held).toContain(`their turn waits for the user to decide their request "${pending.label}"`);
+    expect(held).toContain('"held":"approval-pending"');
+    expect(held).toContain(`"approval_id":"${pending.id}"`);
+    // Held, not lost: nothing reached Quill yet, and the note is recorded.
+    expect(requests.filter((each) => each.prompt.includes("Hob frodo sent you a message"))).toHaveLength(0);
+    expect((await run(treeWhen(() => true))).notes.map((note) => note.text)).toEqual(["The product is now Hobbots."]);
+
+    // Once you decide, Quill's turn ends and his next one carries the message, which he acts on.
+    await run(
+      ApprovalService.use((approvals) =>
+        approvals.decide(pending.id, { decision: "approve", actionDigest: pending.actionDigest }),
+      ),
+    );
+    const done = await run(treeWhen((tree) => ownedBy(tree, QUILL)?.state === "completed"));
+    expect(ownedBy(done, QUILL)?.result?.summary).toBe("Shipped with the new name");
+    expect(requests.filter((each) => each.prompt.includes("Hob frodo sent you a message"))).toHaveLength(1);
+  }, 30_000);
+
+  // covers OR-002, IN-001
+  it("[TC-OR-488] a message to a member whose turn runs, with no approval, says it is held until that turn ends", async () => {
+    const tools = toolsHub(party, TOP);
+    dispose = tools.dispose;
+    const { pip, nettle } = await nested(tools);
+    const { call, run, tree, startTurn } = tools;
+    const queued = (await tree()).tasks.find((task) => task.id === nettle);
+    if (queued === undefined) throw new Error("no nested Task");
+    await run(startTurn(nettle, queued.revision));
+    const sent = await call(PIP, pip, "message_task", { key: "go", task_id: nettle, text: "Go on." });
+    expect(sent.message).toContain(`Held for hob nettle on Task ${nettle}: they are in a turn now`);
+    expect(sent.details).toMatchObject({ recipient: NETTLE, held: "turn-running" });
+    expect(sent.details).not.toHaveProperty("approval_id");
+  });
 });
 
 describe("a lead reads its Quest after it ends", () => {

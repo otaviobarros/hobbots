@@ -386,5 +386,94 @@
     "dur-shake": "450ms",
     "dur-hop": "700ms",
     "dur-loop-cap": "10s"
+  },
+  "contrast": {
+    "$comment": "The floors every theme meets, as WCAG contrast ratios. Each pair is a text color on the color behind it. apps/web/type-and-contrast.test.ts checks every pair in every theme.",
+    "pairs": [
+      {
+        "text": "text",
+        "on": "ground",
+        "floor": 12,
+        "use": "Reading text: replies and long text."
+      },
+      {
+        "text": "text-strong",
+        "on": "ground",
+        "floor": 4.5,
+        "use": "Headings, names and button labels."
+      },
+      {
+        "text": "text-secondary",
+        "on": "ground",
+        "floor": 4.5,
+        "use": "Secondary lines."
+      },
+      {
+        "text": "label",
+        "on": "ground",
+        "floor": 4.5,
+        "use": "Section labels, timestamps and hints."
+      },
+      {
+        "text": "moonlight",
+        "on": "ground",
+        "floor": 4.5,
+        "use": "Hob names and Workshop headings."
+      },
+      {
+        "text": "lantern",
+        "on": "ground",
+        "floor": 4.5,
+        "use": "Links and what needs you."
+      },
+      {
+        "text": "mint",
+        "on": "ground",
+        "floor": 4.5,
+        "use": "Working, done and approve."
+      },
+      {
+        "text": "rose",
+        "on": "ground",
+        "floor": 4.5,
+        "use": "Deny, stop and errors."
+      },
+      {
+        "text": "star",
+        "on": "ground",
+        "floor": 4.5,
+        "use": "Types in code."
+      },
+      {
+        "text": "link",
+        "on": "ground",
+        "floor": 4.5,
+        "use": "Links in replies."
+      },
+      {
+        "text": "on-lantern",
+        "on": "lantern",
+        "floor": 4.5,
+        "use": "Text on a lantern fill."
+      },
+      {
+        "text": "on-rose",
+        "on": "rose",
+        "floor": 4.5,
+        "use": "Text on a rose fill."
+      },
+      {
+        "text": "control",
+        "on": "ground",
+        "floor": 3,
+        "use": "Control borders."
+      },
+      {
+        "text": "focus-ring",
+        "on": "ground",
+        "floor": 3,
+        "use": "The focus ring."
+      }
+    ]
   }
 }

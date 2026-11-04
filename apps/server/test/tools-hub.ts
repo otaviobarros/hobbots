@@ -55,6 +55,18 @@ export const toolsHub = (names: ReadonlyArray<readonly [AgentId, string]>, top: 
     );
   const tree = () =>
     run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readTree(top))).then(Option.getOrThrow);
+  /** Starts a turn on `taskId`, at its `revision`, as its first Attempt. */
+  const startTurn = (taskId: TaskId, revision: number) =>
+    Effect.flatMap(Effect.service(TaskRepository), (tasks) =>
+      tasks.startAttempt(taskId, revision, {
+        id: AttemptId.make(`${taskId}-1`),
+        runtime: "claude-code",
+        sessionId: null,
+        configVersion: 1,
+        policyVersion: null,
+        startedAt: now,
+      }),
+    );
   const seed = Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     for (const [id, name] of names) {
@@ -94,14 +106,7 @@ export const toolsHub = (names: ReadonlyArray<readonly [AgentId, string]>, top: 
       delegation: null,
       milestones: [],
     });
-    yield* tasks.startAttempt(top, created.value.revision, {
-      id: AttemptId.make(`${top}-1`),
-      runtime: "claude-code",
-      sessionId: null,
-      configVersion: 1,
-      policyVersion: null,
-      startedAt: now,
-    });
+    yield* startTurn(top, created.value.revision);
   });
-  return { run, call, refused, head, journaledSince, tree, seed, dispose: () => runtime.dispose() };
+  return { run, call, refused, head, journaledSince, tree, seed, startTurn, dispose: () => runtime.dispose() };
 };
