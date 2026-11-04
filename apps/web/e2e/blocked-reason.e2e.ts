@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, openRoom, taskDetails } from "./quest-room.ts";
+import { laneHead, laneTask, openRoom, taskDetails } from "./quest-room.ts";
 
 // Issue #571 in the browser: Rook's Task is blocked only when its own milestone is all that keeps
 // it open, and its lane in the Quest room then says why, in the words its lead reads. The hub side is
@@ -52,7 +52,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
 // covers OR-004, UX-002
-test("[TC-OR-223] the Task card and its lane say why Rook's Task is blocked, not a bare Blocked", async ({ page }) => {
+test("[TC-OR-223] Rook's lane says why its Task is blocked, not a bare Blocked", async ({ page }) => {
   const current = await startHub(dataDir);
   hub = current;
   await api(current, "PATCH", "/api/setup", {
@@ -80,10 +80,9 @@ test("[TC-OR-223] the Task card and its lane say why Rook's Task is blocked, not
   await openRoom(page, "Build the app");
   const frontend = laneHead(page, "Rook");
   await expect(frontend).toContainText("Blocked", { timeout: 30_000 });
-  // The Task card in the chat gives the reason on Rook's row.
-  const cardRow = page.getByRole("button", { name: "Look inside Write the frontend" });
-  await expect(cardRow).toContainText("Its member ended a turn without completing it");
-  await expect(cardRow).toContainText("Blocked");
+  // Rook's lane gives the reason.
+  const rooks = laneTask(page, "Write the frontend");
+  await expect(rooks).toContainText("Its member ended a turn without completing it");
   const drawer = await taskDetails(page, "Write the frontend");
   await expect(drawer).toContainText('only its own milestones are unreported: "Page live"');
   await expect(drawer).toContainText("It waits on no question, approval or other Task");

@@ -2,6 +2,7 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
+import { openWorkbench, ticket } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
@@ -65,10 +66,10 @@ const finishedTask = async (page: Page) => {
     ].join("\n"),
   );
   await composer.press("Enter");
-  const card = page.getByRole("region", { name: "Aldric's work on Write the launch report" });
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  const questTicket = ticket(page, "Write the launch report");
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: "Workbench for Write the launch report" });
   await bench.getByRole("tab", { name: /^Files/ }).click();
   return { files: bench.getByRole("tabpanel", { name: /^Files/ }), folder };

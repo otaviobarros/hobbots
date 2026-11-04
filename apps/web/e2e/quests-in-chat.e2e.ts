@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { cancelInLane, laneHead, laneTask, openRoom, questRoom, taskDetails } from "./quest-room.ts";
+import { cancelInLane, laneHead, laneTask, openRoom, questRoom, taskDetails, ticket } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -12,11 +12,9 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
 
-  // The card sits under the request, with every Task as a row under its owner.
-  const card = page.getByRole("region", { name: "Aldric's work on Plan the Black Friday campaign" });
-  await expect(card).toContainText("Aldric's quest · 2 tasks");
-  await expect(card.getByRole("button", { name: "Look inside Draft the landing copy" })).toContainText("Quill");
-  await expect(card.getByRole("button", { name: "Look inside Build the campaign" })).toContainText("waiting on Quill");
+  // The ticket sits under the request, counting the party's Tasks.
+  const questTicket = ticket(page, "Plan the Black Friday campaign");
+  await expect(questTicket).toContainText("of 2 done");
 
   // The quest button in the header keeps it in view; a lead's answer shows as one line; a question for you asks.
   const strip = page.getByRole("region", { name: "Work in progress" });
@@ -24,15 +22,15 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(page.getByText("Aldric answered Quill for you")).toBeVisible();
   const asks = page.getByRole("region", { name: "Ada asks you" });
   await expect(asks).toContainText("Should international orders get an earlier cutoff");
-  await expect(card.getByRole("button", { name: "Look inside Build the campaign" })).toContainText("Needs you");
+  await expect(questTicket).toContainText("1 needs you");
   await expect(strip).toContainText("1 needs you");
 
-  // A row on the card opens the room beside the chat on that hob's lane, by keyboard too, and Close room closes it.
-  await card.getByRole("button", { name: "Look inside Build the campaign" }).focus();
+  // The ticket opens the room beside the chat, by keyboard too, and Close room closes it.
+  await questTicket.focus();
   await page.keyboard.press("Enter");
   const room = questRoom(page, "Plan the Black Friday campaign");
   await expect(room.getByRole("heading", { name: "Plan the Black Friday campaign" })).toBeFocused();
-  await expect(laneHead(page, "Ada")).toHaveAttribute("aria-pressed", "true");
+  await expect(laneHead(page, "Ada")).toContainText("Needs you");
   const drawer = await taskDetails(page, "Build the campaign");
   await expect(drawer).toContainText("Aldric gave it");
   await expect(drawer).toContainText("Keyword research done");
@@ -46,7 +44,7 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await asks.getByRole("button", { name: "Send answer" }).click();
   await expect(asks).toContainText("You answered here: Yes, Dec 12 for international orders.");
   // Aldric finishes only once his chat has read each member's result, a paced fake reply apiece.
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   await expect(strip).toBeHidden();
   await expect(page.getByText("The Black Friday campaign is ready.")).toBeVisible();
   // The lead's chat holds only the plan, the question no lead could answer and the finish (#901):
@@ -57,7 +55,7 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(replies.nth(1)).toContainText("Ada has one question for you about the international cutoff.");
   await expect(replies.nth(2)).toContainText("Quill wrote the copy and Ada scheduled the email");
 
-  // Once it ends, the card still opens the room, and the lead's own Task shows its output.
+  // Once it ends, the ticket still opens the room, and the lead's own Task shows its output.
   await openRoom(page, "Plan the Black Friday campaign");
   await expect(laneTask(page, "Plan the Black Friday campaign", "Aldric")).toContainText("Black Friday campaign ready");
 });
@@ -120,7 +118,7 @@ test("[TC-IN-154] cancelling the work a question waits on withdraws it from the 
     timeout: 15_000,
   });
 
-  // Nobody is left to hear the answer: the card says so instead of asking, and so does the drawer.
+  // Nobody is left to hear the answer: the question says so instead of asking, and so does the drawer.
   const withdrawn = "Withdrawn: the work it was about ended before anyone answered.";
   const inChat = page.getByRole("main", { name: "Chat" }).getByRole("region", { name: "Ada asks you" });
   await expect(inChat).toContainText(withdrawn);

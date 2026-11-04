@@ -11,6 +11,7 @@ import {
   openRoom,
   roomMenu,
   showInWorkbench,
+  ticket,
 } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
@@ -158,7 +159,7 @@ test("[TC-CH-193] a lane says why a Reassign is refused, and the room cancels th
   await roomMenu(page, title);
   await expect(page.getByRole("menuitem", { name: "Cancel quest…" })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await expect(page.getByText("Aldric stopped this")).toBeVisible();
+  await expect(ticket(page, title)).toContainText("Cancelled after");
 
   // Once it ended nothing is left to control, but its Workbench still opens.
   const ended = await laneMenu(page, "Ada");
@@ -183,8 +184,8 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   await expect(signs).toContainText("Running", { timeout: 15_000 });
   await expect(banner).toContainText("Failed");
   await expect(lane(page, "Ada")).toContainText("Schedule the sale email");
-  const card = page.getByRole("region", { name: `Aldric's work on ${quest}` });
-  await expect(card.getByRole("button", { name: "Look inside Schedule the sale email" })).toContainText("Ada");
+  // The ticket counts each failed Task as something that needs you.
+  await expect(ticket(page, quest)).toContainText("2 need you");
 
   // A failed Task turns its lane rose and says what stopped it, with Retry and Reassign… there.
   const quill = lane(page, "Quill");
@@ -246,7 +247,6 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   await adaMenu.getByRole("menuitem", { name: "Quill" }).click();
   await expect(adaMenu).toBeHidden();
   await expect(laneTask(page, "Schedule the sale email", "Quill")).toBeVisible();
-  await expect(card.getByRole("button", { name: "Look inside Schedule the sale email" })).toContainText("Quill");
 });
 
 // covers CH-005, OR-004

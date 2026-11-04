@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { lane, laneTask, questRoom } from "./quest-room.ts";
+import { lane, laneTask, openRoom, questRoom, ticket } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -16,8 +16,7 @@ const openAdasTask = async (page: Page) => {
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 15_000 });
-  const card = page.getByRole("region", { name: "Aldric's work on Plan the Black Friday campaign" });
-  await card.getByRole("button", { name: "Look inside Build the campaign" }).click();
+  await openRoom(page, "Plan the Black Friday campaign");
   const drawer = laneTask(page, "Build the campaign");
   await expect(drawer).toContainText(QUESTION);
   return { url, drawer };
@@ -37,7 +36,7 @@ test("[TC-UX-085] a question waiting for you is answered in its lane in the Ques
   await expect(asks.getByRole("button", { name: "Send answer" })).toBeEnabled();
   await answer.press("Enter");
 
-  // The question closes in place, and the chat's card shows the same answer, each saying where you gave it (#671).
+  // The question closes in place, and the chat shows the same answer, each saying where you gave it (#671).
   await expect(drawer).toContainText("You answered here: Yes, Dec 12 for international orders.");
   await expect(answer).toHaveCount(0);
   await questRoom(page, "Plan the Black Friday campaign").getByRole("button", { name: "Close room" }).click();
@@ -46,8 +45,8 @@ test("[TC-UX-085] a question waiting for you is answered in its lane in the Ques
   );
 
   // Once the question is answered, her part finishes and the Quest wraps up.
-  const card = page.getByRole("region", { name: "Aldric's work on Plan the Black Friday campaign" });
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  const questTicket = ticket(page, "Plan the Black Friday campaign");
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
 
   // Nothing waits for you in the Inbox any more.
   await page.goto(`${url}/#/inbox?tab=needs`);

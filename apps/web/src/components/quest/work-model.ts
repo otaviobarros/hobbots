@@ -6,7 +6,6 @@ import {
   isTerminalTask,
   type Message,
   type MessageId,
-  partyOf,
   pendingApprovals,
   pendingApprovalsOn,
   type Quest,
@@ -21,24 +20,20 @@ import { firstLine } from "../../lib/format.ts";
 import { memberFolders } from "./member-folders.ts";
 
 /**
- * How the chat shows a request's work (ADR 018, screen 17): the card under the request, the strip
- * under the header, the drawer, and the few moments that reach the chat. Everything here comes from
+ * How the chat shows a request's work (ADR 018, ADR 027, screen 17): the ticket under the request,
+ * the quest buttons in the header, and the few moments that reach the chat. Everything here comes from
  * the Task records, never from what a hob wrote (STD-UI-008).
  */
 
-/** Where a row stands, in the order the card lists them: what needs you first, done last. */
+/** Where a Task stands for you, from what needs you to what is done. */
 export type RowStatus = "needs-you" | "failed" | "blocked" | "running" | "waiting" | "done";
 
-const RANK: Record<RowStatus, number> = { "needs-you": 0, failed: 1, blocked: 2, running: 3, waiting: 4, done: 5 };
-
+/** A Task right under another, as Task details list them. */
 export interface WorkRow {
-  /** The Task the row opens: a member's Task, or the current step of a Task with steps. */
   readonly task: Task;
   readonly status: RowStatus;
   /** The hobs whose unfinished Tasks this one waits on. */
   readonly waitsOn: ReadonlyArray<AgentId>;
-  /** For a row that stands for a Task's steps: which step is current, from 1. */
-  readonly step: { readonly index: number; readonly total: number } | null;
   /** What the Task last reported, if anything. */
   readonly latest: string | null;
   /** The first action its turn waits on you to approve, which the row names (#698). */
@@ -50,12 +45,8 @@ export interface WorkCard {
   readonly quest: Quest | null;
   /** The hob you asked: the Task's owner, the Quest's lead. */
   readonly leadId: AgentId;
-  readonly party: ReadonlyArray<AgentId>;
-  /** Every row, in the order of `RowStatus`: what needs you first, done last. */
-  readonly rows: ReadonlyArray<WorkRow>;
   /** Done Tasks and all Tasks under the top one, for the progress line. */
   readonly progress: { readonly done: number; readonly total: number };
-  readonly status: RowStatus;
 }
 
 const childrenOf = (tree: TaskTree, id: TaskId) => tree.tasks.filter((task) => task.parentId === id);
@@ -115,53 +106,7 @@ export const waitsOnOf = (tree: TaskTree, task: Task): ReadonlyArray<AgentId> =>
   ),
 ];
 
-/** A step that ended without failing: its work is behind the Task. */
-const settled = (task: Task) => task.state === "completed" || task.state === "cancelled";
-
-/**
- * The step the row stands for: the first that failed or has not ended, so a failed step stays in
- * view ahead of later ones, or the last step once all have settled.
- */
-const currentStep = (steps: ReadonlyArray<Task>) => {
-  const index = steps.findIndex((step) => !settled(step));
-  return index === -1 ? steps.length - 1 : index;
-};
-
-/** One row per member's Task and one for the Task's own steps, showing only its current step. */
-const workRows = (tree: TaskTree, top: Task): ReadonlyArray<WorkRow> => {
-  const children = childrenOf(tree, top.id);
-  const steps = children.filter((child) => child.ownerId === top.ownerId);
-  const rows: Array<WorkRow> = children
-    .filter((child) => child.ownerId !== top.ownerId)
-    .map((task) => ({
-      task,
-      status: rowStatus(tree, task),
-      waitsOn: waitsOnOf(tree, task),
-      step: null,
-      latest: latestOf(tree, task),
-      approval: pendingApprovalsOn(tree, task.id)[0] ?? null,
-    }));
-  const current = steps[currentStep(steps)];
-  if (current !== undefined) {
-    rows.unshift({
-      task: current,
-      status: steps.every(settled) ? "done" : rowStatus(tree, current),
-      waitsOn: waitsOnOf(tree, current),
-      step: { index: steps.indexOf(current) + 1, total: steps.length },
-      latest: latestOf(tree, current),
-      approval: pendingApprovalsOn(tree, current.id)[0] ?? null,
-    });
-  }
-  return rows
-    .map((row, order) => ({ row, order }))
-    .sort(byRank)
-    .map(({ row }) => row);
-};
-
-const byRank = (a: { row: WorkRow; order: number }, b: { row: WorkRow; order: number }) =>
-  RANK[a.row.status] - RANK[b.row.status] || a.order - b.order;
-
-/** The card for a request's Task tree. */
+/** What the ticket, the quest button and the room header say of a request's work: who leads it and how far it is. */
 export const workCard = (tree: TaskTree): WorkCard | null => {
   const top = tree.tasks[0];
   if (top === undefined) return null;
@@ -171,13 +116,10 @@ export const workCard = (tree: TaskTree): WorkCard | null => {
     top,
     quest,
     leadId: top.ownerId,
-    party: quest === null ? [] : partyOf(quest, tree.delegations),
-    rows: workRows(tree, top),
     progress: {
       done: under.filter((task) => task.state === "completed").length,
       total: under.length,
     },
-    status: rowStatus(tree, top),
   };
 };
 
@@ -196,7 +138,7 @@ export const liveTrees = (trees: ReadonlyArray<TaskTree>): ReadonlyArray<TaskTre
 
 /** Something about the work that the chat itself shows, under the message it follows. */
 export type Moment =
-  | { readonly kind: "card"; readonly tree: TaskTree; readonly at: string }
+  | { readonly kind: "ticket"; readonly tree: TaskTree; readonly at: string }
   /** A question that reached you, open or answered by you. */
   | { readonly kind: "question"; readonly tree: TaskTree; readonly question: Question; readonly at: string }
   /** A lead answered a member's question, so it never reached you. */
@@ -205,7 +147,7 @@ export type Moment =
 const momentsOf = (tree: TaskTree): ReadonlyArray<Moment> => {
   const top = tree.tasks[0];
   if (top === undefined) return [];
-  const moments: Array<Moment> = [{ kind: "card", tree, at: top.createdAt }];
+  const moments: Array<Moment> = [{ kind: "ticket", tree, at: top.createdAt }];
   for (const question of tree.questions) {
     if (question.answeredBy?._tag === "Lead" && question.answeredAt !== null) {
       moments.push({ kind: "answered", tree, question, at: question.answeredAt });
@@ -220,7 +162,7 @@ const momentsOf = (tree: TaskTree): ReadonlyArray<Moment> => {
 export const BEFORE_ALL = "before-all";
 
 /**
- * Places each moment after the message it follows in time. A card goes under the request that
+ * Places each moment after the message it follows in time. A ticket goes under the request that
  * started its Task: the last message of yours before it, not the reply that was already running.
  */
 export const placeMoments = (
@@ -231,7 +173,7 @@ export const placeMoments = (
   const moments = trees.flatMap(momentsOf).sort((a, b) => a.at.localeCompare(b.at));
   for (const moment of moments) {
     const anchor = transcript.findLast(
-      (message) => message.createdAt <= moment.at && (moment.kind !== "card" || message.role === "user"),
+      (message) => message.createdAt <= moment.at && (moment.kind !== "ticket" || message.role === "user"),
     );
     const key = anchor?.id ?? BEFORE_ALL;
     placed.set(key, [...(placed.get(key) ?? []), moment]);
@@ -301,7 +243,6 @@ const workRowsAll = (tree: TaskTree, task: Task): ReadonlyArray<WorkRow> =>
     task: child,
     status: rowStatus(tree, child),
     waitsOn: waitsOnOf(tree, child),
-    step: null,
     latest: latestOf(tree, child),
     approval: pendingApprovalsOn(tree, child.id)[0] ?? null,
   }));

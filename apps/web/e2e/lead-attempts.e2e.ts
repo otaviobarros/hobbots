@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
+import { openWorkbench, ticket } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
@@ -34,8 +35,8 @@ test("[TC-OR-315] the lead's later turns on its Task stay in Attempt 1, and its 
     script("report_checkpoint", { key: "found", kind: "finding", summary: "The notes needed a changelog." }),
   ]);
   await send(page, ["Wrap it up", script("complete_task", { key: "done", summary: "The notes are tidy." })]);
-  const card = page.getByRole("region", { name: "Aldric's work on Tidy the notes" });
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  const questTicket = ticket(page, "Tidy the notes");
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
 
   // The hub kept one Attempt of the Task for all three turns.
   const thread = /\/threads\/([^/?]+)/.exec(page.url())?.[1];
@@ -52,7 +53,7 @@ test("[TC-OR-315] the lead's later turns on its Task stay in Attempt 1, and its 
   ]);
 
   // Its Workbench offers no Attempt to pick, and shows what both turns changed.
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   await expect(bench.getByRole("heading", { name: "Tidy the notes" })).toBeVisible();
   await expect(bench.getByRole("radiogroup", { name: "Attempts" })).toHaveCount(0);

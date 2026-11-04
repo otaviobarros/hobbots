@@ -52,16 +52,14 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   // without running past its edge.
   const tray = page.getByRole("region", { name: /^Needs you/ });
   await expect(tray.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 15_000 });
-  const card = page.getByRole("region", { name: /^Aldric's work on Run the Black Friday campaign/ });
-  const adasRow = card.getByRole("button", { name: /^Look inside Build the campaign for the shop in/ });
-  await adasRow.click();
+  const ticket = page.getByRole("button", { name: /^Open the Run the Black Friday campaign .* room: / });
+  await ticket.click();
   const room = page.getByRole("region", { name: /^Run the Black Friday campaign .*, Quest room$/ });
   const heading = room.getByRole("heading", { name: /^Run the Black Friday campaign/ }).first();
   await expect(heading).toBeFocused();
   expect(await lines(heading)).toBe(1);
   await expectInside(heading, room);
   const ada = lane(page, "Ada");
-  await expect(laneHead(page, "Ada")).toHaveAttribute("aria-pressed", "true");
   await expectInside(laneHead(page, "Ada"), ada);
   const task = ada.getByRole("region", { name: /^Build the campaign for the shop in/ }).first();
   await task.locator(":scope > details > summary").click();
@@ -84,12 +82,15 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   // Nothing in the chat is wider than its column, so the transcript never scrolls sideways.
   await expectNoSideScroll(chat);
 
-  // With the room open beside it, the quest card's count and Open in Workbench stay inside the chat's column.
-  await adasRow.click();
-  await expect(room).toBeVisible();
-  for (const end of [card.getByText(/of 2 done$/), card.getByRole("button", { name: "Open in Workbench" })]) {
-    await expect(end).toBeVisible();
-    await expectInside(end, chat);
+  // The ticket keeps to one line inside the chat's column, with the room shut and open beside it.
+  for (const opened of [false, true]) {
+    if (opened) await ticket.click();
+    await expect(room).toBeVisible({ visible: opened });
+    expect(await lines(ticket.getByText(/^Run the Black Friday campaign/))).toBe(1);
+    for (const end of [ticket.getByText(/(of 2 done|^Finished in .*)$/), ticket.getByText("Open room")]) {
+      await expect(end).toBeVisible();
+      await expectInside(end, chat);
+    }
+    await expectNoSideScroll(chat);
   }
-  await expectNoSideScroll(chat);
 });

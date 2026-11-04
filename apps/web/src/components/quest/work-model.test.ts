@@ -16,93 +16,47 @@ import {
   task,
   tree,
 } from "../../test/quests.ts";
-import { BEFORE_ALL, liveTrees, placeMoments, taskDetail, workCard, workCounts } from "./work-model.ts";
+import { BEFORE_ALL, liveTrees, placeMoments, rowStatus, taskDetail, workCard, workCounts } from "./work-model.ts";
 
 const message = (id: string, role: "user" | "assistant", createdAt: string) =>
   ({ id: MessageId.make(id), threadId: THREAD, role, createdAt }) as unknown as Message;
 
-describe("workCard", () => {
-  it("shows the party and orders rows by what needs you, then running, then waiting", () => {
+describe("where work stands", () => {
+  it("puts a Task that waits on another under waiting, and one a question for you holds under needs you", () => {
     const quest = blackFriday();
-    const card = workCard(quest);
-    expect(card?.party).toEqual([QUILL, ADA]);
-    expect(card?.rows.map((row) => [row.task.id, row.status, row.waitsOn])).toEqual([
-      [COPY, "running", []],
-      [BUILD, "waiting", [QUILL]],
-    ]);
+    const [, copy, build] = quest.tasks;
+    if (copy === undefined || build === undefined) throw new Error("the Black Friday Quest has three Tasks");
+    expect([rowStatus(quest, copy), rowStatus(quest, build)]).toEqual(["running", "waiting"]);
 
-    const asking = { ...quest, questions: [question(BUILD, ADA, "Dec 12 for international?", { recipientId: null })] };
-    expect(workCard(asking as typeof quest)?.rows.map((row) => [row.task.id, row.status])).toEqual([
-      [BUILD, "needs-you"],
-      [COPY, "running"],
-    ]);
+    const asking = tree({
+      ...quest,
+      questions: [question(BUILD, ADA, "Dec 12 for international?", { recipientId: null })],
+    });
+    expect([rowStatus(asking, copy), rowStatus(asking, build)]).toEqual(["running", "needs-you"]);
   });
 
-  it("puts a member's Task whose turn waits on your approval under needs you, naming the action", () => {
+  it("puts a member's Task whose turn waits on your approval under needs you", () => {
     const quest = blackFriday();
     const asking = tree({ ...quest, approvals: [memberApproval(COPY, QUILL)] });
-    const card = workCard(asking);
-    expect(card?.rows.map((row) => [row.task.id, row.status, row.approval?.operation ?? null])).toEqual([
-      [COPY, "needs-you", "delete-files"],
-      [BUILD, "waiting", null],
-    ]);
-    expect(card?.status).toBe("needs-you");
+    expect(rowStatus(asking, task(COPY, { ownerId: QUILL }))).toBe("needs-you");
+    expect(rowStatus(asking, task(CAMPAIGN))).toBe("needs-you");
     expect(workCounts(asking)["needs-you"]).toBe(1);
     expect(taskDetail(asking, task(COPY, { ownerId: QUILL })).approvals.map((each) => each.id)).toEqual(["ap-copy"]);
 
     // Once you decide it, the Task runs again and nothing needs you.
     const decided = tree({ ...quest, approvals: [memberApproval(COPY, QUILL, { state: "approved", revision: 2 })] });
-    expect(workCard(decided)?.rows.map((row) => [row.task.id, row.status, row.approval])).toEqual([
-      [COPY, "running", null],
-      [BUILD, "waiting", null],
-    ]);
+    expect(rowStatus(decided, task(COPY, { ownerId: QUILL }))).toBe("running");
     expect(workCounts(decided)["needs-you"]).toBe(0);
   });
 
-  it("shows only the current step of a Task with steps, as step 3 of 4", () => {
+  it("counts every Task under the request, steps included, for the progress", () => {
     const steps = ["outline", "draft", "edit", "publish"].map((id, index) =>
       task(TaskId.make(id), { state: index < 2 ? "completed" : "queued", second: index + 1 }),
     );
     const card = workCard(tree({ tasks: [task(CAMPAIGN), ...steps] }));
-    expect(card?.rows.map((row) => [row.task.id, row.step])).toEqual([["edit", { index: 3, total: 4 }]]);
     expect(card?.progress).toEqual({ done: 2, total: 4 });
-    expect(card?.party).toEqual([]);
-  });
-
-  it("keeps a failed step in view instead of folding it into done or skipping past it", () => {
-    const only = workCard(
-      tree({ tasks: [task(CAMPAIGN), task(TaskId.make("draft"), { state: "failed", second: 1 })] }),
-    );
-    expect(only?.rows.map((row) => [row.task.id, row.status])).toEqual([["draft", "failed"]]);
-
-    const steps = [
-      task(TaskId.make("outline"), { state: "failed", second: 1 }),
-      task(TaskId.make("draft"), { state: "queued", second: 2 }),
-    ];
-    const card = workCard(tree({ tasks: [task(CAMPAIGN), ...steps] }));
-    expect(card?.rows.map((row) => [row.task.id, row.status, row.step])).toEqual([
-      ["outline", "failed", { index: 1, total: 2 }],
-    ]);
-  });
-
-  it("lists every row, the done ones last", () => {
-    const members = ["a", "b", "c", "d", "e", "f"].map((id, index) =>
-      task(TaskId.make(id), { ownerId: QUILL, state: index === 0 ? "completed" : "active", second: index + 1 }),
-    );
-    const card = workCard(
-      tree({
-        tasks: [task(CAMPAIGN), ...members],
-        delegations: members.map((member) => delegation(QUILL, member.id, member.brief)),
-      }),
-    );
-    expect(card?.rows.map((row) => [row.task.id, row.status])).toEqual([
-      ["b", "running"],
-      ["c", "running"],
-      ["d", "running"],
-      ["e", "running"],
-      ["f", "running"],
-      ["a", "done"],
-    ]);
+    expect(card?.quest).toBeNull();
+    expect(card?.leadId).toBe(ALDRIC);
   });
 });
 
@@ -116,7 +70,7 @@ describe("the strip", () => {
 });
 
 describe("placeMoments", () => {
-  it("puts the card under the request, not the reply, and a lead's answer after what came before it", () => {
+  it("puts the ticket under the request, not the reply, and a lead's answer after what came before it", () => {
     const quest = {
       ...blackFriday(),
       questions: [
@@ -133,7 +87,7 @@ describe("placeMoments", () => {
       message("m3", "assistant", "2026-11-01T10:00:24.000Z"),
     ];
     const placed = placeMoments(transcript, [quest]);
-    expect(placed.get(MessageId.make("m1"))?.map((moment) => moment.kind)).toEqual(["card"]);
+    expect(placed.get(MessageId.make("m1"))?.map((moment) => moment.kind)).toEqual(["ticket"]);
     expect(placed.get(MessageId.make("m3"))?.map((moment) => moment.kind)).toEqual(["answered"]);
     expect(placed.has(BEFORE_ALL)).toBe(false);
   });

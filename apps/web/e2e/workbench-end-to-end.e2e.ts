@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
+import { openWorkbench, ticket } from "./quest-room.ts";
 import { hobTerminal, rows } from "./terminal.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
@@ -57,8 +58,8 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
     "Write the release notes",
     script("start_quest", { key: "quest", goal: "Write the release notes" }),
   ]);
-  const card = page.getByRole("region", { name: "Aldric's work on Write the release notes" });
-  await expect(card).toBeVisible({ timeout: 20_000 });
+  const questTicket = ticket(page, "Write the release notes");
+  await expect(questTicket).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
   // In the next turn Aldric edits the notes with a file tool, runs a command that adds the
@@ -76,7 +77,7 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
     run({ command: "npm test", output: "2 passed\n", exitCode: 0 }),
     LONG_REPLY,
   ]);
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  await openWorkbench(page, questTicket);
   const { bench, tabs, open } = tabsOf(page, "Write the release notes");
 
   // Live: the header says so once, every tab follows the running turn, and the Browser is still to come.
@@ -175,11 +176,11 @@ test("[TC-UX-063] a Task that changed no file and ran no command greys out Chang
     script("start_quest", { key: "quest", goal: "Suggest a name for the release" }),
     script("complete_task", { key: "done", summary: "Call it Lantern." }),
   ]);
-  const card = page.getByRole("region", { name: "Aldric's work on Suggest a name for the release" });
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  const questTicket = ticket(page, "Suggest a name for the release");
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  await openWorkbench(page, questTicket);
   const { tabs, open } = tabsOf(page, "Suggest a name for the release");
   await expect(tabs.getByRole("tab")).toHaveText([
     "Summary",

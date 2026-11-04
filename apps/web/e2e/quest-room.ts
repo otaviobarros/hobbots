@@ -3,15 +3,23 @@ import type { Locator, Page } from "@playwright/test";
 const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
- * Opens a request's Quest room with Open room on its card in the chat, which stays there whether the
- * work runs or has ended, and gives back the room.
+ * The ticket under the request with this title (ADR 027): one button, named for the Quest and where
+ * it stands, which stays there whether the work runs or has ended.
  */
+export const ticket = (page: Page, title: string): Locator =>
+  page.getByRole("button", { name: new RegExp(`^Open the ${literal(title)} room: `) });
+
+/** Opens a request's Quest room with its ticket in the chat, and gives back the room. */
 export const openRoom = async (page: Page, title: string): Promise<Locator> => {
-  await page
-    .getByRole("region", { name: new RegExp(`'s work on ${literal(title)}$`) })
-    .getByRole("button", { name: "Open room" })
-    .click();
+  await ticket(page, title).click();
   return questRoom(page, title);
+};
+
+/** Opens the Quest room from a ticket with the Workbench docked under the lanes, and gives back the dock. */
+export const openWorkbench = async (page: Page, from: Locator): Promise<Locator> => {
+  await from.click();
+  await page.getByRole("button", { name: "Open the Workbench" }).click();
+  return dock(page);
 };
 
 /** The Quest room of the request with this title, beside the chat. */
