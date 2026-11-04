@@ -253,8 +253,8 @@ function StuckDetail({
 
 /**
  * A party member's Task that failed while its Quest goes on: Retry sends it back to its hob from
- * here, and Open the task opens it over its lead's chat, where it can go to another hob or be
- * cancelled. A retry the hub recorded takes the entry out of the list with its event.
+ * here, and Open the task opens the Quest room beside its lead's chat on that Task's lane, where it
+ * can go to another hob or be cancelled. A retry the hub recorded takes the entry out of the list with its event.
  */
 function FailedDetail({
   failed,
@@ -298,7 +298,7 @@ function FailedDetail({
             <Link
               to="/hobs/$hobId/threads/$threadId"
               params={{ hobId: leadId, threadId: task.threadId }}
-              search={{ task: task.id }}
+              search={roomSearch(task.id)}
               className="no-underline"
             >
               {copy.failedTask.openTask}

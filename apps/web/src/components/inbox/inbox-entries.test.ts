@@ -60,7 +60,10 @@ const device = (expiresAt: string): WaitingDevice => ({
   fromHub: false,
 });
 
-const failedCopy = { task: task(BUILD, { ownerId: QUILL, state: "failed", brief: "Build the page\nWith the hero" }), leadId: null };
+const failedCopy = {
+  task: task(BUILD, { ownerId: QUILL, state: "failed", brief: "Build the page\nWith the hero" }),
+  leadId: null,
+};
 
 const asked = {
   question: question(COPY, ADA, "Monthly or yearly price?\nThe brief does not say.", {
@@ -126,7 +129,10 @@ describe("entryRow", () => {
       when: "Quill's task failed",
       tone: "stuck",
     });
-    expect(entryRow(failedEntry({ ...failedCopy, leadId: ADA }), names, undefined, now).chain).toEqual(["Ada", "Quill"]);
+    expect(entryRow(failedEntry({ ...failedCopy, leadId: ADA }), names, undefined, now).chain).toEqual([
+      "Ada",
+      "Quill",
+    ]);
   });
 
   it("shows a device asking to join with its name and when the request runs out", () => {

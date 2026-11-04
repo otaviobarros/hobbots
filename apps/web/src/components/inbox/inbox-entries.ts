@@ -12,8 +12,8 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 import { firstLine } from "../../lib/format.ts";
-import { taskTitle } from "../quest/work-model.ts";
 import { blockerTries, blockerWhat } from "../blockers/blocker-model.ts";
+import { taskTitle } from "../quest/work-model.ts";
 import { expiryText, requestTitle, statusText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
 

@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { roomSearch } from "../quest-room/room-search.ts";
 
 /**
  * Opens in the Inbox each request the desktop app asks for, as when the user clicks its system
@@ -18,7 +19,11 @@ export const useOpenRequests = () => {
   useEffect(
     () =>
       window.hobbots?.onOpenTask?.(({ hobId, threadId, taskId }) => {
-        void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId }, search: { task: taskId } });
+        void navigate({
+          to: "/hobs/$hobId/threads/$threadId",
+          params: { hobId, threadId },
+          search: roomSearch(taskId),
+        });
       }),
     [navigate],
   );
