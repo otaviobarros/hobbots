@@ -98,7 +98,7 @@ export function OnboardingFolders() {
           <span className="flex-1 text-right text-sm text-text-secondary">
             {folders.length === 0 ? shared.folders.none : foldersShared(folders.length)}
           </span>
-          <Button onClick={() => void navigate({ to: "/setup/ready" })} disabled={!setup.data || saving}>
+          <Button onClick={() => void navigate({ to: "/setup/remote" })} disabled={!setup.data || saving}>
             {shared.continue}
           </Button>
         </>

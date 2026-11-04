@@ -54,13 +54,27 @@ const remoteAccess = async (current: Hub) =>
     readonly port: number;
   };
 
-/** Walks a new installation to the step that asks about other devices. */
+const otherDevices = "Use Hobbots on your phone too?";
+
+/** Walks a new installation to the step that asks about other devices, which comes after Folders. */
 const openRemoteStep = async (page: Page, current: Hub) => {
   await page.goto(`${current.url}/#/welcome`);
   await page.getByRole("link", { name: "Get started" }).click();
   await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
-  await expect(page.getByRole("heading", { name: "Use Hobbots from your other devices too?" })).toBeVisible();
+  await page.getByRole("button", { name: "Connect Claude" }).click();
+  await expect(page.getByText("✓ Connected")).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill("Pip");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "How much should Pip ask first?" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Where can hobs work?" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: otherDevices })).toBeVisible();
 };
+
+/** Other devices goes on to the last step of setup. */
+const atReady = (page: Page) => expect(page.getByRole("heading", { name: "Ready to summon" })).toBeVisible();
 
 // covers DP-001, DP-004
 test("[TC-DP-123] setup turns remote access on and shows the address and its QR code", async ({ page }) => {
@@ -85,7 +99,7 @@ test("[TC-DP-123] setup turns remote access on and shows the address and its QR 
   expect((await remoteAccess(hub)).enabled).toBe(true);
 
   await page.getByRole("link", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
+  await atReady(page);
   expect((await remoteAccess(hub)).enabled).toBe(true);
 });
 
@@ -116,7 +130,7 @@ test("[TC-DP-124] setup without Tailscale shows how to get it, notices it, and S
   await expect(page.getByRole("switch", { name: "Let my other devices connect" })).not.toBeChecked();
 
   await page.getByRole("button", { name: "Skip for now" }).click();
-  await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
+  await atReady(page);
   expect((await remoteAccess(hub)).enabled).toBe(false);
 });
 
@@ -140,12 +154,12 @@ test("[TC-DP-127] Skip turns remote access off before leaving setup, and stays w
   await expect(page.getByRole("alert")).toHaveText(
     "Hobbots could not read or change remote access. Try again in a moment.",
   );
-  await expect(page.getByRole("heading", { name: "Use Hobbots from your other devices too?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: otherDevices })).toBeVisible();
   expect((await remoteAccess(current)).enabled).toBe(true);
 
   // Once the hub answers, Skip turns it off and only then moves on.
   await page.unroute("**/api/remote-access");
   await page.getByRole("button", { name: "Skip for now" }).click();
-  await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
+  await atReady(page);
   expect((await remoteAccess(current)).enabled).toBe(false);
 });

@@ -57,7 +57,6 @@ const openProviders = async (page: Page, current: Hub) => {
   await page.goto(current.url);
   await page.getByRole("link", { name: "Get started" }).click();
   await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
-  await page.getByRole("button", { name: "Skip for now" }).click();
   await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
 };
 
@@ -104,6 +103,7 @@ test("[TC-UX-080] onboarding shows a missing Codex with its fix, and a connected
   await expect(page.getByText("Codex connected")).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Skip for now" }).click();
   // The last step names the provider the hob thinks with.
   await expect(page.getByText(/^Tinker .* · thinks with Codex GPT-5\.5$/)).toBeVisible();
   await page.getByRole("button", { name: "Summon Tinker" }).click();

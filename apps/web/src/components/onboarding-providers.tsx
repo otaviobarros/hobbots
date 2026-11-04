@@ -350,7 +350,7 @@ export function OnboardingProviders() {
 
   const guide = guideFor(ready, nudged, states);
 
-  const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/remote" }));
+  const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/where" }));
   const next = () => {
     if (!ready) return setNudged(true);
     void navigate({ to: "/setup/hob" });
