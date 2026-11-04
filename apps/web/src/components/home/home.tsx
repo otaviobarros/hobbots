@@ -1,5 +1,6 @@
 import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
 import type { Agent, Thread } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -120,9 +121,9 @@ export function Home() {
 
 function SummonLink() {
   return (
-    <Link to="/summon" className="bg-deep px-2.5 py-1 text-[13px] text-lantern no-underline hover:bg-line">
-      {messages.home.summon}
-    </Link>
+    <Button asChild variant="ghost" size="sm">
+      <Link to="/summon">{messages.home.summon}</Link>
+    </Button>
   );
 }
 

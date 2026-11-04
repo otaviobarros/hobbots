@@ -154,7 +154,7 @@ function Footer({
     return (
       <div className="flex flex-col">
         {note(true)}
-        <Button variant="link" size="xs" className="self-start px-3.5 pb-3" onClick={() => setNoting(false)}>
+        <Button variant="text" size="xs" className="self-start px-3.5 pb-3" onClick={() => setNoting(false)}>
           {copy.answerInstead({ name: askerName })}
         </Button>
       </div>
@@ -168,7 +168,7 @@ function Footer({
       <span className="lbl text-xs font-bold text-lantern">{copy.asks({ name: askerName })}</span>
       <p className="m-0 text-sm leading-snug whitespace-pre-wrap text-text-strong">{question.text}</p>
       <AnswerForm question={question} askerName={askerName} via="task" />
-      <Button variant="link" size="xs" className="self-start" onClick={() => setNoting(true)}>
+      <Button variant="text" size="xs" className="self-start" onClick={() => setNoting(true)}>
         {copy.noteInstead({ name: leadName })}
       </Button>
     </section>

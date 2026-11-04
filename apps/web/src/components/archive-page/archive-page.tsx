@@ -250,7 +250,7 @@ function ChatList({ chats, focus }: { chats: ReadonlyArray<ArchivedChat>; focus:
         ))}
       </ul>
       {!all && chats.length > SHOWN && (
-        <Button variant="link" size="sm" className="self-start" onClick={() => setAll(true)}>
+        <Button variant="text" size="sm" className="self-start" onClick={() => setAll(true)}>
           {copy.chats.showMore({ count: chats.length - SHOWN })}
         </Button>
       )}
