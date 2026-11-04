@@ -168,18 +168,22 @@ const hobRoute = createRoute({
   path: "hobs/$hobId",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { tab?: HobPageTab | undefined; show?: HistoryFilter | undefined } => ({
+  ): { tab?: HobPageTab | undefined; show?: HistoryFilter | undefined; q?: string | undefined } => ({
     tab: isHobPageTab(search.tab) && search.tab !== "chats" ? search.tab : undefined,
     show: isHistoryFilter(search.show) && search.show !== "all" ? search.show : undefined,
+    // A link can open the Chats tab already searching, such as from a chat's own search.
+    q: typeof search.q === "string" && search.q.trim() !== "" ? search.q : undefined,
   }),
   component: function HobPageRoute() {
     const params = hobRoute.useParams();
-    const { tab, show } = hobRoute.useSearch();
+    const { tab, show, q } = hobRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
         aside={null}
-        main={(props) => <HobPage key={params.hobId} {...props} tab={tab ?? "chats"} show={show ?? "all"} />}
+        main={(props) => (
+          <HobPage key={params.hobId} {...props} tab={tab ?? "chats"} show={show ?? "all"} query={q ?? ""} />
+        )}
       />
     );
   },

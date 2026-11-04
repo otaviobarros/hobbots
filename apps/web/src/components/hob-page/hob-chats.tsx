@@ -19,18 +19,21 @@ const copy = messages.chats;
 
 /**
  * The Chats tab: the hob's chats grouped Pinned, Today, Earlier this week and Older, five Older at
- * first. Search finds words in titles and inside messages, and marks them.
+ * first. Search finds words in titles and inside messages, and marks them; a link can open it
+ * already searching.
  */
 export function HobChats({
   hob,
   threads,
   activity,
+  initialQuery = "",
 }: {
   hob: Agent;
   threads: ReadonlyArray<Thread>;
   activity: ActivityMap;
+  initialQuery?: string;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [allOlder, setAllOlder] = useState(false);
   const search = useSearch(query);
   const waiting = useQuery({ ...inboxQuery, select: waitingByThread }).data;

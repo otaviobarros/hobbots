@@ -142,6 +142,30 @@ test("[TC-UX-130] a hob's chats are grouped, searched inside messages, renamed, 
 });
 
 // covers UX-001, UX-005
+test("[TC-UX-147] a link with q opens a hob's Chats already searching for it", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  for (const prompt of ["Fix the kettle", "Weekly report on the discount codes"]) {
+    await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+    const composer = page.getByRole("textbox", { name: /^Message Pip/ });
+    await composer.fill(prompt);
+    await composer.press("Enter");
+    await expect(page.getByText(`Echo: ${prompt}`)).toBeVisible();
+  }
+
+  await page.goto(`${current.url}/#/hobs/${pip.id}?q=codes`);
+  const main = page.getByRole("main", { name: "Pip's page" });
+  await expect(main.getByRole("searchbox", { name: "Search Pip's chats" })).toHaveValue("codes");
+  const matches = main.getByRole("region", { name: "Matches" });
+  await expect(matches.getByRole("link", { name: /^Open / })).toHaveCount(1);
+  await expect(matches.locator("mark").first()).toHaveText(/codes/i);
+
+  // Clearing it shows every chat again.
+  await main.getByRole("button", { name: "Clear the search" }).click();
+  await expect(main.getByRole("region", { name: "Today" }).getByRole("link", { name: /^Open / })).toHaveCount(2);
+});
+
+// covers UX-001, UX-005
 test("[TC-UX-143] a new hob's page says hello and offers three starters, and one opens a new chat with its words", async ({
   page,
 }) => {
