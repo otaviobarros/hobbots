@@ -22,7 +22,7 @@ import {
 import { PolicyEngine } from "@hobbots/permissions";
 import { Clock, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
 import { decideCall, startCall } from "./approval.ts";
-import { toolTurn } from "./claude-code.ts";
+import { sessionPolicy, toolTurn } from "./claude-code.ts";
 import { type HookEnd, toolFinished } from "./command-exit.ts";
 import { applyScriptedWrites } from "./fake-writes.ts";
 import { commandOf, toolLabel, toolRequests } from "./tool-calls.ts";
@@ -584,7 +584,12 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     const failure = fakeFailure(ending);
     // Tool calls come after the thinking step, before the reply is written.
     const stream = Stream.fromIterable<RuntimeEvent>([
-      { _tag: "SessionStarted", sessionId, billing: "fake" },
+      {
+        _tag: "SessionStarted",
+        sessionId,
+        billing: "fake",
+        ...sessionPolicy(toolTurn(request.tools, sandbox, request.hubTools)),
+      },
       // Every reply thinks first, so the step display can be seen and tested.
       { _tag: "StepStarted", id: "thinking-1", kind: "thinking", label: "Thinking" },
       { _tag: "StepEnded", id: "thinking-1" },

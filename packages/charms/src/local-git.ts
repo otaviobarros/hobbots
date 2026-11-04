@@ -8,6 +8,8 @@ import {
   type HubCallStep,
   type HubToolAnswer,
   LocalGitTools,
+  openTools,
+  operationDecision,
   type ToolAccess,
 } from "@hobbots/agents";
 import {
@@ -417,9 +419,12 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
         );
 
       return LocalGitTools.of({
+        // Offered only where its access opens it, by the rule a delegation announces it by (#699).
         forTurn: (turn) =>
           Effect.map(turn.currentAccess, (access) =>
-            access === null || access.folders.length === 0
+            access === null ||
+            access.folders.length === 0 ||
+            !openTools((operation) => operationDecision(access.policy, operation)).gitInit
               ? null
               : { tools, call: (name: string, input: unknown, step?: HubCallStep) => call(turn, name, input, step) },
           ),

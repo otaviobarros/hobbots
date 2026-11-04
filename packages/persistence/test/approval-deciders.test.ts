@@ -150,7 +150,10 @@ describe("ApprovalRepository deciders", () => {
 describe("0040_approval_deciders", () => {
   // covers DP-003, PE-003
   it("[TC-IN-202] keeps every request closed before it, with no decider recorded", async () => {
-    const earlier = Object.fromEntries(Object.entries(migrations).filter(([key]) => key < "0040")) as typeof migrations;
+    // Keeps 0047 too: the repository that seeds the hob writes its name with each version.
+    const earlier = Object.fromEntries(
+      Object.entries(migrations).filter(([key]) => key < "0040" || key === "0047_versioned_name"),
+    ) as typeof migrations;
     const found = await Effect.gen(function* () {
       const approvals = yield* ApprovalRepository;
       const sql = yield* SqlClient.SqlClient;

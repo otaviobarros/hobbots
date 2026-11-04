@@ -1,11 +1,19 @@
-import type { ApprovalRequest } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { HobSprite } from "../hob-sprite.tsx";
-import { groupByThread, INBOX_TABS, type InboxTab, requestTitle, statusText } from "./inbox-items.ts";
+import {
+  entryAsker,
+  entryRow,
+  entryThread,
+  groupByThread,
+  type InboxEntry,
+  type InboxGroup,
+  type RowTone,
+} from "./inbox-entries.ts";
+import { INBOX_TABS, type InboxTab } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
 import type { InboxDirectory } from "./use-inbox-directory.ts";
 
@@ -39,92 +47,124 @@ export function InboxTabs({ tab, waiting, children }: { tab: InboxTab; waiting: 
   );
 }
 
-/** The tab's requests, grouped by hob and thread; the selected one is filled. */
+/** The tab's entries, grouped by thread with this hub's devices apart; the selected one is filled. */
 export function InboxList({
   tab,
-  requests,
-  selectedId,
+  entries,
+  selectedKey,
   directory,
   now,
 }: {
   tab: InboxTab;
-  requests: ReadonlyArray<ApprovalRequest>;
-  selectedId: string | undefined;
+  entries: ReadonlyArray<InboxEntry>;
+  selectedKey: string | undefined;
   directory: InboxDirectory;
   now: Date;
 }) {
   return (
-    <ul aria-label={copy.listLabel} className="m-0 flex list-none flex-col p-0 py-1">
-      {groupByThread(requests).map((group) => {
-        const first = group.requests[0];
-        if (first === undefined) return null;
-        return (
-          <li key={group.threadId} className="flex flex-col">
-            <span className="lbl px-3 pt-2.5 pb-1 text-xs text-label">
-              {copy.group({ name: directory.hobName(first.agentId), thread: directory.threadTitle(group.threadId) })}
-            </span>
-            <ul className="m-0 flex list-none flex-col p-0">
-              {group.requests.map((request) => (
-                <li key={request.id}>
-                  <InboxItem
-                    tab={tab}
-                    request={request}
-                    selected={request.id === selectedId}
-                    directory={directory}
-                    now={now}
-                  />
-                </li>
-              ))}
-            </ul>
-          </li>
-        );
-      })}
+    <ul aria-label={copy.listLabel} className="m-0 flex list-none flex-col gap-3.5 p-0 px-2.5 py-1">
+      {groupByThread(entries).map((group) => (
+        <li key={group.threadId ?? "hub"} className="flex flex-col gap-1">
+          <span className="lbl px-1.5 py-1 text-xs text-label">{groupLabel(group, directory)}</span>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {group.entries.map((entry) => (
+              <li key={entry.key}>
+                <InboxItem
+                  tab={tab}
+                  entry={entry}
+                  selected={entry.key === selectedKey}
+                  directory={directory}
+                  now={now}
+                />
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
     </ul>
   );
 }
 
+/** A group's heading: the hob whose chat the thread is, and the thread; or this hub's devices. */
+const groupLabel = (group: InboxGroup, directory: InboxDirectory): string => {
+  if (group.threadId === null) return copy.hubGroup;
+  const first = group.entries[0];
+  const owner = directory.threadHob(group.threadId) ?? (first === undefined ? undefined : entryAsker(first));
+  return copy.group({
+    name: owner === undefined ? copy.unknownHob : directory.hobName(owner),
+    thread: directory.threadTitle(group.threadId),
+  });
+};
+
+const TONE: Record<RowTone, string> = { urgent: "text-lantern", stuck: "text-rose", plain: "text-text-secondary" };
+
+/**
+ * One entry as a row, the same for every kind: who asked as a chain, the kind, what it is about and
+ * when. It opens the entry beside the list.
+ */
 function InboxItem({
   tab,
-  request,
+  entry,
   selected,
   directory,
   now,
 }: {
   tab: InboxTab;
-  request: ApprovalRequest;
+  entry: InboxEntry;
   selected: boolean;
   directory: InboxDirectory;
   now: Date;
 }) {
-  const hob = directory.hob(request.agentId);
-  const pending = request.state === "pending";
-  const expired = request.state === "expired";
-  const title = requestTitle(request);
+  const thread = entryThread(entry);
+  const row = entryRow(entry, directory.hobName, thread === null ? undefined : directory.threadHob(thread), now);
+  const asker = entryAsker(entry);
+  const hob = asker === undefined ? undefined : directory.hob(asker);
+  const closed = entry.kind === "approval" && entry.request.state !== "pending";
   return (
     <Link
       to="/inbox"
-      search={{ tab, request: request.id }}
+      search={{ tab, request: entry.key }}
       aria-current={selected ? "page" : undefined}
       activeOptions={{ exact: true, includeSearch: true }}
-      data-state={request.state}
+      data-kind={entry.kind}
+      data-state={entry.kind === "approval" ? entry.request.state : undefined}
       className={cn(
-        "hop-on-hover flex w-full items-start gap-2.5 px-2.5 py-2.5 text-start text-text-strong no-underline hover:text-text-strong",
-        selected ? "bg-line" : "hover:bg-hover",
-        !pending && "opacity-70",
+        "hop-on-hover flex w-full items-start gap-2.5 rounded-control p-2.5 text-start text-text-strong no-underline transition-colors hover:text-text-strong",
+        selected ? "bg-card text-text-strong" : "hover:bg-hover",
+        closed && "opacity-70",
       )}
     >
-      {hob && <HobSprite hob={hob} size={26} state={pending ? "needs-you" : "idle"} className="mt-0.5" />}
-      <span className="flex min-w-0 flex-1 flex-col gap-0.75">
+      <span className="mt-0.5 flex size-7.5 shrink-0 items-center justify-center rounded-tile bg-line text-text-secondary">
+        {hob !== undefined ? (
+          <HobSprite hob={hob} size={22} state={closed ? "idle" : "needs-you"} />
+        ) : (
+          entry.kind === "device" && <DeviceGlyph />
+        )}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-2">
-          <span className="flex-1 text-sm text-text-secondary">
-            {copy.from({ name: directory.hobName(request.agentId) })}
-          </span>
-          <Badge variant={expired ? "muted" : "needs-you"}>{expired ? copy.kind.expired : copy.kind.approval}</Badge>
+          <span className="min-w-0 flex-1 truncate text-detail text-text-secondary">{row.who}</span>
+          <Badge variant={row.tag}>{row.kind}</Badge>
         </span>
-        <span className="text-sm leading-snug">{title.what}</span>
-        <code className="truncate font-mono text-xs text-moonlight">{title.exact}</code>
-        <span className={cn("text-xs", pending ? "text-lantern" : "text-label")}>{statusText(request, now)}</span>
+        <span className="text-sm leading-snug font-semibold [overflow-wrap:anywhere]">{row.what}</span>
+        <span className={cn("text-xs", TONE[row.tone])}>{row.when}</span>
       </span>
     </Link>
+  );
+}
+
+/** A screen on a stand, for a device asking to join. */
+function DeviceGlyph() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="size-4.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    >
+      <path d="M3.5 5.5h13v8h-13zM1.5 15.5h17" strokeLinecap="round" />
+    </svg>
   );
 }

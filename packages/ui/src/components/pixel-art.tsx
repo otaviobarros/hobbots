@@ -4,7 +4,10 @@ import type * as React from "react";
 
 export type { PixelPalette, PixelRows };
 
-/** Draws pixel art as crisp SVG. Decorative unless a `label` is given. */
+/**
+ * Draws pixel art as crisp SVG. Decorative unless a `label` is given. A palette color can be any CSS
+ * color, a token such as `var(--color-line-2)` included.
+ */
 function PixelArt({
   rows,
   palette,
@@ -34,7 +37,7 @@ function PixelArt({
       {...props}
     >
       {[...paths].map(([fill, d]) => (
-        <path key={fill} d={d} fill={fill} />
+        <path key={fill} d={d} style={{ fill }} />
       ))}
     </svg>
   );

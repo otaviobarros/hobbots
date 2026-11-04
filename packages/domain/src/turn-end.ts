@@ -70,10 +70,10 @@ export interface TurnEndInput {
 }
 
 /** What each runner's Attempt says when its session ran to its end. */
-const FINISHED: Record<TurnRunner, string | null> = {
+const FINISHED: Record<TurnRunner, string> = {
   step: "The step's session finished.",
   member: "The turn finished.",
-  root: null,
+  root: "The turn finished.",
 };
 
 /** What a Task's result says when the reply that becomes it was empty. */

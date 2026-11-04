@@ -112,7 +112,7 @@ test("[TC-OR-254] after your note on a Task whose question waits for you, the qu
   // The Inbox still has the question, once, never answered by the note.
   await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
   await expect(page.getByRole("tablist", { name: "Inbox filters" })).toContainText("Needs you1");
-  await expect(page.getByText("Light or dark theme?")).toHaveCount(1);
+  await expect(page.getByRole("list", { name: "Requests" }).getByText("Light or dark theme?")).toHaveCount(1);
 });
 
 // covers OR-002, IN-004

@@ -1,4 +1,4 @@
-import type { AttemptId, CommandRecord } from "@hobbots/domain";
+import { type AttemptId, type CommandRecord, runsInSequence } from "@hobbots/domain";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@hobbots/ui/components/collapsible";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -108,20 +108,30 @@ function CommandEntry({ command, now, live }: { command: CommandRecord; now: Dat
   );
 }
 
-/** "Running · 12 sec", "Succeeded", "Failed · exit code 1" or "Cut off". */
+/**
+ * "Running · 12 sec", "Succeeded", "Failed · exit code 1" or "Cut off". A line of commands run one
+ * after another that exited 0 only "Finished": its earlier commands may have failed.
+ */
 function StateText({ command, duration }: { command: CommandRecord; duration: number | null }) {
   const state = copy.state;
+  const partly = command.state === "succeeded" && runsInSequence(command.command);
   const text =
     command.state === "running"
       ? state.running({ time: formatDuration(duration ?? 0) })
       : command.state === "failed" && command.exitCode !== null
         ? `${state.failed} · ${copy.exitCode({ code: command.exitCode })}`
-        : state[command.state];
+        : partly
+          ? copy.finishedInSequence
+          : state[command.state];
   return (
     <span
       className={cn(
         "shrink-0 text-xs",
-        command.state === "failed" ? "text-rose" : command.state === "succeeded" ? "text-mint" : "text-lantern",
+        command.state === "failed"
+          ? "text-rose"
+          : command.state === "succeeded" && !partly
+            ? "text-mint"
+            : "text-lantern",
       )}
     >
       {text}

@@ -20,7 +20,7 @@ export type UnavailableReason = "cleared" | ScanStop | "unread";
 
 /**
  * Each tab's one honest label, taken from the hub's records (ADR 023): Live while the chosen
- * Attempt runs, History once it does not, Unavailable with why, Not used in this Task, and Coming
+ * Attempt runs, History once it does not, Unavailable with why, Not used in this task, and Coming
  * soon for the Browser.
  */
 export type TabState =
@@ -58,7 +58,7 @@ const touchedFiles = (activity: AttemptActivity): number =>
 
 /**
  * The label of each tab. While the Attempt runs a tab may still be used, so it is Live; once it
- * ends, a tab with no record reads Not used in this Task. A folder whose tracking stopped makes
+ * ends, a tab with no record reads Not used in this task. A folder whose tracking stopped makes
  * Changes Unavailable with why, and details cleared past the window make Changes and Terminal
  * Unavailable while their lists stay.
  */

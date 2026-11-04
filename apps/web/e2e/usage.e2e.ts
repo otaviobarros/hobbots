@@ -69,14 +69,24 @@ test("[TC-OP-073] the Usage screen shows each plan's potion and each hob's share
   await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
 
   // The fake Claude Code reports a session window 38% used and a weekly one 12% used.
-  const plans = page.getByRole("region", { name: "Your AI plans" });
-  await expect(plans.getByRole("radio", { name: "Claude Code, 62% left" })).toBeChecked();
-  await expect(plans.getByText("This window refills in 2 hours.")).toBeVisible();
-  await expect(plans.getByText("Current session · 38% used")).toBeVisible();
-  await expect(plans.getByText("Weekly · all models · 12% used")).toBeVisible();
+  const plans = page.getByRole("region", { name: "Your AI" });
+  const providers = plans.getByRole("group", { name: "Provider" });
+  await expect(providers.getByRole("button", { name: /Claude Code.*62% left/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  const claude = plans.getByRole("region", { name: "Claude Code plan" });
+  await expect(claude.getByRole("listitem").nth(0)).toContainText("This session62% left");
+  await expect(claude.getByRole("listitem").nth(0)).toContainText("Refills in 2 hours");
+  await expect(claude.getByRole("listitem").nth(1)).toContainText("This week88% left");
+  await expect(claude).toContainText("Numbers from Claude Code, checked");
   // Fake Codex reports no plan, and the screen says so instead of guessing.
-  await plans.getByRole("radio", { name: "Codex, Not reported" }).check({ force: true });
-  await expect(plans.getByText("Codex didn't report this plan's limits", { exact: false })).toBeVisible();
+  await providers.getByRole("button", { name: /Codex.*Not reported/ }).click();
+  await expect(
+    plans
+      .getByRole("region", { name: "Codex plan" })
+      .getByText("Codex didn't report this plan's limits", { exact: false }),
+  ).toBeVisible();
 
   await expect(page.getByRole("region", { name: "Replies per day" })).toContainText("3 replies in the last 7 days");
   const hobs = page.getByRole("region", { name: "Who used your plans" }).getByRole("listitem");
@@ -93,9 +103,10 @@ test("[TC-OP-073] the Usage screen shows each plan's potion and each hob's share
   expect((shares[0] ?? 0) + (shares[1] ?? 0)).toBeGreaterThanOrEqual(99);
 
   // The 30-day period lives in the URL and counts the same replies.
-  await page.getByRole("navigation", { name: "Period" }).getByRole("link", { name: "30 days" }).click();
+  const period = page.getByRole("radiogroup", { name: "Period" });
+  await period.getByRole("radio", { name: "30 days" }).click();
   await expect(page).toHaveURL(/#\/usage\?days=30/);
-  await expect(page.getByRole("link", { name: "30 days" })).toHaveAttribute("aria-current", "page");
+  await expect(period.getByRole("radio", { name: "30 days" })).toBeChecked();
   await expect(page.getByRole("region", { name: "Replies per day" })).toContainText("3 replies in the last 30 days");
   await expect(hobs).toHaveCount(2);
 });
