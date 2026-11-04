@@ -40,7 +40,7 @@ export function WelcomeVillage({
   useEffect(() => {
     introPlayed = true;
   }, []);
-  // Intro animations run only on the first visit; the idle loop always runs.
+  // Intro animations run only on the first visit; the idle motion plays on every visit, then settles.
   const introClass = (className: string) => (playIntro ? className : undefined);
   const introDelay = (seconds: number): CSSProperties | undefined =>
     playIntro ? { animationDelay: `${seconds}s` } : undefined;

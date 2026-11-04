@@ -98,6 +98,11 @@ Durations come from `duration`. `styles.css` sets each one in `@theme` as `--dur
 
 Nothing loops past `dur-loop-cap` (10s) or 3 cycles without new input, in any theme. A loop starts again only on a change, such as a new reply or a hob starting work. A state that just needs to show uses a still frame, so a working hob shows a still mint mark. Scenes settle to a still frame after 30 seconds without input. Every animation stops with Reduce motion (STD-UI-004).
 
+In `styles.css`, every looping `--animate-hb-*` token runs a fixed number of times that fits both limits, so stars, smoke, fireflies, the needs-you blink and the chief's lantern play when they appear or their state changes, then rest on the element's own still look. Two tokens loop on, because each shows only while new input keeps arriving:
+
+- `--animate-hb-caret` shows only while a reply streams in, and every chunk is new input.
+- `--animate-hb-spin` shows only while a request to the hub is in flight, and goes away when it ends.
+
 ## Shadows and gradients
 
 `shadow-menu` and `shadow-sheet` change with the theme. Besides them, only these fixed shadows are allowed, each named once in `fixed`:

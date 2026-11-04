@@ -68,6 +68,36 @@ test("[TC-UX-001] with 20 hobs the scene shows five and the hall door opens Your
 });
 
 // covers UX-001
+test("[TC-UX-161] at 960px with 24 hobs no hob on the stage covers the summary or Summon", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 800 });
+  const { url } = await hubWithHobs(24);
+  await page.goto(url);
+
+  const scene = page.getByRole("region", { name: "Your hobs right now" });
+  await expect(scene.getByText("24 hobs. Nothing needs you.")).toBeVisible();
+  const summon = scene.getByRole("link", { name: "+ Summon a hob" });
+  const text = scene.getByRole("heading", { level: 1 }).locator("..");
+  const shown = scene.getByRole("button", { name: stageHob });
+  await expect(shown.first()).toBeVisible();
+
+  // The hobs with no room on the stage wait in the hall, so the door counts them too.
+  const count = await shown.count();
+  expect(count).toBeLessThan(5);
+  await expect(scene.getByRole("link", { name: /^Open Your hobs:/ })).toContainText(`+${24 - count} in the hall`);
+
+  const boxes = [await summon.boundingBox(), await text.boundingBox()];
+  for (const hob of await shown.all()) {
+    const box = await hob.boundingBox();
+    for (const other of boxes) {
+      if (box === null || other === null) throw new Error("a box is missing");
+      expect(box.x >= other.x + other.width || box.y >= other.y + other.height).toBe(true);
+    }
+  }
+  // Live work shows as bubbles on the stage, not in a card of its own.
+  await expect(page.getByRole("region", { name: "Happening now" })).toHaveCount(0);
+});
+
+// covers UX-001
 test("[TC-UX-004] the hall door opens Your hobs on the family a count chip picked", async ({ page }) => {
   const { url } = await hubWithHobs(20);
   await page.goto(url);

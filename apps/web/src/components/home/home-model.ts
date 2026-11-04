@@ -8,9 +8,29 @@ import {
   type Thread,
   type ThreadId,
 } from "@hobbots/domain";
+import { groupOf } from "../../lib/crew.ts";
 import type { HobState } from "../../lib/hob-state.ts";
 import { type QuestInProgress, workTone } from "../../lib/quest-work.ts";
 import { filterCounts, filterOf, type HobFilter } from "../hobs-page/hobs-page-model.ts";
+import { messages } from "./messages.ts";
+
+/**
+ * Home's summary line: how many hobs, who needs you, then who is working, in the crew's order.
+ * "4 hobs. Ada and Pip need you. Aldric is working."
+ */
+export const homeSummary = (
+  crew: ReadonlyArray<{ readonly hob: { readonly name: string }; readonly state: HobState }>,
+): string => {
+  if (crew.length === 0) return messages.summary.none;
+  const names = (group: "needs-you" | "working") =>
+    crew.filter((each) => groupOf(each.state) === group).map((each) => each.hob.name);
+  const working = names("working");
+  return [
+    messages.summary.count({ count: crew.length }),
+    messages.summary.needs({ names: names("needs-you") }),
+    ...(working.length === 0 ? [] : [messages.summary.working({ names: working })]),
+  ].join(" ");
+};
 
 /**
  * The chat a hob's peek opens: the one it is replying in, else the one it used last. Null when the

@@ -117,11 +117,7 @@ function DoingBubble({ doing }: { doing: Doing }) {
       )}
     >
       {doing.kind === "live" && (
-        <span
-          role="img"
-          aria-label={copy.doing.live}
-          className="size-2 flex-none animate-hb-blink rounded-(--corner-dot) bg-mint"
-        />
+        <span role="img" aria-label={copy.doing.live} className="size-2 flex-none rounded-(--corner-dot) bg-mint" />
       )}
       <span title={doing.text} className="line-clamp-2 min-w-0">
         {doing.text}

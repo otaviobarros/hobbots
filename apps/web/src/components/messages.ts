@@ -312,14 +312,6 @@ export const messages = {
     },
     landmark: "Your hobs right now",
     summon: "+ Summon a hob",
-    live: "live",
-    /** One reply in progress; {name} is shown in bold. */
-    activity: {
-      thinking: ({ title }: { title: string }) => `{name} is thinking about “${title}”`,
-      writing: ({ title }: { title: string }) => `{name} is writing “${title}”`,
-    },
-    happeningNow: "Happening now",
-    allQuiet: "All quiet. No hob is replying right now.",
   },
   search: {
     nothing: ({ query }: { query: string }) => `Nothing matches “${query}”.`,
