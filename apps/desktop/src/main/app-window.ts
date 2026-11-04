@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { BrowserWindow, dialog, screen, shell } from "electron";
 import { FIRST_RUN_GROUND } from "./window-background.ts";
+import { appWebPreferences, navigationGuard, windowOpenHandler } from "./window-policy.ts";
 import { watchWindow } from "./window-recovery.ts";
 import { initialWindowBounds } from "./window-size.ts";
 
@@ -26,29 +27,18 @@ export const newAppWindow = (options: {
     ...(process.platform === "darwin"
       ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 12, y: 9 } }
       : { titleBarStyle: "default" as const }),
-    webPreferences: {
-      preload: join(import.meta.dirname, "../preload/index.cjs"),
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-      // Only for Chromium's own PDF viewer, which the Workbench's Files tab previews PDFs with.
-      plugins: true,
-      additionalArguments: [...(options.additionalArguments ?? [])],
-    },
+    webPreferences: appWebPreferences(
+      join(import.meta.dirname, "../preload/index.cjs"),
+      options.additionalArguments ?? [],
+    ),
   });
 
   // External links open in the default browser; the app window never navigates away.
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http")) void shell.openExternal(url);
-    return { action: "deny" };
-  });
-  window.webContents.on("will-navigate", (event, url) => {
-    if (!options.isAllowedUrl(url)) event.preventDefault();
-  });
+  window.webContents.setWindowOpenHandler(windowOpenHandler((url) => shell.openExternal(url)));
+  const guard = navigationGuard(options.isAllowedUrl);
+  window.webContents.on("will-navigate", (event, url) => guard(event, url));
   // A redirect, such as the hub's between its HTTP and HTTPS addresses, is held to the same pages.
-  window.webContents.on("will-redirect", (event, url) => {
-    if (!options.isAllowedUrl(url)) event.preventDefault();
-  });
+  window.webContents.on("will-redirect", (event, url) => guard(event, url));
   watchWindow({
     page: window.webContents,
     isAllowedUrl: options.isAllowedUrl,
