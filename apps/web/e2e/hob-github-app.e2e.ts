@@ -119,7 +119,7 @@ test("[TC-GEN-056] gives a hob its own GitHub app from its Charms tab and shows 
 
   // The hub's page opens in the browser and posts Pip's manifest to GitHub.
   const opened = context.waitForEvent("page");
-  await section.getByRole("button", { name: "Give Pip its own GitHub app" }).click();
+  await section.getByRole("button", { name: "Make its app" }).click();
   const github = await opened;
   await expect.poll(() => manifests.length).toBe(1);
   expect(manifests[0]).toMatchObject({ name: "pip-hobbots", public: false });
@@ -152,11 +152,11 @@ test("[TC-GEN-056] gives a hob its own GitHub app from its Charms tab and shows 
     }),
   );
   const expiring = context.waitForEvent("page");
-  await section.getByRole("button", { name: "Give Pip its own GitHub app" }).click();
+  await section.getByRole("button", { name: "Make its app" }).click();
   await (await expiring).close();
   await expect(section.getByText("Finish on GitHub", { exact: false })).toBeVisible();
   await expect(section.getByText("The last start ran out", { exact: false })).toBeVisible({ timeout: 5_000 });
-  await expect(section.getByRole("button", { name: "Give Pip its own GitHub app" })).toBeVisible();
+  await expect(section.getByRole("button", { name: "Make its app" })).toBeVisible();
   await page.unroute("**/api/agents/*/github-app/start");
 
   // GitHub made the app: the tab follows it while you are there, and asks you to install it.
@@ -284,28 +284,28 @@ test("[TC-GEN-058] disconnects a hob's app after asking, and shows an old app th
   await expect(reached).toHaveCount(9);
   await expect(reached.last()).toHaveText("and 2 more");
 
-  // Disconnect asks first; Cancel changes nothing.
-  await section.getByRole("button", { name: "Disconnect" }).click();
+  // Disconnect asks first; Keep it changes nothing.
+  await section.getByRole("button", { name: "Disconnect its app…" }).click();
   await expect(section.getByText("Disconnect Pip's app?", { exact: false })).toBeVisible();
-  await section.getByRole("button", { name: "Cancel" }).click();
+  await section.getByRole("button", { name: "Keep it" }).click();
   expect(asked).not.toContain("POST /disconnect");
 
-  await section.getByRole("button", { name: "Disconnect" }).click();
+  await section.getByRole("button", { name: "Disconnect its app…" }).click();
   state.status = { _tag: "None", cannotCreate: null };
-  await section.getByRole("button", { name: "Disconnect" }).click();
+  await section.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(section.getByRole("status")).toContainText("Disconnected. Pip acts as you again.");
   await expect(section.getByRole("link", { name: "Delete the app on GitHub" })).toHaveAttribute("href", deleteUrl);
-  await expect(section.getByRole("button", { name: "Give Pip its own GitHub app" })).toBeVisible();
+  await expect(section.getByRole("button", { name: "Make its app" })).toBeVisible();
 
   // An old app the hub could not fully remove stays shown, with where to delete it, until dismissed.
   state.status = { _tag: "LeftOver", app, problem: "1 of the app's installations could not be removed.", deleteUrl };
   await page.reload();
   await page.getByRole("tab", { name: "Charms" }).click();
   const left = section.getByRole("alert");
-  await expect(left).toContainText("Pip's old app was not fully removed. It no longer acts.");
-  await expect(left).toContainText("1 of the app's installations could not be removed.");
+  await expect(left).toContainText("Pip's old app was not fully removed");
+  await expect(left).toContainText("It no longer acts. 1 of the app's installations could not be removed.");
   await expect(left.getByRole("link", { name: "Delete the app on GitHub" })).toHaveAttribute("href", deleteUrl);
   state.status = { _tag: "None", cannotCreate: null };
   await left.getByRole("button", { name: "Dismiss" }).click();
-  await expect(section.getByRole("button", { name: "Give Pip its own GitHub app" })).toBeVisible();
+  await expect(section.getByRole("button", { name: "Make its app" })).toBeVisible();
 });

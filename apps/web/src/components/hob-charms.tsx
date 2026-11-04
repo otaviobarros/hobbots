@@ -1,4 +1,4 @@
-import type { HobGitHubAppStatus, HobPermissions, UpdateHobPermissionsPayload } from "@hobbots/api";
+import type { GitHubStatus, HobGitHubAppStatus, HobPermissions, UpdateHobPermissionsPayload } from "@hobbots/api";
 import type { Agent, PolicyOverrides } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
@@ -69,22 +69,21 @@ function GitHubCharm({ hob, permissions, outdated }: { hob: Agent; permissions: 
   // A hob with its own app acts as its bot, so it needs no account connected in Settings (ADR 022).
   const ownApp = useQuery(hobGitHubAppQuery(hob.id)).data;
   const bot = ownApp?._tag === "Connected" ? ownApp.bot : null;
-  const connected =
-    bot !== null || github.data === undefined || github.data._tag === "Connected" || github.data._tag === "Environment";
+  const connected = bot !== null || accountReady(github.data);
   const state = charmState(granted, ownApp, connected);
 
   return (
     <section
       aria-label={copy.card}
-      className={cn("flex flex-col rounded-card bg-card", granted && "shadow-[inset_0_3px_0_var(--color-mint)]")}
+      className={cn(
+        "flex flex-col rounded-card bg-card",
+        granted
+          ? "shadow-[inset_0_0_0_1px_var(--color-line),inset_0_3px_0_var(--color-mint-deep)]"
+          : "shadow-[inset_0_0_0_1px_var(--color-line)]",
+      )}
     >
       <div className="flex items-center gap-3.5 px-4.5 py-4">
-        <span
-          aria-hidden
-          className="grid size-9 flex-none place-items-center rounded-control bg-hover font-heading text-base font-bold text-text-strong"
-        >
-          G
-        </span>
+        <CharmMark off={!granted} />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="flex flex-wrap items-center gap-2">
             <label htmlFor={switchId} className="text-[17px] leading-6 font-bold text-text-strong">
@@ -143,6 +142,23 @@ function GitHubCharm({ hob, permissions, outdated }: { hob: Agent; permissions: 
   );
 }
 
+/** The Charm's mark before its name, faded while the Charm is off. */
+const CharmMark = ({ off }: { off: boolean }) => (
+  <span
+    aria-hidden
+    className={cn(
+      "grid size-9 flex-none place-items-center rounded-control bg-text-strong font-heading text-[17px] font-bold text-ground",
+      off && "opacity-55",
+    )}
+  >
+    G
+  </span>
+);
+
+/** Whether a GitHub account is ready for the hob to act as you; unknown counts as ready. */
+const accountReady = (status: GitHubStatus | undefined): boolean =>
+  status === undefined || status._tag === "Connected" || status._tag === "Environment";
+
 /** Where the Charm stands: off, unable to act, acting as its own app or as you, or not ready yet. */
 const charmState = (granted: boolean, ownApp: HobGitHubAppStatus | undefined, connected: boolean): CharmState => {
   if (!granted) return "off";
@@ -176,6 +192,7 @@ function GitHubRules({
         <Rule
           key={rule.operation}
           rule={rule}
+          icon={ICONS[rule.operation]}
           permissions={permissions}
           shown={sending?.overrides ? shownAnswer(permissions, sending.overrides, rule.operation) : undefined}
           pending={pending}
@@ -188,6 +205,14 @@ function GitHubRules({
     </section>
   );
 }
+
+// A mark for each action, before its name on the card.
+const ICONS: Readonly<Record<string, string>> = {
+  "read-github": "◇",
+  push: "↑",
+  "open-pull-request": "⇄",
+  "comment-github": "✎",
+};
 
 /** The GitHub Charm's actions as its card names them, each with the hub's rule for it. */
 const GITHUB_RULES: ReadonlyArray<RuleInfo> = GITHUB_OPERATIONS.map((operation) => {
