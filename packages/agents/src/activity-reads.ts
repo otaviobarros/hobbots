@@ -1,5 +1,5 @@
 import { ActivityDetailNotFound, AttemptNotFound } from "@hobbots/api";
-import type { AttemptActivity, AttemptId, CommandId, ContentId } from "@hobbots/domain";
+import { type AttemptActivity, type AttemptId, type CommandId, type ContentId, stripEscapes } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import type { ActivityRepository, ActivityStore } from "./activity.ts";
 
@@ -41,7 +41,10 @@ export const readActivityContent = (
 
 const decoder = new TextDecoder();
 
-/** A command's whole redacted output, when its record still names a log. */
+/**
+ * A command's whole redacted output, when its record still names a log, as plain text: it opens in
+ * a browser tab, which would show a colored command's escape sequences as they are (#902).
+ */
 export const readCommandLog = (
   repo: ActivityRepository["Service"],
   store: ActivityStore["Service"],
@@ -52,5 +55,5 @@ export const readCommandLog = (
     const command = yield* repo.findCommand(attemptId, commandId);
     const contentId = Option.isSome(command) ? command.value.log?.contentId : null;
     if (contentId == null) return yield* new ActivityDetailNotFound({ attemptId });
-    return decoder.decode(yield* keptBytes(store, attemptId, contentId));
+    return stripEscapes(decoder.decode(yield* keptBytes(store, attemptId, contentId)));
   });
