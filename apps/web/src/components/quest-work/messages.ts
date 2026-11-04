@@ -1,5 +1,4 @@
 import type { TaskState } from "@hobbots/domain";
-import { formatCount } from "../../lib/format.ts";
 
 /** Copy for a party member's work on another hob's Quest, on Home and in the hob panel (STD-I18N-001). */
 export const messages = {
@@ -18,10 +17,4 @@ export const messages = {
     failed: "Had a problem",
     cancelled: "Cancelled",
   } satisfies Record<TaskState, string>,
-  home: {
-    title: "Quests in progress",
-    empty: "No quests yet. When hobs share work, each Quest shows here with who is on it and how far it got.",
-    progress: ({ done, total }: { done: number; total: number }) =>
-      `${formatCount(done)} of ${formatCount(total)} done`,
-  },
 };

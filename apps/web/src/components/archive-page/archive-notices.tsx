@@ -1,16 +1,19 @@
-import type { Agent, Thread } from "@hobbots/domain";
+import type { Agent, AgentId, Thread } from "@hobbots/domain";
 import { Toast, ToastAction, ToastDescription, ToastProvider, ToastViewport } from "@hobbots/ui/components/toast";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { useArchiveThread } from "../../api/archive.ts";
 import { useRestoreThread } from "../../api/archived-threads.ts";
+import { useBringBackHob, useRetireAgain } from "../../api/queries.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.toast;
 
 /** What the Archive's toast says; `id` makes each notice a new toast. */
-type Notice = { readonly id: number; readonly hob: Agent; readonly thread: Thread } & (
-  | { readonly kind: "restored" }
-  | { readonly kind: "failed"; readonly action: "restore" | "undo" }
+type Notice = { readonly id: number; readonly hob: Agent } & (
+  | { readonly kind: "restored"; readonly thread: Thread }
+  | { readonly kind: "failed"; readonly action: "restore" | "undo"; readonly thread: Thread }
+  | { readonly kind: "back"; readonly chats: number }
+  | { readonly kind: "hob-failed"; readonly action: "bring-back" | "undo"; readonly chats: number }
 );
 
 type NoticeBody = Notice extends infer N ? (N extends Notice ? Omit<N, "id"> : never) : never;
@@ -20,6 +23,13 @@ interface ArchiveActions {
   readonly restore: (hob: Agent, thread: Thread, onDone?: () => void) => void;
   /** Whether this chat is being restored or archived again right now. */
   readonly busy: (thread: Thread) => boolean;
+  /**
+   * Brings a retired hob back, then says how many chats came with it, with Undo. `onDone` runs once
+   * it is back.
+   */
+  readonly bringBack: (hob: Agent, chats: number, onDone?: () => void) => void;
+  /** Whether this hob is being brought back or retired again right now. */
+  readonly hobBusy: (hobId: AgentId) => boolean;
 }
 
 const ArchiveActionsContext = createContext<ArchiveActions | null>(null);
@@ -31,12 +41,14 @@ export const useArchiveActions = (): ArchiveActions => {
 };
 
 /**
- * The Archive's actions and their toast, shared by its pages so a toast stays when Restore moves
- * from a chat back to the list. Undo archives the chat again.
+ * The Archive's actions and their toast, shared by its pages so a toast stays when an action moves
+ * back to the list. Undo archives a restored chat again, or retires a hob brought back.
  */
 export function ArchiveNotices({ children }: { children: ReactNode }) {
   const restoring = useRestoreThread();
   const archiving = useArchiveThread();
+  const bringing = useBringBackHob();
+  const retiring = useRetireAgain();
   const [notice, setNotice] = useState<Notice | null>(null);
   const show = (body: NoticeBody) => setNotice((old) => ({ ...body, id: (old?.id ?? 0) + 1 }) as Notice);
 
@@ -51,17 +63,50 @@ export function ArchiveNotices({ children }: { children: ReactNode }) {
     });
   };
 
-  const undo = (hob: Agent, thread: Thread) => {
+  const archiveAgain = (hob: Agent, thread: Thread) => {
     setNotice(null);
     archiving.mutate(thread, { onError: () => show({ kind: "failed", action: "undo", hob, thread }) });
+  };
+
+  const bringBack = (hob: Agent, chats: number, onDone?: () => void) => {
+    setNotice(null);
+    bringing.mutate(hob.id, {
+      onSuccess: (back) => {
+        onDone?.();
+        show({ kind: "back", hob: back, chats });
+      },
+      onError: () => show({ kind: "hob-failed", action: "bring-back", hob, chats }),
+    });
+  };
+
+  const retireAgain = (hob: Agent, chats: number) => {
+    setNotice(null);
+    retiring.mutate(hob.id, { onError: () => show({ kind: "hob-failed", action: "undo", hob, chats }) });
   };
 
   const busy = (thread: Thread) =>
     (restoring.isPending && restoring.variables === thread.id) ||
     (archiving.isPending && archiving.variables?.id === thread.id);
+  const hobBusy = (hobId: AgentId) =>
+    (bringing.isPending && bringing.variables === hobId) || (retiring.isPending && retiring.variables === hobId);
+
+  const undo = (current: Notice) => {
+    if (current.kind === "restored") archiveAgain(current.hob, current.thread);
+    if (current.kind === "back") retireAgain(current.hob, current.chats);
+  };
+  const retry = (current: Notice) => {
+    if (current.kind === "failed") {
+      if (current.action === "undo") archiveAgain(current.hob, current.thread);
+      else restore(current.hob, current.thread);
+    }
+    if (current.kind === "hob-failed") {
+      if (current.action === "undo") retireAgain(current.hob, current.chats);
+      else bringBack(current.hob, current.chats);
+    }
+  };
 
   return (
-    <ArchiveActionsContext.Provider value={{ restore, busy }}>
+    <ArchiveActionsContext.Provider value={{ restore, busy, bringBack, hobBusy }}>
       <ToastProvider>
         {children}
         {notice && (
@@ -69,12 +114,8 @@ export function ArchiveNotices({ children }: { children: ReactNode }) {
             key={notice.id}
             notice={notice}
             onClose={() => setNotice(null)}
-            onUndo={() => undo(notice.hob, notice.thread)}
-            onRetry={() =>
-              notice.kind === "failed" && notice.action === "undo"
-                ? undo(notice.hob, notice.thread)
-                : restore(notice.hob, notice.thread)
-            }
+            onUndo={() => undo(notice)}
+            onRetry={() => retry(notice)}
           />
         )}
         <ToastViewport
@@ -85,6 +126,33 @@ export function ArchiveNotices({ children }: { children: ReactNode }) {
     </ArchiveActionsContext.Provider>
   );
 }
+
+/** What the toast says, and what its one action is called: Undo after a change, Try again after a failure. */
+const toastText = (notice: Notice): { line: string; action: string; alt: string; failed: boolean } => {
+  const name = notice.hob.name;
+  switch (notice.kind) {
+    case "restored": {
+      const title = notice.thread.title;
+      return { line: copy.restored({ title, name }), action: copy.undo, alt: copy.undoAlt({ title }), failed: false };
+    }
+    case "failed": {
+      const title = notice.thread.title;
+      const line = notice.action === "undo" ? copy.undoFailed({ title }) : copy.restoreFailed({ title });
+      return { line, action: copy.tryAgain, alt: copy.tryAgainAlt({ title }), failed: true };
+    }
+    case "back":
+      return {
+        line: copy.back({ name, chats: notice.chats }),
+        action: copy.undo,
+        alt: copy.undoBackAlt({ name }),
+        failed: false,
+      };
+    case "hob-failed": {
+      const line = notice.action === "undo" ? copy.retireFailed({ name }) : copy.backFailed({ name });
+      return { line, action: copy.tryAgain, alt: copy.tryAgainAlt({ title: name }), failed: true };
+    }
+  }
+};
 
 function NoticeToast({
   notice,
@@ -100,24 +168,12 @@ function NoticeToast({
   const close = (open: boolean) => {
     if (!open) onClose();
   };
-  const title = notice.thread.title;
-  if (notice.kind === "restored") {
-    return (
-      <Toast onOpenChange={close}>
-        <ToastDescription>{copy.restored({ title, name: notice.hob.name })}</ToastDescription>
-        <ToastAction altText={copy.undoAlt({ title })} aria-label={copy.undoAlt({ title })} onClick={onUndo}>
-          {copy.undo}
-        </ToastAction>
-      </Toast>
-    );
-  }
+  const text = toastText(notice);
   return (
-    <Toast tone="failure" onOpenChange={close}>
-      <ToastDescription>
-        {notice.action === "undo" ? copy.undoFailed({ title }) : copy.restoreFailed({ title })}
-      </ToastDescription>
-      <ToastAction altText={copy.tryAgainAlt({ title })} aria-label={copy.tryAgainAlt({ title })} onClick={onRetry}>
-        {copy.tryAgain}
+    <Toast tone={text.failed ? "failure" : "default"} onOpenChange={close}>
+      <ToastDescription>{text.line}</ToastDescription>
+      <ToastAction altText={text.alt} aria-label={text.alt} onClick={text.failed ? onRetry : onUndo}>
+        {text.action}
       </ToastAction>
     </Toast>
   );

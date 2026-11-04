@@ -1,4 +1,4 @@
-import { AgentId, AttemptId, TaskId, ThreadId } from "@hobbots/domain";
+import { AgentId, AttemptId, type HistoryFilter, TaskId, ThreadId } from "@hobbots/domain";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createHashHistory,
@@ -18,7 +18,7 @@ import { ArchiveNotices } from "./components/archive-page/archive-notices.tsx";
 import { ArchivePage } from "./components/archive-page/archive-page.tsx";
 import { ArchivedChatPage, RetiredChatPage, RetiredHobPage } from "./components/archive-page/archive-read.tsx";
 import { HobPage } from "./components/hob-page/hob-page.tsx";
-import { type HobPageTab, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
+import { type HobPageTab, isHistoryFilter, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
 import { HobProfile } from "./components/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { HobsPage } from "./components/hobs-page/hobs-page.tsx";
@@ -67,7 +67,7 @@ const pairRoute = createRoute({
 });
 
 // A new installation opens on Welcome, outside the app shell, until setup is done:
-// Welcome → Where Hobbots runs → other devices → providers → first hob → safety → folders → summon → Home.
+// Welcome → Where Hobbots runs → providers → first hob → safety → folders → other devices → summon → Home.
 // Once setup is done, each of them opens Home.
 const leaveSetupWhenDone = async ({ context }: { context: { queryClient: QueryClient } }) => {
   if (setupDone(await readSetup(context.queryClient))) throw redirect({ to: "/" });
@@ -85,14 +85,6 @@ const setupWhereRoute = createRoute({
   path: "setup/where",
   beforeLoad: leaveSetupWhenDone,
   component: WhereHobbotsRuns,
-});
-
-// Run Hobbots on this computer asks next whether other devices may use it too (ADR 021).
-const setupRemoteRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "setup/remote",
-  beforeLoad: leaveSetupWhenDone,
-  component: SetupRemoteAccess,
 });
 
 const providersRoute = createRoute({
@@ -127,6 +119,14 @@ const foldersRoute = createRoute({
   path: "setup/folders",
   beforeLoad: afterFirstHob,
   component: OnboardingFolders,
+});
+
+// After Folders, setup asks whether other devices may use Hobbots too (ADR 021). It can be skipped.
+const setupRemoteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "setup/remote",
+  beforeLoad: afterFirstHob,
+  component: SetupRemoteAccess,
 });
 
 const readyRoute = createRoute({
@@ -166,17 +166,20 @@ const hobsRoute = createRoute({
 const hobRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId",
-  validateSearch: (search: Record<string, unknown>): { tab?: HobPageTab | undefined } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: HobPageTab | undefined; show?: HistoryFilter | undefined } => ({
     tab: isHobPageTab(search.tab) && search.tab !== "chats" ? search.tab : undefined,
+    show: isHistoryFilter(search.show) && search.show !== "all" ? search.show : undefined,
   }),
   component: function HobPageRoute() {
     const params = hobRoute.useParams();
-    const { tab } = hobRoute.useSearch();
+    const { tab, show } = hobRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
         aside={null}
-        main={(props) => <HobPage key={params.hobId} {...props} tab={tab ?? "chats"} />}
+        main={(props) => <HobPage key={params.hobId} {...props} tab={tab ?? "chats"} show={show ?? "all"} />}
       />
     );
   },

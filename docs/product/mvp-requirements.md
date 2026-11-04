@@ -11,7 +11,7 @@ These are the MVP requirements and their acceptance conditions. Numerical defaul
 | AG-003 | Configure delegation collaborators independently of identity and class. | A disallowed destination is rejected by the server; a role label never grants access. |
 | AG-004 | Configure tools, workspace, permissions, and execution limits separately from prompts. | A prompt cannot expand the effective policy. |
 | AG-005 | Show runtime installation, authentication and health. | Missing or incompatible runtimes show actionable state rather than a fabricated connected status. |
-| AG-006 | Retire hobs while preserving history. | Retire asks whether to hand active work to another hob, let it finish or stop it; new dispatch is then prevented, nothing is deleted and the hob stays inspectable under Archived hobs. |
+| AG-006 | Retire hobs while preserving history. | Retire asks whether to hand active work to another hob, let it finish or stop it; new dispatch is then prevented, nothing is deleted and the hob stays inspectable in the Archive. Bring back makes it active again with all its threads. |
 
 In the UI agents are called **hobs** ([ADR 008](../decisions/008-design.md)); these documents keep "agent" for the domain model. Agent templates (hob kinds) and optional specialization/default skills support onboarding. Exact template content and portable configuration format are open.
 

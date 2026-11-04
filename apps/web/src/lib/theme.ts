@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useLayoutEffect, useSyncExternalStore } from "react";
 import { type ChoiceEnvironment, createChoiceStore } from "./device-choice.ts";
 import { readStored, writeStored } from "./storage.ts";
 
@@ -61,6 +61,14 @@ export const createThemeStore = (environment: ThemeEnvironment) => {
     firstRunFinished: () => {
       if (!isTheme(environment.read())) environment.write(NEW_DEVICE_THEME);
     },
+    /**
+     * Shows Workshop Night while a first run screen is open, whatever theme is saved, and gives the
+     * page its own theme back when it closes. The saved theme stays as it is.
+     */
+    holdFirstRun: () => {
+      environment.mark(FIRST_RUN_THEME);
+      return () => environment.mark(choice.get());
+    },
     storageChanged: choice.storageChanged,
     subscribe: choice.subscribe,
   };
@@ -96,3 +104,6 @@ export const setTheme = (theme: Theme) => store.set(theme);
 
 /** This device's theme, kept in step with every change, here or in another window. */
 export const useTheme = (): Theme => useSyncExternalStore(store.subscribe, store.theme, store.theme);
+
+/** First run always renders in Workshop Night: call it from each first run screen. */
+export const useFirstRunTheme = () => useLayoutEffect(() => store.holdFirstRun(), []);

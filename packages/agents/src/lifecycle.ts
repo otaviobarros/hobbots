@@ -9,13 +9,18 @@ import { foundAgent } from "./hobs.ts";
 import { EventPublisher, RetiredHobGitHubApp } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 
-/** Pauses, wakes and retires hobs (AG-006). Nothing here deletes a hob or its threads. */
+/** Pauses, wakes, retires and brings back hobs (AG-006). Nothing here deletes a hob or its threads. */
 export class HobLifecycle extends Context.Service<
   HobLifecycle,
   {
     readonly pause: (agentId: AgentId) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;
     readonly wake: (agentId: AgentId) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;
     readonly retire: (agentId: AgentId, activeWork: RetireWork) => Effect.Effect<Agent, AgentNotFound>;
+    /**
+     * Brings a retired hob back, active with all its threads. The rules and the GitHub app it lost
+     * on retiring stay gone (ADR 015, ADR 022). Refused for a paused hob; an active one is unchanged.
+     */
+    readonly bringBack: (agentId: AgentId) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;
   }
 >()("@hobbots/agents/HobLifecycle") {
   static readonly layer = Layer.effect(
@@ -85,7 +90,9 @@ export class HobLifecycle extends Context.Service<
         return retired;
       });
 
-      return HobLifecycle.of({ pause, wake, retire });
+      const bringBack = (agentId: AgentId) => admission.withHob(agentId, apply(agentId, AgentTransitions.bringBack));
+
+      return HobLifecycle.of({ pause, wake, retire, bringBack });
     }),
   );
 }

@@ -2,15 +2,15 @@ import type { AddressRefusal, ConnectEnd, WaitingView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { type FormEvent, type ReactNode, useId } from "react";
 import { formatTime } from "../../lib/time.ts";
+import { OnboardingFrame } from "../onboarding-frame.tsx";
 import { groupedCode } from "../pairing/device-request-model.ts";
-import { ElderAside } from "../where-hobbots-runs.tsx";
 import { endedText, refusalText, type SetupBridge } from "./connect-model.ts";
 import { FoundHubs } from "./found-hubs.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages;
 
-/** A setup step beside the Elder Hob, with its buttons along the bottom. */
+/** A setup step in the setup frame, with the Chief in the preview and its buttons along the bottom. */
 function SetupStep({
   stage,
   speech,
@@ -23,15 +23,9 @@ function SetupStep({
   footer?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-0 flex-1">
-      <ElderAside stage={stage} speech={speech} />
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-12 pt-10 pb-6">
-        <div className="flex min-h-0 flex-1 animate-hb-in flex-col gap-2">{children}</div>
-        {footer !== undefined && (
-          <div className="flex flex-wrap items-center gap-3 border-t-2 border-line pt-4">{footer}</div>
-        )}
-      </main>
-    </div>
+    <OnboardingFrame step={null} preview={{ house: true, caption: stage, speech }} footer={footer}>
+      <div className="flex flex-col gap-2">{children}</div>
+    </OnboardingFrame>
   );
 }
 

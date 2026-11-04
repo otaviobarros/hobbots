@@ -9,6 +9,7 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 import type { HobState } from "../../lib/hob-state.ts";
+import { type QuestInProgress, workTone } from "../../lib/quest-work.ts";
 import { filterCounts, filterOf, type HobFilter } from "../hobs-page/hobs-page-model.ts";
 
 /**
@@ -68,3 +69,43 @@ export const inFilter = (state: HobState, filter: HobFilter): boolean => filter 
 /** The filter in force: a picked chip whose family has emptied falls back to All. */
 export const activeFilter = (picked: HobFilter, chips: ReturnType<typeof sceneChips>): HobFilter =>
   chips.some((chip) => chip.value === picked) ? picked : "all";
+
+/** One row of Pick up where you left off: a chat, or a Quest in progress. */
+export type PickUpRow<H, T> =
+  | { readonly kind: "thread"; readonly hob: H; readonly thread: T; readonly at: string }
+  | { readonly kind: "quest"; readonly group: QuestInProgress; readonly at: string };
+
+/** How many rows Pick up where you left off shows. */
+const PICK_UP_LIMIT = 5;
+
+/** When a Quest last moved: its newest member Task, or when it started. */
+const questMoved = (group: QuestInProgress): string =>
+  [group.quest.createdAt, ...group.members.map((each) => each.task.updatedAt)].toSorted().at(-1) ??
+  group.quest.createdAt;
+
+/**
+ * Recent chats and Quests in progress in one list, the most recently active first. A chat that
+ * follows a Quest shows once, as that Quest.
+ */
+export const pickUpRows = <H, T extends Pick<Thread, "id" | "updatedAt">>(
+  chats: ReadonlyArray<{ readonly hob: H; readonly thread: T }>,
+  quests: ReadonlyArray<QuestInProgress>,
+): ReadonlyArray<PickUpRow<H, T>> => {
+  const questThreads = new Set(
+    quests.flatMap((group) => (group.quest.threadId === null ? [] : [group.quest.threadId])),
+  );
+  const rows: Array<PickUpRow<H, T>> = [
+    ...chats
+      .filter(({ thread }) => !questThreads.has(thread.id))
+      .map(({ hob, thread }) => ({ kind: "thread" as const, hob, thread, at: thread.updatedAt })),
+    ...quests.map((group) => ({ kind: "quest" as const, group, at: questMoved(group) })),
+  ];
+  return rows.toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, PICK_UP_LIMIT);
+};
+
+/** How far a Quest's party got, and how many of its members wait on you. */
+export const questProgress = (group: QuestInProgress) => ({
+  done: group.members.filter((each) => each.task.state === "completed").length,
+  total: group.members.length,
+  needs: group.members.filter((each) => workTone[each.task.state] === "needs").length,
+});

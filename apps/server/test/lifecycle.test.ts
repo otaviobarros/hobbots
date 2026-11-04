@@ -176,7 +176,7 @@ describe("retiring hobs", () => {
     const refused = await request("POST", `/api/threads/${thread.id}/messages`, { content: "again" });
     expect(refused).toMatchObject({ status: 409, body: { _tag: "HobUnavailable", status: "retired" } });
     expect((await request("POST", `/api/agents/${agent.id}/threads`)).status).toBe(409);
-    // Retiring is final: it cannot be paused or woken, and retiring again changes nothing.
+    // A retired hob cannot be paused or woken, and retiring again changes nothing.
     expect((await request("POST", `/api/agents/${agent.id}/wake`)).body).toMatchObject({
       _tag: "HobUnavailable",
       status: "retired",
@@ -190,6 +190,32 @@ describe("retiring hobs", () => {
     // Archived hobs show when the hob retired; retiring again kept the first time.
     expect((await request("GET", "/api/agents?status=retired")).body).toMatchObject([{ id: agent.id, retiredAt }]);
     expect((await request("GET", "/api/agents?status=active")).body).toEqual([]);
+  });
+
+  // covers AG-006
+  it("[TC-AG-115] brings a retired hob back active with its threads, and takes new work again", async () => {
+    const { agent, thread } = await summon();
+    await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
+    await settled(thread.id);
+    await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "finish" });
+
+    const back = await request("POST", `/api/agents/${agent.id}/bring-back`);
+    expect(back).toMatchObject({ status: 200, body: { id: agent.id, status: "active", retiredAt: null } });
+    expect((await request("GET", "/api/agents")).body).toMatchObject([{ id: agent.id, status: "active" }]);
+    expect((await request("GET", "/api/agents?status=retired")).body).toEqual([]);
+    expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toMatchObject([{ id: thread.id }]);
+
+    await request("POST", `/api/threads/${thread.id}/messages`, { content: "again" });
+    await settled(thread.id);
+    expect((await messages(thread.id)).map((m) => m.content)).toEqual(["hello", "Echo: hello", "again", "Echo: again"]);
+    // Bringing back an active hob changes nothing; a paused one is refused, and an unknown one is not found.
+    expect((await request("POST", `/api/agents/${agent.id}/bring-back`)).body).toMatchObject({ status: "active" });
+    await request("POST", `/api/agents/${agent.id}/pause`);
+    expect((await request("POST", `/api/agents/${agent.id}/bring-back`)).body).toMatchObject({
+      _tag: "HobUnavailable",
+      status: "paused",
+    });
+    expect((await request("POST", "/api/agents/hob_nobody/bring-back")).status).toBe(404);
   });
 
   // covers AG-006, CH-004

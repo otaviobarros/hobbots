@@ -1,6 +1,5 @@
-import type { Agent } from "@hobbots/domain";
+import type { Agent, HistoryFilter } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@hobbots/ui/components/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -13,6 +12,7 @@ import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { HobAside } from "./hob-aside.tsx";
 import { HobChats } from "./hob-chats.tsx";
 import { HobHero } from "./hob-hero.tsx";
+import { HobHistory } from "./hob-history.tsx";
 import { doingOf, type HobPageTab, isHobPageTab, statsLine } from "./hob-page-model.ts";
 import { messages } from "./messages.ts";
 
@@ -22,7 +22,7 @@ const copy = messages;
  * A hob's own page, in the middle of the chat workspace: its hero, then the Chats and History tabs
  * beside a side column. The tab lives in the URL, so a link or Back opens the same one.
  */
-export function HobPage({ tab, ...props }: WorkspaceMainProps & { tab: HobPageTab }) {
+export function HobPage({ tab, show, ...props }: WorkspaceMainProps & { tab: HobPageTab; show: HistoryFilter }) {
   const hob = useQuery({ ...agentsQuery, select: (hobs) => hobs.find((h) => h.id === props.hobId) });
 
   return (
@@ -38,7 +38,7 @@ export function HobPage({ tab, ...props }: WorkspaceMainProps & { tab: HobPageTa
         </div>
       )}
       {hob.data ? (
-        <Page hob={hob.data} tab={tab} />
+        <Page hob={hob.data} tab={tab} show={show} />
       ) : (
         <p role={hob.isPending ? "status" : "alert"} className="m-auto text-text-secondary">
           {hob.isPending ? copy.loading : copy.missing}
@@ -52,7 +52,7 @@ export function HobPage({ tab, ...props }: WorkspaceMainProps & { tab: HobPageTa
   );
 }
 
-function Page({ hob, tab }: { hob: Agent; tab: HobPageTab }) {
+function Page({ hob, tab, show }: { hob: Agent; tab: HobPageTab; show: HistoryFilter }) {
   const threads = useQuery(threadsQuery(hob.id));
   const activity = useActivity();
   const waiting = useWaitingHobs().has(hob.id);
@@ -60,14 +60,16 @@ function Page({ hob, tab }: { hob: Agent; tab: HobPageTab }) {
   const list = threads.data ?? [];
   const state = withRequests(hobState(hob, list, activity), waiting);
 
-  const pick = (next: string) => {
-    if (!isHobPageTab(next)) return;
+  // The tab and the History filter live in the URL; Chats and Everything are the defaults and stay out of it.
+  const go = (next: HobPageTab, filter: HistoryFilter = "all") =>
     void navigate({
       to: "/hobs/$hobId",
       params: { hobId: hob.id },
-      search: next === "chats" ? {} : { tab: next },
+      search: next === "chats" ? {} : { tab: next, ...(filter === "all" ? {} : { show: filter }) },
       replace: true,
     });
+  const pick = (next: string) => {
+    if (isHobPageTab(next)) go(next);
   };
 
   return (
@@ -109,12 +111,7 @@ function Page({ hob, tab }: { hob: Agent; tab: HobPageTab }) {
             )}
           </TabsContent>
           <TabsContent value="history">
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>{copy.history.soon}</EmptyTitle>
-                <EmptyDescription>{copy.history.soonBody({ name: hob.name })}</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+            <HobHistory hob={hob} filter={show} onFilter={(next) => go("history", next)} />
           </TabsContent>
         </Tabs>
         <HobAside hob={hob} />

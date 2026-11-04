@@ -13,18 +13,17 @@ import { POTION_COLORS, potion, potionPalette } from "../art/icons.ts";
 import { type CrewGroup, groupOf, SCENE_LIMIT, splitScene } from "../lib/crew.ts";
 import { sceneOrder, withRequests } from "../lib/hob-state.ts";
 import { questsInProgress } from "../lib/quest-work.ts";
-import { formatWhen, greeting } from "../lib/time.ts";
+import { greeting } from "../lib/time.ts";
 import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { HobSprite, hobState } from "./hob-sprite.tsx";
 import type { HobFilter } from "./hobs-page/hobs-page-model.ts";
 import { activeFilter, inFilter, sceneChips } from "./home/home-model.ts";
+import { PickUp } from "./home/pick-up.tsx";
 import { StageHob } from "./home/stage-hob.tsx";
 import { messages as inboxCopy } from "./inbox/messages.ts";
 import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
 import { WaitingRequests } from "./inbox/waiting-requests.tsx";
 import { messages } from "./messages.ts";
-import { messages as questCopy } from "./quest-work/messages.ts";
-import { QuestsInProgress } from "./quest-work/quest-work.tsx";
 import { Stars } from "./scene.tsx";
 
 /** Home, the landing page: what your hobs are doing, what needs you, and what is left of each AI plan. */
@@ -51,6 +50,8 @@ export function Home() {
     .flatMap((c) => c.threads.map((thread) => ({ hob: c.hob, thread })))
     .sort((a, b) => b.thread.updatedAt.localeCompare(a.thread.updatedAt));
   const live = recent.filter(({ thread }) => activity[thread.id]);
+  const quests = questsInProgress(useQuestWork(hobs.map((hob) => hob.id)));
+  const byId = new Map(hobs.map((hob) => [hob.id, hob]));
 
   const chips = sceneChips(crew.map((c) => c.state));
   const filter = activeFilter(picked, chips);
@@ -111,44 +112,13 @@ export function Home() {
       </section>
       <WorkHeldNotice className="mx-7 mt-5" />
 
-      <div className="grid min-h-0 flex-1 grid-cols-[1.15fr_1fr_0.9fr] gap-[18px] px-6 py-5">
+      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-7 px-8 pt-6 pb-8">
         <NeedsYou />
-
-        <div className="flex min-w-0 flex-col gap-[18px]">
-          <HappeningNowCard live={live} activity={activity} />
-          <Card label="Recent threads" className="flex-1">
-            {recent.length === 0 && <p className="m-0 text-sm text-text-secondary">No threads yet.</p>}
-            {recent.slice(0, 4).map(({ hob, thread }) => (
-              <Link
-                key={thread.id}
-                to="/hobs/$hobId/threads/$threadId"
-                params={{ hobId: hob.id, threadId: thread.id }}
-                className="flex gap-2.5 text-sm leading-snug text-text-strong no-underline hover:text-moonlight"
-              >
-                <span className="w-16 flex-none font-heading font-semibold text-moonlight">{hob.name}</span>
-                <span className="min-w-0 flex-1 truncate text-text-secondary">{thread.title}</span>
-                <span className="text-xs text-label">{formatWhen(thread.updatedAt)}</span>
-              </Link>
-            ))}
-          </Card>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-[18px]">
-          <AiPlans />
-          <HomeQuests hobs={hobs} className="flex-1" />
-        </div>
+        <PickUp chats={recent} quests={quests} hobs={byId} activity={activity} />
+        <HappeningNowCard live={live} activity={activity} />
+        <AiPlans />
       </div>
     </main>
-  );
-}
-
-/** Quests in progress: every Quest a hob is on as a party member, read from each hob's Quest work. */
-function HomeQuests({ hobs, className = "" }: { hobs: ReadonlyArray<Agent>; className?: string }) {
-  const work = useQuestWork(hobs.map((hob) => hob.id));
-  return (
-    <Card label={questCopy.home.title} className={className}>
-      <QuestsInProgress quests={questsInProgress(work)} />
-    </Card>
   );
 }
 

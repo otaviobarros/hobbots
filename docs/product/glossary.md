@@ -5,7 +5,7 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Term | Meaning | Owner |
 |---|---|---|
 | Agent / hob | A persistent identity with versioned configuration, runtime preference, instructions and policy. The domain model says *agent*; the UI says *hob*. | [Agent model](../architecture/agent-model.md), [ADR 008](../decisions/008-design.md) |
-| Retire | Archiving a hob. New dispatch stops and history stays inspectable. | [MVP requirements](mvp-requirements.md) (AG-006) |
+| Retire | Archiving a hob. New dispatch stops and history stays inspectable. Bring back makes it active again. | [MVP requirements](mvp-requirements.md) (AG-006) |
 | Orchestrator | A role an agent plays when it coordinates others, not a privileged runtime type. | [ADR 005](../decisions/005-agent-parity.md) |
 | Thread | A durable user conversation that belongs to one agent. | [Conversations](../architecture/conversations.md) |
 | Session | The binding to an underlying runtime conversation or connection. It may change during recovery and never replaces domain identity. | [Conversations](../architecture/conversations.md) |

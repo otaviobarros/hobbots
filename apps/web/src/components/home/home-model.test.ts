@@ -1,7 +1,7 @@
 import { AgentId, type TaskTree, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { memberWork, quest } from "../../test/member-work.ts";
-import { activeFilter, inFilter, peekBench, peekThread, sceneChips } from "./home-model.ts";
+import { activeFilter, inFilter, peekBench, peekThread, pickUpRows, questProgress, sceneChips } from "./home-model.ts";
 
 const older = { id: ThreadId.make("t-old"), updatedAt: "2026-11-01T08:00:00.000Z" };
 const newer = { id: ThreadId.make("t-new"), updatedAt: "2026-11-02T08:00:00.000Z" };
@@ -74,5 +74,55 @@ describe("inFilter", () => {
     expect(inFilter("waiting", "needs")).toBe(true);
     expect(inFilter("paused", "resting")).toBe(true);
     expect(inFilter("thinking", "resting")).toBe(false);
+  });
+});
+
+describe("pickUpRows", () => {
+  const launch = quest("q1", "aldric", 0);
+  const group = (updated: number) => {
+    const work = memberWork("copy", "quill", launch, "blocked", updated);
+    return { quest: launch, threadAgentId: launch.leadId, members: [work] };
+  };
+  const chat = (id: string, day: number) => ({
+    hob: "aldric",
+    thread: { id: ThreadId.make(id), updatedAt: `2026-11-0${day}T08:00:00.000Z` },
+  });
+
+  it("mixes chats and Quests, the most recently active first", () => {
+    const rows = pickUpRows([chat("t-old", 1), chat("t-new", 3)], [group(10)]);
+    expect(rows.map((row) => (row.kind === "thread" ? row.thread.id : row.group.quest.id))).toEqual([
+      "t-new",
+      "t-old",
+      "q1",
+    ]);
+  });
+
+  it("shows a chat that follows a Quest once, as that Quest", () => {
+    const rows = pickUpRows([chat("q1-thread", 3)], [group(10)]);
+    expect(rows.map((row) => row.kind)).toEqual(["quest"]);
+  });
+
+  it("keeps the five most recent", () => {
+    const rows = pickUpRows(
+      [1, 2, 3, 4, 5, 6, 7].map((day) => chat(`t${day}`, day)),
+      [],
+    );
+    expect(rows.map((row) => (row.kind === "thread" ? row.thread.id : ""))).toEqual(["t7", "t6", "t5", "t4", "t3"]);
+  });
+});
+
+describe("questProgress", () => {
+  it("counts the party's finished Tasks and the members who wait on you", () => {
+    const launch = quest("q1", "aldric");
+    const members = [
+      memberWork("copy", "quill", launch, "completed"),
+      memberWork("build", "ada", launch, "blocked"),
+      memberWork("email", "pip", launch, "active"),
+    ];
+    expect(questProgress({ quest: launch, threadAgentId: launch.leadId, members })).toEqual({
+      done: 1,
+      total: 3,
+      needs: 1,
+    });
   });
 });

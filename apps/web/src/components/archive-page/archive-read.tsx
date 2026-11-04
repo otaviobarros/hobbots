@@ -121,6 +121,9 @@ export function RetiredHobPage({ hobId }: { hobId: AgentId }) {
               {copy.retired.line({ role: hob.roleTitle, day: retired, kept: copy.hobs.kept({ count: chats.length }) })}
             </span>
           </div>
+          <div className="flex flex-none items-center pb-[18px]">
+            <BringBackButton hob={hob} chats={chats.length} />
+          </div>
         </div>
         <div aria-hidden className="relative -mx-6 h-2.5" style={stripStyle} />
       </section>
@@ -177,8 +180,39 @@ export function RetiredChatPage({ hobId, threadId }: { hobId: AgentId; threadId:
       />
       <ArchiveNote icon={<MoonIcon />}>{copy.retired.chatNote({ name: hob.name })}</ArchiveNote>
       <Transcript hob={hob} threadId={thread.id} />
-      <ReadOnlyBar text={copy.retired.bar({ name: hob.name })} />
+      <ReadOnlyBar text={copy.retired.bar({ name: hob.name })}>
+        <BringBackButton hob={hob} chats={chats.length} />
+      </ReadOnlyBar>
     </ArchiveFrame>
+  );
+}
+
+/**
+ * Bring back for a retired hob. On a card it is a quiet button; on the hob's own pages it is the
+ * main action and goes back to Retired hobs, where the toast offers Undo.
+ */
+export function BringBackButton({ hob, chats, quiet = false }: { hob: Agent; chats: number; quiet?: boolean }) {
+  const navigate = useNavigate();
+  const actions = useArchiveActions();
+  const busy = actions.hobBusy(hob.id);
+  return (
+    <Button
+      variant={quiet ? "outline" : "default"}
+      size={quiet ? "sm" : "default"}
+      disabled={busy}
+      aria-label={copy.hobs.bringBackLabel({ name: hob.name })}
+      className={quiet ? "relative z-[1] flex-none" : "min-w-0 max-w-[260px]"}
+      onClick={() =>
+        actions.bringBack(
+          hob,
+          chats,
+          quiet ? undefined : () => void navigate({ to: "/archive", search: { tab: "hobs" } }),
+        )
+      }
+    >
+      <RestoreIcon />
+      <span className="truncate">{busy ? copy.hobs.bringingBack : copy.hobs.bringBack}</span>
+    </Button>
   );
 }
 
