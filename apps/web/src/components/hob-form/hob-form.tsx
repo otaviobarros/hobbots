@@ -16,6 +16,7 @@ import {
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
+import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { cn } from "@hobbots/ui/lib/utils";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { type Dispatch, type SetStateAction, useEffect, useId, useState } from "react";
@@ -111,7 +112,7 @@ export function Choice({
       label={label}
       className={cn(
         "cut flex cursor-pointer items-center gap-2 border-2 px-3 py-[7px] text-sm",
-        checked ? "border-lantern bg-lantern text-ground" : "border-control text-text-strong hover:bg-line",
+        checked ? "border-text-strong bg-selected text-text-strong" : "border-control text-text-strong hover:bg-line",
         "focus-ring-within",
         className,
       )}
@@ -214,7 +215,7 @@ function RoleOption({
     <label
       className={cn(
         "cut relative flex min-w-0 cursor-pointer items-start gap-2.5 border-2 px-2.5 py-2 text-start",
-        checked ? "border-lantern bg-line" : "border-line hover:bg-hover",
+        checked ? "border-text-strong bg-selected" : "border-line hover:bg-hover",
         "focus-ring-within",
         className,
       )}
@@ -388,7 +389,7 @@ export function OwnRole({
         onPick={onSigil}
         legend={<legend className="mb-1.5 text-[13px] text-text-secondary">{messages.hobForm.sigil}</legend>}
         className="flex flex-wrap gap-1"
-        tileClassName="size-8 border-2 border-line bg-deep hover:border-control data-on:border-lantern data-on:hover:border-lantern"
+        tileClassName="size-8 border-2 border-line bg-deep hover:border-control data-on:border-text-strong data-on:hover:border-text-strong"
       />
     </div>
   );
@@ -613,23 +614,15 @@ export function HobSummary({
   );
 }
 
-function EffortBars({ index, count, on }: { index: number; count: number; on: boolean }) {
+function EffortBars({ index, count }: { index: number; count: number }) {
   return (
     <span aria-hidden className="flex items-end gap-0.5">
       {Array.from({ length: count }, (_, j) => (
         <span
           // biome-ignore lint/suspicious/noArrayIndexKey: the bars are a fixed row of identical marks.
           key={j}
-          className="w-[3px]"
-          style={{
-            height: 4 + j * 3,
-            background:
-              j <= index
-                ? `var(--color-${on ? "on-lantern" : "text-strong"})`
-                : on
-                  ? "color-mix(in srgb, var(--color-on-lantern) 25%, transparent)"
-                  : "var(--color-line-2)",
-          }}
+          className={cn("w-[3px]", j <= index ? "bg-current" : "bg-line-2")}
+          style={{ height: 4 + j * 3 }}
         />
       ))}
     </span>
@@ -698,7 +691,7 @@ function Brain<D extends BrainChoice>({
                     key={m.id}
                     className={cn(
                       "flex cursor-pointer items-center gap-2.5 px-2.5 py-1.5 text-sm",
-                      on ? "bg-line" : "hover:bg-hover",
+                      on ? "bg-selected" : "hover:bg-hover",
                       "focus-ring-within focus-inset",
                     )}
                   >
@@ -711,7 +704,7 @@ function Brain<D extends BrainChoice>({
                     />
                     <span
                       aria-hidden
-                      className={cn("size-2.5 border-2", on ? "border-lantern bg-lantern" : "border-control")}
+                      className={cn("size-2.5 border-2", on ? "border-moonlight bg-moonlight" : "border-control")}
                     />
                     <span className={cn("w-24 shrink-0 font-bold", on ? "text-moonlight" : "text-text-strong")}>
                       {m.displayName}
@@ -725,43 +718,29 @@ function Brain<D extends BrainChoice>({
         </div>
       )}
       {efforts.length > 0 ? (
-        <fieldset className="m-0 flex flex-wrap items-center gap-3 border-0 p-0">
-          <legend className="sr-only">{messages.models.effort}</legend>
-          {/* A legend cannot sit inline with the row, so the visible label is a plain span. */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* The control carries the name; the visible label only repeats it. */}
           <span aria-hidden className="text-sm font-bold">
             {messages.models.effort}
           </span>
-          <div className="flex flex-wrap border-2 border-control">
-            {efforts.map((effort: Effort, i) => {
-              const on = effort === draft.effort;
-              return (
-                <label
-                  key={effort}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-1.5 px-[11px] py-1.5 text-sm whitespace-nowrap",
-                    on ? "bg-lantern text-ground" : "text-text-strong hover:bg-line",
-                    "focus-ring-within focus-inset",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="hob-effort"
-                    checked={on}
-                    onChange={() => onChange({ ...draft, effort })}
-                    className="sr-only"
-                  />
-                  <EffortBars index={i} count={efforts.length} on={on} />
-                  {effortWords(effort).label}
-                </label>
-              );
-            })}
-          </div>
+          <SegmentedControl
+            aria-label={messages.models.effort}
+            value={draft.effort ?? null}
+            onValueChange={(effort: Effort) => onChange({ ...draft, effort })}
+          >
+            {efforts.map((effort: Effort, i) => (
+              <SegmentedControlItem key={effort} value={effort}>
+                <EffortBars index={i} count={efforts.length} />
+                {effortWords(effort).label}
+              </SegmentedControlItem>
+            ))}
+          </SegmentedControl>
           {draft.effort && (
             <span key={draft.effort} className="animate-hb-in text-[13px] text-text-secondary">
               {effortWords(draft.effort).note}
             </span>
           )}
-        </fieldset>
+        </div>
       ) : (
         model && (
           <span className="text-[13px] text-label">{messages.models.noEffort({ model: model.displayName })}</span>
