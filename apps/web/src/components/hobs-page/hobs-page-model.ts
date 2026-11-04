@@ -1,14 +1,15 @@
 import type { Thread } from "@hobbots/domain";
+import { Schema } from "effect";
 import type { HobState } from "../../lib/hob-state.ts";
 import type { Doing } from "../hob-page/hob-page-model.ts";
 import { messages } from "./messages.ts";
 
 /** The page's filters; All is the default and stays out of the URL. */
 const HOB_FILTERS = ["all", "needs", "working", "resting"] as const;
-export type HobFilter = (typeof HOB_FILTERS)[number];
+export const HobFilter = Schema.Literals(HOB_FILTERS);
+export type HobFilter = typeof HobFilter.Type;
 
-export const isHobFilter = (value: unknown): value is HobFilter =>
-  typeof value === "string" && (HOB_FILTERS as ReadonlyArray<string>).includes(value);
+export const isHobFilter = Schema.is(HobFilter);
 
 /** The filter a hob's state falls under: a hob that waits on you or had a problem needs you. */
 export const filterOf = (state: HobState): Exclude<HobFilter, "all"> => {

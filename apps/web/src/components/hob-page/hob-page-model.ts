@@ -1,4 +1,5 @@
 import { type Agent, type HistoryFilter, STARTER_ROLES, type Thread } from "@hobbots/domain";
+import { Schema } from "effect";
 import type { HobState } from "../../lib/hob-state.ts";
 import { messages } from "./messages.ts";
 
@@ -6,16 +7,13 @@ const copy = messages;
 
 /** The page's two tabs; Chats is the default and stays out of the URL. */
 const HOB_PAGE_TABS = ["chats", "history"] as const;
-export type HobPageTab = (typeof HOB_PAGE_TABS)[number];
+export const HobPageTab = Schema.Literals(HOB_PAGE_TABS);
+export type HobPageTab = typeof HobPageTab.Type;
 
-export const isHobPageTab = (value: unknown): value is HobPageTab =>
-  typeof value === "string" && (HOB_PAGE_TABS as ReadonlyArray<string>).includes(value);
+export const isHobPageTab = Schema.is(HobPageTab);
 
 /** The History tab's filters, in the order they show; Everything is the default and stays out of the URL. */
 export const HISTORY_FILTERS = ["all", "work", "you", "quest"] as const satisfies ReadonlyArray<HistoryFilter>;
-
-export const isHistoryFilter = (value: unknown): value is HistoryFilter =>
-  typeof value === "string" && (HISTORY_FILTERS as ReadonlyArray<string>).includes(value);
 
 /** The badge variants a hob's state tag takes (the four status families of the design system). */
 type StateTagVariant = "needs-you" | "working" | "resting" | "failed" | "done";

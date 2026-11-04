@@ -15,19 +15,24 @@ import { Sidebar } from "./sidebar/sidebar.tsx";
 /** A hob's chat or its fresh page, whose header holds the reconnecting card. */
 const CHAT_PATH = /^\/hobs\/[^/]+\/(new|threads\/[^/]+)$/;
 
-/** The window: its title bar and whichever page fills it, with or without the sidebar. */
-export function AppWindow() {
-  // A revoked device sees only that it was removed, whichever page it was on.
-  const removed = useDeviceAccess() === "removed";
+/** The window's frame: its title bar above whatever fills it, a page or an error screen. */
+export function WindowFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen min-h-[610px] flex-col bg-ground text-text-strong">
       {/* Window chrome: macOS draws the traffic lights over the left of this bar in Electron. */}
       <header className="flex h-[30px] flex-none items-center justify-center bg-deep text-[13px] text-label [-webkit-app-region:drag]">
         Hobbots
       </header>
-      {removed ? <DeviceRemoved /> : <Outlet />}
+      {children}
     </div>
   );
+}
+
+/** The window: its title bar and whichever page fills it, with or without the sidebar. */
+export function AppWindow() {
+  // A revoked device sees only that it was removed, whichever page it was on.
+  const removed = useDeviceAccess() === "removed";
+  return <WindowFrame>{removed ? <DeviceRemoved /> : <Outlet />}</WindowFrame>;
 }
 
 /** The app once setup is done: live events, the sidebar and the current page. */
