@@ -246,7 +246,10 @@ function SharedFolders({
   if (permissions.sharedFolders.length === 0) {
     return (
       <span className="text-sm text-text-secondary">
-        No shared folders yet. <Link to="/settings">Add them in Settings</Link>
+        No shared folders yet.{" "}
+        <Link to="/settings/$section" params={{ section: "safety" }}>
+          Add them in Settings
+        </Link>
       </span>
     );
   }

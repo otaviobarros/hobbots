@@ -82,7 +82,7 @@ const chief = (page: Page) =>
 test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, and approving it there resumes the turn", async ({
   page,
 }) => {
-  await pipAsksToPush(page);
+  const { current } = await pipAsksToPush(page);
   await expect(inboxLink(page)).toHaveAccessibleName("Inbox, 1 waiting on you");
 
   // The chief raises its lantern as soon as the request arrives, and leads to the Inbox.
@@ -118,10 +118,16 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   await expect(history.locator('[data-state="approved"]')).toContainText("Once");
   await expect(history.locator('[data-state="approved"]')).toContainText("Pip: Push your work");
 
-  // The paused reply went on in its thread. The arrow keys move between the tabs, and the address follows.
+  // The arrow keys move between the tabs, and the address follows.
   await page.keyboard.press("ArrowLeft");
-  await expect(page.getByRole("tab", { name: "All" })).toHaveAttribute("aria-selected", "true");
-  await expect(page).toHaveURL(/tab=all/);
+  await expect(page.getByRole("tab", { name: /^Needs you/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page).toHaveURL(/tab=needs/);
+
+  // A link to the decided request still opens it in Needs you, and the paused reply went on in its thread.
+  const [decided] = await api<ReadonlyArray<Approval>>(current, "GET", "/api/approvals");
+  if (decided === undefined) throw new Error("No approval request");
+  await page.goto(`${current.url}/#/inbox?tab=needs&request=${decided.id}`);
+  await expect(list.getByRole("link", { name: /Push your work/ })).toContainText("You allowed this");
   await page.getByRole("link", { name: "Open in the chat" }).click();
   await expect(page.locator('[data-state="done"]', { hasText: "git push" })).toBeVisible();
   await expect(page.getByText(/^Echo: Ship it/)).toBeVisible();
@@ -168,7 +174,9 @@ test("[TC-IN-004] an expired request shows as expired and cannot be approved", a
     "◷ Expired before anyone decided. Nothing ran.",
   );
 
-  await page.goto(`${current.url}/#/inbox?tab=all`);
+  // A link to it, as from History's standing rules, opens it in Needs you.
+  const [closed] = await api<ReadonlyArray<Approval>>(current, "GET", "/api/approvals");
+  await page.goto(`${current.url}/#/inbox?tab=needs&request=${closed?.id}`);
   const item = page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Push your work/ });
   await expect(item).toContainText("Expired");
   await expect(item).toContainText("Expired · nothing ran");
@@ -212,7 +220,7 @@ test("[TC-IN-011] the open request keeps its place when it cannot be read on its
   await page.route(detail, (route) => route.fulfill({ status: 503, body: "" }));
 
   // Loaded afresh, so the app reads the list through the routes above.
-  await page.goto(`${current.url}/#/inbox?tab=all&request=${asked.id}`);
+  await page.goto(`${current.url}/#/inbox?tab=needs&request=${asked.id}`);
   await page.reload();
   const failed = page.getByRole("main").getByRole("alert");
   await expect(failed).toContainText("could not read this request", { timeout: 20_000 });

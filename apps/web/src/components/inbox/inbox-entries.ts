@@ -5,6 +5,9 @@ import {
   type BackpackBlocker,
   type BackpackItem,
   openBlocker,
+  type Quest,
+  type TaskId,
+  type TaskTree,
   type ThreadId,
 } from "@hobbots/domain";
 import { firstLine } from "../../lib/format.ts";
@@ -94,22 +97,132 @@ export const entryAsker = (entry: InboxEntry): AgentId | undefined => {
   }
 };
 
+/** The Task an entry is about, when it is about one. */
+const entryTask = (entry: InboxEntry): TaskId | null => {
+  switch (entry.kind) {
+    case "approval":
+      return entry.request.taskId ?? entry.request.rootTaskId;
+    case "question":
+      return entry.waiting.task.id;
+    case "stuck":
+      return entry.item.taskId;
+    default:
+      return null;
+  }
+};
+
+/**
+ * The top Quest over each Task in `trees`: the outermost Quest on the path from the Task up to its
+ * tree's top, which is what the Inbox groups by.
+ */
+export const topQuests = (trees: ReadonlyArray<TaskTree>): Map<TaskId, Quest> => {
+  const found = new Map<TaskId, Quest>();
+  for (const tree of trees) {
+    const parents = new Map(tree.tasks.map((task) => [task.id, task.parentId]));
+    const questOn = new Map(tree.quests.map((quest) => [quest.taskId, quest]));
+    for (const task of tree.tasks) {
+      let top: Quest | undefined;
+      for (let at: TaskId | null | undefined = task.id; at != null; at = parents.get(at)) {
+        top = questOn.get(at) ?? top;
+      }
+      if (top !== undefined) found.set(task.id, top);
+    }
+  }
+  return found;
+};
+
+/** Where a group of entries belongs: a quest, a thread with no quest, or this hub for devices. */
+export type InboxPlace =
+  | { readonly kind: "quest"; readonly quest: Quest }
+  | { readonly kind: "thread"; readonly threadId: ThreadId }
+  | { readonly kind: "hub" };
+
 export interface InboxGroup {
-  /** The thread the group's entries are about, or null for this hub's devices. */
-  readonly threadId: ThreadId | null;
+  readonly key: string;
+  readonly place: InboxPlace;
   readonly entries: ReadonlyArray<InboxEntry>;
 }
 
-/** Entries grouped by thread, each group where its first entry falls, so the groups keep the list's order. */
-export const groupByThread = (entries: ReadonlyArray<InboxEntry>): Array<InboxGroup> => {
-  const groups = new Map<ThreadId | null, Array<InboxEntry>>();
-  for (const entry of entries) {
-    const threadId = entryThread(entry);
-    const group = groups.get(threadId);
-    if (group === undefined) groups.set(threadId, [entry]);
-    else group.push(entry);
+/** The place an entry is listed under, from the top Quest over its Task when there is one. */
+export const entryPlace = (entry: InboxEntry, questOf: (taskId: TaskId) => Quest | undefined): InboxPlace => {
+  const taskId = entryTask(entry);
+  const quest = taskId === null ? undefined : questOf(taskId);
+  if (quest !== undefined) return { kind: "quest", quest };
+  const threadId = entryThread(entry);
+  return threadId === null ? { kind: "hub" } : { kind: "thread", threadId };
+};
+
+const placeKey = (place: InboxPlace): string => {
+  if (place.kind === "quest") return `quest:${place.quest.id}`;
+  return place.kind === "thread" ? `thread:${place.threadId}` : "hub";
+};
+
+/** Facts the urgency order reads from an entry. */
+const urgency = (entry: InboxEntry) => {
+  switch (entry.kind) {
+    case "approval": {
+      const pending = entry.request.state === "pending";
+      return {
+        closed: !pending,
+        risky: pending && entry.request.onceOnly,
+        expiresAt: pending ? entry.request.expiresAt : null,
+        since: entry.request.createdAt,
+      };
+    }
+    case "question":
+      return { closed: false, risky: false, expiresAt: null, since: entry.waiting.question.createdAt };
+    case "stuck":
+      return {
+        closed: false,
+        risky: false,
+        expiresAt: null,
+        since: openBlocker(entry.item)?.raisedAt ?? entry.item.updatedAt,
+      };
+    default:
+      return {
+        closed: false,
+        risky: false,
+        expiresAt: entry.device.request.expiresAt,
+        since: entry.device.request.createdAt,
+      };
   }
-  return Array.from(groups, ([threadId, grouped]) => ({ threadId, entries: grouped }));
+};
+
+/**
+ * Most urgent first: high-risk requests, then what expires soonest, then what has waited longest.
+ * A request already decided, kept in view while you look at it, goes last.
+ */
+export const byUrgency = (a: InboxEntry, b: InboxEntry): number => {
+  const x = urgency(a);
+  const y = urgency(b);
+  if (x.closed !== y.closed) return x.closed ? 1 : -1;
+  if (x.risky !== y.risky) return x.risky ? -1 : 1;
+  if (x.expiresAt !== y.expiresAt) {
+    if (x.expiresAt === null) return 1;
+    if (y.expiresAt === null) return -1;
+    return x.expiresAt < y.expiresAt ? -1 : 1;
+  }
+  if (x.since === y.since) return 0;
+  return x.since < y.since ? -1 : 1;
+};
+
+/**
+ * Entries grouped by quest, or by thread outside a quest, with this hub's devices apart. The most
+ * urgent entry leads each group, and the group with the most urgent entry comes first.
+ */
+export const groupByPlace = (
+  entries: ReadonlyArray<InboxEntry>,
+  questOf: (taskId: TaskId) => Quest | undefined,
+): Array<InboxGroup> => {
+  const groups = new Map<string, { place: InboxPlace; entries: Array<InboxEntry> }>();
+  for (const entry of [...entries].sort(byUrgency)) {
+    const place = entryPlace(entry, questOf);
+    const key = placeKey(place);
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, { place, entries: [entry] });
+    else group.entries.push(entry);
+  }
+  return Array.from(groups, ([key, group]) => ({ key, ...group }));
 };
 
 /** The entry to show beside the list: the one the address names when the list has it, otherwise the first. */

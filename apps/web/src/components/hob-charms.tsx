@@ -33,7 +33,7 @@ export function CharmsTab({ hob }: { hob: Agent }) {
       <div className="flex items-center gap-3 rounded-card border-(length:--edge) border-dashed border-line-2 px-4 py-3.5">
         <span className="flex-1 text-sm text-text-secondary">{copy.more}</span>
         <Button asChild variant="outline">
-          <Link to="/settings" hash="charms">
+          <Link to="/settings/$section" params={{ section: "connections" }}>
             {copy.moreLink}
           </Link>
         </Button>
@@ -124,7 +124,7 @@ function GitHubCharm({ hob, permissions, outdated }: { hob: Agent; permissions: 
       {!connected && (
         <span className="ps-16 pe-4.5 pb-4 text-detail text-text-secondary">
           {copy.notConnected}{" "}
-          <Link to="/settings" hash="charms" className="text-link underline">
+          <Link to="/settings/$section" params={{ section: "connections" }} className="text-link underline">
             {copy.connectInSettings}
           </Link>
         </span>

@@ -50,7 +50,7 @@ test("[TC-DP-072] turns remote access on in Settings, and says why once Tailscal
   });
 
   // Off by default: only this computer reaches the hub.
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   const devices = page.getByRole("region", { name: "Devices" });
   const remote = devices.getByRole("switch", { name: "Use Hobbots from my other devices" });
   await expect(remote).not.toBeChecked();
@@ -93,7 +93,7 @@ test("[TC-DP-125] Settings shows the address with its QR code, and the port move
   const port = Number(new URL(current.url).port);
   await finishSetup(current);
 
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   const devices = page.getByRole("region", { name: "Devices" });
   await devices.getByRole("switch", { name: "Use Hobbots from my other devices" }).click();
   const address = `http://hub.example.ts.net:${port}`;
@@ -110,7 +110,7 @@ test("[TC-DP-125] Settings shows the address with its QR code, and the port move
   const moved = port + 200;
   await field.fill(String(moved));
   await devices.getByRole("button", { name: "Change port" }).click();
-  await expect(page).toHaveURL(`http://127.0.0.1:${moved}/#/settings`);
+  await expect(page).toHaveURL(`http://127.0.0.1:${moved}/#/settings/devices`);
   await expect(
     page.getByRole("region", { name: "Devices" }).getByText(`http://hub.example.ts.net:${moved}`, { exact: true }),
   ).toBeVisible();
@@ -140,7 +140,7 @@ test("[TC-DP-126] Settings lists the allowed devices, and Revoke asks first and 
   await finishSetup(current);
   await allowAnotherDevice(current, "Safari on iPhone");
 
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   const allowed = page.getByRole("list", { name: "Allowed devices" });
   await expect(allowed.getByRole("listitem")).toHaveCount(3);
   const window = allowed.getByRole("listitem").filter({ hasText: "This computer's Hobbots window" });
@@ -193,7 +193,7 @@ test("[TC-DP-139] turns HTTPS on in Settings, runs tailscale serve after consent
   const servePort = port + 1000;
   await finishSetup(current);
 
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   const devices = page.getByRole("region", { name: "Devices" });
   await devices.getByRole("switch", { name: "Use Hobbots from my other devices" }).click();
   const https = devices.getByRole("switch", { name: "Use HTTPS through Tailscale" });

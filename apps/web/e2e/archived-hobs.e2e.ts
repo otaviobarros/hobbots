@@ -25,7 +25,7 @@ const api = async <T>(current: Hub, method: string, path: string, body?: unknown
 };
 
 // covers AG-006
-test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which Settings › Archived hobs leads to", async ({
+test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which Settings › Your data leads to", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -78,8 +78,8 @@ test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which
   // The thread list leads back to Retired hobs, and Settings points to the Archive.
   await page.getByRole("link", { name: "‹ Retired hobs" }).click();
   await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
-  await page.goto(`${current.url}/#/settings`);
-  await page.getByRole("region", { name: "Archived hobs" }).getByRole("link", { name: "Open the Archive" }).click();
+  await page.goto(`${current.url}/#/settings/data`);
+  await page.getByRole("region", { name: "Retired hobs" }).getByRole("link", { name: "Open the Archive" }).click();
   await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
   expect(await api(current, "GET", "/agents")).toEqual([]);
 

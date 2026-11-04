@@ -468,7 +468,7 @@ test("[TC-PE-043] where the sandbox cannot start, the profile and provider healt
   await expect(page.getByText("Blocked until the sandbox can start on this hub.")).toHaveCount(3);
 
   // Settings shows the same declaration under the provider.
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/connections`);
   const provider = page
     .getByRole("region", { name: "Claude Code" })
     .getByRole("list", { name: "Enforcement on this hub" });
@@ -491,7 +491,7 @@ test("[TC-UX-006] a profile or settings page taller than the window scrolls only
   await expect(page.getByRole("radiogroup", { name: "Run commands" })).toBeVisible();
   expect(await pageScrolls()).toBe(false);
 
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/connections`);
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
   expect(await pageScrolls()).toBe(false);
 });
