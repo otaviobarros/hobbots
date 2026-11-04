@@ -857,7 +857,7 @@ export const messages = {
     eyebrow: "Optional extra",
     title: "Use Hobbots on your phone too?",
     intro:
-      "Open your hobs from your laptop or any browser on your own Tailscale network. Each new device asks you before it can join. Turn this on or off any time in Settings › Devices.",
+      "Open your hobs from your laptop or phone, over your own private network. Nothing is open to the internet. You can skip this and turn it on later.",
     connected: "Tailscale is connected",
     thisComputer: ({ name }: { name: string }) => `This computer is ${name} on your tailnet`,
     switchLabel: "Let my other devices connect",
