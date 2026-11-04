@@ -28,3 +28,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [024 — The Codex adapter](024-codex-adapter.md)
 - [025 — The connected desktop](025-connected-desktop.md)
 - [026 — Backup, restore, export and diagnostics](026-backup-export-diagnostics.md)
+- [027 — The Quest room](027-quest-room.md)

@@ -8,8 +8,9 @@ import { ChiefMark, type ChiefMood } from "../chief/chief-mark.tsx";
 import { chiefLabel, chiefMood } from "../chief/chief-mood.ts";
 import { useWaitingCount } from "../inbox/use-waiting-count.ts";
 import { messages } from "./messages.ts";
+import { sidebarChief, sidebarColumn, sidebarIcon, sidebarItem, sidebarNav } from "./sidebar-classes.ts";
 import { SidebarHobs } from "./sidebar-hobs.tsx";
-import { SidebarLink, SidebarTip, sidebarIcon, sidebarItem } from "./sidebar-item.tsx";
+import { SidebarLink, SidebarTip } from "./sidebar-item.tsx";
 import { useSidebarOpen } from "./use-sidebar-open.ts";
 
 const copy = messages;
@@ -45,12 +46,8 @@ export function Sidebar() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="relative w-sidebar flex-none wide:w-auto">
-        <nav
-          aria-label={copy.label}
-          data-open={open}
-          className="group/side flex h-full w-sidebar flex-col gap-0.5 overflow-hidden bg-panel p-3 transition-[width] duration-(--dur-sheet) data-[open=true]:w-sidebar-open max-wide:absolute max-wide:inset-y-0 max-wide:start-0 max-wide:z-30 max-wide:data-[open=true]:shadow-sheet"
-        >
+      <div className={sidebarColumn}>
+        <nav aria-label={copy.label} data-open={open} className={sidebarNav}>
           <Chief waiting={waiting} />
           {ITEMS.map((item) => (
             <SidebarLink
@@ -90,7 +87,7 @@ function Chief({ waiting }: { waiting: number }) {
   const mood = chiefMood({ waiting, working: Object.keys(activity).length > 0, preview: previewMood() });
 
   return (
-    <div className="flex flex-none items-center gap-2 pb-2">
+    <div className={sidebarChief}>
       <Link
         to={mood === "needs-you" ? "/inbox" : "/"}
         aria-label={chiefLabel(mood, waiting)}

@@ -5,13 +5,7 @@ import { Link } from "@tanstack/react-router";
 import type { ReactElement } from "react";
 import { ICONS, LINE_ICONS, type SectionName } from "../../art/icons.ts";
 import { messages as inboxCopy } from "../inbox/messages.ts";
-
-/** A sidebar row: a 48px icon column, then the label once the sidebar is expanded. */
-export const sidebarItem =
-  "relative flex min-h-row-min w-full flex-none items-center gap-2 rounded-control py-0.5 text-start text-body text-text-strong no-underline transition-colors duration-(--dur-fade) hover:bg-hover hover:text-text-strong focus-visible:-outline-offset-2 aria-[current=page]:bg-selected";
-
-/** The icon column every row lines up on, so collapsed rows keep their place when it expands. */
-export const sidebarIcon = "inline-flex no-underline w-12 flex-none items-center justify-center";
+import { sidebarIcon, sidebarItem } from "./sidebar-classes.ts";
 
 /** While the sidebar is collapsed, hovering or focusing a row names it beside the sidebar. */
 export function SidebarTip({

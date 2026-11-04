@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { setupBridge } from "./components/connect/connect-model.ts";
 import { LocalSetup } from "./components/connect/local-setup.tsx";
 import { messages } from "./components/connect/messages.ts";
+import { titleStrip, windowFrame } from "./components/shell/window-classes.ts";
 import { followMotionChoice } from "./lib/motion.ts";
 import { followTextSizeChoice } from "./lib/text-size.ts";
 import { followThemeChoice } from "./lib/theme.ts";
@@ -25,11 +26,9 @@ const start = new URLSearchParams(globalThis.location.search).get("start") === "
 
 createRoot(root).render(
   <StrictMode>
-    <div className="flex h-screen min-h-[610px] flex-col bg-ground text-text-strong">
+    <div className={windowFrame}>
       {/* Window chrome: macOS draws the traffic lights over the left of this bar. */}
-      <header className="flex h-title-strip flex-none items-center justify-center bg-deep text-detail text-label [-webkit-app-region:drag]">
-        Hobbots
-      </header>
+      <header className={titleStrip}>Hobbots</header>
       {bridge === undefined ? (
         <p className="m-auto text-text-secondary">{messages.noBridge}</p>
       ) : (
