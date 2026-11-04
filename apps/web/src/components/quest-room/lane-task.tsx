@@ -3,7 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { formatWhen } from "../../lib/time.ts";
 import { TaskBackpack } from "../backpack/quest-backpack.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
-import { type RoomRow, roomStatusLabel, roomTone, waitingNames } from "../quest/control-room.ts";
+import { attemptCount, type RoomRow, roomStatusLabel, roomTone, waitingNames } from "../quest/control-room.ts";
 import { messages as questCopy } from "../quest/messages.ts";
 import { AnswerForm, answerRoute } from "../quest/question-card.tsx";
 import { TaskControlsFor } from "../quest/room-controls.tsx";
@@ -43,13 +43,16 @@ export function LaneTask({
   const waits = waitingNames(row, (id) => hobs(id).name);
   const line = task.result?.summary ?? latestOf(tree, task);
   return (
-    <section aria-label={taskTitle(task)} className="flex flex-col gap-2 text-detail">
+    <section aria-label={taskTitle(task)} className="flex min-w-0 flex-col gap-2 text-detail wrap-anywhere">
       {titled && (
         <span className="flex items-center gap-2">
           <h3 className="m-0 min-w-0 flex-1 truncate text-detail font-bold text-text-strong">{taskTitle(task)}</h3>
           <StatusTag status={roomTone(row.status)}>{roomStatusLabel(row.status)}</StatusTag>
         </span>
       )}
+      <p className="m-0 text-meta text-label">
+        {messages.taskMeta({ attempt: attemptCount(tree, task), age: formatWhen(task.createdAt) })}
+      </p>
       {waits.length > 0 && (
         <p className="m-0 text-lantern">{questCopy.card.waitingOn({ names: questCopy.names(waits) })}</p>
       )}

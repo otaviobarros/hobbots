@@ -40,6 +40,9 @@ export const messages = {
     unread: ({ name }: { name: string }) => `Open the chat, new from ${name}`,
     newFrom: ({ name }: { name: string }) => `New from ${name}`,
   },
+  /** A Task's line in its lane: which try it is on and when it started. */
+  taskMeta: ({ attempt, age }: { attempt: number; age: string }) =>
+    attempt === 0 ? `not started · ${age}` : `attempt ${formatCount(attempt)} · ${age}`,
   /** What the lead's lane says beside its role while its Task waits on the party's work. */
   waitingOnTasks: ({ count }: { count: number }) =>
     plural(count, { one: "waiting on 1 task", other: `waiting on ${formatCount(count)} tasks` }),

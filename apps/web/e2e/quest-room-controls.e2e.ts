@@ -186,7 +186,8 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   await bannerControls.getByRole("button", { name: "Retry" }).click();
   await expect(banner).toContainText(/Queued: waiting for Quill to start Attempt 2\.|attempt 2/);
   await expect(banner).toContainText("attempt 2", { timeout: 15_000 });
-  await expect(banner).not.toContainText("Failed");
+  // Its state tag no longer says Failed; the failed try stays in its history.
+  await expect(banner.locator(":scope > span").first()).not.toContainText("Failed");
 
   // Reassign gives Ada's failed Task to Quill, the only hob it can go to, and the lanes follow.
   const emailControls = controlsOf(page, "Schedule the sale email");
