@@ -131,7 +131,7 @@ export function ConnectWaiting({ waiting, onCancel }: { waiting: WaitingView; on
           {waiting.hubName !== computer && ` · ${copy.form.calledItself({ name: waiting.hubName })}`}
         </p>
         <div className="cut my-3 flex flex-col items-center gap-1 bg-text-strong px-[34px] py-[18px] text-ground">
-          <span className="lbl text-xs text-[#5b4f9a]">{copy.waiting.codeLabel}</span>
+          <span className="lbl text-xs text-ground/70">{copy.waiting.codeLabel}</span>
           <span className="font-pixel text-[44px] font-bold tracking-[0.12em]">{groupedCode(waiting.code)}</span>
         </div>
         <span className="font-bold text-lantern">

@@ -10,19 +10,12 @@ import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { potion, potionPalette } from "../../art/icons.ts";
+import { POTION_COLORS, potion, potionPalette, UNREPORTED_POTION } from "../../art/icons.ts";
 import { formatMoney } from "../../lib/format.ts";
 import { billingOf, headlineMeter, leftOf, refillOf, reportedCredits } from "../../lib/usage.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.plans;
-
-// Each provider's potion colors; a plan that reports nothing shows an empty grey bottle.
-const POTION: Record<RuntimeKind, readonly [fill: string, top: string]> = {
-  "claude-code": ["#e39a74", "#f3c4a8"],
-  codex: ["#7fd1b9", "#b5ecd9"],
-};
-const UNREPORTED = ["#3a3666", "#3a3666"] as const;
 
 /** What one provider's potion says: how full it is, its headline and the sentence under it. */
 interface PlanView {
@@ -74,7 +67,7 @@ const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView =
       name,
       kind,
       level: 0,
-      palette: UNREPORTED,
+      palette: UNREPORTED_POTION,
       headline: health.availability === "ready" ? copy.notReported : copy.unavailable,
       detail: unreportedDetail(health, name),
       meters: [],
@@ -86,7 +79,7 @@ const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView =
     name,
     kind,
     level: leftOf(meter),
-    palette: POTION[health.runtime],
+    palette: POTION_COLORS[health.runtime],
     headline: copy.left({ percent: Math.round(leftOf(meter) * 100) }),
     detail: meter.resetsAt === null ? copy.noRefill : copy.refill(refillOf(meter.resetsAt, now)),
     meters: plan.meters,

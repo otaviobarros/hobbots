@@ -13,8 +13,8 @@ export const PROVIDER_MAKERS: Readonly<Record<RuntimeKind, string>> = messages.p
 
 /** The provider's square mark and its tile color, as a Tailwind class. */
 export const PROVIDER_MARKS: Readonly<Record<RuntimeKind, { readonly mark: string; readonly tile: string }>> = {
-  "claude-code": { mark: "C", tile: "bg-[#e39a74]" },
-  codex: { mark: "G", tile: "bg-[#8fd3a8]" },
+  "claude-code": { mark: "C", tile: "bg-provider-claude" },
+  codex: { mark: "G", tile: "bg-provider-codex" },
 };
 
 /**

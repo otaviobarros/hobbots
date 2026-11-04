@@ -725,7 +725,7 @@ function RetireDialog({
             <Button
               onClick={confirm}
               disabled={retire.isPending}
-              className="bg-rose shadow-[0_4px_0_#9a4f4f] hover:bg-rose active:shadow-[0_2px_0_#9a4f4f]"
+              className="bg-rose shadow-[0_4px_0_color-mix(in_srgb,var(--color-rose)_65%,black)] hover:bg-rose active:shadow-[0_2px_0_color-mix(in_srgb,var(--color-rose)_65%,black)]"
             >
               {retire.isPending ? "Retiring…" : `Retire ${hob.name}`}
             </Button>

@@ -349,7 +349,8 @@ export function Summon() {
                 aria-describedby="summon-hint"
                 className={cn(
                   "w-full",
-                  problem && "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_#22203f] hover:bg-line-2",
+                  problem &&
+                    "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_color-mix(in_srgb,var(--color-line-2)_60%,black)] hover:bg-line-2",
                 )}
               >
                 {shared.ready.summon({ name })}

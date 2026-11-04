@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { BrowserWindow, screen, shell } from "electron";
+import { FIRST_RUN_GROUND } from "./window-background.ts";
 import { initialWindowBounds } from "./window-size.ts";
 
 /**
@@ -9,6 +10,8 @@ import { initialWindowBounds } from "./window-size.ts";
  */
 export const newAppWindow = (options: {
   readonly isAllowedUrl: (url: string) => boolean;
+  /** The theme's ground, which shows before the page paints; first run's when left out. */
+  readonly backgroundColor?: string;
   readonly additionalArguments?: ReadonlyArray<string>;
 }) => {
   // Opens on the display the pointer is on, where the user is looking.
@@ -16,7 +19,7 @@ export const newAppWindow = (options: {
   const window = new BrowserWindow({
     ...initialWindowBounds(display.workArea),
     title: "Hobbots",
-    backgroundColor: "#141228",
+    backgroundColor: options.backgroundColor ?? FIRST_RUN_GROUND,
     // The traffic lights sit inside the 30px title strip of the Hobbots design.
     ...(process.platform === "darwin"
       ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 12, y: 9 } }

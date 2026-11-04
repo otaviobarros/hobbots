@@ -85,11 +85,11 @@ function LookPreview({
         <span
           key={`${star.left}-${star.top}`}
           aria-hidden
-          className="absolute size-[3px] animate-hb-twinkle bg-[#cfc8ff]"
+          className="absolute size-[3px] animate-hb-twinkle bg-scene-star"
           style={{ left: star.left, top: star.top, animationDelay: `${star.delay}s` }}
         />
       ))}
-      <div aria-hidden className="absolute inset-x-0 top-[280px] h-[240px] bg-[#221d44]" />
+      <div aria-hidden className="absolute inset-x-0 top-[280px] h-[240px] bg-scene-ground" />
       <div aria-hidden className="absolute inset-x-[54px] top-[268px] h-3.5 bg-line-2" />
       <div className="absolute inset-x-0 top-4 flex flex-col items-center gap-0.5 px-4">
         <span className="max-w-full truncate font-pixel text-[26px] font-bold text-moonlight">{name}</span>
@@ -215,7 +215,9 @@ export function OnboardingFirstHob() {
             aria-disabled={problem !== undefined}
             aria-describedby="first-hob-hint"
             className={
-              problem ? "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_#22203f] hover:bg-line-2" : undefined
+              problem
+                ? "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_color-mix(in_srgb,var(--color-line-2)_60%,black)] hover:bg-line-2"
+                : undefined
             }
           >
             {shared.continue}

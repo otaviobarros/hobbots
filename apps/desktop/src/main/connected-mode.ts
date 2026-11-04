@@ -37,6 +37,7 @@ import type { HubConnection } from "./settings.ts";
 import { reveal } from "./single-instance.ts";
 import { showOnLaunch, systemNotices } from "./system-notices.ts";
 import type { DeviceTokenStore, thisComputer } from "./tailnet.ts";
+import { windowBackground } from "./window-background.ts";
 import { deviceCookies, guardWindowRequests, withoutDeviceCookies } from "./window-cookies.ts";
 
 /** How often a hub that cannot be reached is checked again (ADR 025). */
@@ -263,7 +264,11 @@ export const startConnected = async (
       return existing;
     }
     await setCookies(origins, computer.token);
-    const window = newAppWindow({ isAllowedUrl, additionalArguments: [CONNECTED_MODE_ARGUMENT] });
+    const window = newAppWindow({
+      isAllowedUrl,
+      backgroundColor: windowBackground(settings),
+      additionalArguments: [CONNECTED_MODE_ARGUMENT],
+    });
     windows.add(window);
     window.on("closed", () => {
       windows.delete(window);

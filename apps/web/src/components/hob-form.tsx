@@ -37,6 +37,7 @@ import {
   splitModels,
   thinksWith,
 } from "../api/first-hob.ts";
+import { DIE, DIE_PALETTE } from "../art/icons.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { RoleSigil } from "./role-sigil.tsx";
@@ -46,9 +47,6 @@ import { RoleSigil } from "./role-sigil.tsx";
  * hat and tool, nearby looks, the model and effort a hob thinks with, and the line that sums it up. Each screen
  * lays them out its own way, but both offer the same choices.
  */
-
-const DIE = ["owwwo", "wwwww", "wwoww", "wwwww", "owwwo"];
-const DIE_PALETTE = { o: "#141228", w: "#ece8ff" };
 
 /** A die that turns a quarter at a time each time it is rolled. */
 export function Die({ size, rolls }: { size: number; rolls: number }) {
@@ -573,7 +571,12 @@ function EffortBars({ index, count, on }: { index: number; count: number; on: bo
           className="w-[3px]"
           style={{
             height: 4 + j * 3,
-            background: j <= index ? (on ? "#141228" : "#ece8ff") : on ? "rgba(20,18,40,.25)" : "#3a3666",
+            background:
+              j <= index
+                ? `var(--color-${on ? "on-lantern" : "text-strong"})`
+                : on
+                  ? "color-mix(in srgb, var(--color-on-lantern) 25%, transparent)"
+                  : "var(--color-line-2)",
           }}
         />
       ))}

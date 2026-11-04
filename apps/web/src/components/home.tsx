@@ -8,7 +8,7 @@ import { useRef, useState } from "react";
 import { type ActivityMap, useActivity } from "../api/activity.ts";
 import { agentsQuery, runtimesQuery, threadsQuery } from "../api/queries.ts";
 import { useQuestWork } from "../api/quest-work.ts";
-import { potion, potionPalette } from "../art/icons.ts";
+import { POTION_COLORS, potion, potionPalette } from "../art/icons.ts";
 import {
   type CrewGroup,
   foldsByDefault,
@@ -268,13 +268,13 @@ function HallDoor({ count, peek, onOpen }: { count: number; peek: Agent | undefi
       aria-label={`Open the hall: ${count} more ${count === 1 ? "hob" : "hobs"}`}
       className="hop-on-hover absolute right-9 bottom-[34px] h-[120px] w-[150px] bg-transparent p-0"
     >
-      <span aria-hidden className="absolute inset-x-0 bottom-0 h-[84px] bg-[#3d2f52]" />
+      <span aria-hidden className="absolute inset-x-0 bottom-0 h-[84px] bg-scene-wall" />
       <span
         aria-hidden
-        className="absolute -inset-x-2.5 bottom-[84px] h-9 bg-[#5b3f5e] [clip-path:polygon(50%_0,100%_100%,0_100%)]"
+        className="absolute -inset-x-2.5 bottom-[84px] h-9 bg-scene-roof [clip-path:polygon(50%_0,100%_100%,0_100%)]"
       />
       <span aria-hidden className="absolute bottom-11 left-[18px] h-5 w-6 animate-hb-flicker bg-lantern" />
-      <span aria-hidden className="absolute bottom-0 left-[58px] h-14 w-10 bg-[#241c33]" />
+      <span aria-hidden className="absolute bottom-0 left-[58px] h-14 w-10 bg-scene-door" />
       {peek && (
         <span aria-hidden className="absolute bottom-1 left-[66px]">
           <HobSprite hob={peek} size={24} />
@@ -519,7 +519,7 @@ function AiPlans() {
           className="hop-on-hover flex flex-col items-center gap-0.5 text-text-strong no-underline"
         >
           <span className="sprite">
-            <PixelArt rows={potion(ready ? 1 : 0)} palette={potionPalette("#e39a74", "#f3c4a8")} size={36} />
+            <PixelArt rows={potion(ready ? 1 : 0)} palette={potionPalette(...POTION_COLORS["claude-code"])} size={36} />
           </span>
           <span className="text-xs font-bold">Claude</span>
           <span className={cn("pb-1 text-xs", ready ? "text-mint" : "text-rose")}>{left}</span>

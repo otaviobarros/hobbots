@@ -78,10 +78,10 @@ function Panel({
 
 // Providers from the Hobbots design. Only Claude Code and Codex are wired in this build.
 const LATER_PROVIDERS = [
-  { name: "Gemini", mark: "G", color: "#8fb4f0" },
-  { name: "Grok", mark: "X", color: "#c9c3e8" },
-  { name: "Local models (Ollama)", mark: "L", color: "#f3e9b5" },
-  { name: "Any OpenAI-compatible key", mark: "+", color: "#b79be8" },
+  { name: "Gemini", mark: "G", tile: "bg-provider-gemini" },
+  { name: "Grok", mark: "X", tile: "bg-provider-grok" },
+  { name: "Local models (Ollama)", mark: "L", tile: "bg-provider-local" },
+  { name: "Any OpenAI-compatible key", mark: "+", tile: "bg-provider-other" },
 ];
 
 /** Settings › Permissions: the safety preset and the folders hobs may work in, as chosen during setup, and the standing rules. */
@@ -124,7 +124,7 @@ export function SettingsPage() {
         <ProviderCard runtime="codex" />
         <div className="flex flex-col">
           {LATER_PROVIDERS.map((p) => (
-            <ProviderRow key={p.name} name={p.name} mark={p.mark} color={p.color}>
+            <ProviderRow key={p.name} name={p.name} mark={p.mark} tile={p.tile}>
               <Badge variant="later">Later</Badge>
             </ProviderRow>
           ))}
@@ -176,21 +176,18 @@ export function ArchivedHobsPage() {
 function ProviderRow({
   name,
   mark,
-  color,
+  tile,
   children,
 }: {
   name: string;
   mark: string;
-  color: string;
+  /** The tile color, as a Tailwind class. */
+  tile: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3.5 border-b-2 border-line py-2.5">
-      <span
-        aria-hidden
-        className="cut grid size-[30px] place-items-center font-bold text-ground"
-        style={{ background: color }}
-      >
+      <span aria-hidden className={cn("cut grid size-[30px] place-items-center font-bold text-ground", tile)}>
         {mark}
       </span>
       <span className="flex-1">{name}</span>

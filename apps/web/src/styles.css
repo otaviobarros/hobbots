@@ -50,6 +50,26 @@
   /* The same in every theme: scene art, and the knob of a switch that is on. */
   --color-wood: #7a5b3a;
   --color-switch-knob: #fdf9ef;
+  /*
+   * Scene art keeps the colors the design draws it with in every theme: the village, Home's hall,
+   * the ground under setup's guide and the Workbench desk.
+   */
+  --color-scene-ground: #221d44;
+  --color-scene-wall: #3d2f52;
+  --color-scene-roof: #5b3f5e;
+  --color-scene-chimney: #4a3a6a;
+  --color-scene-smoke: #6a6390;
+  --color-scene-door: #241c33;
+  --color-scene-star: #cfc8ff;
+  --color-desk: #6b4a2f;
+  --color-desk-edge: #8a6240;
+  /* The tile behind each AI provider's letter mark, the same in every theme. */
+  --color-provider-claude: #e39a74;
+  --color-provider-codex: #8fd3a8;
+  --color-provider-gemini: #8fb4f0;
+  --color-provider-grok: #c9c3e8;
+  --color-provider-local: #f3e9b5;
+  --color-provider-other: #b79be8;
 
   --font-sans: "Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif;
   --font-pixel: "Pixelify Sans Variable", "Pixelify Sans", system-ui, sans-serif;
