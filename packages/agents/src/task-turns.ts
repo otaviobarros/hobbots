@@ -42,6 +42,16 @@ export interface ChatTaskTurn {
    * works on none. A call that starts a Task changes it partway through the turn.
    */
   readonly workingOn: Effect.Effect<TaskId | null>;
+  /**
+   * The work the turn's tool call keys belong to (#660), from `callScope`: the Task it was briefed on,
+   * else its reply. Fixed for the whole turn, so a retry of a call that started a Task is still a retry.
+   */
+  readonly scope: () => string;
+  /**
+   * `charms`, with each Charm call's refusal recorded as a Task tool's is, and a repository it created
+   * recorded on the Task the turn works on (#664).
+   */
+  readonly recordCharms: (charms: HubTools | null) => HubTools | null;
   /** The Attempt the turn runs on its Task: from the start when briefed on one, once a call starts one, else null. */
   readonly attempt: Effect.Effect<AttemptId | null>;
   /** The folders the Quest on its Task works in, which the turn's activity is tracked in (#670); null for all. */

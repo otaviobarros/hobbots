@@ -23,7 +23,7 @@ import {
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
 import { Data, Effect, Option } from "effect";
-import type { CharmCallRunner, ReadBack, WriteOutcome } from "./charm-calls.ts";
+import { type CharmCallRunner, type ReadBack, scopesOf, type WriteOutcome } from "./charm-calls.ts";
 import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { githubActor, recordedLogin } from "./github-actor.ts";
@@ -228,6 +228,8 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
         const outcome = yield* runner.run(
           {
             agentId: turn.agentId,
+            scope: turn.scope(),
+            also: turn.also,
             tool: planned.tool,
             key: planned.key,
             input: planned.input,
@@ -276,7 +278,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
         const { key, withoutKey } = keyed(turn, input);
         yield* checkBranch(input.head);
         if (input.base !== undefined) yield* checkBranch(input.base);
-        const earlier = yield* runner.earlier(turn.agentId, key, withoutKey);
+        const earlier = yield* runner.earlier(turn.agentId, scopesOf(turn), key, withoutKey);
         if (Option.isSome(earlier)) return earlier.value;
 
         // Outgoing text is redacted before deciding, so the card shows and approves what is sent.
@@ -352,7 +354,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
     ): Effect.Effect<string, Refused> =>
       Effect.gen(function* () {
         const { key, withoutKey } = keyed(turn, input);
-        const earlier = yield* runner.earlier(turn.agentId, key, withoutKey);
+        const earlier = yield* runner.earlier(turn.agentId, scopesOf(turn), key, withoutKey);
         if (Option.isSome(earlier)) return earlier.value;
 
         // The hub's marker is its own: anything shaped like one goes before the text is redacted and shown.

@@ -1122,7 +1122,14 @@ describe("waits and Task tool calls", () => {
             });
             return { done: { message: `Created ${id}`, details: { task_id: id } }, entries: created.entries };
           });
-        const call = { agentId: ALDRIC, key: "k1", tool: "plan_steps" as const, input: '{"steps":[]}', at: now };
+        const call = {
+          agentId: ALDRIC,
+          scope: "task:top",
+          key: "k1",
+          tool: "plan_steps" as const,
+          input: '{"steps":[]}',
+          at: now,
+        };
         const first = yield* ledger.once(call, create("one"));
         expect(first.entries).toHaveLength(1);
         const again = yield* ledger.once(call, create("two"));

@@ -347,9 +347,27 @@ export class TaskRepository extends Context.Service<
   }
 >()("@hobbots/agents/TaskRepository") {}
 
-/** A hob's call to a Task tool, as the ledger keys it: by hob and key, with the input it carried. */
+/**
+ * The work a tool call's key belongs to (#660): the Task the turn works on when it starts, or, for a
+ * chat turn that starts on none, its reply, which its retries and Continue share. A key is unique per
+ * hob within one scope, so a key chosen for one Task is free again for the next, while a turn
+ * delivered again on the same Task still finds the calls the first delivery made.
+ */
+export const callScope = {
+  reply: (messageId: string) => `reply:${messageId}`,
+  task: (taskId: string) => `task:${taskId}`,
+};
+
+/** A hob's call to a Task tool, as the ledger keys it: by hob, scope and key, with the input it carried. */
 export interface TaskToolCall {
   readonly agentId: AgentId;
+  /** The work the key belongs to, from `callScope`. */
+  readonly scope: string;
+  /**
+   * Another scope a retry of the key is found in: a chat turn's reply, so Continue on a reply whose
+   * first run started its Task still finds what that run did under the reply's scope.
+   */
+  readonly also?: string;
   readonly key: string;
   readonly tool: TaskToolName;
   /**
@@ -371,6 +389,12 @@ export interface TaskToolOutcome {
   readonly done: TaskToolDone;
   readonly entries: ReadonlyArray<EventEnvelope>;
   /**
+   * The work the call started, when it started the turn's Task (#660): the call, and every call
+   * and Charm write its turn made before in the call's scope, move into it, so a later reply on the
+   * Task finds them.
+   */
+  readonly scope?: string;
+  /**
    * The backpack items the call's result tells the turn, as a result or failure it shows (#662).
    * The turn carries them from then on, as it carries what its prompt shows. None by default.
    */
@@ -380,6 +404,8 @@ export interface TaskToolOutcome {
 /** A Task tool call the hub refused, to record (#575). */
 export interface RefusedTaskToolCall {
   readonly agentId: AgentId;
+  /** The work the key belongs to, from `callScope`. */
+  readonly scope: string;
   /** The key the call came with; null when it came with none the hub could read. */
   readonly key: string | null;
   /** The tool's name as the call gave it, which may name no tool. */
@@ -393,7 +419,7 @@ export interface RefusedTaskToolCall {
 }
 
 /**
- * Makes each Task tool call happen once per hob and key (ADR 018). The call's writes and its
+ * Makes each Task tool call happen once per hob, scope and key (ADR 018, #660). The call's writes and its
  * result are stored in one transaction, so a retried call returns the first result and never
  * writes again; a refused call writes nothing, its key stays free, and a retry is decided again.
  * A call from a turn whose backpack claim no longer holds is refused in that same transaction, as

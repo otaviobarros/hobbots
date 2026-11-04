@@ -65,6 +65,7 @@ const notYours = new TaskToolRefused({
 
 const answerCall = (at: string) => ({
   agentId: FRODO,
+  scope: "task:lead",
   key: "answer-1",
   tool: "answer",
   input: '{"answer":"Use the blue one.","question_id":"d26a216f","turn_task":"lead"}',
@@ -128,7 +129,14 @@ describe("refused Task tool calls", () => {
       Effect.gen(function* () {
         yield* seed;
         const ledger = yield* TaskToolCalls;
-        const call = { agentId: FRODO, key: "answer-1", tool: "answer" as const, input: "{}", at: now };
+        const call = {
+          agentId: FRODO,
+          scope: "task:lead",
+          key: "answer-1",
+          tool: "answer" as const,
+          input: "{}",
+          at: now,
+        };
         // The ledger's own refusal leaves no done row behind for the key.
         const refused = yield* Effect.flip(ledger.once(call, Effect.fail(notYours)));
         expect(refused).toBe(notYours);

@@ -178,7 +178,14 @@ const reportingTurn =
         const { tasks, ledger } = services;
         const report = ledger
           .once(
-            { agentId: QUILL, key: delivery.key, tool: "report_checkpoint", input: '{"kind":"finding"}', at: now },
+            {
+              agentId: QUILL,
+              scope: "task:copy",
+              key: delivery.key,
+              tool: "report_checkpoint",
+              input: '{"kind":"finding"}',
+              at: now,
+            },
             tasks
               .recordCheckpoint({
                 id: CheckpointId.make(`c-${delivery.item.id}-${runs.count}`),

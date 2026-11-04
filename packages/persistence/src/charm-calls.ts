@@ -6,6 +6,7 @@ import { lockJournal } from "./journal.ts";
 
 interface Row {
   readonly agentId: string;
+  readonly scope: string;
   readonly callKey: string;
   readonly attempt: string;
   readonly tool: string;
@@ -26,6 +27,7 @@ const decodeCall = Schema.decodeUnknownEffect(CharmCall);
 const fromRow = (row: Row) =>
   decodeCall({
     agentId: row.agentId,
+    scope: row.scope,
     key: row.callKey,
     attempt: row.attempt,
     tool: row.tool,
@@ -43,6 +45,7 @@ const fromRow = (row: Row) =>
 
 const toRow = (call: CharmCall) => ({
   agent_id: call.agentId,
+  scope: call.scope,
   call_key: call.key,
   attempt: call.attempt,
   tool: call.tool,
@@ -67,7 +70,7 @@ const orDie = <A, R>(effect: Effect.Effect<A, SqlError.SqlError, R>) =>
   );
 
 /**
- * The SQL Charm call records (migration 0028). Recording a call checks its key and its site in the
+ * The SQL Charm call records (migration 0028), keyed by hob, scope and key (migration 0045). Recording a call checks its key and its site in the
  * same transaction, with the journal's head taken first so concurrent calls take turns on PostgreSQL.
  */
 export const CharmCallsLive = Layer.effect(
@@ -76,14 +79,16 @@ export const CharmCallsLive = Layer.effect(
     const sql = yield* SqlClient.SqlClient;
     const one = (rows: ReadonlyArray<Row>) =>
       rows[0] === undefined ? Effect.succeed(Option.none<CharmCall>()) : fromRow(rows[0]).pipe(Effect.map(Option.some));
-    const find = (agentId: string, key: string) =>
-      sql<Row>`SELECT * FROM charm_calls WHERE agent_id = ${agentId} AND call_key = ${key}`.pipe(Effect.flatMap(one));
+    const find = (agentId: string, scopes: ReadonlyArray<string>, key: string) =>
+      sql<Row>`SELECT * FROM charm_calls
+        WHERE agent_id = ${agentId} AND ${sql.in("scope", scopes)} AND call_key = ${key}
+        ORDER BY created_at LIMIT 1`.pipe(Effect.flatMap(one));
 
     return CharmCalls.of({
-      begin: (call) =>
+      begin: (call, also) =>
         Effect.gen(function* () {
           yield* lockJournal(sql);
-          const stored = yield* find(call.agentId, call.key);
+          const stored = yield* find(call.agentId, [call.scope, also ?? call.scope], call.key);
           const replaces =
             Option.isSome(stored) && stored.value.state === "not-sent" && stored.value.input === call.input;
           if (Option.isSome(stored) && !replaces) return { _tag: "Existing", call: stored.value } as const;
@@ -93,20 +98,29 @@ export const CharmCallsLive = Layer.effect(
             ORDER BY created_at LIMIT 1`;
           if (busy !== undefined) return { _tag: "Blocked", call: yield* fromRow(busy) } as const;
           if (replaces) {
-            yield* sql`DELETE FROM charm_calls WHERE agent_id = ${call.agentId} AND call_key = ${call.key}`;
+            yield* sql`DELETE FROM charm_calls
+              WHERE agent_id = ${call.agentId} AND scope = ${stored.value.scope} AND call_key = ${call.key}`;
           }
           yield* sql`INSERT INTO charm_calls ${sql.insert(toRow(call))}`;
           return { _tag: "Started" } as const;
         }).pipe(sql.withTransaction, orDie),
       // One conditional update, so of two outcomes racing for the same sending only the first lands,
-      // and an outcome for an earlier sending of the key never lands on a later one.
+      // and an outcome for an earlier sending of the key never lands on a later one. By attempt, not
+      // scope, so a sending still settles after its reply's calls moved to the Task it started (#660).
       settle: (call, state, result, at) =>
         sql<Row>`
           UPDATE charm_calls SET state = ${state}, result = ${result}, updated_at = ${at}
           WHERE agent_id = ${call.agentId} AND call_key = ${call.key} AND attempt = ${call.attempt}
             AND state IN ('sending', 'uncertain')
           RETURNING *`.pipe(Effect.flatMap(one), orDie),
-      find: (agentId, key) => orDie(find(agentId, key)),
+      find: (agentId, scopes, key) => orDie(find(agentId, scopes, key)),
+      current: (call) =>
+        orDie(
+          sql<Row>`SELECT * FROM charm_calls
+            WHERE agent_id = ${call.agentId} AND call_key = ${call.key} AND attempt = ${call.attempt}`.pipe(
+            Effect.flatMap(one),
+          ),
+        ),
       findByStep: (threadId, messageId, stepId) =>
         orDie(
           sql<Row>`
