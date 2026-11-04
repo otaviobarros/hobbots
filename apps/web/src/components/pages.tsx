@@ -177,7 +177,7 @@ function ProviderRow({
 }) {
   return (
     <div className="flex items-center gap-3.5 border-b-2 border-line py-2.5">
-      <span aria-hidden className={cn("cut grid size-[30px] place-items-center font-bold text-ground", tile)}>
+      <span aria-hidden className={cn("cut grid size-[30px] place-items-center font-bold text-provider-ink", tile)}>
         {mark}
       </span>
       <span className="flex-1">{name}</span>

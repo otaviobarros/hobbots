@@ -50,6 +50,7 @@
   /* The same in every theme: scene art, and the knob of a switch that is on. */
   --color-wood: #7a5b3a;
   --color-switch-knob: #fdf9ef;
+  --color-provider-ink: #141228;
   /*
    * Scene art keeps the colors the design draws it with in every theme: the village, Home's hall,
    * the ground under setup's guide and the Workbench desk.

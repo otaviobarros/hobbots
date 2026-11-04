@@ -234,6 +234,10 @@
     "switch-knob": {
       "use": "The knob of a switch that is on, in every theme.",
       "value": "#fdf9ef"
+    },
+    "provider-ink": {
+      "use": "The letter on an AI provider's tile, in every theme.",
+      "value": "#141228"
     }
   },
   "skin": {

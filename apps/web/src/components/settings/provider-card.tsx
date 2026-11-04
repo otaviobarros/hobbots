@@ -47,7 +47,7 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
   return (
     <section aria-label={name} className="cut bg-card p-3">
       <div className="mb-2 flex items-center gap-2">
-        <span aria-hidden className={`grid size-5 place-items-center text-xs font-bold text-ground ${look.tile}`}>
+        <span aria-hidden className={`grid size-5 place-items-center text-xs font-bold text-provider-ink ${look.tile}`}>
           {look.mark}
         </span>
         <span className="font-heading flex-1 text-base font-semibold">{name}</span>

@@ -16,7 +16,11 @@ function ProviderMark({ runtime, className }: { runtime: RuntimeKind; className?
   return (
     <span
       aria-hidden
-      className={cn("grid size-4 flex-none place-items-center text-[11px] font-bold text-ground", look.tile, className)}
+      className={cn(
+        "grid size-4 flex-none place-items-center text-[11px] font-bold text-provider-ink",
+        look.tile,
+        className,
+      )}
     >
       {look.mark}
     </span>

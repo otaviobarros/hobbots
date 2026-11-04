@@ -19,7 +19,7 @@ Lamplight is smooth: rounded corners, eased motion and Atkinson headings. Worksh
 
 - **color**: 26 color tokens, each with a value for every theme and a line on where it is used.
 - **shadow**: `shadow-menu` and `shadow-sheet` for every theme.
-- **fixed**: values that stay the same in every theme. The switch knob is `#fdf9ef` when the switch is on.
+- **fixed**: values that stay the same in every theme. The switch knob is `#fdf9ef` when the switch is on. The letter on an AI provider's tile is `provider-ink`, `#141228`, because the tiles keep their light colors in every theme.
 - **skin**: the values each look sets once. Components read them and never use a corner, font or easing directly.
 - **font**, **type**, **space**, **radius**, **size** and **duration**: the same in every theme.
 - **contrast**: the floors every theme meets, as pairs of a text color and the color behind it.
