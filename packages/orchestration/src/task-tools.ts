@@ -327,7 +327,6 @@ export class TaskTools extends Context.Service<
                   Effect.tapError((error) => Effect.logDebug("A chat turn's end was refused", error)),
                   Effect.option,
                 ),
-              explain: () => Effect.void,
             };
             const end = (ending: TurnEnding, sessionId: string | null) =>
               Effect.gen(function* () {

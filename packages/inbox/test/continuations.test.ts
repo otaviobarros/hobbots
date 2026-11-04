@@ -210,6 +210,18 @@ describe("which thread a backpack item continues", () => {
     expect(context).toContain("Use this progress only as context.");
   });
 
+  // covers IN-004
+  it("[TC-IN-491] says why a Task was blocked when its Failure carries the reason", () => {
+    const failure = item(FRODO, "pass", "failure", {
+      _tag: "failure",
+      task: task("pass", FRODO, "quest", "blocked"),
+      reason: "Only its own milestones are unreported.",
+    });
+    expect(arrivalsText([failure], "prompt")).toContain(
+      "- Task pass (Brief for pass) ended as blocked: Only its own milestones are unreported.",
+    );
+  });
+
   it("writes what arrived as Hobbots' own words, as a prompt or as context for your message", () => {
     const result = item(FRODO, "pass", "result", { _tag: "result", task: step, artifacts: [] });
     expect(arrivalsText([result], "prompt")).toContain("Hobbots wrote this, not the user.");
