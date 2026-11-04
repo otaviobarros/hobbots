@@ -49,7 +49,7 @@ describe("sceneChips", () => {
   it("counts every hob under All and each family with hobs in it", () => {
     expect(sceneChips(["needs-you", "waiting", "thinking", "idle", "paused", "failed"])).toEqual([
       { value: "all", count: 6 },
-      { value: "needs-you", count: 2 },
+      { value: "needs", count: 3 },
       { value: "working", count: 1 },
       { value: "resting", count: 2 },
     ]);
@@ -69,8 +69,9 @@ describe("sceneChips", () => {
 describe("inFilter", () => {
   it("keeps a hob lit under All and under its own family only", () => {
     expect(inFilter("failed", "all")).toBe(true);
-    expect(inFilter("failed", "needs-you")).toBe(false);
-    expect(inFilter("waiting", "needs-you")).toBe(true);
+    expect(inFilter("failed", "needs")).toBe(true);
+    expect(inFilter("failed", "resting")).toBe(false);
+    expect(inFilter("waiting", "needs")).toBe(true);
     expect(inFilter("paused", "resting")).toBe(true);
     expect(inFilter("thinking", "resting")).toBe(false);
   });

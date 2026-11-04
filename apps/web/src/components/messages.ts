@@ -254,7 +254,7 @@ export const messages = {
     chips: {
       label: "Show hobs",
       all: "All",
-      "needs-you": "Need you",
+      needs: "Need you",
       working: "Working",
       resting: "Resting",
     },

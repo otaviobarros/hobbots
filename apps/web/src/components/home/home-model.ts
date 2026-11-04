@@ -9,6 +9,7 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 import type { HobState } from "../../lib/hob-state.ts";
+import { filterCounts, filterOf, type HobFilter } from "../hobs-page/hobs-page-model.ts";
 
 /**
  * The chat a hob's peek opens: the one it is replying in, else the one it used last. Null when the
@@ -48,35 +49,22 @@ export const peekBench = (
   return null;
 };
 
-/** What the count chips on Home filter the scene to: every hob, or one state family. */
-export type SceneFilter = "all" | "needs-you" | "working" | "resting";
-
-const familyOf: Record<HobState, SceneFilter | null> = {
-  "needs-you": "needs-you",
-  waiting: "needs-you",
-  working: "working",
-  thinking: "working",
-  idle: "resting",
-  asleep: "resting",
-  paused: "resting",
-  // A hob that had a problem has no chip of its own, so only All shows it.
-  failed: null,
+/**
+ * The chips over the scene: All, then each family with hobs in it, with its count. The families
+ * are the ones Your hobs filters by, so a chip and its page agree.
+ */
+export const sceneChips = (
+  states: ReadonlyArray<HobState>,
+): ReadonlyArray<{ readonly value: HobFilter; readonly count: number }> => {
+  const counts = filterCounts(states.map((state) => ({ state })));
+  return (["all", "needs", "working", "resting"] as const)
+    .map((value) => ({ value, count: counts[value] }))
+    .filter(({ value, count }) => value === "all" || count > 0);
 };
 
 /** Whether a hob in `state` stays lit under `filter`. */
-export const inFilter = (state: HobState, filter: SceneFilter): boolean =>
-  filter === "all" || familyOf[state] === filter;
-
-/** The chips over the scene: All, then each family with hobs in it, with its count. */
-export const sceneChips = (
-  states: ReadonlyArray<HobState>,
-): ReadonlyArray<{ readonly value: SceneFilter; readonly count: number }> => [
-  { value: "all", count: states.length },
-  ...(["needs-you", "working", "resting"] as const)
-    .map((value) => ({ value, count: states.filter((state) => familyOf[state] === value).length }))
-    .filter(({ count }) => count > 0),
-];
+export const inFilter = (state: HobState, filter: HobFilter): boolean => filter === "all" || filterOf(state) === filter;
 
 /** The filter in force: a picked chip whose family has emptied falls back to All. */
-export const activeFilter = (picked: SceneFilter, chips: ReturnType<typeof sceneChips>): SceneFilter =>
+export const activeFilter = (picked: HobFilter, chips: ReturnType<typeof sceneChips>): HobFilter =>
   chips.some((chip) => chip.value === picked) ? picked : "all";

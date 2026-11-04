@@ -25,7 +25,8 @@ import { questsInProgress } from "../lib/quest-work.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
 import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
-import { activeFilter, inFilter, type SceneFilter, sceneChips } from "./home/home-model.ts";
+import type { HobFilter } from "./hobs-page/hobs-page-model.ts";
+import { activeFilter, inFilter, sceneChips } from "./home/home-model.ts";
 import { StageHob } from "./home/stage-hob.tsx";
 import { messages as inboxCopy } from "./inbox/messages.ts";
 import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
@@ -45,7 +46,7 @@ export function Home() {
   const waitingHobs = useWaitingHobs();
   const [folded, setFolded] = useState<Partial<Record<CrewGroup, boolean>>>({});
   const [query, setQuery] = useState("");
-  const [picked, setPicked] = useState<SceneFilter>("all");
+  const [picked, setPicked] = useState<HobFilter>("all");
   const filterRef = useRef<HTMLInputElement>(null);
 
   const crew = sceneOrder(
@@ -113,7 +114,7 @@ export function Home() {
             <FilterChips
               aria-label={messages.home.chips.label}
               value={filter}
-              onValueChange={(value) => setPicked(value as SceneFilter)}
+              onValueChange={(value) => setPicked(value as HobFilter)}
             >
               {chips.map(({ value, count }) => (
                 <FilterChip key={value} value={value} count={count}>
