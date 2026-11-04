@@ -1,6 +1,7 @@
 import type { AgentId, Attempt, AttemptId, Task, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Tabs, TabsContent } from "@hobbots/ui/components/tabs";
+import { useReturnFocus } from "@hobbots/ui/lib/restore-focus";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ComponentType, type ReactNode, useEffect, useId, useRef } from "react";
@@ -43,7 +44,7 @@ const PANELS: Readonly<Record<Exclude<WorkbenchTab, "browser">, ComponentType<Wo
 /**
  * One Task's full view (ADR 023), in the chat's place: its header, its five tabs with honest
  * labels, its chat drawer, and Back to where it was opened from. The hob panel, the right panel and
- * a pinned Quest stay where they are. Escape goes back.
+ * a pinned Quest stay where they are. Escape goes back, and focus goes back to what opened it.
  */
 export function Workbench({
   hobId,
@@ -67,6 +68,8 @@ export function Workbench({
   const moves = useWorkbenchMoves(hobId, threadId);
   const chatId = useId();
   const toggle = useRef<HTMLButtonElement>(null);
+  // Back, Escape and the browser's Back all close it, so focus returns when it goes, never to the page.
+  useReturnFocus();
   const closeChat = () => {
     moves.chat(false);
     toggle.current?.focus();

@@ -31,6 +31,7 @@ import { useArchiveActions } from "./archive-notices.tsx";
 import { ArchiveFrame, Crumbs, DimPortrait, doorStyle, MoonIcon, RestoreIcon, stripStyle } from "./archive-parts.tsx";
 import { BringBackButton } from "./archive-read.tsx";
 import { messages } from "./messages.ts";
+import { useFocusAfterRestore } from "./use-focus-after-restore.ts";
 
 const copy = messages;
 
@@ -147,6 +148,7 @@ function ArchivedChats({
   const chosen = hobs.find((hob) => hob.id === hobId);
   const visible = visibleChats(chats, chosen?.id, query, messageHits);
   const trimmed = query.trim();
+  const focus = useFocusAfterRestore(visible);
 
   const pickScope = (next: string) =>
     void navigate({
@@ -185,7 +187,7 @@ function ArchivedChats({
       </div>
       {visible.length > 0 ? (
         // A new scope or search starts again at twelve.
-        <ChatList key={`${chosen?.id ?? "all"}|${trimmed}`} chats={visible} />
+        <ChatList key={`${chosen?.id ?? "all"}|${trimmed}`} chats={visible} focus={focus} />
       ) : (
         <Empty surface="card">
           <EmptyHeader>
@@ -193,7 +195,7 @@ function ArchivedChats({
               <PixelArt rows={ARCHIVE_CHEST} palette={archiveChestPalette} size={72} />
             </EmptyMedia>
             <EmptyTitle asChild>
-              <h2>
+              <h2 ref={focus.empty}>
                 {trimmed !== ""
                   ? copy.chats.noMatch({ query: trimmed })
                   : chats.length === 0
@@ -235,14 +237,16 @@ function MoreHobs({ more, onPick }: { more: ReadonlyArray<ScopeChip<Agent>>; onP
   );
 }
 
-function ChatList({ chats }: { chats: ReadonlyArray<ArchivedChat> }) {
+type RestoreFocus = ReturnType<typeof useFocusAfterRestore>;
+
+function ChatList({ chats, focus }: { chats: ReadonlyArray<ArchivedChat>; focus: RestoreFocus }) {
   const [all, setAll] = useState(false);
   const shown = all ? chats : chats.slice(0, SHOWN);
   return (
     <>
       <ul aria-label={copy.chats.list} className="cut m-0 flex list-none flex-col bg-card p-0">
         {shown.map((chat) => (
-          <ChatRow key={chat.thread.id} chat={chat} />
+          <ChatRow key={chat.thread.id} chat={chat} focus={focus} />
         ))}
       </ul>
       {!all && chats.length > SHOWN && (
@@ -254,7 +258,7 @@ function ChatList({ chats }: { chats: ReadonlyArray<ArchivedChat> }) {
   );
 }
 
-function ChatRow({ chat: { hob, thread } }: { chat: ArchivedChat }) {
+function ChatRow({ chat: { hob, thread }, focus }: { chat: ArchivedChat; focus: RestoreFocus }) {
   const actions = useArchiveActions();
   const busy = actions.busy(thread);
   return (
@@ -280,13 +284,17 @@ function ChatRow({ chat: { hob, thread } }: { chat: ArchivedChat }) {
             {copy.chats.meta({ name: hob.name, day: formatDay(thread.archivedAt ?? thread.updatedAt) })}
           </span>
         </span>
+        {/* Never disabled while it restores, so it keeps the focus; its label says Restoring and a press meanwhile does nothing. */}
         <Button
+          ref={focus.button(thread.id)}
           variant="outline"
           size="sm"
           className="relative z-[1]"
-          disabled={busy}
+          aria-disabled={busy}
           aria-label={copy.chats.restoreLabel({ title: thread.title })}
-          onClick={() => actions.restore(hob, thread)}
+          onClick={() => {
+            if (!busy) actions.restore(hob, thread, () => focus.restored(thread.id));
+          }}
         >
           <RestoreIcon />
           {/* On a narrow screen the row keeps the icon, so the title has room; the label still names it. */}

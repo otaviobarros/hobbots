@@ -1,6 +1,7 @@
 import type { RuntimeHealth } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Stepper } from "@hobbots/ui/components/stepper";
+import { focusElement } from "@hobbots/ui/lib/restore-focus";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
@@ -54,6 +55,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
   const models = useQuery(modelsQuery(draft.runtime));
   const [tried, setTried] = useState(false);
   const { left, summon, summoning } = useSummonHob(draft, setDraft, create);
+  const { scroller, heading } = useStepStart(step);
 
   // Leaving and coming back keeps what was chosen, until the hob exists.
   useEffect(() => keepSummonDraft(draft), [draft]);
@@ -102,7 +104,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
     );
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+    <main ref={scroller} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <form onSubmit={next} className="mx-auto flex w-full max-w-[1064px] flex-col gap-6 px-8 py-8">
         <header className="flex flex-col gap-3.5">
           <div className="flex items-center gap-4">
@@ -129,7 +131,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
             >
               <legend className="sr-only">{copy.steps[index]}</legend>
               <div className="flex flex-col gap-1">
-                <h2 className="m-0 font-heading text-[26px] leading-8 font-(--heading-weight)">
+                <h2 ref={heading} className="m-0 font-heading text-[26px] leading-8 font-(--heading-weight)">
                   {stepTitle(step, name, signedOut !== undefined)}
                 </h2>
                 <span className="text-text-secondary">{stepIntro(step, name)}</span>
@@ -176,6 +178,23 @@ const stepIntro = (step: SummonStep, name: string) =>
   step === "role" ? copy.role.intro : step === "look" ? copy.look.intro : copy.ready.intro({ name });
 
 type Create = ReturnType<typeof useCreateHob>;
+
+/**
+ * A new step starts at its top, with focus on its heading (WCAG 2.4.3), not at the step before's
+ * scroll offset with its heading out of sight. The first step opens as the page does.
+ */
+function useStepStart(step: SummonStep) {
+  const scroller = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const shown = useRef(step);
+  useEffect(() => {
+    if (shown.current === step) return;
+    shown.current = step;
+    scroller.current?.scrollTo({ top: 0 });
+    if (heading.current) focusElement(heading.current, { preventScroll: true });
+  }, [step]);
+  return { scroller, heading };
+}
 
 const summonHint = ({
   create,
