@@ -76,18 +76,18 @@ const configColumns = (agent: Agent) => ({
   runtime: agent.runtime,
 });
 // A thread's sessions and own brain are JSON text columns (migration 0020).
-// `read_seq` stays on the hub: a read shows only whether the thread is `unread` (migration 0053).
+// `read_revision` stays on the hub: a read shows only whether the thread is `unread` (migration 0053).
 export const threadRows = (
   rows: ReadonlyArray<{
     readonly revision?: unknown;
     readonly sessions?: unknown;
     readonly brain?: unknown;
     readonly lastContent?: unknown;
-    readonly readSeq?: unknown;
+    readonly readRevision?: unknown;
     readonly unread?: unknown;
   }>,
 ) =>
-  rows.map(({ lastContent, readSeq: _readSeq, unread, ...row }) => ({
+  rows.map(({ lastContent, readRevision: _readRevision, unread, ...row }) => ({
     ...row,
     lastLine: typeof lastContent === "string" ? previewLine(lastContent) : null,
     unread: Number(unread ?? 0) === 1,
@@ -105,13 +105,14 @@ const lastContent = (sql: SqlClient.SqlClient) =>
     WHERE m.thread_id = threads.id AND m.status <> 'queued' AND trim(m.content) <> ''
     ORDER BY m.seq DESC LIMIT 1) AS last_content`;
 /**
- * Whether the hob wrote in the thread after the last message you read, as `unread`: a reply that
- * ended with text, or that failed, after `read_seq` (ADR 027). A reply still under way waits until
- * it ends, and your own messages never count.
+ * Whether the hob wrote in the thread since you last read it, as `unread`: a reply that ended with
+ * text, or that failed, written after `read_revision` (ADR 027). That counts a reply continued in
+ * place after you read it, since its message takes a new revision. A reply still under way waits
+ * until it ends, and your own messages never count.
  */
 const unreadColumn = (sql: SqlClient.SqlClient) =>
   sql`(CASE WHEN EXISTS (SELECT 1 FROM messages u
-    WHERE u.thread_id = threads.id AND u.role = 'assistant' AND u.seq > COALESCE(threads.read_seq, 0)
+    WHERE u.thread_id = threads.id AND u.role = 'assistant' AND u.revision > COALESCE(threads.read_revision, 0)
       AND u.status NOT IN ('queued', 'streaming', 'stopping')
       AND (trim(u.content) <> '' OR u.status = 'failed')) THEN 1 ELSE 0 END) AS unread`;
 const checkpointRows = (rows: ReadonlyArray<{ readonly lines?: unknown; readonly omitted?: unknown }>) =>
@@ -344,17 +345,17 @@ export const HobbotsRepositoryLive = Layer.effect(
         }),
       );
 
-    // Moves the read marker forward to the message's place in the thread, never back, and announces
-    // the thread with its new revision, so every device clears its unread dot (ADR 027).
+    // Moves the read marker forward to the newest revision of the messages up to this one, as you
+    // saw them, never back, and announces the thread with its new revision, so every device clears
+    // its unread dot (ADR 027).
     const markThreadRead = (threadId: ThreadId, messageId: MessageId) =>
       journaled(1, (revision) =>
         Effect.gen(function* () {
-          const moved = yield* sql`UPDATE threads SET
-              read_seq = (SELECT seq FROM messages WHERE id = ${messageId} AND thread_id = ${threadId}),
-              revision = ${revision}
-            WHERE id = ${threadId}
-              AND (SELECT seq FROM messages WHERE id = ${messageId} AND thread_id = ${threadId})
-                > COALESCE(read_seq, 0)
+          const seen = sql`(SELECT MAX(m.revision) FROM messages m
+            WHERE m.thread_id = ${threadId}
+              AND m.seq <= (SELECT seq FROM messages WHERE id = ${messageId} AND thread_id = ${threadId}))`;
+          const moved = yield* sql`UPDATE threads SET read_revision = ${seen}, revision = ${revision}
+            WHERE id = ${threadId} AND ${seen} > COALESCE(read_revision, 0)
             RETURNING id`;
           if (moved.length === 0) return null;
           const [thread] = yield* findThread(threadId).pipe(Effect.orDie, Effect.map(Option.toArray));

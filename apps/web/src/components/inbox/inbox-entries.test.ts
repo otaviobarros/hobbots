@@ -21,6 +21,7 @@ import {
   byUrgency,
   deviceEntry,
   entryRow,
+  failedEntry,
   groupByPlace,
   namesRequest,
   needsEntries,
@@ -58,6 +59,8 @@ const device = (expiresAt: string): WaitingDevice => ({
   }),
   fromHub: false,
 });
+
+const failedCopy = { task: task(BUILD, { ownerId: QUILL, state: "failed", brief: "Build the page\nWith the hero" }), leadId: null };
 
 const asked = {
   question: question(COPY, ADA, "Monthly or yearly price?\nThe brief does not say.", {
@@ -112,6 +115,20 @@ describe("entryRow", () => {
     expect(entryRow(stuckEntry(stuck(THREAD, true)), names, undefined, now).when).toBe("Quill retired");
   });
 
+  // covers IN-004, OR-006
+  it("[TC-IN-543] shows a member's failed Task in rose under its lead, by the Task's first line", () => {
+    const row = entryRow(failedEntry(failedCopy), names, ALDRIC, now);
+    expect(row).toEqual({
+      chain: ["Aldric", "Quill"],
+      kind: "Failed",
+      tag: "failed",
+      what: "Build the page",
+      when: "Quill's task failed",
+      tone: "stuck",
+    });
+    expect(entryRow(failedEntry({ ...failedCopy, leadId: ADA }), names, undefined, now).chain).toEqual(["Ada", "Quill"]);
+  });
+
   it("shows a device asking to join with its name and when the request runs out", () => {
     const row = entryRow(deviceEntry(device("2026-11-01T10:08:00.000Z")), names, undefined, now);
     expect(row).toEqual({
@@ -154,12 +171,26 @@ describe("entries", () => {
     devices: [device("2026-11-01T10:08:00.000Z")],
     questions: [asked],
     blockers: [stuck(other)],
+    failed: [],
     requests: [request(null)],
   });
 
-  it("lists devices, questions, stuck work and requests in one list, the requests by their own id", () => {
-    expect(entries.map((entry) => entry.key)).toEqual(["device:p1", "question:q-copy", "stuck:b1", "ap-copy"]);
-    expect(entries.map((entry) => namesRequest(entry.key))).toEqual([false, false, false, true]);
+  it("lists devices, questions, stuck work, failed Tasks and requests in one list, the requests by their own id", () => {
+    const all = needsEntries({
+      devices: [device("2026-11-01T10:08:00.000Z")],
+      questions: [asked],
+      blockers: [stuck(other)],
+      failed: [failedCopy],
+      requests: [request(null)],
+    });
+    expect(all.map((entry) => entry.key)).toEqual([
+      "device:p1",
+      "question:q-copy",
+      "stuck:b1",
+      "failed:build",
+      "ap-copy",
+    ]);
+    expect(all.map((entry) => namesRequest(entry.key))).toEqual([false, false, false, false, true]);
   });
 
   it("groups by quest, or by thread outside one, with this hub's devices apart, the most urgent first", () => {

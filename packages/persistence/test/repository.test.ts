@@ -203,6 +203,60 @@ describe("HobbotsRepository", () => {
     });
   });
 
+  // covers UX-006, CH-009, DP-003
+  it("[TC-DP-252] a reply you read that is continued in place is unread again once it ends, until you read it", async () => {
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(
+        new Agent({
+          id: agentId,
+          name: "Aldric",
+          roleTitle: "Guide",
+          runtime: "claude-code",
+          model: null,
+          effort: null,
+          instructions: "",
+          lookSeed: 1,
+          lookColor: "moss",
+          configVersion: 1,
+          createdAt: now,
+        }),
+      );
+      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      const unread = () => repo.findThread(threadId).pipe(Effect.map((t) => Option.getOrThrow(t).unread));
+      yield* repo.upsertMessage(new Message({ ...message("m1"), role: "user", configVersion: null }));
+      // The reply was cut off, and you read it as it was.
+      yield* repo.upsertMessage(new Message({ ...message("m2", "failed"), content: "Half a plan" }));
+      yield* repo.markThreadRead(threadId, MessageId.make("m2"));
+      const read = yield* unread();
+      // Continue resumes it in the same message, which stays read while it runs.
+      yield* repo.upsertMessage(new Message({ ...message("m2", "streaming"), content: "Half a plan, and" }));
+      const continuing = yield* unread();
+      yield* repo.upsertMessage(new Message({ ...message("m2"), content: "Half a plan, and the rest." }));
+      const continued = yield* unread();
+      // A fresh read of the list says the same, and reading it again clears it.
+      const listed = (yield* repo.listThreads(agentId))[0]?.unread;
+      const marked = yield* repo.markThreadRead(threadId, MessageId.make("m2"));
+      return {
+        read,
+        continuing,
+        continued,
+        listed,
+        cleared: Option.map(marked, (change) => change.value.unread),
+        after: yield* unread(),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result).toEqual({
+      read: false,
+      continuing: false,
+      continued: true,
+      listed: true,
+      cleared: Option.some(false),
+      after: false,
+    });
+  });
+
   // covers CH-009, DP-003
   it("[TC-DP-041] stores when a thread was archived and lists live and archived threads apart", async () => {
     const thread = (id: string, archivedAt: string | null) =>

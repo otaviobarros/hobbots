@@ -1108,9 +1108,9 @@ describe("0053_thread_reads", () => {
           updatedAt: "2026-11-04T00:00:00.000Z",
         })}`;
       }
-      for (const [id, seq] of [
-        ["m1", 1],
-        ["m2", 2],
+      for (const [id, seq, revision] of [
+        ["m1", 1, 7],
+        ["m2", 2, 9],
       ] as const) {
         yield* sql`INSERT INTO messages ${sql.insert({
           id,
@@ -1120,15 +1120,18 @@ describe("0053_thread_reads", () => {
           status: "complete",
           createdAt: "2026-11-04T00:00:00.000Z",
           seq,
+          revision,
         })}`;
       }
       yield* threadReads;
-      return yield* sql`SELECT id, read_seq FROM threads ORDER BY id`;
+      const rows = yield* sql<{ id: string; readRevision: unknown }>`SELECT id, read_revision FROM threads ORDER BY id`;
+      // PostgreSQL reads BIGINT as text.
+      return rows.map((row) => ({ ...row, readRevision: row.readRevision === null ? null : Number(row.readRevision) }));
     }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0053"))), Effect.runPromise);
 
     expect(threads).toEqual([
-      { id: "t1", readSeq: 2 },
-      { id: "t2", readSeq: null },
+      { id: "t1", readRevision: 9 },
+      { id: "t2", readRevision: null },
     ]);
   });
 });

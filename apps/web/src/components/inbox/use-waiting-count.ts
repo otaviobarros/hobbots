@@ -11,13 +11,14 @@ import { pendingCount } from "./inbox-items.ts";
 
 /**
  * How many things wait for the user, kept live by the journal: pending requests, questions no lead
- * could answer (ADR 018), stuck work (IN-007) and devices asking to pair (ADR 021). 0 until the
- * Inbox is read.
+ * could answer (ADR 018), stuck work (IN-007), party members' failed Tasks (ADR 027) and devices
+ * asking to pair (ADR 021). 0 until the Inbox is read.
  */
 export const useWaitingCount = (): number =>
   (useQuery({ ...inboxQuery, select: pendingCount }).data ?? 0) +
   useWaitingQuestions().length +
   useBlockers().length +
+  useFailedTasks().length +
   usePromptedDevices().length;
 
 /**
