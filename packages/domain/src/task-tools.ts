@@ -249,7 +249,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "message_task",
     description:
-      "Send a short message to a member's Task directly under one of yours, such as that an obstacle is gone. It reaches the member in its next turn and wakes it. To reach a hob further down, message the member that leads it.",
+      "Send a short message to a member's Task directly under one of yours, such as that an obstacle is gone. It reaches the member in its next turn and wakes it. A member in a turn reads it only once that turn ends, as when it waits for the user to decide an approval request: the result then says so and why. To reach a hob further down, message the member that leads it.",
     label: "Messaging a member",
   },
   {
