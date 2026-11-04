@@ -1,9 +1,11 @@
+import { AgentId, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { Outlet } from "@tanstack/react-router";
+import { Outlet, useParams } from "@tanstack/react-router";
 import { reasonOf, useDesktopConnection, useFollowDesktopConnection } from "../api/connected-desktop.ts";
 import { useHobbotsEvents } from "../api/events.ts";
 import { useDeviceAccess } from "../api/live.ts";
 import { hubNameOf, isLoopbackHost } from "../lib/hub-name.ts";
+import { ArchiveProvider } from "./archive/archive-context.tsx";
 import { ConnectionBanner } from "./connection-banner.tsx";
 import { DeviceRemoved } from "./device-removed.tsx";
 import { HobJump } from "./hob-jump.tsx";
@@ -74,10 +76,25 @@ export function AppShell() {
       )}
       <div className="flex min-h-0 flex-1">
         <Sidebar />
-        <Outlet />
+        <ShellArchive>
+          <Outlet />
+        </ShellArchive>
       </div>
       <HobJump />
       <DevicePrompt />
     </>
+  );
+}
+
+/** Archiving for every page, aware of the hob and chat the address names. */
+function ShellArchive({ children }: { children: React.ReactNode }) {
+  const params = useParams({ strict: false }) as { hobId?: string; threadId?: string };
+  return (
+    <ArchiveProvider
+      hobId={params.hobId === undefined ? undefined : AgentId.make(params.hobId)}
+      threadId={params.threadId === undefined ? undefined : ThreadId.make(params.threadId)}
+    >
+      {children}
+    </ArchiveProvider>
   );
 }

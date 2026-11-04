@@ -131,6 +131,23 @@ test("[TC-CH-151] a chat row's menu on the hob's page archives it by keyboard, a
 });
 
 // covers CH-009
+test("[TC-CH-275] archiving a hob's only chat opens its fresh page and keeps the Undo toast", async ({ page }) => {
+  hub = await startHub(dataDir);
+  const { pip, threads } = await pipWithThreads(hub, ["Tagline ideas"]);
+
+  await page.goto(`${hub.url}/#/hobs/${pip}/threads/${threads[0]}`);
+  await page.getByRole("button", { name: "More for this thread" }).click();
+  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+
+  // Nothing is left to open, so the fresh page opens, and the toast survives the move.
+  await expect(page).toHaveURL(new RegExp(`hobs/${pip}/new$`));
+  await expect(page.getByRole("status").filter({ hasText: "Archived “Tagline ideas”." })).toBeVisible();
+  await page.getByRole("button", { name: "Undo archive of Tagline ideas" }).click();
+  await expect(page).toHaveURL(new RegExp(`threads/${threads[0]}$`));
+  expect(await api<Array<unknown>>(hub, "GET", `/agents/${pip}/threads?archived=true`)).toEqual([]);
+});
+
+// covers CH-009
 test("[TC-CH-152] a thread cannot be archived while its reply runs, by menu or by shortcut", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
