@@ -83,10 +83,11 @@ test("[TC-CH-157] a thread archived from its menu is found in the Archive and in
   const archived = page.getByRole("list", { name: "Archived chats" });
   await expect(archived.getByRole("listitem")).toHaveCount(1);
   await archived.getByRole("link", { name: "Read Rename the newsletter" }).click();
+  const read = page.getByRole("main", { name: "Rename the newsletter" });
+  await expect(read.getByRole("note")).toContainText("Pip takes no new messages here");
+  await expect(read.getByText("Echo: Rename the newsletter", { exact: true })).toBeVisible();
+  await expect(read.getByRole("textbox")).toHaveCount(0);
   const main = page.getByRole("main", { name: "Chat" });
-  await expect(main.getByRole("region", { name: "Archived" })).toContainText("Pip takes no new messages here");
-  await expect(main.getByText("Echo: Rename the newsletter", { exact: true })).toBeVisible();
-  await expect(main.getByRole("textbox")).toHaveCount(0);
 
   // Found by search too, marked archived, and it opens read-only from there.
   await page.goto(`${current.url}/#/hobs/${pip.id}`);

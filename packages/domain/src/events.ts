@@ -216,7 +216,8 @@ export type MessageDelta = typeof MessageDelta.Type;
 /** Each journaled event type's payload version, from 1; an incompatible payload change bumps it (ADR 013). */
 export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   AgentUpserted: 1,
-  // 2: a thread carries its `sessions` and its own `brain`. 3: its `archivedAt`.
+  // 2: a thread carries its `sessions` and its own `brain`. 3: its `archivedAt`. Its `pinnedAt` was
+  // added with a default, compatibly.
   ThreadUpserted: 3,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
   // A reply's `usage` was added with a default, compatibly.

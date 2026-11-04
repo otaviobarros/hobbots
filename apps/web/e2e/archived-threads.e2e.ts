@@ -82,23 +82,56 @@ test("[TC-CH-160] an archived thread opens read-only from the Archive and comes 
   await expect(list).toContainText("Pip · Archived");
   await list.getByRole("link", { name: "Read Rename the newsletter" }).click();
 
-  // Read-only: the Archived banner with Restore, the transcript, and no composer.
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${hob.id}/threads/${archived.id}`));
-  const chat = page.getByRole("main", { name: "Chat" });
-  await expect(chat.getByRole("region", { name: "Archived" })).toContainText("Pip takes no new messages here");
-  await expect(chat.getByText("Echo: Rename the newsletter", { exact: true })).toBeVisible();
-  await expect(chat.getByRole("textbox")).toHaveCount(0);
-  await expect(nav.getByRole("link", { name: "Archived, 1 thread" })).toHaveAttribute("aria-current", "page");
+  // Read-only in the Archive: a note with when it was archived, the transcript, no composer.
+  await expect(page).toHaveURL(new RegExp(`#/archive/chats/${hob.id}/${archived.id}$`));
+  const read = page.getByRole("main", { name: "Rename the newsletter" });
+  await expect(read.getByRole("heading", { name: "Rename the newsletter" })).toBeVisible();
+  await expect(read.getByRole("note")).toContainText("Pip takes no new messages here until you restore it");
+  await expect(read.getByText("Echo: Rename the newsletter", { exact: true })).toBeVisible();
+  await expect(read.getByRole("textbox")).toHaveCount(0);
 
-  await chat.getByRole("button", { name: "Restore “Rename the newsletter”" }).click();
+  await read.getByRole("button", { name: "Restore to Pip's chats" }).click();
 
-  // Restored: back in the hob's list, and it takes messages again.
+  // Restored: back on the list with Undo, and the chat takes messages again.
+  await expect(page).toHaveURL(new RegExp(`#/archive\\?hob=${hob.id}$`));
+  await expect(
+    page.getByRole("status").filter({ hasText: "Restored “Rename the newsletter” to Pip's chats." }),
+  ).toBeVisible();
+  await expect(archive.getByRole("heading", { name: "Nothing archived yet." })).toBeVisible();
+  await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${archived.id}`);
   await expect(nav.getByRole("link", { name: /Rename the newsletter/ })).toBeVisible();
-  await expect(nav.getByRole("link", { name: /^Archived/ })).toHaveCount(0);
+  const chat = page.getByRole("main", { name: "Chat" });
   const composer = chat.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("Try a shorter name");
   await composer.press("Enter");
   await expect(chat.getByText("Echo: Try a shorter name", { exact: true })).toBeVisible();
+});
+
+// covers CH-009
+test("[TC-CH-218] Undo after a Restore in the Archive archives the chat again", async ({ page }) => {
+  const { current, hob, archived } = await hubWithArchive();
+  await page.goto(`${current.url}/#/archive`);
+  const archive = page.getByRole("main", { name: "Archive" });
+  await archive.getByRole("button", { name: "Restore “Rename the newsletter”" }).click();
+
+  const toast = page.getByRole("status").filter({ hasText: "Restored “Rename the newsletter” to Pip's chats." });
+  await expect(toast).toBeVisible();
+  await expect(archive.getByRole("list", { name: "Archived chats" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo restore of Rename the newsletter" }).click();
+
+  const list = archive.getByRole("list", { name: "Archived chats" });
+  await expect(list.getByRole("listitem")).toHaveText([/Rename the newsletter/]);
+  const back = await api<Array<{ id: string }>>(current, "GET", `/agents/${hob.id}/threads?archived=true`);
+  expect(back.map((t) => t.id)).toEqual([archived.id]);
+});
+
+// covers CH-009
+test("[TC-CH-219] an archived chat's address shows when it is no longer archived", async ({ page }) => {
+  const { current, hob, live } = await hubWithArchive();
+  await page.goto(`${current.url}/#/archive/chats/${hob.id}/${live.id}`);
+  await expect(page.getByText("This chat is no longer archived.")).toBeVisible();
+  await page.getByRole("link", { name: "Open it" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${hob.id}/threads/${live.id}`));
 });
 
 // covers CH-009

@@ -149,9 +149,11 @@ test("[TC-AG-098] three hobs with different models chat at once in the app, an e
   });
   expect(refused.status).toBe(409);
   await ashChat.page.goto(`${current.url}/#/settings/archived/${ash.id}/threads/${ashChat.thread}`);
-  const archived = ashChat.page.getByRole("main", { name: "Chat" });
+  const archived = ashChat.page.getByRole("main").filter({ has: ashChat.page.getByRole("note") });
   await expect(archived.getByText(`Echo: ${longPrompt("Ash")}`)).toBeVisible();
-  await expect(archived.getByRole("note")).toHaveText("Ash is retired, so this chat is read-only.");
+  await expect(archived.getByRole("note")).toHaveText(
+    "Ash is retired, so this chat is read-only. It still shows up in search.",
+  );
   await expect(ashChat.page.getByRole("textbox")).toHaveCount(0);
 
   // Pip and Moss still chat after Ash retired.
