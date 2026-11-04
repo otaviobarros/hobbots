@@ -17,7 +17,7 @@ function Mark({ health, className }: { health: RuntimeHealth; className?: string
     <span
       aria-hidden
       className={cn(
-        "grid size-[26px] flex-none place-items-center rounded-control text-detail font-bold text-ground",
+        "grid size-[26px] flex-none place-items-center rounded-control text-detail font-bold text-provider-ink",
         look.tile,
         className,
       )}
