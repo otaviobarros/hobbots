@@ -1,5 +1,4 @@
 import type { AgentId, Message, ThreadId } from "@hobbots/domain";
-import { cn } from "@hobbots/ui/lib/utils";
 import { Fragment, type ReactNode } from "react";
 import { operationLabel } from "../../lib/reply-steps.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
@@ -7,7 +6,10 @@ import { type HobLookup, useHobLookup, useThreadTrees } from "../quest/use-work.
 import { messages } from "./messages.ts";
 import { type ReceiptHop, type SteerReceipt, steerReceiptOf } from "./steer-model.ts";
 
-const HOP_TONE: Record<ReceiptHop["state"], string> = {
+/** How each step reads: the lead reading or done, then each hop by where its note stands. */
+const TONE: Record<ReceiptHop["state"] | "reading" | "read", string> = {
+  reading: "text-text-secondary",
+  read: "",
   passing: "text-text-secondary",
   held: "text-lantern",
   picked: "font-semibold text-mint",
@@ -53,18 +55,18 @@ const sentences = (receipt: SteerReceipt, hobs: HobLookup): ReadonlyArray<{ key:
 function Step({
   hob,
   hobs,
-  className,
+  tone,
   children,
 }: {
   hob: AgentId;
   hobs: HobLookup;
-  className: string;
+  tone: keyof typeof TONE;
   children: ReactNode;
 }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       <HobSprite hob={hobs(hob)} size={16} />
-      <span className={className}>{children}</span>
+      <span className={TONE[tone]}>{children}</span>
     </span>
   );
 }
@@ -73,7 +75,7 @@ function Hops({ hops, hobs }: { hops: ReadonlyArray<ReceiptHop>; hobs: HobLookup
   return hops.map((hop, index) => (
     // biome-ignore lint/suspicious/noArrayIndexKey: STD-REACT-020 a hob can get the same note twice, so its place is its key.
     <Fragment key={`${hop.hob}-${index}`}>
-      <Step hob={hop.hob} hobs={hobs} className={HOP_TONE[hop.state]}>
+      <Step hob={hop.hob} hobs={hobs} tone={hop.state}>
         {hopText(hop, hobs(hop.hob).name)}
       </Step>
       {hop.state === "picked" && <Hops hops={hop.passedOn} hobs={hobs} />}
@@ -99,7 +101,7 @@ function SteerReceiptLine({ receipt, hobs }: { receipt: SteerReceipt; hobs: HobL
       className="flex max-w-bubble-max flex-wrap items-center justify-end gap-x-2 gap-y-1 self-end text-detail text-label"
     >
       <span aria-hidden className="contents">
-        <Step hob={receipt.lead} hobs={hobs} className={cn(!receipt.read && "text-text-secondary")}>
+        <Step hob={receipt.lead} hobs={hobs} tone={receipt.read ? "read" : "reading"}>
           {leadText}
         </Step>
         <Hops hops={receipt.hops} hobs={hobs} />
