@@ -1,6 +1,16 @@
 import { join } from "node:path";
 import { expect, test } from "./hub.ts";
-import { dock, lane, laneTask, openRoom, questRoom, roomMenu, showInWorkbench } from "./quest-room.ts";
+import {
+  dock,
+  lane,
+  laneTask,
+  openRoom,
+  openWorkbench,
+  questRoom,
+  roomMenu,
+  showInWorkbench,
+  ticket,
+} from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
@@ -23,13 +33,13 @@ test("[TC-UX-021] a finished Task's Workbench opens in the room on Summary, grey
   );
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
-  const card = page.getByRole("region", { name: "Aldric's work on Tidy the notes" });
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  const questTicket = ticket(page, "Tidy the notes");
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  // With a message left unsent, the Workbench opens from the card, docked in the room beside the chat.
+  // With a message left unsent, the Workbench opens from the ticket, docked in the room beside the chat.
   await composer.fill("A thought for later");
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   await expect(bench.getByRole("heading", { name: "Tidy the notes" })).toBeVisible();
   // One History tag for the finished Attempt, in the header.
@@ -73,7 +83,7 @@ test("[TC-UX-021] a finished Task's Workbench opens in the room on Summary, grey
   await expect(composer).toHaveValue("A thought for later");
 
   // Opened again it starts on Summary.
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  await openWorkbench(page, questTicket);
   await expect(bench.getByRole("tab", { name: /^Summary/ })).toHaveAttribute("aria-selected", "true");
   await room.getByRole("button", { name: "Close room" }).click();
   await expect(bench).toBeHidden();
@@ -89,8 +99,8 @@ test("[TC-UX-022] the header's quest button opens the room, and a lane's Show in
   await composer.fill(["Tidy the notes", script("start_quest", { key: "quest", goal: "Tidy the notes" })].join("\n"));
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
-  const card = page.getByRole("region", { name: "Aldric's work on Tidy the notes" });
-  await expect(card).toBeVisible({ timeout: 20_000 });
+  const questTicket = ticket(page, "Tidy the notes");
+  await expect(questTicket).toBeVisible({ timeout: 20_000 });
 
   // The quest button in the header opens the room with the Workbench folded under the lane.
   await composer.fill("Keep the headings short");
@@ -138,11 +148,11 @@ test("[TC-UX-030] a finished Task's Summary says what was asked, what happened a
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
-  const card = page.getByRole("region", { name: "Aldric's work on Tidy the notes" });
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  const questTicket = ticket(page, "Tidy the notes");
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   const summary = bench.getByRole("tabpanel", { name: /^Summary/ });
   // It leads with the result, then what happened; what you asked waits behind Details.
@@ -201,10 +211,7 @@ test("[TC-UX-031] a question waiting for you shows in the lane above the Workben
 
   const asks = page.getByRole("region", { name: "Aldric asks you" });
   await expect(asks).toContainText("Should the headings be short?");
-  await page
-    .getByRole("region", { name: "Aldric's work on Tidy the notes" })
-    .getByRole("button", { name: "Open in Workbench" })
-    .click();
+  await openWorkbench(page, ticket(page, "Tidy the notes"));
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
   await expect(bench.getByRole("tabpanel", { name: /^Summary/ })).toContainText(
@@ -280,11 +287,11 @@ test("[TC-UX-033] Still open says nothing is open only once it could read what w
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
-  const card = page.getByRole("region", { name: "Aldric's work on Tidy the notes" });
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  const questTicket = ticket(page, "Tidy the notes");
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
   await expect(open.getByRole("alert")).toHaveText(

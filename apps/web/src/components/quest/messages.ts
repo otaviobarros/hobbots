@@ -2,30 +2,8 @@ import type { CheckpointKind } from "@hobbots/domain";
 import { formatCount, formatList, plural } from "../../lib/format.ts";
 import type { RowStatus } from "./work-model.ts";
 
-/** Copy for the Task and Quest card, strip and drawer in the chat (STD-I18N-001). */
+/** Copy for a request's work in the chat: the quest buttons, questions and Task details (STD-I18N-001). */
 export const messages = {
-  card: {
-    quest: ({ name, count }: { name: string; count: number }) =>
-      `${name}'s quest · ${plural(count, { one: "1 task", other: `${formatCount(count)} tasks` })}`,
-    task: ({ name }: { name: string }) => `${name}'s task`,
-    finished: ({ name }: { name: string }) => `${name} finished this`,
-    failed: ({ name }: { name: string }) => `${name} could not finish this`,
-    cancelled: ({ name }: { name: string }) => `${name} stopped this`,
-    label: ({ name, title }: { name: string; title: string }) => `${name}'s work on ${title}`,
-    progress: ({ done, total }: { done: number; total: number }) =>
-      `${formatCount(done)} of ${formatCount(total)} done`,
-    owner: ({ name }: { name: string }) => `· ${name}`,
-    step: ({ index, total }: { index: number; total: number }) => `step ${formatCount(index)} of ${formatCount(total)}`,
-    waitingOn: ({ names }: { names: string }) => `waiting on ${names}`,
-    /** A Task whose turn waits on you to approve an action, named as the request names it (#698). */
-    waitingApproval: ({ action }: { action: string }) => `waiting on your approval: ${action}`,
-    /** Work about the request ran out of tries and waits for you in the Inbox (IN-007). */
-    stuck: "Stuck",
-    started: ({ ago }: { ago: string }) => `Started ${ago}`,
-    openRoom: "Open room",
-    open: ({ title }: { title: string }) => `Look inside ${title}`,
-    workbench: "Open in Workbench",
-  },
   status: {
     "needs-you": "Needs you",
     failed: "Failed",

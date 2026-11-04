@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Page } from "@playwright/test";
 import { expect, startHub, test } from "./hub.ts";
+import { openWorkbench, ticket } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
@@ -29,10 +30,10 @@ const playTurn = async (page: Page, lines: ReadonlyArray<string>) => {
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 };
 
-/** Opens the Workbench of the Task on the chat's card, on its Changes tab. */
+/** Opens the Workbench of the Task from its ticket in the chat, on its Changes tab. */
 const openChanges = async (page: Page, title: string) => {
-  const card = page.getByRole("region", { name: `Aldric's work on ${title}` });
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  const questTicket = ticket(page, title);
+  await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: `Workbench for ${title}` });
   await bench.getByRole("tab", { name: /^Changes/ }).click();
   return { bench, panel: bench.getByRole("tabpanel", { name: /^Changes/ }) };

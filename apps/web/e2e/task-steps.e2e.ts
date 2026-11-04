@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { ticket } from "./quest-room.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -70,16 +71,16 @@ test("[TC-OR-034] a Task split into four steps shows step 2 of 4 in the chat and
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  // The card under the request follows the current step while each runs in its own session.
-  const card = page.getByRole("region", { name: "Aldric's work on Plan the spring launch" });
-  await expect(card).toContainText("step 2 of 4", { timeout: 20_000 });
-  await expect(card).toContainText("4 of 4 done", { timeout: 30_000 });
+  // The ticket under the request counts the steps as each runs in its own session.
+  const questTicket = ticket(page, "Plan the spring launch");
+  await expect(questTicket).toContainText("1 of 4 done", { timeout: 20_000 });
+  await expect(questTicket).toContainText("4 of 4 done", { timeout: 30_000 });
 
   // Once every step is done, Aldric hears their results, not their sessions, and returns one result.
   await composer.fill(script("complete_task", { key: "done", summary: "The spring launch is planned." }));
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   // The Task completes as the call is made; the reply that tells of it streams after.
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
   const reply = page.getByRole("main");

@@ -1,4 +1,5 @@
 import { expect, test } from "./hub.ts";
+import { openWorkbench, ticket } from "./quest-room.ts";
 import { colored, hobTerminal, rows } from "./terminal.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
@@ -32,8 +33,8 @@ test("[TC-RT-105] a command that exits non-zero shows as Failed with its exit co
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  const card = page.getByRole("region", { name: "Aldric's work on Write the test first" });
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  const questTicket = ticket(page, "Write the test first");
+  await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: "Workbench for Write the test first" });
   await bench.getByRole("tab", { name: /^Terminal/ }).click();
   const panel = bench.getByRole("tabpanel", { name: /^Terminal/ });
@@ -76,8 +77,8 @@ test("[TC-RT-500] a line of commands run one after another that exits 0 shows as
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  const card = page.getByRole("region", { name: "Aldric's work on Set up the repository" });
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  const questTicket = ticket(page, "Set up the repository");
+  await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: "Workbench for Set up the repository" });
   await bench.getByRole("tab", { name: /^Terminal/ }).click();
   const terminal = hobTerminal(bench.getByRole("tabpanel", { name: /^Terminal/ }), "Aldric");

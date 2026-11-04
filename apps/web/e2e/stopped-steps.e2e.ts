@@ -1,9 +1,9 @@
 import { expect, test } from "./hub.ts";
-import { laneTask, taskDetails } from "./quest-room.ts";
+import { laneTask, openRoom, taskDetails, ticket } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #667 in the browser: a step that stops on a finding, with no result, shows as blocked with
-// the finding on the Task card, and the step after it is held with it. The hub side is checked in
+// the finding in its lane, and the step after it is held with it. The hub side is checked in
 // apps/server/test/stopped-steps.test.ts.
 
 test.afterEach(stopAldricHub);
@@ -11,7 +11,7 @@ test.afterEach(stopAldricHub);
 const FINDING = "The README and SPEC are already there from an earlier run";
 
 // covers OR-002, OR-004, UX-002
-test("[TC-OR-402] the Task card shows a step that stopped on a finding as blocked, and the step after it held", async ({
+test("[TC-OR-402] the Quest room shows a step that stopped on a finding as blocked, and the step after it held", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -28,13 +28,10 @@ test("[TC-OR-402] the Task card shows a step that stopped on a finding as blocke
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  // Step 1 needs Aldric: blocked, with what it found, not done.
-  const card = page.getByRole("region", { name: "Aldric's work on Write the docs" });
-  const row = card.getByRole("button", { name: "Look inside Write the README and SPEC" });
-  await expect(row).toContainText("Blocked", { timeout: 20_000 });
-  await expect(row).toContainText("step 1 of 2");
-  await expect(card).toContainText("0 of 2 done");
-  await row.click();
+  // Step 1 needs Aldric: blocked, with what it found, not done. The ticket counts both steps.
+  await expect(ticket(page, "Write the docs")).toContainText("0 of 2 done");
+  await openRoom(page, "Write the docs");
+  await expect(laneTask(page, "Write the README and SPEC")).toContainText("Blocked", { timeout: 20_000 });
   await expect(await taskDetails(page, "Write the README and SPEC")).toContainText(FINDING);
 
   // Step 2 is held by it, and never ran.

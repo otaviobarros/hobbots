@@ -2,19 +2,19 @@ import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { dock, lane, laneHead, openRoom, questRoom } from "./quest-room.ts";
+import { dock, lane, laneHead, openRoom, questRoom, ticket } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
 const TITLE = "Plan the Black Friday campaign";
 
-/** Starts the Black Friday Quest from Aldric's fresh page and waits for its card. */
+/** Starts the Black Friday Quest from Aldric's fresh page and waits for its ticket. */
 const startQuest = async (page: Page, url: string, aldric: string) => {
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
-  await expect(page.getByRole("region", { name: `Aldric's work on ${TITLE}` })).toBeVisible();
+  await expect(ticket(page, TITLE)).toBeVisible();
   return composer;
 };
 
@@ -22,13 +22,13 @@ const startQuest = async (page: Page, url: string, aldric: string) => {
 const chat = (page: Page) => page.getByRole("main", { name: "Chat" });
 
 // covers UX-002, UX-006, OR-001
-test("[TC-UX-201] the card, the header's quest button and the Inbox each open the room beside the chat, and Close room returns to the chat in place", async ({
+test("[TC-UX-201] the ticket, the header's quest button and the Inbox each open the room beside the chat, and Close room returns to the chat in place", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
   const composer = await startQuest(page, url, aldric);
 
-  // The card opens the room beside the chat, with focus on its title and a lane per hob.
+  // The ticket opens the room beside the chat, with focus on its title and a lane per hob.
   const room = await openRoom(page, TITLE);
   await expect(room.getByRole("heading", { name: TITLE })).toBeFocused();
   await expect(room).toContainText("Aldric's quest");

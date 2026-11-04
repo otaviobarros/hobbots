@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
+import { openWorkbench, ticket } from "./quest-room.ts";
 import { colored, hobTerminal, rows } from "./terminal.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
@@ -22,13 +23,13 @@ const send = async (page: Page, lines: ReadonlyArray<string>) => {
 /** Waits for Aldric's turn to end. */
 const settled = (page: Page) => expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-/** Opens the Task's Workbench from its card in the chat, on its Terminal. */
+/** Opens the Task's Workbench from its ticket in the chat, on its Terminal. */
 const openTerminal = async (page: Page, title: string) => {
-  const card = page.getByRole("region", { name: `Aldric's work on ${title}` });
-  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  const questTicket = ticket(page, title);
+  await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: `Workbench for ${title}` });
   await bench.getByRole("tab", { name: /^Terminal/ }).click();
-  return { card, bench, panel: bench.getByRole("tabpanel", { name: /^Terminal/ }) };
+  return { questTicket, bench, panel: bench.getByRole("tabpanel", { name: /^Terminal/ }) };
 };
 
 // covers UX-002, UX-006, PE-005
@@ -46,8 +47,8 @@ test("[TC-UX-045] a finished Task's Terminal replays its commands in a read-only
     script("start_quest", { key: "quest", goal: "Check the notes" }),
     script("complete_task", { key: "done", summary: "Checked." }),
   ]);
-  const card = page.getByRole("region", { name: "Aldric's work on Check the notes" });
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  const questTicket = ticket(page, "Check the notes");
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   await settled(page);
 
   const { bench, panel } = await openTerminal(page, "Check the notes");
@@ -109,8 +110,8 @@ test("[TC-UX-046] while a turn runs the Terminal is Live: a running command coun
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   // The first turn starts the Quest, so the next turn's commands belong to its Attempt.
   await send(page, ["Watch the build", script("start_quest", { key: "quest", goal: "Watch the build" })]);
-  const card = page.getByRole("region", { name: "Aldric's work on Watch the build" });
-  await expect(card).toBeVisible({ timeout: 20_000 });
+  const questTicket = ticket(page, "Watch the build");
+  await expect(questTicket).toBeVisible({ timeout: 20_000 });
   await settled(page);
 
   // The second turn runs a command that keeps running until the turn ends.
@@ -145,7 +146,7 @@ test("[TC-UX-183] a command whose runtime reports output as it comes shows it li
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   await send(page, ["Ship the preview", script("start_quest", { key: "quest", goal: "Ship the preview" })]);
-  await expect(page.getByRole("region", { name: "Aldric's work on Ship the preview" })).toBeVisible({
+  await expect(ticket(page, "Ship the preview")).toBeVisible({
     timeout: 20_000,
   });
   await settled(page);

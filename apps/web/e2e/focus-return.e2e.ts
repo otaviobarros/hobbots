@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { dock, questRoom } from "./quest-room.ts";
+import { questRoom, ticket } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Where focus lands when a screen takes away the element that had it: always on a visible,
@@ -48,7 +48,7 @@ const inView = (locator: Locator) =>
   });
 
 // covers UX-002, UX-006
-test("[TC-UX-160] the Workbench opened from the card takes focus in the room, and Close room puts it back in the chat", async ({
+test("[TC-UX-160] the room opened from the ticket by keyboard takes focus, and Close room puts it back in the chat", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -63,16 +63,15 @@ test("[TC-UX-160] the Workbench opened from the card takes focus in the room, an
     ].join("\n"),
   );
   await composer.press("Enter");
-  const card = page.getByRole("region", { name: "Aldric's work on Tidy the notes" });
-  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  const questTicket = ticket(page, "Tidy the notes");
+  await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  // By keyboard: the card's button opens the room with its Workbench on Summary, and focus moves into the room.
-  await card.getByRole("button", { name: "Open in Workbench" }).focus();
+  // By keyboard: the ticket opens the room, and focus moves to its title.
+  await questTicket.focus();
   await page.keyboard.press("Enter");
   const room = questRoom(page, "Tidy the notes");
-  await expect(room.locator(":focus")).toHaveCount(1);
-  await expect(dock(page).getByRole("tab", { name: /^Summary/ })).toHaveAttribute("aria-selected", "true");
+  await expect(room.getByRole("heading", { name: "Tidy the notes" })).toBeFocused();
 
   // Close room, by keyboard, puts focus back in the chat's message box.
   await room.getByRole("button", { name: "Close room" }).focus();

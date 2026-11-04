@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { lane, laneHead } from "./quest-room.ts";
+import { lane, laneHead, ticket } from "./quest-room.ts";
 
 // Issue #273 in the browser: a party member's request reaches you in the Inbox, under its lead's
 // thread, and never its lead. The hub-level side is apps/server/test/quests.test.ts.
@@ -157,26 +157,24 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on the q
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden();
 
-  // Aldric's Quest card names what Nettle's Task waits on, and the tray holds the request itself.
-  const card = page.getByRole("region", { name: "Aldric's work on Tidy the scratch folder" });
-  const row = card.getByRole("button", { name: "Look inside Remove the notes" });
-  await expect(row).toContainText("waiting on your approval: Delete files", { timeout: 20_000 });
-  await expect(row).toContainText("Needs you");
+  // Aldric's ticket says something needs you, and the tray holds the request itself.
+  const questTicket = ticket(page, "Tidy the scratch folder");
+  await expect(questTicket).toContainText("1 needs you", { timeout: 20_000 });
   const inTray = page
     .getByRole("region", { name: /^Needs you/ })
     .getByRole("region", { name: "Nettle asks permission" });
   await expect(inTray.getByText(`rm ${shared}/tmp-notes.txt`, { exact: true })).toBeVisible();
 
-  // The card's row opens the room on Nettle's lane, which says it needs you and what it waits on,
-  // while the chat's tray beside it holds the request; Allow once there decides it.
-  await row.click();
-  await expect(laneHead(page, "Nettle")).toHaveAttribute("aria-pressed", "true");
+  // The ticket opens the room, where Nettle's lane says it needs you and what it waits on, while
+  // the chat's tray beside it holds the request; Allow once there decides it.
+  await questTicket.click();
   await expect(laneHead(page, "Nettle")).toContainText("Needs you");
   await expect(lane(page, "Nettle")).toContainText("Waits on you");
   await inTray.getByRole("button", { name: "Allow once" }).click();
 
-  // Nettle goes on and finishes. Nothing waits on you any more, and the card says how it ended.
+  // Nettle goes on and finishes, and nothing waits on you any more.
   await expect(laneHead(page, "Nettle")).toContainText("Done", { timeout: 20_000 });
+  await expect(questTicket).not.toContainText("needs you");
   await expect(page.getByRole("button", { name: "Allow once" })).toHaveCount(0);
   await expect(inTray).toBeHidden();
   const approvals = await api<ReadonlyArray<{ readonly state: string; readonly decidedVia: string | null }>>(

@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { laneHead, openRoom, showInWorkbench } from "./quest-room.ts";
+import { laneHead, openRoom, showInWorkbench, ticket } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -40,9 +40,9 @@ test("[TC-OR-462] a Quest whose lead left a file uncommitted shows it under Stil
   await composer.fill("Wrap up the spec for the shop");
   await composer.press("Enter");
 
-  // Aldric brings nobody in, so his card opens a room with his lane alone.
-  const card = page.getByRole("region", { name: "Aldric's work on Wrap up the spec" });
-  await expect(card).toContainText("Aldric finished this", { timeout: 15_000 });
+  // Aldric brings nobody in, so his ticket opens a room with his lane alone.
+  const questTicket = ticket(page, "Wrap up the spec");
+  await expect(questTicket).toContainText("Finished in", { timeout: 15_000 });
   await openRoom(page, "Wrap up the spec");
   const bench = await showInWorkbench(page, "Wrap up the spec");
   const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
