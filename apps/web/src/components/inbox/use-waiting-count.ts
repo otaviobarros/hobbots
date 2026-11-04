@@ -1,21 +1,24 @@
-import type { AgentId, ApprovalRequest } from "@hobbots/domain";
-import { useQuery } from "@tanstack/react-query";
+import type { AgentId, ApprovalRequest, ThreadId } from "@hobbots/domain";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockers } from "../../api/blockers.ts";
+import { useFailedTasks } from "../../api/failed-tasks.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
+import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { useWaitingQuestions } from "../../api/questions.ts";
-import { type HobNeed, hobNeeds } from "../../lib/hob-state.ts";
+import { type HobNeed, hobNeeds, leadNeeds } from "../../lib/hob-state.ts";
 import { pendingCount } from "./inbox-items.ts";
 
 /**
  * How many things wait for the user, kept live by the journal: pending requests, questions no lead
- * could answer (ADR 018), stuck work (IN-007) and devices asking to pair (ADR 021). 0 until the
- * Inbox is read.
+ * could answer (ADR 018), stuck work (IN-007), party members' failed Tasks (ADR 027) and devices
+ * asking to pair (ADR 021). 0 until the Inbox is read.
  */
 export const useWaitingCount = (): number =>
   (useQuery({ ...inboxQuery, select: pendingCount }).data ?? 0) +
   useWaitingQuestions().length +
   useBlockers().length +
+  useFailedTasks().length +
   usePromptedDevices().length;
 
 /**
@@ -29,3 +32,23 @@ export const useWaitingHobs = (): ReadonlyMap<AgentId, HobNeed> =>
     questions: useWaitingQuestions(),
   });
 const NONE: ReadonlyArray<ApprovalRequest> = [];
+
+/**
+ * The hobs the sidebar marks as needing you (ADR 027): the lead whose chat each request, question,
+ * stuck work or member's failed Task waits in, since you talk only to the lead.
+ */
+export const useLeadsNeedingYou = (): ReadonlySet<AgentId> => {
+  const hobs = useQuery(agentsQuery).data ?? [];
+  const owners = useQueries({
+    queries: hobs.map((hob) => threadsQuery(hob.id)),
+    combine: (results) =>
+      new Map(results.flatMap((result) => (result.data ?? []).map((thread) => [thread.id, thread.agentId] as const))),
+  });
+  return leadNeeds({
+    approvals: useQuery(inboxQuery).data ?? NONE,
+    blockers: useBlockers(),
+    questions: useWaitingQuestions(),
+    failed: useFailedTasks(),
+    leadOf: (threadId: ThreadId) => owners.get(threadId),
+  });
+};

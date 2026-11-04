@@ -18,11 +18,16 @@ describe("notification choices", () => {
   it("are all on by default and keep the other settings beside them", async () => {
     const file = join(temp, "settings.json");
     const settings = fileSettingsStore(file);
-    expect(notificationChoices(settings)).toEqual({ requests: true, devices: true, sound: true });
+    expect(notificationChoices(settings)).toEqual({ requests: true, devices: true, finishes: true, sound: true });
     settings.update({ keepRunningInMenuBar: false });
-    settings.update({ notifyDevices: false });
+    settings.update({ notifyDevices: false, notifyFinishes: false });
     await settings.saved();
-    expect(notificationChoices(fileSettingsStore(file))).toEqual({ requests: true, devices: false, sound: true });
+    expect(notificationChoices(fileSettingsStore(file))).toEqual({
+      requests: true,
+      devices: false,
+      finishes: false,
+      sound: true,
+    });
     expect(fileSettingsStore(file).read().keepRunningInMenuBar).toBe(false);
   });
 
@@ -41,6 +46,7 @@ describe("notification choices", () => {
     await expect(set?.(trusted, { sound: false, openAtLogin: true })).resolves.toEqual({
       requests: true,
       devices: true,
+      finishes: true,
       sound: false,
     });
     await expect(set?.(trusted, { devices: "no" })).resolves.toEqual({ refused: "malformed" });
@@ -49,12 +55,13 @@ describe("notification choices", () => {
     await expect(handlers.get(notificationChannels.get)?.(trusted)).resolves.toEqual({
       requests: true,
       devices: true,
+      finishes: true,
       sound: false,
     });
   });
 
   it("shows a kind only while it is on, silent when the sound is off", () => {
-    let choices = { requests: true, devices: false, sound: false };
+    let choices = { requests: true, devices: false, finishes: true, sound: false };
     const show = vi.fn((_notice: { title: string; body: string; silent: boolean }) => ({ close: () => {} }));
     const requests = notifyWhenOn("requests", () => choices, show);
     const devices = notifyWhenOn("devices", () => choices, show);
@@ -62,7 +69,7 @@ describe("notification choices", () => {
     devices({ title: "A device asks to connect", body: "iPhone" }, () => {});
     expect(show).toHaveBeenCalledTimes(1);
     expect(show.mock.calls[0]?.[0]).toEqual({ title: "Pip asks permission", body: "Run npm test", silent: true });
-    choices = { requests: false, devices: true, sound: true };
+    choices = { requests: false, devices: true, finishes: true, sound: true };
     requests({ title: "Pip asks permission", body: "Run npm test" }, () => {});
     devices({ title: "A device asks to connect", body: "iPhone" }, () => {});
     expect(show).toHaveBeenCalledTimes(2);

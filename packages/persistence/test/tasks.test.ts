@@ -364,6 +364,47 @@ describe("Task records", () => {
     expect(result.journal.stored).toEqual(result.journal.returned);
   });
 
+  // covers OR-006, IN-007
+  it("[TC-OR-560] lists a member's failed Task with the lead you talk to while its work goes on, until it is retried or the work ends", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = TaskId.make("copy");
+        const started = yield* tasks.startAttempt(copy, (yield* latest("copy")).revision, attempt("a1"));
+        yield* tasks.updateAttempt(AttemptId.make("a1"), {
+          _tag: "Ended",
+          end: { _tag: "Failed", reason: "Timed out" },
+          at: now,
+        });
+        yield* tasks.moveTask(copy, (yield* latest("copy")).revision, "failed", now);
+        const build = yield* latest("build");
+        yield* tasks.moveTask(build.id, build.revision, "failed", later);
+        const failed = yield* tasks.listFailedTasks;
+        yield* tasks.startAttempt(copy, (yield* latest("copy")).revision, attempt("a2"));
+        const retried = yield* tasks.listFailedTasks;
+        yield* tasks.updateAttempt(AttemptId.make("a2"), {
+          _tag: "Ended",
+          end: { _tag: "Failed", reason: "Timed out again" },
+          at: later,
+        });
+        yield* tasks.moveTask(copy, (yield* latest("copy")).revision, "failed", later);
+        const campaignTask = yield* latest("campaign");
+        yield* tasks.moveTask(campaignTask.id, campaignTask.revision, "failed", later);
+        const ended = yield* tasks.listFailedTasks;
+        return { started: started.value.task.state, failed, retried, ended };
+      }),
+    );
+
+    expect(result.started).toBe("active");
+    expect(result.failed.map(({ task, leadId }) => [task.id, task.ownerId, leadId])).toEqual([
+      ["copy", QUILL, ALDRIC],
+      ["build", ADA, ALDRIC],
+    ]);
+    expect(result.retried.map(({ task }) => task.id)).toEqual(["build"]);
+    expect(result.ended).toEqual([]);
+  });
+
   // covers EX-001, OR-006
   it("[TC-OR-004] completes a Task only with its own Attempt and a settled ledger, and its Quest with it", async () => {
     const result = await run(

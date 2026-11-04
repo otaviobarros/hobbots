@@ -34,6 +34,7 @@ import {
   useStartThread,
 } from "../../api/queries.ts";
 import { runtimeProblem } from "../../api/runtime-health.ts";
+import { useReadThread } from "../../api/thread-reads.ts";
 import { brainSwitches, lastReplyBrain } from "../../lib/brains.ts";
 import { isQuietReply } from "../../lib/quiet-replies.ts";
 import { sendErrorText } from "../../lib/send-error.ts";
@@ -83,6 +84,7 @@ export function ChatView({
   focusMessageId,
   pins,
   headerEnd,
+  inView = true,
 }: {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
@@ -91,6 +93,8 @@ export function ChatView({
   pins: Pins;
   /** What the header ends with, such as the fold button while the Quest room is open. */
   headerEnd?: ReactNode;
+  /** Whether the chat is in view: not while it is folded away beside the Quest room. */
+  inView?: boolean;
 }) {
   const hob = useQuery({ ...agentsQuery, select: (agents) => agents.find((a) => a.id === hobId) });
   const thread = useQuery({
@@ -132,6 +136,8 @@ export function ChatView({
   const transcript = messages.data?.filter((m) => m.status !== "queued");
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
+  // Reading the chat clears its unread dot on every device, while it is in view (ADR 027).
+  useReadThread(hobId, thread.data, transcript, inView);
   // Up brings back the last message that went out; a queued one is still there to remove or edit.
   const lastSent = transcript?.findLast((m) => m.role === "user")?.content;
   // Only the thread's latest reply can be continued, and only while nothing else runs.

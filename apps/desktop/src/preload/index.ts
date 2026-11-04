@@ -5,7 +5,7 @@ import { keepRunningChannels } from "../main/keep-running.ts";
 import { loginItemChannels } from "../main/login-item.ts";
 import { CONNECTED_MODE_ARGUMENT, SETUP_MODE_ARGUMENT } from "../main/mode-argument.ts";
 import { notificationChannels } from "../main/notification-choices.ts";
-import { openRequestChannel } from "../main/open-request.ts";
+import { openRequestChannel, openTaskChannel } from "../main/open-request.ts";
 import { setupChannels } from "../main/setup-ipc.ts";
 import { showFileChannel } from "../main/show-file.ts";
 import { windowBackgroundChannel } from "../main/window-background.ts";
@@ -34,6 +34,47 @@ const onOpenRequest = (listener: (requestId: string) => void) => {
   };
 };
 
+/** A Task in its lead's chat, as a notification names it (ADR 027). */
+interface TaskLink {
+  readonly hobId: string;
+  readonly threadId: string;
+  readonly taskId: string;
+}
+
+const isTaskLink = (value: unknown): value is TaskLink => {
+  const link = value as Partial<Record<keyof TaskLink, unknown>> | null;
+  return (
+    typeof link === "object" &&
+    link !== null &&
+    typeof link.hobId === "string" &&
+    typeof link.threadId === "string" &&
+    typeof link.taskId === "string"
+  );
+};
+
+// A Task whose notification was clicked, kept until the page listens, as a request is.
+let waitingTask: TaskLink | undefined;
+let taskListener: ((link: TaskLink) => void) | undefined;
+ipcRenderer.on(openTaskChannel, (_event, link: unknown) => {
+  if (!isTaskLink(link)) return;
+  const { hobId, threadId, taskId } = link;
+  if (taskListener) taskListener({ hobId, threadId, taskId });
+  else waitingTask = { hobId, threadId, taskId };
+});
+
+/** Calls `listener` with each Task to open in its lead's chat; answers a function that stops it. */
+const onOpenTask = (listener: (link: TaskLink) => void) => {
+  taskListener = listener;
+  if (waitingTask !== undefined) {
+    const link = waitingTask;
+    waitingTask = undefined;
+    listener(link);
+  }
+  return () => {
+    if (taskListener === listener) taskListener = undefined;
+  };
+};
+
 /** What the bridge offers on every computer: this app's own settings and opening a request. */
 const shared = {
   loginItem: {
@@ -50,6 +91,7 @@ const shared = {
     set: (patch: Record<string, boolean>) => ipcRenderer.invoke(notificationChannels.set, patch),
   },
   onOpenRequest,
+  onOpenTask,
 };
 
 /** Calls `listener` with each new view of the connection to the hub; answers a function that stops it. */

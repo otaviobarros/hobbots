@@ -5,6 +5,7 @@ import {
   type ApprovalRequest,
   type BackpackItem,
   exactAction,
+  type FailedTask,
   type PolicyOperation,
   type Quest,
   type TaskId,
@@ -16,6 +17,7 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { useTaskControl } from "../../api/task-controls.ts";
 import { firstLine } from "../../lib/format.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { useCopy } from "../../lib/use-copy.ts";
@@ -26,6 +28,7 @@ import { messages as blockerCopy } from "../blockers/messages.ts";
 import { messages as appCopy } from "../messages.ts";
 import { DeviceFacts, MatchingCode, PairingActions } from "../pairing/device-request.tsx";
 import { messages as pairingCopy } from "../pairing/messages.ts";
+import { controlError } from "../quest/control-room.ts";
 import { AnswerForm } from "../quest/question-card.tsx";
 import { useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
@@ -64,6 +67,9 @@ export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob
       return <QuestionDetail waiting={entry.waiting} hob={hob} row={row} {...context} />;
     case "stuck":
       return <StuckDetail item={entry.item} hob={hob} row={row} {...context} />;
+    case "failed":
+      // Keyed by the entry, so a Retry sent from one failed Task never shows on the next.
+      return <FailedDetail key={entry.key} failed={entry.failed} hob={hob} row={row} lead={lead} {...context} />;
     default:
       return <DeviceDetail device={entry.device} row={row} now={context.now} />;
   }
@@ -241,6 +247,73 @@ function StuckDetail({
       <div className="flex flex-col gap-2">
         <BlockerChoices item={item} hob={hob} />
       </div>
+    </DetailFrame>
+  );
+}
+
+/**
+ * A party member's Task that failed while its Quest goes on: Retry sends it back to its hob from
+ * here, and Open the task opens the Quest room beside its lead's chat on that Task's lane, where it
+ * can go to another hob or be cancelled. A retry the hub recorded takes the entry out of the list with its event.
+ */
+function FailedDetail({
+  failed,
+  hob,
+  row,
+  lead,
+  directory,
+  questOf,
+  now,
+}: { failed: FailedTask; hob: Agent | undefined; row: InboxRow; lead: AgentId | undefined } & DetailContext) {
+  const { task } = failed;
+  const owner = directory.hobName(task.ownerId);
+  const leadId = failed.leadId ?? lead ?? task.ownerId;
+  const retry = useTaskControl();
+  return (
+    <DetailFrame
+      label={copy.failedTask.label({ name: owner, what: row.what })}
+      portrait={<EntryPortrait hob={hob} device={false} waiting large />}
+      row={{ ...row, what: copy.failedTask.title({ name: owner }) }}
+      why={copy.failedTask.why({ lead: directory.hobName(leadId) })}
+      chat={chatLink(leadId, task.threadId, null)}
+    >
+      <Facts
+        rows={[
+          [copy.detail.quest, questName(questOf(task.id), directory)],
+          [copy.detail.task, row.what],
+          [copy.detail.thread, task.threadId === null ? undefined : directory.threadTitle(task.threadId)],
+          [copy.detail.when, formatWhen(task.updatedAt, now)],
+        ]}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="default"
+          disabled={retry.isPending || retry.isSuccess}
+          onClick={() => retry.mutate({ kind: "retry", taskId: task.id })}
+        >
+          {retry.isPending ? copy.failedTask.retrying : copy.failedTask.retry}
+        </Button>
+        {task.threadId !== null && (
+          <Button variant="outline" asChild>
+            <Link
+              to="/hobs/$hobId/threads/$threadId"
+              params={{ hobId: leadId, threadId: task.threadId }}
+              search={roomSearch(task.id)}
+              className="no-underline"
+            >
+              {copy.failedTask.openTask}
+            </Link>
+          </Button>
+        )}
+      </div>
+      <p role="status" className="m-0 text-meta text-text-secondary empty:hidden">
+        {retry.isSuccess ? copy.failedTask.retried({ name: owner }) : null}
+      </p>
+      {retry.isError && (
+        <p role="alert" className="m-0 text-meta text-rose">
+          {controlError(retry.error, { owner, target: owner })}
+        </p>
+      )}
     </DetailFrame>
   );
 }

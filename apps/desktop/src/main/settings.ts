@@ -38,6 +38,7 @@ interface DesktopSettings {
   /** Which system notifications the app sends, each on until the user turns it off. */
   readonly notifyRequests?: boolean;
   readonly notifyDevices?: boolean;
+  readonly notifyFinishes?: boolean;
   readonly notifySound?: boolean;
   readonly mode?: DesktopMode["mode"] | undefined;
   readonly connection?: HubConnection | undefined;
@@ -83,6 +84,7 @@ const BOOLEAN_KEYS = [
   "keepRunningInMenuBar",
   "notifyRequests",
   "notifyDevices",
+  "notifyFinishes",
   "notifySound",
   "leftHub",
 ] as const satisfies ReadonlyArray<keyof DesktopSettings>;

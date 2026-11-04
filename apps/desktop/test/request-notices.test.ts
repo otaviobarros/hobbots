@@ -1,12 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { followHub } from "../src/main/hub-events.ts";
-import { deviceNotices, requestNotices } from "../src/main/request-notices.ts";
+import {
+  deviceNotices,
+  failedTaskNotices,
+  finishedNotices,
+  questionNotices,
+  requestNotices,
+} from "../src/main/request-notices.ts";
 import {
   deviceNoticeText,
   devicePairings,
+  failedNoticeText,
+  failedTasks,
   noticeChanges,
   noticeText,
   pendingRequests,
+  questionNoticeText,
+  waitingQuestions,
 } from "../src/main/request-notices-model.ts";
 import { entryFrame, fakeEventStream, readyFrame } from "./fake-event-stream.ts";
 
@@ -280,5 +290,146 @@ describe("device notifications", () => {
     expect(notices).toEqual([{ closed: false }]);
     await vi.advanceTimersByTimeAsync(10 * 60_000 + 1000);
     expect(notices).toEqual([{ closed: true }]);
+  });
+});
+
+/** A hub that answers `lists` by path, and a system that records its notifications and what they open. */
+const questSetup = () => {
+  const hub = { lists: {} as Record<string, unknown>, focused: false };
+  const notices: Array<{ title: string; body: string; closed: boolean; click: () => void }> = [];
+  const tasks: Array<unknown> = [];
+  const options = {
+    read: async (path: string) =>
+      path === "/api/agents"
+        ? [
+            { id: "aldric", name: "Aldric" },
+            { id: "ada", name: "Ada" },
+          ]
+        : (hub.lists[path] ?? null),
+    isFocused: () => hub.focused,
+    notify: ({ title, body }: { title: string; body: string }, onClick: () => void) => {
+      const notice = { title, body, closed: false, click: onClick };
+      notices.push(notice);
+      return {
+        close: () => {
+          notice.closed = true;
+        },
+      };
+    },
+    open: () => {},
+    openTask: (link: unknown) => void tasks.push(link),
+    retry: { firstRetryMs: 1, maxRetryMs: 4 },
+  };
+  return { hub, notices, tasks, options };
+};
+
+const asked = (id: string) => ({
+  question: { id, askerId: "ada", chain: ["aldric"], text: "Which store should the campaign use?" },
+  task: { id: "build", threadId: "t1", rootId: "campaign" },
+});
+
+const failedTask = (id: string) => ({
+  task: { id, ownerId: "ada", threadId: "t1", brief: "Build the campaign\nin the shop's own store" },
+  leadId: "aldric",
+});
+
+describe("Quest notifications", () => {
+  // covers IN-007, UX-001
+  it("[TC-IN-540] announces a question that reached you, opens the asking hob's lane in the lead's chat, and closes once answered", async () => {
+    const { hub, notices, tasks, options } = questSetup();
+    const { check } = questionNotices(options);
+    hub.lists["/api/questions"] = { cursor: "e.1", questions: [] };
+    await check();
+    hub.lists["/api/questions"] = { cursor: "e.2", questions: [asked("q1")] };
+    await check();
+    expect(notices).toEqual([
+      expect.objectContaining({ title: "Ada asks you", body: "Which store should the campaign use?" }),
+    ]);
+    hub.lists["/api/questions"] = { cursor: "e.3", questions: [] };
+    await check();
+    expect(notices[0]?.closed).toBe(true);
+    notices[0]?.click();
+    expect(tasks).toEqual([{ hobId: "aldric", threadId: "t1", taskId: "build" }]);
+  });
+
+  // covers IN-007, OR-006
+  it("[TC-IN-541] announces a member's failed Task with its brief, and closes it once retried, reassigned or its work ended", async () => {
+    const { hub, notices, tasks, options } = questSetup();
+    const { check } = failedTaskNotices(options);
+    hub.lists["/api/failed-tasks"] = { cursor: "e.1", tasks: [] };
+    await check();
+    hub.lists["/api/failed-tasks"] = { cursor: "e.2", tasks: [failedTask("build")] };
+    await check();
+    expect(notices).toEqual([expect.objectContaining({ title: "Ada's task failed", body: "Build the campaign" })]);
+    hub.lists["/api/failed-tasks"] = { cursor: "e.3", tasks: [] };
+    await check();
+    expect(notices[0]?.closed).toBe(true);
+    notices[0]?.click();
+    expect(tasks).toEqual([{ hobId: "aldric", threadId: "t1", taskId: "build" }]);
+  });
+
+  // covers IN-005, UX-001
+  it("[TC-IN-542] announces a top Quest that finished once, and nothing for a nested one, one that failed, or while a window is focused", async () => {
+    const { hub, notices, tasks, options } = questSetup();
+    const stream = fakeEventStream();
+    const { finished } = finishedNotices(options);
+    const quest = (id: string, state: string, parentQuestId: string | null = null) => ({
+      quest: {
+        id,
+        taskId: `task-${id}`,
+        leadId: "aldric",
+        threadId: "t1",
+        goal: "Spring launch\nwith a party",
+        state,
+        parentQuestId,
+      },
+    });
+    const following = followHub({
+      url: () => "http://127.0.0.1:4317/api/events",
+      canConnect: () => true,
+      onConnected: () => {},
+      onChange: (change) => void (change._tag === "QuestFinished" && finished(change.quest)),
+      onLost: () => {},
+      fetch: stream.fetch,
+    });
+    try {
+      await expect.poll(() => stream.connections.length).toBe(1);
+      stream.last().write(readyFrame);
+      stream
+        .last()
+        .write(entryFrame("QuestCompleted", { _tag: "QuestCompleted", ...quest("nested", "completed", "q0") }, 1));
+      stream.last().write(entryFrame("QuestCompleted", { _tag: "QuestCompleted", ...quest("failed", "failed") }, 2));
+      stream.last().write(entryFrame("QuestCompleted", { _tag: "QuestCompleted", ...quest("q1", "completed") }, 3));
+      await expect.poll(() => notices.length).toBe(1);
+      expect(notices[0]).toMatchObject({ title: "Spring launch is done", body: "Open Aldric's chat for the summary." });
+      notices[0]?.click();
+      expect(tasks).toEqual([{ hobId: "aldric", threadId: "t1", taskId: "task-q1" }]);
+      await finished({ id: "q1", goal: "Spring launch", leadId: "aldric", link: null });
+      hub.focused = true;
+      await finished({ id: "q2", goal: "Summer launch", leadId: "aldric", link: null });
+      expect(notices).toHaveLength(1);
+    } finally {
+      await following.stop();
+    }
+  });
+
+  it("reads questions and failed Tasks from the hub's answers, and keeps a long question within what macOS shows", () => {
+    expect(waitingQuestions({ questions: [asked("q1"), { question: { id: 3 } }] })).toEqual([
+      {
+        id: "q1",
+        askerId: "ada",
+        text: "Which store should the campaign use?",
+        link: { hobId: "aldric", threadId: "t1", taskId: "build" },
+      },
+    ]);
+    expect(waitingQuestions([])).toBeNull();
+    expect(
+      failedTasks({ tasks: [{ task: { id: "x", ownerId: "ada", threadId: null, brief: "" }, leadId: null }] }),
+    ).toEqual([{ id: "x", ownerId: "ada", brief: "", link: null }]);
+    const long = questionNoticeText({ id: "q", askerId: "ada", text: "é".repeat(400), link: null }, "Ada");
+    expect(new TextEncoder().encode(long.title + long.body).length).toBeLessThanOrEqual(240);
+    expect(failedNoticeText({ id: "x", ownerId: "ada", brief: "Build", link: null }, undefined).title).toBe(
+      "A hob's task failed",
+    );
   });
 });
