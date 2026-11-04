@@ -20,7 +20,7 @@ Browser use is too large for the MVP. It moves to its own post-MVP slice ([#382]
 
 ### What it is
 
-The Workbench is one Task's full view: its header, five tabs and a chat drawer. It shows one Attempt at a time. With none chosen it opens on the latest Attempt that recorded work (a command, a changed file, a reference, a report or the result), so a retry that ended before doing anything does not hide the one that did; a running Attempt, or one whose stop was never confirmed, is shown whatever it recorded, and with none that recorded anything it shows the Task's current Attempt.
+The Workbench is one Task's full view: its header, five tabs and a task chat card. It shows one Attempt at a time. With none chosen it opens on the latest Attempt that recorded work (a command, a changed file, a reference, a report or the result), so a retry that ended before doing anything does not hide the one that did; a running Attempt, or one whose stop was never confirmed, is shown whatever it recorded, and with none that recorded anything it shows the Task's current Attempt.
 
 It opens from the Task card, the task sheet and "Open in Workbench" on a tool step. It opens in the chat's place, inside the same window. There is no right panel beside the chat: the quest sheet and the task sheet slide in over the chat column and close when the Workbench opens, so the Workbench takes the chat column's whole width. The hob panel stays where it is, and a pinned Quest stays as a quest button in the chat header. **Back to chat** (or **Back to the task** when it was opened from the task sheet) returns to the same thread, scroll position and unsent message.
 
@@ -64,13 +64,14 @@ Screenshot moves to #382 with the Browser. Computer control stays Later.
 
 Summary is built from records the hub already keeps. It makes **no model call**, so it costs nothing, is never wrong about what happened and works offline from the runtime.
 
-- **What you asked.** The Task's brief: your message, or the lead's brief for a member's Task.
-- **What happened.** Its checkpoints and steps in order, each with a mark: done, failed, waiting or next. Retries show as tries. A hob tool call the hub refused on the Task shows as failed, with what the hob was told ([#575](https://github.com/otaviobarros/hobbots/issues/575)).
+- **One line** leads: the result, once the Task has one, or else where the Attempt shown stands, such as waiting on your answer in the task chat.
+- **What happened.** A timeline card of its checkpoints and steps in order, each with a mark: done, failed, waiting or next. Retries show as tries. A hob tool call the hub refused on the Task shows as failed, with what the hob was told ([#575](https://github.com/otaviobarros/hobbots/issues/575)).
+- **Buttons** under it name the tabs the Task used: "See the 4 changed files", "See what ran in Terminal".
 - **What it made.** The Task's Artifact references (files, links and text) and its changed files, each linked into Files or Changes.
-- **Still open.** Its open questions, pending approvals, blockers and unresolved backpack items, each linked to where you act on it.
-- **The result**, once the Task has one.
+- **Still open.** Its open questions, pending approvals, blockers and unresolved backpack items, each linked to where you act on it. The question for you on this Task is the exception: the task chat holds it, so it shows only there ([#833](https://github.com/otaviobarros/hobbots/issues/833)).
+- **What you asked**, behind Details: the Task's brief, your message or the lead's brief for a member's Task.
 
-Each line links to the tab or the chat that holds the detail. Buttons at the end name the tabs the Task used: "See the 4 changed files", "See what ran in Terminal".
+Each line links to the tab or the chat that holds the detail.
 
 ### Changes
 
@@ -128,9 +129,9 @@ The Terminal is a read-only record. You cannot type into it.
 - **The hob's files are never touched.** The Workbench only records. What the hob made stays in its folders until you delete it.
 - Archiving a thread or retiring a hob deletes nothing here.
 
-### The Task chat drawer
+### The Task chat
 
-A drawer on the Workbench to talk about this Task without leaving it.
+A card beside the views, under the Workbench header, to talk about this Task without leaving it. An icon button in the header shows and hides it.
 
 - What you write goes to the Task as a **note**, the note of ADR 018: it reaches the Task's lead as a message about this Task, through the lead's backpack. For a Task with no party, the lead is its owner.
 - **Quick nudges** are notes with one tap, such as "Looks good", "Explain what you did" and "Keep going". The exact set is copy, not a decision.
@@ -183,7 +184,7 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - An image the Task overwrote or deleted shows its earlier version, and one past the size limit says "Earlier version not kept" with why. The records are proven at hub level: `[TC-GEN-082]`, and the Changes tab shows both in the browser: `[TC-UX-037]`.
 - Change capture works in a Git and a non-Git folder, runs no code from the repository, keeps no contents of a secret file and labels a change made while another hob worked in the same folder. Proven: `[TC-PE-276]`, `[TC-PE-277]`, `[TC-PE-280]`, `[TC-PE-284]`, `[TC-GEN-079]`, `[TC-GEN-081]`, `[TC-GEN-082]` and `[TC-GEN-083]`.
 - Opening a finished Task shows Summary first with the header, a tab it did not use reads "Not used in this Task", Browser reads Coming soon, and going back keeps your chat and pinned Quest. Proven in the browser with the fake runtime: `[TC-UX-021]`, and opening from the drawer and the Quest tab in `[TC-UX-022]`.
-- A finished Task's Summary names what it made and links to each file, with no model call. Proven in the browser with the fake runtime: `[TC-UX-030]`, a question waiting for you under Still open in `[TC-UX-031]`, the question's own thread reached from a Quest pinned elsewhere in `[TC-UX-032]`, and Still open saying nothing is open only after its reads answered in `[TC-UX-033]`. A retried step's Workbench opens on the Attempt that changed a file, past a retry that recorded nothing, and keeps an Attempt you choose in `[TC-UX-034]`. Summary reads only the records the hub already serves; nothing in it calls a runtime.
+- A finished Task's Summary names what it made and links to each file, with no model call. Proven in the browser with the fake runtime: `[TC-UX-030]`, a question waiting for you in the task chat and not again under Still open in `[TC-UX-031]`, the same from a Quest pinned elsewhere in `[TC-UX-032]`, and Still open saying nothing is open only after its reads answered in `[TC-UX-033]`. A retried step's Workbench opens on the Attempt that changed a file, past a retry that recorded nothing, and keeps an Attempt you choose in `[TC-UX-034]`. Summary reads only the records the hub already serves; nothing in it calls a runtime.
 - Selecting a Task that edited files shows its changes, Live during the turn and as History after: documents rendered with their changed parts marked, code as a diff, and each file marked added, edited or deleted. Proven in the browser with the fake runtime: `[TC-UX-035]` and `[TC-UX-036]`.
 - A file the Task made opens as a preview and shows in Finder from the app. Listing and serving only files inside the hob's folders, through no link, with secret files listed but never served, are proven at hub level: `[TC-GEN-140]` to `[TC-GEN-144]`. The Files tab's previews, Download in a browser, a file changed or gone since, a secret file and Show in Finder through the desktop app's bridge are proven in the browser with the fake runtime: `[TC-UX-040]` to `[TC-UX-044]`; the bridge's own checks in the desktop app's unit tests. Finder itself in the packaged app is not verified.
 - A finished Task's terminal shows history, not a live session, with long output folded and redacted, and a running command counts its time and reads Cut off once its turn is stopped. Proven in the browser with the fake runtime: `[TC-UX-045]` and `[TC-UX-046]`. Output streamed as it comes is proven by the unit tests of the web client's live output; the fake streams it too fast for the browser to see it running.

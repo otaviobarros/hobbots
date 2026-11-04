@@ -13,7 +13,8 @@ import { messages } from "./messages.ts";
 const copy = messages.chat;
 
 /**
- * The Task chat drawer on the Workbench (ADR 023): talk about this Task without leaving it. What
+ * The Task chat on the Workbench (ADR 023), a card beside the views under the header: talk about
+ * this Task without leaving it. The header's toggle shows and hides it, and Escape closes it. What
  * you write, or a quick nudge, goes to the Task as a note (ADR 018), so it reaches the Task's
  * nearest lead, never a party member directly. Your notes on the Task show above the box. While a
  * question on the Task waits for you, the footer holds the question and its answer box instead, so
@@ -58,7 +59,7 @@ export function WorkbenchChat({
         event.preventDefault();
         onClose();
       }}
-      className="flex w-workbench-chat max-w-full shrink-0 animate-hb-in flex-col border-s border-line bg-panel @max-[480px]/bench:absolute @max-[480px]/bench:inset-y-0 @max-[480px]/bench:end-0 @max-[480px]/bench:z-20 @max-[480px]/bench:shadow-menu @min-[480px]/bench:max-w-[45%]"
+      className="flex w-workbench-chat max-w-full shrink-0 animate-hb-in flex-col overflow-hidden rounded-card border-(length:--edge) border-line bg-panel @max-[480px]/bench:absolute @max-[480px]/bench:inset-y-4 @max-[480px]/bench:end-4 @max-[480px]/bench:z-20 @max-[480px]/bench:max-w-[calc(100%-2rem)] @max-[480px]/bench:shadow-menu @min-[480px]/bench:max-w-[45%]"
     >
       <header className="flex items-center gap-2.5 border-b border-line px-3.5 py-3">
         <HobSprite hob={lead} size={26} />
@@ -70,9 +71,6 @@ export function WorkbenchChat({
             {asker === null ? copy.notesGo({ name: lead.name }) : copy.waiting({ name: asker.name })}
           </span>
         </span>
-        <Button variant="icon" size="icon" onClick={onClose} aria-label={copy.close} title={copy.close}>
-          ✕
-        </Button>
       </header>
       <ol
         aria-label={copy.notes}
