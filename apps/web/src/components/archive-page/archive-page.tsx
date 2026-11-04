@@ -8,8 +8,7 @@ import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/s
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { type CSSProperties, useMemo, useState } from "react";
-import { useRestoreThread } from "../../api/archived-threads.ts";
+import { useMemo, useState } from "react";
 import { agentsQuery, archivedAgentsQuery, archivedThreadsQuery, threadsQuery } from "../../api/queries.ts";
 import { useSearch } from "../../api/search.ts";
 import { ARCHIVE_CHEST, archiveChestPalette } from "../../art/icons.ts";
@@ -25,6 +24,8 @@ import {
   scopeHobs,
   visibleChats,
 } from "./archive-model.ts";
+import { useArchiveActions } from "./archive-notices.tsx";
+import { ArchiveFrame, Crumbs, DimPortrait, doorStyle, MoonIcon, RestoreIcon, stripStyle } from "./archive-parts.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages;
@@ -66,71 +67,59 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
   };
 
   return (
-    <main aria-label={copy.title} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-[920px] flex-col gap-5 px-6 pt-5 pb-12">
-        <nav aria-label={copy.crumbs} className="flex items-center gap-2 text-sm text-text-secondary">
-          <Link to="/hobs" className="text-text-secondary no-underline hover:text-text-strong hover:underline">
-            {copy.yourHobs}
-          </Link>
-          <span aria-hidden className="text-label">
-            /
-          </span>
-          <span aria-current="page" className="text-text-strong">
+    <ArchiveFrame label={copy.title}>
+      <Crumbs trail={[]} current={copy.title} />
+      <header className="flex items-center gap-4">
+        <span aria-hidden className="grid size-14 flex-none place-items-center rounded-card bg-card">
+          <PixelArt rows={ARCHIVE_CHEST} palette={archiveChestPalette} size={36} />
+        </span>
+        <span className="flex min-w-0 flex-col gap-1">
+          <h1 className="m-0 font-(family-name:--font-heading) text-[32px] leading-[38px] font-(--heading-weight) [font-variant-ligatures:none]">
             {copy.title}
-          </span>
-        </nav>
-        <header className="flex items-center gap-4">
-          <span aria-hidden className="grid size-14 flex-none place-items-center rounded-card bg-card">
-            <PixelArt rows={ARCHIVE_CHEST} palette={archiveChestPalette} size={36} />
-          </span>
-          <span className="flex min-w-0 flex-col gap-1">
-            <h1 className="m-0 font-(family-name:--font-heading) text-[32px] leading-[38px] font-(--heading-weight) [font-variant-ligatures:none]">
-              {copy.title}
-            </h1>
-            <span className="text-text-secondary">{copy.intro}</span>
-          </span>
-        </header>
-        <Tabs value={tab} onValueChange={pick} className="min-w-0 gap-4">
-          <TabsList aria-label={copy.tabs.label}>
-            <TabsTrigger value="chats">
-              {copy.tabs.chats}
-              <span className={countPill}>{chats.length}</span>
-            </TabsTrigger>
-            <TabsTrigger value="hobs">
-              {copy.tabs.hobs}
-              <span className={countPill}>{retired.data?.length ?? 0}</span>
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="chats" className="flex flex-col gap-4">
-            {hobs.isError || archived.error ? (
-              <p role="alert" className="m-0 text-sm text-rose">
-                {copy.chats.loadFailed}
-              </p>
-            ) : hobs.isPending || archived.pending ? (
-              <p role="status" className="m-0 text-sm text-label">
-                {copy.chats.loading}
-              </p>
-            ) : (
-              <ArchivedChats hobs={hobs.data} chats={chats} hobId={hobId} tab={tab} />
-            )}
-          </TabsContent>
-          <TabsContent value="hobs" className="flex flex-col gap-4">
-            <p className="m-0 text-sm text-text-secondary">{copy.hobs.intro}</p>
-            {retired.isError ? (
-              <p role="alert" className="m-0 text-sm text-rose">
-                {copy.hobs.loadFailed}
-              </p>
-            ) : retired.isPending ? (
-              <p role="status" className="m-0 text-sm text-label">
-                {copy.hobs.loading}
-              </p>
-            ) : (
-              <RetiredHobs hobs={retired.data} />
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
-    </main>
+          </h1>
+          <span className="text-text-secondary">{copy.intro}</span>
+        </span>
+      </header>
+      <Tabs value={tab} onValueChange={pick} className="min-w-0 gap-4">
+        <TabsList aria-label={copy.tabs.label}>
+          <TabsTrigger value="chats">
+            {copy.tabs.chats}
+            <span className={countPill}>{chats.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="hobs">
+            {copy.tabs.hobs}
+            <span className={countPill}>{retired.data?.length ?? 0}</span>
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="chats" className="flex flex-col gap-4">
+          {hobs.isError || archived.error ? (
+            <p role="alert" className="m-0 text-sm text-rose">
+              {copy.chats.loadFailed}
+            </p>
+          ) : hobs.isPending || archived.pending ? (
+            <p role="status" className="m-0 text-sm text-label">
+              {copy.chats.loading}
+            </p>
+          ) : (
+            <ArchivedChats hobs={hobs.data} chats={chats} hobId={hobId} tab={tab} />
+          )}
+        </TabsContent>
+        <TabsContent value="hobs" className="flex flex-col gap-4">
+          <p className="m-0 text-sm text-text-secondary">{copy.hobs.intro}</p>
+          {retired.isError ? (
+            <p role="alert" className="m-0 text-sm text-rose">
+              {copy.hobs.loadFailed}
+            </p>
+          ) : retired.isPending ? (
+            <p role="status" className="m-0 text-sm text-label">
+              {copy.hobs.loading}
+            </p>
+          ) : (
+            <RetiredHobs hobs={retired.data} />
+          )}
+        </TabsContent>
+      </Tabs>
+    </ArchiveFrame>
   );
 }
 
@@ -236,14 +225,15 @@ function ChatList({ chats }: { chats: ReadonlyArray<ArchivedChat> }) {
 }
 
 function ChatRow({ chat: { hob, thread } }: { chat: ArchivedChat }) {
-  const restore = useRestoreThread();
+  const actions = useArchiveActions();
+  const busy = actions.busy(thread);
   return (
     <li className="border-b border-line last:border-b-0">
       <div className="relative grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 px-3.5 py-3 hover:bg-hover">
         <DimPortrait hob={hob} />
         <span className="flex min-w-0 flex-col gap-0.5">
           <Link
-            to="/hobs/$hobId/threads/$threadId"
+            to="/archive/chats/$hobId/$threadId"
             params={{ hobId: hob.id, threadId: thread.id }}
             aria-label={copy.chats.open({ title: thread.title })}
             title={thread.title}
@@ -259,50 +249,15 @@ function ChatRow({ chat: { hob, thread } }: { chat: ArchivedChat }) {
           variant="outline"
           size="sm"
           className="relative z-[1]"
-          disabled={restore.isPending}
+          disabled={busy}
           aria-label={copy.chats.restoreLabel({ title: thread.title })}
-          onClick={() => restore.mutate(thread.id)}
+          onClick={() => actions.restore(hob, thread)}
         >
           <RestoreIcon />
-          {restore.isPending ? copy.chats.restoring : copy.chats.restore}
+          {busy ? copy.chats.restoring : copy.chats.restore}
         </Button>
       </div>
-      {restore.isError && (
-        <div role="alert" className="flex items-center gap-3 px-3.5 pb-3 text-sm text-rose">
-          <span className="flex-1">{copy.chats.restoreFailed({ title: thread.title })}</span>
-          <Button variant="outline" size="xs" onClick={() => restore.mutate(thread.id)}>
-            {copy.chats.tryAgain}
-          </Button>
-        </div>
-      )}
     </li>
-  );
-}
-
-/** A hob's portrait on a sunken tile, grayed: it is not where the hob is working now. */
-function DimPortrait({ hob }: { hob: Agent }) {
-  return (
-    <span aria-hidden className="grid size-9 place-items-center rounded-control bg-deep">
-      <HobSprite hob={hob} size={28} className="opacity-60 grayscale-80" />
-    </span>
-  );
-}
-
-/** The arrow that turns back, on Restore and Bring back. */
-function RestoreIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M5 3 2.5 5.5 5 8" />
-      <path d="M2.5 5.5H10a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
   );
 }
 
@@ -332,18 +287,6 @@ function RetiredHobs({ hobs }: { hobs: ReadonlyArray<Agent> }) {
   );
 }
 
-// Retired hobs go gray: the door takes the control color where an active hob takes its hat color.
-const doorStyle = {
-  "--hob": "var(--color-control)",
-  backgroundImage:
-    "linear-gradient(180deg, color-mix(in srgb, var(--hob) 26%, var(--color-card)) 0%, var(--color-card) 100%)",
-} as CSSProperties;
-
-const stripStyle: CSSProperties = {
-  backgroundImage:
-    "repeating-linear-gradient(90deg, color-mix(in srgb, var(--hob) 50%, var(--color-deep)) 0 8px, color-mix(in srgb, var(--hob) 35%, var(--color-deep)) 8px 16px)",
-};
-
 function RetiredCard({ hob }: { hob: Agent }) {
   const threads = useQuery(threadsQuery(hob.id));
   return (
@@ -359,7 +302,7 @@ function RetiredCard({ hob }: { hob: Agent }) {
       <span className="flex min-w-0 flex-col gap-2 p-4">
         <span className="flex min-w-0 flex-col">
           <Link
-            to="/settings/archived/$hobId"
+            to="/archive/hobs/$hobId"
             params={{ hobId: hob.id }}
             aria-label={copy.hobs.read({ name: hob.name })}
             title={hob.name}
@@ -379,21 +322,5 @@ function RetiredCard({ hob }: { hob: Agent }) {
         </span>
       </span>
     </li>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M12.5 10A5.5 5.5 0 0 1 6 3.5a5.5 5.5 0 1 0 6.5 6.5z" />
-    </svg>
   );
 }
