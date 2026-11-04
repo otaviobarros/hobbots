@@ -322,3 +322,43 @@ describe("renamed and pinned threads", () => {
     expect(result.pin).toEqual(refused);
   });
 });
+
+describe("read threads", () => {
+  // covers UX-006, CH-002
+  it("[TC-UX-190] marks a thread read for every device once you read the hob's reply, and unread again when it writes", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const thread = yield* finishedThread("Plan the kettle repair");
+        const reply = (yield* repo.listMessages(thread.id)).at(-1);
+        if (reply === undefined) throw new Error("no reply");
+        const events = yield* recordThreadEvents;
+        const read = yield* chat.markRead(thread.id, reply.id);
+        const readAgain = yield* chat.markRead(thread.id, reply.id);
+        yield* chat.sendPrompt(thread.id, "And the lid?");
+        yield* settled(thread.id);
+        const written = Option.getOrThrow(yield* repo.findThread(thread.id));
+        const missing = yield* Effect.exit(chat.markRead("nope" as ThreadId, reply.id));
+        yield* Effect.yieldNow;
+        return {
+          before: thread.unread,
+          read,
+          readAgain,
+          written: written.unread,
+          missing: Exit.isFailure(missing),
+          events: events.filter((t) => t.id === thread.id).map((t) => t.unread),
+        };
+      }),
+    );
+    expect(result.before).toBe(true);
+    expect(result.read.unread).toBe(false);
+    expect(result.read.updatedAt).toBe(result.readAgain.updatedAt);
+    expect(result.readAgain).toEqual(result.read);
+    expect(result.written).toBe(true);
+    expect(result.missing).toBe(true);
+    // The read goes out to every device; reading the same message again sends nothing.
+    expect(result.events[0]).toBe(false);
+    expect(result.events.filter((unread) => !unread).length).toBeGreaterThanOrEqual(1);
+  });
+});

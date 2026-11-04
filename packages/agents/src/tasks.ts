@@ -17,6 +17,7 @@ import type {
   DelegationId,
   DeviceId,
   EventEnvelope,
+  FailedTask,
   HandOff,
   HistoryRecords,
   IllegalTaskTransition,
@@ -324,6 +325,8 @@ export class TaskRepository extends Context.Service<
     readonly leaveNote: (input: NewNote) => Changed<TaskNote>;
     /** The questions no lead could answer that wait for you, oldest first. */
     readonly listWaitingQuestions: Effect.Effect<ReadonlyArray<WaitingQuestion>>;
+    /** Members' failed Tasks that wait on you while their top Task goes on, oldest first (ADR 027). */
+    readonly listFailedTasks: Effect.Effect<ReadonlyArray<FailedTask>>;
     /** Gives an artifact to another Task in its tree. Handing it to the same Task again changes nothing. */
     readonly handOff: (artifactId: ArtifactId, toTaskId: TaskId, at: string) => Changed<HandOff>;
     /**

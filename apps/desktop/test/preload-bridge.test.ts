@@ -32,7 +32,7 @@ afterEach(() => {
 describe("the preload bridge", () => {
   // covers DP-001, PE-006
   it("[TC-DP-160] offers a connected desktop no folder picker and nothing that reaches this computer's files", async () => {
-    const shared = ["keepRunning", "loginItem", "notifications", "onOpenRequest"];
+    const shared = ["keepRunning", "loginItem", "notifications", "onOpenRequest", "onOpenTask"];
     expect(await bridgeWith([CONNECTED_MODE_ARGUMENT])).toEqual([...shared, "connection"].sort());
     // The hub it uses, what is wrong with the connection and what can be done, and Disconnect;
     // none of them reaches this computer's files.

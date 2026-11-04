@@ -3,10 +3,17 @@ import { type ReadUntilOptions, readUntil } from "./read-until.ts";
 import {
   deviceNoticeText,
   devicePairings,
+  type FinishedQuest,
+  failedNoticeText,
+  failedTasks,
+  finishedNoticeText,
   type NoticeState,
   noticeChanges,
   noticeText,
   pendingRequests,
+  questionNoticeText,
+  type TaskLink,
+  waitingQuestions,
 } from "./request-notices-model.ts";
 
 /** A notification the system shows; `close` takes it away. */
@@ -23,6 +30,11 @@ export interface RequestNoticesOptions {
   readonly notify: (notice: { title: string; body: string }, onClick: () => void) => ShownNotice;
   /** Opens or reveals the window and shows the request in the Inbox. */
   readonly open: (requestId: string) => void;
+  /**
+   * Opens or reveals the window at a Task in its lead's chat, so the room opens with that lane lit
+   * (ADR 027), or only brings the window forward for work with no thread.
+   */
+  readonly openTask?: (link: TaskLink | null) => void;
   /** How an Inbox read that did not answer is made again. */
   readonly retry?: ReadUntilOptions;
 }
@@ -36,6 +48,8 @@ interface NoticeSource<P extends { readonly id: string }> {
   readonly texts: (items: ReadonlyArray<P>) => Promise<ReadonlyArray<{ title: string; body: string }>>;
   /** When an item runs out on its own, with no event to say so: the list is read again then. */
   readonly expiresAt?: (item: P) => string;
+  /** What clicking an item's notification opens, instead of the item in the Inbox. */
+  readonly open?: (item: P) => void;
 }
 
 /** How long until a moment after the first item runs out, or undefined when none does. */
@@ -74,7 +88,8 @@ const makeNotices = <P extends { readonly id: string }>(
         if (text === undefined) return;
         const notice = notify(text, () => {
           shown.delete(item.id);
-          open(item.id);
+          if (source.open) source.open(item);
+          else open(item.id);
         });
         shown.set(item.id, notice);
       });
@@ -101,24 +116,72 @@ const makeNotices = <P extends { readonly id: string }>(
  * menu bar after the last window closed, or after opening at login. `check` it whenever the hub's
  * event stream connects and whenever a request arrives or is decided.
  */
-export const requestNotices = (options: RequestNoticesOptions) => {
-  const hobNames = async (): Promise<ReadonlyMap<string, string>> => {
-    const hobs = await options.read("/api/agents");
-    if (!Array.isArray(hobs)) return new Map();
-    return new Map(
-      hobs.flatMap((hob: { id?: unknown; name?: unknown }) =>
-        typeof hob?.id === "string" && typeof hob.name === "string" ? [[hob.id, hob.name] as const] : [],
-      ),
-    );
-  };
-  return makeNotices(options, {
+/** Every hob's name by its id, or none when the hub did not answer. */
+const hobNames = async (read: RequestNoticesOptions["read"]): Promise<ReadonlyMap<string, string>> => {
+  const hobs = await read("/api/agents");
+  if (!Array.isArray(hobs)) return new Map();
+  return new Map(
+    hobs.flatMap((hob: { id?: unknown; name?: unknown }) =>
+      typeof hob?.id === "string" && typeof hob.name === "string" ? [[hob.id, hob.name] as const] : [],
+    ),
+  );
+};
+
+export const requestNotices = (options: RequestNoticesOptions) =>
+  makeNotices(options, {
     path: "/api/approvals",
     pending: pendingRequests,
     texts: async (requests) => {
-      const names = await hobNames();
+      const names = await hobNames(options.read);
       return requests.map((request) => noticeText(request, names.get(request.agentId)));
     },
   });
+
+/**
+ * Notifies the user of each question that climbed every lead and reached them (ADR 027), as
+ * `requestNotices` does for requests: one answered anywhere closes. Clicking it opens the room at
+ * the asking hob's lane. `check` it whenever the event stream connects and whenever a question changes.
+ */
+export const questionNotices = (options: RequestNoticesOptions) =>
+  makeNotices(options, {
+    path: "/api/questions",
+    pending: waitingQuestions,
+    texts: async (questions) => {
+      const names = await hobNames(options.read);
+      return questions.map((question) => questionNoticeText(question, names.get(question.askerId)));
+    },
+    open: (question) => options.openTask?.(question.link),
+  });
+
+/**
+ * Notifies the user of each party member's Task that failed while its work goes on (ADR 027): one
+ * retried or reassigned anywhere, or whose work ended, closes. `check` it whenever the event stream
+ * connects and whenever a Task changes.
+ */
+export const failedTaskNotices = (options: RequestNoticesOptions) =>
+  makeNotices(options, {
+    path: "/api/failed-tasks",
+    pending: failedTasks,
+    texts: async (tasks) => {
+      const names = await hobNames(options.read);
+      return tasks.map((task) => failedNoticeText(task, names.get(task.ownerId)));
+    },
+    open: (task) => options.openTask?.(task.link),
+  });
+
+/**
+ * Notifies the user that a top Quest finished, from its journal entry, while no window is focused
+ * (ADR 027). A Quest is announced once, however often its entry is replayed.
+ */
+export const finishedNotices = (options: RequestNoticesOptions) => {
+  const announced = new Set<string>();
+  const finished = async (quest: FinishedQuest) => {
+    if (announced.has(quest.id) || options.isFocused()) return;
+    announced.add(quest.id);
+    const names = await hobNames(options.read);
+    options.notify(finishedNoticeText(quest, names.get(quest.leadId)), () => options.openTask?.(quest.link));
+  };
+  return { finished };
 };
 
 /**

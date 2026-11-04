@@ -7,6 +7,7 @@
 import { STREAM_FRAME } from "@hobbots/domain";
 import { Option, Schema } from "effect";
 import type { Event } from "effect/encoding/Sse";
+import { type FinishedQuest, finishedQuest } from "./request-notices-model.ts";
 
 /**
  * A change the main process reads again: the Inbox's requests, or which hobs are working, once a
@@ -17,6 +18,12 @@ export type HubChange =
   | { readonly _tag: "Approvals" }
   | { readonly _tag: "Pairing" }
   | { readonly _tag: "Activity" }
+  /** A question reached you, moved or was answered or withdrawn (ADR 027). */
+  | { readonly _tag: "Questions" }
+  /** A Task changed state, so the failed Tasks that wait on you may have changed (ADR 027). */
+  | { readonly _tag: "Tasks" }
+  /** A top Quest finished (ADR 027). */
+  | { readonly _tag: "QuestFinished"; readonly quest: FinishedQuest }
   | ({
       readonly _tag: "RemoteAccess";
       /**
@@ -31,7 +38,7 @@ export const RemoteAccessView = Schema.Struct({ port: Schema.Int, enabled: Schem
 export type RemoteAccessView = typeof RemoteAccessView.Type;
 
 /** The part of a journal entry the main process reads; the rest of the envelope is ignored. */
-const HubEntry = Schema.Struct({ type: Schema.String });
+const HubEntry = Schema.Struct({ type: Schema.String, payload: Schema.optionalKey(Schema.Unknown) });
 const decodeEntry = Schema.decodeUnknownOption(Schema.fromJsonString(HubEntry));
 const decodeReady = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ resumed: Schema.Boolean })));
 /** The part of HTTPS through `tailscale serve` that says whether the HTTPS address answers. */
@@ -55,6 +62,32 @@ export interface HubConnected {
   readonly resumed: boolean;
 }
 
+/** The kinds of journal entry that make one of the main process's reads stale. */
+const STALE: Readonly<Record<string, "Approvals" | "Questions" | "Tasks" | "Pairing" | undefined>> = {
+  ApprovalRequested: "Approvals",
+  ApprovalResolved: "Approvals",
+  QuestionAsked: "Questions",
+  QuestionEscalated: "Questions",
+  QuestionAnswered: "Questions",
+  QuestionWithdrawn: "Questions",
+  TaskStateChanged: "Tasks",
+  TaskCompleted: "Tasks",
+  // A device asked to pair, or its request changed (ADR 021).
+  PairingRequested: "Pairing",
+  PairingChanged: "Pairing",
+};
+
+/** What a journal entry means for the main process: a finished Quest, a read it makes stale, or nothing. */
+const entryChange = (entry: typeof HubEntry.Type | undefined): HubChange | null => {
+  if (entry === undefined) return null;
+  if (entry.type === "QuestCompleted") {
+    const quest = finishedQuest(entry.payload);
+    return quest === null ? null : { _tag: "QuestFinished", quest };
+  }
+  const stale = Object.hasOwn(STALE, entry.type) ? STALE[entry.type] : undefined;
+  return stale === undefined ? null : { _tag: stale };
+};
+
 /**
  * What a frame means for the main process: `Connected` for the stream's first frame, the read a
  * frame makes stale, or null when it changes nothing the main process shows. The hub announces each
@@ -77,17 +110,7 @@ export const frameChange = (frame: Pick<Event, "event" | "data">): HubChange | H
         }),
       });
     case "message":
-      switch (Option.getOrUndefined(decodeEntry(frame.data))?.type) {
-        case "ApprovalRequested":
-        case "ApprovalResolved":
-          return { _tag: "Approvals" };
-        // A device asked to pair, or its request changed (ADR 021).
-        case "PairingRequested":
-        case "PairingChanged":
-          return { _tag: "Pairing" };
-        default:
-          return null;
-      }
+      return entryChange(Option.getOrUndefined(decodeEntry(frame.data)));
     default:
       return null;
   }

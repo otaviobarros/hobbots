@@ -133,6 +133,76 @@ describe("HobbotsRepository", () => {
     expect(result.touched).toBe(result.long);
   });
 
+  // covers UX-006, DP-003
+  it("[TC-DP-250] keeps how far you read a thread, unread once the hob writes past it, and moves it only forward", async () => {
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(
+        new Agent({
+          id: agentId,
+          name: "Aldric",
+          roleTitle: "Guide",
+          runtime: "claude-code",
+          model: null,
+          effort: null,
+          instructions: "",
+          lookSeed: 1,
+          lookColor: "moss",
+          configVersion: 1,
+          createdAt: now,
+        }),
+      );
+      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      const unread = () => repo.findThread(threadId).pipe(Effect.map((t) => Option.getOrThrow(t).unread));
+      const asked = new Message({ ...message("m1"), role: "user", configVersion: null });
+      yield* repo.upsertMessage(asked);
+      const yours = yield* unread();
+      // A reply under way leaves the thread read until it ends.
+      yield* repo.upsertMessage(message("m2", "streaming"));
+      const streaming = yield* unread();
+      yield* repo.upsertMessage(message("m2"));
+      const ended = yield* unread();
+      const listed = (yield* repo.listThreads(agentId))[0]?.unread;
+      const marked = yield* repo.markThreadRead(threadId, MessageId.make("m2"));
+      const after = yield* unread();
+      // Reading an older message, again or a message of another thread changes nothing.
+      const back = yield* repo.markThreadRead(threadId, MessageId.make("m1"));
+      const again = yield* repo.markThreadRead(threadId, MessageId.make("m2"));
+      const elsewhere = yield* repo.markThreadRead(threadId, MessageId.make("nope"));
+      // A write of the thread keeps the marker, and a failed reply with no text is unread too.
+      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Renamed", createdAt: now, updatedAt: now }));
+      const kept = yield* unread();
+      yield* repo.upsertMessage(new Message({ ...message("m3", "failed"), content: "" }));
+      return {
+        yours,
+        streaming,
+        ended,
+        listed,
+        marked: Option.map(marked, (c) => ({ unread: c.value.unread, events: c.entries.map((e) => e.type) })),
+        after,
+        back: Option.isNone(back),
+        again: Option.isNone(again),
+        elsewhere: Option.isNone(elsewhere),
+        kept,
+        failed: yield* unread(),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result).toEqual({
+      yours: false,
+      streaming: false,
+      ended: true,
+      listed: true,
+      marked: Option.some({ unread: false, events: ["ThreadUpserted"] }),
+      after: false,
+      back: true,
+      again: true,
+      elsewhere: true,
+      kept: false,
+      failed: true,
+    });
+  });
+
   // covers CH-009, DP-003
   it("[TC-DP-041] stores when a thread was archived and lists live and archived threads apart", async () => {
     const thread = (id: string, archivedAt: string | null) =>

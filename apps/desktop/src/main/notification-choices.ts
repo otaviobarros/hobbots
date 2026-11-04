@@ -4,10 +4,12 @@ import { handleTrusted, noArgs, type SettingsIpcOptions, withArgs } from "./trus
 
 /** Which system notifications the app sends. Each is on until the user turns it off. */
 export interface NotificationChoices {
-  /** A hob waits for an approval. */
+  /** A hob needs you: it waits for an approval, a question reached you, or a member's Task failed (ADR 027). */
   readonly requests: boolean;
   /** A device asks to connect to this hub (ADR 021). */
   readonly devices: boolean;
+  /** A Quest finished (ADR 027). */
+  readonly finishes: boolean;
   /** Each notification plays the system sound. */
   readonly sound: boolean;
 }
@@ -17,6 +19,7 @@ export const notificationChoices = (settings: SettingsStore): NotificationChoice
   return {
     requests: saved.notifyRequests ?? true,
     devices: saved.notifyDevices ?? true,
+    finishes: saved.notifyFinishes ?? true,
     sound: saved.notifySound ?? true,
   };
 };
@@ -32,12 +35,14 @@ const ChoicesPatch = () =>
   Schema.Struct({
     requests: Schema.optionalKey(Schema.Boolean),
     devices: Schema.optionalKey(Schema.Boolean),
+    finishes: Schema.optionalKey(Schema.Boolean),
     sound: Schema.optionalKey(Schema.Boolean),
   });
 
-const patchFrom = ({ requests, devices, sound }: Partial<NotificationChoices>) => ({
+const patchFrom = ({ requests, devices, finishes, sound }: Partial<NotificationChoices>) => ({
   ...(requests !== undefined && { notifyRequests: requests }),
   ...(devices !== undefined && { notifyDevices: devices }),
+  ...(finishes !== undefined && { notifyFinishes: finishes }),
   ...(sound !== undefined && { notifySound: sound }),
 });
 
@@ -60,7 +65,7 @@ type Notify = (notice: { title: string; body: string; silent: boolean }, onClick
  * the kind on again never announces what already waited.
  */
 export const notifyWhenOn =
-  (kind: "requests" | "devices", choices: () => NotificationChoices, show: Notify) =>
+  (kind: "requests" | "devices" | "finishes", choices: () => NotificationChoices, show: Notify) =>
   (notice: { title: string; body: string }, onClick: () => void): { close: () => void } => {
     const now = choices();
     if (!now[kind]) return { close: () => {} };

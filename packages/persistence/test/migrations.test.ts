@@ -19,6 +19,7 @@ import backpackBlockers from "../src/migrations/0029_backpack_blockers.ts";
 import withdrawnQuestions from "../src/migrations/0033_withdrawn_questions.ts";
 import taskGrants from "../src/migrations/0035_task_grants.ts";
 import versionedName from "../src/migrations/0047_versioned_name.ts";
+import threadReads from "../src/migrations/0052_thread_reads.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1078,6 +1079,56 @@ describe("0047_versioned_name", () => {
       { agentId: "hob1", version: 2, name: "Wren" },
       { agentId: "hob2", version: 1, name: "Pip" },
       { agentId: "hob2", version: 2, name: "Pip" },
+    ]);
+  });
+});
+
+describe("0052_thread_reads", () => {
+  // covers UX-006, DP-003
+  it("[TC-DP-251] counts every thread from before it as read through its last message", async () => {
+    const threads = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "hob1",
+        name: "Aldric",
+        roleTitle: "Guide",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        configVersion: 1,
+        createdAt: "2026-11-04T00:00:00.000Z",
+      })}`;
+      for (const id of ["t1", "t2"]) {
+        yield* sql`INSERT INTO threads ${sql.insert({
+          id,
+          agentId: "hob1",
+          title: "Plan",
+          createdAt: "2026-11-04T00:00:00.000Z",
+          updatedAt: "2026-11-04T00:00:00.000Z",
+        })}`;
+      }
+      for (const [id, seq] of [
+        ["m1", 1],
+        ["m2", 2],
+      ] as const) {
+        yield* sql`INSERT INTO messages ${sql.insert({
+          id,
+          threadId: "t1",
+          role: id === "m1" ? "user" : "assistant",
+          content: "Hello",
+          status: "complete",
+          createdAt: "2026-11-04T00:00:00.000Z",
+          seq,
+        })}`;
+      }
+      yield* threadReads;
+      return yield* sql`SELECT id, read_seq FROM threads ORDER BY id`;
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0052"))), Effect.runPromise);
+
+    expect(threads).toEqual([
+      { id: "t1", readSeq: 2 },
+      { id: "t2", readSeq: null },
     ]);
   });
 });

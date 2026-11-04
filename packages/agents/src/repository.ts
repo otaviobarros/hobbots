@@ -38,7 +38,18 @@ export class HobbotsRepository extends Context.Service<
     /** The hob's archived threads, most recently archived first. */
     readonly listArchivedThreads: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Thread>>;
     readonly findThread: (id: ThreadId) => Effect.Effect<Option.Option<Thread>>;
+    /**
+     * Writes the thread, leaving how far you read it as it is: only `markThreadRead` moves that.
+     */
     readonly upsertThread: (thread: Thread) => Effect.Effect<Committed<Thread>>;
+    /**
+     * Records that you read the thread through `messageId` (ADR 027). The marker only moves forward:
+     * none, and nothing journaled, when the message is not in the thread or you had read past it.
+     */
+    readonly markThreadRead: (
+      threadId: ThreadId,
+      messageId: MessageId,
+    ) => Effect.Effect<Option.Option<Committed<Thread>>>;
     readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;
     /** Saves the message with the events it produces (`messageEvents`). */
     readonly upsertMessage: (message: Message) => Effect.Effect<Committed<Message>>;

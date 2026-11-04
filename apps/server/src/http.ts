@@ -112,6 +112,7 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
       setBrain: ({ params, payload }) => setBrain(params.threadId, payload),
       rename: ({ params, payload }) => chat.rename(params.threadId, payload.title),
       pin: ({ params, payload }) => chat.setPinned(params.threadId, payload.pinned),
+      markRead: ({ params, payload }) => chat.markRead(params.threadId, payload.messageId),
       archive: ({ params }) => chat.archive(params.threadId),
       restore: ({ params }) => chat.restore(params.threadId),
     });

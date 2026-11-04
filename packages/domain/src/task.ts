@@ -68,6 +68,14 @@ export class Task extends Schema.Class<Task>("Task")({
 }) {}
 
 /**
+ * A party member's failed Task that waits on you (ADR 027): its top Task is still under way, so you
+ * can retry or reassign it. `leadId` is the hob whose chat the work was asked in, which you talk to
+ * about it, or null for work with no thread.
+ */
+export const FailedTask = Schema.Struct({ task: Task, leadId: Schema.NullOr(AgentId) });
+export type FailedTask = typeof FailedTask.Type;
+
+/**
  * An Attempt is live while `starting` or `running`; the other states are its outcome. `unresolved`
  * is a cancel Hobbots asked for and could not confirm in time: whether its session stopped is not
  * known (OR-006).

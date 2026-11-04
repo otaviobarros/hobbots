@@ -35,6 +35,7 @@ import {
   useStartThread,
 } from "../../api/queries.ts";
 import { runtimeProblem } from "../../api/runtime-health.ts";
+import { useReadThread } from "../../api/thread-reads.ts";
 import { brainSwitches, lastReplyBrain } from "../../lib/brains.ts";
 import { sendErrorText } from "../../lib/send-error.ts";
 import { ReplyApprovals } from "../approvals/reply-approvals.tsx";
@@ -137,6 +138,8 @@ export function ChatView({
   const transcript = messages.data?.filter((m) => m.status !== "queued");
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
+  // Reading the chat clears its unread dot on every device (ADR 027).
+  useReadThread(hobId, thread.data, transcript);
   // Up brings back the last message that went out; a queued one is still there to remove or edit.
   const lastSent = transcript?.findLast((m) => m.role === "user")?.content;
   // Only the thread's latest reply can be continued, and only while nothing else runs.

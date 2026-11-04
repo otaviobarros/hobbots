@@ -213,6 +213,12 @@ export class ChatService extends Context.Service<
     readonly rename: (threadId: ThreadId, title: string) => Effect.Effect<Thread, ThreadNotFound | ThreadArchived>;
     /** Pins the thread to the top of its hob's chats, or unpins it. Refused while it is archived. */
     readonly setPinned: (threadId: ThreadId, pinned: boolean) => Effect.Effect<Thread, ThreadNotFound | ThreadArchived>;
+    /**
+     * Records that you read the thread through `messageId` (ADR 027), so its unread dot clears on
+     * every device. The marker only moves forward: a message you had read past, or one from another
+     * thread, returns the thread as it is. An archived thread takes it too.
+     */
+    readonly markRead: (threadId: ThreadId, messageId: MessageId) => Effect.Effect<Thread, ThreadNotFound>;
     /** Restores an archived thread, unless its hob is retired. Restoring a live thread returns it unchanged. */
     readonly restore: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
     /** Starts the hob's queued messages and the work waiting in its backpack, in threads with no turn running, as when it wakes. */
@@ -1245,6 +1251,13 @@ export class ChatService extends Context.Service<
         );
       });
 
+      // Needs no hob lock: the marker moves forward in one statement, whatever else changes the thread.
+      const markRead = Effect.fn("ChatService.markRead")(function* (threadId: ThreadId, messageId: MessageId) {
+        const thread = yield* findThread(threadId);
+        const marked = yield* repo.markThreadRead(threadId, messageId);
+        return Option.isSome(marked) ? yield* announce(marked.value) : thread;
+      });
+
       // The threads with your queued messages or backpack work waiting: of one hob, or of every hob.
       const threadsWaiting = (agentId?: AgentId) =>
         Effect.gen(function* () {
@@ -1290,6 +1303,7 @@ export class ChatService extends Context.Service<
         archive,
         rename,
         setPinned,
+        markRead,
         restore,
         drainAgent,
         wake,

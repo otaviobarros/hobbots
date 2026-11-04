@@ -4,6 +4,16 @@ export const messages = {
     title: ({ name }: { name: string }) => `${name} asks permission`,
     unknownHob: "A hob",
   },
+  questionNotice: {
+    title: ({ name }: { name: string }) => `${name} asks you`,
+  },
+  failedNotice: {
+    title: ({ name }: { name: string }) => `${name}'s task failed`,
+  },
+  finishedNotice: {
+    title: ({ goal }: { goal: string }) => `${goal} is done`,
+    body: ({ name }: { name: string }) => `Open ${name}'s chat for the summary.`,
+  },
   deviceNotice: {
     title: ({ name }: { name: string }) => `${name} wants to use Hobbots`,
     body: ({ code }: { code: string }) => `Check that it shows ${code}, then Allow or Deny.`,

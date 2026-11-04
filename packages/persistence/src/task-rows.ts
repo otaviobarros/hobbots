@@ -206,6 +206,36 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
       return task === undefined || !open(task.id) || !open(task.rootId) ? [] : [{ question, task }];
     });
   });
+  /** The hob each record's thread belongs to, by thread id. */
+  const threadOwners = (records: ReadonlyArray<{ readonly threadId: string | null }>) =>
+    Effect.gen(function* () {
+      const threadIds = [...new Set(records.flatMap((each) => (each.threadId === null ? [] : [each.threadId])))];
+      const owners =
+        threadIds.length === 0
+          ? []
+          : yield* sql<{ readonly id: string; readonly agentId: string }>`SELECT id, agent_id FROM threads
+              WHERE ${sql.in("id", threadIds)}`;
+      return new Map(owners.map((each) => [each.id, AgentId.make(each.agentId)]));
+    });
+  /**
+   * Members' Tasks that failed while their top Task is still under way, oldest first, each with the
+   * hob whose chat the work was asked in (ADR 027). A top Task that failed is the lead's own reply.
+   */
+  const failedTasks = Effect.gen(function* () {
+    const failed = yield* sql<Row>`SELECT * FROM tasks WHERE state = 'failed' AND parent_id IS NOT NULL
+      ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("task")));
+    if (failed.length === 0) return [];
+    const roots = yield* sql<Row>`SELECT * FROM tasks WHERE ${sql.in("id", [
+      ...new Set(failed.map((each) => each.rootId)),
+    ])}`.pipe(Effect.flatMap(decodeRows("task")));
+    const open = new Set(roots.flatMap((root) => (isTerminalTask(root.state) ? [] : [root.id])));
+    const waiting = failed.filter((each) => open.has(each.rootId));
+    const ownerOf = yield* threadOwners(waiting);
+    return waiting.map((task) => ({
+      task,
+      leadId: task.threadId === null ? null : (ownerOf.get(task.threadId) ?? null),
+    }));
+  });
   const artifact = (id: string) =>
     sql<Row>`SELECT * FROM artifact_refs WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("artifact")));
 
@@ -296,13 +326,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
       )} ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("task")));
       const byTask = new Map(open.map((each) => [each.childTaskId, each]));
       // A nested Quest's lead is a member, but its thread belongs to the hob the request was made to.
-      const threadIds = [...new Set(quests.flatMap((each) => (each.threadId === null ? [] : [each.threadId])))];
-      const owners =
-        threadIds.length === 0
-          ? []
-          : yield* sql<{ readonly id: string; readonly agentId: string }>`SELECT id, agent_id FROM threads
-              WHERE ${sql.in("id", threadIds)}`;
-      const ownerOf = new Map(owners.map((each) => [each.id, AgentId.make(each.agentId)]));
+      const ownerOf = yield* threadOwners(quests);
       return tasks.flatMap((task) => {
         const delegation = byTask.get(task.id);
         const quest = delegation && active.get(delegation.questId);
@@ -400,6 +424,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     note,
     carriedNote,
     waitingQuestions,
+    failedTasks,
     openQuestionsOn,
     artifact,
     readTree,
