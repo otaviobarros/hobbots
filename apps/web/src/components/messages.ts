@@ -224,6 +224,10 @@ export const messages = {
   home: {
     openPage: ({ name, role, state }: { name: string; role: string; state: string }) =>
       `Open ${name}'s page, ${role}, ${state}`,
+    peekLabel: ({ name, role, state }: { name: string; role: string; state: string }) => `${name}, ${role}, ${state}`,
+    peekResting: "Nothing on right now.",
+    openChat: "Open chat",
+    openWorkbench: "Open Workbench",
     happeningNow: "Happening now",
     allQuiet: "All quiet. No hob is replying right now.",
   },

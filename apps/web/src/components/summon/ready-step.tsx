@@ -58,7 +58,11 @@ export function ReadyStep({
             value={copy.preset({ preset: preset.label })}
             note={preset.note}
             action={
-              <Link to="/settings" className="text-detail whitespace-nowrap text-link underline underline-offset-3">
+              <Link
+                to="/settings/$section"
+                params={{ section: "safety" }}
+                className="text-detail whitespace-nowrap text-link underline underline-offset-3"
+              >
                 {copy.changeInSettings}
               </Link>
             }
@@ -156,7 +160,11 @@ function Thinks({
     <>
       <ProviderCards runtimes={runtimes.data} draft={draft} onChange={set} />
       <span className="flex flex-wrap items-center gap-3">
-        <Link to="/settings" className="flex-1 text-detail text-link underline underline-offset-3">
+        <Link
+          to="/settings/$section"
+          params={{ section: "connections" }}
+          className="flex-1 text-detail text-link underline underline-offset-3"
+        >
           {copy.connectAnother}
         </Link>
         {ready && (

@@ -24,6 +24,7 @@ import { questsInProgress } from "../lib/quest-work.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
 import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
+import { StageHob } from "./home/stage-hob.tsx";
 import { messages as inboxCopy } from "./inbox/messages.ts";
 import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
 import { WaitingRequests } from "./inbox/waiting-requests.tsx";
@@ -135,32 +136,15 @@ export function Home() {
             many ? "right-[210px] gap-[22px]" : "right-[150px] gap-11",
           )}
         >
-          {stage.map(({ hob, state }) => (
-            <Link
+          {stage.map(({ hob, state, threads }) => (
+            <StageHob
               key={hob.id}
-              to="/hobs/$hobId"
-              params={{ hobId: hob.id }}
-              aria-label={openPageLabel(hob, state)}
-              className="hop-on-hover flex flex-col items-center gap-1.5 text-ground no-underline"
-            >
-              <span
-                className={cn(
-                  "flex flex-col items-center bg-text-strong whitespace-nowrap",
-                  many ? "px-1.5 py-0.5 text-xs" : "px-2 py-[3px] text-xs",
-                )}
-              >
-                <span>{many ? hob.name : sceneTag(hob, state)}</span>
-                <span className="font-bold">{hob.roleTitle}</span>
-              </span>
-              {!many && (
-                <span aria-hidden className="block h-1.5 w-16 bg-line-2">
-                  {(state === "working" || state === "thinking") && (
-                    <span className="block h-full w-full animate-hb-tick bg-mint" />
-                  )}
-                </span>
-              )}
-              <HobSprite hob={hob} size={many ? 52 : 64} state={state} badge />
-            </Link>
+              hob={hob}
+              state={state}
+              threads={threads}
+              activity={activity}
+              size={many ? 48 : 56}
+            />
           ))}
         </div>
 
@@ -415,15 +399,6 @@ const summary = (count: number, busy: number, paused: number, hall: number, firs
   if (paused > 0) return `${working}, and ${paused} ${paused === 1 ? "is" : "are"} paused.`;
   return busy > 0 ? `${working} right now.` : `Your ${count} hobs are ready when you are.`;
 };
-
-const sceneTagWords: Partial<Record<HobState, string>> = {
-  working: "writing…",
-  thinking: "thinking…",
-  idle: "resting",
-  paused: "paused",
-};
-
-const sceneTag = (hob: Agent, state: HobState) => `${hob.name} · ${sceneTagWords[state] ?? stateLabel[state]}`;
 
 function Card({
   label,

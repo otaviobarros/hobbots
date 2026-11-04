@@ -67,7 +67,7 @@ test("[TC-OP-036] backs up from Settings, and Welcome restores it after the data
   await expect(page.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 20_000 });
 
   // Settings › Backup & export makes the backup and shows where it went.
-  await page.goto(`${hub.url}/#/settings#backup`);
+  await page.goto(`${hub.url}/#/settings/data`);
   const panel = page.getByRole("region", { name: "Backup & export" });
   await panel.getByRole("textbox", { name: "Save the backup in" }).fill(destination);
   await panel.getByRole("button", { name: "Back up now" }).click();
@@ -118,15 +118,16 @@ test("[TC-OP-036] backs up from Settings, and Welcome restores it after the data
   // Home holds the work from the backup until it is resumed, and the thread and its Quest are back.
   const held = page.getByRole("region", { name: "Work is held after a restore" });
   await expect(held).toBeVisible({ timeout: 20_000 });
-  await page.goto(`${hub.url}/#/settings#backup`);
+  await page.goto(`${hub.url}/#/settings/data`);
   const restored = page.getByRole("region", { name: "Backup & export" });
   await expect(restored).toContainText(/Restored .* from a backup made /);
   await expect(restored).toContainText("The data from before the restore");
+  await restored.getByRole("button", { name: "Resume work" }).click();
+  await expect(restored).not.toContainText("Work is held after a restore");
+  await page.goto(`${hub.url}/#/settings/devices`);
   await expect(page.getByRole("region", { name: "Devices" })).toContainText(
     "Revoked by a restorePlaywrightOpen Hobbots on that device to ask again.",
   );
-  await restored.getByRole("button", { name: "Resume work" }).click();
-  await expect(restored).not.toContainText("Work is held after a restore");
 
   await page.goto(`${hub.url}/#/hobs/${party.aldric}`);
   await page

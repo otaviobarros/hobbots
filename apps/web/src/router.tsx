@@ -19,6 +19,8 @@ import { HobPage } from "./components/hob-page/hob-page.tsx";
 import { type HobPageTab, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
 import { HobProfile } from "./components/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
+import { HobsPage } from "./components/hobs-page/hobs-page.tsx";
+import { type HobFilter, isHobFilter } from "./components/hobs-page/hobs-page-model.ts";
 import { Home } from "./components/home.tsx";
 import { type InboxTab, isInboxTab } from "./components/inbox/inbox-items.ts";
 import { InboxPage } from "./components/inbox/inbox-page.tsx";
@@ -26,8 +28,9 @@ import { OnboardingFirstHob } from "./components/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
-import { SettingsPage } from "./components/pages.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
+import { isSettingsSection } from "./components/settings/sections.ts";
+import { SettingsPage } from "./components/settings/settings-page.tsx";
 import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
 import { Summon } from "./components/summon/summon.tsx";
 import { parseStep, type SummonStep } from "./components/summon/summon-model.ts";
@@ -36,10 +39,7 @@ import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
 import type { WorkbenchSearch } from "./components/workbench/use-workbench.ts";
 import { isWorkbenchTab } from "./components/workbench/workbench-model.ts";
-import { readStored, writeStored } from "./lib/storage.ts";
 import { isUsagePeriod } from "./lib/usage.ts";
-
-const lastHobKey = "lastHob";
 
 const PAIR_PATH = "/pair";
 
@@ -146,16 +146,17 @@ const homeRoute = createRoute({
   component: Home,
 });
 
+// Your hobs: every hob as a card. `?show=` narrows it to the hobs that need you, work or rest.
 const hobsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs",
-  beforeLoad: async ({ context }) => {
-    const hobs = await context.queryClient.ensureQueryData(agentsQuery);
-    const remembered = readStored<string | null>(lastHobKey, null);
-    const target = hobs.find((h) => h.id === remembered) ?? hobs[0];
-    if (target) throw redirect({ to: "/hobs/$hobId", params: { hobId: target.id } });
+  validateSearch: (search: Record<string, unknown>): { show?: HobFilter | undefined } => ({
+    show: isHobFilter(search.show) && search.show !== "all" ? search.show : undefined,
+  }),
+  component: function YourHobs() {
+    const { show } = hobsRoute.useSearch();
+    return <HobsPage filter={show ?? "all"} />;
   },
-  component: () => <section className="grid flex-1 place-items-center text-label">No hobs yet.</section>,
 });
 
 // A hob's own page: its hero, its chats and its history. `?tab=history` opens History.
@@ -165,7 +166,6 @@ const hobRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { tab?: HobPageTab | undefined } => ({
     tab: isHobPageTab(search.tab) && search.tab !== "chats" ? search.tab : undefined,
   }),
-  beforeLoad: ({ params }) => writeStored(lastHobKey, params.hobId),
   component: function HobPageRoute() {
     const params = hobRoute.useParams();
     const { tab } = hobRoute.useSearch();
@@ -182,7 +182,6 @@ const hobRoute = createRoute({
 const newThreadRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId/new",
-  beforeLoad: ({ params }) => writeStored(lastHobKey, params.hobId),
   component: function NewThreadPage() {
     const params = newThreadRoute.useParams();
     return <HobsLayout hobId={AgentId.make(params.hobId)} />;
@@ -215,7 +214,6 @@ const threadRoute = createRoute({
     file: typeof search.file === "string" ? search.file : undefined,
     chat: search.chat === "open" ? "open" : undefined,
   }),
-  beforeLoad: ({ params }) => writeStored(lastHobKey, params.hobId),
   component: function ThreadPage() {
     const params = threadRoute.useParams();
     const { message, task, bench, tab, attempt, file, chat } = threadRoute.useSearch();
@@ -299,7 +297,24 @@ const usageRoute = createRoute({
     return <UsagePage days={days === 30 ? "30" : "7"} />;
   },
 });
-const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "settings", component: SettingsPage });
+// Settings opens on its overview; each section has its own address, such as `/settings/devices`.
+const settingsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "settings",
+  component: () => <SettingsPage section={null} />,
+});
+const settingsSectionRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "settings/$section",
+  // An unknown section opens the overview rather than an empty page.
+  beforeLoad: ({ params }) => {
+    if (!isSettingsSection(params.section)) throw redirect({ to: "/settings" });
+  },
+  component: function SettingsSectionPage() {
+    const { section } = settingsSectionRoute.useParams();
+    return <SettingsPage section={isSettingsSection(section) ? section : null} />;
+  },
+});
 // The Archive: archived chats across every hob and retired hobs (CH-009, AG-006). `?tab=hobs`
 // opens Retired hobs and `?hob=` narrows the archived chats to one hob.
 const archiveRoute = createRoute({
@@ -378,6 +393,7 @@ const routeTree = rootRoute.addChildren([
     inboxRoute,
     usageRoute,
     settingsRoute,
+    settingsSectionRoute,
     archiveRoute,
     archivedRoute,
     archivedHobRoute,

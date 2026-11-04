@@ -66,6 +66,23 @@ function Page({ hob, tab }: { hob: Agent; tab: HobPageTab }) {
 
   return (
     <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-6 pt-5 pb-12">
+      <nav
+        aria-label={copy.crumbs}
+        className="-mb-2 flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-label"
+      >
+        <Link
+          to="/hobs"
+          className="rounded-control px-1 py-0.5 text-text-secondary no-underline hover:bg-hover hover:text-text-strong"
+        >
+          {copy.yourHobs}
+        </Link>
+        <span aria-hidden className="opacity-60">
+          /
+        </span>
+        <span aria-current="page" title={hob.name} className="truncate text-text-strong">
+          {hob.name}
+        </span>
+      </nav>
       <HobHero hob={hob} state={state} stats={statsLine(hob, list.length)} doing={doingOf(state, list, activity)} />
       <div className="grid items-start gap-7 min-[1120px]:grid-cols-[minmax(0,1fr)_300px]">
         <Tabs value={tab} onValueChange={pick} className="min-w-0 gap-4">

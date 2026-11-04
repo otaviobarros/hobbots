@@ -5,9 +5,16 @@ import { messages } from "./messages.ts";
 
 const copy = messages;
 
-/** The Inbox's tabs: what needs you now, everything, and what was decided or expired. */
-export const INBOX_TABS = ["needs", "all", "history"] as const;
+/** The Inbox's tabs: what needs you now, and what was decided or expired. */
+export const INBOX_TABS = ["needs", "history"] as const;
 export type InboxTab = (typeof INBOX_TABS)[number];
+
+/** How Needs you lists what waits: grouped by quest, or as one list by urgency. */
+export const INBOX_VIEWS = ["quest", "urgency"] as const;
+export type InboxView = (typeof INBOX_VIEWS)[number];
+
+export const isInboxView = (value: unknown): value is InboxView =>
+  typeof value === "string" && (INBOX_VIEWS as ReadonlyArray<string>).includes(value);
 
 export const isInboxTab = (value: unknown): value is InboxTab =>
   typeof value === "string" && (INBOX_TABS as ReadonlyArray<string>).includes(value);
@@ -17,9 +24,9 @@ export const pendingCount = (approvals: ReadonlyArray<ApprovalRequest>): number 
   approvals.filter((approval) => approval.state === "pending").length;
 
 /**
- * The tab's requests. Needs you lists the pending ones oldest first, so the one asked first, which
- * expires first, leads; All lists the newest first and History the most recently decided first. `kept` names a request that stays
- * listed in Needs you after it is decided, so the one the user is looking at does not vanish.
+ * The tab's requests. Needs you lists the pending ones oldest first, and History the most recently
+ * decided first. `kept` names a request that stays listed in Needs you after it is decided, or that
+ * a link opens there once it is closed, so the one the user is looking at does not vanish.
  */
 export const tabRequests = (
   approvals: ReadonlyArray<ApprovalRequest>,
@@ -27,7 +34,6 @@ export const tabRequests = (
   kept?: string | undefined,
 ): Array<ApprovalRequest> => {
   if (tab === "needs") return approvals.filter((approval) => approval.state === "pending" || approval.id === kept);
-  if (tab === "all") return [...approvals].reverse();
   return approvals.filter((approval) => approval.state !== "pending").sort(byClosing);
 };
 

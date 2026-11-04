@@ -200,7 +200,7 @@ test("[TC-CH-093] a brain that cannot think says so in the chat, and Fix it open
   const banner = page.getByRole("region", { name: "Brain unavailable" });
   await expect(banner).toHaveText(/Pip can't think right now: Claude Code is signed out\./);
   await banner.getByRole("link", { name: "Fix it in Settings" }).click();
-  await expect(page).toHaveURL(/#\/settings#ai-providers$/);
+  await expect(page).toHaveURL(/#\/settings\/connections$/);
   await expect(page.getByRole("region", { name: "AI providers" })).toBeInViewport();
 });
 
