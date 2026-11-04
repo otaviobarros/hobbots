@@ -3,6 +3,7 @@ import { HOB_COLORS } from "@hobbots/art/look";
 import { type Agent, hobAppBot } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../api/client.ts";
@@ -111,6 +112,7 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
           </Button>
         </p>
       )}
+      {status.isPending && <WhoWaiting />}
       {status.data?._tag === "None" && (
         <NoApp
           hob={hob}
@@ -265,6 +267,19 @@ function You({ hob }: { hob: Agent }) {
     </div>
   );
 }
+
+/** Who the hob acts as, while the hub asks: a tile and two line blocks in the place of You. */
+const WhoWaiting = () => (
+  <div className="flex items-center gap-3">
+    <Skeleton shape="dot" surface="card" className="size-9" />
+    <span className="flex min-w-0 flex-1 flex-col">
+      <Skeleton surface="card" width="12ch" />
+      <span className="text-detail">
+        <Skeleton surface="card" width="36ch" />
+      </span>
+    </span>
+  </div>
+);
 
 function NoApp({
   hob,

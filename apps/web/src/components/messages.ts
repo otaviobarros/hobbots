@@ -188,7 +188,6 @@ export const messages = {
     retry: "Try again",
   },
   profile: {
-    loading: "Loading…",
     missing: "This hob is not here",
     missingNote: "It may have retired. Retired hobs live in the Archive.",
     landmark: ({ name }: { name: string }) => `${name}'s profile`,
@@ -570,6 +569,9 @@ export const messages = {
     github: {
       name: "GitHub",
       card: "GitHub Charm",
+      checking: "Checking GitHub…",
+      slow: "GitHub is slow to answer. Your hobs keep working.",
+      retry: "Try again",
       state: {
         off: "Off",
         on: "On",
@@ -934,7 +936,6 @@ export const messages = {
   permissions: {
     loadFailed: ({ name }: { name: string }) => `Hobbots could not read what ${name} may do.`,
     tryAgain: "Try again",
-    loading: "Loading…",
     noShared: "No shared folders yet.",
     addInSettings: "Add them in Settings",
     sharedFolders: "Shared folders",

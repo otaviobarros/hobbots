@@ -3,6 +3,7 @@ import { type Agent, type AgentId, type RetireWork, starterRole } from "@hobbots
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -69,32 +70,78 @@ export function HobProfile({ hobId }: { hobId: AgentId }) {
   const [retired, setRetired] = useState<Retired | null>(null);
   const current = hob.data ?? retired?.hob ?? leaving;
 
+  if (!current && hob.isPending) return <ProfileWaiting hobId={hobId} />;
   if (!current) {
     return (
       <main className="grid flex-1 place-items-center">
-        {hob.isPending ? (
-          <span className="text-label">{messages.profile.loading}</span>
-        ) : (
-          <div className="flex flex-col items-center gap-3 text-center">
-            <span className="font-heading text-heading font-bold text-moonlight">{messages.profile.missing}</span>
-            <span className="text-text-secondary">{messages.profile.missingNote}</span>
-            <div className="flex gap-2.5">
-              <Button asChild variant="outline">
-                <Link to="/archive" search={{ tab: "hobs" }}>
-                  {messages.profile.retire.archived}
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link to="/">{messages.profile.retire.home}</Link>
-              </Button>
-            </div>
+        <div className="flex flex-col items-center gap-3 text-center">
+          <span className="font-heading text-heading font-bold text-moonlight">{messages.profile.missing}</span>
+          <span className="text-text-secondary">{messages.profile.missingNote}</span>
+          <div className="flex gap-2.5">
+            <Button asChild variant="outline">
+              <Link to="/archive" search={{ tab: "hobs" }}>
+                {messages.profile.retire.archived}
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/">{messages.profile.retire.home}</Link>
+            </Button>
           </div>
-        )}
+        </div>
       </main>
     );
   }
   return <Profile hob={current} retired={retired} onRetiring={setLeaving} onRetired={setRetired} />;
 }
+
+/**
+ * The profile while the hob list is read for the first time (Patterns › Loading): the header in its
+ * place, with a tile and line blocks for the hob's look, name and role, and the tabs. Coming from
+ * the sidebar or a hob's page, the list is already there and the real header shows at once.
+ */
+function ProfileWaiting({ hobId }: { hobId: AgentId }) {
+  return (
+    <main aria-busy="true" className="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-[820px] flex-col gap-4.5 px-10 pt-7 pb-6">
+        <header className="flex flex-wrap items-end gap-4 rounded-card bg-card px-5 pt-5 pb-6">
+          <span className="flex size-22 flex-none items-end justify-center">
+            <Skeleton shape="tile" surface="card" className="size-14" />
+          </span>
+          <span className="flex min-w-0 flex-[1_1_240px] flex-col gap-0.5">
+            <span className="font-heading text-heading">
+              <Skeleton surface="card" width="8ch" />
+            </span>
+            <span className="text-ui">
+              <Skeleton surface="card" width="24ch" />
+            </span>
+          </span>
+          <span className="flex flex-none items-center gap-2">
+            <Button asChild>
+              <Link to="/hobs/$hobId/new" params={{ hobId }}>
+                {messages.profile.openChat}
+              </Link>
+            </Button>
+            <Skeleton shape="control" surface="card" className="h-[38px] w-[46px]" />
+          </span>
+        </header>
+        <Tabs value="profile">
+          <ProfileTabs disabled />
+        </Tabs>
+      </div>
+    </main>
+  );
+}
+
+/** The profile's tabs, disabled while the hob list is read. */
+const ProfileTabs = ({ disabled }: { disabled: boolean }) => (
+  <TabsList aria-label={messages.profile.tabs}>
+    {TABS.map(([id, label]) => (
+      <TabsTrigger key={id} value={id} disabled={disabled} className="px-[18px]">
+        {label}
+      </TabsTrigger>
+    ))}
+  </TabsList>
+);
 
 /** A hob the profile retired, with the choice made and whether it had replies running. */
 interface Retired {
@@ -144,13 +191,7 @@ function Profile({
           }}
           className="flex flex-col gap-4.5"
         >
-          <TabsList aria-label={messages.profile.tabs}>
-            {TABS.map(([id, label]) => (
-              <TabsTrigger key={id} value={id} className="px-[18px]">
-                {label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          <ProfileTabs disabled={false} />
           {/* Kept mounted, so looking at another tab never drops unsaved edits. */}
           <TabsContent value="profile" forceMount className="data-[state=inactive]:hidden">
             <ProfileTab

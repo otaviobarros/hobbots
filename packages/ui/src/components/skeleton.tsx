@@ -19,6 +19,11 @@ const skeletonVariants = cva("shrink-0 rounded-tag", {
       tile: "block rounded-tile",
       // A meter's empty track, the same as Progress before it fills: line-2 on every surface.
       bar: "block w-full rounded-dot",
+      // A control that waits on its value, such as a segmented control or a menu button. Its size
+      // comes from the caller, such as h-[30px] w-[210px].
+      control: "block rounded-control",
+      // A switch, or a round mark such as an account's initial. Its size comes from the caller.
+      dot: "block rounded-dot",
     },
     // The fill: line on ground and panel, line-2 on card, where line would not show.
     surface: {
@@ -58,8 +63,8 @@ const textFillVariants = cva("block h-3/5 w-full rounded-tag", {
 
 /**
  * Holds the place of a value that is still loading. Give `text` and `block` the value's likely
- * length as `width`, such as `12ch`, so the line does not move when the value lands. A `tile` or a
- * `bar` takes its size from the layout. The block is hidden from assistive technology: the region
+ * length as `width`, such as `12ch`, so the line does not move when the value lands. A `tile`, a
+ * `bar`, a `control` or a `dot` takes its size from the layout. The block is hidden from assistive technology: the region
  * around it carries `aria-busy` while it loads.
  */
 function Skeleton({
