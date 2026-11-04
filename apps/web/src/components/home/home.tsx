@@ -132,7 +132,7 @@ function Sky() {
         className="absolute inset-0 bg-linear-to-r from-scene-sky/82 from-0% via-scene-sky/55 via-32% to-transparent to-55%"
       />
       <div aria-hidden className="hidden dark:contents">
-        <Stars count={16} height={100} className="bg-moonlight" />
+        <Stars count={16} height={100} tone="moonlight" />
       </div>
       <div
         aria-hidden
