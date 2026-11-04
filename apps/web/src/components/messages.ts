@@ -7,7 +7,6 @@ import { formatCount, plural as pluralForm } from "../lib/format.ts";
 /** Evidence from the hub as a sentence, ending with one period. */
 const sentence = (text: string) => text.replace(/\.?$/, ".");
 
-
 export const messages = {
   providers: {
     names: { "claude-code": "Claude", codex: "Codex" },
