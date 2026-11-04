@@ -29,8 +29,19 @@ const TONE: Record<ApprovalState, { readonly ring: string; readonly text: string
  * it acts on, who asked, why the policy asks now, the risk and when it expires, with Allow once,
  * Always for this site with the rule it saves, and Deny with an optional reason. It follows the durable request, so a decision made elsewhere or an expiry shows
  * here as it happens. `via` names where it shows, the chat or the Inbox, which a decision records.
+ * With `keys`, A and D decide it from anywhere on the page, as in the Inbox.
  */
-export function ApprovalCard({ approval, hob, via }: { approval: ApprovalRequest; hob: Agent; via: ApprovalSurface }) {
+export function ApprovalCard({
+  approval,
+  hob,
+  via,
+  keys = false,
+}: {
+  approval: ApprovalRequest;
+  hob: Agent;
+  via: ApprovalSurface;
+  keys?: boolean;
+}) {
   const tone = TONE[approval.state];
   const pending = approval.state === "pending";
   const decide = useDecideApproval(approval, via);
@@ -74,6 +85,7 @@ export function ApprovalCard({ approval, hob, via }: { approval: ApprovalRequest
           hob={hob}
           pending={decide.isPending}
           onDecide={(decision) => decide.mutate(decision)}
+          keys={keys}
         />
       )}
       {/* One live region for the card's whole life, so a screen reader hears each change to it. */}

@@ -126,6 +126,14 @@ export const messages = {
     loading: "Reading the questions for you…",
     loadFailed: "Hobbots could not read the questions for you.",
   },
+  /** The keycaps under the list in Needs you. */
+  keys: {
+    hints: [
+      { keys: ["↑", "↓"], does: "move" },
+      { keys: ["A"], does: "allow once" },
+      { keys: ["D"], does: "deny" },
+    ],
+  },
   sidebar: ({ count }: { count: number }) => `Inbox, ${formatCount(count)} waiting on you`,
   count: ({ count }: { count: number }) => formatCount(count),
 } as const;

@@ -6,7 +6,8 @@ import { createContext, type ReactNode, useContext, useEffect, useEffectEvent, u
 import { useArchiveThread, useUndoArchive } from "../../api/archive.ts";
 import { ApiError } from "../../api/client.ts";
 import { queryKeys } from "../../api/queries.ts";
-import { type ArchiveBlock, isArchiveKey, isTextField, isUndoKey, nextThread } from "./archive-rules.ts";
+import { isTextField } from "../../lib/page-keys.ts";
+import { type ArchiveBlock, isArchiveKey, isUndoKey, nextThread } from "./archive-rules.ts";
 import { ArchiveToast } from "./archive-toast.tsx";
 import { useArchiveBlock } from "./use-archive-block.ts";
 
