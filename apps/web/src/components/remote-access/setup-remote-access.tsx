@@ -115,6 +115,13 @@ export function SetupRemoteAccess() {
               </span>
             </div>
             <div className="flex items-center gap-4 border-b-2 border-line py-3">
+              <Switch
+                aria-labelledby={labelId}
+                aria-describedby={noteId}
+                checked={on}
+                disabled={change.isPending}
+                onCheckedChange={(enabled) => change.mutate({ enabled })}
+              />
               <span className="flex flex-1 flex-col gap-0.5">
                 <span id={labelId} className="font-bold">
                   {copy.switchLabel}
@@ -123,13 +130,6 @@ export function SetupRemoteAccess() {
                   {copy.switchNote}
                 </span>
               </span>
-              <Switch
-                aria-labelledby={labelId}
-                aria-describedby={noteId}
-                checked={on}
-                disabled={change.isPending}
-                onCheckedChange={(enabled) => change.mutate({ enabled })}
-              />
             </div>
             {status.enabled && <RemoteAccessOn status={status} />}
           </div>

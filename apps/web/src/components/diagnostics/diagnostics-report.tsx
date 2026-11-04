@@ -77,11 +77,11 @@ export function DiagnosticsReportMaker({ questId }: { questId: QuestId | null })
       <span className="lbl pt-2 text-label">{copy.heading}</span>
       <p className="m-0 text-sm text-text-secondary">{copy.note}</p>
       <div className="flex items-center gap-3">
+        <Switch aria-labelledby={titlesId} checked={includeTitles} onCheckedChange={changeTitles} />
         <span className="flex flex-1 flex-col">
           <span id={titlesId}>{copy.includeTitles}</span>
           <span className="text-xs text-text-secondary">{copy.includeTitlesNote}</span>
         </span>
-        <Switch aria-labelledby={titlesId} checked={includeTitles} onCheckedChange={changeTitles} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={make} disabled={making}>

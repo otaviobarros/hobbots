@@ -521,6 +521,36 @@
         "use": "Text on a rose fill."
       },
       {
+        "text": "mint",
+        "on": "line",
+        "floor": 4.5,
+        "use": "Working and Running tags."
+      },
+      {
+        "text": "text-secondary",
+        "on": "line",
+        "floor": 4.5,
+        "use": "Done and quiet tags."
+      },
+      {
+        "text": "text-secondary",
+        "on": "line-2",
+        "floor": 4.5,
+        "use": "Waiting, Resting and Cancelled tags."
+      },
+      {
+        "text": "text-strong",
+        "on": "line-2",
+        "floor": 4.5,
+        "use": "Queued tags."
+      },
+      {
+        "text": "label",
+        "on": "line",
+        "floor": 4.5,
+        "use": "Later tags."
+      },
+      {
         "text": "control",
         "on": "ground",
         "floor": 3,

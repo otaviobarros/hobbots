@@ -53,7 +53,7 @@ The 12:1 floor for `text` is measured on `ground` only. Reading text means hob r
 | `control` | 3:1 | 4.1 | 3.5 | 4.3 | 3.5 |
 | `focus-ring` | 3:1 | 10.1 | 5.1 | 14.9 | 7.2 |
 
-`on-lantern` on a `lantern` fill and `on-rose` on a `rose` fill are 6.2:1 or more in every theme.
+`on-lantern` on a `lantern` fill and `on-rose` on a `rose` fill are 6.2:1 or more in every theme. Status tags add their own pairs (`mint` on `line`, `text-secondary` on `line` and `line-2`, `text-strong` on `line-2`, `label` on `line`), each at 4.5:1.
 
 ## Type and spacing
 

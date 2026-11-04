@@ -127,18 +127,18 @@ export function RemoteAccessSettings() {
     <>
       <p className="m-0 text-text-secondary">{copy.intro}</p>
       <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
-        <div className="flex flex-1 flex-col gap-0.5">
-          <span id={labelId} className="font-bold">
-            {copy.switchLabel}
-          </span>
-          <span className="text-[13px] text-text-secondary">{on ? copy.onNote : copy.offNote}</span>
-        </div>
         <Switch
           aria-labelledby={labelId}
           checked={on}
           disabled={!status || change.isPending}
           onCheckedChange={(enabled) => change.mutate({ enabled })}
         />
+        <div className="flex flex-1 flex-col gap-0.5">
+          <span id={labelId} className="font-bold">
+            {copy.switchLabel}
+          </span>
+          <span className="text-[13px] text-text-secondary">{on ? copy.onNote : copy.offNote}</span>
+        </div>
       </div>
       {notReady !== null && (
         <p className="m-0 flex items-start gap-2 text-sm">
