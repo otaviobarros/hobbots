@@ -31,7 +31,7 @@ type MenuItem = ComponentType<{
  * Archive thread, as a menu item. While the thread cannot be archived it stays in the menu,
  * disabled, and reads its reason. `current` shows the shortcut, which acts on the open thread.
  */
-function ArchiveItem({
+export function ArchiveItem({
   Item,
   hob,
   thread,
