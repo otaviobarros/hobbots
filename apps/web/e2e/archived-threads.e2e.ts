@@ -157,7 +157,8 @@ test("[TC-CH-161] restoring the last archived thread from the Archive leaves the
 test("[TC-CH-162] ⌘K marks an archived thread and opens it read-only", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
   await page.goto(`${current.url}/#/hobs/${hob.id}`);
-
+  // ⌘K listens once the page is up.
+  await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   const finder = page.getByRole("dialog", { name: "Jump anywhere" });
   await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("newsletter");

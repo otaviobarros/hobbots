@@ -72,7 +72,8 @@ const hubWithHistory = async () => {
 test("[TC-CH-065] a word from an old message finds its thread with ⌘K and opens it at the match", async ({ page }) => {
   const { current, hob, old, recent } = await hubWithHistory();
   await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${recent.id}`);
-
+  // ⌘K listens once the page is up.
+  await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   const finder = page.getByRole("dialog", { name: "Jump anywhere" });
   await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("lantern");
@@ -112,6 +113,7 @@ test("[TC-CH-069] a reply streaming into the thread keeps the search match in vi
   // A long reply starts streaming into the old thread, a word every 40 ms, for several seconds.
   await api(current, "POST", `/threads/${old.id}/messages`, { content: "more ".repeat(150) });
 
+  await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   const finder = page.getByRole("dialog", { name: "Jump anywhere" });
   await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("lantern");

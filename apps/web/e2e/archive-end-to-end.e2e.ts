@@ -95,6 +95,8 @@ test("[TC-CH-157] a thread archived from its menu is found in the Archive and in
 
   // Found by search too, marked archived, and it opens read-only from there.
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
+  // ⌘K listens once the page is up.
+  await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   const finder = page.getByRole("dialog", { name: "Jump anywhere" });
   await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("newsletter");
