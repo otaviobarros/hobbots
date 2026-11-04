@@ -136,7 +136,7 @@ const planAt = async (page: Page, session: number, week: number) => {
 };
 
 // covers OP-002
-test("[TC-OP-075] a plan warns when it runs low and says when paused hobs come back", async ({ page }) => {
+test("[TC-OP-076] a plan warns when it runs low and says when paused hobs come back", async ({ page }) => {
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
 
