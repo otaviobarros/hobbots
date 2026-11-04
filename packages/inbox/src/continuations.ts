@@ -159,7 +159,7 @@ export const arrivalsText = (items: ReadonlyArray<BackpackItem>, as: "prompt" | 
     ...digestSection(progress, work.length === 0),
     "",
     as === "prompt"
-      ? "Act on it now. When the Task you work on in this conversation is done, return its result with complete_task, and tell the user in one short summary what was made, where it is and who did what. Otherwise write to the user only for a question no lead can answer: end your turn without a message, even after you act."
+      ? "Act on it now. When the Task you work on in this conversation is done, return its result with complete_task and give the finish. Otherwise end your turn without a message, unless a question needs the user."
       : work.length === 0
         ? "Answer the user's message. Use this progress only as context."
         : "Answer the user's message first, then act on this work.",

@@ -234,9 +234,8 @@ describe("which thread a backpack item continues", () => {
     const result = item(FRODO, "pass", "result", { _tag: "result", task: step, artifacts: [] });
     const prompt = arrivalsText([result], "prompt");
     expect(prompt.startsWith(CONTINUATION_HEADER)).toBe(true);
-    expect(prompt).toContain("write to the user only for a question no lead can answer");
-    expect(prompt).toContain("end your turn without a message, even after you act");
-    expect(prompt).toContain("one short summary what was made, where it is and who did what");
+    expect(prompt).toContain("return its result with complete_task and give the finish");
+    expect(prompt).toContain("Otherwise end your turn without a message, unless a question needs the user.");
     expect(prompt).not.toContain("Tell the user briefly what changed");
   });
 

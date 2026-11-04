@@ -20,10 +20,10 @@ export const CHECKPOINT_WORDS = 8;
  * can answer, and the finish. Briefings and tool descriptions carry the same words.
  */
 export const LEAN_CHAT_RULE =
-  "In the user's chat, write only the plan when the work starts, a question no lead can answer, and the finish. Between those, stay quiet: end a turn without a message, even after you act. Say more only when the user writes to you.";
+  "In the chat, write only the plan, a question no lead can answer and the finish; otherwise end your turn without a message, until the user writes.";
 
 /** What a lead's finish says (#901). */
-export const FINISH_RULE = "Finish with one short summary: what was made, where it is, and who did what.";
+export const FINISH_RULE = "The finish says in short what was made, where it is and who did what.";
 
 const text = (description: string) => Schema.String.check(Schema.isNonEmpty()).annotate({ description });
 const id = (description: string) => Schema.String.check(Schema.isNonEmpty()).annotate({ description });

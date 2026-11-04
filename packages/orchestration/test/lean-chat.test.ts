@@ -89,10 +89,9 @@ describe("short checkpoints and a lean chat", () => {
     const briefing = ownerBriefing(campaign, tree(copy));
     expect(briefing).toContain(LEAN_CHAT_RULE);
     expect(briefing).toContain(FINISH_RULE);
-    expect(LEAN_CHAT_RULE).toContain("the plan when the work starts, a question no lead can answer, and the finish");
-    expect(LEAN_CHAT_RULE).toContain("end a turn without a message");
-    expect(LEAN_CHAT_RULE).toContain("Say more only when the user writes to you");
-    expect(FINISH_RULE).toContain("what was made, where it is, and who did what");
+    expect(LEAN_CHAT_RULE).toContain("write only the plan, a question no lead can answer and the finish");
+    expect(LEAN_CHAT_RULE).toContain("otherwise end your turn without a message, until the user writes");
+    expect(FINISH_RULE).toContain("what was made, where it is and who did what");
   });
 
   it("never tells a member, which has no chat, how to write in one", () => {
