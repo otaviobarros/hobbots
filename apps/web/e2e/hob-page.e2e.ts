@@ -67,7 +67,7 @@ test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a Hi
   // History is a tab in the URL, so Back returns to Chats.
   await main.getByRole("tab", { name: "History" }).click();
   await expect(page).toHaveURL(/\?tab=history$/);
-  await expect(main.getByRole("tabpanel")).toContainText("History is on its way");
+  await expect(main.getByRole("tabpanel")).toContainText("Nothing yet.");
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await expect(main.getByRole("tab", { name: /^Chats/ })).toHaveAttribute("aria-selected", "true");
 
