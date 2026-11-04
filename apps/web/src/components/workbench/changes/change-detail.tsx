@@ -2,7 +2,7 @@ import type { AttemptActivity, FileChange } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { useState } from "react";
-import { formatBytes } from "../../../lib/reply-steps.ts";
+import { formatBytes } from "../../../lib/format.ts";
 import type { HobLookup } from "../../quest/use-work.ts";
 import { changeShow, fileKindLabel, sharedHobs, splitPath } from "./changes-model.ts";
 import { CodeDiffView } from "./code-diff-view.tsx";

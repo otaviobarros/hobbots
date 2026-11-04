@@ -22,7 +22,7 @@ import { setupQuery } from "../../api/setup.ts";
 import { openSummonDraft, summonProblem } from "../../api/summon.ts";
 import { motionReduced } from "../../lib/motion.ts";
 import { readyProviders } from "../../lib/providers.ts";
-import { useSettledBrain, useSettledRuntime } from "../hob-form.tsx";
+import { useSettledBrain, useSettledRuntime } from "../hob-form/hob-form.tsx";
 import { messages as shared } from "../messages.ts";
 import { LookStep } from "./look-step.tsx";
 import { messages } from "./messages.ts";

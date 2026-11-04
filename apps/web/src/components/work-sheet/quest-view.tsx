@@ -5,7 +5,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { formatWhen } from "../../lib/time.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import {
   type RoomRow,
   roomRows,

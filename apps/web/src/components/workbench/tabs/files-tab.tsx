@@ -4,7 +4,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { attemptFilesQuery, taskFileUrl } from "../../../api/workbench.ts";
-import { formatBytes } from "../../../lib/reply-steps.ts";
+import { formatBytes } from "../../../lib/format.ts";
 import { changePath, leavesFile } from "../changes/changes-model.ts";
 import { FilePicker } from "../file-picker.tsx";
 import { FilePreview } from "../files/file-preview.tsx";

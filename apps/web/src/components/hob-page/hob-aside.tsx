@@ -9,7 +9,7 @@ import { type LedQuest, ledQuests } from "../../lib/led-quests.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
 import { useHobWaiting } from "../backpack/use-hob-waiting.ts";
 import { WaitingList } from "../backpack/waiting-list.tsx";
-import { useHobPermissions } from "../hob-permissions.tsx";
+import { useHobPermissions } from "../hob-profile/hob-permissions.tsx";
 import { QuestLink } from "../quest-work/quest-link.tsx";
 import { messages } from "./messages.ts";
 

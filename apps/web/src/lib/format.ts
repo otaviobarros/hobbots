@@ -101,3 +101,34 @@ export const formatDuration = (ms: number, locale?: string): string => {
   if (seconds < 3600) return twoUnits(seconds, 60, "minute", "second", locale);
   return twoUnits(Math.floor(seconds / 60), 60, "hour", "minute", locale);
 };
+
+const UNITS = [
+  { unit: "byte", size: 1 },
+  { unit: "kilobyte", size: 1024 },
+  { unit: "megabyte", size: 1024 * 1024 },
+  { unit: "gigabyte", size: 1024 * 1024 * 1024 },
+] as const;
+
+/** A size in the reader's locale, in the largest unit that keeps it at 1 or more: "12 kB", "3.4 MB". */
+export const formatBytes = (bytes: number, locale?: string): string => {
+  const { unit, size } = UNITS.findLast((candidate) => bytes >= candidate.size) ?? UNITS[0];
+  return new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit,
+    unitDisplay: "short",
+    maximumFractionDigits: unit === "byte" ? 0 : 1,
+  }).format(bytes / size);
+};
+
+/** A day of the month in the reader's locale: "Oct 2". */
+export const formatMonthDay = (date: Date, locale?: string): string =>
+  new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(date);
+
+/** A weekday and date in the reader's locale, with the year when asked: "Sun, Nov 1", "Tue, Dec 30, 2025". */
+export const formatWeekdayDate = (date: Date, withYear: boolean, locale?: string): string =>
+  new Intl.DateTimeFormat(locale, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(withYear ? { year: "numeric" } : {}),
+  }).format(date);

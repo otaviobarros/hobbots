@@ -81,7 +81,7 @@ Feature components in `apps/web` do not accept a `className` prop. The primitive
 - ✅ `<Button className="ms-auto" variant="ghost">`
 - ❌ `<Button className="bg-rose px-6 text-[13px]">`
 - **Why:** a screen that cannot restyle a component cannot drift from the design system.
-- **Enforced by:** a GritQL plugin that fails on a non-layout class passed to a primitive, and the frontend check, which fails on a feature component with a `className` prop.
+- **Enforced by:** the frontend check in `pnpm check`. It fails on a `className` passed to a component imported from `@hobbots/ui/components/*` that holds a class other than margin, width and height, flex and grid placement, position, inset, translate, z-index or `hidden`, and on a feature component in `apps/web` whose props have a `className`. It reads the imports, so it knows which elements are primitives. Code that broke the rule when the check was turned on sits in the frontend baseline until its looks move into variants.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-UI-011 Visual variants come from cva

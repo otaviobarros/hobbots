@@ -1,7 +1,7 @@
 import type { ApprovalRequest } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { formatWhen } from "../../lib/time.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { StandingRules } from "../standing-rules/standing-rules.tsx";
 import { deciderText, requestTitle, verdictText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";

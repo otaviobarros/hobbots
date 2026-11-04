@@ -5,7 +5,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { useAnswerQuestion } from "../../api/questions.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { enterSends } from "./enter-sends.ts";
 import { messages } from "./messages.ts";
 import type { HobLookup } from "./use-work.ts";

@@ -9,7 +9,7 @@ import { formatDay } from "../../lib/time.ts";
 import { useCopy } from "../../lib/use-copy.ts";
 import { messages as archiveMessages } from "../archive-page/messages.ts";
 import { BackupSettings } from "../backup/backup-settings.tsx";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { SettingsGroup } from "./settings-group.tsx";
 

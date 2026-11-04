@@ -6,7 +6,7 @@ import { Link } from "@tanstack/react-router";
 import { runtimesQuery } from "../../api/queries.ts";
 import { PROVIDER_NAMES } from "../../lib/providers.ts";
 import { useCopy } from "../../lib/use-copy.ts";
-import { providerFix } from "../provider-fix.tsx";
+import { providerFix } from "../providers/provider-fix.tsx";
 import { messages as settingsMessages } from "../settings/messages.ts";
 import { messages } from "./messages.ts";
 

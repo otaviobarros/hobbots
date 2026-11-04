@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   formatAgo,
+  formatBytes,
   formatCompact,
   formatCount,
   formatDuration,
   formatIn,
   formatMoment,
   formatMoney,
+  formatMonthDay,
   formatPercent,
+  formatWeekdayDate,
   plural,
 } from "./format.ts";
 
@@ -54,5 +57,18 @@ describe("format", () => {
 
   it("names a moment by its day and time", () => {
     expect(formatMoment("2026-11-03T12:00:00.000Z", "en-US")).toMatch(/^Nov [34], 2026, \d{1,2}:\d{2}\s?[AP]M$/);
+  });
+
+  it("names a size in the largest unit that keeps it at 1 or more", () => {
+    expect(formatBytes(512, "en-US")).toBe("512 byte");
+    expect(formatBytes(16 * 1024, "en-US")).toBe("16 kB");
+    expect(formatBytes(3.45 * 1024 * 1024, "en-US")).toBe("3.5 MB");
+    expect(formatBytes(2.5 * 1024 * 1024 * 1024, "en-US")).toBe("2.5 GB");
+  });
+
+  it("names a day of the month, and a weekday with or without the year", () => {
+    expect(formatMonthDay(new Date(2026, 9, 2), "en-US")).toBe("Oct 2");
+    expect(formatWeekdayDate(new Date(2026, 10, 1), false, "en-US")).toBe("Sun, Nov 1");
+    expect(formatWeekdayDate(new Date(2025, 11, 30), true, "en-US")).toBe("Tue, Dec 30, 2025");
   });
 });

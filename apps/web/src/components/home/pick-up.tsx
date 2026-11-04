@@ -7,7 +7,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { ActivityMap } from "../../api/activity.ts";
 import type { QuestInProgress } from "../../lib/quest-work.ts";
 import { formatWhen } from "../../lib/time.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { QuestLink } from "../quest-work/quest-link.tsx";
 import { type PickUpRow, pickUpRows, questProgress } from "./home-model.ts";
 import { messages } from "./messages.ts";

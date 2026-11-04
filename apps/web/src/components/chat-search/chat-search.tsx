@@ -3,7 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { formatWhen } from "../../lib/time.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { findInChat, MIN_QUERY } from "./chat-search-model.ts";
 import { messages } from "./messages.ts";
 

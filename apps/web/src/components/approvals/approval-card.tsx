@@ -9,7 +9,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useEffect, useRef } from "react";
 import { useDecideApproval } from "../../api/approvals.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
 import { ApprovalActions } from "./approval-actions.tsx";
 import { decisionErrorText, expiryText, resultText } from "./approval-text.ts";

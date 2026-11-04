@@ -12,7 +12,7 @@ import { usePromptedDevices } from "../../api/pairing.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
 import { readStored, writeStored } from "../../lib/storage.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
-import { Stars } from "../scene.tsx";
+import { Stars } from "../scene/scene.tsx";
 import { EntryDetail } from "./inbox-detail.tsx";
 import { entryAsker, type InboxEntry, namesRequest, needsEntries, selectedEntry } from "./inbox-entries.ts";
 import { InboxHistory } from "./inbox-history.tsx";
