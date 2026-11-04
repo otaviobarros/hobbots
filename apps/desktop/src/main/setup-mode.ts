@@ -90,7 +90,7 @@ export const startSetup = async (
         pairing?.abort();
         return handOver(() => {
           chooseMode(settings, { mode: "hub" });
-          return next.startHub("/setup/remote");
+          return next.startHub("/setup/providers");
         });
       },
       findHubs: () => listHubs(computer().tailnet),

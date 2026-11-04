@@ -73,7 +73,7 @@ export function OnboardingReady() {
     void wait(motionReduced() ? 0 : SUMMONING_MS).then(() => setRitual("arrived"));
   };
 
-  const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/folders" }));
+  const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/remote" }));
   const name = draft.name.trim() || shared.firstHob.yourHob;
   const model = models.data?.models.find((m) => m.id === draft.model);
   const failed = ritual === "idle" && (create.isError || update.isError);
@@ -162,7 +162,7 @@ function ReadyToSummon({
 }
 
 /** What setup has settled so far, for the guide beside the step. */
-const soFar = (setup: InstallationSetup | undefined, draft: FirstHobDraft): ReadonlyArray<string> => [
+export const soFar = (setup: InstallationSetup | undefined, draft: FirstHobDraft): ReadonlyArray<string> => [
   ...connectedLines(setup?.connectedProviders),
   shared.hobOn({ hob: hobLine(draft), provider: PROVIDER_NAMES[draft.runtime] }),
   ...(setup

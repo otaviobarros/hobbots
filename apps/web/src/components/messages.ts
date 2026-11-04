@@ -854,9 +854,8 @@ export const messages = {
     saveFailed: "Hobbots could not save that. Try again in a moment.",
   },
   remoteSetup: {
-    stage: "This computer",
-    eyebrow: "Optional",
-    title: "Use Hobbots from your other devices too?",
+    eyebrow: "Optional extra",
+    title: "Use Hobbots on your phone too?",
     intro:
       "Open your hobs from your laptop or any browser on your own Tailscale network. Each new device asks you before it can join. Turn this on or off any time in Settings › Devices.",
     connected: "Tailscale is connected",

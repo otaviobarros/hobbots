@@ -146,13 +146,13 @@ export function ElderAside({ stage, speech }: { stage: string; speech: string })
 
 /**
  * Where Hobbots runs on the hub's own pages, the first step of setup once this computer is the hub.
- * Running here leads to the optional remote access step. A hub does not become a connected desktop
+ * Running here leads to Your AI. A hub does not become a connected desktop
  * (ADR 025), so Connect only says where to choose it: in the app on the other computer.
  */
 export function WhereHobbotsRuns() {
   return (
     <WhereLayout>
-      <Link to="/setup/remote" className={choiceOpenClass}>
+      <Link to="/setup/providers" className={choiceOpenClass}>
         <RunHereChoice />
       </Link>
       <div className={`${choiceClass} border-line opacity-70`}>
