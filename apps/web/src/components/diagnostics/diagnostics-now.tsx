@@ -66,7 +66,7 @@ export function DiagnosticsNowView({
         ))}
       </ul>
       <ul aria-label={copy.stalled} className="m-0 flex list-none flex-col p-0">
-        {now.stalled.length === 0 && <li className="text-sm text-secondary-text">{copy.noStalled}</li>}
+        {now.stalled.length === 0 && <li className="text-sm text-text-secondary">{copy.noStalled}</li>}
         {now.stalled.map((stalled) => (
           <StalledRow
             key={`${stalled.kind}:${stalled.itemId ?? stalled.attemptId}`}
@@ -78,7 +78,7 @@ export function DiagnosticsNowView({
       </ul>
       <ul aria-label={copy.recovery} className="m-0 flex list-none flex-col p-0">
         {now.recovery.length === 0 && (
-          <li className="text-sm text-secondary-text">{copy.recovered({ when: formatAgo(now.startedAt) })}</li>
+          <li className="text-sm text-text-secondary">{copy.recovered({ when: formatAgo(now.startedAt) })}</li>
         )}
         {now.recovery.map((error) => (
           <li key={`${error.step}:${error.attemptId ?? error.taskId}:${error.at}`} className="text-sm text-rose">

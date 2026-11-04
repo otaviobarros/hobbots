@@ -114,8 +114,8 @@ export function SearchResults({ query, onOpen }: { query: string; onOpen: () => 
           {...resultLink(result)}
           onClick={onOpen}
           className={cn(
-            "hop-on-hover cut flex w-full animate-hb-in items-start gap-2.5 px-2 py-[7px] text-text no-underline",
-            "hover:bg-hover hover:text-text",
+            "hop-on-hover cut flex w-full animate-hb-in items-start gap-2.5 px-2 py-[7px] text-text-strong no-underline",
+            "hover:bg-hover hover:text-text-strong",
           )}
         >
           <span className="mt-0.5 flex-none">
@@ -126,14 +126,14 @@ export function SearchResults({ query, onOpen }: { query: string; onOpen: () => 
               {result.kind === "hob" ? result.hob.name : result.hit.thread.title}
               <ArchivedTag result={result} />
             </span>
-            <span className="line-clamp-2 text-xs text-secondary-text">
+            <span className="line-clamp-2 text-xs text-text-secondary">
               <ResultDetail result={result} />
             </span>
           </span>
         </Link>
       ))}
       {!pending && !error && results.length === 0 && (
-        <p className="m-0 px-2 text-sm text-secondary-text">{copy.nothing({ query: query.trim() })}</p>
+        <p className="m-0 px-2 text-sm text-text-secondary">{copy.nothing({ query: query.trim() })}</p>
       )}
     </div>
   );

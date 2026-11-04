@@ -116,15 +116,15 @@ export function Home() {
           <h1 className={cn("m-0 font-pixel font-bold text-moonlight", many ? "text-[28px]" : "text-[34px]")}>
             {greeting()}
           </h1>
-          <p className={cn("m-0 leading-normal", many ? "text-secondary-text" : "text-[17px]")}>
+          <p className={cn("m-0 leading-normal", many ? "text-text-secondary" : "text-[17px]")}>
             {summary(crew.length, busy, paused, hall, crew[0]?.hob)}
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             {chip("working", `${busy} working`, busy > 0 ? "text-mint" : "")}
             {chip("needs-you", `${count("needs-you")} need you`, "text-lantern")}
             {count("waiting") > 0 && chip("waiting", `${count("waiting")} waiting`, "text-label")}
-            {chip("resting", `${count("resting")} resting`, "text-secondary-text")}
-            {paused > 0 && chip("paused", `${paused} paused`, "text-secondary-text")}
+            {chip("resting", `${count("resting")} resting`, "text-text-secondary")}
+            {paused > 0 && chip("paused", `${paused} paused`, "text-text-secondary")}
             {!many && <SummonLink />}
           </div>
         </div>
@@ -145,7 +145,7 @@ export function Home() {
             >
               <span
                 className={cn(
-                  "flex flex-col items-center bg-text whitespace-nowrap",
+                  "flex flex-col items-center bg-text-strong whitespace-nowrap",
                   many ? "px-1.5 py-0.5 text-xs" : "px-2 py-[3px] text-xs",
                 )}
               >
@@ -192,16 +192,16 @@ export function Home() {
           <div className="flex min-w-0 flex-col gap-[18px]">
             <HappeningNowCard live={live} activity={activity} />
             <Card label="Recent threads" className="flex-1">
-              {recent.length === 0 && <p className="m-0 text-sm text-secondary-text">No threads yet.</p>}
+              {recent.length === 0 && <p className="m-0 text-sm text-text-secondary">No threads yet.</p>}
               {recent.slice(0, 4).map(({ hob, thread }) => (
                 <Link
                   key={thread.id}
                   to="/hobs/$hobId/threads/$threadId"
                   params={{ hobId: hob.id, threadId: thread.id }}
-                  className="flex gap-2.5 text-sm leading-snug text-text no-underline hover:text-moonlight"
+                  className="flex gap-2.5 text-sm leading-snug text-text-strong no-underline hover:text-moonlight"
                 >
                   <span className="w-16 flex-none font-pixel font-semibold text-moonlight">{hob.name}</span>
-                  <span className="min-w-0 flex-1 truncate text-secondary-text">{thread.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-text-secondary">{thread.title}</span>
                   <span className="text-xs text-label">{formatWhen(thread.updatedAt)}</span>
                 </Link>
               ))}
@@ -236,13 +236,13 @@ function SummonLink() {
   );
 }
 
-const chipClass = "bg-deep px-2.5 py-1 text-[13px] text-text";
+const chipClass = "bg-deep px-2.5 py-1 text-[13px] text-text-strong";
 
 function LiveDot() {
   return (
     <>
       <span aria-hidden className="size-2 animate-hb-blink bg-rose" />
-      <span className="text-xs text-secondary-text">live</span>
+      <span className="text-xs text-text-secondary">live</span>
     </>
   );
 }
@@ -252,7 +252,7 @@ function NeedsYou() {
     <Card label="Needs you" className="border-[3px] border-lantern" labelClass="text-lantern">
       <WaitingRequests
         empty={
-          <p className="m-0 border-t-2 border-line pt-3 leading-normal text-secondary-text">{inboxCopy.home.empty}</p>
+          <p className="m-0 border-t-2 border-line pt-3 leading-normal text-text-secondary">{inboxCopy.home.empty}</p>
         }
       />
     </Card>
@@ -282,11 +282,11 @@ function HallDoor({ count, peek, onOpen }: { count: number; peek: Agent | undefi
       )}
       <span
         aria-hidden
-        className="absolute bottom-[50px] left-[98px] animate-hb-float font-pixel text-sm text-secondary-text"
+        className="absolute bottom-[50px] left-[98px] animate-hb-float font-pixel text-sm text-text-secondary"
       >
         z
       </span>
-      <span className="cut absolute top-2 -right-1.5 bg-text px-[7px] py-[3px] text-xs font-bold text-ground">
+      <span className="cut absolute top-2 -right-1.5 bg-text-strong px-[7px] py-[3px] text-xs font-bold text-ground">
         {count} in the hall
       </span>
     </button>
@@ -338,11 +338,11 @@ function AllHobs({
           onChange={(event) => onQuery(event.target.value)}
           placeholder="Find a hob"
           aria-label="Find a hob by name or role"
-          className="w-[200px] border-2 border-control bg-deep px-2 py-[5px] text-[13px] text-text placeholder:text-label"
+          className="w-[200px] border-2 border-control bg-deep px-2 py-[5px] text-[13px] text-text-strong placeholder:text-label"
         />
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1">
-        {groups.length === 0 && <p className="m-0 text-sm text-secondary-text">No hob matches “{query.trim()}”.</p>}
+        {groups.length === 0 && <p className="m-0 text-sm text-text-secondary">No hob matches “{query.trim()}”.</p>}
         {groups.map(({ group, members }) => {
           // A filter opens every group, so a match is never hidden.
           const open = filtering || !(folded[group] ?? foldsByDefault(group, crew.length));
@@ -356,7 +356,7 @@ function AllHobs({
                 aria-controls={`${groupHeaderId(group)}-tiles`}
                 disabled={filtering}
                 onClick={() => onFold(group, open)}
-                className="flex w-full scroll-mt-2 items-center gap-2 bg-transparent py-1 text-left text-text"
+                className="flex w-full scroll-mt-2 items-center gap-2 bg-transparent py-1 text-left text-text-strong"
               >
                 <span aria-hidden className="w-2.5 text-label">
                   {open ? "▾" : "▸"}
@@ -379,12 +379,12 @@ function AllHobs({
                       params={{ hobId: hob.id }}
                       aria-label={openChatLabel(hob, state)}
                       title={`${hob.name} · ${hob.roleTitle} · ${stateLabel[state]}`}
-                      className="cut hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text no-underline hover:bg-line hover:text-text"
+                      className="cut hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text-strong no-underline hover:bg-line hover:text-text-strong"
                     >
                       <HobSprite hob={hob} size={28} state={state} badge className="mr-1.5" />
                       <span className="flex min-w-0 flex-col">
                         <span className="truncate font-pixel text-sm font-semibold">{hob.name}</span>
-                        <span className="truncate text-xs text-secondary-text">
+                        <span className="truncate text-xs text-text-secondary">
                           {hob.roleTitle} · {stateLabel[state]}
                         </span>
                       </span>
@@ -466,7 +466,7 @@ function HappeningNowCard({
   return (
     <Card label={messages.home.happeningNow} extra={live.length > 0 && <LiveDot />}>
       {live.length === 0 ? (
-        <p className="m-0 text-sm text-secondary-text">{messages.home.allQuiet}</p>
+        <p className="m-0 text-sm text-text-secondary">{messages.home.allQuiet}</p>
       ) : (
         <HappeningNow live={live} activity={activity} />
       )}
@@ -486,7 +486,7 @@ function HappeningNow({
       key={thread.id}
       to="/hobs/$hobId/threads/$threadId"
       params={{ hobId: hob.id, threadId: thread.id }}
-      className="flex animate-hb-in items-center gap-2.5 text-text no-underline"
+      className="flex animate-hb-in items-center gap-2.5 text-text-strong no-underline"
     >
       <HobSprite hob={hob} size={26} state={activity[thread.id] ?? "working"} />
       <span className="min-w-0 flex-1 text-sm leading-snug">
@@ -516,7 +516,7 @@ function AiPlans() {
         <Link
           to="/usage"
           aria-label={`Claude, ${left}`}
-          className="hop-on-hover flex flex-col items-center gap-0.5 text-text no-underline"
+          className="hop-on-hover flex flex-col items-center gap-0.5 text-text-strong no-underline"
         >
           <span className="sprite">
             <PixelArt rows={potion(ready ? 1 : 0)} palette={potionPalette("#e39a74", "#f3c4a8")} size={36} />
@@ -525,7 +525,7 @@ function AiPlans() {
           <span className={cn("pb-1 text-xs", ready ? "text-mint" : "text-rose")}>{left}</span>
         </Link>
       </div>
-      <span className="text-[13px] text-secondary-text">
+      <span className="text-[13px] text-text-secondary">
         Plan limits show here once Claude reports them. More providers arrive with the MVP.
       </span>
     </Card>

@@ -40,7 +40,7 @@ export function InboxDetail({
       className="flex max-w-190 animate-hb-in flex-col gap-3.5 px-7 py-5"
     >
       <header className="flex flex-col gap-2.5">
-        <span className="flex items-center gap-2.5 text-sm text-secondary-text">
+        <span className="flex items-center gap-2.5 text-sm text-text-secondary">
           <HobSprite hob={hob} size={22} state={pending ? "needs-you" : "idle"} />
           {copy.from({ name: hob.name })}
           <Badge variant={request.state === "expired" ? "muted" : "needs-you"} className="ms-auto">

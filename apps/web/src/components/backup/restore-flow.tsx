@@ -26,15 +26,15 @@ function Summary({ summary }: { summary: RestoreSummary }) {
           <span className="text-lantern">{copy.missing}</span>
           <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {summary.missingFolders.map((folder) => (
-              <li key={folder} className="font-mono text-[13px] break-all text-secondary-text">
+              <li key={folder} className="font-mono text-[13px] break-all text-text-secondary">
                 {folder}
               </li>
             ))}
           </ul>
         </div>
       )}
-      <span className="text-secondary-text">{copy.notBack}</span>
-      <span className="text-secondary-text">{copy.replaces}</span>
+      <span className="text-text-secondary">{copy.notBack}</span>
+      <span className="text-text-secondary">{copy.replaces}</span>
     </div>
   );
 }

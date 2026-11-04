@@ -10,14 +10,14 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-lantern font-bold text-ground shadow-[0_4px_0_var(--color-lantern-shadow)] hover:bg-lantern-hover active:translate-y-0.5 active:shadow-[0_2px_0_var(--color-lantern-shadow)]",
+          "bg-lantern font-bold text-ground shadow-[0_4px_0_var(--color-lantern-press)] hover:bg-lantern-hover active:translate-y-0.5 active:shadow-[0_2px_0_var(--color-lantern-press)]",
         approve:
           "bg-mint font-bold text-ground shadow-[0_4px_0_var(--color-mint-deep)] active:translate-y-0.5 active:shadow-[0_2px_0_var(--color-mint-deep)]",
-        outline: "border-2 border-solid border-control bg-transparent text-text hover:bg-line",
+        outline: "border-2 border-solid border-control bg-transparent text-text-strong hover:bg-line",
         deny: "border-2 border-solid border-rose bg-transparent text-rose hover:bg-line",
-        chip: "border-2 border-solid border-control bg-transparent text-[13px] text-text hover:bg-line",
-        ghost: "bg-transparent text-text hover:bg-hover",
-        icon: "border-2 border-solid border-line-2 bg-transparent text-secondary-text [clip-path:none] hover:bg-line hover:text-text",
+        chip: "border-2 border-solid border-control bg-transparent text-[13px] text-text-strong hover:bg-line",
+        ghost: "bg-transparent text-text-strong hover:bg-hover",
+        icon: "border-2 border-solid border-line-2 bg-transparent text-text-secondary [clip-path:none] hover:bg-line hover:text-text-strong",
         link: "bg-transparent text-lantern [clip-path:none] hover:underline",
       },
       size: {

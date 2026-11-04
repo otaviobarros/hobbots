@@ -51,7 +51,7 @@ export function FolderField({
           spellCheck={false}
           autoComplete="off"
           onChange={(event) => onChange(event.target.value)}
-          className="cut min-w-0 flex-1 basis-64 border-2 border-control bg-deep px-3 py-2 font-mono text-sm text-text outline-none focus-visible:border-lantern disabled:opacity-60"
+          className="cut min-w-0 flex-1 basis-64 border-2 border-control bg-deep px-3 py-2 font-mono text-sm text-text-strong outline-none focus-visible:border-lantern disabled:opacity-60"
         />
         {chooseBackupFolder && (
           <Button variant="outline" disabled={disabled || picking} onClick={() => void pick()}>
@@ -59,7 +59,7 @@ export function FolderField({
           </Button>
         )}
       </div>
-      <span id={hintId} className="text-[13px] text-secondary-text">
+      <span id={hintId} className="text-[13px] text-text-secondary">
         {hint}
       </span>
     </div>

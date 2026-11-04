@@ -14,7 +14,7 @@ const toneText: Record<WorkTone, string> = {
   waiting: "text-label",
   done: "text-mint",
   problem: "text-rose",
-  idle: "text-secondary-text",
+  idle: "text-text-secondary",
 };
 
 const toneBar: Record<WorkTone, string> = {
@@ -52,7 +52,7 @@ export function HobQuestWork({ hob }: { hob: Agent }) {
               threadAgentId={each.threadAgentId}
               taskId={each.task.id}
               label={messages.openQuest({ name: hob.name, lead: leadName, state })}
-              className="flex w-full animate-hb-in items-center gap-1.5 py-[3px] ps-[46px] pe-2 text-xs text-secondary-text no-underline hover:bg-hover hover:text-text"
+              className="flex w-full animate-hb-in items-center gap-1.5 py-[3px] ps-[46px] pe-2 text-xs text-text-secondary no-underline hover:bg-hover hover:text-text-strong"
             >
               {lead && <HobSprite hob={lead} size={14} />}
               <span className="min-w-0 flex-1 truncate">{messages.onQuest({ lead: leadName })}</span>
@@ -72,7 +72,7 @@ export function HobQuestWork({ hob }: { hob: Agent }) {
 export function QuestsInProgress({ quests }: { quests: ReadonlyArray<QuestInProgress> }) {
   const hobs = useHobs();
   if (quests.length === 0)
-    return <p className="m-0 text-sm leading-normal text-secondary-text">{messages.home.empty}</p>;
+    return <p className="m-0 text-sm leading-normal text-text-secondary">{messages.home.empty}</p>;
   return (
     <ul className="m-0 flex list-none flex-col gap-3 p-0">
       {quests.map((group) => (
@@ -97,7 +97,7 @@ function QuestEntry({ group, hobs }: { group: QuestInProgress; hobs: ReadonlyMap
       quest={group.quest}
       threadAgentId={group.threadAgentId}
       taskId={group.quest.taskId}
-      className="flex flex-col gap-1.5 text-text no-underline hover:text-moonlight"
+      className="flex flex-col gap-1.5 text-text-strong no-underline hover:text-moonlight"
     >
       <span className="flex items-center gap-2 text-sm">
         <span aria-hidden className="flex">
@@ -125,7 +125,7 @@ function MemberLine({ work, hob, lead }: { work: MemberWork; hob: Agent | undefi
     <span className="flex items-center gap-2 text-[13px] leading-snug">
       {hob && <HobSprite hob={hob} size={18} />}
       <span className="w-16 flex-none truncate font-pixel font-semibold text-moonlight">{hob?.name}</span>
-      <span className="min-w-0 flex-1 truncate text-secondary-text">{messages.onQuest({ lead })}</span>
+      <span className="min-w-0 flex-1 truncate text-text-secondary">{messages.onQuest({ lead })}</span>
       <span className={cn("whitespace-nowrap text-xs", toneText[workTone[work.task.state]])}>
         {messages.state[work.task.state]}
       </span>

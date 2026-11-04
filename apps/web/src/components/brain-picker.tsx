@@ -144,7 +144,7 @@ function ThreadBrainPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={cn(chipClass, "cursor-pointer bg-transparent text-text hover:bg-line")}
+          className={cn(chipClass, "cursor-pointer bg-transparent text-text-strong hover:bg-line")}
           aria-label={copy.trigger({ brain: label, state })}
         >
           {chip}

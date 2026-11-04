@@ -30,7 +30,7 @@ function Saved({ result }: { result: ExportResult }) {
         ))}
       </dl>
       {result.notCopied > 0 && (
-        <span className="text-secondary-text">
+        <span className="text-text-secondary">
           {plural(result.notCopied, {
             one: copy.notCopied.one,
             other: copy.notCopied.other({ count: formatCount(result.notCopied) }),
@@ -77,7 +77,7 @@ export function ExportForm({ scope, disabled = false }: { scope: ExportScope | n
           spellCheck={false}
           autoCapitalize="off"
           autoComplete="off"
-          className="min-w-[260px] flex-1 border-2 border-control bg-deep px-[11px] py-[7px] font-mono text-sm text-text"
+          className="min-w-[260px] flex-1 border-2 border-control bg-deep px-[11px] py-[7px] font-mono text-sm text-text-strong"
         />
         <Button type="submit" disabled={disabled || scope === null || destination.trim() === "" || pending}>
           {pending ? copy.exporting : copy.export}

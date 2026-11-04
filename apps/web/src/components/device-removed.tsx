@@ -21,7 +21,7 @@ export function DeviceRemoved() {
         <h1 id="device-removed-title" className="m-0 font-pixel text-2xl font-bold text-moonlight">
           {hub === null ? copy.removedTitleNoName : copy.removedTitle({ hub })}
         </h1>
-        <p className="m-0 leading-normal text-secondary-text">{copy.removedBody}</p>
+        <p className="m-0 leading-normal text-text-secondary">{copy.removedBody}</p>
         <Button className="mt-1.5" onClick={() => globalThis.location.reload()}>
           {copy.askAgain}
         </Button>

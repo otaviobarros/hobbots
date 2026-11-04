@@ -90,7 +90,7 @@ function GitHubState({
 }) {
   switch (status._tag) {
     case "Environment":
-      return <span className="text-[13px] text-secondary-text">{copy.environment}</span>;
+      return <span className="text-[13px] text-text-secondary">{copy.environment}</span>;
     case "Connected":
       return (
         <Connected account={status.account} pending={pending} onDisconnect={() => onChange({ kind: "disconnect" })} />
@@ -113,7 +113,7 @@ function Connected({
 }) {
   return (
     <>
-      <span className="text-[13px] text-secondary-text">
+      <span className="text-[13px] text-text-secondary">
         {copy.connectedAs({ login: account.login, since: formatDay(account.connectedAt) })}{" "}
         {copy.through[account.source]}
       </span>
@@ -157,7 +157,7 @@ function AppReach({ login }: { login: string }) {
     <>
       <span className="lbl pt-1 text-xs text-label">{copy.repositoriesLabel}</span>
       {repositories.isError && <span className="text-[13px] text-rose">{copy.repositoriesFailed}</span>}
-      {listed && listed.length === 0 && <span className="text-[13px] text-secondary-text">{copy.noRepositories}</span>}
+      {listed && listed.length === 0 && <span className="text-[13px] text-text-secondary">{copy.noRepositories}</span>}
       {listed && listed.length > 0 && (
         <ul aria-label={copy.repositoriesLabel} className="m-0 flex list-none flex-wrap gap-1.5 p-0">
           {listed.map((repository) => (
@@ -182,7 +182,7 @@ function AppReach({ login }: { login: string }) {
       <span className="lbl pt-1 text-xs text-label">{copy.permissionsLabel}</span>
       <ul aria-label={copy.permissionsLabel} className="m-0 flex list-none flex-wrap gap-1.5 p-0">
         {GITHUB_APP_PERMISSIONS.map((permission) => (
-          <li key={permission.name} className="border-2 border-line px-2 py-0.5 text-[13px] text-secondary-text">
+          <li key={permission.name} className="border-2 border-line px-2 py-0.5 text-[13px] text-text-secondary">
             {copy.permission(permission)}
           </li>
         ))}
@@ -206,7 +206,7 @@ function Connecting({
       <span className="select-all font-pixel text-[28px] font-bold tracking-widest text-moonlight">
         {status.userCode}
       </span>
-      <span className="text-[13px] text-secondary-text">{copy.waiting}</span>
+      <span className="text-[13px] text-text-secondary">{copy.waiting}</span>
       <div className="flex flex-wrap gap-2">
         <Button asChild size="sm">
           <a href={status.verificationUri} target="_blank" rel="noreferrer">
@@ -236,7 +236,7 @@ function Disconnected({
   return (
     <>
       {justDisconnected && (
-        <span className="text-[13px] text-secondary-text">
+        <span className="text-[13px] text-text-secondary">
           {copy.disconnected}{" "}
           <a href={GITHUB_AUTHORIZED_APPS} target="_blank" rel="noreferrer" className="text-lantern">
             {copy.authorizedApps}
@@ -256,7 +256,7 @@ function Disconnected({
           <span className="text-[13px] text-label">{copy.recommended}</span>
         </div>
       ) : (
-        <span className="text-[13px] text-secondary-text">{copy.cannotConnect[status.cannotConnect]}</span>
+        <span className="text-[13px] text-text-secondary">{copy.cannotConnect[status.cannotConnect]}</span>
       )}
       {found.data && found.data.length > 0 && (
         <>
