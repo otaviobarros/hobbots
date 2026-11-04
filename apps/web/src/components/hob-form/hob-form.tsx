@@ -10,7 +10,9 @@ import {
 import { Button } from "@hobbots/ui/components/button";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
+import { Skeleton, WaitNote } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
+import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { type Dispatch, type SetStateAction, useEffect, useId, useState } from "react";
 import {
@@ -393,25 +395,83 @@ function Brain<D extends BrainChoice>({
   );
 }
 
+/**
+ * The brain picker while the runtime lists its models: the model cards with name blocks and Effort
+ * in place, disabled, so nothing moves when the list arrives. After a second a line names the
+ * runtime it asks, and after ten it offers Try again (Patterns › Loading).
+ */
+export function ModelsWaiting({
+  runtime,
+  onRetry,
+  surface = "plain",
+}: {
+  runtime: RuntimeKind;
+  onRetry: () => void;
+  /** What the picker sits on: `card` where the blocks need `line-2` to show. */
+  surface?: Surface | undefined;
+}) {
+  const wait = useWaitStage(true);
+  const name = RUNTIME_NAMES[runtime];
+  return (
+    <div aria-busy="true" className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap gap-2">
+        {WAITING_MODELS.map((width) => (
+          <span
+            key={width}
+            className="cut flex flex-col items-start gap-px border-(length:--edge) border-control px-3 py-[5px] text-ui"
+          >
+            <span className="font-bold">
+              <Skeleton width={width} surface={surface} />
+            </span>
+            <span className="text-meta">
+              <Skeleton width="22ch" surface={surface} />
+            </span>
+          </span>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <span aria-hidden className="text-ui font-bold">
+          {messages.models.effort}
+        </span>
+        <SegmentedControl aria-label={messages.models.effort} value={null} onValueChange={() => undefined} disabled>
+          {WAITING_EFFORTS.map((effort, i) => (
+            <SegmentedControlItem key={effort} value={effort}>
+              <EffortBars index={i} count={WAITING_EFFORTS.length} />
+              <Skeleton width="6ch" />
+            </SegmentedControlItem>
+          ))}
+        </SegmentedControl>
+      </div>
+      <WaitNote
+        wait={wait}
+        detail={messages.models.loading({ runtime: name })}
+        outside={{ note: messages.models.slow({ runtime: name }), retryLabel: messages.models.retry, onRetry }}
+      />
+    </div>
+  );
+}
+
+type Surface = "plain" | "card";
+
+/** The likely length of each waiting model card's name. */
+const WAITING_MODELS = ["8ch", "10ch", "7ch"] as const;
+/** The placeholder segments of the waiting Effort control. */
+const WAITING_EFFORTS = ["low", "medium", "high"] as const;
+
 /** The brain picker once the runtime has listed its models, with the wait and the failure before it. */
 export function ModelsBrain<D extends BrainChoice>({
   models,
   draft,
   onChange,
-  waitingClassName = "py-1",
+  surface,
 }: {
   models: UseQueryResult<RuntimeModels>;
   draft: D;
   onChange: (draft: D) => void;
-  waitingClassName?: string;
+  surface?: Surface | undefined;
 }) {
   if (models.isPending) {
-    return (
-      <span className={cn("text-ui text-lantern", waitingClassName)}>
-        {messages.models.loading({ runtime: RUNTIME_NAMES[draft.runtime] })}{" "}
-        <span className="animate-hb-blink">•••</span>
-      </span>
-    );
+    return <ModelsWaiting runtime={draft.runtime} onRetry={() => void models.refetch()} surface={surface} />;
   }
   if (models.isError) {
     return (

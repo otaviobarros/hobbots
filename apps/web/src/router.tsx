@@ -280,12 +280,12 @@ const profileRoute = createRoute({
   },
 });
 
-// A hob just summoned, on its own stage with three first questions. A reload keeps it.
+// A hob just summoned, on its own stage with three first questions. A reload keeps it, and draws
+// the stage at once while the hobs are read rather than waiting for them before the route opens.
 const arrivedRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "hobs/$hobId/arrived",
-  beforeLoad: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
   component: function ArrivedRoute() {
     const params = arrivedRoute.useParams();
     return <ArrivedPage hobId={AgentId.make(params.hobId)} />;

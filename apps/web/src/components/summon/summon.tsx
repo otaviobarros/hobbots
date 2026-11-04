@@ -143,6 +143,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
                   onChange={setDraft}
                   name={name}
                   preset={setup.data && presetInfo(setup.data.safetyPreset)}
+                  presetPending={setup.isPending}
                   runtimes={runtimes}
                   signedOut={signedOut}
                   models={models}

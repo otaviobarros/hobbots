@@ -1,4 +1,5 @@
-import type { RuntimeHealth } from "@hobbots/domain";
+import type { RuntimeHealth, RuntimeKind } from "@hobbots/domain";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useId } from "react";
 import { type BrainChoice, pickRuntime } from "../../api/first-hob.ts";
@@ -11,8 +12,8 @@ import { PickCard } from "./pick.tsx";
 const STATES = settingsMessages.providers.availability;
 
 /** The provider's square mark in its color. */
-function Mark({ health, className }: { health: RuntimeHealth; className?: string }) {
-  const look = PROVIDER_MARKS[health.runtime];
+function Mark({ runtime, className }: { runtime: RuntimeKind; className?: string }) {
+  const look = PROVIDER_MARKS[runtime];
   return (
     <span
       aria-hidden
@@ -59,7 +60,7 @@ export function ProviderCards<D extends BrainChoice>({
                 label={name}
                 className="items-center gap-2.5 px-2.5 py-2"
               >
-                <Mark health={health} />
+                <Mark runtime={health.runtime} />
                 <span className="flex min-w-0 flex-col">
                   <strong>{name}</strong>
                   <span className="truncate text-meta text-text-secondary">{PROVIDER_MAKERS[health.runtime]}</span>
@@ -74,7 +75,7 @@ export function ProviderCards<D extends BrainChoice>({
               name={radios}
               className="flex min-w-0 cursor-not-allowed items-center gap-2.5 rounded-control border border-dashed border-line-2 px-2.5 py-2 text-label"
             >
-              <Mark health={health} className="opacity-60" />
+              <Mark runtime={health.runtime} className="opacity-60" />
               <span className="flex min-w-0 flex-col">
                 <strong className="text-text-secondary">{name}</strong>
                 <span className="text-meta text-lantern">{STATES[health.availability]}</span>
@@ -85,5 +86,30 @@ export function ProviderCards<D extends BrainChoice>({
       </fieldset>
       <BlockedProviders blocked={blocked} className="text-text-secondary [&_b]:text-text-strong" />
     </>
+  );
+}
+
+/**
+ * The provider cards while the hub checks them: each provider's mark and name in its card, with a
+ * block where its state goes, so the cards do not move when the check lands.
+ */
+export function ProviderCardsWaiting() {
+  return (
+    <div className="grid grid-cols-2 gap-2 max-[720px]:grid-cols-1">
+      {PROVIDERS.map((runtime) => (
+        <span
+          key={runtime}
+          className="flex min-w-0 items-center gap-2.5 rounded-control bg-card px-2.5 py-2 text-text-strong"
+        >
+          <Mark runtime={runtime} />
+          <span className="flex min-w-0 flex-col">
+            <strong>{PROVIDER_NAMES[runtime]}</strong>
+            <span className="text-meta">
+              <Skeleton width="14ch" surface="card" />
+            </span>
+          </span>
+        </span>
+      ))}
+    </div>
   );
 }

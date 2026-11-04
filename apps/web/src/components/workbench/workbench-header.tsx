@@ -2,6 +2,7 @@ import { type Attempt, type AttemptId, isLiveAttempt, policySandbox, type Task, 
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode, RefObject } from "react";
@@ -19,11 +20,13 @@ type Sandbox = "on" | "off" | "unavailable";
 
 /**
  * Where the Task runs on the hub: outside the sandbox once any of its commands ran there, else as
- * the runtime's sandbox stands on this hub (ADR 014). Unknown until the runtimes are read.
+ * the runtime's sandbox stands on this hub (ADR 014). `checking` while the runtimes are read, and
+ * null when the hub does not list the runtime.
  */
-const useSandbox = (runtime: Attempt["runtime"], read: ActivityRead): Sandbox | null => {
+const useSandbox = (runtime: Attempt["runtime"], read: ActivityRead): Sandbox | "checking" | null => {
   const health = useQuery({ ...runtimesQuery, select: (all) => all.find((each) => each.runtime === runtime) });
   if (typeof read === "object" && read.commands.some((command) => !command.sandboxed)) return "off";
+  if (health.isPending) return "checking";
   return health.data === undefined ? null : policySandbox(health.data.enforcement);
 };
 
@@ -171,10 +174,18 @@ const sandboxWords: Record<Sandbox, string> = {
   unavailable: messages.sandboxNotReady,
 };
 
-/** In the sandbox, or the Unsandboxed tag. */
+/** In the sandbox, or the Unsandboxed tag, with a tag block in its place while the runtimes are read. */
 function Where({ runtime, read }: { runtime: Attempt["runtime"]; read: ActivityRead }) {
   const sandbox = useSandbox(runtime, read);
   if (sandbox === null) return null;
+  if (sandbox === "checking") {
+    return (
+      <>
+        <Dot />
+        <Skeleton shape="block" width="12ch" />
+      </>
+    );
+  }
   return (
     <>
       <Dot />

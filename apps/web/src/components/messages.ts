@@ -165,7 +165,8 @@ export const messages = {
     },
   },
   models: {
-    loading: ({ runtime }: { runtime: string }) => `Asking ${runtime} for its models`,
+    loading: ({ runtime }: { runtime: string }) => `Asking ${runtime} for its models…`,
+    slow: ({ runtime }: { runtime: string }) => `${runtime} is slow to answer. Your hobs keep working.`,
     failed: ({ runtime }: { runtime: string }) => `Hobbots could not get ${runtime}'s models.`,
     retry: "Try again",
     /** How a hob thinks, such as "Codex · GPT-5.5 · medium effort". */
@@ -266,6 +267,11 @@ export const messages = {
     checking: "Checking…",
     checkingProviders: "Checking your AI providers",
     checkFailed: "Hobbots could not check your AI providers.",
+    /** The wait line while the providers are checked, after a second. */
+    waitingProviders: "Checking your AI providers…",
+    /** After ten seconds of checking. */
+    checkSlow: "Your AI providers are slow to answer. Your hobs keep working.",
+    tryAgain: "Try again",
     checkAgainToSummon: ({ name }: { name: string }) => `Check your AI providers again to summon ${name}`,
     fixProvider: ({ name }: { name: string }) => `Fix a provider to summon ${name}`,
     summoning: ({ name }: { name: string }) => `Summoning ${name}… If you leave now, ${name} still joins your hobs.`,
