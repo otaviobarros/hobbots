@@ -49,13 +49,14 @@ export const lastChat = <T extends Pick<Thread, "updatedAt">>(threads: ReadonlyA
 
 /**
  * The line under a hob's name on its card: what it is doing, else the last line of its latest chat,
- * else that it just arrived or is resting.
+ * else that it just arrived when it has done nothing yet, or that it is resting.
  */
 export const cardLine = (
   doing: Doing | null,
   threads: ReadonlyArray<Pick<Thread, "updatedAt" | "lastLine">>,
+  fresh: boolean,
 ): string => {
   if (doing) return doing.text;
-  if (threads.length === 0) return messages.card.arrived;
+  if (fresh) return messages.card.arrived;
   return lastChat(threads)?.lastLine ?? messages.card.resting;
 };

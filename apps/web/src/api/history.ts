@@ -1,5 +1,5 @@
 import type { AgentId, HistoryFilter, HistoryPage, HobbotsEvent } from "@hobbots/domain";
-import { type QueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { infiniteQueryOptions, type QueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { DateTime } from "effect";
 import { call } from "./client.ts";
 
@@ -16,8 +16,8 @@ const readerZone = () => DateTime.zoneMakeNamedUnsafe(Intl.DateTimeFormat().reso
  * What a hob did across all its chats, newest first, a page of days at a time. The next page starts
  * before the oldest event of the last one; it is null when there are no earlier days.
  */
-export const useHobHistory = (agentId: AgentId, filter: HistoryFilter) =>
-  useInfiniteQuery({
+const historyQuery = (agentId: AgentId, filter: HistoryFilter) =>
+  infiniteQueryOptions({
     queryKey: historyKeys.of(agentId, filter),
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }): Promise<HistoryPage> => {
@@ -35,6 +35,19 @@ export const useHobHistory = (agentId: AgentId, filter: HistoryFilter) =>
     },
     getNextPageParam: (last) => last.before,
   });
+
+/** A hob's History under one filter, read a page at a time. */
+export const useHobHistory = (agentId: AgentId, filter: HistoryFilter) =>
+  useInfiniteQuery(historyQuery(agentId, filter));
+
+/**
+ * Whether a hob is new: it has no chats and nothing in its History, not even work on a Quest it
+ * joined. Its History is read only once it is known to have no chats, and counts as empty until it arrives.
+ */
+export const useIsNewHob = (agentId: AgentId, chats: number | undefined): boolean => {
+  const history = useInfiniteQuery({ ...historyQuery(agentId, "all"), enabled: chats === 0 });
+  return chats === 0 && (history.data?.pages[0]?.days.length ?? 0) === 0;
+};
 
 /** The events a History is read from: Tasks, Quests, approvals and questions. */
 const CHANGES_HISTORY = new Set<HobbotsEvent["_tag"]>([

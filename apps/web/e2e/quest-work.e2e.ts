@@ -170,3 +170,37 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
   await page.getByRole("dialog", { name: "Quill" }).getByRole("link", { name: "Open Workbench" }).click();
   await expect(page).toHaveURL(new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?bench=copy$`));
 });
+
+// covers UX-001, OR-001
+test("[TC-UX-145] a hob with no chats that has worked on a Quest reads Resting, not New", async ({ page }) => {
+  dataDir = emptyDataDir();
+  hub = await startHub(dataDir);
+  await call("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
+  const ids = {
+    aldric: await summon("Aldric", 1001),
+    quill: await summon("Quill", 1338),
+    ada: await summon("Ada", 1675),
+    pip: await summon("Pip", 2012),
+  };
+  const thread = await call<{ readonly id: string }>("POST", `/agents/${ids.aldric}/threads`);
+  campaign(ids, thread.id);
+  const wick = await summon("Wick", 2349);
+
+  // Ada has no chats, but her Task on Aldric's Quest is in her History, so she is no longer new.
+  await page.goto(`${hub.url}/#/hobs`);
+  const main = page.getByRole("main", { name: "Your hobs" });
+  const ada = main.getByRole("link", { name: "Ada, Resting" });
+  await expect(ada).toBeVisible();
+  await expect(ada).toContainText("Resting");
+  await expect(ada).not.toContainText("Just arrived");
+  // Wick has done nothing yet.
+  await expect(main.getByRole("link", { name: "Wick, New" })).toContainText("Just arrived");
+
+  await page.goto(`${hub.url}/#/hobs/${ids.ada}`);
+  const hero = page.getByRole("main", { name: "Ada's page" }).getByRole("region", { name: "Ada" });
+  await expect(hero).toContainText(/Ada\s*◷\s*Resting/);
+  await page.goto(`${hub.url}/#/hobs/${wick}`);
+  await expect(page.getByRole("main", { name: "Wick's page" }).getByRole("region", { name: "Wick" })).toContainText(
+    /Wick\s*✦\s*New/,
+  );
+});

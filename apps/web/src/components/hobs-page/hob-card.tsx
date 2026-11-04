@@ -4,6 +4,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
 import type { ActivityMap } from "../../api/activity.ts";
+import { useIsNewHob } from "../../api/history.ts";
 import type { HobState } from "../../lib/hob-state.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { HobStateTag } from "../hob-page/hob-hero.tsx";
@@ -41,11 +42,12 @@ export function HobCard({
   const doing = doingOf(state, threads, activity);
   const last = lastChat(threads);
   const needs = doing?.kind === "needs-you";
+  const fresh = useIsNewHob(hob.id, threads.length);
   return (
     <Link
       to="/hobs/$hobId"
       params={{ hobId: hob.id }}
-      aria-label={copy.card.open({ name: hob.name, state: stateTag(state, threads.length === 0).word })}
+      aria-label={copy.card.open({ name: hob.name, state: stateTag(state, fresh).word })}
       style={tint(hob)}
       className={cn(
         "hop-on-hover cut relative flex min-w-0 flex-col overflow-hidden bg-card text-text-strong no-underline transition-[translate,box-shadow,background-color] duration-150 hover:-translate-y-0.5 hover:bg-hover hover:text-text-strong hover:shadow-menu focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0",
@@ -57,7 +59,7 @@ export function HobCard({
         <HobSprite hob={hob} size={64} state={state} className="z-[1] -mb-0.5" />
         <span aria-hidden className={ground} />
         <span className="absolute top-3 right-3">
-          <HobStateTag state={state} fresh={threads.length === 0} />
+          <HobStateTag state={state} fresh={fresh} />
         </span>
       </span>
       <span className="flex min-w-0 flex-col gap-2 px-4 pt-3 pb-3.5">
@@ -79,7 +81,7 @@ export function HobCard({
             <span aria-hidden className="mt-1.5 size-2 flex-none animate-hb-blink rounded-dot bg-mint" />
           )}
           {needs && <span aria-hidden className="mt-1.5 size-2 flex-none rotate-45 rounded-[2px] bg-lantern" />}
-          <span className="line-clamp-2 min-w-0">{cardLine(doing, threads)}</span>
+          <span className="line-clamp-2 min-w-0">{cardLine(doing, threads, fresh)}</span>
         </span>
         <span className="flex min-w-0 items-center gap-2 border-t border-line pt-2.5 text-[13px] leading-[18px] text-text-secondary">
           <ChatIcon />
