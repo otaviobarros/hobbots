@@ -32,6 +32,8 @@ export const createChoiceStore = <T>(environment: ChoiceEnvironment<T>, parse: (
     },
     /** Another window on this device saved a value. */
     storageChanged: () => apply(stored()),
+    /** What the value shows changed outside it, such as the system's light or dark: show it again. */
+    refresh: () => apply(value),
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => {

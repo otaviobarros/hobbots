@@ -2,14 +2,22 @@ import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/s
 import { cn } from "@hobbots/ui/lib/utils";
 import { type ReactNode, useId } from "react";
 import { setTextSize, TEXT_SIZES, type TextSize, useTextSize } from "../../lib/text-size.ts";
-import { type Look, lookOf, type Mode, modeOf, setTheme, themeOf, useTheme } from "../../lib/theme.ts";
+import {
+  choiceOf,
+  type Look,
+  lookOfChoice,
+  type ModeChoice,
+  modeChoiceOf,
+  setTheme,
+  useThemeChoice,
+} from "../../lib/theme.ts";
 import { messages } from "./messages.ts";
 import { SettingsGroup } from "./settings-group.tsx";
 
 const copy = messages.appearance;
 
 const LOOKS: ReadonlyArray<Look> = ["lamplight", "workshop"];
-const MODES: ReadonlyArray<Mode> = ["dark", "light"];
+const MODES: ReadonlyArray<ModeChoice> = ["light", "dark", "auto"];
 
 /** Each look's preview: its own ground, bar and mark, rounded in Lamplight and square in Workshop. */
 const PREVIEW: Readonly<Record<Look, { readonly ground: string; readonly bar: string; readonly mark: string }>> = {
@@ -26,13 +34,13 @@ const PREVIEW: Readonly<Record<Look, { readonly ground: string; readonly bar: st
 };
 
 /**
- * Settings › This app › Appearance: the look (Lamplight or Workshop), Dark or Light, and the text
- * size. Each is picked by hand and kept on this device.
+ * Settings › This app › Appearance: the look (Lamplight or Workshop), Light, Dark or Automatic,
+ * which follows the system, and the text size. Each is kept on this device.
  */
 export function AppearanceGroup() {
-  const theme = useTheme();
-  const look = lookOf(theme);
-  const mode = modeOf(theme);
+  const choice = useThemeChoice();
+  const look = lookOfChoice(choice);
+  const mode = modeChoiceOf(choice);
   const textSize = useTextSize();
   const name = useId();
   return (
@@ -54,7 +62,7 @@ export function AppearanceGroup() {
                 type="radio"
                 name={name}
                 checked={on}
-                onChange={() => setTheme(themeOf(option, mode))}
+                onChange={() => setTheme(choiceOf(option, mode))}
                 className="sr-only"
               />
               <span aria-hidden className={cn("flex h-[72px] items-end gap-1.5 p-2", preview.ground)}>
@@ -70,10 +78,10 @@ export function AppearanceGroup() {
         })}
       </fieldset>
       <Choice label={copy.mode}>
-        <SegmentedControl<Mode>
+        <SegmentedControl<ModeChoice>
           aria-label={copy.mode}
           value={mode}
-          onValueChange={(next) => setTheme(themeOf(look, next))}
+          onValueChange={(next) => setTheme(choiceOf(look, next))}
         >
           {MODES.map((option) => (
             <SegmentedControlItem key={option} value={option} className="flex-1">

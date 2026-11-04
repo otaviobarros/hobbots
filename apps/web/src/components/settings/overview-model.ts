@@ -4,7 +4,7 @@ import { runtimeProblem, signInProblem } from "../../api/runtime-health.ts";
 import { presetInfo } from "../../api/safety.ts";
 import { formatAgo, formatList } from "../../lib/format.ts";
 import { PROVIDER_NAMES, PROVIDERS } from "../../lib/providers.ts";
-import { lookOf, modeOf, type Theme } from "../../lib/theme.ts";
+import { lookOfChoice, modeChoiceOf, type ThemeChoice } from "../../lib/theme.ts";
 import { messages } from "./messages.ts";
 import type { SettingsSection } from "./sections.ts";
 
@@ -45,7 +45,8 @@ export interface OverviewInput {
   /** Devices allowed besides the hub's own window. */
   readonly otherDevices: number | undefined;
   readonly backup: BackupState | undefined;
-  readonly theme: Theme;
+  /** What was picked on this device, Automatic included. */
+  readonly theme: ThemeChoice;
   readonly now?: Date;
 }
 
@@ -120,7 +121,7 @@ const githubCard = (status: GitHubStatus | undefined): OverviewCard => {
 };
 
 /** Remote access is on, not paused, yet the hub listens on no tailnet address or not all of them. */
-const unreachable = (remote: RemoteAccessStatus) =>
+export const unreachable = (remote: RemoteAccessStatus) =>
   remote.enabled &&
   !remote.paused &&
   remote.problem !== null &&
@@ -191,9 +192,9 @@ const backupArea = (
   }
 };
 
-const appearanceCard = (theme: Theme): OverviewCard => {
-  const look = copy.appearance.looks[lookOf(theme)];
-  const mode = copy.appearance.modes[modeOf(theme)];
+const appearanceCard = (theme: ThemeChoice): OverviewCard => {
+  const look = copy.appearance.looks[lookOfChoice(theme)];
+  const mode = copy.appearance.modes[modeChoiceOf(theme)];
   return {
     id: "appearance",
     section: "app",

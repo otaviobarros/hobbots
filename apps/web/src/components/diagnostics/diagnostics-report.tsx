@@ -11,7 +11,7 @@ import { messages } from "./messages.ts";
 const copy = messages.report;
 
 /** Saves the report where the browser saves downloads, or asks where in the desktop app. */
-const save = (report: DiagnosticsReport) => {
+export const saveReport = (report: DiagnosticsReport) => {
   const url = URL.createObjectURL(new Blob([reportText(report)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url;
@@ -103,7 +103,7 @@ export function DiagnosticsReportMaker({ questId }: { questId: QuestId | null })
             <Button size="sm" onClick={() => copyReport(reportText(report))}>
               {copy.copy[copied]}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => save(report)}>
+            <Button variant="outline" size="sm" onClick={() => saveReport(report)}>
               {copy.save}
             </Button>
           </div>

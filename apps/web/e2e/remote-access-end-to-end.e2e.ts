@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 // Interaction check 10 of the screen inventory, end to end in the browser (ADR 021): turn on remote
-// access, open the hub's tailnet address in another browser, Allow it on the hub, then Revoke it.
+// access, open the hub's tailnet address in another browser, Allow it on the hub, then Remove it.
 // The hub-level proof of the same slice is in apps/server/test/remote-access-end-to-end.test.ts.
 
 let hub: Hub | undefined;
@@ -53,7 +53,7 @@ const asDesktop = () => {
 };
 
 // covers DP-004, PE-006
-test("[TC-DP-155] turns on remote access, allows a tailnet browser on the hub, and Revoke refuses it at once", async ({
+test("[TC-DP-155] turns on remote access, allows a tailnet browser on the hub, and Remove refuses it at once", async ({
   page,
   browser,
 }) => {
@@ -105,12 +105,12 @@ test("[TC-DP-155] turns on remote access, allows a tailnet browser on the hub, a
   await remotePage.reload();
   await expect(remotePage.getByRole("navigation")).toBeVisible();
 
-  // On the hub: Revoke the laptop from Settings › Devices.
+  // On the hub: Remove the laptop from Settings › Devices.
   const allowed = page.getByRole("list", { name: "Allowed devices" });
   const entry = allowed.getByRole("listitem").filter({ hasText: "Kitchen laptop" });
   await expect(entry).toBeVisible();
-  await entry.getByRole("button", { name: "Revoke Kitchen laptop" }).click();
-  await entry.getByRole("button", { name: "Revoke", exact: true }).click();
+  await entry.getByRole("button", { name: "Remove Kitchen laptop" }).click();
+  await entry.getByRole("button", { name: "Remove", exact: true }).click();
   await expect(allowed.getByText("Kitchen laptop")).toHaveCount(0);
 
   // The laptop is refused at once: its open page shows it was removed, and the hub refuses its reads.

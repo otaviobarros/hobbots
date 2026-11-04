@@ -97,7 +97,7 @@ describe("allowed devices", () => {
     // No bridge, or one that cannot say which hub it uses: the hub's own settings show.
     expect(connectionCalls(undefined)).toBeUndefined();
     expect(connectionCalls({ disconnect })).toBeUndefined();
-    // Its answer names no device, so no row is marked as this Mac's and every row keeps Revoke.
+    // Its answer names no device, so no row is marked as this Mac's and every row keeps Remove.
     expect(deviceMeta(device({}), now, { hub: "Studio" })).toMatch(/^A browser · iOS · on Studio · /);
   });
 

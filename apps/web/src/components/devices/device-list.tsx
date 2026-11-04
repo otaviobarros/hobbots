@@ -11,9 +11,9 @@ import { type DeviceContext, deviceMeta, deviceName } from "./device-meta.ts";
 const copy = messages.remoteAccess.devices;
 
 /**
- * One allowed device. Revoke… asks first, in the row; Revoke then signs it out at once, and Keep or
- * Escape takes the question back with focus on Revoke…. The hub's window is never revoked, and a
- * connected desktop leaves itself with Disconnect rather than Revoke.
+ * One allowed device. Remove asks first, in the row; Remove there signs it out at once, and Keep or
+ * Escape takes the question back with focus on Remove. The hub's window is never removed, and a
+ * connected desktop leaves itself with Disconnect rather than Remove.
  */
 function DeviceRow({ device, now, context }: { device: Device; now: Date; context: DeviceContext }) {
   const [asking, setAsking] = useState(false);
@@ -54,12 +54,12 @@ function DeviceRow({ device, now, context }: { device: Device; now: Date; contex
         {revocable && !asking && (
           <Button
             ref={revokeButton}
-            variant="deny"
+            variant="ghost"
             size="xs"
-            aria-label={copy.revokeLabel({ name })}
+            aria-label={copy.removeLabel({ name })}
             onClick={() => setAsking(true)}
           >
-            {copy.revoke}
+            {copy.remove}
           </Button>
         )}
       </div>
@@ -72,14 +72,14 @@ function DeviceRow({ device, now, context }: { device: Device; now: Date; contex
           <span className="flex-1 text-sm text-rose">{copy.confirm({ name })}</span>
           {revoke.isError && (
             <span role="alert" className="basis-full text-sm text-rose">
-              {copy.revokeFailed}
+              {copy.removeFailed}
             </span>
           )}
           <Button ref={keepButton} variant="outline" size="sm" onClick={keep}>
             {copy.keep}
           </Button>
           <Button variant="deny" size="sm" onClick={() => revoke.mutate(device.id)}>
-            {revoke.isPending ? copy.revoking : copy.confirmRevoke}
+            {revoke.isPending ? copy.removing : copy.confirmRemove}
           </Button>
         </fieldset>
       )}
@@ -107,7 +107,7 @@ function RevokedByRestore({ devices }: { devices: ReadonlyArray<Device> }) {
 }
 
 /**
- * Settings › Devices: every device that may reach the hub, with its last activity and Revoke (ADR 021).
+ * Settings › Devices: every device that may reach the hub, with its last activity and Remove (ADR 021).
  * The list follows the journal, so a device allowed or revoked anywhere shows here at once. On a
  * connected desktop it names the hub and marks this computer's own device (ADR 025).
  */
