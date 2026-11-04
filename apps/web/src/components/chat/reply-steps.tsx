@@ -126,7 +126,7 @@ function ToolStep({
   const note = stepNote(step, outcome);
   return (
     <Collapsible className="flex flex-col gap-0.5">
-      <CollapsibleTrigger className="group flex items-center gap-2 border-0 bg-transparent p-0 text-start text-[13px] text-text-secondary hover:text-text-strong focus-visible:outline-2 focus-visible:outline-focus-ring">
+      <CollapsibleTrigger className="group flex min-h-6 items-center gap-2 border-0 bg-transparent p-0 text-start text-[13px] text-text-secondary hover:text-text-strong focus-visible:outline-2 focus-visible:outline-focus-ring">
         <StepLine step={step} outcome={outcome} />
         <span aria-hidden className="text-label group-data-[state=open]:rotate-90">
           ›

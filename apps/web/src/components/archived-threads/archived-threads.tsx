@@ -134,7 +134,8 @@ function RestoreButton({
   onRestore: () => void;
 } & Pick<ComponentProps<typeof Button>, "variant" | "size">) {
   return (
-    <Button {...button} disabled={pending} aria-label={label} onClick={onRestore}>
+    // While it restores, the button reads "Restoring…", and its name says the same (WCAG 2.5.3).
+    <Button {...button} disabled={pending} aria-label={pending ? undefined : label} onClick={onRestore}>
       {pending ? messages.restoring : messages.restore}
     </Button>
   );

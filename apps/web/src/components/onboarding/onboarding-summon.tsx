@@ -183,11 +183,14 @@ function ReadyToSummon({
           <div key={row.label} className="flex items-baseline gap-3 border-line border-b py-2.5 last:border-b-0">
             <dt className="lbl w-[120px] flex-none text-label">{row.label}</dt>
             <dd className="m-0 min-w-0 flex-1 truncate">{row.value}</dd>
-            <Button asChild variant="ghost" size="xs" className="text-link">
-              <Link to={row.to} aria-label={copy.change({ step: row.label })}>
-                {copy.changeShort}
-              </Link>
-            </Button>
+            {/* A dl holds only dt and dd groups, so the row's link is a description of its own. */}
+            <dd className="m-0 flex-none">
+              <Button asChild variant="ghost" size="xs" className="text-link">
+                <Link to={row.to} aria-label={copy.change({ step: row.label })}>
+                  {copy.changeShort}
+                </Link>
+              </Button>
+            </dd>
           </div>
         ))}
       </dl>

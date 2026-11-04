@@ -59,7 +59,7 @@ import { type ContinueReply, MessageRow, messageElementId, QueuedRow, WaitingRow
  * Keeps the transcript's end in view while the composer grows or shrinks, so a long draft never
  * hides the latest message. A transcript scrolled back stays where it is.
  */
-const stayAtEnd = (view: HTMLDivElement | null) => {
+const stayAtEnd = (view: HTMLElement | null) => {
   if (view === null) return;
   let height = view.clientHeight;
   const observer = new ResizeObserver(() => {
@@ -270,12 +270,15 @@ export function ChatView({
       )}
       {threadId && <PinNotes threadId={threadId} pins={pins} />}
 
-      <div
+      <section
         onScroll={(event) => {
           const view = event.currentTarget;
           if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
         }}
         ref={stayAtEnd}
+        aria-label={copy.conversation}
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: the transcript scrolls, and before it holds a control only its own focus lets the keyboard scroll it (WCAG 2.1.1).
+        tabIndex={0}
         className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-[18px]"
       >
         {threadId && messages.isPending && <p className="text-label">{copy.loadingMessages}</p>}
@@ -352,7 +355,7 @@ export function ChatView({
           </p>
         )}
         <div ref={bottom} />
-      </div>
+      </section>
 
       {brainProblem !== null && (
         <section

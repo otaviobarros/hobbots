@@ -104,7 +104,7 @@ test("[TC-UX-040] a finished Task's Files tab lists what it made first, previews
   ]);
   expect(download.suggestedFilename()).toBe("report.md");
   expect(readFileSync(await download.path(), "utf8")).toBe("# Launch report\n\nEverything shipped.\n");
-  await expect(report.getByRole("button", { name: /Show .* in Finder/ })).toHaveCount(0);
+  await expect(report.getByRole("button", { name: /^Show in Finder: / })).toHaveCount(0);
 });
 
 // covers UX-002
@@ -205,7 +205,7 @@ test("[TC-UX-044] in the desktop app a file shows in Finder instead of downloadi
   await files.getByRole("button", { name: /^Launch report/ }).click();
   const report = files.getByRole("region", { name: "report.md" });
   await expect(report.getByRole("link", { name: /Download/ })).toHaveCount(0);
-  await report.getByRole("button", { name: "Show report.md in Finder" }).click();
+  await report.getByRole("button", { name: "Show in Finder: report.md" }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { showFileCalls: unknown[] }).showFileCalls.length))
     .toBe(1);
@@ -215,6 +215,6 @@ test("[TC-UX-044] in the desktop app a file shows in Finder instead of downloadi
   await expect(report).not.toContainText("Finder could not find this file");
 
   // A second time the file is gone from where the hub listed it.
-  await report.getByRole("button", { name: "Show report.md in Finder" }).click();
+  await report.getByRole("button", { name: "Show in Finder: report.md" }).click();
   await expect(report).toContainText("Finder could not find this file. It may have moved since.");
 });

@@ -6,8 +6,11 @@ import { CodeBlock } from "./code-block.tsx";
 import { codeLanguage, hastText } from "./hast-text.ts";
 import { remarkHtmlAsText } from "./html-as-text.ts";
 import { safeUrl } from "./links.ts";
+import { messages } from "./messages.ts";
 import { ReplyImage, ReplyLink } from "./reply-media.tsx";
 import { streamingMarkdown } from "./streaming.ts";
+
+const copy = messages;
 
 const heading = "font-heading text-title font-(--heading-weight) text-moonlight";
 
@@ -34,6 +37,7 @@ const components: Components = {
   input: ({ node: _, ...props }) => (
     <input
       className="me-2 size-3.5 cursor-default appearance-none border-2 border-control align-[-2px] checked:border-mint checked:bg-mint"
+      aria-label={copy.task}
       {...props}
     />
   ),

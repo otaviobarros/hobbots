@@ -284,7 +284,7 @@ function SharedFolders({
     return (
       <span className="text-sm text-text-secondary">
         {messages.permissions.noShared}{" "}
-        <Link to="/settings/$section" params={{ section: "safety" }}>
+        <Link to="/settings/$section" params={{ section: "safety" }} className="text-link underline">
           {messages.permissions.addInSettings}
         </Link>
       </span>

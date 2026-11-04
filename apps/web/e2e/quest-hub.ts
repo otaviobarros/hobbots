@@ -13,11 +13,21 @@ export const stopQuestHub = async () => {
 
 /**
  * A hub past setup that plays the scripted Black Friday Quest, with Aldric, Quill and Ada. With
- * `nested`, Rook and Pip join too, and Rook leads a Quest of his own under Aldric's.
+ * `nested`, Rook and Pip join too, and Rook leads a Quest of his own under Aldric's. `stepMs` slows the
+ * script, for a test that checks a moment that passes after a few steps.
  */
-export const questHub = async ({ nested = false }: { readonly nested?: boolean } = {}) => {
+export const questHub = async ({
+  nested = false,
+  stepMs,
+}: {
+  readonly nested?: boolean;
+  readonly stepMs?: number;
+} = {}) => {
   dataDir = emptyDataDir();
-  hub = await startHub(dataDir, { HOBBOTS_FAKE_QUEST: "black-friday" });
+  hub = await startHub(dataDir, {
+    HOBBOTS_FAKE_QUEST: "black-friday",
+    ...(stepMs !== undefined && { HOBBOTS_FAKE_QUEST_STEP_MS: String(stepMs) }),
+  });
   const { url, headers } = hub;
   const api = async (method: string, path: string, body: unknown) => {
     const response = await fetch(`${url}/api${path}`, {

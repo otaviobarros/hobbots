@@ -12,6 +12,8 @@ export const messages = {
     address: ({ url }: { url: string }) => `(${url})`,
     opensOutside: ({ url }: { url: string }) => `Opens ${url} in your browser`,
   },
+  /** The name of a task list's check box; the box itself says whether the task is done. */
+  task: "Task",
   image: {
     load: ({ host }: { host: string }) => `Show image from ${host}`,
     loadNamed: ({ alt, host }: { alt: string; host: string }) => `Show image “${alt}” from ${host}`,

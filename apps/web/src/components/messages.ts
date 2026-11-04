@@ -342,6 +342,7 @@ export const messages = {
     openHob: ({ name }: { name: string }) => `Open ${name}'s page`,
     hello: ({ name }: { name: string }) => `Hello, I'm ${name}!`,
     freshPage: "A fresh page",
+    conversation: "Conversation",
     helloBody: "Tell me my first chore. I keep working even if you switch to another thread.",
     freshBody: ({ name }: { name: string }) =>
       `Tell ${name} what you want done. ${name} plans it, brings in other hobs when it needs them, and asks you before anything risky.`,

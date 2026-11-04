@@ -66,13 +66,18 @@ export function ChangesTab({ activity, state, hobs, focus, onTab }: WorkbenchTab
               <>
                 <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-text-strong">
                   {splitPath(selected.path).name}
-                </span>
+                </span>{" "}
                 {/* Very narrow, the name keeps the room; the menu still tags every file. */}
                 <span className="hidden @min-[240px]/picker:inline-flex">
                   <KindTag kind={selected.kind} />
                 </span>
               </>
             )
+          }
+          currentText={
+            selected === null
+              ? ""
+              : messages.pickerShown({ name: splitPath(selected.path).name, kind: messages.kind[selected.kind] })
           }
           row={(change) => <RowContent change={change} activity={activity} dir={changeDir(change, manyFolders)} />}
           onPick={(index) => {

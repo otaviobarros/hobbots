@@ -142,22 +142,24 @@ function Row({ row, hobs, onOpen }: { row: WorkRow; hobs: HobLookup; onOpen: (ta
         : row.step !== null
           ? copy.step(row.step)
           : row.latest;
+  const shown = detail === null ? owner.name : copy.rowDetail({ name: owner.name, detail });
+  const status = messages.status[row.status];
   return (
     <button
       type="button"
       onClick={() => onOpen(row.task.id)}
-      aria-label={copy.open({ title })}
+      aria-label={copy.open({ title, detail: shown, status })}
       className="flex w-full cursor-pointer items-center gap-2.5 border-0 bg-panel px-2.5 py-2 text-start text-text-strong hover:bg-hover"
     >
       <StatusDot status={row.status} />
       <HobSprite hob={owner} size={18} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm font-bold">{title}</span>
+        <span className="truncate text-sm font-bold">{title}</span>{" "}
         <span className={cn("truncate text-detail", row.approval === null ? "text-text-secondary" : "text-lantern")}>
-          {detail === null ? owner.name : copy.rowDetail({ name: owner.name, detail })}
+          {shown}
         </span>
-      </span>
-      <StatusTag status={row.status}>{messages.status[row.status]}</StatusTag>
+      </span>{" "}
+      <StatusTag status={row.status}>{status}</StatusTag>
     </button>
   );
 }

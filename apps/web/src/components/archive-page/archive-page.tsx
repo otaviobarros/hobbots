@@ -291,7 +291,7 @@ function ChatRow({ chat: { hob, thread }, focus }: { chat: ArchivedChat; focus: 
           size="sm"
           className="relative z-[1]"
           aria-disabled={busy}
-          aria-label={copy.chats.restoreLabel({ title: thread.title })}
+          aria-label={(busy ? copy.chats.restoringLabel : copy.chats.restoreLabel)({ title: thread.title })}
           onClick={() => {
             if (!busy) actions.restore(hob, thread, () => focus.restored(thread.id));
           }}

@@ -156,7 +156,11 @@ function LiveOutputBlock({ live }: { live: LiveOutput | undefined }) {
       <figcaption className="border-b-2 border-line px-2.5 py-1 text-xs text-label">{copy.liveOutput}</figcaption>
       {live?.missed && <p className="m-0 border-b-2 border-line px-2.5 py-1 text-xs text-label">{copy.missed}</p>}
       {/* Reversed, so the newest line shows and the rest scrolls up. */}
-      <div className="flex max-h-60 flex-col-reverse overflow-auto">
+      <div
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling area takes the focus so the keyboard can scroll it (WCAG 2.1.1).
+        tabIndex={0}
+        className="flex max-h-60 flex-col-reverse overflow-auto"
+      >
         <pre role="log" aria-live="polite" className={cn(OUTPUT_TEXT, "max-h-none overflow-visible")}>
           {live === undefined || live.text === "" ? <span className="text-label">{copy.waiting}</span> : live.text}
         </pre>

@@ -96,7 +96,12 @@ export function DiagnosticsReportMaker({ questId }: { questId: QuestId | null })
       )}
       {report !== null && (
         <>
-          <section aria-label={copy.view} className="cut max-h-[360px] overflow-auto bg-card p-3">
+          <section
+            aria-label={copy.view}
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling area takes the focus so the keyboard can scroll it (WCAG 2.1.1).
+            tabIndex={0}
+            className="cut max-h-[360px] overflow-auto bg-card p-3"
+          >
             <pre className="m-0 font-mono text-xs break-all whitespace-pre-wrap">{reportText(report)}</pre>
           </section>
           <div className="flex flex-wrap gap-2">

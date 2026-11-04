@@ -49,7 +49,9 @@ export const messages = {
   picker: {
     previous: "Previous file",
     next: "Next file",
-    open: ({ label }: { label: string }) => `${label}: pick a file`,
+    /** The picker's name: what it does, then the file and place it shows, in its order (WCAG 2.5.3). */
+    open: ({ label, shown, position }: { label: string; shown: string; position: string }) =>
+      `${label}: pick a file. ${shown}, ${position}`,
     of: ({ index, total }: { index: number; total: number }) => `${formatCount(index)} of ${formatCount(total)}`,
   },
   unavailable: {

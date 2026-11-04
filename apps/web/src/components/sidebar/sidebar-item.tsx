@@ -58,7 +58,7 @@ export function SidebarLink({
         <span className={cn(sidebarIcon, active ? "text-text-strong" : "text-text-secondary")}>
           <SectionIcon name={label} />
         </span>
-        <span className="sidebar-label flex-1">{label}</span>
+        <span className="sidebar-label flex-1">{label}</span>{" "}
         {badge > 0 && (
           <span
             aria-hidden

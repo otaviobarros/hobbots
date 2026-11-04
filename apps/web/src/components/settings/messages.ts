@@ -179,6 +179,7 @@ export const messages = {
     retiredHobsBody: "Retired hobs and their chats also live in the Archive, and still show up in search.",
     openArchive: "Open the Archive",
     readChats: "Read chats",
+    readChatsWith: ({ name }: { name: string }) => `Read chats with ${name}`,
     dataFolder: "Data folder",
     dataFolderIntro: "Everything Hobbots keeps lives in this folder on the hub. A backup copies what matters in it.",
     dataFolderElsewhere: "Shown only on the hub's own computer.",

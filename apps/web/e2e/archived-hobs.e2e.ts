@@ -75,7 +75,7 @@ test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which
   await expect(retired.getByRole("note")).toContainText(
     "Pip is retired, so these chats are read-only until you bring it back",
   );
-  await retired.getByRole("link", { name: "Read Plan my week" }).click();
+  await retired.getByRole("link", { name: /^Read Plan my week, / }).click();
 
   await expect(page).toHaveURL(new RegExp(`#/archive/hobs/${hob.id}/${thread.id}$`));
   const chat = page.getByRole("main", { name: "Plan my week" });
@@ -94,7 +94,7 @@ test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which
   const row = yourData.getByRole("list", { name: "Retired hobs" }).getByRole("listitem").filter({ hasText: "Pip" });
   await expect(row).toContainText("Guide");
   await expect(row).toContainText("1 chat kept");
-  await row.getByRole("link", { name: "Read Pip's chats" }).click();
+  await row.getByRole("link", { name: "Read chats with Pip" }).click();
   await expect(page).toHaveURL(new RegExp(`#/archive/hobs/${hob.id}$`));
   await page.goto(`${current.url}/#/settings/data`);
   await yourData.getByRole("link", { name: "Open the Archive" }).click();
