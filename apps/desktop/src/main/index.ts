@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { readInstallationId } from "@hobbots/server/installation";
-import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 import { startMode } from "./app-mode.ts";
 import { startConnected } from "./connected-mode.ts";
 import { startHub } from "./hub-mode.ts";
@@ -9,7 +9,7 @@ import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./logi
 import { handleNotificationIpc } from "./notification-choices.ts";
 import { limitPermissions } from "./permissions.ts";
 import { logProcessFailures } from "./process-failures.ts";
-import { fileSettingsStore } from "./settings.ts";
+import { fileSettingsStore, saveBeforeQuit } from "./settings.ts";
 import { registerLocalScheme, startSetup } from "./setup-mode.ts";
 import { claimSingleInstance } from "./single-instance.ts";
 import { thisComputer } from "./tailnet.ts";
@@ -45,12 +45,25 @@ app.whenReady().then(async () => {
   limitPermissions(session.defaultSession);
   const dataDir = app.getPath("userData");
   const settings = fileSettingsStore(join(dataDir, "desktop-settings.json"));
-  // Settings are saved in the background; quitting, or starting again after Disconnect, waits for them.
+  // Settings are saved in the background; quitting waits for them, and says so when they cannot be saved.
   let settingsSaved = false;
+  let savingBeforeQuit = false;
   app.on("before-quit", (event) => {
     if (settingsSaved) return;
     event.preventDefault();
-    void settings.saved().finally(() => {
+    if (savingBeforeQuit) return;
+    savingBeforeQuit = true;
+    void saveBeforeQuit(settings, async ({ message, detail, buttons }) => {
+      const answer = await dialog.showMessageBox({
+        type: "error",
+        message,
+        detail,
+        buttons: [...buttons],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      return answer.response;
+    }).finally(() => {
       settingsSaved = true;
       app.quit();
     });

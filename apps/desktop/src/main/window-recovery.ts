@@ -23,6 +23,8 @@ export interface WindowPrompt {
 
 export interface RecoveryOptions {
   readonly page: WatchedPage;
+  /** The pages the window may show now; a failed page is loaded again only while it is one. */
+  readonly isAllowedUrl: (url: string) => boolean;
   readonly ask: (prompt: WindowPrompt) => Promise<number>;
   readonly close: () => void;
   readonly log?: (message: string, details: unknown) => void;
@@ -41,6 +43,7 @@ const ERR_ABORTED = -3;
 
 export const watchWindow = ({
   page,
+  isAllowedUrl,
   ask,
   close,
   log = (message, details) => console.error(message, details),
@@ -50,6 +53,11 @@ export const watchWindow = ({
   let crashes: Array<number> = [];
   let failedLoads = 0;
   let hung: AbortController | undefined;
+  /**
+   * The failed load a retry or a question is for. Any later navigation elsewhere, or a page that
+   * loads, replaces it, so a retry never takes the window back to an address it has moved on from.
+   */
+  let failed: { readonly url: string } | undefined;
   /** At most one question about a crash or a failed load at a time. */
   let asking = false;
   const askOnce = (prompt: WindowPrompt, then: (choice: number) => void) => {
@@ -104,23 +112,37 @@ export const watchWindow = ({
 
   page.on("did-finish-load", () => {
     failedLoads = 0;
+    failed = undefined;
   });
+
+  page.on(
+    "did-start-navigation",
+    (details: { readonly url: string; readonly isMainFrame: boolean; readonly isSameDocument: boolean }) => {
+      if (details.isMainFrame && !details.isSameDocument && details.url !== failed?.url) failed = undefined;
+    },
+  );
+
+  /** Loads the failed page again, unless the window moved on or may no longer show it. */
+  const loadAgain = (attempt: { readonly url: string }) => {
+    if (failed !== attempt || !live() || !isAllowedUrl(attempt.url)) return;
+    void page.loadURL(attempt.url).catch(() => undefined);
+  };
 
   page.on("did-fail-load", (_event: unknown, code: number, description: string, url: string, isMainFrame: boolean) => {
     if (!isMainFrame || code === ERR_ABORTED) return;
     log("A Hobbots window's page did not load", { code, description, url });
     failedLoads += 1;
+    const attempt = { url };
+    failed = attempt;
     if (failedLoads < MAX_TRIES) {
-      later(RETRY_MS, () => {
-        if (live()) void page.loadURL(url).catch(() => undefined);
-      });
+      later(RETRY_MS, () => loadAgain(attempt));
       return;
     }
     askOnce(
       { message: copy.notLoaded, detail: copy.notLoadedDetail, buttons: [copy.tryAgain, copy.close] },
       (choice) => {
         failedLoads = 0;
-        if (choice === 0) void page.loadURL(url).catch(() => undefined);
+        if (choice === 0) loadAgain(attempt);
         else close();
       },
     );

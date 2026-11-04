@@ -6,7 +6,10 @@ import { type WatchedPage, type WindowPrompt, watchWindow } from "../src/main/wi
 const copy = messages.window;
 
 /** A window's page as a plain emitter, recording what the watcher asks of it. */
-const watched = (answer: (prompt: WindowPrompt) => Promise<number> = async () => 0) => {
+const watched = (
+  answer: (prompt: WindowPrompt) => Promise<number> = async () => 0,
+  isAllowedUrl: (url: string) => boolean = () => true,
+) => {
   const emitter = new EventEmitter();
   const done: string[] = [];
   const asked: WindowPrompt[] = [];
@@ -22,6 +25,7 @@ const watched = (answer: (prompt: WindowPrompt) => Promise<number> = async () =>
   });
   watchWindow({
     page: page as unknown as WatchedPage,
+    isAllowedUrl,
     ask: (prompt) => {
       asked.push(prompt);
       return answer(prompt);
@@ -121,6 +125,40 @@ describe("a window whose page fails", () => {
     // The user chose Try again, which starts the count over.
     expect(page.done.at(-1)).toBe("load http://127.0.0.1:4317/");
     page.emit("did-finish-load");
+  });
+
+  it("drops a retry once the window moved on, or once it may no longer show the page", async () => {
+    const page = watched();
+    const fail = (url: string) => page.emit("did-fail-load", {}, -102, "ERR_CONNECTION_REFUSED", url, true);
+    fail("http://127.0.0.1:4317/hobs");
+    // The hub moved to another port, and the window followed it there before the retry.
+    page.emit("did-start-navigation", { url: "http://127.0.0.1:4400/hobs", isMainFrame: true, isSameDocument: false });
+    page.runLater();
+    expect(page.done).toEqual([]);
+
+    fail("http://127.0.0.1:4400/hobs");
+    page.emit("did-finish-load");
+    page.runLater();
+    expect(page.done).toEqual([]);
+
+    // A frame inside the page, or a link within the same page, does not count as moving on.
+    fail("http://127.0.0.1:4400/hobs");
+    page.emit("did-start-navigation", {
+      url: "http://127.0.0.1:4400/frame",
+      isMainFrame: false,
+      isSameDocument: false,
+    });
+    page.emit("did-start-navigation", { url: "http://127.0.0.1:4400/hobs#a", isMainFrame: true, isSameDocument: true });
+    page.runLater();
+    expect(page.done).toEqual(["load http://127.0.0.1:4400/hobs"]);
+
+    const strict = watched(
+      async () => 0,
+      (url) => url.startsWith("http://127.0.0.1:4400/"),
+    );
+    strict.emit("did-fail-load", {}, -102, "ERR_CONNECTION_REFUSED", "http://127.0.0.1:4317/hobs", true);
+    strict.runLater();
+    expect(strict.done).toEqual([]);
   });
 
   it("ignores a load that was stopped, a frame inside the page, and a window that is gone", async () => {

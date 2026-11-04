@@ -12,7 +12,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "icon": "node scripts/app-icon.ts",
-    "package:mac": "electron-builder --mac --config electron-builder.config.mjs --publish never && node scripts/check-fuses.ts"
+    "package:mac": "node scripts/package-mac.ts"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

@@ -25,7 +25,8 @@ export interface LoginItem {
   /** True when macOS opened the app at login, so it starts without a window. */
   readonly openedAtLogin: boolean;
   readonly state: () => LoginItemState;
-  readonly setOpenAtLogin: (openAtLogin: boolean) => LoginItemState;
+  /** Answers once the choice is saved; rejects when it could not be. */
+  readonly setOpenAtLogin: (openAtLogin: boolean) => Promise<LoginItemState>;
 }
 
 const statuses = new Set<string>(["enabled", "requires-approval", "not-registered", "not-found"]);
@@ -60,9 +61,10 @@ export const makeLoginItem = (options: {
   return {
     openedAtLogin,
     state,
-    setOpenAtLogin: (openAtLogin) => {
+    setOpenAtLogin: async (openAtLogin) => {
       settings.update({ openAtLogin });
       if (supported) items.write(openAtLogin);
+      await settings.saved();
       // Read back rather than assumed: an unsigned build can be refused without an error.
       return state();
     },

@@ -38,23 +38,23 @@ describe("the login item", () => {
   });
 
   // covers EX-005
-  it("[TC-GEN-005] removes the login item when the switch is turned off, and remembers it", () => {
+  it("[TC-GEN-005] removes the login item when the switch is turned off, and remembers it", async () => {
     const mac = fakeMac();
     const settings = freshSettings();
     const item = makeLoginItem({ supported: true, items: mac.items, settings });
-    expect(item.setOpenAtLogin(false)).toEqual({ openAtLogin: false, status: "not-registered" });
+    expect(await item.setOpenAtLogin(false)).toEqual({ openAtLogin: false, status: "not-registered" });
     expect(mac.writes).toEqual([true, false]);
     // Turned off stays off after a restart.
     makeLoginItem({ supported: true, items: mac.items, settings });
     expect(mac.writes).toEqual([true, false]);
-    expect(item.setOpenAtLogin(true).status).toBe("enabled");
+    expect((await item.setOpenAtLogin(true)).status).toBe("enabled");
   });
 
   // covers EX-005, OP-002
-  it("[TC-GEN-006] reports what macOS made of the registration instead of assuming it worked", () => {
+  it("[TC-GEN-006] reports what macOS made of the registration instead of assuming it worked", async () => {
     const refused = fakeMac({ refuse: true });
     const item = makeLoginItem({ supported: true, items: refused.items, settings: freshSettings() });
-    expect(item.setOpenAtLogin(true)).toEqual({ openAtLogin: true, status: "not-registered" });
+    expect(await item.setOpenAtLogin(true)).toEqual({ openAtLogin: true, status: "not-registered" });
 
     const waiting = fakeMac({ status: "requires-approval" });
     const approval = makeLoginItem({ supported: true, items: waiting.items, settings: freshSettings() });
@@ -79,11 +79,11 @@ describe("the login item", () => {
     expect(byHand.openedAtLogin).toBe(false);
   });
 
-  it("never touches macOS from a development checkout", () => {
+  it("never touches macOS from a development checkout", async () => {
     const mac = fakeMac({ wasOpenedAtLogin: true });
     const item = makeLoginItem({ supported: false, items: mac.items, settings: freshSettings() });
     expect(item.openedAtLogin).toBe(false);
-    expect(item.setOpenAtLogin(false)).toEqual({ openAtLogin: false, status: "unavailable" });
+    expect(await item.setOpenAtLogin(false)).toEqual({ openAtLogin: false, status: "unavailable" });
     expect(mac.writes).toEqual([]);
   });
 

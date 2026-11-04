@@ -1,7 +1,7 @@
 /**
  * Reads the fuses of every app `package:mac` built under release/ and fails on any that differs from
  * `electronFuses` (STD-DESKTOP-007), so a packaging change can never quietly ship the defaults.
- * Run by `pnpm --filter @hobbots/desktop package:mac` (Node 22.18 or later, for type stripping).
+ * Run by scripts/package-mac.ts after each build (Node 22.18 or later, for type stripping).
  */
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";

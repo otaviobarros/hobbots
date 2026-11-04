@@ -45,8 +45,9 @@ const patchFrom = ({ requests, devices, sound }: Partial<NotificationChoices>) =
 export const handleNotificationIpc = (options: SettingsIpcOptions) =>
   handleTrusted(options, {
     [notificationChannels.get]: noArgs(() => notificationChoices(options.settings)),
-    [notificationChannels.set]: withArgs(Schema.Tuple([ChoicesPatch()]), ([patch]) => {
+    [notificationChannels.set]: withArgs(Schema.Tuple([ChoicesPatch()]), async ([patch]) => {
       options.settings.update(patchFrom(patch));
+      await options.settings.saved();
       return notificationChoices(options.settings);
     }),
   });

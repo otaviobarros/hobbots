@@ -15,8 +15,9 @@ export const keepRunningChannels = {
 export const handleKeepRunningIpc = (options: SettingsIpcOptions) =>
   handleTrusted(options, {
     [keepRunningChannels.get]: noArgs(() => keepsRunning(options.settings)),
-    [keepRunningChannels.set]: withArgs(Schema.Tuple([Schema.Boolean]), ([on]) => {
+    [keepRunningChannels.set]: withArgs(Schema.Tuple([Schema.Boolean]), async ([on]) => {
       options.settings.update({ keepRunningInMenuBar: on });
+      await options.settings.saved();
       return keepsRunning(options.settings);
     }),
   });

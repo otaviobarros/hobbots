@@ -51,6 +51,7 @@ export const newAppWindow = (options: {
   });
   watchWindow({
     page: window.webContents,
+    isAllowedUrl: options.isAllowedUrl,
     ask: async ({ message, detail, buttons, signal }) =>
       (
         await dialog.showMessageBox(window, {
