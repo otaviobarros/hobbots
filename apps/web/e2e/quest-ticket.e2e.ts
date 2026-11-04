@@ -88,15 +88,24 @@ test("[TC-UX-221] two Quests in one thread each keep their own ticket under the 
   await expect(second).toContainText("Started");
   await expect(first).toContainText("Finished in");
 
-  // Each ticket sits under the request that started it, in the order you sent them.
+  // Each ticket sits under the request that started it, in the order you sent them, once the turn
+  // has settled. The order is read from the page in one go, so a scroll between reads cannot skew it.
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
   const chat = page.getByRole("main", { name: "Chat" });
-  const asked = (title: string) => chat.getByText(new RegExp(`^${title}\\nfake:hub start_quest`));
-  const tops = await Promise.all(
-    [asked("Tidy the notes"), first, asked("Write the summary"), second].map(
-      async (each) => (await each.boundingBox())?.y ?? 0,
-    ),
-  );
-  expect([...tops].sort((a, b) => a - b)).toEqual(tops);
+  const order = () =>
+    chat.evaluate((root) => {
+      const marks = [...root.querySelectorAll("*")].flatMap((each) => {
+        const label = each.getAttribute("aria-label") ?? "";
+        const text = each.childElementCount === 0 ? (each.textContent ?? "") : "";
+        if (label.startsWith("Open the Tidy the notes room")) return ["ticket 1"];
+        if (label.startsWith("Open the Write the summary room")) return ["ticket 2"];
+        if (text.startsWith("Tidy the notes\nfake:hub start_quest")) return ["request 1"];
+        if (text.startsWith("Write the summary\nfake:hub start_quest")) return ["request 2"];
+        return [];
+      });
+      return marks;
+    });
+  await expect.poll(order).toEqual(["request 1", "ticket 1", "request 2", "ticket 2"]);
 
   // The running Quest has its own quest button in the header; the ended one leaves it.
   const strip = page.getByRole("region", { name: "Work in progress" });
