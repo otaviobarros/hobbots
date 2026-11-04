@@ -135,10 +135,11 @@ export const POTION_COLORS: Readonly<Record<RuntimeKind, readonly [fill: string,
 /** A plan that reports nothing shows an empty grey bottle. */
 export const UNREPORTED_POTION = ["#3a3666", "#3a3666"] as const;
 
+// The glass reads the theme's tokens, so the bottle keeps its outline on a light card too.
 export const potionPalette = (fill: string, top: string): PixelPalette => ({
   k: "#a9774a",
-  g: "#ece8ff",
-  e: "#2c2a5a",
+  g: "var(--color-line-2)",
+  e: "var(--color-deep)",
   f: fill,
   t: top,
 });
