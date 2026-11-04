@@ -190,7 +190,7 @@ describe("turnEnded", () => {
       outcome: "The step's session finished.",
     });
     expect(decide("member", "active", ENDINGS.replied).attempt.outcome).toBe("The turn finished.");
-    expect(decide("root", "active", ENDINGS.replied).attempt.outcome).toBeNull();
+    expect(decide("root", "active", ENDINGS.replied).attempt.outcome).toBe("The turn finished.");
     expect(decide("member", "cancelling", ENDINGS.failed).attempt).toEqual({
       state: "failed",
       outcome: "The runtime broke",

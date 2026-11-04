@@ -7,6 +7,7 @@ import {
   foldLog,
   isSecretFile,
   keepPlan,
+  runsInSequence,
 } from "../src/index.ts";
 
 const file = (hash: string, size = 10) => ({ kind: "file" as const, size, hash });
@@ -101,5 +102,31 @@ describe("foldersOverlap", () => {
     expect(foldersOverlap("/work/site", "/work/site/docs")).toBe(true);
     expect(foldersOverlap("/work/site/docs", "/work/site")).toBe(true);
     expect(foldersOverlap("/work/site", "/work/site-old")).toBe(false);
+  });
+});
+
+describe("runsInSequence", () => {
+  it("is true for a line that runs a command after another whatever its exit", () => {
+    for (const line of ["git rev-parse --git-dir; git init", "make\nmake test", "sleep 1 & echo done"]) {
+      expect(runsInSequence(line)).toBe(true);
+    }
+  });
+
+  it("is false for one command, a chain on success or failure, a redirection and a quoted separator", () => {
+    for (const line of [
+      "pytest",
+      "npm ci && npm test",
+      "test -d .git || git init",
+      "make 2>&1 | tee log",
+      "cmd &> log",
+      "echo 'a; b' \"c & d\"",
+      "echo a\\;b",
+      "make |& tee log",
+      "npm test\n",
+      "npm test;",
+      "cat > notes.md <<'EOF'\nline one\nline two; three\nEOF",
+    ]) {
+      expect(runsInSequence(line)).toBe(false);
+    }
   });
 });

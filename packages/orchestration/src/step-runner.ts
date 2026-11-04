@@ -212,11 +212,11 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
               { currentAccess: currentAccessOf(run), redactor, approvals },
               STEP_TOOLS,
             ),
-            started: (sessionId) =>
+            started: (session) =>
               Effect.asVoid(
                 Effect.flatMap(nowIso, (at) =>
                   attempt(
-                    tasks.updateAttempt(attemptId, { _tag: "Running", sessionId, at }),
+                    tasks.updateAttempt(attemptId, { _tag: "Running", ...session, at }),
                     "record a step's session",
                   ),
                 ),

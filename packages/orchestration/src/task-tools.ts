@@ -352,7 +352,7 @@ export class TaskTools extends Context.Service<
                   Effect.option,
                 ),
             };
-            const end = (ending: TurnEnding, sessionId: string | null) =>
+            const end = (ending: TurnEnding, sessionId: string | null, policyVersion: string | null) =>
               Effect.gen(function* () {
                 if (attemptId === null || attemptOn === null) return;
                 const at = DateTime.formatIso(yield* DateTime.now);
@@ -363,6 +363,7 @@ export class TaskTools extends Context.Service<
                   ending,
                   carried: [],
                   sessionId,
+                  policyVersion,
                   ...(begun === null ? {} : { was: begun.was }),
                   at,
                 });

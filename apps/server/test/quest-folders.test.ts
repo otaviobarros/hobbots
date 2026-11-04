@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { AttemptId, TaskTree } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { endedActivity, hub, say, setUp, treeWhen } from "./workbench-hub.ts";
@@ -60,5 +61,30 @@ describe("a lead's turns on its Quest", () => {
     const whole = await unnamed.run(treeWhen((tree) => tree.attempts.length === 1));
     expect(whole.quests[0]?.limits.folders).toBeUndefined();
     expect(await scanned(unnamed.run, whole)).toEqual([[unnamed.folder, ...unnamed.others].sort()]);
+  }, 30_000);
+
+  // covers UX-002, ADR 018, ADR 023
+  it("[TC-OR-524] record changes against the Quest's folder when the lead's own folder holds it, as its members' are", async () => {
+    const { run, folder } = setUp({ "full-run/README.md": "# Full run\n", "elsewhere.md": "Not the Quest's\n" });
+    const quest = join(folder, "full-run");
+    await run(
+      say(
+        [
+          "Write the spec",
+          hub("start_quest", { key: "quest", goal: "Write the spec", folders: [quest] }),
+          write("full-run/docs/SPEC.md", "# Spec\n"),
+        ].join("\n"),
+      ),
+    );
+    const tree = await run(treeWhen((each) => each.attempts.length === 1));
+    // The next turn resumes the Attempt and knows the Quest's folder from its start.
+    await run(say(["Add notes", write("full-run/notes.md", "Notes\n")].join("\n")));
+    const activity = await run(endedActivity(tree.attempts[0]?.id as AttemptId, 2));
+
+    expect(await scanned(run, tree)).toEqual([[quest]]);
+    expect(activity.changes.map((change) => [change.folder, change.path]).sort()).toEqual([
+      [quest, "docs/SPEC.md"],
+      [quest, "notes.md"],
+    ]);
   }, 30_000);
 });

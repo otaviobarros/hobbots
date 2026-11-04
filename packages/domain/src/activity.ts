@@ -72,6 +72,50 @@ export type NotKept = typeof NotKept.Type;
 export const CommandState = Schema.Literals(["running", "succeeded", "failed", "uncertain"]);
 export type CommandState = typeof CommandState.Type;
 
+/** Whether the `&` at `i` runs what comes before it in the background, rather than redirecting (`2>&1`, `&>`) or piping (`|&`). */
+const background = (line: string, i: number) => !"|<>".includes(line[i - 1] ?? " ") && line[i + 1] !== ">";
+
+/** The index just past the quoted text or escape that starts at `i`, or `i` when none starts there. */
+const pastQuote = (line: string, i: number) => {
+  const c = line[i];
+  if (c === "\\") return i + 2;
+  if (c !== "'" && c !== '"') return i;
+  let j = i + 1;
+  while (j < line.length && line[j] !== c) j += c === '"' && line[j] === "\\" ? 2 : 1;
+  return j + 1;
+};
+
+/** Whether the character at `i`, outside quotes, ends a command whatever its exit: `;`, a newline or a lone `&`. */
+const sequenceAt = (line: string, i: number) => {
+  const c = line[i];
+  if (c === ";" || c === "\n") return true;
+  return c === "&" && line[i + 1] !== "&" && line[i - 1] !== "&" && background(line, i);
+};
+
+/**
+ * Whether a command line runs a command after another whatever the first one's exit: at a `;`, a
+ * newline or a lone `&` outside quotes, with a command after it. Its exit code is the last
+ * command's, so a line that succeeded may hold one that failed, as `git rev-parse …; git init` does
+ * (#702). A heredoc's body is not read: the line ends where it starts.
+ */
+export const runsInSequence = (line: string): boolean => {
+  let heredoc = false;
+  for (let i = 0; i < line.length; ) {
+    const past = pastQuote(line, i);
+    if (past !== i) {
+      i = past;
+      continue;
+    }
+    if (line.startsWith("<<", i)) heredoc = true;
+    if (sequenceAt(line, i)) {
+      if (heredoc && line[i] === "\n") return false;
+      if (line.slice(i + 1).trim() !== "") return true;
+    }
+    i++;
+  }
+  return false;
+};
+
 /** A command's whole output, kept as a log outside the database. */
 export const CommandLog = Schema.Struct({
   contentId: Schema.NullOr(ContentId),

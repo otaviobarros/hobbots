@@ -150,6 +150,27 @@ const placesOf = (folder: string, change: Pick<ListingChange, "path" | "movedFro
   ...(change.movedFrom === null ? [] : [fileLocation(folder, change.movedFrom)]),
 ];
 
+/** Whether `outer` holds `inner`, a folder inside it. */
+const holds = (outer: string, inner: string) => outer.length < inner.length && foldersOverlap(outer, inner);
+
+/**
+ * The baseline of `folder` read from the baseline of `outer`, a folder that holds it: its files under
+ * `folder`, by their path there.
+ */
+const baselineWithin = (outer: string, baseline: Baseline, folder: string): Baseline => {
+  const prefix = `${folder
+    .slice(outer.length)
+    .replace(/^[/\\]+/, "")
+    .replaceAll("\\", "/")}/`;
+  const under = <V>(entries: ReadonlyMap<string, V>) =>
+    new Map(
+      [...entries].flatMap(([path, value]) =>
+        path.startsWith(prefix) ? [[path.slice(prefix.length), value] as const] : [],
+      ),
+    );
+  return { listing: under(baseline.listing), stopped: null, versions: under(baseline.versions) };
+};
+
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 const encoder = new TextEncoder();
 const newId = () => crypto.randomUUID();
@@ -295,11 +316,19 @@ const makeRecorder = (limits: ActivityLimits) =>
             other.overlaps.delete(me);
           }
         };
-        /** Those of `folders` that hold or sit in one its Task works in; all of them when none does. */
+        /**
+         * The folders of `folders` the turn tracks once it knows where its Task works: each that sits in
+         * one of its Task's folders, and in place of one that holds some, those it holds, so a lead whose
+         * folder holds its Quest's records changes against the Quest's folder, as its members do (#702).
+         * All of them when its Task works in none of them.
+         */
         const within = (folders: ReadonlyArray<string>) =>
           Effect.map(turn.workIn ?? Effect.succeed(null), (work) => {
-            const kept = folders.filter((folder) => work?.some((each) => foldersOverlap(each, folder)) === true);
-            return kept.length > 0 ? kept : folders;
+            const kept = folders.flatMap((folder) => {
+              const holding = (work ?? []).filter((each) => foldersOverlap(each, folder));
+              return holding.some((each) => !holds(folder, each)) ? [folder] : holding;
+            });
+            return kept.length > 0 ? [...new Set(kept)] : folders;
           });
         const before = resumed === null ? Option.none() : yield* repo.read(resumed);
         if (Option.isSome(before)) {
@@ -541,54 +570,59 @@ const makeRecorder = (limits: ActivityLimits) =>
           return freed;
         };
 
-        /** Records the turn's changes in every tracked folder as they are now, and each folder's end scan. */
+        /**
+         * Records the turn's changes in every tracked folder as they are now, and each folder's end
+         * scan. A turn whose Attempt is known by now narrows its folders first, so it scans where its Task works.
+         */
         const compare = (settled: boolean) =>
-          Effect.forEach(
-            [...baselines],
-            ([folder, baseline]) =>
-              Effect.gen(function* () {
-                if (baseline.stopped !== null) return;
-                const startedAt = yield* nowIso;
-                const scanned = yield* scanner.scan(folder, limits);
-                const at = yield* nowIso;
-                if (settled || scanned.stopped !== null) {
-                  scans.push(scanDraft(folder, "end", scanned.filesScanned, scanned.stopped, startedAt, at));
-                }
-                if (scanned.stopped !== null) return;
-                // A change another turn took over since stays as this turn last recorded it.
-                const kept = (changeSets.get(folder) ?? [])
-                  .filter((draft) => takenOver(folder, draft))
-                  .map((draft) => ({ ...draft, settled }));
-                // What this folder's last changes held is freed first, so the new ones can use it.
-                for (const id of release(folder, kept)) freed.add(id);
-                const fresh = yield* Effect.forEach(
-                  compareListings(baseline.listing, scanned.listing).filter(
-                    (change) => ownChange(folder, change) && !kept.some((draft) => draft.path === change.path),
-                  ),
-                  (change) => draftOf(folder, baseline, change, settled, at),
-                );
-                const drafts = [...kept, ...fresh];
-                yield* Semaphore.withPermit(
-                  lock,
-                  Effect.sync(() => {
-                    // A folder the turn stopped tracking while it was scanned stays dropped.
-                    if (!tracks(folder)) return;
-                    changeSets.set(folder, drafts);
-                    dirtyFolders.add(folder);
-                  }),
-                );
-              }),
-            { discard: true },
-          ).pipe(
-            Effect.andThen(sync),
-            Effect.andThen(
-              Effect.suspend(() => {
-                for (const id of release()) freed.add(id);
-                const loose = [...freed].filter((id) => !held.has(id));
-                freed.clear();
-                return dropUnnamed(loose);
-              }).pipe(
-                Effect.catchCause((cause) => Effect.logWarning("Could not drop a turn's superseded contents", cause)),
+          Effect.flatMap(Semaphore.withPermit(lock, attach), () =>
+            Effect.forEach(
+              [...baselines],
+              ([folder, baseline]) =>
+                Effect.gen(function* () {
+                  if (baseline.stopped !== null) return;
+                  const startedAt = yield* nowIso;
+                  const scanned = yield* scanner.scan(folder, limits);
+                  const at = yield* nowIso;
+                  if (settled || scanned.stopped !== null) {
+                    scans.push(scanDraft(folder, "end", scanned.filesScanned, scanned.stopped, startedAt, at));
+                  }
+                  if (scanned.stopped !== null) return;
+                  // A change another turn took over since stays as this turn last recorded it.
+                  const kept = (changeSets.get(folder) ?? [])
+                    .filter((draft) => takenOver(folder, draft))
+                    .map((draft) => ({ ...draft, settled }));
+                  // What this folder's last changes held is freed first, so the new ones can use it.
+                  for (const id of release(folder, kept)) freed.add(id);
+                  const fresh = yield* Effect.forEach(
+                    compareListings(baseline.listing, scanned.listing).filter(
+                      (change) => ownChange(folder, change) && !kept.some((draft) => draft.path === change.path),
+                    ),
+                    (change) => draftOf(folder, baseline, change, settled, at),
+                  );
+                  const drafts = [...kept, ...fresh];
+                  yield* Semaphore.withPermit(
+                    lock,
+                    Effect.sync(() => {
+                      // A folder the turn stopped tracking while it was scanned stays dropped.
+                      if (!tracks(folder)) return;
+                      changeSets.set(folder, drafts);
+                      dirtyFolders.add(folder);
+                    }),
+                  );
+                }),
+              { discard: true },
+            ).pipe(
+              Effect.andThen(sync),
+              Effect.andThen(
+                Effect.suspend(() => {
+                  for (const id of release()) freed.add(id);
+                  const loose = [...freed].filter((id) => !held.has(id));
+                  freed.clear();
+                  return dropUnnamed(loose);
+                }).pipe(
+                  Effect.catchCause((cause) => Effect.logWarning("Could not drop a turn's superseded contents", cause)),
+                ),
               ),
             ),
           );
@@ -611,6 +645,25 @@ const makeRecorder = (limits: ActivityLimits) =>
          */
         const narrow = Effect.gen(function* () {
           me.folders = yield* within(me.folders);
+          // A Task's folder inside one the turn tracked from its start starts from what that one listed.
+          for (const folder of me.folders) {
+            if (baselines.has(folder)) continue;
+            const outer = [...baselines.keys()].find((each) => holds(each, folder));
+            const baseline = outer === undefined ? undefined : baselines.get(outer);
+            if (outer === undefined || baseline === undefined) continue;
+            // One whose scan stopped listed nothing to start from: the smaller folder is scanned on its own.
+            if (baseline.stopped !== null) {
+              yield* takeBaseline(folder);
+              continue;
+            }
+            const inner = baselineWithin(outer, baseline, folder);
+            const scan = scans.find((each) => each.folder === outer && each.phase === "start");
+            baselines.set(folder, inner);
+            if (scan !== undefined) {
+              scans.push({ ...scan, id: FolderScanId.make(newId()), folder, filesScanned: inner.listing.size });
+            }
+            if (unattributed.has(outer)) unattributed.add(folder);
+          }
           for (const folder of [...baselines.keys()]) {
             if (tracks(folder)) continue;
             baselines.delete(folder);
@@ -619,14 +672,22 @@ const makeRecorder = (limits: ActivityLimits) =>
           unlinkElsewhere();
         });
 
+        /** The Attempt the turn works on once it is known, narrowing its folders the first time (#670). */
+        const attach = Effect.gen(function* () {
+          if (me.attemptId !== null) return me.attemptId;
+          const attemptId = yield* turn.attempt;
+          if (attemptId === null) return null;
+          yield* narrow;
+          me.attemptId = attemptId;
+          return attemptId;
+        });
+
         /** Writes what the turn recorded since the last write, once the Attempt it works on is known. */
         const sync = Semaphore.withPermit(
           lock,
           Effect.gen(function* () {
-            const attemptId = me.attemptId ?? (yield* turn.attempt);
+            const attemptId = yield* attach;
             if (attemptId === null) return;
-            if (me.attemptId === null) yield* narrow;
-            me.attemptId = attemptId;
             const entries = [];
             for (const stepId of [...dirtyCommands]) {
               const command = commands.get(stepId);

@@ -342,7 +342,7 @@ const strayTurn = Effect.gen(function* () {
       configVersion: 1,
     }),
   );
-  yield* turn.end({ _tag: "Replied", text: "" }, null);
+  yield* turn.end({ _tag: "Replied", text: "" }, null, null);
   return turn;
 });
 
