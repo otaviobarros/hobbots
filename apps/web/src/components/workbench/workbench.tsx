@@ -1,5 +1,6 @@
 import type { AgentId, Attempt, AttemptId, Task, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { Tabs, TabsContent } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ComponentType, useEffect, useId, useRef } from "react";
@@ -21,6 +22,7 @@ import {
   type ActivityRead,
   attemptsOf,
   chosenAttempt,
+  isWorkbenchTab,
   openingAttempt,
   type ProbedRead,
   type TabState,
@@ -28,7 +30,7 @@ import {
   WORKBENCH_TABS,
   type WorkbenchTab,
 } from "./workbench-model.ts";
-import { tabIds, WorkbenchTabs } from "./workbench-tabs.tsx";
+import { WorkbenchTabs } from "./workbench-tabs.tsx";
 
 /** The tab that fills each panel; the Browser has none until it arrives (#382). */
 const PANELS: Readonly<Record<Exclude<WorkbenchTab, "browser">, ComponentType<WorkbenchTabProps>>> = {
@@ -158,7 +160,6 @@ function Bench({
   hobs: HobLookup;
   moves: ReturnType<typeof useWorkbenchMoves>;
 }) {
-  const base = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const attempts = attemptsOf(tree, task);
   const attempt = useShownAttempt(tree, task, attempts, view.attemptId);
@@ -193,34 +194,38 @@ function Bench({
         headingRef={heading}
         onAttempt={moves.attempt}
       />
-      <WorkbenchTabs base={base} tab={view.tab} states={states} onTab={moves.tab} />
-      {/* Every panel stays mounted, so each keeps its scroll, selection and folds while another shows. */}
-      <div className="relative min-h-0 flex-1">
-        {WORKBENCH_TABS.map((tab) => {
-          const on = tab === view.tab;
-          const ids = tabIds(base, tab);
-          return (
-            <div
-              key={tab}
-              role="tabpanel"
-              id={ids.panel}
-              aria-labelledby={ids.tab}
-              inert={!on}
-              className={cn("absolute inset-0 overflow-y-auto", !on && "invisible")}
-            >
-              <TabNotice
-                tab={tab}
-                state={states[tab]}
-                owner={hobs(task.ownerId).name}
-                onRetry={() => void read.refetch()}
-              />
-              {tab !== "browser" && states[tab].kind !== "not-used" && (
-                <Panel tab={tab} props={{ ...shared, state: states[tab], focus: on ? view.file : undefined }} />
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <Tabs
+        value={view.tab}
+        onValueChange={(next) => isWorkbenchTab(next) && moves.tab(next)}
+        className="min-h-0 flex-1"
+      >
+        <WorkbenchTabs states={states} />
+        {/* Every panel stays mounted, so each keeps its scroll, selection and folds while another shows. */}
+        <div className="relative min-h-0 flex-1">
+          {WORKBENCH_TABS.map((tab) => {
+            const on = tab === view.tab;
+            return (
+              <TabsContent
+                key={tab}
+                value={tab}
+                forceMount
+                inert={!on}
+                className={cn("absolute inset-0 overflow-y-auto", !on && "invisible")}
+              >
+                <TabNotice
+                  tab={tab}
+                  state={states[tab]}
+                  owner={hobs(task.ownerId).name}
+                  onRetry={() => void read.refetch()}
+                />
+                {tab !== "browser" && states[tab].kind !== "not-used" && (
+                  <Panel tab={tab} props={{ ...shared, state: states[tab], focus: on ? view.file : undefined }} />
+                )}
+              </TabsContent>
+            );
+          })}
+        </div>
+      </Tabs>
     </>
   );
 }
