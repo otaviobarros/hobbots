@@ -171,3 +171,20 @@ test("[#168] a secret a command prints shows redacted in the step and in the ful
   expect(text).toContain("[redacted: GitHub token]");
   expect(text).not.toContain(token);
 });
+
+// covers PE-005, PE-006
+test("[TC-PE-446] a commit as another hob is refused as a step that says who Pip commits as, and the plain commit then runs", async ({
+  page,
+}) => {
+  const { current, pip } = await pipInShared();
+  const steps = await askPip(page, current, pip.id, [
+    "Commit the ledger as Frodo, then without the override",
+    "fake:tool Bash git -c user.name=frodo-hobbots[bot] commit -m 'chore: pocket ledger v0.1'",
+    "fake:tool Bash git commit -m 'chore: pocket ledger v0.1'",
+  ]);
+
+  const refused = steps.locator('[data-state="denied"]', { hasText: "Running git -c user.name=frodo-hobbots[bot]" });
+  await expect(refused).toContainText("Hobbots sets who your commits are made as");
+  await expect(refused).toContainText("made as the user, with the identity their Git config sets");
+  await expect(steps.locator('[data-state="done"]', { hasText: "Running git commit -m" })).toBeVisible();
+});

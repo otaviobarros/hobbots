@@ -394,4 +394,51 @@ describe("creating a Git repository from the sandbox, end to end", () => {
       `git_init: Created an empty Git repository in ${inner}.`,
     );
   });
+
+  // covers PE-005, PE-006
+  it("[TC-PE-445] a member's commit as another hob is refused with the identity it commits as, and its plain commit runs", async () => {
+    await request("PATCH", "/api/setup", {
+      completed: true,
+      safetyPreset: "balanced",
+      approvedFolders: [project, frodoProject],
+    });
+    // Pip has no GitHub App of its own, so it commits as the user (ADR 018).
+    const pip = (
+      await request<Agent>("POST", "/api/agents", {
+        name: "Pip",
+        ...roleFields("writer"),
+        lookSeed: 700,
+        lookColor: "moss",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+      })
+    ).body;
+    const thread = (await request<Thread>("POST", `/api/agents/${pip.id}/threads`)).body;
+    await exchange(thread, "Keep a ledger", hub("start_quest", { key: "quest", goal: "Keep a ledger" }));
+
+    const bot = "frodo-hobbots[bot]";
+    const asFrodo = `git -c user.name=${bot} -c user.email=351716127+${bot}@users.noreply.github.com commit -m 'chore: pocket ledger v0.1'`;
+    const refused = await exchange(thread, "Commit the ledger as Frodo", `fake:tool Bash ${asFrodo}`);
+    expect(refused.steps.find((step) => step.kind === "tool" && step.label.includes(`user.name=${bot}`))).toMatchObject(
+      {
+        state: "denied",
+        reason: expect.stringContaining("made as the user, with the identity their Git config sets"),
+      },
+    );
+
+    // Told why, it commits without the override, which runs.
+    const committed = await exchange(
+      thread,
+      "Commit the ledger",
+      `fake:run ${JSON.stringify({
+        command: "git commit -m 'chore: pocket ledger v0.1'",
+        output: "[main 1a2b3c4] chore: pocket ledger v0.1\n",
+      })}`,
+    );
+    expect(committed.steps.find((step) => step.kind === "tool" && step.label.includes("git commit"))).toMatchObject({
+      state: "done",
+    });
+  });
 });

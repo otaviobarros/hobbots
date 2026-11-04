@@ -823,7 +823,7 @@ export const policyHooks = (
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
     const decision = await Effect.runPromise(
-      decideCall(engine, turn.context, null, call, report, redaction, turn.steersPush, turn.initTool),
+      decideCall(engine, turn.context, null, call, report, redaction, turn.steersPush, turn.initTool, turn.commitAs),
     ).catch(() => failed(tool));
     if (decision._tag === "Run") {
       if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
@@ -895,7 +895,17 @@ export const policyHooks = (
     const call = { id: options.toolUseID, tool, input, cwd: hooked?.cwd ?? (turn.folders[0] as string) };
     // An aborted call stops waiting, which expires its request.
     const decision = await Effect.runPromise(
-      decideCall(engine, turn.context, approvals, call, report, redaction, turn.steersPush, turn.initTool),
+      decideCall(
+        engine,
+        turn.context,
+        approvals,
+        call,
+        report,
+        redaction,
+        turn.steersPush,
+        turn.initTool,
+        turn.commitAs,
+      ),
       {
         signal: options.signal,
       },
