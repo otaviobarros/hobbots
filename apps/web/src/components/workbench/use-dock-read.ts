@@ -2,10 +2,23 @@ import type { TaskId, TaskTree } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { workbenchTreeQuery } from "../../api/workbench.ts";
 import { useWorkbenchStream } from "../../api/workbench-stream.ts";
-import { laneOf, type RoomLane } from "../quest-room/room-model.ts";
 import type { RoomView } from "../quest-room/room-search.ts";
 import { type DockFilter, dockCounts, dockSources, dockStates, sameStates } from "./dock-model.ts";
 import type { TabState } from "./workbench-model.ts";
+
+/**
+ * Whose work the dock shows: the lit lane's hob, or its one Task when Show in the Workbench asked
+ * for it, and the Task its header names. A Task alone has one lane, so the dock names it as a lit
+ * lane's Task is named.
+ */
+const dockScope = (tree: TaskTree, party: boolean, lit: TaskId | undefined, taskOnly: boolean) => {
+  const named = lit ?? (party ? undefined : tree.tasks[0]?.id);
+  const litTask = named === undefined ? undefined : tree.tasks.find((each) => each.id === named);
+  const ownerId = lit === undefined ? undefined : tree.tasks.find((each) => each.id === lit)?.ownerId;
+  const only: DockFilter | undefined =
+    lit === undefined || ownerId === undefined ? undefined : taskOnly ? { taskId: lit } : { ownerId };
+  return { litTask, ownerId, only };
+};
 
 /**
  * What the docked Workbench shows: the Quest's tree read in one call and kept live through its one
@@ -13,7 +26,8 @@ import type { TabState } from "./workbench-model.ts";
  */
 export const useDockRead = (
   tree: TaskTree,
-  lanes: ReadonlyArray<RoomLane>,
+  /** Whether the Quest has more than one lane, one per hob. */
+  party: boolean,
   lit: TaskId | undefined,
   view: RoomView,
 ) => {
@@ -21,19 +35,13 @@ export const useDockRead = (
   const topId = top?.id ?? ("" as TaskId);
   const read = useQuery({ ...workbenchTreeQuery(topId), enabled: top !== undefined });
   useWorkbenchStream(topId, read.data?.cursor);
-  const lane = laneOf(lanes, lit);
-  // A Task alone has one lane, so the dock names it as a lit lane's Task is named.
-  const named = lit ?? (lanes.length === 1 ? top?.id : undefined);
-  const litTask = named === undefined ? undefined : tree.tasks.find((each) => each.id === named);
+  const { litTask, ownerId, only } = dockScope(tree, party, lit, view.taskOnly);
   const data = read.data;
-  // Show in the Workbench narrows the dock to its one Task; a lit lane, to its hob's.
-  const only: DockFilter | undefined =
-    lit === undefined || lane === undefined ? undefined : view.taskOnly ? { taskId: lit } : { ownerId: lane.ownerId };
   const sources = data === undefined ? [] : dockSources(tree, data.activity, view.attemptId, only);
   const unread: TabState = read.isError ? { kind: "unavailable", reason: "unread" } : { kind: "history" };
   return {
     top,
-    lane,
+    ownerId,
     litTask,
     only,
     sources,

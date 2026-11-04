@@ -1,6 +1,6 @@
-import type { AgentId, AttemptId, TaskTree } from "@hobbots/domain";
-import { useQueries } from "@tanstack/react-query";
-import { attemptActivityQuery } from "../../api/workbench.ts";
+import type { AgentId, AttemptId, TaskId, TaskTree } from "@hobbots/domain";
+import { useQuery } from "@tanstack/react-query";
+import { workbenchTreeQuery } from "../../api/workbench.ts";
 import { type LanePicks, type LaneRoom, laneAttempts, laneRoom } from "./lane-model.ts";
 
 /** The try the address picked, by the Task it is a try of; none when it names no try of this tree. */
@@ -21,33 +21,25 @@ export interface LaneReads {
 
 /**
  * The room's lanes, from the Task tree and the Workbench records of the tries they show, and where
- * each hob's reads stand. Each record is read once and kept live as the hub records more, so a lane
- * grows as its hob works; a record not read yet, or that failed, leaves only what the tree says,
- * and its lane says why (STD-REACT-015).
+ * each hob's reads stand. The records come from the Quest's one Workbench read, which the docked
+ * Workbench keeps live through the tree's stream, so a lane grows as its hob works; while that read
+ * is on its way or failed, a lane shows only what the tree says, and says why (STD-REACT-015).
  */
 export const useLaneRoom = (
   tree: TaskTree,
   picks: LanePicks,
 ): { readonly room: LaneRoom; readonly reads: (hobId: AgentId) => LaneReads } => {
-  const ids = laneAttempts(tree, picks);
-  const results = useQueries({ queries: ids.map((id) => attemptActivityQuery(id)) });
-  const activities = results.flatMap((each) => (each.data === undefined ? [] : [each.data]));
-  const ownerOf = (id: AttemptId) => {
-    const taskId = tree.attempts.find((each) => each.id === id)?.taskId;
-    return tree.tasks.find((each) => each.id === taskId)?.ownerId;
-  };
+  const ids = new Set(laneAttempts(tree, picks));
+  const read = useQuery({ ...workbenchTreeQuery(tree.tasks[0]?.id ?? ("" as TaskId)), enabled: tree.tasks.length > 0 });
+  const activities = (read.data?.activity.attempts ?? [])
+    .map((each) => each.activity)
+    .filter((each) => ids.has(each.attempt.id));
   const reads = (hobId: AgentId): LaneReads => {
-    const own = results.filter((_, index) => {
-      const id = ids[index];
-      return id !== undefined && ownerOf(id) === hobId;
-    });
-    const unsettled = own.filter((each) => each.isPending || each.isError);
+    const owns = tree.tasks.some((task) => task.ownerId === hobId);
     return {
-      pending: own.some((each) => each.isPending),
-      failed: own.some((each) => each.isError),
-      retry: () => {
-        for (const each of unsettled) void each.refetch();
-      },
+      pending: owns && read.isPending,
+      failed: owns && read.isError,
+      retry: () => void read.refetch(),
     };
   };
   return { room: laneRoom(tree, activities, picks), reads };

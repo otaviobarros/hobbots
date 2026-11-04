@@ -4,7 +4,6 @@ import { type RefObject, useRef } from "react";
 import type { HobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { messages as roomCopy } from "../quest-room/messages.ts";
-import type { RoomLane } from "../quest-room/room-model.ts";
 import type { RoomMoves, RoomView } from "../quest-room/room-search.ts";
 import { DockBar } from "./dock-bar.tsx";
 import type { DockSource } from "./dock-model.ts";
@@ -24,21 +23,22 @@ import { attemptsOf, isWorkbenchTab, WORKBENCH_TABS } from "./workbench-model.ts
  */
 export function WorkbenchDock({
   tree,
-  lanes,
+  party,
   lit,
   view,
   hobs,
   moves,
 }: {
   tree: TaskTree;
-  lanes: ReadonlyArray<RoomLane>;
+  /** Whether the Quest has more than one lane, one per hob. */
+  party: boolean;
   /** The Task whose lane is lit, or undefined while the dock shows everyone. */
   lit: TaskId | undefined;
   view: RoomView;
   hobs: HobLookup;
   moves: RoomMoves;
 }) {
-  const { top, lane, litTask, only, sources, states, counts, retry } = useDockRead(tree, lanes, lit, view);
+  const { top, ownerId, litTask, only, sources, states, counts, retry } = useDockRead(tree, party, lit, view);
   const height = useDockHeight();
   const heading = useRef<HTMLHeadingElement>(null);
   if (top === undefined) return null;
@@ -74,14 +74,14 @@ export function WorkbenchDock({
           counts={counts}
           open={open}
           filter={
-            lane === undefined || only === undefined
+            ownerId === undefined || only === undefined
               ? null
               : {
-                  hob: hobs(lane.ownerId),
-                  name: "taskId" in only && litTask !== undefined ? taskTitle(litTask) : hobs(lane.ownerId).name,
+                  hob: hobs(ownerId),
+                  name: "taskId" in only && litTask !== undefined ? taskTitle(litTask) : hobs(ownerId).name,
                 }
           }
-          party={lanes.length > 1}
+          party={party}
           onEveryone={() => moves.lane(undefined)}
           onFold={() => moves.tab(open ? undefined : "changes")}
         />
