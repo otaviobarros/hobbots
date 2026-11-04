@@ -1,5 +1,3 @@
-import { cn } from "@hobbots/ui/lib/utils";
-
 /** The 16 × 16 line icons the Inbox draws beside its words, in the color of the text they sit by. */
 const PATHS = {
   /** A clock, before when a row expires or how long it waited. */
@@ -14,7 +12,8 @@ const PATHS = {
 
 export type InboxIconName = keyof typeof PATHS;
 
-export function InboxIcon({ name, className }: { name: InboxIconName; className?: string }) {
+/** One of the icons at `size` pixels, 14 by default; it takes the color of the text around it. */
+export function InboxIcon({ name, size = 14 }: { name: InboxIconName; size?: number }) {
   return (
     <svg
       viewBox="0 0 16 16"
@@ -24,7 +23,9 @@ export function InboxIcon({ name, className }: { name: InboxIconName; className?
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className={cn("size-3.5 shrink-0", className)}
+      width={size}
+      height={size}
+      className="shrink-0"
     >
       <path d={PATHS[name]} />
     </svg>

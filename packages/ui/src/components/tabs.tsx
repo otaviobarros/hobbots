@@ -12,12 +12,19 @@ function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive
   return <TabsPrimitive.Root data-slot="tabs" className={cn("flex flex-col", className)} {...props} />;
 }
 
-function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
+// `line` draws the line the selected tab's bar sits on; `plain` leaves it out, for tabs in a header
+// that already has a rule under it.
+function TabsList({
+  className,
+  variant = "line",
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.List> & { variant?: "line" | "plain" }) {
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        "flex shrink-0 gap-1 overflow-x-auto border-0 border-b-[length:var(--edge)] border-solid border-line",
+        "flex shrink-0 gap-1 overflow-x-auto border-0 border-solid border-line",
+        variant === "line" && "border-b-[length:var(--edge)]",
         className,
       )}
       {...props}

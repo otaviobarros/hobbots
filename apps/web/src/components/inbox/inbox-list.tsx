@@ -80,11 +80,9 @@ export function InboxList({
         return (
           <li key={group.key} className="flex flex-col gap-1 rounded-card bg-card px-1 pt-1 pb-1">
             <span title={copy.groupTitle(heading)} className="flex min-w-0 items-center gap-1.5 px-1.5 py-1">
-              {heading.icon === "quest" ? (
-                <FlagIcon size={13} className="text-star" />
-              ) : (
-                <InboxIcon name={heading.icon} className="size-3.25 text-star" />
-              )}
+              <span className="flex text-star">
+                {heading.icon === "quest" ? <FlagIcon size={13} /> : <InboxIcon name={heading.icon} size={13} />}
+              </span>
               <span className="lbl flex-none text-xs text-label">{heading.label}</span>
               <span className="min-w-0 truncate text-meta text-label">{heading.detail}</span>
             </span>
@@ -202,7 +200,7 @@ function InboxItem({
           {row.what}
         </span>
         <span className={cn("flex items-center gap-1.25 text-meta", TONE[row.tone])}>
-          <InboxIcon name="clock" className="size-3" />
+          <InboxIcon name="clock" size={12} />
           {place === undefined ? row.when : copy.whenIn({ when: row.when, place })}
         </span>
       </span>

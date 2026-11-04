@@ -24,7 +24,7 @@ export function InboxTabs({ tab, children }: { tab: InboxTab; children: ReactNod
 export function InboxTabList({ tab, waiting }: { tab: InboxTab; waiting: number }) {
   const open = useOpenTab();
   return (
-    <TabsList aria-label={copy.tabsLabel} className="border-b-0">
+    <TabsList aria-label={copy.tabsLabel} variant="plain">
       {INBOX_TABS.map((name) => (
         <TabsTrigger key={name} value={name} onClick={() => name === tab && open(name)}>
           {copy.tabs[name]}
@@ -38,8 +38,8 @@ export function InboxTabList({ tab, waiting }: { tab: InboxTab; waiting: number 
 /** The open tab's panel: the page under the header. */
 export function InboxPanel({ tab, children }: { tab: InboxTab; children: ReactNode }) {
   return (
-    <TabsContent value={tab} className="flex min-h-0 min-w-0 flex-1">
-      {children}
+    <TabsContent value={tab} className="min-h-0 min-w-0 flex-1">
+      <div className="flex h-full min-w-0">{children}</div>
     </TabsContent>
   );
 }
