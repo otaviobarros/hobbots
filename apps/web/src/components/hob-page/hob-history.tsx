@@ -1,5 +1,5 @@
 import { HOB_COLORS } from "@hobbots/art/look";
-import type { Agent, HistoryFilter } from "@hobbots/domain";
+import type { Agent, HistoryDay, HistoryFilter } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@hobbots/ui/components/empty";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
@@ -43,75 +43,16 @@ export function HobHistory({
   onFilter: (filter: HistoryFilter) => void;
 }) {
   const history = useHobHistory(hob.id, filter);
-  const list = useQuery(agentsQuery).data ?? [];
-  const hobs = new Map(list.map((each) => [each.id, each]));
-  // A lead's History holds its party's work too, which the note under the filters says.
-  const work = useQuestWork(list.map((each) => each.id));
-  const { live, finished } = ledQuests(questsInProgress(work), hob.id);
-  const leads = live.length > 0 || finished > 0;
   const pages = history.data?.pages ?? [];
   const days = pages.flatMap((page) => page.days);
   const earlier = pages.at(-1)?.earlierDays ?? 0;
   // While a filter shows nothing, the filters stay so you can go back to Everything.
   const nothingAtAll = filter === "all" && history.isSuccess && days.length === 0;
-  const now = new Date();
 
   return (
     <div className="flex flex-col gap-3.5">
-      {!nothingAtAll && (
-        <div className="flex flex-wrap items-center gap-3">
-          <SegmentedControl aria-label={copy.filters.label} size="sm" value={filter} onValueChange={onFilter}>
-            {FILTERS.map((each) => (
-              <SegmentedControlItem key={each} value={each}>
-                {copy.filters[each]}
-              </SegmentedControlItem>
-            ))}
-          </SegmentedControl>
-          <span className="text-[13px] leading-[18px] text-label">
-            {leads ? copy.noteLead : copy.note({ name: hob.name })}
-          </span>
-        </div>
-      )}
-      {history.isPending ? (
-        <p role="status" className="m-0 text-sm text-label">
-          {copy.loading}
-        </p>
-      ) : history.isError && days.length === 0 ? (
-        <div role="alert" className="flex items-center gap-3 text-sm text-rose">
-          {copy.failed}
-          <Button variant="outline" size="sm" onClick={() => void history.refetch()}>
-            {copy.retry}
-          </Button>
-        </div>
-      ) : days.length === 0 ? (
-        <Empty surface="card">
-          <EmptyMedia variant="icon">
-            <ClockIcon />
-          </EmptyMedia>
-          <EmptyHeader>
-            <EmptyTitle>{filter === "all" ? copy.empty : copy.emptyKind}</EmptyTitle>
-            <EmptyDescription>
-              {filter === "all" ? copy.emptyBody({ name: hob.name }) : copy.emptyKindBody({ name: hob.name })}
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        days.map(({ day, events }) => {
-          const label = dayLabel(day, now);
-          return (
-            <section key={day} aria-label={label} className="flex flex-col">
-              <h3 className="lbl m-0 flex items-center gap-2 px-1 pb-1.5 text-xs leading-4 text-label after:h-px after:flex-1 after:bg-line">
-                {label}
-              </h3>
-              <ol className="m-0 flex list-none flex-col p-0">
-                {events.map((event) => (
-                  <EventRow key={event.id} row={historyRow(event, hob, hobs)} />
-                ))}
-              </ol>
-            </section>
-          );
-        })
-      )}
+      {!nothingAtAll && <Filters hob={hob} filter={filter} onFilter={onFilter} />}
+      <Days hob={hob} filter={filter} history={history} days={days} />
       {history.hasNextPage && earlier > 0 && (
         <button
           type="button"
@@ -124,6 +65,98 @@ export function HobHistory({
       )}
     </div>
   );
+}
+
+/** The four filters, and a note on whose work the History holds. */
+function Filters({
+  hob,
+  filter,
+  onFilter,
+}: {
+  hob: Agent;
+  filter: HistoryFilter;
+  onFilter: (filter: HistoryFilter) => void;
+}) {
+  const list = useQuery(agentsQuery).data ?? [];
+  // A lead's History holds its party's work too, which the note says.
+  const { live, finished } = ledQuests(questsInProgress(useQuestWork(list.map((each) => each.id))), hob.id);
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <SegmentedControl aria-label={copy.filters.label} size="sm" value={filter} onValueChange={onFilter}>
+        {FILTERS.map((each) => (
+          <SegmentedControlItem key={each} value={each}>
+            {copy.filters[each]}
+          </SegmentedControlItem>
+        ))}
+      </SegmentedControl>
+      <span className="text-[13px] leading-[18px] text-label">
+        {live.length > 0 || finished > 0 ? copy.noteLead : copy.note({ name: hob.name })}
+      </span>
+    </div>
+  );
+}
+
+/** The days read so far, each under its heading, or why there are none. */
+function Days({
+  hob,
+  filter,
+  history,
+  days,
+}: {
+  hob: Agent;
+  filter: HistoryFilter;
+  history: ReturnType<typeof useHobHistory>;
+  days: ReadonlyArray<HistoryDay>;
+}) {
+  const list = useQuery(agentsQuery).data ?? [];
+  const hobs = new Map(list.map((each) => [each.id, each]));
+  if (history.isPending)
+    return (
+      <p role="status" className="m-0 text-sm text-label">
+        {copy.loading}
+      </p>
+    );
+  if (history.isError && days.length === 0)
+    return (
+      <div role="alert" className="flex items-center gap-3 text-sm text-rose">
+        {copy.failed}
+        <Button variant="outline" size="sm" onClick={() => void history.refetch()}>
+          {copy.retry}
+        </Button>
+      </div>
+    );
+  if (days.length === 0) {
+    const all = filter === "all";
+    return (
+      <Empty surface="card">
+        <EmptyMedia variant="icon">
+          <ClockIcon />
+        </EmptyMedia>
+        <EmptyHeader>
+          <EmptyTitle>{all ? copy.empty : copy.emptyKind}</EmptyTitle>
+          <EmptyDescription>
+            {all ? copy.emptyBody({ name: hob.name }) : copy.emptyKindBody({ name: hob.name })}
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+  const now = new Date();
+  return days.map(({ day, events }) => {
+    const label = dayLabel(day, now);
+    return (
+      <section key={day} aria-label={label} className="flex flex-col">
+        <h3 className="lbl m-0 flex items-center gap-2 px-1 pb-1.5 text-xs leading-4 text-label after:h-px after:flex-1 after:bg-line">
+          {label}
+        </h3>
+        <ol className="m-0 flex list-none flex-col p-0">
+          {events.map((event) => (
+            <EventRow key={event.id} row={historyRow(event, hob, hobs)} />
+          ))}
+        </ol>
+      </section>
+    );
+  });
 }
 
 /** One event: its time, its mark on the day's line, what happened, and where it opens. */
