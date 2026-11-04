@@ -44,11 +44,14 @@ export function QuestCard({
   tree,
   hobs,
   onOpen,
+  onQuest,
   onWorkbench,
 }: {
   tree: TaskTree;
   hobs: HobLookup;
   onOpen: (taskId: TaskId) => void;
+  /** Opens the request's Quest in the work sheet, by its top Task. */
+  onQuest: (topId: TaskId) => void;
   /** Opens the Task's Workbench: what it ran, changed and made (ADR 023). */
   onWorkbench: (taskId: TaskId) => void;
 }) {
@@ -102,7 +105,12 @@ export function QuestCard({
         <Button variant="link" size="xs" className="ms-auto" onClick={() => onWorkbench(card.top.id)}>
           {copy.workbench}
         </Button>
-        <Button variant="link" size="xs" onClick={() => onOpen(card.top.id)}>
+        {/* With no Task under it there is nothing to list: Details opens the Task itself. */}
+        <Button
+          variant="link"
+          size="xs"
+          onClick={() => (tree.tasks.length === 1 ? onOpen(card.top.id) : onQuest(card.top.id))}
+        >
           {card.rows.length + card.done + card.more > 0 ? copy.showAll : copy.details}
         </Button>
       </div>

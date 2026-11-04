@@ -13,11 +13,14 @@ export function WorkMoments({
   moments,
   hobs,
   onOpen,
+  onQuest,
   onWorkbench,
 }: {
   moments: ReadonlyArray<Moment>;
   hobs: HobLookup;
   onOpen: (taskId: TaskId) => void;
+  /** Opens the request's Quest in the work sheet, by its top Task. */
+  onQuest: (topId: TaskId) => void;
   /** Opens a Task's Workbench in the chat's place. */
   onWorkbench: (taskId: TaskId) => void;
 }) {
@@ -28,6 +31,7 @@ export function WorkMoments({
         tree={moment.tree}
         hobs={hobs}
         onOpen={onOpen}
+        onQuest={onQuest}
         onWorkbench={onWorkbench}
       />
     ) : moment.kind === "question" ? (

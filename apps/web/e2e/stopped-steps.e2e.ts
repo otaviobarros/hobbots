@@ -34,9 +34,7 @@ test("[TC-OR-402] the Task card shows a step that stopped on a finding as blocke
   await expect(row).toContainText("step 1 of 2");
   await expect(card).toContainText("0 of 2 done");
   await row.click();
-  await expect(page.getByRole("complementary", { name: "Write the README and SPEC, Task details" })).toContainText(
-    FINDING,
-  );
+  await expect(page.getByRole("dialog", { name: "Write the README and SPEC, Task details" })).toContainText(FINDING);
 
   // Step 2 is held by it, and never ran.
   await page.getByRole("tab", { name: "Quest" }).click();

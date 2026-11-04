@@ -165,11 +165,12 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on its T
     .getByRole("region", { name: "Nettle asks permission" });
   await expect(inTray.getByText(`rm ${shared}/tmp-notes.txt`, { exact: true })).toBeVisible();
 
-  // The Task's drawer opens on what waits on your approval.
+  // The Task's sheet says it needs you, and Review in chat goes back to the tray.
   await row.click();
-  const drawer = page.getByRole("complementary", { name: "Remove the notes, Task details" });
-  await expect(drawer.getByRole("region", { name: "Nettle asks permission" })).toBeVisible();
-  await drawer.getByRole("button", { name: "Close" }).click();
+  const drawer = page.getByRole("dialog", { name: "Remove the notes, Task details" });
+  await expect(drawer).toContainText("Needs you");
+  await drawer.getByRole("button", { name: "Review in chat" }).click();
+  await expect(drawer).toBeHidden();
 
   // The Quest tab, open beside the chat while the work runs, shows it under the Task too, and
   // Allow once there decides the same request.
