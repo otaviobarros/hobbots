@@ -1,5 +1,7 @@
-/** Twinkling pixel stars across the full width and the top `height` pixels. */
-export function Stars({ count, height }: { count: number; height: number }) {
+import { cn } from "@hobbots/ui/lib/utils";
+
+/** Twinkling pixel stars across the full width and the top `height` pixels, in `star` unless `className` sets a color. */
+export function Stars({ count, height, className }: { count: number; height: number; className?: string }) {
   // A fixed seed keeps the sky the same on every render.
   const stars = (() => {
     let a = 7;
@@ -19,7 +21,7 @@ export function Stars({ count, height }: { count: number; height: number }) {
     <span
       key={`${s.x}.${s.y}`}
       aria-hidden
-      className="absolute animate-hb-twinkle bg-star"
+      className={cn("absolute animate-hb-twinkle bg-star", className)}
       style={{ left: `${s.x}%`, top: s.y, width: s.z, height: s.z, animationDelay: `${s.d}s` }}
     />
   ));

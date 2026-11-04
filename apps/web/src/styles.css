@@ -61,6 +61,10 @@
   --color-scene-smoke: #6a6390;
   --color-scene-door: #241c33;
   --color-scene-star: #cfc8ff;
+  --color-scene-sky: #0b0a1a;
+  --color-scene-title: #ece9f3;
+  --color-scene-text: #c9c3dd;
+  --color-scene-sun: #f4c25e;
   --color-desk: #6b4a2f;
   --color-desk-edge: #8a6240;
   /* The tile behind each AI provider's letter mark, the same in every theme. */
