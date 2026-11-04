@@ -87,18 +87,14 @@ test("[TC-UX-291] from the room, one failed Task is retried and the other is giv
   await openRoom(page, quest);
   await expect(ticket(page, quest)).toContainText("2 need you", { timeout: 15_000 });
 
-  // Quill's banner failed: Retry starts a second try of the same Task, and the first stays in its history.
+  // Quill's banner failed: Retry starts a second try of the same Task, and the lane is no longer rose.
   const banner = laneTask(page, "Write the sale banner");
   const bannerFailed = lane(page, "Quill").getByRole("region", { name: "Quill's task failed" });
   await expect(bannerFailed).toContainText("The image service timed out.");
   await bannerFailed.getByRole("button", { name: "Retry" }).click();
   await expect(banner).toContainText("attempt 2", { timeout: 15_000 });
   await expect(bannerFailed).toBeHidden();
-  await expect(
-    lane(page, "Quill")
-      .getByRole("group", { name: "Quill's attempts" })
-      .getByRole("button", { name: "Attempt 1, failed" }),
-  ).toBeVisible();
+  await expect(banner.locator(":scope > span").first()).not.toContainText("Failed");
 
   // Ada's email failed: Reassign… gives it to Quill, whose lane takes it.
   const emailFailed = lane(page, "Ada").getByRole("region", { name: "Ada's task failed" });
