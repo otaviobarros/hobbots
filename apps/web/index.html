@@ -5,9 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:" />
     <title>Hobbots</title>
+    <!--
+      The frame below paints before the app's code loads: first-paint.js gives it this device's theme
+      and sidebar width, and the stylesheet is linked here rather than imported by main.tsx.
+    -->
+    <script src="/first-paint.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      The window's frame, painted at once while the app's code loads and replaced by the app's first
+      render: the desktop title strip, and the sidebar as still skeletons (Patterns › Loading). Setup,
+      Welcome and pairing show the frame without the sidebar.
+    -->
+    <div id="root">
+      <div aria-busy="true" class="flex h-screen min-h-[610px] flex-col bg-ground text-text-strong">
+        <header class="hidden h-title-strip flex-none items-center justify-center bg-deep text-detail text-label [-webkit-app-region:drag] in-data-[window=desktop]:flex">
+          Hobbots
+        </header>
+        <div class="flex min-h-0 flex-1">
+          <div aria-hidden="true" class="relative w-sidebar flex-none wide:w-auto in-data-[frame=plain]:hidden">
+            <div class="flex h-full w-sidebar flex-col gap-0.5 overflow-hidden bg-panel p-3 in-data-[sidebar=open]:w-sidebar-open max-wide:absolute max-wide:inset-y-0 max-wide:start-0 max-wide:z-30 max-wide:in-data-[sidebar=open]:shadow-sheet">
+              <div class="flex flex-none items-center gap-2 pb-2">
+                <span class="inline-flex w-12 flex-none justify-center"><span class="block size-10 rounded-tile bg-line"></span></span>
+                <span class="hidden h-[0.6lh] w-[9ch] rounded-tag bg-line text-reading in-data-[sidebar=open]:block"></span>
+              </div>
+              <div class="flex min-h-row-min flex-none items-center gap-2 py-0.5">
+                <span class="inline-flex w-12 flex-none justify-center"><span class="block size-5 rounded-dot bg-line"></span></span>
+                <span class="hidden h-[0.6lh] w-[6ch] rounded-tag bg-line in-data-[sidebar=open]:block"></span>
+              </div>
+              <div class="flex min-h-row-min flex-none items-center gap-2 py-0.5">
+                <span class="inline-flex w-12 flex-none justify-center"><span class="block size-5 rounded-dot bg-line"></span></span>
+                <span class="hidden h-[0.6lh] w-[6ch] rounded-tag bg-line in-data-[sidebar=open]:block"></span>
+              </div>
+              <div class="flex min-h-row-min flex-none items-center gap-2 py-0.5">
+                <span class="inline-flex w-12 flex-none justify-center"><span class="block size-5 rounded-dot bg-line"></span></span>
+                <span class="hidden h-[0.6lh] w-[6ch] rounded-tag bg-line in-data-[sidebar=open]:block"></span>
+              </div>
+              <div class="flex min-h-row-min flex-none items-center gap-2 py-0.5">
+                <span class="inline-flex w-12 flex-none justify-center"><span class="block size-5 rounded-dot bg-line"></span></span>
+                <span class="hidden h-[0.6lh] w-[8ch] rounded-tag bg-line in-data-[sidebar=open]:block"></span>
+              </div>
+              <div class="mx-1.5 my-2 h-px flex-none bg-line"></div>
+              <div class="flex min-h-row-min flex-none items-center gap-2 py-0.5">
+                <span class="inline-flex w-12 flex-none justify-center"><span class="block size-hob-tile rounded-tile bg-line"></span></span>
+                <span class="hidden h-[0.6lh] w-[10ch] rounded-tag bg-line in-data-[sidebar=open]:block"></span>
+              </div>
+              <div class="mt-auto flex min-h-row-min flex-none items-center gap-2 py-0.5">
+                <span class="inline-flex w-12 flex-none justify-center"><span class="block size-[18px] rounded-dot bg-line"></span></span>
+                <span class="hidden h-[0.6lh] w-[7ch] rounded-tag bg-line text-detail in-data-[sidebar=open]:block"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

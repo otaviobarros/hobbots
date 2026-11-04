@@ -1,9 +1,17 @@
 import { resolve } from "node:path";
-import babel from "@rolldown/plugin-babel";
+import babel, { type RolldownBabelPreset } from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { hubProxy } from "./hub-proxy.ts";
+
+// The React Compiler's preset as plain data, so Babel can run it in worker threads: its own preset
+// is a function, which cannot be sent to a worker. Its filters and hooks stay as they are.
+const reactCompiler = reactCompilerPreset();
+const compilerPreset: RolldownBabelPreset = {
+  ...reactCompiler,
+  preset: (reactCompiler.preset as () => RolldownBabelPreset["preset"])(),
+};
 
 export default defineConfig({
   // Root-relative asset paths: the server serves index.html for nested client paths too, where
@@ -12,7 +20,16 @@ export default defineConfig({
   base: "/",
   // The React Compiler memoizes components and hooks, so the code has no useMemo, useCallback or
   // memo (STD-REACT-010).
-  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
+  plugins: [
+    react(),
+    babel({
+      presets: [compilerPreset],
+      // Every module goes through the compiler, which is most of the time a first load takes in
+      // development; workers share it across the computer's cores.
+      parallel: true,
+    }),
+    tailwindcss(),
+  ],
   // Two entries: the hub's pages, and setup's local pages that the desktop app serves from its own
   // resources before this computer is a hub or connected to one (ADR 025).
   build: {
@@ -30,6 +47,10 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
+    // Transforms both entries and everything they import as soon as the dev server starts, while the
+    // desktop app is still starting the hub. Without it the first window waits while every module
+    // goes through Babel and the React Compiler on request, which takes many seconds.
+    warmup: { clientFiles: ["./src/main.tsx", "./src/local.tsx"] },
     proxy: hubProxy(process.env.HOBBOTS_PORT ?? 4317),
   },
 });
