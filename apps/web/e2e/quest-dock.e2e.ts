@@ -98,7 +98,7 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
 test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and every other Task's latest that did work", async ({
   page,
 }) => {
-  // Quill writes the copy and fails; retried, she does nothing and finishes.
+  // Quill writes the copy and fails; retried, she changes nothing and finishes with a result.
   await startParty(page, ["Draft the copy", 'fake:once fake:write copy.md "# Copy\\n\\nHello.\\n"', "fake:fail"]);
   const sheet = laneTask(page, "Draft the copy");
   await expect(sheet).toContainText("Failed", { timeout: 30_000 });
@@ -110,16 +110,14 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and ev
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
   const { bench, changes } = lists(page);
 
-  // With no try picked, Quill's work is the first try's, past the retry that did nothing.
+  // With no try picked, Quill's work is her latest try's, which finished with nothing changed.
   await bench.getByRole("tab", { name: /^Changes/ }).click();
-  await expect(changes.getByRole("button")).toHaveText([/^notes\.md, by Aldric/, /^copy\.md, by Quill/]);
+  await expect(changes.getByRole("button")).toHaveText([/^notes\.md, by Aldric/]);
 
-  // Lit, her lane's Task names its tries; picking the second changes every tab, and the address keeps it.
+  // Lit, her lane's Task names its tries, the latest checked: it changed nothing.
   await laneHead(page, "Quill").click();
   const attempts = bench.getByRole("radiogroup", { name: "Attempts" });
-  await expect(attempts.getByRole("radio", { name: "Attempt 1" })).toBeChecked();
-  await attempts.getByRole("radio", { name: "Attempt 2" }).click();
-  await expect(page).toHaveURL(/attempt=/);
+  await expect(attempts.getByRole("radio", { name: "Attempt 2" })).toBeChecked();
   await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveText("ChangesNot used in this task");
   await expect(bench.getByRole("tabpanel", { name: /^Changes/ })).toContainText(
     "Quill did not change any files in this task.",
@@ -129,8 +127,10 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and ev
     "Quill did not make or touch any files in this task.",
   );
 
-  // Back to the first try, her copy is there again.
+  // Picking the first try changes every tab, and the address keeps it: her copy is there.
   await attempts.getByRole("radio", { name: "Attempt 1" }).click();
+  await expect(page).toHaveURL(/attempt=/);
+  await expect(bench.getByRole("tabpanel", { name: /^Files/ })).not.toContainText("did not make or touch");
   await bench.getByRole("tab", { name: /^Changes/ }).click();
   await expect(changes.getByRole("button")).toHaveText([/^copy\.md/]);
 
