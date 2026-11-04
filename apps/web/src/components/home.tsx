@@ -1,5 +1,5 @@
 import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
-import type { Agent, RuntimeHealth, Thread } from "@hobbots/domain";
+import type { Agent, Thread } from "@hobbots/domain";
 import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -7,9 +7,8 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { type ActivityMap, useActivity } from "../api/activity.ts";
-import { agentsQuery, runtimesQuery, threadsQuery } from "../api/queries.ts";
+import { agentsQuery, threadsQuery } from "../api/queries.ts";
 import { useQuestWork } from "../api/quest-work.ts";
-import { POTION_COLORS, potion, potionPalette } from "../art/icons.ts";
 import { type CrewGroup, groupOf, SCENE_LIMIT, splitScene } from "../lib/crew.ts";
 import { sceneOrder, withRequests } from "../lib/hob-state.ts";
 import { questsInProgress } from "../lib/quest-work.ts";
@@ -20,13 +19,13 @@ import type { HobFilter } from "./hobs-page/hobs-page-model.ts";
 import { activeFilter, inFilter, sceneChips } from "./home/home-model.ts";
 import { NeedsYou } from "./home/needs-you.tsx";
 import { PickUp } from "./home/pick-up.tsx";
+import { PlanLine } from "./home/plan-line.tsx";
 import { StageHob } from "./home/stage-hob.tsx";
 import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
 import { messages } from "./messages.ts";
 import { Stars } from "./scene.tsx";
-import { planOf, planSummary, usePlans } from "./usage/plan-summary.ts";
 
-/** Home, the landing page: what your hobs are doing, what needs you, and what is left of each AI plan. */
+/** Home, the landing page: what your hobs are doing, what needs you, and what is left of the Claude Code plan. */
 export function Home() {
   const agents = useQuery(agentsQuery);
   const hobs = agents.data ?? [];
@@ -116,7 +115,7 @@ export function Home() {
         <NeedsYou />
         <PickUp chats={recent} quests={quests} hobs={byId} activity={activity} />
         <HappeningNowCard live={live} activity={activity} />
-        <AiPlans />
+        <PlanLine />
       </div>
     </main>
   );
@@ -254,53 +253,3 @@ function HappeningNow({
     </Link>
   ));
 }
-
-function AiPlans() {
-  const runtimes = useQuery(runtimesQuery);
-  const plans = usePlans();
-  const claude = runtimes.data?.[0];
-  const ready = claude?.availability === "ready";
-  // The same plan, and the same words, as the Usage screen.
-  const summary = ready ? planSummary(planOf(plans, "claude-code"), new Date()) : null;
-  const left = runtimes.isPending ? "Checking…" : providerState(claude);
-
-  return (
-    <Card label="AI plans">
-      <div className="flex items-end gap-[18px] border-b-4 border-wood px-1.5">
-        <Link
-          to="/usage"
-          aria-label={`Claude, ${left}`}
-          className="hop-on-hover flex flex-col items-center gap-0.5 text-text-strong no-underline"
-        >
-          <span className="sprite">
-            <PixelArt
-              rows={potion(summary?.left ?? (ready ? 1 : 0))}
-              palette={potionPalette(...POTION_COLORS["claude-code"])}
-              size={36}
-            />
-          </span>
-          <span className="text-xs font-bold">Claude</span>
-          <span className={cn("pb-1 text-xs", ready ? "text-mint" : "text-rose")}>{left}</span>
-        </Link>
-      </div>
-      <span className="text-[13px] text-text-secondary">
-        {summary === null ? "Plan limits show here once Claude reports them." : `Claude Code plan · ${summary.line}`}
-      </span>
-    </Card>
-  );
-}
-
-/** Claude's state under its potion: how it bills when ready, else what it needs. */
-const providerState = (claude: RuntimeHealth | undefined) => {
-  if (claude?.availability === "ready") return planLabel(claude.billing ?? null);
-  if (claude?.availability === "outdated") return "Update needed";
-  if (claude?.availability === "signedOut") return "Sign-in needed";
-  return "Not connected";
-};
-
-const planLabel = (billing: string | null) => {
-  if (!billing) return "Connected";
-  if (billing.startsWith("subscription")) return "Subscription";
-  if (billing === "fake") return "Test runtime";
-  return "API key";
-};

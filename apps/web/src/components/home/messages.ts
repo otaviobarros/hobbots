@@ -1,7 +1,12 @@
 import { formatCount, plural } from "../../lib/format.ts";
 
-/** Copy for Home's Needs you and Pick up where you left off (STD-I18N-001). */
+/** Copy for Home's Needs you, Pick up where you left off and plan line (STD-I18N-001). */
 export const messages = {
+  plan: {
+    title: "Claude Code plan",
+    notReported: "Its limits show here once Claude Code reports them.",
+    usage: "Usage",
+  },
   needsYou: {
     title: "Needs you",
     openInbox: "Open Inbox",
