@@ -109,7 +109,7 @@ export function QuestCard({
 const useStuck = (tree: TaskTree): ReadonlyArray<BackpackItem> =>
   blockersOn(useBlockers(), new Set(tree.tasks.map((task) => task.id)));
 
-/** What a row adds under its title when its tag alone does not say it: an approval, a wait or a step. */
+/** What a row adds under its title: an approval, a wait, a step, or what its owner last reported. */
 const rowDetail = (row: WorkRow, hobs: HobLookup): string | null =>
   row.approval !== null
     ? copy.waitingApproval({ action: operationLabel(row.approval.operation) })
@@ -117,7 +117,7 @@ const rowDetail = (row: WorkRow, hobs: HobLookup): string | null =>
       ? copy.waitingOn({ names: messages.names(row.waitsOn.map((id) => hobs(id).name)) })
       : row.step !== null
         ? copy.step(row.step)
-        : null;
+        : row.latest;
 
 /** One Task or the current step: its owner's tile, its title and owner, and where it stands. */
 function Row({ row, hobs, onOpen }: { row: WorkRow; hobs: HobLookup; onOpen: (taskId: TaskId) => void }) {

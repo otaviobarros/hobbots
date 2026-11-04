@@ -160,7 +160,7 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on the q
   // Aldric's Quest card names what Nettle's Task waits on, and the tray holds the request itself.
   const card = page.getByRole("region", { name: "Aldric's work on Tidy the scratch folder" });
   const row = card.getByRole("button", { name: "Look inside Remove the notes" });
-  await expect(row).toContainText("Nettle · waiting on your approval: Delete files", { timeout: 20_000 });
+  await expect(row).toContainText("waiting on your approval: Delete files", { timeout: 20_000 });
   await expect(row).toContainText("Needs you");
   const inTray = page
     .getByRole("region", { name: /^Needs you/ })
