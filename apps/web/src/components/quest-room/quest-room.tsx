@@ -10,6 +10,7 @@ import { QuestLanes } from "../lanes/quest-lanes.tsx";
 import { useLaneJump } from "../lanes/use-lane-jump.ts";
 import { pickedTries, useLaneRoom } from "../lanes/use-lane-room.ts";
 import { HubWait } from "../loading/hub-wait.tsx";
+import { roomRows } from "../quest/control-room.ts";
 import { type HobLookup, type Pins, useFollowedTrees, useHobLookup } from "../quest/use-work.ts";
 import { findTask, taskTitle } from "../quest/work-model.ts";
 import { LaneNotes } from "../steer-receipt/lane-notes.tsx";
@@ -128,6 +129,7 @@ function OpenRoom({
     moves.lane(hobId === null ? undefined : room.order.find((lane) => lane.hobId === hobId)?.task.id);
   const lanes = useLaneJump(pick);
   const actOn = useLaneSlots({ hobs, pins, view, moves });
+  const rows = roomRows(tree);
   return (
     <section
       aria-label={messages.label({ title: taskTitle(top) })}
@@ -151,7 +153,9 @@ function OpenRoom({
         onFlashed={lanes.flashed}
         reads={reads}
         slots={(lane) => {
-          const acted = actOn(tree, lane);
+          // A failed step waits on you in its owner's lane too, so acting covers the hob's steps.
+          const owned = rows.filter((row) => row.task.ownerId === lane.hobId).map((row) => row.task);
+          const acted = actOn(tree, { hobId: lane.hobId, task: lane.task, tasks: owned });
           return {
             actions: acted.actions,
             tries: acted.tries,
