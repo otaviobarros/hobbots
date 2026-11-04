@@ -14,6 +14,7 @@ import { ChatView } from "../chat-view.tsx";
 import { HobSprite } from "../hob-sprite.tsx";
 import { MessageRow, messageElementId } from "../message-row.tsx";
 import { messages as chatCopy } from "../messages.ts";
+import { ReconnectingCard } from "../reconnecting.tsx";
 import { messages } from "./messages.ts";
 
 /** What the chat workspace gives whatever fills its middle: the hob, the thread and the side panels' state. */
@@ -91,23 +92,26 @@ function ArchivedHeader({
   tagged?: boolean;
 }) {
   return (
-    <header className="flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
-      <HobSprite hob={hob} size={36} state="idle" badge />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="flex min-w-0 items-baseline gap-2">
-          <span className="font-heading text-xl font-semibold whitespace-nowrap">{hob.name}</span>
-          <span className="text-sm font-bold whitespace-nowrap text-moonlight">{hob.roleTitle}</span>
-          <span className="truncate text-text-secondary">{title}</span>
-          {tagged && <Badge variant="archived">{messages.tag}</Badge>}
-        </span>
-        <span className="text-xs text-label">{detail}</span>
-      </div>
-      <Button asChild variant="outline">
-        <Link to="/hobs/$hobId/profile" params={{ hobId: hob.id }}>
-          {messages.editHob}
-        </Link>
-      </Button>
-    </header>
+    <>
+      <header className="flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
+        <HobSprite hob={hob} size={36} state="idle" badge />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="font-heading text-xl font-semibold whitespace-nowrap">{hob.name}</span>
+            <span className="text-sm font-bold whitespace-nowrap text-moonlight">{hob.roleTitle}</span>
+            <span className="truncate text-text-secondary">{title}</span>
+            {tagged && <Badge variant="archived">{messages.tag}</Badge>}
+          </span>
+          <span className="text-xs text-label">{detail}</span>
+        </div>
+        <Button asChild variant="outline">
+          <Link to="/hobs/$hobId/profile" params={{ hobId: hob.id }}>
+            {messages.editHob}
+          </Link>
+        </Button>
+      </header>
+      <ReconnectingCard className="mx-6 mt-2.5" />
+    </>
   );
 }
 

@@ -53,6 +53,7 @@ import { useThreadNeeds } from "./needs-tray/use-thread-needs.ts";
 import { PinNotes } from "./quest/pin-notes.tsx";
 import { ThreadQuestButton, useWorkMoments } from "./quest/thread-work.tsx";
 import type { Pins } from "./quest/use-work.ts";
+import { ReconnectingCard } from "./reconnecting.tsx";
 
 /**
  * Keeps the transcript's end in view while the composer grows or shrinks, so a long draft never
@@ -258,6 +259,7 @@ export function ChatView({
           </Link>
         </Button>
       </header>
+      <ReconnectingCard className="mx-6 mt-2.5" />
       {threadId && finding && (
         <ChatSearch
           hob={current}

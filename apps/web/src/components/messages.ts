@@ -899,7 +899,7 @@ export const messages = {
     removedBody:
       "Someone revoked it, so it can no longer reach your hobs. Ask again, then allow it on the hub, to use Hobbots here.",
     askAgain: "Ask again",
-    reconnecting: "Reconnecting to Hobbots… Messages you send wait here and go out when it is back.",
+    reconnecting: "Reconnecting to Hobbots… Your hobs keep working on the hub; messages wait here until it is back.",
     unreachable: ({ hub }: { hub: string }) =>
       `Hobbots cannot reach ${hub}. The hub may be off, or remote access may be paused. Messages you send wait here.`,
     unreachableNoName:
