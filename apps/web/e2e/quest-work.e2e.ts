@@ -160,4 +160,13 @@ test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and ope
   await keywords.click();
   await expect(page).toHaveURL(questThread("build"));
   await expect(drawer("Brief for build")).toBeVisible();
+
+  // Quill's peek on Home opens her Task's Workbench in Aldric's thread, where the Quest is followed.
+  await page.goto(hub.url);
+  await page
+    .getByRole("region", { name: "Your hobs right now" })
+    .getByRole("button", { name: /^Quill, / })
+    .click();
+  await page.getByRole("dialog", { name: "Quill" }).getByRole("link", { name: "Open Workbench" }).click();
+  await expect(page).toHaveURL(new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?bench=copy$`));
 });

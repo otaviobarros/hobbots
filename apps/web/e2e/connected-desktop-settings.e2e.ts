@@ -64,7 +64,7 @@ test("[TC-DP-217] a connected desktop's Settings › Devices shows its hub in pl
   const current = hub;
   await setupDone(current);
   await page.addInitScript(asConnectedDesktop, await browserDevice(current));
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   const devices = page.getByRole("region", { name: "Devices" });
 
   // The hub it uses, its address and both versions; nothing that changes the hub's network.
@@ -129,7 +129,7 @@ test("[TC-DP-220] an older desktop app without Disconnect sees its hub, no Disco
   const current = hub;
   await setupDone(current);
   await page.addInitScript(asPreviousDesktop);
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   const devices = page.getByRole("region", { name: "Devices" });
 
   await expect(devices.getByRole("status").filter({ hasText: "Connected to Studio" })).toBeVisible();

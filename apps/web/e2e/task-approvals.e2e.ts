@@ -159,8 +159,10 @@ test("[TC-IN-153] a party member's request in the Inbox offers This Quest, and i
 
   // Quill's second push runs on his grant, so nothing else waits on you.
   await expect(page.getByRole("link", { name: /waiting on you$/ })).toHaveCount(0);
-  await page.getByRole("tab", { name: "All" }).click();
-  await expect(page.getByRole("list", { name: "Requests" })).toContainText("You allowed this for its Task");
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByRole("region", { name: "Decision history" }).locator('[data-state="approved"]')).toContainText(
+    "Task",
+  );
   const grants = await api<Grants>(current, "GET", "/api/grants");
   expect(grants.map(({ agentId, lifetime }) => [agentId, lifetime])).toEqual([[expect.any(String), "task"]]);
   const approvals = await api<ReadonlyArray<{ readonly agentId: string; readonly state: string }>>(

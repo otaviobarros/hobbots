@@ -29,7 +29,7 @@ test("[TC-DP-099] a browser revoked while it is open sees it was removed, and it
   hub = await startHub(dataDir);
   const current = hub;
   await setupDone(current);
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   await expect(page.getByRole("region", { name: "Devices" })).toBeVisible();
 
   expect((await revokeBrowser(current)).status).toBe(200);
@@ -63,13 +63,13 @@ test("[TC-DP-104] a browser revoked while closed sees it was removed on its firs
   hub = await startHub(dataDir);
   const current = hub;
   await setupDone(current);
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   await expect(page.getByRole("region", { name: "Devices" })).toBeVisible();
   await page.goto("about:blank");
   expect((await revokeBrowser(current)).status).toBe(200);
 
   // Only the first answer says revoked, since it drops the cookie; later ones say only "no device".
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   await expect(page.getByRole("heading", { name: "This device was removed from the hub" })).toBeVisible({
     timeout: 3_000,
   });
@@ -108,7 +108,7 @@ test("[TC-DP-100] Pause remote access leaves the tailnet while this computer kee
   await change({ enabled: true });
   expect(await onTailnet(port)).toBe(401);
 
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   const devices = page.getByRole("region", { name: "Devices" });
   await expect(devices.getByRole("status")).toHaveText("Tailscale connected · this computer is hub");
 
