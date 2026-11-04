@@ -65,7 +65,7 @@ test("[TC-UX-141] while Ada's question waits for you, the Workbench chat answers
   const card = page.getByRole("region", { name: "Aldric's work on Plan the Black Friday campaign" });
   await card.getByRole("button", { name: "Look inside Build the campaign" }).click();
   const drawer = page.getByRole("dialog", { name: "Build the campaign, Task details" });
-  await drawer.getByRole("button", { name: "Open in Workbench" }).click();
+  await drawer.getByRole("button", { name: "Open Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Build the campaign" });
 
   // The toggle, and the panel once open, say the question waits for you.
