@@ -21,7 +21,7 @@ const progressVariants = cva("relative flex w-full items-center overflow-hidden 
 });
 
 const indicatorVariants = cva(
-  "size-full flex-1 rounded-dot transition-transform duration-200 ease-(--ease-ui) motion-reduce:transition-none",
+  "size-full flex-1 rounded-dot transition-transform duration-(--dur-enter) ease-(--ease-ui) motion-reduce:transition-none",
   {
     variants: {
       tone: {

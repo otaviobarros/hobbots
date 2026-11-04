@@ -58,7 +58,7 @@ export function ChatRow({
   const pin = usePinThread();
 
   return (
-    <li className="group/row relative grid grid-cols-[16px_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1 border-t border-line py-3 ps-3 pe-3.5 transition-colors duration-150 first:border-t-0 hover:bg-hover">
+    <li className="group/row relative grid grid-cols-[16px_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1 border-t border-line py-3 ps-3 pe-3.5 transition-colors duration-(--dur-fade) first:border-t-0 hover:bg-hover">
       {!renaming && (
         <Link
           to="/hobs/$hobId/threads/$threadId"

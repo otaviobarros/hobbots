@@ -25,7 +25,7 @@ type SearchFieldProps = Omit<React.ComponentProps<"input">, "type" | "value" | "
 
 // Corners, edge width and easing read the theme's skin variables (docs/design/themes.md).
 const frame =
-  "h-auto rounded-control border-[length:var(--edge)] border-line-2 bg-deep transition-colors duration-150 ease-[var(--ease-ui)] hover:border-control dark:bg-deep";
+  "h-auto rounded-control border-[length:var(--edge)] border-line-2 bg-deep transition-colors duration-(--dur-fade) ease-[var(--ease-ui)] hover:border-control dark:bg-deep";
 
 const input = "h-auto py-2 text-ui text-text placeholder:text-label [&::-webkit-search-cancel-button]:appearance-none";
 

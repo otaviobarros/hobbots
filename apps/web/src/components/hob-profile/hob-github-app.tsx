@@ -224,7 +224,7 @@ function Finishing({
       <span className="flex items-center gap-2.5">
         <span
           aria-hidden
-          className="size-3.5 flex-none animate-spin rounded-dot border-2 border-lantern/30 border-t-lantern motion-reduce:animate-none"
+          className="size-3.5 flex-none animate-hb-spin rounded-dot border-2 border-lantern/30 border-t-lantern motion-reduce:animate-none"
         />
         <strong className="text-sm text-text-strong">{copy.finishOnGitHub({ name: hob.name })}</strong>
       </span>

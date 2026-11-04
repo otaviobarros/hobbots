@@ -49,7 +49,7 @@ export function Sidebar() {
         <nav
           aria-label={copy.label}
           data-open={open}
-          className="group/side flex h-full w-sidebar flex-col gap-0.5 overflow-hidden bg-panel p-3 transition-[width] duration-220 data-[open=true]:w-sidebar-open max-wide:absolute max-wide:inset-y-0 max-wide:start-0 max-wide:z-30 max-wide:data-[open=true]:shadow-sheet"
+          className="group/side flex h-full w-sidebar flex-col gap-0.5 overflow-hidden bg-panel p-3 transition-[width] duration-(--dur-sheet) data-[open=true]:w-sidebar-open max-wide:absolute max-wide:inset-y-0 max-wide:start-0 max-wide:z-30 max-wide:data-[open=true]:shadow-sheet"
         >
           <Chief waiting={waiting} />
           {ITEMS.map((item) => (
@@ -112,7 +112,7 @@ function Chevron({ open }: { open: boolean }) {
     <svg
       aria-hidden
       viewBox="0 0 16 16"
-      className={cn("size-[18px] transition-transform duration-220", open && "rotate-180")}
+      className={cn("size-[18px] transition-transform duration-(--dur-sheet)", open && "rotate-180")}
       fill="none"
       stroke="currentColor"
       strokeWidth={1.5}

@@ -14,14 +14,14 @@ function Switch({ className, ...props }: React.ComponentProps<typeof SwitchPrimi
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        "relative inline-flex h-6 w-[46px] shrink-0 cursor-pointer rounded-dot border-(length:--edge) border-solid border-control bg-line p-0 transition-colors duration-150 ease-(--ease-ui) outline-none motion-reduce:transition-none focus-visible:shadow-(--control-focus-ring) focus-visible:[outline:var(--control-focus-outline)] focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-mint-deep data-[state=checked]:bg-mint-deep",
+        "relative inline-flex h-6 w-[46px] shrink-0 cursor-pointer rounded-dot border-(length:--edge) border-solid border-control bg-line p-0 transition-colors duration-(--dur-fade) ease-(--ease-ui) outline-none motion-reduce:transition-none focus-visible:shadow-(--control-focus-ring) focus-visible:[outline:var(--control-focus-outline)] focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-mint-deep data-[state=checked]:bg-mint-deep",
         className,
       )}
       {...props}
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
-        className="absolute top-0.5 start-0.5 size-[calc(20px-2*var(--edge))] rounded-dot bg-text-strong transition-[inset-inline-start] duration-150 ease-(--ease-ui) motion-reduce:transition-none data-[state=checked]:start-6 data-[state=checked]:bg-switch-knob"
+        className="absolute top-0.5 start-0.5 size-[calc(20px-2*var(--edge))] rounded-dot bg-text-strong transition-[inset-inline-start] duration-(--dur-fade) ease-(--ease-ui) motion-reduce:transition-none data-[state=checked]:start-6 data-[state=checked]:bg-switch-knob"
       />
     </SwitchPrimitive.Root>
   );
