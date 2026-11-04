@@ -29,18 +29,15 @@ export function PotionBottle({ fill }: { fill: PotionFill | null }) {
           <span
             data-slot="potion-liquid"
             data-tone={fill.level}
-            className={cn(
-              "absolute inset-x-0 bottom-0 transition-[height] duration-600",
-              LIQUID[fill.level],
-            )}
+            className={cn("absolute inset-x-0 bottom-0 transition-[height] duration-600", LIQUID[fill.level])}
             style={{ height: height(fill) }}
           >
             <i className="absolute inset-x-0 top-0 h-1 bg-white/25" />
-            <i className="absolute bottom-1.5 left-[22px] size-[5px] animate-hb-bubble rounded-full bg-white/45 motion-reduce:hidden" />
-            <i className="absolute bottom-0.5 left-11 size-[5px] animate-hb-bubble rounded-full bg-white/45 [animation-delay:1.4s] motion-reduce:hidden" />
+            <i className="absolute bottom-1.5 start-[22px] size-[5px] animate-hb-bubble rounded-full bg-white/45 motion-reduce:hidden" />
+            <i className="absolute bottom-0.5 start-11 size-[5px] animate-hb-bubble rounded-full bg-white/45 [animation-delay:1.4s] motion-reduce:hidden" />
           </span>
         )}
-        <span className="absolute top-3 left-2.5 h-7 w-[7px] rounded-[4px] bg-white/20" />
+        <span className="absolute top-3 start-2.5 h-7 w-[7px] rounded-[4px] bg-white/20" />
       </span>
     </span>
   );
