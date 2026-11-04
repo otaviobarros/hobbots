@@ -130,7 +130,7 @@ function InboxItem({
       data-state={entry.kind === "approval" ? entry.request.state : undefined}
       className={cn(
         "hop-on-hover flex w-full items-start gap-2.5 rounded-control p-2.5 text-start text-text-strong no-underline transition-colors hover:text-text-strong",
-        selected ? "bg-card ring-2 ring-lantern ring-inset" : "hover:bg-hover",
+        selected ? "bg-card text-text-strong" : "hover:bg-hover",
         closed && "opacity-70",
       )}
     >
