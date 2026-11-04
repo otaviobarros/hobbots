@@ -9,6 +9,7 @@ import {
   readCommandLine,
   uniqueRules,
 } from "@hobbots/permissions";
+import { GIT_IDENTITY_VARIABLES } from "./sandbox.ts";
 
 /** A request a runtime tool call becomes: every kind but a Charm's, which the hub makes itself. */
 type ToolRequest = Exclude<PolicyRequest, { readonly _tag: "GitHub" | "PullRequest" | "GitHubComment" }>;
@@ -264,6 +265,8 @@ interface Unwrapped {
   readonly words: ReadonlyArray<string>;
   /** The folder the command runs in. */
   readonly folder: string;
+  /** The `VAR=value` words taken off before the program, its own or a wrapper's such as `env`. */
+  readonly assignments?: ReadonlyArray<string>;
 }
 
 /** Skips one wrapper's options and operands, following the folder it moves to. */
@@ -284,24 +287,40 @@ const skipWrapper = (args: ReadonlyArray<string>, wrapper: Wrapper, folder: stri
   return { words: args.slice(i + (wrapper.operands ?? 0)), folder: where };
 };
 
+/** A `VAR=value` or `VAR+=value` word's name and value, or null for any other word. */
+const assignmentOf = (word: string): { name: string; value: string } | null => {
+  const match = /^([A-Za-z_][A-Za-z0-9_]*)\+?=(.*)$/s.exec(word);
+  return match === null ? null : { name: match[1] ?? "", value: match[2] ?? "" };
+};
+
 /** Drops leading `VAR=value` assignments and wrappers, in any order, so the real program is classified. */
 const unwrap = (words: ReadonlyArray<string>, folder: string, home: string): Unwrapped => {
-  let current: Unwrapped = { words, folder };
+  const assignments: Array<string> = [];
+  let current: Unwrapped = { words, folder, assignments };
   for (;;) {
     const [first, ...rest] = current.words;
     if (first === undefined) return current;
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(first)) {
-      current = { words: rest, folder: current.folder };
+    if (assignmentOf(first) !== null) {
+      assignments.push(first);
+      current = { words: rest, folder: current.folder, assignments };
       continue;
     }
     const wrapper = WRAPPERS.get(basename(first));
     if (wrapper === undefined) return current;
-    current = skipWrapper(rest, wrapper, current.folder, home);
+    current = { ...skipWrapper(rest, wrapper, current.folder, home), assignments };
   }
 };
 
 // Git options that take a value before the subcommand.
-const GIT_VALUE_OPTIONS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"]);
+const GIT_VALUE_OPTIONS = new Set([
+  "-C",
+  "-c",
+  "--config-env",
+  "--git-dir",
+  "--work-tree",
+  "--namespace",
+  "--exec-path",
+]);
 
 const DEFAULT_BRANCHES = new Set(["main", "master", "trunk", "develop"]);
 
@@ -373,19 +392,21 @@ const repositoryOf = (gitDir: string) => (isAbsolute(gitDir) && basename(gitDir)
  * first, and the index of its subcommand. Git takes every `-C` before it resolves the other two, and
  * finds the repository from the folder it runs in unless `--git-dir` names one; a working tree is
  * that folder unless `--work-tree` names another. Each folder Git may change is named, so the
- * folder it runs in always is.
+ * folder it runs in always is. `settings` are the keys its `-c` and `--config-env` options set.
  */
 const gitFolders = (
   args: ReadonlyArray<string>,
   folder: string,
   home: string | null,
-): { folders: ReadonlyArray<string>; sub: number } => {
+): { folders: ReadonlyArray<string>; sub: number; settings: ReadonlyArray<string> } => {
   let i = 0;
   let where = folder;
   const named: Array<{ name: "--git-dir" | "--work-tree"; value: string | undefined }> = [];
+  const settings: Array<string> = [];
   while (i < args.length && (args[i] as string).startsWith("-")) {
     const option = readOption(args, i, GIT_VALUE_OPTIONS);
-    if (option.name === "-C") where = moveTo(where, option.value, home, `git -C ${option.value ?? ""}`);
+    if (option.name === "-c" || option.name === "--config-env") settings.push((option.value ?? "").split("=")[0] ?? "");
+    else if (option.name === "-C") where = moveTo(where, option.value, home, `git -C ${option.value ?? ""}`);
     else if (option.name === "--git-dir" || option.name === "--work-tree")
       named.push({ name: option.name, value: option.value });
     i += option.used;
@@ -397,7 +418,7 @@ const gitFolders = (
   const gitDir = last("--git-dir");
   // Git still writes some files, such as `archive -o` or `format-patch`, in the folder it runs in.
   const folders = [gitDir === undefined ? where : repositoryOf(gitDir), last("--work-tree") ?? where, where];
-  return { folders: [...new Set(folders)], sub: i };
+  return { folders: [...new Set(folders)], sub: i, settings };
 };
 
 const MAKE_CHDIR = new Set(["-C", "--directory"]);
@@ -604,6 +625,21 @@ export const commandRequests = (command: string, cwd: string, home: string = hom
   return requests;
 };
 
+/** Whether any simple command in a Bash call's command line, its wrappers taken off, passes `test`. */
+const someCommand = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  home: string,
+  test: (command: Unwrapped, raw: ReadonlyArray<string>) => boolean,
+): boolean => {
+  const command = tool === "Bash" ? text(input, "command") : undefined;
+  return (
+    command !== undefined &&
+    commandLine(command).some((token) => "words" in token && test(unwrap(token.words, cwd, home), token.words))
+  );
+};
+
 /**
  * Whether a tool call runs `git init`, behind any wrapper or Git option, anywhere in its command
  * line. In the sandbox it cannot write the new repository's config, so the hub makes it (ADR 014).
@@ -613,15 +649,186 @@ export const initsRepository = (
   input: Record<string, unknown>,
   cwd: string,
   home: string = homedir(),
-): boolean => {
-  const command = tool === "Bash" ? text(input, "command") : undefined;
-  if (command === undefined) return false;
-  return commandLine(command).some((token) => {
-    if (!("words" in token)) return false;
-    const [name, ...args] = unwrap(token.words, cwd, home).words;
-    return name !== undefined && basename(name) === "git" && args[gitFolders(args, cwd, home).sub] === "init";
-  });
+): boolean =>
+  someCommand(
+    tool,
+    input,
+    cwd,
+    home,
+    ({ words: [name, ...args] }) =>
+      name !== undefined && basename(name) === "git" && args[gitFolders(args, cwd, home).sub] === "init",
+  );
+
+/** Variables that name a commit's author or committer, or pass Git settings or a config file. */
+const IDENTITY_VARIABLES: ReadonlySet<string> = new Set([
+  ...GIT_IDENTITY_VARIABLES,
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG",
+]);
+
+/**
+ * Whether a variable's name is one that sets a commit's identity, or one the hub sets it with
+ * (`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>`, ADR 022).
+ */
+const isIdentityVariable = (name: string) =>
+  IDENTITY_VARIABLES.has(name) || /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/.test(name);
+
+/** Git settings that name a commit's author or committer, or pull in a config file that may. */
+const IDENTITY_SETTING = /^((user|author|committer)\.(name|email)|include\.path|includeif\..*\.path)$/i;
+
+/**
+ * Variables that name a commit's author or committer over the hub's settings, or pass Git settings
+ * or config files that may. `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` may only switch a file off.
+ */
+const overridingVariable = (word: string) => {
+  const assignment = assignmentOf(word);
+  if (assignment === null) return false;
+  const { name, value } = assignment;
+  return CONFIG_FILES.test(name) ? value !== "/dev/null" : isIdentityVariable(name);
 };
+
+/** Builtins that set variables for every command after them in the shell. */
+const SETS_VARIABLES = new Set(["export", "declare", "typeset", "readonly", "local"]);
+
+/** Shells whose `-c` runs a command line of its own. */
+const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
+
+/** `git commit`'s long options that take a value, so the word after one is never read as an option. */
+const COMMIT_VALUE_OPTIONS = [
+  "message",
+  "file",
+  "reuse-message",
+  "reedit-message",
+  "author",
+  "date",
+  "template",
+  "cleanup",
+  "fixup",
+  "squash",
+  "trailer",
+  "pathspec-from-file",
+];
+
+/** `git commit`'s short options that take a value: the rest of their word, or the next word. */
+const COMMIT_VALUE_LETTERS = "mFCct";
+
+/** Whether `long`, a long option's name without its dashes, is a prefix Git accepts for `full`. */
+const prefixOf = (long: string, full: string, shortest: number) => long.length >= shortest && full.startsWith(long);
+
+/**
+ * Whether `git commit`'s arguments take the author from elsewhere: `--author`, or `-C`, `-c`,
+ * `--reuse-message` or `--reedit-message`, which copy another commit's, without `--reset-author`.
+ * Each option's value is skipped, so a message such as `-m --reset-author` is never read as one.
+ */
+const commitTakesAuthor = (args: ReadonlyArray<string>): boolean => {
+  let takes = false;
+  let resets = false;
+  for (let i = 0; i < args.length && args[i] !== "--"; i++) {
+    const option = commitOption(args[i] as string);
+    takes ||= option.takes;
+    resets ||= option.resets;
+    if (option.valueNext) i++;
+  }
+  return takes && !resets;
+};
+
+/** One `git commit` argument: whether it takes or resets the author, and whether the next word is its value. */
+const commitOption = (arg: string): { takes: boolean; resets: boolean; valueNext: boolean } => {
+  if (arg.startsWith("--")) {
+    const equals = arg.indexOf("=");
+    const long = arg.slice(2, equals === -1 ? undefined : equals);
+    return {
+      takes: prefixOf(long, "author", 2) || prefixOf(long, "reuse-message", 3) || prefixOf(long, "reedit-message", 3),
+      resets: prefixOf(long, "reset-author", 3),
+      valueNext: equals === -1 && long !== "" && COMMIT_VALUE_OPTIONS.some((full) => full.startsWith(long)),
+    };
+  }
+  if (!arg.startsWith("-")) return { takes: false, resets: false, valueNext: false };
+  // A cluster such as `-aC abc` ends at its first letter that takes a value.
+  const letters = arg.slice(1);
+  const valued = [...letters].findIndex((letter) => COMMIT_VALUE_LETTERS.includes(letter));
+  const options = valued === -1 ? letters : letters.slice(0, valued + 1);
+  return {
+    takes: options.includes("C") || options.includes("c"),
+    resets: false,
+    valueNext: valued === letters.length - 1,
+  };
+};
+
+/** `git config` words that write a setting, besides a value after its key. */
+const CONFIG_WRITES = /^(set|unset|--add|--replace-all|--unset|--unset-all)$/;
+
+/** `env` options that drop the environment, or part of it, that the hub sets. */
+const DROPS_ENVIRONMENT = /^(-|--ignore-environment|--unset|-[A-Za-z]*[iu][A-Za-z]*)$/;
+
+const ENV = WRAPPERS.get("env") as Wrapper;
+
+/**
+ * Whether an `env` among a simple command's raw words drops what the hub sets. Its options are read
+ * with their values, as `unwrap` reads them, so `env -C . -i` is read to its end, and the words a
+ * `-S` splits are read too.
+ */
+const dropsEnvironment = (raw: ReadonlyArray<string>): boolean =>
+  raw.some((word, i) => {
+    if (basename(word) !== "env") return false;
+    for (let j = i + 1; j < raw.length && (raw[j] as string).startsWith("-") && raw[j] !== "--"; ) {
+      const option = readOption(raw, j, ENV.takesValue);
+      if (DROPS_ENVIRONMENT.test(option.name)) return true;
+      if (ENV.split?.has(option.name) && dropsEnvironment(["env", ...simpleCommands(option.value ?? "").flat()]))
+        return true;
+      j += option.used;
+    }
+    return false;
+  });
+
+/** Whether a Git command sets the commit identity: with `-c`, `git config` or `git commit`'s options. */
+const gitSetsIdentity = (args: ReadonlyArray<string>, folder: string): boolean => {
+  const { sub, settings } = gitFolders(args, folder, null);
+  // A key the shell only settles when it runs may be any.
+  if (settings.some((key) => !isSettled(key) || IDENTITY_SETTING.test(key))) return true;
+  const rest = args.slice(sub + 1);
+  if (args[sub] === "config") {
+    const key = rest.findIndex((word) => IDENTITY_SETTING.test(word));
+    return key !== -1 && (rest[key + 1] !== undefined || rest.some((word) => CONFIG_WRITES.test(word)));
+  }
+  return args[sub] === "commit" && commitTakesAuthor(rest);
+};
+
+/** Whether one simple command, its wrappers taken off, sets the commit identity itself. */
+const setsIdentity =
+  (home: string) =>
+  ({ words, folder, assignments = [] }: Unwrapped, raw: ReadonlyArray<string>): boolean => {
+    const [name, ...args] = words;
+    if (assignments.some(overridingVariable)) return true;
+    if (name === undefined) return false;
+    const program = basename(name);
+    // A push makes no commit, and the policy decides it as a Push whatever its environment.
+    const pushes = program === "git" && args[gitFolders(args, folder, null).sub] === "push";
+    if (!pushes && dropsEnvironment(raw)) return true;
+    if (SETS_VARIABLES.has(program)) return args.some(overridingVariable);
+    if (program === "unset") return args.some(isIdentityVariable);
+    // A command line run by another shell, or by `eval`, is read the same way.
+    const nested = (line: string) => overridesCommitIdentity("Bash", { command: line }, folder, home);
+    if (program === "eval") return nested(args.join(" "));
+    if (SHELLS.has(program)) {
+      const flag = args.findIndex((arg) => /^-[A-Za-z]*c[A-Za-z]*$/.test(arg));
+      return flag !== -1 && nested(args[flag + 1] ?? "");
+    }
+    return program === "git" && gitSetsIdentity(args, folder);
+  };
+
+/**
+ * Whether a tool call's command line sets who its commits are made as (#700): Git's `-c user.*`,
+ * `--config-env`, `git config user.*`, `git commit --author` or `-C`, the `GIT_AUTHOR_*`,
+ * `GIT_COMMITTER_*` and Git config variables, or dropping those the hub sets, behind any wrapper,
+ * `export`, `unset`, `eval` or `sh -c`. The hub sets every hob's identity, so none is let through.
+ */
+export const overridesCommitIdentity = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  home: string = homedir(),
+): boolean => someCommand(tool, input, cwd, home, setsIdentity(home));
 
 /** Programs whose path arguments are where they write. */
 const PATH_WRITERS = new Set(["touch", "mkdir", "cp", "mv", "tee", "install", "ln"]);
@@ -801,9 +1008,9 @@ const CONFIG_FILES = /^GIT_CONFIG_(GLOBAL|SYSTEM)$/;
  * out: `GIT_CONFIG_GLOBAL=/dev/null`, `NO_COLOR=1`. A value that runs code or expands is kept.
  */
 const isPlainAssignment = (word: string) => {
-  const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s.exec(word);
-  if (match === null) return false;
-  const [, name = "", value = ""] = match;
+  const assignment = assignmentOf(word);
+  if (assignment === null) return false;
+  const { name, value } = assignment;
   if (/[$`<>]/.test(value)) return false;
   return PLAIN_VARIABLES.test(name) || (CONFIG_FILES.test(name) && value === "/dev/null");
 };

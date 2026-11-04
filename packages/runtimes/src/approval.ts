@@ -9,11 +9,18 @@ import {
   type ToolStartedEvent,
   type TurnApprovals,
 } from "@hobbots/agents";
-import { leftoverGitNote, steerGitInit } from "@hobbots/domain";
+import { type CommitIdentity, leftoverGitNote, steerGitInit } from "@hobbots/domain";
 import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { inSharedTemp, TEMP_HINT } from "./sandbox.ts";
-import { commandWritesTo, initsRepository, narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
+import {
+  commandWritesTo,
+  initsRepository,
+  narrowestVerdict,
+  overridesCommitIdentity,
+  toolLabel,
+  toolRequests,
+} from "./tool-calls.ts";
 
 export const UNKNOWN_TOOL = (tool: string) => `Hobbots does not know the ${tool} tool, so it stays closed.`;
 
@@ -72,6 +79,17 @@ const steeredTo = (call: ToolCall, steersPush: ((cwd: string) => Effect.Effect<s
 export const steerPush = (tool: string) =>
   `Push with the ${tool} tool instead of git push: Hobbots pushes your branch to GitHub for you, as the user and under your policy. A git push from your sandbox cannot sign in.`;
 
+/**
+ * Why a command that sets its own commit identity is refused (#700), naming the one the hub sets:
+ * the hob's bot when it has its own GitHub App (ADR 022), else the user's (ADR 018).
+ */
+export const steerCommitIdentity = (commitAs: CommitIdentity | undefined) =>
+  `Run Git without setting who commits: no -c user.*, git config user.*, --author or -C on git commit, and no GIT_AUTHOR_*, GIT_COMMITTER_*, EMAIL or GIT_CONFIG* variables, whether set, exported or unset. Hobbots sets who your commits are made as, and they are made as ${
+    commitAs === undefined
+      ? "the user, with the identity their Git config sets"
+      : `${commitAs.name} <${commitAs.email}>`
+  }, never as another hob or person.`;
+
 /** Whether a call runs, and the verdict it runs under or why it does not. */
 export type CallDecision = AskedDecision<PolicyVerdict>;
 
@@ -108,9 +126,10 @@ export const decideCall = (
   redaction?: Redactor | null,
   steersPush?: (cwd: string) => Effect.Effect<string | null>,
   initTool?: string,
+  commitAs?: CommitIdentity,
 ): Effect.Effect<CallDecision> =>
   Effect.flatMap(steeredTo(call, steersPush), (pushTool) => {
-    const steer = steeredAway(context, call, pushTool, initTool);
+    const steer = steeredAway(context, call, pushTool, initTool, commitAs);
     return steer !== null
       ? Effect.succeed<CallDecision>({ _tag: "Refuse", verdict: undefined, reason: steer })
       : askUntilDecided({
@@ -131,15 +150,18 @@ export const decideCall = (
 /**
  * Why a call is refused before the policy decides it, pointing the hob to what works from its
  * sandbox, or null: a `git push` the GitHub Charm makes (ADR 020), a `git init`, which the hub makes
- * (ADR 014), and a write in a shared temporary folder, for which the turn has its own (#578).
+ * (ADR 014), a write in a shared temporary folder, for which the turn has its own (#578), and a
+ * commit identity of the command's own, since the hub sets it (#700).
  */
 const steeredAway = (
   context: PolicyContext,
   call: ToolCall,
   pushTool: string | null,
   initTool: string | undefined,
+  commitAs: CommitIdentity | undefined,
 ): string | null => {
   if (pushTool !== null) return steerPush(pushTool);
+  if (overridesCommitIdentity(call.tool, call.input, call.cwd)) return steerCommitIdentity(commitAs);
   if (initTool !== undefined && initsRepository(call.tool, call.input, call.cwd)) return steerGitInit(initTool);
   const temp = sharedTempWrites(context, call);
   return temp.length > 0 ? steerTemp(temp) : null;
