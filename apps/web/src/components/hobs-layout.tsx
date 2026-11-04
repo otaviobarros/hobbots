@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
 import { threadsQuery } from "../api/queries.ts";
-import { ArchiveProvider } from "./archive/archive-context.tsx";
 import { ThreadMain, type WorkspaceMainProps } from "./archived-threads/archived-threads.tsx";
 import { useNoteDrafts } from "./quest/note-box.tsx";
 import { usePins } from "./quest/use-work.ts";
@@ -29,18 +28,12 @@ interface WorkspaceProps {
 }
 
 /**
- * The chat workspace, where the work sheet and the Workbench open over the chat. The middle is the thread's chat unless the route fills it with `main`, such as the hob's
- * archived threads. Threads are archived from their menus or with ⌃⌘A, with Undo in a toast.
+ * The chat workspace, where the work sheet and the Workbench open over the chat. The middle is the
+ * thread's chat unless the route fills it with `main`, such as the hob's archived threads. Threads
+ * are archived from their menus or with ⌃⌘A, with Undo in a toast that the app shell holds, so it
+ * stays when archiving the last chat opens the hob's fresh page.
  */
-export function HobsLayout(props: WorkspaceProps) {
-  return (
-    <ArchiveProvider hobId={props.hobId} threadId={props.threadId}>
-      <Workspace {...props} />
-    </ArchiveProvider>
-  );
-}
-
-function Workspace({
+export function HobsLayout({
   hobId,
   threadId,
   focusMessageId,
