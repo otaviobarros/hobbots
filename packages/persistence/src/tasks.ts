@@ -1021,6 +1021,7 @@ export const TaskRepositoryLive = Layer.effect(
           Effect.orDie,
         ),
       listMemberWork: (agentId) => read.memberWork(agentId).pipe(Effect.orDie),
+      readHistoryRecords: (agentId) => read.historyRecords(agentId).pipe(Effect.orDie),
       listQueuedSteps: read.queuedSteps.pipe(Effect.orDie),
       listStrandedSteps: read.strandedSteps.pipe(Effect.orDie),
       listCancellingTasks: read.cancelling.pipe(Effect.orDie),
