@@ -245,12 +245,18 @@ export const messages = {
       }),
   },
   home: {
-    openPage: ({ name, role, state }: { name: string; role: string; state: string }) =>
-      `Open ${name}'s page, ${role}, ${state}`,
     peekLabel: ({ name, role, state }: { name: string; role: string; state: string }) => `${name}, ${role}, ${state}`,
     peekResting: "Nothing on right now.",
     openChat: "Open chat",
     openWorkbench: "Open Workbench",
+    hall: {
+      tag: ({ count }: { count: number }) => `+${formatCount(count)} in the hall`,
+      open: ({ count }: { count: number }) =>
+        pluralForm(count, {
+          one: "Open Your hobs: 1 more hob waits in the hall",
+          other: `Open Your hobs: ${formatCount(count)} more hobs wait in the hall`,
+        }),
+    },
     chips: {
       label: "Show hobs",
       all: "All",
