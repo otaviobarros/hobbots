@@ -47,7 +47,7 @@ const aldricHub = async () => {
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
 // covers IN-007, OR-007, UX-004
-test("[TC-IN-096] work whose turn is cut off shows as stuck on its Task card and in Needs you, and Retry starts it again", async ({
+test("[TC-IN-096] work whose turn is cut off shows as stuck in the chat's Needs-you tray and in the Inbox, and Retry starts it again", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -63,13 +63,16 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck on its Task card and
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  // The result could not be delivered: the card says so, with the next action.
-  const card = page.getByRole("region", { name: "Aldric's work on Plan the spring launch" });
-  const stuck = card.getByRole("region", { name: /^Aldric's work is stuck/ });
+  // The result could not be delivered: the tray says so, with Retry first and why in Details.
+  const stuck = page
+    .getByRole("region", { name: /^Needs you/ })
+    .getByRole("region", { name: /^Aldric's work is stuck/ });
   await expect(stuck).toContainText('Reading the result of "Outline the launch"', { timeout: 20_000 });
+  await stuck.getByText("Tries and the error").click();
   await expect(stuck).toContainText("It was tried 1 time, and the turn ended early. The last try was cut off.");
-  await expect(stuck).toContainText("Next: retry it");
-  await expect(stuck.getByRole("button", { name: "Reassign" })).toBeDisabled();
+  await expect(stuck.getByRole("button", { name: "Retry" })).toBeVisible();
+  // Reassign does not exist yet, so the tray leaves it out.
+  await expect(stuck.getByRole("button", { name: "Reassign" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible();
 
   // Needs you lists it too, and Retry there starts the work again in the chat.
@@ -83,11 +86,11 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck on its Task card and
   await expect(page.getByText("Nothing needs you")).toBeVisible();
   await page.goBack();
   await expect(page.getByText("Hobbots wrote this, not the user.").last()).toBeVisible({ timeout: 20_000 });
-  await expect(card.getByRole("region", { name: /^Aldric's work is stuck/ })).toBeHidden();
+  await expect(stuck).toBeHidden();
 });
 
 // covers IN-007
-test("[TC-IN-097] Dismiss takes stuck work off the card and out of Needs you", async ({ page }) => {
+test("[TC-IN-097] Dismiss takes stuck work out of the chat's tray and out of Needs you", async ({ page }) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -100,8 +103,9 @@ test("[TC-IN-097] Dismiss takes stuck work off the card and out of Needs you", a
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  const card = page.getByRole("region", { name: "Aldric's work on Plan the spring launch" });
-  const stuck = card.getByRole("region", { name: /^Aldric's work is stuck/ });
+  const stuck = page
+    .getByRole("region", { name: /^Needs you/ })
+    .getByRole("region", { name: /^Aldric's work is stuck/ });
   await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
   await stuck.getByRole("button", { name: "Dismiss" }).click();
   await expect(stuck).toBeHidden();
