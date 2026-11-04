@@ -1,4 +1,4 @@
-import { Message, MessageId, type MessageStatus, ThreadId } from "@hobbots/domain";
+import { Message, MessageId, type MessageStatus, type ReplyStep, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { isQuietReply } from "./quiet-replies.ts";
 
@@ -29,5 +29,21 @@ describe("quiet replies", () => {
     expect(isQuietReply(message("assistant", "", "interrupted"), plan)).toBe(false);
     expect(isQuietReply(message("assistant", "", "streaming"), plan)).toBe(false);
     expect(isQuietReply(message("assistant", ""), undefined)).toBe(false);
+  });
+
+  it("keeps a quiet reply whose tool call did not plainly succeed, so an uncertain write can be settled", () => {
+    const step = (state: ReplyStep["state"]): ReplyStep => ({
+      id: `t-${state}`,
+      kind: "tool",
+      label: "Pushing",
+      state,
+    });
+    const quiet = (steps: ReadonlyArray<ReplyStep>) =>
+      isQuietReply(new Message({ ...message("assistant", ""), steps: [...steps] }), plan);
+    expect(quiet([step("done")])).toBe(true);
+    expect(quiet([{ id: "thinking-1", kind: "thinking", label: "Thinking", state: "unfinished" }])).toBe(true);
+    for (const state of ["uncertain", "failed", "denied", "unfinished"] as const) {
+      expect(quiet([step("done"), step(state)])).toBe(false);
+    }
   });
 });

@@ -185,6 +185,25 @@ export class Checkpoint extends Schema.Class<Checkpoint>("Checkpoint")({
   revision: Revision,
 }) {}
 
+/** Longest detail a lead's context keeps from one checkpoint, so its own context stays small. */
+export const DETAIL_LIMIT = 600;
+
+/** A checkpoint's detail, cut to `limit` characters and marked when cut, or null when it has none. */
+export const detailOf = (checkpoint: Checkpoint, limit = DETAIL_LIMIT): string | null => {
+  const detail = checkpoint.detail?.trim() ?? "";
+  if (detail === "") return null;
+  return detail.length <= limit ? detail : `${detail.slice(0, limit).trimEnd()}…`;
+};
+
+/**
+ * What a lead's context says of a checkpoint (#901): its short summary, then its detail, bounded, so
+ * what the hob put beyond the beat a lane shows still reaches the lead.
+ */
+export const checkpointText = (checkpoint: Checkpoint, limit = DETAIL_LIMIT): string => {
+  const detail = detailOf(checkpoint, limit);
+  return detail === null ? checkpoint.summary : `${checkpoint.summary}. Detail: ${detail}`;
+};
+
 /** Whether a checkpoint belongs on `taskId`'s card: recorded on it, or about it too. */
 export const checkpointOn = (checkpoint: Checkpoint, taskId: TaskId) =>
   checkpoint.taskId === taskId || checkpoint.aboutTaskId === taskId;

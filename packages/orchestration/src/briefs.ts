@@ -3,6 +3,7 @@ import {
   ancestorsOf,
   type BackpackItem,
   CHECKPOINT_WORDS,
+  checkpointText,
   FINISH_RULE,
   handedFrom,
   isTerminalTask,
@@ -236,7 +237,7 @@ const childLine = (child: Task, tree: TaskTree, place: string) => {
       ? ` Result: ${cut(child.result.summary, SUMMARY_LIMIT)}`
       : latest === undefined
         ? ""
-        : ` Latest: ${latest.kind}, ${cut(latest.summary, SUMMARY_LIMIT)}`;
+        : ` Latest: ${latest.kind}, ${cut(checkpointText(latest, SUMMARY_LIMIT), 2 * SUMMARY_LIMIT)}`;
   const kind = isStep(child, tree.tasks) ? "Step" : "Task";
   const state = stuck ? "queued, but it cannot start because a Task it comes after did not complete" : child.state;
   const indent = "  ".repeat(place.split(".").length - 1);

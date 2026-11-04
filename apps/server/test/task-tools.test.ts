@@ -270,6 +270,19 @@ describe("hob tools for Tasks and Quests", () => {
       { summary: "Two headlines too long", detail: "Both run past 60 characters, so the landing page wraps them." },
       { summary: "Three headlines drafted", detail: null },
     ]);
+    // The lead reads the detail with the summary, so nothing put beyond the beat is lost to it.
+    const read = await done(ALDRIC, TOP, "read_tasks", { key: "read" });
+    const tasksRead = read.details.tasks as ReadonlyArray<{
+      readonly task_id: string;
+      readonly recent_checkpoints: ReadonlyArray<{ readonly summary: string; readonly detail?: string }>;
+    }>;
+    expect(tasksRead.find((each) => each.task_id === quill)?.recent_checkpoints).toEqual([
+      expect.objectContaining({ summary: "Three headlines drafted" }),
+      expect.objectContaining({
+        summary: "Two headlines too long",
+        detail: "Both run past 60 characters, so the landing page wraps them.",
+      }),
+    ]);
     // A member's own Quest has no chat of its own, so its first delegation asks for no plan.
     const nested = await done(QUILL, quill, "delegate_task", { key: "pip", hob: "Pip", brief: "Find keywords" });
     expect(nested.message).not.toContain("Tell the user the plan");

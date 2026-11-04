@@ -1,4 +1,11 @@
-import { type BackpackItem, CONTINUATION_HEADER, type Question, type Task, type ThreadId } from "@hobbots/domain";
+import {
+  type BackpackItem,
+  CONTINUATION_HEADER,
+  checkpointText,
+  type Question,
+  type Task,
+  type ThreadId,
+} from "@hobbots/domain";
 import { heldUnder } from "./dispatcher.ts";
 
 /**
@@ -92,7 +99,7 @@ const describeArrival = (item: BackpackItem): string => {
     case "failure":
       return `${about(payload.task)} ended as ${payload.task.state}${payload.reason === undefined ? "." : `: ${payload.reason}`}`;
     case "checkpoint":
-      return `A ${payload.checkpoint.kind} was reported on Task ${payload.checkpoint.taskId}: ${payload.checkpoint.summary}`;
+      return `A ${payload.checkpoint.kind} was reported on Task ${payload.checkpoint.taskId}: ${checkpointText(payload.checkpoint)}`;
     case "question":
       return describeQuestion(payload.question);
     case "answer":
