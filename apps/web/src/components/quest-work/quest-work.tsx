@@ -23,8 +23,8 @@ const useHobs = () => {
 };
 
 /**
- * A hob's work on other hobs' Quests, under its row in the hob panel: "On Aldric's quest" and its
- * Task's state, each opening the Quest. It is never one of the hob's threads.
+ * A hob's work on other hobs' Quests, on its card under what it is doing: "On Aldric's quest" and
+ * its Task's state, each opening the Quest. It is never one of the hob's threads.
  */
 export function HobQuestWork({ hob }: { hob: Agent }) {
   const work = useHobQuestWork(hob.id);
@@ -43,7 +43,7 @@ export function HobQuestWork({ hob }: { hob: Agent }) {
               threadAgentId={each.threadAgentId}
               taskId={each.task.id}
               label={messages.openQuest({ name: hob.name, lead: leadName, state })}
-              className="flex w-full animate-hb-in items-center gap-1.5 py-[3px] ps-[46px] pe-2 text-xs text-text-secondary no-underline hover:bg-hover hover:text-text-strong"
+              className="flex w-full items-center gap-1.5 rounded-control py-0.5 text-detail text-text-secondary no-underline hover:text-text-strong"
             >
               {lead && <HobSprite hob={lead} size={14} />}
               <span className="min-w-0 flex-1 truncate">{messages.onQuest({ lead: leadName })}</span>

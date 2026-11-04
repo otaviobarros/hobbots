@@ -69,22 +69,20 @@ const hubWithHistory = async () => {
 };
 
 // covers CH-006
-test("[TC-CH-065] a word from an old message finds its thread in the hob panel and opens it at the match", async ({
-  page,
-}) => {
+test("[TC-CH-065] a word from an old message finds its thread with ⌘K and opens it at the match", async ({ page }) => {
   const { current, hob, old, recent } = await hubWithHistory();
   await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${recent.id}`);
 
-  const search = page.getByRole("searchbox", { name: "Search hobs, threads and messages" });
-  await search.fill("lantern");
-  await expect(page.getByRole("status").filter({ hasText: "result" })).toHaveText("1 result");
-  const result = page.getByRole("link", { name: /Where did I put the lanterns\?/ });
-  await expect(result).toContainText("Pip · ");
+  await page.keyboard.press("ControlOrMeta+k");
+  const finder = page.getByRole("dialog", { name: "Jump anywhere" });
+  await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("lantern");
+  await expect(finder.getByRole("option")).toHaveCount(1);
+  const result = finder.getByRole("option", { name: /Where did I put the lanterns\?/ });
   await expect(result).toContainText("2 matches");
   await result.click();
 
   await expect(page).toHaveURL(new RegExp(`#/hobs/${hob.id}/threads/${old.id}\\?message=`));
-  await expect(search).toHaveValue("");
+  await expect(finder).toBeHidden();
   const chatView = page.getByRole("main", { name: "Chat" });
   // The newest match, the echo of the lantern question, scrolls into view.
   await expect(chatView.getByText("Echo: Where did I put the lanterns?", { exact: true })).toBeInViewport();
@@ -114,8 +112,10 @@ test("[TC-CH-069] a reply streaming into the thread keeps the search match in vi
   // A long reply starts streaming into the old thread, a word every 40 ms, for several seconds.
   await api(current, "POST", `/threads/${old.id}/messages`, { content: "more ".repeat(150) });
 
-  await page.getByRole("searchbox", { name: "Search hobs, threads and messages" }).fill("lantern");
-  await page.getByRole("link", { name: /Where did I put the lanterns\?/ }).click();
+  await page.keyboard.press("ControlOrMeta+k");
+  const finder = page.getByRole("dialog", { name: "Jump anywhere" });
+  await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("lantern");
+  await finder.getByRole("option", { name: /Where did I put the lanterns\?/ }).click();
   const chatView = page.getByRole("main", { name: "Chat" });
   const match = chatView.getByText("Echo: Where did I put the lanterns?", { exact: true });
   const stop = page.getByRole("button", { name: "■ Stop" });

@@ -7,8 +7,6 @@ import { formatCount, plural as pluralForm } from "../lib/format.ts";
 /** Evidence from the hub as a sentence, ending with one period. */
 const sentence = (text: string) => text.replace(/\.?$/, ".");
 
-const plural = new Intl.PluralRules("en");
-
 export const messages = {
   providers: {
     names: { "claude-code": "Claude", codex: "Codex" },
@@ -309,26 +307,7 @@ export const messages = {
     happeningNow: "Happening now",
     allQuiet: "All quiet. No hob is replying right now.",
   },
-  hobPanel: {
-    label: "Hobs and threads",
-    search: "Search hobs, threads, messages",
-    searchLabel: "Search hobs, threads and messages",
-    hide: "Hide hob list",
-    hobs: "Hobs",
-    loading: "Loading hobs…",
-    loadFailed: "Could not load your hobs.",
-    rooms: "Rooms: the great hall",
-    later: "Later",
-    summon: "+ Summon a hob",
-    keys: "⌘K jump anywhere · ⌥↑ ⌥↓ switch threads",
-    threadCount: ({ count }: { count: number }) => (plural.select(count) === "one" ? "1 thread" : `${count} threads`),
-    newThread: "+ New thread",
-    working: "Working",
-  },
   search: {
-    results: ({ count }: { count: number }) => (plural.select(count) === "one" ? "1 result" : `${count} results`),
-    searching: "Searching…",
-    failed: "Could not search. Try again.",
     nothing: ({ query }: { query: string }) => `Nothing matches “${query}”.`,
     matches: ({ count }: { count: number }) => `${count} matches`,
   },
@@ -342,7 +321,6 @@ export const messages = {
   chat: {
     ideas: ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"],
     newThread: "New thread",
-    showNav: "Show hob list",
     hidePanel: "Hide Quest panel",
     showPanel: "Show Quest panel",
     hello: ({ name }: { name: string }) => `Hello, I'm ${name}!`,

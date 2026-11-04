@@ -133,24 +133,32 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
   await expect(page).toHaveURL(questThread("campaign"));
   await expect(drawer("Brief for campaign")).toBeVisible();
 
+  // Each member's card in the sidebar names the Quest it works on and opens it.
   await page.goto(`${hub.url}/#/hobs/${ids.quill}`);
-  const panel = page.getByRole("navigation", { name: "Hobs and threads" });
-  const work = panel.getByRole("link", { name: "Quill is on Aldric's quest, Working. Open the Quest" });
-  await expect(work).toBeVisible();
+  const card = async (name: string) => {
+    await page
+      .getByRole("navigation", { name: "Sections" })
+      .getByRole("button", { name: new RegExp(`^${name}, `) })
+      .click();
+    return page.getByRole("dialog", { name });
+  };
   await expect(
-    panel.getByRole("link", { name: "Ada is on Aldric's quest, Not started. Open the Quest" }),
+    (await card("Ada")).getByRole("link", { name: "Ada is on Aldric's quest, Not started. Open the Quest" }),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
   // Aldric leads it, so it is not his work as a member.
-  await expect(panel.getByRole("link", { name: /^Aldric is on/ })).toHaveCount(0);
+  await expect((await card("Aldric")).getByRole("link", { name: /^Aldric is on/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   // Quill's work is not one of her threads.
   expect(await call<ReadonlyArray<unknown>>("GET", `/agents/${ids.quill}/threads`)).toEqual([]);
-  await work.click();
+  await (await card("Quill"))
+    .getByRole("link", { name: "Quill is on Aldric's quest, Working. Open the Quest" })
+    .click();
   await expect(page).toHaveURL(questThread("copy"));
   await expect(drawer("Brief for copy")).toBeVisible();
 
   // Ada leads Pip's nested Quest, but it is followed in Aldric's thread, so the link opens his chat.
-  const nested = panel.getByRole("link", { name: "Pip is on Ada's quest, Working. Open the Quest" });
-  await nested.click();
+  await (await card("Pip")).getByRole("link", { name: "Pip is on Ada's quest, Working. Open the Quest" }).click();
   await expect(page).toHaveURL(questThread("keywords"));
   await expect(drawer("Brief for keywords")).toBeVisible();
   await expect(page.getByRole("main", { name: "Chat" }).locator("header")).toContainText("Aldric");

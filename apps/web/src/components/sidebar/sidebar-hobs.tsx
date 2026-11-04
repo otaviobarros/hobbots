@@ -3,6 +3,7 @@ import { Popover, PopoverTrigger } from "@hobbots/ui/components/popover";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useActivity } from "../../api/activity.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
@@ -85,10 +86,11 @@ function SidebarHob({
   const word = copy.state[state];
   const mark = MARK[state];
   const showThreads = expanded && open;
+  const [cardOpen, setCardOpen] = useCardOpen();
 
   return (
     <div className="flex flex-none flex-col">
-      <Popover>
+      <Popover open={cardOpen} onOpenChange={setCardOpen}>
         <SidebarTip label={copy.hobTip({ name: hob.name, state: word })} expanded={expanded}>
           <PopoverTrigger asChild>
             <button
@@ -148,3 +150,13 @@ function RecentThreads({ hobId, pathname }: { hobId: AgentId; pathname: string }
     </>
   );
 }
+
+/** The card's open state, closed whenever the address changes, so a link inside it never leaves it open over the page. */
+const useCardOpen = () => {
+  const href = useRouterState({ select: (s) => s.location.href });
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (href) setOpen(false);
+  }, [href]);
+  return [open, setOpen] as const;
+};

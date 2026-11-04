@@ -72,17 +72,13 @@ export function ChatView({
   hobId,
   threadId,
   focusMessageId,
-  navOpen,
   panelOpen,
-  onShowNav,
   onTogglePanel,
 }: {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
   focusMessageId?: string | undefined;
-  navOpen: boolean;
   panelOpen: boolean;
-  onShowNav: () => void;
   onTogglePanel: () => void;
 }) {
   const hob = useQuery({ ...agentsQuery, select: (agents) => agents.find((a) => a.id === hobId) });
@@ -213,11 +209,6 @@ export function ChatView({
   return (
     <main aria-label="Chat" className="flex min-w-[360px] flex-1 flex-col">
       <header className="flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
-        {!navOpen && (
-          <Button variant="icon" size="icon" onClick={onShowNav} aria-label={copy.showNav} title={copy.showNav}>
-            »
-          </Button>
-        )}
         <HobSprite hob={current} size={36} state={state} badge />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-baseline gap-2">

@@ -17,6 +17,7 @@ import { doingOf, stateTag } from "../hob-page/hob-page-model.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
 import { useHobLookup } from "../quest/use-work.ts";
+import { HobQuestWork } from "../quest-work/quest-work.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.card;
@@ -91,6 +92,7 @@ export function HobCard({ hob, state, threads }: { hob: Agent; state: HobState; 
             <span className="truncate">{doing.text}</span>
           </span>
         )}
+        <HobQuestWork hob={hob} />
         <CardBackpack hob={hob} />
         <div className="flex gap-2">
           {/* Each way out closes the card, so it never stays open over the page it opened. */}

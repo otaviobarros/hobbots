@@ -57,57 +57,6 @@ export function ArchiveItem({
   );
 }
 
-/**
- * A thread row in the hob panel with its menu: a ⋯ button that shows on hover and focus, and the
- * same menu on right-click, Shift+F10 or the context-menu key.
- */
-export function ThreadRowMenu({
-  hob,
-  thread,
-  current,
-  children,
-}: {
-  hob: Agent;
-  thread: Thread;
-  current: boolean;
-  /** The row's link. */
-  children: ReactNode;
-}) {
-  const [contextOpen, setContextOpen] = useState(false);
-  const [buttonOpen, setButtonOpen] = useState(false);
-  return (
-    <ContextMenu onOpenChange={setContextOpen}>
-      <ContextMenuTrigger asChild>
-        <div className="group relative flex">
-          {children}
-          <DropdownMenu onOpenChange={setButtonOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="icon"
-                size="icon"
-                aria-label={copy.threadMenu({ title: thread.title })}
-                title={copy.threadMenu({ title: thread.title })}
-                className={cn(
-                  "absolute end-1.5 top-1/2 size-6 -translate-y-1/2 bg-panel opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100",
-                  buttonOpen && "opacity-100",
-                )}
-              >
-                ⋯
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <ArchiveItem Item={DropdownMenuItem} hob={hob} thread={thread} current={current} open={buttonOpen} />
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent>
-        <ArchiveItem Item={ContextMenuItem} hob={hob} thread={thread} current={current} open={contextOpen} />
-      </ContextMenuContent>
-    </ContextMenu>
-  );
-}
-
 /** The chat header's ⋯ menu for the open thread: export it, or archive it. */
 export function ThreadHeaderMenu({ hob, thread }: { hob: Agent; thread: Thread }) {
   const [open, setOpen] = useState(false);
