@@ -9,7 +9,7 @@ export const isSettingsSection = (value: unknown): value is SettingsSection =>
   SETTINGS_SECTIONS.some((section) => section === value);
 
 /** The tabs of Settings › Connections: the AI hobs think with, and the Charms they use. */
-export const CONNECTIONS_TABS = ["ai", "charms"] as const;
+const CONNECTIONS_TABS = ["ai", "charms"] as const;
 
 export type ConnectionsTab = (typeof CONNECTIONS_TABS)[number];
 
