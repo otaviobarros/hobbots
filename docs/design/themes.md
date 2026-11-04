@@ -38,6 +38,8 @@ Lamplight is smooth: rounded corners, eased motion and Atkinson headings. Worksh
 
 Every theme meets these floors against `ground`. The pairs and floors live in `contrast` in themes.json, and `apps/web/type-and-contrast.test.ts` checks every pair in every theme. A new color that sets text adds its pair there.
 
+The 12:1 floor for `text` is measured on `ground` only. Reading text means hob replies, which sit on `ground`. Text on a card or panel is UI text and needs 4.5:1.
+
 | Pair | Floor | Lamplight Dusk | Lamplight Paper | Workshop Night | Workshop Daylight |
 | --- | --- | --- | --- | --- | --- |
 | `text` | 12:1 | 12.8 | 12.4 | 13.1 | 14.1 |
