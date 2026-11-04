@@ -19,4 +19,4 @@ export const questSheet = (page: Page, title: string): Locator => page.getByRole
 
 /** The task sheet of the Task with this title. */
 export const taskSheet = (page: Page, title: string): Locator =>
-  page.getByRole("dialog", { name: `${title}, Task details` });
+  page.getByRole("dialog", { name: `${title}, task details` });

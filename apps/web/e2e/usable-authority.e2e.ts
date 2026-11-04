@@ -3,7 +3,7 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-// Issue #661 in the browser: Aldric gives Nettle Local Git and Run commands but denies Edit files,
+// Issue #661 in the browser: Aldric gives Nettle Save versions with Git and Run commands and tests but denies Edit files,
 // which leaves Nettle no command tool. The delegation's step in Aldric's reply shows it refused, with
 // the rule and the tools Nettle would have. The hub side is in apps/server/test/usable-authority.test.ts.
 

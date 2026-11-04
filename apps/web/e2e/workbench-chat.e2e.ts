@@ -21,7 +21,7 @@ test("[TC-UX-051] the Workbench chat of Quill's Task talks to Aldric, who leads 
   await strip.getByRole("button", { name: /^Plan the Black Friday campaign/ }).click();
   const quest = page.getByRole("dialog", { name: "Plan the Black Friday campaign, quest" });
   await quest.getByRole("button", { name: /Draft the landing copy/ }).click();
-  const drawer = page.getByRole("dialog", { name: "Draft the landing copy, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Draft the landing copy, task details" });
   await drawer.getByRole("textbox", { name: "Tell Aldric about this task" }).fill("Keep the headlines short.");
   await drawer.getByRole("button", { name: "Open Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Draft the landing copy" });
@@ -64,7 +64,7 @@ test("[TC-UX-149] while Ada's question waits for you, the Workbench chat answers
   await expect(page.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 30_000 });
   const card = page.getByRole("region", { name: "Aldric's work on Plan the Black Friday campaign" });
   await card.getByRole("button", { name: "Look inside Build the campaign" }).click();
-  const drawer = page.getByRole("dialog", { name: "Build the campaign, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Build the campaign, task details" });
   await drawer.getByRole("button", { name: "Open Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Build the campaign" });
 

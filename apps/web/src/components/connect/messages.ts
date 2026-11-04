@@ -79,7 +79,7 @@ export const messages = {
   allowed: {
     title: "You're in!",
     body: ({ computer }: { computer: string }) =>
-      `This computer now uses Hobbots on ${computer}. Hobs, chats and Quests live there and keep working while this one sleeps. Opening Home…`,
+      `This computer now uses Hobbots on ${computer}. Hobs, chats and quests live there and keep working while this one sleeps. Opening Home…`,
   },
 
   /** How a request that did not connect ended. */

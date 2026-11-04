@@ -168,7 +168,7 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on the q
 
   // The Task's sheet says it needs you, and Review in chat goes back to the tray.
   await row.click();
-  const drawer = page.getByRole("dialog", { name: "Remove the notes, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Remove the notes, task details" });
   await expect(drawer).toContainText("Needs you");
   await drawer.getByRole("button", { name: "Review in chat" }).click();
   await expect(drawer).toBeHidden();

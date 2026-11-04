@@ -30,7 +30,7 @@ test("[TC-CH-190] the quest sheet shows the whole tree live with its controls an
   const build = room.getByRole("button", { name: /Ada · Build the campaign/ });
   await expect(build).toContainText("waiting on Quill");
   await expect(build).toContainText("you", { timeout: 15_000 });
-  await expect(room.getByRole("button", { name: "Cancel Quest" })).toBeEnabled();
+  await expect(room.getByRole("button", { name: "Cancel quest" })).toBeEnabled();
   await expect(room).not.toContainText("arrive once the hub can confirm");
 
   // A row opens its task sheet, with the controls that apply to it.
@@ -38,7 +38,7 @@ test("[TC-CH-190] the quest sheet shows the whole tree live with its controls an
   const sheet = taskSheet(page, "Build the campaign");
   const controls = sheet.getByRole("region", { name: "Controls for Build the campaign" });
   await expect(controls.getByRole("button", { name: "Reassign" })).toBeEnabled();
-  await expect(controls.getByRole("button", { name: "Cancel Task" })).toBeEnabled();
+  await expect(controls.getByRole("button", { name: "Cancel task" })).toBeEnabled();
   await expect(controls.getByRole("button", { name: "Retry" })).toHaveCount(0);
   await backTo(sheet, "Plan the Black Friday campaign");
 
@@ -69,7 +69,7 @@ test("[TC-CH-190] the quest sheet shows the whole tree live with its controls an
     timeout: 15_000,
   });
   // The Quest ends only once Aldric's chat has read each member's result, a paced fake reply apiece.
-  await expect(room.getByRole("button", { name: "Cancel Quest" })).toHaveCount(0, { timeout: 30_000 });
+  await expect(room.getByRole("button", { name: "Cancel quest" })).toHaveCount(0, { timeout: 30_000 });
 
   // Unpinned, it leaves the other thread's header.
   await room.getByRole("button", { name: "Pin" }).click();
@@ -80,9 +80,9 @@ test("[TC-CH-190] the quest sheet shows the whole tree live with its controls an
   // A pin the hub no longer has says so and can be unpinned.
   await page.evaluate(() => localStorage.setItem("quest.pinned", JSON.stringify(["gone"])));
   await page.reload();
-  await expect(page.getByText("A pinned Quest is no longer on this hub.")).toBeVisible();
+  await expect(page.getByText("A pinned quest is no longer on this hub.")).toBeVisible();
   await page.getByRole("button", { name: "Unpin" }).click();
-  await expect(page.getByText("A pinned Quest is no longer on this hub.")).toBeHidden();
+  await expect(page.getByText("A pinned quest is no longer on this hub.")).toBeHidden();
 });
 
 // covers CH-005, OR-006, UX-001
@@ -117,15 +117,15 @@ test("[TC-CH-193] the task sheet says why a Reassign is refused, and the quest s
   await backTo(sheet, "Plan the Black Friday campaign");
   await expect(build).toContainText("Needs you");
 
-  // Cancel Quest asks first, then shows Cancelling… until every Task confirms it stopped.
-  const cancel = room.getByRole("button", { name: "Cancel Quest" });
+  // Cancel quest asks first, then shows Cancelling… until every Task confirms it stopped.
+  const cancel = room.getByRole("button", { name: "Cancel quest" });
   await cancel.click();
   await expect(room).toContainText("Cancel this quest? Every hob on it stops.");
   await room.getByRole("button", { name: "Keep it" }).click();
   await expect(room).not.toContainText("Cancel this quest?");
   await cancel.click();
   await room.getByRole("button", { name: "Yes, cancel" }).click();
-  await expect(room.getByRole("status").filter({ hasText: "Cancelled: 2 Tasks confirmed they stopped." })).toBeVisible({
+  await expect(room.getByRole("status").filter({ hasText: "Cancelled: 2 tasks confirmed they stopped." })).toBeVisible({
     timeout: 15_000,
   });
   await expect(room.getByRole("button", { name: /Aldric · Plan the Black Friday campaign/ })).toContainText(
@@ -133,7 +133,7 @@ test("[TC-CH-193] the task sheet says why a Reassign is refused, and the quest s
   );
   await expect(build).toContainText("Cancelled");
   await expect(copy).toContainText("Done");
-  await expect(room.getByRole("button", { name: /Cancel Quest|Cancelling…/ })).toHaveCount(0);
+  await expect(room.getByRole("button", { name: /Cancel quest|Cancelling…/ })).toHaveCount(0);
   await expect(page.getByText("Aldric stopped this")).toBeVisible();
 
   // Once it ended nothing is left to control, but its Workbench still opens.
@@ -162,19 +162,19 @@ test("[TC-CH-192] the task sheet cancels a Task, retries a failed one and gives 
   await expect(email).toContainText("Ada");
   await expect(page.getByText("Aldric's party: Quill and Ada")).toBeVisible();
 
-  // Cancel Task asks first, then the Task confirms it stopped; the sheet and the row follow.
+  // Cancel task asks first, then the Task confirms it stopped; the sheet and the row follow.
   await signs.click();
   const signsSheet = taskSheet(page, "Order the sale signs");
   const signsControls = signsSheet.getByRole("region", { name: "Controls for Order the sale signs" });
   await expect(signsControls.getByRole("button", { name: "Retry" })).toHaveCount(0);
-  await signsControls.getByRole("button", { name: "Cancel Task" }).click();
+  await signsControls.getByRole("button", { name: "Cancel task" }).click();
   await expect(signsControls).toContainText("Cancel Order the sale signs and everything under it?");
   await signsControls.getByRole("button", { name: "Yes, cancel" }).click();
-  await expect(signsControls.getByRole("status")).toHaveText("Cancelled: the Task confirmed it stopped.", {
+  await expect(signsControls.getByRole("status")).toHaveText("Cancelled: the task confirmed it stopped.", {
     timeout: 15_000,
   });
   await expect(signsSheet).toContainText("Cancelled");
-  await expect(signsControls.getByRole("button", { name: "Cancel Task" })).toHaveCount(0);
+  await expect(signsControls.getByRole("button", { name: "Cancel task" })).toHaveCount(0);
   await backTo(signsSheet, quest);
   await expect(signs).toContainText("Cancelled");
 

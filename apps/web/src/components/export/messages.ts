@@ -2,7 +2,7 @@
 export const messages = {
   heading: "Export",
   intro:
-    "Your chats, Quests and what hobs made, as Markdown and JSON you can read without Hobbots. Every piece of text is redacted, your own messages included. An export cannot be restored; a backup is what brings a hub back.",
+    "Your chats, quests and what hobs made, as Markdown and JSON you can read without Hobbots. Every piece of text is redacted, your own messages included. An export cannot be restored; a backup is what brings a hub back.",
   what: "What to export",
   everything: "Everything",
   oneHob: "One hob",
@@ -16,13 +16,13 @@ export const messages = {
     hob: ({ name }: { name: string }) => `Export ${name}`,
   },
   dialogIntro: {
-    thread: "This thread and the Quests started in it, as Markdown and JSON you can read without Hobbots.",
+    thread: "This chat and the quests started in it, as Markdown and JSON you can read without Hobbots.",
     hob: ({ name }: { name: string }) =>
-      `${name}'s threads, the Quests it led and the Tasks it worked on, as Markdown and JSON you can read without Hobbots. Other hobs' Tasks show only their titles and states.`,
+      `${name}'s threads, the quests it led and the tasks it worked on, as Markdown and JSON you can read without Hobbots. Other hobs' tasks show only their titles and states.`,
   },
   redacted: "Every piece of text is redacted, your own messages included. Redaction is best effort.",
   close: "Close",
-  menuThread: "Export thread…",
+  menuThread: "Export chat…",
   menuHob: "Export hob…",
   saved: ({ folder }: { folder: string }) => `Saved to ${folder}`,
   held: { threads: "Threads", quests: "Quests", files: "Files copied" },

@@ -94,10 +94,10 @@ describe("ruleText", () => {
     );
   });
 
-  it("says a This Task rule for the Task, or for the Quest once a party joins", () => {
+  it("says a This task rule for the Task, or for the Quest once a party joins", () => {
     const host = { _tag: "Host", host: "example.com" } as const;
-    expect(ruleText(host, "Pip", "task")).toBe("For this Task, let Pip use example.com");
-    expect(ruleText(host, "Pip", "quest")).toBe("For this Quest, let Pip use example.com");
+    expect(ruleText(host, "Pip", "task")).toBe("For this task, let Pip use example.com");
+    expect(ruleText(host, "Pip", "quest")).toBe("For this quest, let Pip use example.com");
   });
 
   it("quotes words the shell would not read back as written", () => {
@@ -116,7 +116,7 @@ describe("runnerNote", () => {
   });
 });
 
-describe("This Task", () => {
+describe("This task", () => {
   const TOP = TaskId.make("top");
   const tree = (quests: ReadonlyArray<Quest>) =>
     new TaskTree({
@@ -156,7 +156,7 @@ describe("This Task", () => {
     expect(offersThisTask(request({ rootTaskId: TOP, grantable: false }))).toBe(false);
   });
 
-  it("reads This Quest once a party joins the request's top Task, and This Task before", () => {
+  it("reads This quest once a party joins the request's top Task, and This task before", () => {
     const asked = request({ rootTaskId: TOP });
     expect(workScope(asked, undefined)).toBe("task");
     expect(workScope(asked, tree([]))).toBe("task");

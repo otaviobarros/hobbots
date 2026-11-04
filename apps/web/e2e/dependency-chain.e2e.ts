@@ -106,11 +106,11 @@ test("[TC-OR-209] a three-member Quest with a dependency chain runs to finished 
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
 
-  // The quest sheet follows every Task to Done, and the Quest ends: no Cancel Quest is left.
+  // The quest sheet follows every Task to Done, and the Quest ends: no Cancel quest is left.
   const tasks = await openQuest(page, "Build and review the app");
   for (const row of [/Quill · Write the backend/, /Rook · Write the frontend/, /Pip · Review the backend/]) {
     await expect(tasks.getByRole("button", { name: row })).toContainText("Done", { timeout: 30_000 });
   }
-  await expect(page.getByRole("button", { name: "Cancel Quest" })).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Cancel quest" })).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByText("The app is built and reviewed.").first()).toBeVisible();
 });
