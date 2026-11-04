@@ -175,10 +175,6 @@ export const enforcement = (
   sandbox: SandboxState = "on",
 ) => ruleEnforcement(operation, (other) => decisions[other], sandbox);
 
-/** The badge color for a rule's answer. */
-export const ruleColor = (answer: RuleAnswer) =>
-  answer === "Allow" ? "bg-mint" : answer === "Ask" ? "bg-lantern" : "bg-rose";
-
 /** A folder's last part for its row; the root folder keeps its slash. */
 export const folderName = (folder: string): string => {
   const trimmed = trimTrailingSlashes(folder);
