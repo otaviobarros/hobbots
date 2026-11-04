@@ -62,6 +62,21 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   await sheet.getByText("Everything in this task").click();
   await expect(sheet).toContainText("hobbots_manual_tests/black_friday_campaign_full_run");
   await expectNoSideScroll(sheet);
+
+  // Back shows the quest in the same sheet, never closing it on the way (#894), and the quest's
+  // heading stops at three lines too.
+  const panel = page.locator('[data-slot="sheet-content"]');
+  await panel.evaluate((each) => Object.assign(each, { stayedOpen: true }));
+  await sheet.getByRole("button", { name: /^Back to Run the Black Friday campaign/ }).click();
+  const quest = page.getByRole("dialog", { name: /^Run the Black Friday campaign .*, quest$/ });
+  const questHeading = quest.getByRole("heading", { name: /^Run the Black Friday campaign/ });
+  await expect(questHeading).toBeFocused();
+  await expect(panel).toHaveJSProperty("stayedOpen", true);
+  expect(await lines(questHeading)).toBeLessThanOrEqual(3);
+  await expectInside(questHeading, quest);
+  await quest.getByRole("button", { name: /^Ada · Build the campaign for the shop in/ }).click();
+  await expect(heading).toBeFocused();
+  await expect(panel).toHaveJSProperty("stayedOpen", true);
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
 

@@ -76,7 +76,10 @@ export function QuestView({
         <SheetCloseButton label={copy.close} className="ms-0" />
       </SheetHeader>
       <div className="flex flex-col gap-1">
-        <SheetTitle tabIndex={-1}>{taskTitle(top)}</SheetTitle>
+        {/* A request can be a paragraph: the heading stops at three lines, like the task sheet's (#874). */}
+        <SheetTitle tabIndex={-1} clamped>
+          {taskTitle(top)}
+        </SheetTitle>
         <SheetDescription>
           {copy.started({ when: formatWhen(top.createdAt) })}
           {total > 0 && ` · ${copy.done({ done, total })}`}
