@@ -56,12 +56,12 @@ test("[TC-UX-001] with 20 hobs the scene shows six, the hall holds 14 and the fi
   await page.goto(url);
 
   const scene = page.getByRole("region", { name: "Your hobs right now" });
-  await expect(scene.getByRole("link", { name: /^Open chat with/ })).toHaveCount(6);
+  await expect(scene.getByRole("link", { name: /^Open .+'s page,/ })).toHaveCount(6);
   await expect(scene.getByRole("button", { name: "Open the hall: 14 more hobs" })).toContainText("14 in the hall");
 
   // Past 12 hobs, Resting starts folded; its count chip unfolds it.
   const all = page.getByRole("region", { name: "All hobs" });
-  const tiles = all.getByRole("link", { name: /^Open chat with/ });
+  const tiles = all.getByRole("link", { name: /^Open .+'s page,/ });
   await expect(all.getByRole("button", { name: /^Resting/ })).toHaveAttribute("aria-expanded", "false");
   await expect(tiles).toHaveCount(0);
   await scene.getByRole("button", { name: "20 resting" }).click();
@@ -70,7 +70,7 @@ test("[TC-UX-001] with 20 hobs the scene shows six, the hall holds 14 and the fi
 
   await all.getByRole("searchbox", { name: "Find a hob by name or role" }).fill("carto");
   await expect(tiles).toHaveCount(1);
-  await expect(all.getByRole("link", { name: /^Open chat with Wick, Cartographer/ })).toBeVisible();
+  await expect(all.getByRole("link", { name: /^Open Wick's page, Cartographer/ })).toBeVisible();
 });
 
 // covers UX-001
@@ -81,10 +81,10 @@ test("[TC-UX-004] Home tiles show each hob's sigil and role, and the filter find
   await page.getByRole("region", { name: "Your hobs right now" }).getByRole("button", { name: "20 resting" }).click();
 
   await all.getByRole("searchbox", { name: "Find a hob by name or role" }).fill("QA");
-  const tiles = all.getByRole("link", { name: /^Open chat with/ });
+  const tiles = all.getByRole("link", { name: /^Open .+'s page,/ });
   await expect(tiles).toHaveCount(2);
   for (const name of ["Hob 5", "Hob 10"]) {
-    const tile = all.getByRole("link", { name: `Open chat with ${name}, QA engineer, ready` });
+    const tile = all.getByRole("link", { name: `Open ${name}'s page, QA engineer, ready` });
     await expect(tile).toContainText("QA engineer · ready");
     // The sigil is decorative: the role is read once, from its title in words.
     await expect(tile.locator('[data-slot="sigil-badge"]')).toHaveAttribute("aria-hidden", "true");
@@ -96,17 +96,17 @@ test("[TC-UX-005] with six or fewer hobs the Home scene shows each hob's sigil a
   const { url } = await hubWithHobs(5);
   await page.goto(url);
   const scene = page.getByRole("region", { name: "Your hobs right now" });
-  await expect(scene.getByRole("link", { name: /^Open chat with/ })).toHaveCount(5);
+  await expect(scene.getByRole("link", { name: /^Open .+'s page,/ })).toHaveCount(5);
   await expect(page.getByRole("region", { name: "All hobs" })).toHaveCount(0);
 
-  const qa = scene.getByRole("link", { name: "Open chat with Hob 5, QA engineer, ready" });
+  const qa = scene.getByRole("link", { name: "Open Hob 5's page, QA engineer, ready" });
   await expect(qa).toContainText("QA engineer");
   await expect(qa.locator('[data-slot="sigil-badge"]')).toHaveAttribute("aria-hidden", "true");
-  await expect(scene.getByRole("link", { name: /^Open chat with Hob 1,/ })).toContainText("Assistant");
+  await expect(scene.getByRole("link", { name: /^Open Hob 1's page,/ })).toContainText("Assistant");
 });
 
 // covers UX-001
-test("[TC-UX-002] ⌘K opens a hob's chat from any page", async ({ page }) => {
+test("[TC-UX-002] ⌘K opens a hob's page from any page", async ({ page }) => {
   const { url, ids } = await hubWithHobs(20);
   await page.goto(`${url}/#/usage`);
   await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
@@ -118,7 +118,7 @@ test("[TC-UX-002] ⌘K opens a hob's chat from any page", async ({ page }) => {
   await page.keyboard.press("Enter");
 
   await expect(finder).toBeHidden();
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Wick}/new$`));
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Wick}$`));
 });
 
 // covers UX-001
@@ -146,5 +146,5 @@ test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", asy
   await page.keyboard.press("ArrowUp");
   const hobId = (await chosen.getAttribute("id"))?.replace("hob-jump-hob-", "");
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${hobId}/new$`));
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${hobId}$`));
 });

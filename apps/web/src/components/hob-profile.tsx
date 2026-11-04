@@ -135,7 +135,8 @@ function Profile({
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <Link to="/hobs/$hobId" params={{ hobId: hob.id }} className="text-sm text-lantern hover:text-lantern-hover">
-            ← Back to chat
+            <span aria-hidden>← </span>
+            {messages.profile.backToPage({ name: hob.name })}
           </Link>
           <div className="flex min-w-0 items-center gap-3">
             <h1 className="m-0 truncate font-heading text-[30px] font-bold">{hob.name}</h1>

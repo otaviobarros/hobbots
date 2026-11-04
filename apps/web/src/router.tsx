@@ -14,6 +14,8 @@ import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
 import { ArchivedHobView } from "./components/archived-hobs.tsx";
 import { ArchivedThreadList } from "./components/archived-threads/archived-threads.tsx";
+import { HobPage } from "./components/hob-page/hob-page.tsx";
+import { type HobPageTab, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
 import { HobProfile } from "./components/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
@@ -36,7 +38,6 @@ import { readStored, writeStored } from "./lib/storage.ts";
 import { isUsagePeriod } from "./lib/usage.ts";
 
 const lastHobKey = "lastHob";
-const lastThreadKey = (hobId: string) => `lastThread.${hobId}`;
 
 const PAIR_PATH = "/pair";
 
@@ -133,7 +134,7 @@ const readyRoute = createRoute({
 // Every page after setup shares the rail.
 const shellRoute = createRoute({ getParentRoute: () => rootRoute, id: "shell", component: AppShell });
 
-// Home is the landing page; the chat is one click away and opens on the last thread.
+// Home is the landing page; each hob is one click away on its own page.
 const homeRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/",
@@ -155,17 +156,24 @@ const hobsRoute = createRoute({
   component: () => <section className="grid flex-1 place-items-center text-label">No hobs yet.</section>,
 });
 
-// Opening a hob restores its last selected thread, or its most recent one, or a fresh page.
+// A hob's own page: its hero, its chats and its history. `?tab=history` opens History.
 const hobRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId",
-  beforeLoad: async ({ context, params }) => {
-    const hobId = AgentId.make(params.hobId);
-    const threads = await context.queryClient.ensureQueryData(threadsQuery(hobId));
-    const remembered = readStored<string | null>(lastThreadKey(hobId), null);
-    const target = threads.find((t) => t.id === remembered) ?? threads[0];
-    if (target) throw redirect({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: target.id } });
-    throw redirect({ to: "/hobs/$hobId/new", params: { hobId } });
+  validateSearch: (search: Record<string, unknown>): { tab?: HobPageTab | undefined } => ({
+    tab: isHobPageTab(search.tab) && search.tab !== "chats" ? search.tab : undefined,
+  }),
+  beforeLoad: ({ params }) => writeStored(lastHobKey, params.hobId),
+  component: function HobPageRoute() {
+    const params = hobRoute.useParams();
+    const { tab } = hobRoute.useSearch();
+    return (
+      <HobsLayout
+        hobId={AgentId.make(params.hobId)}
+        aside={null}
+        main={(props) => <HobPage key={params.hobId} {...props} tab={tab ?? "chats"} />}
+      />
+    );
   },
 });
 
@@ -207,10 +215,7 @@ const threadRoute = createRoute({
     file: typeof search.file === "string" ? search.file : undefined,
     chat: search.chat === "open" ? "open" : undefined,
   }),
-  beforeLoad: ({ params }) => {
-    writeStored(lastHobKey, params.hobId);
-    writeStored(lastThreadKey(params.hobId), params.threadId);
-  },
+  beforeLoad: ({ params }) => writeStored(lastHobKey, params.hobId),
   component: function ThreadPage() {
     const params = threadRoute.useParams();
     const { message, task, bench, tab, attempt, file, chat } = threadRoute.useSearch();
