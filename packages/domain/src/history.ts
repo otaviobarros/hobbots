@@ -152,6 +152,20 @@ export const historyEvents = (agentId: AgentId, records: HistoryRecords): Readon
     quest: questOf(task.id, task.rootId),
   });
 
+  // A Task that ended says its result, or why its last Attempt stopped, and how many Attempts it took.
+  const endedOf = (task: Task): HistoryEvent | null => {
+    if (task.state !== "completed" && task.state !== "failed" && task.state !== "cancelled") return null;
+    const attemptId = task.result?.attemptId ?? task.currentAttemptId;
+    const attempt = attemptId === null ? undefined : attempts.get(attemptId);
+    return TaskEndedEvent.make({
+      ...taskBase(task, `ended:${task.id}`, task.updatedAt, attemptId),
+      brief: task.brief,
+      state: task.state,
+      summary: task.result?.summary ?? attempt?.outcome ?? null,
+      attempts: attempt?.number ?? 0,
+    });
+  };
+
   const fromTask = (task: Task): ReadonlyArray<HistoryEvent> => {
     const events: Array<HistoryEvent> = [];
     const delegation = delegated.get(task.id);
@@ -167,19 +181,8 @@ export const historyEvents = (agentId: AgentId, records: HistoryRecords): Readon
           leadId: delegation.leadId,
         }),
       );
-    if (task.state === "completed" || task.state === "failed" || task.state === "cancelled") {
-      const attemptId = task.result?.attemptId ?? task.currentAttemptId;
-      const attempt = attemptId === null ? undefined : attempts.get(attemptId);
-      events.push(
-        TaskEndedEvent.make({
-          ...taskBase(task, `ended:${task.id}`, task.updatedAt, attemptId),
-          brief: task.brief,
-          state: task.state,
-          summary: task.result?.summary ?? attempt?.outcome ?? null,
-          attempts: attempt?.number ?? 0,
-        }),
-      );
-    }
+    const ended = endedOf(task);
+    if (ended !== null) events.push(ended);
     return events;
   };
 
