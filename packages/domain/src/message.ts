@@ -170,6 +170,13 @@ const endedState = (step: ReplyStep): ReplyStepState => {
   return step.state === "awaiting" ? "unfinished" : step.state;
 };
 
+/** Steps as their turn ends: a tool call cut off while it ran is uncertain, anything else still under way unfinished. */
+export const endedSteps = (steps: ReadonlyArray<ReplyStep>): ReadonlyArray<ReplyStep> =>
+  steps.map((step) => {
+    const state = endedState(step);
+    return state === step.state ? step : { ...step, state };
+  });
+
 /**
  * A turn's end. A tool call cut off while it ran is uncertain: it may have taken effect. Anything
  * else still under way, thinking or a call awaiting approval, is unfinished.
@@ -178,10 +185,7 @@ const endTurn = (message: Message, fields: Partial<Message>): Message =>
   new Message({
     ...message,
     ...fields,
-    steps: message.steps.map((step) => {
-      const state = endedState(step);
-      return state === step.state ? step : { ...step, state };
-    }),
+    steps: endedSteps(message.steps),
   });
 
 const requireInProgress = (message: Message, action: string) =>

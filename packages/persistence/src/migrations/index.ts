@@ -49,6 +49,7 @@ import stateChecks from "./0046_state_checks.ts";
 import versionedName from "./0047_versioned_name.ts";
 import historyReads from "./0048_history_reads.ts";
 import threadPinnedAt from "./0049_thread_pinned_at.ts";
+import attemptSteps from "./0050_attempt_steps.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -105,4 +106,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0047_versioned_name": versionedName,
   "0048_history_reads": historyReads,
   "0049_thread_pinned_at": threadPinnedAt,
+  "0050_attempt_steps": attemptSteps,
 };

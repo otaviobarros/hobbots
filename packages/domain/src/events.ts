@@ -6,7 +6,7 @@ import { BackpackItem } from "./backpack.ts";
 import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
-import { Message } from "./message.ts";
+import { Message, ReplyStep } from "./message.ts";
 import {
   ArtifactRef,
   Checkpoint,
@@ -119,6 +119,12 @@ const FileChangesRecorded = Schema.TaggedStruct("FileChangesRecorded", {
   changes: Schema.Array(FileChange),
   removed: Schema.Array(FileChangeId),
 });
+/** The steps an Attempt's turn outside any chat has so far, all of them, as they change (#892). */
+const AttemptStepsRecorded = Schema.TaggedStruct("AttemptStepsRecorded", {
+  attemptId: AttemptId,
+  taskId: TaskId,
+  steps: Schema.Array(ReplyStep),
+});
 /** The hub refused a Task tool call, or refused a retried one again (ADR 018). */
 const ToolCallRefused = Schema.TaggedStruct("ToolCallRefused", { refusal: RefusedCall });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
@@ -199,6 +205,7 @@ export const JournaledEvent = Schema.Union([
   FileChangesRecorded,
   FolderScanned,
   ToolCallRefused,
+  AttemptStepsRecorded,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -255,6 +262,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   FileChangesRecorded: 1,
   FolderScanned: 1,
   ToolCallRefused: 1,
+  AttemptStepsRecorded: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

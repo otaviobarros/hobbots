@@ -550,6 +550,48 @@ describe("a Task's activity", () => {
       { _tag: "CommandRecorded", command: { id: "left-running", state: "uncertain" } },
     ]);
   }, 30_000);
+  // covers UX-002, EX-004
+  it("[TC-PE-453] after a restart, an Attempt's steps left under way are ended and journaled before they are served (#892)", async () => {
+    const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
+    await inHub(say(["Check the notes", hub("start_quest", { key: "quest", goal: "Check" })].join("\n")));
+    const tree = await inHub(treeWhen((each) => each.attempts.length > 0));
+    const attempt = tree.attempts[0];
+    if (attempt === undefined) throw new Error("no Attempt");
+    await inHub(endedActivity(attempt.id));
+    // What a hub that stopped mid-turn leaves behind: a tool still running and a step still waiting.
+    await inHub(
+      ActivityRepository.use((repo) =>
+        repo.saveSteps(
+          attempt.id,
+          [
+            { id: "searching", kind: "tool", label: "Searching GitHub", state: "running", startedAt: now },
+            { id: "asking", kind: "tool", label: "Asking to edit files", state: "awaiting", startedAt: now },
+            { id: "read", kind: "tool", label: "Reading a file", state: "done", startedAt: now },
+          ],
+          now,
+        ),
+      ),
+    );
+    const before = await inHub(EventJournal.use((journal) => journal.readAfter(0, 10_000)));
+
+    // The hub starts again: its recorder ends what no turn still runs.
+    await inHub(Effect.scoped(Layer.build(ActivityRecorder.layer(limits))));
+
+    const activity = await inHub(activityOf(attempt.id));
+    expect(activity.steps.map(({ id, state }) => ({ id, state }))).toEqual([
+      { id: "searching", state: "uncertain" },
+      { id: "asking", state: "unfinished" },
+      { id: "read", state: "done" },
+    ]);
+    const after = await inHub(EventJournal.use((journal) => journal.readAfter(before.at(-1)?.sequence ?? 0, 10_000)));
+    expect(after.filter((entry) => entry.type === "AttemptStepsRecorded")).toHaveLength(1);
+
+    // A second start finds nothing left under way, so it journals nothing more.
+    const settled = await inHub(EventJournal.use((journal) => journal.readAfter(0, 10_000)));
+    await inHub(Effect.scoped(Layer.build(ActivityRecorder.layer(limits))));
+    const again = await inHub(EventJournal.use((journal) => journal.readAfter(settled.at(-1)?.sequence ?? 0, 10_000)));
+    expect(again.filter((entry) => entry.type === "AttemptStepsRecorded")).toHaveLength(0);
+  }, 30_000);
   // covers PE-005
   it("[TC-PE-286] counts a text's redacted size against the Attempt's budget, so redaction never takes it past", async () => {
     // 1,000 bytes as written, and longer once each secret in it reads as its marker.

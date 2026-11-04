@@ -204,6 +204,28 @@ describe("summaryOf", () => {
     expect(lines).toEqual([{ kind: "ended", attempt: failed, mark: "failed" }]);
   });
 
+  it("lists the tool calls of the Attempt's own turns with their marks, in the order they started (#892)", () => {
+    const call = { tool: "mcp__hobbots__github_search", operation: "read-github" as const, targets: ["/work"] };
+    const steps = [
+      { id: "t0", kind: "thinking" as const, label: "Thinking", state: "done" as const },
+      { id: "t1", kind: "tool" as const, label: "Searching GitHub", state: "done" as const, call, startedAt: AT },
+      { id: "t2", kind: "tool" as const, label: "Reading a GitHub item", state: "uncertain" as const, call },
+      { id: "t3", kind: "tool" as const, label: "Running rm", state: "denied" as const, call, reason: "Never" },
+    ];
+    const lines = summaryOf(
+      tree({ attempts: [done] }),
+      task(CAMPAIGN, { state: "completed" }),
+      done,
+      new AttemptActivity({ ...activity([]), steps }),
+      [],
+    ).happened;
+    expect(lines.map((line) => (line.kind === "tool" ? [line.step.label, line.mark] : line.kind))).toEqual([
+      ["Searching GitHub", "done"],
+      ["Reading a GitHub item", "unresolved"],
+      ["Running rm", "failed"],
+    ]);
+  });
+
   it("never calls a stop it could not confirm stopped", () => {
     const unresolved = attempt(CAMPAIGN, "unresolved");
     const cancelled = attempt(CAMPAIGN, "cancelled");

@@ -223,6 +223,8 @@ const lineKey = (line: HappenedLine): string => {
       return line.milestone.id;
     case "refused":
       return `refused-${line.refusal.id}`;
+    case "tool":
+      return `tool-${line.step.id}`;
     case "ended":
       return `ended-${line.attempt.id}`;
   }
@@ -265,6 +267,19 @@ function Happened({ line, hobs, onOpen }: { line: HappenedLine; hobs: HobLookup;
     );
   }
   if (line.kind === "refused") return <Refused line={line} hobs={hobs} mark={mark} row={row} />;
+  if (line.kind === "tool") {
+    return (
+      <div data-slot="tool-step" className={row}>
+        {mark}
+        <span className="min-w-0 flex-1 whitespace-pre-wrap">
+          {line.step.label}
+          {line.step.reason !== undefined && (
+            <span className="block text-text-secondary">{copy.endedWhy({ why: line.step.reason })}</span>
+          )}
+        </span>
+      </div>
+    );
+  }
   return (
     <div className={row}>
       {mark}

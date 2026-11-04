@@ -6,6 +6,7 @@ import {
   type ContentId,
   compareListings,
   DEFAULT_ACTIVITY_LIMITS,
+  endedSteps,
   type FileChangeId,
   FileChangeId as FileChangeIdSchema,
   type FileVersion,
@@ -19,6 +20,7 @@ import {
   type ListingChange,
   type NotKept,
   previewToolOutput,
+  type ReplyStep,
   type ScannedFile,
   type ScanStop,
   type TaskId,
@@ -83,6 +85,13 @@ export class ActivityRecorder extends Context.Service<
      * live turns whose Attempt is not known yet, such as a chat turn whose call is starting its Task.
      */
     readonly settle: (attemptId: AttemptId | null) => Effect.Effect<void>;
+    /**
+     * Records every step a turn outside any chat has now on its Attempt, a planned step's or a party
+     * member's, so its Task shows what it did (#892). A chat turn's steps stay on its reply.
+     */
+    readonly recordSteps: (attemptId: AttemptId, steps: ReadonlyArray<ReplyStep>) => Effect.Effect<void>;
+    /** The steps the Attempt's earlier turns outside any chat left, so a turn that resumes it adds to them. */
+    readonly stepsOf: (attemptId: AttemptId) => Effect.Effect<ReadonlyArray<ReplyStep>>;
   }
 >()("@hobbots/agents/ActivityRecorder") {
   static readonly layer = (limits: ActivityLimits = DEFAULT_ACTIVITY_LIMITS) =>
@@ -987,6 +996,16 @@ const makeRecorder = (limits: ActivityLimits) =>
       }
     }).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not settle the commands left running", cause)));
 
+    // The same holds for the steps a turn outside any chat left under way (#892): a tool call left
+    // running is uncertain, and anything else still under way unfinished, each with its journal entry.
+    yield* Effect.gen(function* () {
+      const at = yield* nowIso;
+      for (const { attemptId, steps } of yield* repo.openSteps) {
+        const saved = yield* repo.saveSteps(attemptId, endedSteps(steps), at);
+        if (Option.isSome(saved)) yield* publisher.publish(saved.value.entries);
+      }
+    }).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not settle the steps left under way", cause)));
+
     const prune = Effect.gen(function* () {
       const now = yield* DateTime.now;
       const cutoff = DateTime.formatIso(DateTime.subtractDuration(now, Duration.days(limits.retentionDays)));
@@ -998,5 +1017,11 @@ const makeRecorder = (limits: ActivityLimits) =>
     const settle = (attemptId: AttemptId | null) =>
       Effect.forEach([...live], (turn) => turn.settle(attemptId), { discard: true });
 
-    return ActivityRecorder.of({ forTurn, prune, settle });
+    const recordSteps = (attemptId: AttemptId, steps: ReadonlyArray<ReplyStep>) =>
+      Effect.gen(function* () {
+        const saved = yield* repo.saveSteps(attemptId, steps, yield* nowIso);
+        if (Option.isSome(saved)) yield* publisher.publish(saved.value.entries);
+      });
+
+    return ActivityRecorder.of({ forTurn, prune, settle, recordSteps, stepsOf: repo.readSteps });
   });

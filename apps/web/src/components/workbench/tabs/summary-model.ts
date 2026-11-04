@@ -12,6 +12,7 @@ import {
   type Milestone,
   type Question,
   type RefusedCall,
+  type ReplyStep,
   saysMore,
   type Task,
   type TaskResult,
@@ -50,6 +51,8 @@ export type HappenedLine =
   | { readonly kind: "milestone"; readonly milestone: Milestone; readonly mark: Mark }
   /** A Task tool call the hub refused on this Task, with how many times it was tried (#575). */
   | { readonly kind: "refused"; readonly refusal: RefusedCall; readonly mark: Mark }
+  /** A tool call of the Attempt's own turns, as a step's or a party member's turn recorded it (#892). */
+  | { readonly kind: "tool"; readonly step: ReplyStep; readonly mark: Mark }
   /** The chosen Attempt ended without finishing the Task, with why when the hub knows. */
   | { readonly kind: "ended"; readonly attempt: Attempt; readonly mark: Mark };
 
@@ -199,12 +202,42 @@ const reportLines = (
       line: { kind: "checkpoint", checkpoint, mark: CHECKPOINT_MARK[checkpoint.kind] },
     }));
 
+const STEP_MARK: Readonly<Record<ReplyStep["state"], Mark>> = {
+  running: "running",
+  awaiting: "waiting",
+  done: "done",
+  failed: "failed",
+  denied: "failed",
+  unfinished: "cancelled",
+  uncertain: "unresolved",
+};
+
 /**
- * What happened, in order: the Task's steps and its members' Tasks, what its owner reported in the
+ * The tool calls of the Attempt's own turns, at the time each started. A call that never started,
+ * such as one refused before it ran, goes at the time of the call before it.
+ */
+const toolLines = (attempt: Attempt | null, activity: AttemptActivity | null): Array<Timed> => {
+  if (attempt === null || activity === null || activity.attempt.id !== attempt.id) return [];
+  let at = attempt.startedAt;
+  return activity.steps.flatMap((step) => {
+    if (step.kind !== "tool") return [];
+    at = step.startedAt ?? at;
+    return [{ at, line: { kind: "tool", step, mark: STEP_MARK[step.state] } }];
+  });
+};
+
+/**
+ * What happened, in order: the Task's steps and its members' Tasks, the tool calls of the chosen
+ * Attempt's own turns, what its owner reported in the
  * chosen Attempt, the milestones it reached, then those still ahead, and how the Attempt ended
  * when it ended without finishing.
  */
-const happenedOf = (tree: TaskTree, task: Task, attempt: Attempt | null): ReadonlyArray<HappenedLine> => {
+const happenedOf = (
+  tree: TaskTree,
+  task: Task,
+  attempt: Attempt | null,
+  activity: AttemptActivity | null,
+): ReadonlyArray<HappenedLine> => {
   const milestones = tree.milestones.filter((each) => each.taskId === task.id).sort((a, b) => a.position - b.position);
   const reached: Array<Timed> = milestones.flatMap((milestone) =>
     milestone.reachedAt === null
@@ -215,7 +248,13 @@ const happenedOf = (tree: TaskTree, task: Task, attempt: Attempt | null): Readon
   const refused: Array<Timed> = tree.refusals
     .filter((refusal) => refusal.taskId === task.id)
     .map((refusal) => ({ at: refusal.refusedAt, line: { kind: "refused", refusal, mark: "failed" } }));
-  const timed = [...childLines(tree, task), ...reportLines(tree, task, attempt, milestones), ...reached, ...refused];
+  const timed = [
+    ...childLines(tree, task),
+    ...toolLines(attempt, activity),
+    ...reportLines(tree, task, attempt, milestones),
+    ...reached,
+    ...refused,
+  ];
   // A stable sort keeps lines that share a time, such as steps planned together, in their order.
   const lines = timed.sort((a, b) => a.at.localeCompare(b.at)).map((each) => each.line);
   for (const milestone of milestones) {
@@ -292,7 +331,7 @@ export const summaryOf = (
       from: delegation?.leadId ?? null,
       expected: delegation?.expectedOutput ?? null,
     },
-    happened: happenedOf(tree, task, attempt),
+    happened: happenedOf(tree, task, attempt, activity),
     made: { artifacts, changes },
     open: {
       questions: tree.questions.filter(
