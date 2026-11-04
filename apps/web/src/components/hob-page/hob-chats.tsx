@@ -7,10 +7,12 @@ import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import type { ActivityMap } from "../../api/activity.ts";
 import { inboxQuery } from "../../api/approvals.ts";
-import { archivedThreadsQuery } from "../../api/queries.ts";
+import { agentsQuery, archivedThreadsQuery } from "../../api/queries.ts";
+import { useQuestWork } from "../../api/quest-work.ts";
 import { useSearch } from "../../api/search.ts";
+import { questsInProgress } from "../../lib/quest-work.ts";
 import { ChatRow } from "./chat-row.tsx";
-import { chatGroups, chatMatches, OLDER_SHOWN, waitingByThread } from "./chats-model.ts";
+import { chatGroups, chatMatches, OLDER_SHOWN, questsByThread, waitingByThread } from "./chats-model.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.chats;
@@ -33,6 +35,8 @@ export function HobChats({
   const search = useSearch(query);
   const waiting = useQuery({ ...inboxQuery, select: waitingByThread }).data;
   const searching = query.trim() !== "";
+  const hobs = useQuery(agentsQuery).data ?? [];
+  const quests = questsByThread(questsInProgress(useQuestWork(hobs.map((each) => each.id))));
 
   const row = (thread: Thread, match?: Pick<Parameters<typeof ChatRow>[0], "title" | "snippet">) => (
     <ChatRow
@@ -41,6 +45,7 @@ export function HobChats({
       thread={thread}
       live={activity[thread.id] !== undefined}
       needs={waiting?.get(thread.id) ?? 0}
+      quests={quests.get(thread.id) ?? []}
       {...match}
     />
   );
