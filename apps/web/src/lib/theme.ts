@@ -8,6 +8,12 @@ export type Theme = (typeof THEMES)[number];
 /** The theme a device shows until a theme is picked on it: first run always uses Workshop Night. */
 export const FIRST_RUN_THEME: Theme = "workshop-night";
 
+/**
+ * The theme a device keeps once its first run finishes, when nothing was picked on it during
+ * setup. A device with no saved theme that finished setup before this rule stays on Workshop Night.
+ */
+export const NEW_DEVICE_THEME: Theme = "lamplight-dusk";
+
 const STORAGE_KEY = "hobbots.theme";
 
 const isTheme = (value: unknown): value is Theme => THEMES.some((theme) => theme === value);
@@ -49,6 +55,13 @@ export const createThemeStore = (environment: ThemeEnvironment) => {
       environment.write(next);
       apply(next);
     },
+    /**
+     * First run finished on this device: with no theme saved yet, it keeps Lamplight Dusk from the
+     * next start. This window stays as it is, so first run shows Workshop Night to the end.
+     */
+    firstRunFinished: () => {
+      if (!isTheme(environment.read())) environment.write(NEW_DEVICE_THEME);
+    },
     /** Another window on this device saved a theme. */
     storageChanged: () => apply(stored()),
     subscribe: (listener: () => void) => {
@@ -74,6 +87,9 @@ const pageEnvironment: ThemeEnvironment = {
  * theme picker in Settings saves through `set` and reads `theme`.
  */
 const store = createThemeStore(pageEnvironment);
+
+/** Saves Lamplight Dusk for the next start when first run finishes on a device with no saved theme. */
+export const firstRunFinished = store.firstRunFinished;
 
 /** Follows a theme picked in another window on this device. */
 export const followThemeChoice = () => {

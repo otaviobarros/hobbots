@@ -13,7 +13,7 @@ A theme changes how things look. It never changes where things are, what they sa
 | Workshop Night | `workshop-night` | Workshop | Dark |
 | Workshop Daylight | `workshop-daylight` | Workshop | Light |
 
-Lamplight is smooth: rounded corners, eased motion and Atkinson headings. Workshop is today's pixel look: cut corners, Pixelify headings and stepped motion. First run always uses Workshop Night.
+Lamplight is smooth: rounded corners, eased motion and Atkinson headings. Workshop is today's pixel look: cut corners, Pixelify headings and stepped motion. First run always uses Workshop Night. When first run finishes on a device with no saved theme, the device keeps Lamplight Dusk from its next start. A device with no saved theme that finished setup earlier stays on Workshop Night.
 
 ## What is in themes.json
 
@@ -50,7 +50,7 @@ Every theme meets these floors against `ground`:
 
 ## In the code
 
-`apps/web/src/styles.css` holds the themes. Its `@theme` block and `:root` rule carry Lamplight Dusk, the default when no theme is set, and a `:root[data-theme="…"]` rule per other theme overrides every color and shadow. Two more rules set the skin: Lamplight on `:root`, Workshop on `[data-theme^="workshop-"]`. A unit test checks the file against themes.json. The app opens in Workshop Night on first run: `apps/web/index.html` and `apps/web/local.html` set it. `apps/web/src/lib/theme.ts` then applies the theme saved on this device before the first render, and follows a theme picked in another window. Like Reduce motion, the theme belongs to the device it is picked on, not to the hub. A missing or unknown value means Workshop Night.
+`apps/web/src/styles.css` holds the themes. Its `@theme` block and `:root` rule carry Lamplight Dusk, the default when no theme is set, and a `:root[data-theme="…"]` rule per other theme overrides every color and shadow. Two more rules set the skin: Lamplight on `:root`, Workshop on `[data-theme^="workshop-"]`. A unit test checks the file against themes.json. The app opens in Workshop Night on first run: `apps/web/index.html` and `apps/web/local.html` set it. `apps/web/src/lib/theme.ts` then applies the theme saved on this device before the first render, and follows a theme picked in another window. Like Reduce motion, the theme belongs to the device it is picked on, not to the hub. A missing or unknown value means Workshop Night. Finishing setup saves Lamplight Dusk when nothing is saved yet (`firstRunFinished`), and the open window keeps Workshop Night until the next start.
 
 Shadows are plain custom properties with their own `shadow-menu` and `shadow-sheet` utilities, so each theme can change their shape. shadcn's `dark:` variant follows the mode: every theme but Lamplight Paper and Workshop Daylight is dark.
 

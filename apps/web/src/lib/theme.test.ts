@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { readStored, writeStored } from "./storage.ts";
-import { createThemeStore, FIRST_RUN_THEME, type Theme, type ThemeEnvironment } from "./theme.ts";
+import { createThemeStore, FIRST_RUN_THEME, NEW_DEVICE_THEME, type Theme, type ThemeEnvironment } from "./theme.ts";
 
 const environment = (overrides: Partial<ThemeEnvironment> = {}) => {
   const marks: Theme[] = [];
@@ -93,5 +93,35 @@ describe("the theme store", () => {
     expect(store.theme()).toBe("workshop-daylight");
     expect(marks).toEqual(["workshop-night", "workshop-daylight"]);
     vi.unstubAllGlobals();
+  });
+
+  it("keeps Lamplight Dusk from the next start when first run finishes with no saved theme", () => {
+    let saved: unknown = null;
+    const { env, marks } = environment({
+      read: () => saved,
+      write: (theme) => {
+        saved = theme;
+      },
+    });
+    const store = createThemeStore(env);
+    store.firstRunFinished();
+    expect(saved).toBe("lamplight-dusk");
+    expect(NEW_DEVICE_THEME).toBe("lamplight-dusk");
+    // First run shows Workshop Night to the end; the saved theme applies at the next start.
+    expect(store.theme()).toBe("workshop-night");
+    expect(marks).toEqual(["workshop-night"]);
+    expect(createThemeStore(env).theme()).toBe("lamplight-dusk");
+  });
+
+  it("keeps a theme already saved when first run finishes", () => {
+    const { env, writes } = environment({ read: () => "workshop-daylight" });
+    createThemeStore(env).firstRunFinished();
+    expect(writes).toEqual([]);
+  });
+
+  it("keeps Workshop Night for a device that finished setup with nothing saved", () => {
+    // Setup is done, so first run never finishes again here: nothing saved still means Workshop Night.
+    const { env } = environment({ read: () => null });
+    expect(createThemeStore(env).theme()).toBe("workshop-night");
   });
 });
