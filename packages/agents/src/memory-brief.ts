@@ -1,7 +1,13 @@
 import type { MemoryActor, MemoryPage, MemoryScope } from "@hobbots/domain";
-import { Effect, type Option } from "effect";
+import { Effect, Option } from "effect";
 import { clip, oneLine, quote } from "./briefing.ts";
-import { type MemoryProjectsShape, type MemoryStoreShape, memoryActorFor } from "./memory.ts";
+import {
+  MemoryProjects,
+  type MemoryProjectsShape,
+  MemoryStore,
+  type MemoryStoreShape,
+  memoryActorFor,
+} from "./memory.ts";
 
 /**
  * The memory brief (ADR 028): what a hob's session is told from its memory, in the same briefing
@@ -183,3 +189,19 @@ export const startedMemoryBrief = (
  * brief: null when the turn sent none, and nothing changes.
  */
 export const deliveredMemoryBrief = (brief: TurnMemoryBrief): string | null => (brief.sent ? brief.digest : null);
+
+/**
+ * The memory brief a fresh session outside any chat starts with, a Task step's or a party member's,
+ * from the services in the current context: null without memory, or when memory holds nothing the
+ * hob may read. A resumed session is not briefed again, since no receipt is kept for it.
+ */
+export const freshSessionMemoryBrief = (
+  agentId: Extract<MemoryActor, { _tag: "Hob" }>["agentId"],
+  folders: ReadonlyArray<string>,
+): Effect.Effect<string | null> =>
+  Effect.gen(function* () {
+    const store = yield* Effect.serviceOption(MemoryStore);
+    if (Option.isNone(store)) return null;
+    const actor = yield* memoryActorFor(yield* Effect.serviceOption(MemoryProjects), agentId, folders);
+    return yield* buildMemoryBrief(store.value, actor);
+  });

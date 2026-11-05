@@ -9,6 +9,8 @@ import {
   HobbotsRepository,
   HobLifecycle,
   HobTools,
+  MemoryStore,
+  type MemoryStoreShape,
   type PromptRequest,
   QuestionService,
   RuntimeAdapter,
@@ -114,8 +116,11 @@ const reacted = (prompt: string, reactions: Array<Reaction>) => {
   return index === -1 ? prompt : [prompt, ...(reactions.splice(index, 1)[0]?.lines ?? [])].join("\n");
 };
 
-/** The hub's services, a temporary project folder, and what each scripted call was answered. */
-export const partyHub = () => {
+/**
+ * The hub's services, a temporary project folder, and what each scripted call was answered. With
+ * `memory`, the hub's hobs remember through it (ADR 028).
+ */
+export const partyHub = (options: { readonly memory?: MemoryStoreShape } = {}) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
   const project = join(temp, "project");
   mkdirSync(project, { recursive: true });
@@ -203,6 +208,7 @@ export const partyHub = () => {
         tools,
         HobAdmission.layer,
         recording,
+        options.memory === undefined ? Layer.empty : Layer.succeed(MemoryStore, options.memory),
         Layer.succeed(UserSession, {
           deviceId: WINDOW_DEVICE_ID,
           name: "This computer's Hobbots window",

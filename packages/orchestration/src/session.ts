@@ -1,5 +1,6 @@
 import {
   type ActivityRecorder,
+  freshSessionMemoryBrief,
   type HubTools,
   nextSteps,
   type Redactor,
@@ -108,11 +109,14 @@ export const runSessionTurn = (
       attempt: Effect.succeed(turn.attemptId),
       redactor,
     });
+    // A fresh session starts with the hob's memory brief (ADR 028), as a chat session does.
+    const briefing =
+      turn.sessionId === null ? yield* freshSessionMemoryBrief(turn.agent.id, turn.access?.folders ?? []) : null;
     yield* activity
       .run(
         {
           prompt: turn.prompt,
-          briefing: null,
+          briefing,
           sessionId: turn.sessionId,
           instructions: systemInstructions(turn.config.name, turn.config),
           instructionsChanged: false,
