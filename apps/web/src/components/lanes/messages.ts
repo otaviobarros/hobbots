@@ -70,8 +70,6 @@ export const messages = {
   briefed: ({ names }: { names: string }) => `Briefed ${names}`,
   waits: ({ names }: { names: string }) => `Waits on ${names}`,
   now: "Working",
-  /** A turn with no step running and a command it left running: the command it waits on, exact. */
-  waitsOnCommand: ({ command }: { command: string }) => `Waiting on ${command}`,
   /** How long ago the room last recorded anything the hob did, once a running lane has gone quiet. */
   quiet: ({ ago }: { ago: string }) => `last step ${ago}`,
   result: {

@@ -258,20 +258,19 @@ describe("the Quest room's lanes", () => {
     ]);
   });
 
-  it("[TC-UX-1004-01] names the command a turn waits on while no step runs, and when the hob last did something", () => {
-    // covers UX-004: a running lane says what the hob waits on, from records only (#1004)
+  it("[TC-UX-1004-01] dates a running lane's last step from the newest thing its records say the hob did", () => {
+    // covers UX-004: a running lane says when its hob last did something, from records only (#1004)
     const records = activity(BUILD, {
       attempt: attempt(BUILD, "running"),
       steps: [{ id: "think", kind: "thinking", label: "Thinking", state: "done", startedAt: AT(13) }],
-      commands: [
-        command(BUILD, "pnpm dev", 14, { state: "running", exitCode: null, endedAt: null }),
-        command(BUILD, "pnpm lint", 15, { endedAt: AT(16) }),
-      ],
+      commands: [command(BUILD, "pnpm lint", 14, { endedAt: AT(16) })],
+      changes: [change(BUILD, "src/page.astro", "edited", 15)],
     });
+    // A command that ended last is the last step, and no step runs now.
     const lane = laneOf(laneRoom(handedOn(), [records]), ADA);
-    expect(lane.items.at(-1)).toMatchObject({ kind: "now", label: "Waiting on pnpm dev", since: AT(16) });
-    expect(lane.plain.at(-1)).toMatchObject({ kind: "now", label: "Waiting for dev to finish", since: AT(16) });
-    // A step that runs is what the turn is on, even with a command left running beside it.
+    expect(lane.items.at(-1)).toMatchObject({ kind: "now", label: null, since: AT(16) });
+    expect(lane.plain.at(-1)).toMatchObject({ kind: "now", label: null, since: AT(16) });
+    // A step that starts later is what the turn is on, and moves the last step with it.
     const busy = activity(BUILD, {
       ...records,
       steps: [{ id: "edit", kind: "tool", label: "Editing page.astro", state: "running", startedAt: AT(17) }],

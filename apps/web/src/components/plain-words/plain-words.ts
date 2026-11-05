@@ -203,12 +203,6 @@ export const commandLine = (record: CommandRecord): { readonly text: string; rea
   }
 };
 
-/** A command a hob left running while no step of its turn runs, as its lane says what the turn waits on. */
-export const commandAwaited = (record: CommandRecord): string => {
-  const sense = commandSense(record.command);
-  return sense.kind === "routine" ? messages.awaiting.other : said(messages.awaiting, sense);
-};
-
 /** The command a step's label names, as "Running pnpm test" says it. */
 const labelCommand = (label: string): string => label.replace(/^Running\s+/, "");
 

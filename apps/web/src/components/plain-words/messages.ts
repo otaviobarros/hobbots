@@ -71,18 +71,6 @@ export const messages = {
     git: "Using git",
     other: "Running a command",
   },
-  /** A command the hob left running while no step runs, for a lane: what its turn waits on. */
-  awaiting: {
-    script: ({ name }: { name: string }) => `Waiting for ${name} to finish`,
-    tests: "Waiting for the tests to finish",
-    build: "Waiting for the build to finish",
-    lint: "Waiting for the code style check to finish",
-    install: "Waiting for the install to finish",
-    packageScript: ({ name }: { name: string }) => `Waiting for ${name} to finish`,
-    commit: "Waiting for git to save the work",
-    git: "Waiting for git to finish",
-    other: "Waiting for a command to finish",
-  },
   /** A file change, for a lane. */
   created: ({ name }: { name: string }) => `Created ${name}`,
   updated: ({ name }: { name: string }) => `Updated ${name}`,
