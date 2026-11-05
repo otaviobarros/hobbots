@@ -1,3 +1,5 @@
+import { formatCount, plural } from "../../lib/format.ts";
+
 /** User-facing copy for the Settings sections in this folder (STD-I18N-001). */
 export const messages = {
   page: {
@@ -22,7 +24,8 @@ export const messages = {
     },
     data: {
       name: "Your data",
-      intro: "Everything stays on the hub. Back it up, take it with you, or read the chats of a hob you retired.",
+      intro:
+        "Everything stays on the hub. Back it up, take it with you, read the chats of a hob you retired, or start over.",
     },
     help: { name: "Help and about", intro: "When something feels off, start here." },
   },
@@ -65,6 +68,11 @@ export const messages = {
       { label: "Export as files", words: ["export", "markdown", "json", "take it with you"], section: "data" },
       { label: "Retired hobs", words: ["archived hobs", "retire"], section: "data" },
       { label: "Data folder", words: ["where", "files", "storage", "disk"], section: "data" },
+      {
+        label: "Start over",
+        words: ["delete everything", "reset", "erase all data", "wipe", "start from scratch"],
+        section: "data",
+      },
       { label: "Diagnostics", words: ["check", "report", "support", "stalled"], section: "help" },
       { label: "Version", words: ["about", "license", "open source"], section: "help" },
       { label: "Keyboard shortcuts", words: ["keys", "hotkeys", "keyboard"], section: "help" },
@@ -196,6 +204,70 @@ export const messages = {
     dataFolderIntro: "Everything Hobbots keeps lives in this folder on the hub. A backup copies what matters in it.",
     dataFolderElsewhere: "Shown only on the hub's own computer.",
     copy: { idle: "Copy", copied: "Copied", failed: "Could not copy" },
+  },
+  startOver: {
+    heading: "Start over",
+    body: "Delete every hob, chat, quest and setting on the hub and go back to the welcome screen. Your own folders and the files in them stay as they are.",
+    open: "Delete everything…",
+    lastBackup: ({ when }: { when: string }) => `Last backup ${when}. Back up first if you might want any of it back.`,
+    noBackup: "No backup yet. Back up first if you might want any of it back.",
+    title: "Delete everything and start over?",
+    lead: "Hobbots goes back to how it was the first time you opened it. This can't be undone.",
+    goes: "What goes",
+    stays: "What stays",
+    goesItems: {
+      hobs: ({ count }: { count: number }) =>
+        plural(count, {
+          one: "Your hob and its chats",
+          other: `All ${formatCount(count)} hobs, retired ones too, with their chats`,
+        }),
+      rest: [
+        "Quests, the Inbox and its history",
+        "Settings, folders and Always allowed rules",
+        "GitHub and the other devices you allowed",
+        "Workbench files and logs",
+      ],
+    },
+    staysItems: [
+      "Your folders and the files hobs made in them",
+      "Your Claude account and plan",
+      "Backups you saved somewhere else",
+    ],
+    working: ({ names, count }: { names: string; count: number }) =>
+      plural(count, {
+        one: `${names} is working right now. It stops at once, and what it was writing is lost.`,
+        other: `${names} are working right now. They stop at once, and what they were writing is lost.`,
+      }),
+    wayBack: "Want a way back?",
+    backupDone: ({ when, path }: { when: string; path: string }) =>
+      `Backed up ${when} to ${path}. You can restore it from the welcome screen.`,
+    backupNone: ({ folder }: { folder: string }) =>
+      `Saves to ${folder}, the folder chosen under Backups. You can restore it from the welcome screen.`,
+    backupNoFolder: "Choose where backups go under Backups first.",
+    backupRunning: "Backing up…",
+    backupFailed: ({ reason }: { reason: string }) => `The backup did not finish: ${reason}`,
+    backUp: "Back up first",
+    backedUp: "Backed up",
+    confirmRisk: "High risk · it cannot be undone.",
+    confirm: "I understand this deletes all my hobs, chats and settings.",
+    keep: "Keep my data",
+    delete: "Delete everything",
+    deletingTitle: "Deleting everything…",
+    deletingNote: "Keep Hobbots open. This takes a few seconds, then Hobbots opens at the welcome screen.",
+    steps: {
+      signIns: "Removing sign-ins from the keychain",
+      stopping: "Stopping your hobs",
+      deleting: "Deleting hobs, chats, quests and devices",
+    },
+    doneTitle: "All clear",
+    doneBody:
+      "Everything Hobbots kept on the hub is gone. Your folders and files are untouched. Set up again whenever you're ready.",
+    doneBrowser:
+      "This browser was one of the devices the hub forgot, so it asks to be allowed again. Allow it from the Hobbots window on the hub's computer.",
+    startFresh: "Start fresh",
+    askAgain: "Ask to be allowed",
+    failed: ({ reason }: { reason: string }) => `Hobbots could not finish starting over: ${reason}`,
+    close: "Close",
   },
   appearance: {
     heading: "Appearance",

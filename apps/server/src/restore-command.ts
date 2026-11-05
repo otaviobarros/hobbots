@@ -2,25 +2,9 @@ import { mkdirSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { NodeRuntime } from "@effect/platform-node";
 import { Console, Effect } from "effect";
-import { exitOnFailure } from "./command-line.ts";
+import { exitOnFailure, hubRunning } from "./command-line.ts";
 import { ServerConfig } from "./config.ts";
-import { parseServerIdentity, readInstallationId } from "./installation.ts";
-import { hubPort } from "./network-settings.ts";
 import { checkBackup, performRestore, summaryOf } from "./restores.ts";
-
-/** Whether a hub of this data folder answers on its port. */
-const hubRunning = (dataDir: string) =>
-  Effect.promise(async () => {
-    try {
-      const response = await fetch(`http://127.0.0.1:${hubPort(dataDir, process.env)}/api/health`, {
-        signal: AbortSignal.timeout(1000),
-      });
-      const identity = parseServerIdentity(await response.json());
-      return identity !== undefined && identity.installationId === readInstallationId(dataDir);
-    } catch {
-      return false;
-    }
-  });
 
 /**
  * Restores a backup into the data folder of a hub with no app (ADR 026):
