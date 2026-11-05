@@ -1,4 +1,4 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Option, Schema } from "effect";
 
@@ -38,15 +38,63 @@ export const processAlive = (pid: number) => {
   }
 };
 
-/** Records this process as the hub of the data folder, on the port it is about to listen on. */
-export const recordHubPresence = (dataDir: string, port: number) =>
-  Effect.sync(() =>
-    writeFileSync(hubPresenceFile(dataDir), `${JSON.stringify({ pid: process.pid, port })}\n`, { mode: 0o600 }),
-  );
+/** Another hub process is alive and recorded as using the data folder, so this one must not start. */
+class HubAlreadyRunning extends Schema.TaggedError<HubAlreadyRunning>()("HubAlreadyRunning", {
+  dataDir: Schema.String,
+  pid: Schema.Number,
+  port: Schema.Number,
+}) {
+  override get message() {
+    return `Another hub (process ${this.pid}, port ${this.port}) is using ${this.dataDir}. Stop it first.`;
+  }
+}
+
+/** Written beside the file and renamed over it, so a reader never sees half a record. */
+const write = (dataDir: string, port: number) => {
+  const file = hubPresenceFile(dataDir);
+  writeFileSync(`${file}.${process.pid}.tmp`, `${JSON.stringify({ pid: process.pid, port })}\n`, { mode: 0o600 });
+  renameSync(`${file}.${process.pid}.tmp`, file);
+};
+
+/** Creates the record when there is none yet. Answers whether it did. */
+const createFirst = (dataDir: string, port: number) => {
+  try {
+    writeFileSync(hubPresenceFile(dataDir), `${JSON.stringify({ pid: process.pid, port })}\n`, {
+      mode: 0o600,
+      flag: "wx",
+    });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+};
 
 /**
- * Removes the file when the hub stops, if it is still this process's: a second hub started on the
- * same folder may have written its own. A hub that crashes leaves it, and its process is then gone.
+ * Records this process as the hub of the data folder, on the port it is about to listen on. Fails
+ * while another live process holds the record, and leaves that record as it is: a second hub on the
+ * same folder must not take the first one's place. A record of a process that is gone is replaced.
+ */
+export const claimHubPresence = (dataDir: string, port: number) =>
+  Effect.gen(function* () {
+    // Made only when there is none, so of two hubs starting at once, one finds the other's record.
+    if (createFirst(dataDir, port)) return;
+    const current = readHubPresence(dataDir);
+    if (current !== undefined && current.pid !== process.pid && processAlive(current.pid)) {
+      return yield* new HubAlreadyRunning({ dataDir, pid: current.pid, port: current.port });
+    }
+    write(dataDir, port);
+  });
+
+/** Records the port the hub moved to, when the record is still this process's. */
+export const recordHubPort = (dataDir: string, port: number) =>
+  Effect.sync(() => {
+    if (readHubPresence(dataDir)?.pid === process.pid) write(dataDir, port);
+  });
+
+/**
+ * Removes the file when the hub stops, if it is still this process's. A hub that crashes leaves it,
+ * and its process is then gone.
  */
 export const forgetHubPresence = (dataDir: string) =>
   Effect.sync(() => {

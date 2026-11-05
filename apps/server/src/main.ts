@@ -108,7 +108,7 @@ import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
 import { ApiRoutes } from "./http.ts";
-import { forgetHubPresence, recordHubPresence } from "./hub-presence.ts";
+import { claimHubPresence, forgetHubPresence } from "./hub-presence.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
@@ -579,7 +579,7 @@ const Hub = Effect.gen(function* () {
     const dataDir = realpathSync(config.dataDir);
     // Before anything reads the folder, so the command-line tools know a hub is using it (#999). Each
     // start records its port again, since a restore can bring another one.
-    yield* recordHubPresence(dataDir, hubPort(dataDir, process.env));
+    yield* claimHubPresence(dataDir, hubPort(dataDir, process.env));
     if (yield* Effect.promise(() => finishReset(dataDir))) yield* Effect.log("Finished starting over");
     yield* backupBeforeMigrations(dataDir, config.version);
     const asked = yield* Deferred.make<Restart>();

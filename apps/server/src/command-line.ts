@@ -15,7 +15,8 @@ const refused = (error: unknown) =>
  * Whether a hub may be using this data folder, so a command must not touch it (#999). A hub records
  * its process in the folder while it runs, so it is found whatever port it listens on. With no live
  * record, as for a hub of an earlier version, the hub's port is asked: only a refused connection or
- * an answer from another installation counts as no hub, and a port that does not answer counts as one.
+ * a whole answer from another installation counts as no hub. Anything else counts as one: a port that
+ * does not answer, or not in full, and an answer that does not say which hub it is.
  * Answers the reason to refuse, or undefined when no hub uses the folder.
  */
 export const hubUsing = (dataDir: string) =>
@@ -25,17 +26,20 @@ export const hubUsing = (dataDir: string) =>
       return `A hub is using ${dataDir} (process ${presence.pid}, port ${presence.port}). If none is running, delete ${hubPresenceFile(dataDir)}.`;
     }
     const port = hubPort(dataDir, process.env);
+    let body: unknown;
     try {
       const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
         signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
       });
-      const identity = parseServerIdentity(await response.json().catch(() => undefined));
-      return identity !== undefined && identity.installationId === readInstallationId(dataDir)
-        ? `A hub is using ${dataDir} on port ${port}.`
-        : undefined;
+      body = await response.json();
     } catch (error) {
-      return refused(error) ? undefined : `Port ${port} did not answer, so a hub may be using ${dataDir}.`;
+      return refused(error) ? undefined : `Port ${port} did not answer in full, so a hub may be using ${dataDir}.`;
     }
+    const identity = parseServerIdentity(body);
+    if (identity === undefined) return `Port ${port} did not say which hub it is, so a hub may be using ${dataDir}.`;
+    return identity.installationId === readInstallationId(dataDir)
+      ? `A hub is using ${dataDir} on port ${port}.`
+      : undefined;
   });
 
 /**

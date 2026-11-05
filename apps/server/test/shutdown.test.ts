@@ -201,4 +201,37 @@ describe("the command-line tools and a running hub", () => {
     expect(after.code).toBe(0);
     expect(after.output).toContain("Run again with --yes to delete everything.");
   });
+
+  // covers OP-003 (#999)
+  it("[TC-OP-112] a second hub on the same data folder does not start, and leaves the first one's record", {
+    timeout: 90_000,
+  }, async () => {
+    const { port } = await startHub();
+    const folder = dataDir as string;
+    const first = readHubPresence(folder);
+    const second = spawn(join(server, "node_modules", ".bin", "tsx"), ["src/main.ts"], {
+      cwd: server,
+      env: {
+        ...process.env,
+        HOBBOTS_PORT: String(await freePort()),
+        HOBBOTS_DATA_DIR: folder,
+        HOBBOTS_RUNTIME: "fake",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    second.stdout?.on("data", (chunk: Buffer) => {
+      output += chunk.toString("utf8");
+    });
+    second.stderr?.on("data", (chunk: Buffer) => {
+      output += chunk.toString("utf8");
+    });
+    const code = await new Promise((done) => second.once("exit", done));
+    expect(code).not.toBe(0);
+    expect(output).toContain(`Another hub (process ${first?.pid}, port ${port}) is using ${folder}`);
+    expect(readHubPresence(folder)).toEqual(first);
+    const reset = await command("reset-command", folder, ["--yes"]);
+    expect(reset.code).toBe(1);
+    expect(reset.output).toContain(`(process ${first?.pid}, port ${port})`);
+  });
 });
