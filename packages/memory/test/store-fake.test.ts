@@ -14,7 +14,7 @@ memoryStoreContract("the fake", () =>
 
 describe("the fake memory", () => {
   // covers ADR 028 (When memory is down)
-  it("[TC-GEN-165] answers that memory is unavailable while it is down", () =>
+  it("[TC-GEN-177] answers that memory is unavailable while it is down", () =>
     Effect.gen(function* () {
       const { store, controls } = makeMemoryStoreFake();
       controls.setDown(true);

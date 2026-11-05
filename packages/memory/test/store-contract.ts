@@ -56,7 +56,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
 
   describe(`MemoryStore contract: ${name}`, () => {
     // covers ADR 028 (The MemoryStore service)
-    it("[TC-GEN-158] starts empty and answers on its first run", () =>
+    it("[TC-GEN-170] starts empty and answers on its first run", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.health;
@@ -68,7 +68,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (attribution), #954
-    it("[TC-GEN-159] keeps a hob's page, attributed to it, across a second run", () =>
+    it("[TC-GEN-171] keeps a hob's page, attributed to it, across a second run", () =>
       run(({ store, reopen }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/tests.md");
@@ -109,7 +109,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (MemoryConflict)
-    it("[TC-GEN-160] refuses a write that would overwrite a version it did not see", () =>
+    it("[TC-GEN-172] refuses a write that would overwrite a version it did not see", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const first = yield* store.write(asPip, pipsOwn, draft("notes/pr.md", "# PRs\n\nSmall."), fresh);
@@ -125,7 +125,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (memory_search scopes)
-    it("[TC-GEN-161] searches only the scopes it is given", () =>
+    it("[TC-GEN-173] searches only the scopes it is given", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.write(asPip, pipsOwn, draft("notes/deploy.md", "# Deploy\n\nPip deploys with fly."), fresh);
@@ -145,7 +145,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (the hub is the boundary), #954
-    it("[TC-GEN-162] never lets a hob touch another hob's memory or a project it does not work in, and leaves forget and restore to you", () =>
+    it("[TC-GEN-174] never lets a hob touch another hob's memory or a project it does not work in, and leaves forget and restore to you", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/secret.md");
@@ -169,7 +169,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (forget, restore)
-    it("[TC-GEN-163] forgets a page and restores one of its versions", () =>
+    it("[TC-GEN-175] forgets a page and restores one of its versions", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/style.md");
@@ -194,7 +194,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Browse)
-    it("[TC-GEN-164] lists pinned pages first, then the newest, up to a limit, and the pages changed since a time", () =>
+    it("[TC-GEN-176] lists pinned pages first, then the newest, up to a limit, and the pages changed since a time", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.write(asPip, pipsOwn, draft("notes/a.md", "# A"), fresh);
