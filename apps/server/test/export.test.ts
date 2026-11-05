@@ -14,6 +14,7 @@ import {
   ActivityRepository,
   DataExport,
   HobbotsRepository,
+  MemoryStore,
   type NewAttempt,
   SecretRedaction,
   TaskRepository,
@@ -31,13 +32,16 @@ import {
   type ExportScope,
   FileChangeId,
   HobbotsExport,
+  MemoryPath,
   Message,
   MessageId,
+  memoryProjectIdentity,
   QuestId,
   TaskId,
   Thread,
   ThreadId,
 } from "@hobbots/domain";
+import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import {
   ActivityRepositoryLive,
   EventJournal,
@@ -265,8 +269,32 @@ const seed = Effect.gen(function* () {
     VALUES ('phone', 'Otto phone', 'browser', 'iOS', ${TOKEN_HASH}, ${AT})`;
 });
 
+/** Memory for the exports (ADR 028): Quill's own, a project's and everyone's, none of it Aldric's. */
+const memory = makeMemoryStoreFake();
+const YOU = { _tag: "You" } as const;
+const SITE = memoryProjectIdentity("git@github.com:me/site.git", "site");
+const seedMemory = Effect.gen(function* () {
+  const store = yield* MemoryStore;
+  const page = (path: string, markdown: string) => ({ path: MemoryPath.make(path), markdown, tags: [], pinned: false });
+  const fresh = { _tag: "New" } as const;
+  yield* store.write(YOU, { _tag: "Everyone" }, page("about-you.md", "# About you\n\nPrefers short PRs."), fresh);
+  yield* store.write(
+    { _tag: "Hob", agentId: QUILL, projects: [SITE] },
+    { _tag: "Hob", agentId: QUILL },
+    page("notes/voice.md", `# Voice\n\nWarm, never pushy. Key: ${PASTED}`),
+    fresh,
+  );
+  yield* store.write(
+    YOU,
+    { _tag: "Project", identity: SITE },
+    page("facts/deploy.md", "# Deploy\n\nFridays only."),
+    fresh,
+  );
+});
+
 const App = DataExport.layer("9.9.9").pipe(
-  Layer.provideMerge(Layer.effectDiscard(seed)),
+  Layer.provideMerge(Layer.effectDiscard(Effect.andThen(seed, seedMemory))),
+  Layer.provideMerge(Layer.succeed(MemoryStore, memory.store)),
   Layer.provideMerge(
     Layer.mergeAll(
       HobFilesLive,
@@ -462,5 +490,55 @@ describe("exports", () => {
   it("[TC-OP-044] refuses a hob or thread that is not there", async () => {
     expect((await refusal({ _tag: "Hob", agentId: AgentId.make("nobody") }))._tag).toBe("AgentNotFound");
     expect((await refusal({ _tag: "Thread", threadId: ThreadId.make("nothing") }))._tag).toBe("ThreadNotFound");
+  });
+
+  // covers OP-003, ADR 028 (Backups)
+  it("[TC-OP-100] exports each memory scope's pages as redacted Markdown, a hob's own with its export, and says when memory is down", async () => {
+    const everything = await run({ _tag: "Everything" });
+    const files = filesIn(everything.folder);
+    expect(
+      Object.keys(files)
+        .filter((path) => path.startsWith("memory/"))
+        .sort(),
+    ).toEqual([
+      "memory/everyone/about-you.md",
+      "memory/hobs/Quill/notes/voice.md",
+      "memory/projects/github.com me site/facts/deploy.md",
+    ]);
+    expect(files["memory/everyone/about-you.md"]?.toString()).toBe("# About you\n\nPrefers short PRs.");
+    expect(files["memory/hobs/Quill/notes/voice.md"]?.toString()).toBe(
+      "# Voice\n\nWarm, never pushy. Key: [redacted: GitHub token]",
+    );
+    const data = decode(files["export.json"]?.toString());
+    expect(data.memory.state).toBe("included");
+    expect(data.memory.pages.map((page) => [page.scope._tag, page.path, page.title, page.file])).toEqual([
+      ["Everyone", "about-you.md", "About you", "memory/everyone/about-you.md"],
+      ["Hob", "notes/voice.md", "Voice", "memory/hobs/Quill/notes/voice.md"],
+      ["Project", "facts/deploy.md", "Deploy", "memory/projects/github.com me site/facts/deploy.md"],
+    ]);
+    expect(data.memory.pages[1]?.author).toEqual({ _tag: "Hob", agentId: QUILL });
+    expect(files["README.md"]?.toString()).toContain("`memory/`: 3 pages your hobs remember");
+
+    // A hob's export holds its own memory only; a thread's holds none.
+    const quill = filesIn((await run({ _tag: "Hob", agentId: QUILL })).folder);
+    expect(Object.keys(quill).filter((path) => path.startsWith("memory/"))).toEqual([
+      "memory/hobs/Quill/notes/voice.md",
+    ]);
+    const thread = decode(
+      filesIn((await run({ _tag: "Thread", threadId: CAMPAIGN })).folder)["export.json"]?.toString(),
+    );
+    expect(thread.memory).toEqual({ state: "none", pages: [] });
+
+    // Memory that does not answer leaves the rest of the export as it is.
+    memory.controls.setDown(true);
+    try {
+      const down = filesIn((await run({ _tag: "Everything" })).folder);
+      expect(Object.keys(down).some((path) => path.startsWith("memory/"))).toBe(false);
+      expect(decode(down["export.json"]?.toString()).memory.state).toBe("unavailable");
+      expect(down["README.md"]?.toString()).toContain("memory did not answer");
+      expect(Object.keys(down)).toContain("threads/2026-11-02 Black Friday campaign.md");
+    } finally {
+      memory.controls.setDown(false);
+    }
   });
 });

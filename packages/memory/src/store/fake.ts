@@ -194,6 +194,10 @@ export const makeMemoryStoreFake = (): {
           )
           .slice(0, limit),
       ),
+    scopes: () =>
+      Effect.map(up, () =>
+        [...scopes.values()].filter(({ scope }) => summaries(scope).length > 0).map(({ scope }) => scope),
+      ),
     changes: (_actor, scope, since) =>
       Effect.map(up, () =>
         summaries(scope)

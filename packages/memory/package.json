@@ -15,7 +15,8 @@
     "@hobbots/agents": "workspace:*",
     "@hobbots/domain": "workspace:*",
     "@hobbots/permissions": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "tar": "7.5.22"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

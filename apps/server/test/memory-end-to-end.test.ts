@@ -16,7 +16,6 @@ import {
   SecretRedaction,
   TaskFiles,
 } from "@hobbots/agents";
-import { MemoryProjectsLive } from "@hobbots/charms";
 import {
   type Agent,
   isInProgress,
@@ -28,7 +27,7 @@ import {
   type Thread,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
-import { MemoryToolsLive } from "@hobbots/memory";
+import { MemoryProjectsLive, MemoryToolsLive } from "@hobbots/memory";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -79,13 +78,7 @@ let dispose: () => Promise<void>;
 
 beforeAll(() => {
   const Memory = MemoryToolsLive.pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        Layer.succeed(MemoryStore, memory.store),
-        MemoryProjectsLive.pipe(Layer.provide(NodeServices.layer)),
-        PolicyEngine.node,
-      ),
-    ),
+    Layer.provide(Layer.mergeAll(Layer.succeed(MemoryStore, memory.store), MemoryProjectsLive, PolicyEngine.node)),
   );
   const App = Layer.mergeAll(HobLifecycle.layer, WakeOnArrival)
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))

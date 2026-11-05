@@ -60,6 +60,7 @@ const RecordingEngine = Layer.sync(MemoryEngine, () =>
     health: Effect.succeed(RUNNING),
     endpoint: Effect.succeed(Option.none()),
     reconfigure: (settings) => Effect.sync(() => void reconfigured.push(settings)),
+    backup: () => Effect.succeed(false),
     status: Effect.succeed({ pages: 12, usage: { calls: 3, inputTokens: 900, outputTokens: 100, since: null } }),
   }),
 );

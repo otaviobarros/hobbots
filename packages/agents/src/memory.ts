@@ -18,10 +18,11 @@ import {
   type MemoryScope,
   type MemoryUnavailable,
   type MemoryVersion,
+  memoryProjectIdentity,
   memoryScopeAllowed,
   type ThreadId,
 } from "@hobbots/domain";
-import { Context, Effect, type Option } from "effect";
+import { Context, Effect, Option } from "effect";
 import type { CharmTurn } from "./charms.ts";
 import type { HubToolAnswer, HubTools } from "./runtime.ts";
 
@@ -46,6 +47,8 @@ export interface MemoryStoreShape {
   readonly page: (actor: MemoryActor, scope: MemoryScope, path: MemoryPath) => Memory<MemoryPage | null>;
   /** The first `limit` pages in `scope`: pinned first, then the most recently changed. */
   readonly list: (actor: MemoryActor, scope: MemoryScope, limit: number) => Memory<ReadonlyArray<MemoryPageSummary>>;
+  /** Every scope that holds a page now, among those `actor` may reach. */
+  readonly scopes: (actor: MemoryActor) => Memory<ReadonlyArray<MemoryScope>>;
   /** Pages in `scope` changed after `since` (an ISO date), oldest change first. */
   readonly changes: (actor: MemoryActor, scope: MemoryScope, since: string) => Memory<ReadonlyArray<MemoryPageSummary>>;
   /** Every version of the page at `path`, newest first; empty when there is no page. */
@@ -144,6 +147,9 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   search: guarded("search", store.search, ([scopes]) => scopes),
   page: guarded("read", store.page, one),
   list: guarded("list", store.list, one),
+  // Nothing to refuse: what the engine answers is narrowed to what the actor may reach.
+  scopes: (actor) =>
+    Effect.map(store.scopes(actor), (found) => found.filter((scope) => memoryScopeAllowed(actor, scope))),
   changes: guarded("list", store.changes, one),
   history: guarded("read", store.history, one),
   write: guarded("write", store.write, one),
@@ -154,14 +160,35 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   health: store.health,
 });
 
+export interface MemoryProjectsShape {
+  /** Who `folder` is across clones: its Git `origin` remote, or its name when it has none. */
+  readonly of: (folder: string) => Effect.Effect<MemoryProjectIdentity>;
+}
+
 /**
- * Which project a hob's folder is in memory (ADR 028): its normalized Git `origin` remote, or the
- * folder's name without one, so two clones of one repository share a project.
+ * The project identity of each folder a hob works in (ADR 028), read by the hub from the folder
+ * itself, never from a tool's input.
  */
-export class MemoryProjects extends Context.Service<
-  MemoryProjects,
-  { readonly identityOf: (folder: string) => Effect.Effect<MemoryProjectIdentity> }
->()("@hobbots/agents/MemoryProjects") {}
+export class MemoryProjects extends Context.Service<MemoryProjects, MemoryProjectsShape>()(
+  "@hobbots/agents/MemoryProjects",
+) {}
+
+const folderName = (folder: string) => folder.replace(/[/\\]+$/, "").replace(/^.*[/\\]/, "");
+
+/**
+ * The actor a hob's memory calls are made as: the hob, with the projects of the folders it works in,
+ * once each. Without `MemoryProjects`, each folder is the project of its name.
+ */
+export const memoryActorFor = (
+  projects: Option.Option<MemoryProjectsShape>,
+  agentId: AgentId,
+  folders: ReadonlyArray<string>,
+): Effect.Effect<Extract<MemoryActor, { _tag: "Hob" }>> =>
+  Effect.forEach(folders, (folder) =>
+    Option.isSome(projects)
+      ? projects.value.of(folder)
+      : Effect.succeed(memoryProjectIdentity(null, folderName(folder))),
+  ).pipe(Effect.map((identities) => ({ _tag: "Hob", agentId, projects: [...new Set(identities)] })));
 
 /** What recording a save found: it is new, and journaled, or the hob used its key before in the same work. */
 export type MemorySaveStart =

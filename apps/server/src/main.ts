@@ -13,6 +13,7 @@ import {
   HobAdmission,
   HobLifecycle,
   HobService,
+  MemoryBriefReceipts,
   MemoryCapture,
   PermissionSummary,
   RecoveryLog,
@@ -37,7 +38,6 @@ import {
   LocalGitHubSignInsFake,
   LocalGitHubSignInsLive,
   LocalGitToolsLive,
-  MemoryProjectsLive,
 } from "@hobbots/charms";
 import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
@@ -47,6 +47,7 @@ import {
   loadOrCreateMemoryKeys,
   MemoryEngine,
   type MemoryKeys,
+  MemoryProjectsLive,
   MemoryStoreAiMemory,
   MemoryToolsLive,
 } from "@hobbots/memory";
@@ -133,9 +134,7 @@ const memoryToolsLayer = (config: { readonly runtime: string; readonly memory: "
   if (config.memory === "off") return Layer.empty;
   const store =
     config.runtime === "fake" ? MemoryStoreFake : MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer));
-  return MemoryToolsLive.pipe(
-    Layer.provide(Layer.mergeAll(store, MemoryProjectsLive.pipe(Layer.provide(NodeServices.layer)), PolicyEngine.node)),
-  );
+  return MemoryToolsLive.pipe(Layer.provide(Layer.mergeAll(store, MemoryProjectsLive, PolicyEngine.node)));
 };
 
 /** The memory engine as the hub's settings choose it: turned off, missing, or the bundled binary. */
@@ -144,9 +143,9 @@ const memoryEngineLayer = (
   dataDir: string,
   keys: MemoryKeys,
 ) => {
-  if (config.memory === "off") return MemoryEngine.off("disabled");
+  if (config.memory === "off") return MemoryEngine.off("disabled", dataDir, keys);
   const folder = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
-  if (folder === "") return MemoryEngine.off("missing");
+  if (folder === "") return MemoryEngine.off("missing", dataDir, keys);
   // The memory model you chose, as the engine can run it now (ADR 028).
   const settings = engineSettingsFor(readMemorySettings(dataDir), memoryModelCanRun).engine;
   return MemoryEngine.layer({ folder, dataDir, keys, settings }).pipe(
@@ -437,6 +436,10 @@ const ServerLive = Layer.unwrap(
             // What the startup recovery could not do, for Settings › Diagnostics (ADR 026).
             RecoveryLog.layer,
             Memory,
+            // Before every session, a chat's, a step's and a party member's: a hob's memory reaches the
+            // projects of its folders, and what each session was briefed from it (ADR 028).
+            MemoryProjectsLive,
+            MemoryBriefReceipts.layer,
             // The memory model you chose, kept beside the engine's folder (ADR 028).
             MemorySettingsStore.layer(dataDir),
             // The hub's credentials, provider keys and memory keys included, are redacted by value
