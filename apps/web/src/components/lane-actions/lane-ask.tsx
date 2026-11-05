@@ -1,6 +1,7 @@
 import type { Question } from "@hobbots/domain";
 import { formatWhen } from "../../lib/time.ts";
-import { AnswerForm, answerRoute } from "../quest/question-card.tsx";
+import { AnswerForm } from "../quest/answer-form.tsx";
+import { answerRoute } from "../quest/question-card.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { messages } from "./messages.ts";
 

@@ -1,19 +1,23 @@
 import type { Agent } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
+import { ChiefMark } from "../chief/chief-mark.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 
 /**
- * Who an Inbox entry comes from, on a tile: the hob's portrait, or a screen on a stand for a device
- * asking to join. `large` is the detail pane's size.
+ * Who an Inbox entry comes from, on a tile: the hob's portrait, a screen on a stand for a device
+ * asking to join, or the chief, the Hobbots mark, for a question the hub itself asks (#976).
+ * `large` is the detail pane's size.
  */
 export function EntryPortrait({
   hob,
   device,
+  hub = false,
   waiting,
   large = false,
 }: {
   hob: Agent | undefined;
   device: boolean;
+  hub?: boolean;
   waiting: boolean;
   large?: boolean;
 }) {
@@ -25,6 +29,7 @@ export function EntryPortrait({
       )}
     >
       {hob !== undefined && <HobSprite hob={hob} size={large ? 33 : 22} state={waiting ? "needs-you" : "idle"} />}
+      {hob === undefined && hub && <ChiefMark size={large ? 33 : 22} mood={waiting ? "needs-you" : "idle"} />}
       {hob === undefined && device && (
         <svg
           aria-hidden="true"

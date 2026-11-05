@@ -24,6 +24,7 @@ import { devicesChanged } from "./devices.ts";
 import { failedTaskChanged } from "./failed-tasks.ts";
 import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
+import { hubQuestionChanged } from "./hub-questions.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { applyMemoryChanged, refreshMemory } from "./memory-pages.ts";
@@ -226,7 +227,10 @@ const applyWorkEvent = (
             | "BackpackItemChanged"
             | "PairingRequested"
             | "PairingChanged"
-            | "DeviceRevoked";
+            | "DeviceRevoked"
+            | "HubQuestionRaised"
+            | "HubQuestionAnswered"
+            | "HubQuestionWithdrawn";
         }
       >,
 ) => {
@@ -264,8 +268,12 @@ const applyWorkEvent = (
       void failedTaskChanged(queryClient, event.task);
       return;
     // The rest change Tasks and Quests (ADR 018). A question that reaches you, or leaves you, also
-    // changes what waits in your Inbox.
+    // changes what waits in your Inbox. A question the hub itself asks has no Task (#976).
     default:
+      if ("hubQuestion" in event) {
+        void hubQuestionChanged(queryClient, event.hubQuestion);
+        return;
+      }
       applyTaskEvent(queryClient, event);
       if ("question" in event) void questionChanged(queryClient, event.question);
       return;

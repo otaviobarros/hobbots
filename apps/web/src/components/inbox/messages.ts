@@ -37,6 +37,10 @@ export const messages = {
     arrow: " → ",
     you: "You",
     youEnd: "you",
+    /** Who asks a question the hub itself puts to you (#976). */
+    hub: "Your hub",
+    /** The same, inside a sentence: "Your answer to your hub". */
+    hubInSentence: "your hub",
     waitingOn: ({ name }: { name: string }) => `${name} is waiting on this`,
     stuckAfter: ({ count }: { count: number }) =>
       plural(count, { one: `Stuck after ${formatCount(count)} try`, other: `Stuck after ${formatCount(count)} tries` }),
@@ -79,6 +83,7 @@ export const messages = {
     tries: "Tries",
     askedBy: "Asked by",
     passedUpBy: "Passed up by",
+    about: "About",
     when: "When",
     whenExpires: ({ asked, expiry }: { asked: string; expiry: string }) => `${asked} · ${expiry}`,
     copy: "Copy",
@@ -138,6 +143,9 @@ export const messages = {
     passedBy: ({ names }: { names: ReadonlyArray<string> }) => `Passed up to you by ${formatList(names)}.`,
     goesBack: ({ name }: { name: string }) => `Goes back to ${name}, who passes it to the hob that asked.`,
     goesStraight: ({ name }: { name: string }) => `Goes straight back to ${name}.`,
+    /** A question the hub itself asks (#976): no lead passed it, and only the hub can apply the answer. */
+    fromHub: "Only the hub can make this change, so it asks you itself. No hob is waiting on it.",
+    goesToHub: "Goes to your hub, which applies it.",
     loadFailed: "Hobbots could not read the questions for you.",
   },
   /** A party member's Task that failed while its Quest goes on (ADR 027), in Needs you. */

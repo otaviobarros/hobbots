@@ -788,6 +788,7 @@ describe("only the user decides approvals and manages grants", () => {
         join("packages", "agents", "src", "devices.ts"),
         join("packages", "agents", "src", "controls.ts"),
         join("packages", "agents", "src", "grants.ts"),
+        join("packages", "agents", "src", "hub-questions.ts"),
         join("packages", "agents", "src", "questions.ts"),
         join("packages", "api", "src", "user-session.ts"),
       ].sort(),
