@@ -16,7 +16,31 @@ import {
   task,
   tree,
 } from "../../test/quests.ts";
-import { BEFORE_ALL, liveTrees, placeMoments, rowStatus, taskDetail, workCard, workCounts } from "./work-model.ts";
+import {
+  BEFORE_ALL,
+  liveTrees,
+  placeMoments,
+  rowStatus,
+  taskDetail,
+  taskTitle,
+  workCard,
+  workCounts,
+} from "./work-model.ts";
+
+describe("taskTitle", () => {
+  it("cuts each folder path in a brief's first line to its last part", () => {
+    const title = (brief: string) => taskTitle({ brief });
+    expect(title("In /Users/ana/projects/tests/lemon-stand, write check.sh (bash)\nMore")).toBe(
+      "In lemon-stand, write check.sh (bash)",
+    );
+    expect(title("Markup. In /Users/ana/lemon-stand/, create index.html")).toBe(
+      "Markup. In lemon-stand, create index.html",
+    );
+    expect(title("Read ~/notes/plan.md and sum it up.")).toBe("Read plan.md and sum it up.");
+    expect(title("Write landing copy for Lemon Stand")).toBe("Write landing copy for Lemon Stand");
+    expect(title("Compare a/b with c/d")).toBe("Compare a/b with c/d");
+  });
+});
 
 const message = (id: string, role: "user" | "assistant", createdAt: string) =>
   ({ id: MessageId.make(id), threadId: THREAD, role, createdAt }) as unknown as Message;

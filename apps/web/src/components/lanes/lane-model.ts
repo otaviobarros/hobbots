@@ -9,12 +9,18 @@ import {
   liveAttemptOn,
   pendingApprovalsOn,
   saysMore,
+  TASK_TOOLS,
   type Task,
   type TaskId,
   type TaskTree,
 } from "@hobbots/domain";
 import { type RoomStatus, roomRows, roomStatus } from "../quest/control-room.ts";
 import { questionForYou, taskTitle } from "../quest/work-model.ts";
+import { messages } from "./messages.ts";
+
+/** Why the hub refused a hob's Task tool call, in a few words, or nothing for a reason only the hob needs. */
+const refusalReason = (reason: string): string =>
+  Object.hasOwn(messages.refusal, reason) ? messages.refusal[reason as keyof typeof messages.refusal] : "";
 
 /**
  * The Quest room's lanes (ADR 027): one per hob on the Quest, built from the Task tree and the
@@ -216,13 +222,22 @@ const beatItems = (tree: TaskTree, task: Task, attemptId: AttemptId | undefined)
     )
     .map((each) => ({ at: each.createdAt, item: { kind: "beat", key: `checkpoint-${each.id}`, text: each.summary } }));
 
-/** The Task tool calls the hub refused for the Task, with what it told the hob. */
+/**
+ * The Task tool calls the hub refused for the Task, in your words: the tool's own label, and why in
+ * a few words where the reason has some. The message the hub sent the hob is for the hob: it names
+ * Tasks by id and tells it how to go on.
+ */
 const refusalItems = (tree: TaskTree, task: Task): ReadonlyArray<Timed> =>
   tree.refusals
     .filter((each) => each.taskId === task.id)
     .map((each) => ({
       at: each.refusedAt,
-      item: { kind: "refused", key: `refusal-${each.id}`, what: each.tool, reason: each.message },
+      item: {
+        kind: "refused",
+        key: `refusal-${each.id}`,
+        what: TASK_TOOLS.find((tool) => tool.name === each.tool)?.label ?? each.tool,
+        reason: refusalReason(each.reason),
+      },
     }));
 
 /** Work handed from one hob's Task to another's: out in the giver's lane, in in the taker's. */

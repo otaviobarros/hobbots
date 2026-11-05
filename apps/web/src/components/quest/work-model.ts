@@ -247,5 +247,13 @@ const workRowsAll = (tree: TaskTree, task: Task): ReadonlyArray<WorkRow> =>
     approval: pendingApprovalsOn(tree, child.id)[0] ?? null,
   }));
 
-/** The first line of a brief, as a Task's title. */
-export const taskTitle = (task: Pick<Task, "brief">): string => firstLine(task.brief);
+/** A folder path in a brief: from the root or the home folder, up to its last part. */
+const FOLDER_PATH = /(^|[\s("'])~?\/(?:[^\s,:;)"'/]+\/)*([^\s,:;)"'/]+)\/?(?=[\s,:;)"']|$)/g;
+
+/**
+ * The first line of a brief, as a Task's title, with each folder path cut to its last part: a lead
+ * often opens a brief with the folder ("In /Users/…/lemon-stand, write check.sh"), which would
+ * otherwise fill the title before it says what the Task does.
+ */
+export const taskTitle = (task: Pick<Task, "brief">): string =>
+  firstLine(task.brief).replace(FOLDER_PATH, (_, before: string, last: string) => `${before}${last}`);
