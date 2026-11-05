@@ -9,6 +9,9 @@ import {
   HobbotsRepository,
   HobLifecycle,
   HobTools,
+  MemoryBriefReceipts,
+  MemoryStore,
+  type MemoryStoreShape,
   type PromptRequest,
   QuestionService,
   RuntimeAdapter,
@@ -27,6 +30,7 @@ import {
   ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
+import { waitUntil } from "@hobbots/domain/testing";
 import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -40,7 +44,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Effect, Layer, ManagedRuntime, Schedule } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { DispatcherHostLive } from "../src/backpack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
 import { EventBus } from "../src/event-bus.ts";
@@ -114,8 +118,11 @@ const reacted = (prompt: string, reactions: Array<Reaction>) => {
   return index === -1 ? prompt : [prompt, ...(reactions.splice(index, 1)[0]?.lines ?? [])].join("\n");
 };
 
-/** The hub's services, a temporary project folder, and what each scripted call was answered. */
-export const partyHub = () => {
+/**
+ * The hub's services, a temporary project folder, and what each scripted call was answered. With
+ * `memory`, the hub's hobs remember through it (ADR 028).
+ */
+export const partyHub = (options: { readonly memory?: MemoryStoreShape } = {}) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
   const project = join(temp, "project");
   mkdirSync(project, { recursive: true });
@@ -203,6 +210,9 @@ export const partyHub = () => {
         tools,
         HobAdmission.layer,
         recording,
+        options.memory === undefined
+          ? Layer.empty
+          : Layer.mergeAll(Layer.succeed(MemoryStore, options.memory), MemoryBriefReceipts.layer),
         Layer.succeed(UserSession, {
           deviceId: WINDOW_DEVICE_ID,
           name: "This computer's Hobbots window",
@@ -222,9 +232,6 @@ export const partyHub = () => {
   return { run, dispose, requests, answers, reactions, gates };
 };
 
-const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 1000 }));
-
 export const isLive = (state: string) => state === "starting" || state === "running";
 
 /** Sends your message to Frodo in his thread. */
@@ -233,29 +240,31 @@ export const send = (lines: ReadonlyArray<string>) =>
 
 /** The request's whole tree once `ready` holds for it. */
 export const treeWhen = (ready: (tree: TaskTree) => boolean) =>
-  retry(
-    Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
-      return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
-    }),
+  waitUntil(
+    Effect.map(
+      TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+      ([tree]) => tree,
+    ),
+    (tree): tree is TaskTree => tree !== undefined && ready(tree),
+    { what: "the Task tree" },
   );
 
 /** The first approval request waiting for you, once one does. */
-export const firstPending = retry(
-  Effect.flatMap(
+export const firstPending = waitUntil(
+  Effect.map(
     ApprovalRepository.use((approvals) => approvals.listPending),
-    (all) => (all[0] === undefined ? Effect.fail("not yet" as const) : Effect.succeed(all[0])),
+    (all) => all[0],
   ),
+  (first): first is NonNullable<typeof first> => first !== undefined,
+  { what: "an approval request" },
 );
 
 /** The thread's messages once `ready` holds for them, every reply ended. */
 export const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
-  retry(
-    Effect.gen(function* () {
-      const all = yield* HobbotsRepository.use((repo) => repo.listMessages(threadId));
-      const ended = all.every((m) => m.status !== "streaming" && m.status !== "stopping");
-      return ended && ready(all) ? all : yield* Effect.fail("not yet" as const);
-    }),
+  waitUntil(
+    HobbotsRepository.use((repo) => repo.listMessages(threadId)),
+    (all) => all.every((m) => m.status !== "streaming" && m.status !== "stopping") && ready(all),
+    { what: "the thread's messages" },
   );
 
 /** A reply with no message of yours before it: a continuation Hobbots started. */

@@ -5,7 +5,10 @@ import { ApprovalRequest } from "./approval.ts";
 import { BackpackItem } from "./backpack.ts";
 import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
+import { HubQuestion } from "./hub-question.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { MemoryShare } from "./memory-shares.ts";
+import { MemorySave } from "./memory-tools.ts";
 import { Message, ReplyStep } from "./message.ts";
 import {
   ArtifactRef,
@@ -94,6 +97,12 @@ const QuestionAnswered = Schema.TaggedStruct("QuestionAnswered", { question: Que
 const QuestionEscalated = Schema.TaggedStruct("QuestionEscalated", { question: Question });
 /** A question's Task ended as cancelled or failed before anyone answered it, so it was withdrawn. */
 const QuestionWithdrawn = Schema.TaggedStruct("QuestionWithdrawn", { question: Question });
+/** The hub put a question to you itself (#976): it goes straight to you, never to a lead. */
+const HubQuestionRaised = Schema.TaggedStruct("HubQuestionRaised", { hubQuestion: HubQuestion });
+/** You answered a question from the hub; the part of the hub that raised it applies the answer. */
+const HubQuestionAnswered = Schema.TaggedStruct("HubQuestionAnswered", { hubQuestion: HubQuestion });
+/** The hub no longer needs the answer to its question, so it was withdrawn. */
+const HubQuestionWithdrawn = Schema.TaggedStruct("HubQuestionWithdrawn", { hubQuestion: HubQuestion });
 /** You left a note on a Task; it goes to the Task's nearest lead (ADR 018). */
 const NoteLeft = Schema.TaggedStruct("NoteLeft", { note: TaskNote });
 /** A turn of a note's recipient picked it up: the backpack put it into that turn, which its runtime accepted (#900, ADR 019). */
@@ -129,6 +138,20 @@ const AttemptStepsRecorded = Schema.TaggedStruct("AttemptStepsRecorded", {
 });
 /** The hub refused a Task tool call, or refused a retried one again (ADR 018). */
 const ToolCallRefused = Schema.TaggedStruct("ToolCallRefused", { refusal: RefusedCall });
+/**
+ * A hob's `memory_save` was recorded before it was sent (ADR 028): the journal is the outbox, so the
+ * capture worker sends a save memory did not take at once.
+ */
+const MemorySaveRecorded = Schema.TaggedStruct("MemorySaveRecorded", { save: MemorySave });
+/** A recorded save was sent: memory took it, kept it for later, or refused it. */
+const MemorySaveChanged = Schema.TaggedStruct("MemorySaveChanged", { save: MemorySave });
+/**
+ * A hob asked to share a page with a project or every hob (ADR 028, Sharing), recorded before
+ * anything is written: it waits for your review, or the preset lets it through.
+ */
+const MemoryShareRequested = Schema.TaggedStruct("MemoryShareRequested", { share: MemoryShare });
+/** A share moved: it went through, you shared it or kept it private, or you took it back. */
+const MemoryShareChanged = Schema.TaggedStruct("MemoryShareChanged", { share: MemoryShare });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
 const FolderScanned = Schema.TaggedStruct("FolderScanned", { scan: FolderScan });
 /**
@@ -194,6 +217,9 @@ export const JournaledEvent = Schema.Union([
   QuestionAnswered,
   QuestionEscalated,
   QuestionWithdrawn,
+  HubQuestionRaised,
+  HubQuestionAnswered,
+  HubQuestionWithdrawn,
   NoteLeft,
   NotePickedUp,
   HandedOff,
@@ -209,6 +235,10 @@ export const JournaledEvent = Schema.Union([
   FolderScanned,
   ToolCallRefused,
   AttemptStepsRecorded,
+  MemorySaveRecorded,
+  MemorySaveChanged,
+  MemoryShareRequested,
+  MemoryShareChanged,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -251,6 +281,9 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   QuestionAnswered: 1,
   QuestionEscalated: 1,
   QuestionWithdrawn: 1,
+  HubQuestionRaised: 1,
+  HubQuestionAnswered: 1,
+  HubQuestionWithdrawn: 1,
   // A note's `messageId`, `fromNoteId`, `pickedUpBy` and `pickedUpAt` were added with defaults, compatibly.
   NoteLeft: 1,
   NotePickedUp: 1,
@@ -268,6 +301,10 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   FolderScanned: 1,
   ToolCallRefused: 1,
   AttemptStepsRecorded: 1,
+  MemorySaveRecorded: 1,
+  MemorySaveChanged: 1,
+  MemoryShareRequested: 1,
+  MemoryShareChanged: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */
@@ -326,8 +363,8 @@ export type StreamReady = typeof StreamReady.Type;
 
 /**
  * The SSE event names on the event stream; a journaled entry is a plain `message` frame (ADR 013).
- * `turn` carries `TurnStarted` and `TurnEnded`, `remote-access` carries `RemoteAccessChanged` and
- * `command-output` carries `CommandOutput`.
+ * `turn` carries `TurnStarted` and `TurnEnded`, `remote-access` carries `RemoteAccessChanged`,
+ * `command-output` carries `CommandOutput` and `memory` carries `MemoryChanged`.
  */
 export const STREAM_FRAME = {
   ready: "ready",
@@ -335,4 +372,5 @@ export const STREAM_FRAME = {
   turn: "turn",
   remoteAccess: "remote-access",
   commandOutput: "command-output",
+  memory: "memory",
 } as const;

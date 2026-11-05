@@ -223,6 +223,16 @@ export type Answerer = typeof Answerer.Type;
 export const QuestionSurface = Schema.Literals(["chat", "inbox", "task"]);
 export type QuestionSurface = typeof QuestionSurface.Type;
 
+/** Most choices a question offers (#740): two to four, as a card shows them as buttons. */
+export const MAX_QUESTION_OPTIONS = 4;
+
+/** One choice a question offers (#740): a short label, and one line on what happens if it is picked. */
+export const QuestionOption = Schema.Struct({
+  label: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(80)),
+  consequence: Schema.String.check(Schema.isTrimmed(), Schema.isMaxLength(200)),
+});
+export type QuestionOption = typeof QuestionOption.Type;
+
 /**
  * A question from a Task's owner. It goes to the nearest lead, and climbs one lead at a time when
  * escalated; `recipientId` is null once it reaches the user. `chain` lists the leads it passed,
@@ -253,8 +263,94 @@ export class Question extends Schema.Class<Question>("Question")({
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
+  /** The choices it offers, none for a question answered in words only (#740). */
+  options: Schema.Array(QuestionOption).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
+  /** The index in `options` of the one the asker recommends, if any. */
+  recommended: Schema.NullOr(Schema.Int).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /** Once answered, the index in `options` of the choice picked; null when the answer was typed. */
+  picked: Schema.NullOr(Schema.Int).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   revision: Revision,
 }) {}
+
+/** The choice an answered question's answer picked, or undefined for a typed answer. */
+export const pickedOption = (question: Pick<Question, "options" | "picked">): QuestionOption | undefined =>
+  question.picked === null ? undefined : question.options[question.picked];
+
+/**
+ * A question's choices as a hob reads them, after the question, or "" for one without:
+ * ` Choices: 1. Light (recommended): matches the brand; 2. Dark: stands out.`
+ */
+export const choicesText = (question: Question): string =>
+  question.options.length === 0
+    ? ""
+    : ` Choices: ${question.options
+        .map((option, index) => {
+          const mark = index === question.recommended ? " (recommended)" : "";
+          const line = option.consequence === "" ? "" : `: ${option.consequence}`;
+          return `${index + 1}. ${option.label}${mark}${line}`;
+        })
+        .join("; ")}`;
+
+/** How an answered question with choices was answered, as its asker hears it, or "" for one without. */
+export const answerHow = (question: Question): string =>
+  question.options.length === 0
+    ? ""
+    : question.picked === null
+      ? " (written in words, not one of the choices)"
+      : ` (choice ${question.picked + 1} of ${question.options.length})`;
+
+/**
+ * A label two of `options` share once case is ignored, or undefined when each is its own (#740):
+ * an answer names its choice by label, so two that read the same could not be told apart.
+ */
+export const collidingLabel = (options: ReadonlyArray<{ readonly label: string }>): string | undefined => {
+  const seen = new Set<string>();
+  for (const option of options) {
+    const key = option.label.trim().toLowerCase();
+    if (seen.has(key)) return option.label;
+    seen.add(key);
+  }
+  return undefined;
+};
+
+/**
+ * Why `options` with `recommended` can't be offered, or undefined when they can (#740): each label
+ * reads differently once case is ignored, and `recommended` points at one of them. A hob counts
+ * its choices from 1 and the hub from 0 (#976), so `from` says which.
+ */
+export const choicesProblem = (
+  options: ReadonlyArray<{ readonly label: string }> | undefined,
+  recommended: number | undefined,
+  from: 0 | 1,
+): string | undefined => {
+  const same = options === undefined ? undefined : collidingLabel(options);
+  if (same !== undefined) return `Two options are both "${same}". Give each option its own label.`;
+  if (recommended === undefined) return undefined;
+  if (options === undefined) return "recommended needs options to recommend one of.";
+  if (recommended - from < options.length) return undefined;
+  return from === 1
+    ? `recommended is the number of one of the ${options.length} options.`
+    : `recommended is the index of one of the ${options.length} options, from 0.`;
+};
+
+/**
+ * The index of the choice `answer` names, ignoring case and surrounding spaces, or null when it
+ * names none: a lead that answers in words with a choice's label picked that choice.
+ */
+export const optionNamed = (options: ReadonlyArray<QuestionOption>, answer: string): number | null => {
+  const wanted = answer.trim().toLowerCase();
+  const index = options.findIndex((option) => option.label.toLowerCase() === wanted);
+  return index === -1 ? null : index;
+};
 
 /**
  * A note you left on a Task (ADR 018). You talk only to the lead, so it goes to the Task's nearest
@@ -363,6 +459,7 @@ export const TaskRefusal = Schema.Literals([
   "not-delegated",
   "same-owner",
   "lineage-owner",
+  "options-collide",
 ]);
 export type TaskRefusal = typeof TaskRefusal.Type;
 

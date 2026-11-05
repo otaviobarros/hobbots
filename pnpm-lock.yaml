@@ -271,6 +271,9 @@ importers:
       '@hobbots/inbox':
         specifier: workspace:*
         version: link:../../packages/inbox
+      '@hobbots/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@hobbots/orchestration':
         specifier: workspace:*
         version: link:../../packages/orchestration
@@ -403,6 +406,9 @@ importers:
         specifier: 11.0.5
         version: 11.0.5
     devDependencies:
+      '@axe-core/playwright':
+        specifier: 4.14.0
+        version: 4.14.0(playwright-core@1.64.1)
       '@babel/core':
         specifier: 8.1.0
         version: 8.1.0
@@ -522,6 +528,37 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.1.0
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.5
+        version: 26.6.5
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/memory:
+    dependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.3.0(@opentelemetry/api@1.10.0))
+      '@hobbots/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@hobbots/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@hobbots/permissions':
+        specifier: workspace:*
+        version: link:../permissions
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.0
+      tar:
+        specifier: 7.5.22
+        version: 7.5.22
     devDependencies:
       '@types/node':
         specifier: 26.6.5
@@ -884,6 +921,12 @@ packages:
 
   '@astrojs/yaml2ts@0.2.4':
     resolution: {integrity: sha512-8oddpOae35pJsXPQXhTkM0ypfKPskVsh2bCxRtbf7e+/Epw2nReakFYpLKjZMEr75CsoF203PMnCocpfz0s69A==}
+
+  '@axe-core/playwright@4.14.0':
+    resolution: {integrity: sha512-SGUhG5PIHd2eMdpgBF2PyQLOhX+qyDR2PT4cmoS4Qk2ak+jX/rrSvst9l0PGv5WTHolKpUMvVmoHpr4cZgf1RQ==}
+    engines: {node: '>=22.12.0'}
+    peerDependencies:
+      playwright-core: '>= 1.0.0'
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -3695,6 +3738,10 @@ packages:
 
   aws4@1.13.2:
     resolution: {integrity: sha512-lHe62zvbTB5eEABUVi/AwVh0ZKY9rMMDhmm+eeyuuUQbQ3+J+fONVQOZyj+DdrvD4BY33uYniyRJ4UJIaSKAfw==}
+
+  axe-core@4.14.0:
+    resolution: {integrity: sha512-9WTZxEjsZ7b13TH8JPmbV2z8CHbl80/2hm3XPEG4JgNdQLK81IBRXmSxHfMAOkSqQeRxT/0dwNDz2GOm3zzpcQ==}
+    engines: {node: '>=4'}
 
   axobject-query@4.1.0:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
@@ -7150,6 +7197,11 @@ snapshots:
     dependencies:
       yaml: 2.9.1
 
+  '@axe-core/playwright@4.14.0(playwright-core@1.64.1)':
+    dependencies:
+      axe-core: 4.14.0
+      playwright-core: 1.64.1
+
   '@babel/code-frame@7.29.7':
     dependencies:
       '@babel/helper-validator-identifier': 7.29.7
@@ -9809,6 +9861,8 @@ snapshots:
       possible-typed-array-names: 1.1.0
 
   aws4@1.13.2: {}
+
+  axe-core@4.14.0: {}
 
   axobject-query@4.1.0: {}
 

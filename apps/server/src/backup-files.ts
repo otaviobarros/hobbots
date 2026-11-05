@@ -4,7 +4,8 @@ import { chmod, lstat, mkdir, readdir, readFile, rename, rm, rmdir, writeFile } 
 import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { Schema } from "effect";
+import { MEMORY_ARCHIVE, memoryFolder, replaceMemoryKeys, restoreMemoryArchive } from "@hobbots/memory";
+import { Effect, Schema } from "effect";
 
 /** The format of a backup's manifest (ADR 026). A later format, such as an encrypted one, gets a new version. */
 export const BACKUP_FORMAT = "hobbots.backup";
@@ -45,13 +46,21 @@ export const BACKUP_PARTS = {
   activity: { backup: "activity", data: "activity" },
   toolLogs: { backup: "tool-logs", data: "tool-logs" },
   network: { backup: join("settings", "network.json"), data: "network.json" },
+  memorySettings: { backup: join("settings", "memory-settings.json"), data: "memory-settings.json" },
 } as const;
 
 /**
- * The entries of the data folder that are the hub's own, which a restore moves aside. The desktop
- * app keeps its window's own files in the same folder, and they stay where they are.
+ * Memory in a backup (ADR 028): the archive its engine made, kept whole. A restore unpacks it into
+ * the engine's folder rather than copying it.
  */
-const HUB_ENTRIES = [
+export const MEMORY_PART = `memory/${MEMORY_ARCHIVE}`;
+
+/**
+ * The entries of the data folder that are the hub's own, which a restore moves aside and Start over
+ * deletes. The desktop app keeps its window's own files in the same folder, and they stay where they
+ * are.
+ */
+export const HUB_ENTRIES = [
   "hobbots.sqlite",
   "hobbots.sqlite-wal",
   "hobbots.sqlite-shm",
@@ -59,6 +68,9 @@ const HUB_ENTRIES = [
   "tool-logs",
   "workspaces",
   "network.json",
+  "memory-settings.json",
+  "memory",
+  "memory-keys",
   "installation-id",
   "window-key",
   "charms",
@@ -277,8 +289,9 @@ const putBack = async (
 
 /**
  * Restores a checked backup into `dataDir`, with no hub running there (ADR 026): moves the hub's own
- * entries aside into `<dataDir>.before-restore-<date>`, copies the backup in owner-only, writes a new
- * installation ID and the marker the next start applies. A failure puts everything back as it was.
+ * entries aside into `<dataDir>.before-restore-<date>`, copies the backup in owner-only, unpacks its
+ * memory, writes a new installation ID, new memory bearers (ADR 028) and the marker the next start
+ * applies. A failure puts everything back as it was.
  * Returns the folder set aside, or null when the data folder held nothing of the hub's.
  */
 export const restoreInto = async (
@@ -316,6 +329,15 @@ export const restoreInto = async (
       }
       if (part === BACKUP_PARTS.workspace) await mkdir(target, { recursive: true, mode: 0o700 });
     }
+    if (manifest.files.some((file) => file.path === MEMORY_PART)) {
+      await Effect.runPromise(
+        restoreMemoryArchive(join(backup, MEMORY_PART), memoryFolder(dataDir)).pipe(
+          Effect.mapError((refused) => new NotRestorable(`The backup's memory cannot be restored: ${refused.reason}.`)),
+        ),
+      );
+    }
+    // The old bearers are left behind with the data set aside, so they no longer reach memory.
+    replaceMemoryKeys(dataDir);
     await writeFile(join(dataDir, "installation-id"), `${randomUUID()}\n`, { flag: "wx", mode: 0o600 });
     const marker: RestoreMarker = {
       id: randomUUID(),

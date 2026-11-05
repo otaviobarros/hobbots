@@ -17,6 +17,7 @@ import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { useActivity } from "../../api/activity.ts";
 import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../../api/drafts.ts";
 import { useConnection } from "../../api/live.ts";
+import { threadMemorySavesQuery } from "../../api/memory-saves.ts";
 import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../../api/outbox.ts";
 import {
   agentsQuery,
@@ -44,6 +45,8 @@ import { ThreadHeaderMenu } from "../archive/thread-menu.tsx";
 import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
 import { ChatSearch, ChatSearchButton } from "../chat-search/chat-search.tsx";
 import { HobSprite, stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
+import { replySaves } from "../memory-line/memory-line-model.ts";
+import { MemorySavedLines, MemorySavesUnread } from "../memory-line/memory-saved-line.tsx";
 import { messages } from "../messages.ts";
 import { NeedsTray } from "../needs-tray/needs-tray.tsx";
 import { useThreadNeeds } from "../needs-tray/use-thread-needs.ts";
@@ -53,10 +56,11 @@ import { ThreadQuestButton, useWorkMoments } from "../quest/thread-work.tsx";
 import type { Pins } from "../quest/use-work.ts";
 import { ReconnectingCard } from "../shell/reconnecting.tsx";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
+import { BackIcon } from "./chat-icons.tsx";
 import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
 import { EmptyThread } from "./empty-thread.tsx";
-import { type ContinueReply, MessageRow, messageElementId, QueuedRow, WaitingRow } from "./message-row.tsx";
+import { type ContinueReply, MessageRow, QueuedRow, useScrollToMessage, WaitingRow } from "./message-row.tsx";
 import { TranscriptSkeleton } from "./transcript-skeleton.tsx";
 
 /**
@@ -165,11 +169,7 @@ export function ChatView({
     if (lastContent !== undefined && !holding) bottom.current?.scrollIntoView({ block: "end" });
   }, [lastContent, holding]);
 
-  const focusLoaded = messages.data?.some((m) => m.id === focusMessageId) ?? false;
-  useEffect(() => {
-    if (focusLoaded && focusMessageId)
-      document.getElementById(messageElementId(focusMessageId))?.scrollIntoView({ block: "center" });
-  }, [focusLoaded, focusMessageId]);
+  useScrollToMessage(messages.data, focusMessageId);
 
   // When a waiting message starts this page's thread, the page follows it there with its draft.
   useEffect(() => {
@@ -236,8 +236,19 @@ export function ChatView({
       aria-label={copy.landmark}
       className="@container/chat flex min-w-chat-min flex-1 flex-col group-data-[room=open]/room:min-w-0"
     >
-      {/* The tile, then the chat's title over who leads it and what they are doing (A2-02). */}
+      {/* Back to the hob's chats, the tile, then the chat's title over who leads it and what they are doing (A2-02). */}
       <header className="@container/header flex items-center gap-3 border-b-(length:--edge) border-line px-6 pt-3.5 pb-3">
+        {/* The way back to the chat list: the hob's page, which opens on its Chats tab. */}
+        <Button asChild variant="quiet" size="icon" className="-ms-2 -me-1">
+          <Link
+            to="/hobs/$hobId"
+            params={{ hobId }}
+            aria-label={copy.backToChats({ name: current.name })}
+            title={copy.backToChats({ name: current.name })}
+          >
+            <BackIcon />
+          </Link>
+        </Button>
         {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
         <Link
           to="/hobs/$hobId"
@@ -291,7 +302,7 @@ export function ChatView({
           if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
         }}
         ref={stayAtEnd}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px] @max-[480px]/chat:px-4"
       >
         {/* The transcript, the tray and the composer share one centered column (A2-01). Long words
             and paths wrap inside it, so nothing in it is wider than the column (#874). */}
@@ -373,8 +384,9 @@ export function ChatView({
         </div>
       </div>
 
-      <ArchiveToastViewport />
-      <div className="flex-none px-6 pt-2 pb-5">
+      {/* Folded away beside the room, the chat leaves its toasts to the room's own place. */}
+      {inView && <ArchiveToastViewport />}
+      <div className="flex-none px-6 pt-2 pb-5 @max-[480px]/chat:px-3 @max-[480px]/chat:pb-3">
         <div className="mx-auto flex w-full max-w-measure flex-col gap-2.5">
           {brainProblem !== null && (
             <section
@@ -479,6 +491,8 @@ function Transcript({
   const work = useWorkMoments(hob.id, threadId, transcript);
   // Under a message you sent while work ran, where it went next (ADR 027).
   const receipts = useSteerReceipts(hob.id, threadId, transcript);
+  // Under a reply, what it saved to the hob's memory (ADR 028).
+  const saves = useQuery({ ...threadMemorySavesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
   return (
     <>
       {work.before}
@@ -489,7 +503,13 @@ function Transcript({
           )}
           {/* A lead that acted on arrived work and wrote nothing leaves no row; its work still shows. */}
           {!isQuietReply(message, transcript[index - 1]) && (
-            <MessageRow message={message} hob={hob} focused={message.id === focusMessageId} resume={resume(message)}>
+            <MessageRow
+              message={message}
+              hob={hob}
+              focused={message.id === focusMessageId}
+              resume={resume(message)}
+              after={<MemorySavedLines saves={replySaves(saves.data, message.id)} hob={hob} />}
+            >
               <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
             </MessageRow>
           )}
@@ -497,6 +517,9 @@ function Transcript({
           {work.after(message.id)}
         </Fragment>
       ))}
+      {saves.isError && saves.data === undefined && (
+        <MemorySavesUnread name={hob.name} retry={() => void saves.refetch()} />
+      )}
       {changes && <BrainSwitchNote brain={next} next />}
     </>
   );

@@ -43,7 +43,7 @@ test("[TC-RT-109] two steps working in one folder at once each list only their o
     { brief: ["Write the review", 'fake:write docs/REVIEW.md "# Review\\n"', REPLY].join("\n") },
   ];
   await composer.fill(["Write the docs", script("plan_steps", { key: "plan", steps })].join("\n"));
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 

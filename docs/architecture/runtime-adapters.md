@@ -7,7 +7,7 @@
 | Target | Planned route | Status in this foundation |
 |---|---|---|
 | Codex | Codex App Server over stdio, 0.166.0 or later ([ADR 024](../decisions/024-codex-adapter.md)) | Selected; App Server behavior, the policy on its tool calls and a whole turn in the sandbox on macOS verified with a stand-in model; the sandbox on Linux and a real sign-in still need verification. |
-| Claude Code | Supported CLI/SDK integration | Selected; exact route/version needs compatibility validation. |
+| Claude Code | The host's `claude` through the Claude Agent SDK, 2.1.301 or later | Built; the [status page](../STATUS.md) lists what is proven on real Claude Code. |
 | ACP agents | ACP client adapter with capability negotiation | Foundation selected; per-agent interoperability is not yet demonstrated. |
 | Other CLIs/local-model runtimes | Individually validated future adapters | Outside initial support guarantees. |
 

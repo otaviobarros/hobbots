@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { PolicyOverrides } from "./policy.ts";
-import { ArtifactKind, type Quest, TaskRefusal, WaitMode } from "./quest.ts";
+import { ArtifactKind, choicesProblem, MAX_QUESTION_OPTIONS, type Quest, TaskRefusal, WaitMode } from "./quest.ts";
 import { ancestorsOf, type Task } from "./task.ts";
 
 /**
@@ -36,9 +36,18 @@ const key = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(200)).an
 
 const taskId = Schema.optionalKey(id("The Task to act on. Leave it out to act on the Task you are working on."));
 
+/** A milestone's title: a few words, since a milestone's id is the hub's and never names a new one. */
+const milestoneTitle = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.isPattern(/^(?![0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$)/i, {
+    message: 'A milestone is a short title, such as "Page renders", never the id of an existing milestone.',
+  }),
+).annotate({ description: 'A short title for a point to report when it is reached, such as "Page renders".' });
+
 const milestones = Schema.optionalKey(
-  Schema.Array(text("A point to report when it is reached")).annotate({
-    description: "Milestones the Task's owner reports as it reaches them, in order.",
+  Schema.Array(milestoneTitle).annotate({
+    description:
+      "Titles of new milestones the Task's owner reports as it reaches them, in order. A milestone that already exists on another Task is reported there, not named again here.",
   }),
 );
 
@@ -134,11 +143,39 @@ export const TaskToolInputs = {
     key,
     task_id: taskId,
     question: text("The question. It goes to your nearest lead, or to the user when you have none."),
-  }),
+    options: Schema.optionalKey(
+      Schema.Array(
+        Schema.Struct({
+          label: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(80)).annotate({
+            description: 'A short label for the choice, such as "Light".',
+          }),
+          consequence: Schema.String.check(Schema.isTrimmed(), Schema.isMaxLength(200)).annotate({
+            description: "One line on what happens if it is picked.",
+          }),
+        }),
+      )
+        .check(Schema.isMinLength(2), Schema.isMaxLength(MAX_QUESTION_OPTIONS))
+        .annotate({
+          description: `When the answer is a choice, 2 to ${MAX_QUESTION_OPTIONS} choices to pick from. Whoever answers can still answer in words instead.`,
+        }),
+    ),
+    recommended: Schema.optionalKey(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+        description: "The number of the choice you recommend, counted from 1, if you recommend one.",
+      }),
+    ),
+  }).check(
+    Schema.makeFilter(
+      (input: { readonly options?: ReadonlyArray<{ readonly label: string }>; readonly recommended?: number }) =>
+        choicesProblem(input.options, input.recommended, 1),
+    ),
+  ),
   answer: Schema.Struct({
     key,
     question_id: id("The question you were asked."),
-    answer: text("Your answer. It goes back to the hob that asked."),
+    answer: text(
+      "Your answer. It goes back to the hob that asked. To pick one of the question's choices, give its label.",
+    ),
   }),
   escalate: Schema.Struct({
     key,
@@ -234,7 +271,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "ask",
     description:
-      "Ask a question about a Task you own. It goes to your nearest lead, who answers or passes it up; it reaches the user only when no lead can answer.",
+      "Ask a question about a Task you own. It goes to your nearest lead, who answers or passes it up; it reaches the user only when no lead can answer. When the answer is a choice, give the choices as options, with the one you recommend, so the user can pick one with a click.",
     label: "Asking a question",
   },
   {

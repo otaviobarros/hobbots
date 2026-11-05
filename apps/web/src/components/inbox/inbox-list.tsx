@@ -115,19 +115,22 @@ export function InboxViewPicker({ view, onChange }: { view: InboxView; onChange:
 /** Where an entry belongs, in a few words, for a row in By urgency: "Aldric's quest". */
 const placeName = (place: InboxPlace, directory: InboxDirectory): string => {
   if (place.kind === "hub") return copy.hub;
+  if (place.kind === "memory") return copy.memory;
   if (place.kind === "quest") return copy.questName({ name: directory.hobName(place.quest.leadId) });
   return directory.threadTitle(place.threadId);
 };
 
 /**
  * A group's heading: a short label with its icon, then the detail. A quest is its lead's quest and
- * its goal, a thread outside a quest whose chat it is and its title, and this hub its devices.
+ * its goal, a thread outside a quest whose chat it is and its title, this hub its devices, and
+ * memory the shares.
  */
 const groupHeading = (
   { place, entries }: InboxGroup,
   directory: InboxDirectory,
-): { readonly icon: "quest" | "chat" | "screen"; readonly label: string; readonly detail: string } => {
+): { readonly icon: "quest" | "chat" | "screen" | "memory"; readonly label: string; readonly detail: string } => {
   if (place.kind === "hub") return { icon: "screen", label: copy.hub, detail: copy.devices };
+  if (place.kind === "memory") return { icon: "memory", label: copy.memory, detail: copy.memoryDetail };
   if (place.kind === "quest") {
     return {
       icon: "quest",
@@ -190,7 +193,7 @@ function InboxItem({
         closed && "opacity-70",
       )}
     >
-      <EntryPortrait hob={hob} device={entry.kind === "device"} waiting={!closed} />
+      <EntryPortrait hob={hob} device={entry.kind === "device"} hub={entry.kind === "hub-question"} waiting={!closed} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-detail text-text-secondary">

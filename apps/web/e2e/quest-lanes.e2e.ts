@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { lane, laneHead, openRoom, ticket } from "./quest-room.ts";
+import { dock, lane, laneHead, openRoom, ticket } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -59,16 +59,22 @@ test("[TC-UX-209] a lane marks the files its hob changed and deleted, by their p
   const { url, aldric } = await questHub();
   await startRoom(page, url, aldric, "Make the shop badge in our green", "Make the shop badge");
 
-  // Aldric cleared the old badge before he delegated; Quill then made it again.
+  // Aldric cleared the old badge before he delegated; Quill then made it again. In everyday words a
+  // lane names the file and what happened to it.
   const aldricDid = lane(page, "Aldric").getByRole("list", { name: "What Aldric did" });
-  await expect(aldricDid.getByRole("listitem").filter({ hasText: "Deleted" })).toContainText("web/badge.png", {
-    timeout: 20_000,
-  });
+  await expect(aldricDid).toContainText("Deleted badge.png", { timeout: 20_000 });
   const quillDid = lane(page, "Quill").getByRole("list", { name: "What Quill did" });
-  await expect(quillDid.getByRole("listitem").filter({ hasText: "Edited" })).toContainText("web/badge.png", {
-    timeout: 20_000,
-  });
-  await expect(quillDid).not.toContainText("/fake/shop");
+  await expect(quillDid).toContainText(/(Created|Updated) badge\.png/, { timeout: 20_000 });
+  await expect(quillDid).not.toContainText("web/badge.png");
+
+  // The technical steps show each mark by its path in the hob's folder, never the whole path.
+  await page.getByRole("button", { name: "Show technical steps" }).click();
+  await expect(aldricDid.getByRole("listitem").filter({ hasText: "Deleted" })).toContainText("web/badge.png");
+  const quillEdited = quillDid.getByRole("listitem").filter({ hasText: "Edited" });
+  await expect(quillEdited).toContainText("web/badge.png");
+  // Only the marks: Quill's note on what it left uncommitted names its folder on purpose, and it
+  // arrives whenever Quill finishes, so the lane as a whole may or may not show it yet.
+  await expect(quillEdited).not.toContainText("/fake/shop");
 });
 
 // covers UX-002, OR-004
@@ -121,7 +127,8 @@ test("[TC-UX-212] every control in a lane is reached with the keyboard, and its 
   const { url, aldric } = await questHub();
   await startRoom(page, url, aldric, "Plan a Black Friday campaign for the shop", TITLE);
   const quill = lane(page, "Quill");
-  const show = quill.getByRole("button", { name: "Show in the Workbench" });
+  // The Task's details, where Show in the Workbench now sits, are the lane's last control.
+  const show = quill.getByText("Everything in this task");
   await expect(show).toBeVisible();
 
   // The header lights the lane from the keyboard, and again shows everyone.
@@ -176,8 +183,38 @@ test("[TC-UX-214] a lane whose records could not be read says so and reads them 
   // Once the hub answers again, Try again brings the marks in and the alert goes.
   await page.unroute(activity);
   await alert.getByRole("button", { name: "Try again" }).click();
-  await expect(quill.getByRole("list", { name: "What Quill did" })).toContainText("web/badge.png", {
+  await expect(quill.getByRole("list", { name: "What Quill did" })).toContainText("badge.png", {
     timeout: 20_000,
   });
   await expect(alert).toBeHidden();
+});
+
+// covers UX-002
+test("[TC-UX-284] a finished Quest says so under the header and folds each lane to its result", async ({ page }) => {
+  const { url, aldric } = await questHub();
+  const room = await startRoom(page, url, aldric, "Wrap up the spec for the shop", "Wrap up the spec");
+
+  const finished = room.getByRole("region", { name: /^(Quest|Task) finished$/ });
+  await expect(finished).toContainText("Spec wrapped up", { timeout: 20_000 });
+  await expect(finished).toContainText(/took /);
+
+  // See what changed opens the whole Quest's changes, filtered to no one.
+  await finished.getByRole("button", { name: "See what changed" }).click();
+  await expect(dock(page).getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
+  await expect(dock(page)).toContainText("SPEC.md");
+  await expect(dock(page).getByRole("button", { name: /only$/ })).toHaveCount(0);
+
+  // Aldric's lane keeps its result and folds the rest, which opens in everyday words.
+  const did = lane(page, "Aldric").getByRole("list", { name: "What Aldric did" });
+  await expect(did).not.toContainText("SPEC.md");
+  await lane(page, "Aldric")
+    .getByRole("button", { name: /^Show the \d+ steps?$/ })
+    .click();
+  await expect(did).toContainText(/(Created|Updated) SPEC\.md/);
+
+  // In a narrow window the switch for the technical steps sits in the quest's menu.
+  await page.setViewportSize({ width: 960, height: 800 });
+  await room.getByRole("button", { name: "Wrap up the spec menu" }).click();
+  await page.getByRole("menuitem", { name: "Show technical steps" }).click();
+  await expect(did).toContainText("docs/SPEC.md");
 });

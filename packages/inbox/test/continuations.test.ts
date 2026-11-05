@@ -295,6 +295,44 @@ describe("which thread a backpack item continues", () => {
     expect(prompt).toContain('Your question tone was answered by the user: "Both"');
     expect(prompt).toContain("The user left a note about Task stew: No salt");
   });
+
+  // covers IN-004
+  it("[TC-IN-545] tells a lead a question's choices, and the asker whether its answer picked one (#740)", () => {
+    const asked = new Question({
+      id: QuestionId.make("tone"),
+      taskId: TaskId.make("stew"),
+      askerId: SAM,
+      recipientId: FRODO,
+      chain: [],
+      text: "Rabbit or taters?",
+      state: "open",
+      answer: null,
+      answeredBy: null,
+      createdAt: at,
+      answeredAt: null,
+      options: [
+        { label: "Rabbit", consequence: "Needs an hour more" },
+        { label: "Taters", consequence: "" },
+      ],
+      recommended: 1,
+      revision: 1,
+    });
+    const answered = (answer: string, picked: number | null) =>
+      new Question({ ...asked, state: "answered", answer, picked, answeredBy: { _tag: "User" }, answeredAt: at });
+    const prompt = arrivalsText(
+      [
+        item(FRODO, "stew", "question", { _tag: "question", question: asked }),
+        item(SAM, "stew", "answer", { _tag: "answer", question: answered("Taters", 1) }),
+        item(SAM, "stew", "answer", { _tag: "answer", question: answered("Both", null) }),
+      ],
+      "prompt",
+    );
+    expect(prompt).toContain(
+      '"Rabbit or taters?" Choices: 1. Rabbit: Needs an hour more; 2. Taters (recommended) Answer it with answer if you can, giving a choice\'s label to pick it;',
+    );
+    expect(prompt).toContain('Your question tone was answered by the user: "Taters" (choice 2 of 2)');
+    expect(prompt).toContain('was answered by the user: "Both" (written in words, not one of the choices)');
+  });
 });
 
 describe("an approval outcome no live turn waits for", () => {

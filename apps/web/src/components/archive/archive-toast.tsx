@@ -12,6 +12,15 @@ export function ArchiveToastViewport() {
   return <ToastViewport label={copy.notifications} className="mx-4 mb-2" />;
 }
 
+/** Where the toasts show on a page with no composer: in sight at its bottom while the page scrolls. */
+export function PageToastViewport() {
+  return (
+    <div className="sticky bottom-6 z-10 mx-auto mt-auto w-full max-w-[520px] empty:hidden">
+      <ArchiveToastViewport />
+    </div>
+  );
+}
+
 /** The toast for one notice: Undo after an archive, the reason for a refusal, Try again after a failure. */
 export function ArchiveToast({
   notice,

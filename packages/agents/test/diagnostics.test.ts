@@ -142,6 +142,14 @@ describe("report", () => {
         },
       }),
     ],
+    memory: {
+      state: "running",
+      offReason: null,
+      version: "3.4.2",
+      restarts: 1,
+      lastExit: { code: 3, at: "2026-10-30T11:58:00.000Z" },
+      runningSince: "2026-10-30T11:58:01.000Z",
+    },
     workHeld: false,
     stalled: [],
     recovery: [],
@@ -169,6 +177,8 @@ describe("report", () => {
     expect(report.runtimes).toEqual([
       { runtime: "claude-code", version: "2.1.0", availability: "ready", signedIn: true },
     ]);
+    // The memory engine's health names no path, port or key, so it goes in as it is.
+    expect(report.memory).toEqual(input.memory);
     expect(JSON.stringify(report)).not.toContain("example.com");
     expect(JSON.stringify(report)).not.toContain("A secret plan");
   });

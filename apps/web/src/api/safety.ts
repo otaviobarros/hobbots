@@ -125,6 +125,16 @@ export const RULES: ReadonlyArray<RuleInfo> = [
     label: "Anything outside its folders",
     note: "Any other file on the hub. Always Never.",
   },
+  {
+    operation: "search-memory",
+    label: "Recall what it learned",
+    note: "Search its own memory, About you and the projects it works in.",
+  },
+  {
+    operation: "save-memory",
+    label: "Remember things",
+    note: "Save notes to its own memory. You see a line in the chat each time.",
+  },
 ];
 
 /** The operations the GitHub Charm card sets, in its order. Permissions lists the others. */

@@ -1,0 +1,151 @@
+name: Flake hunt
+
+# Every night, runs the whole browser suite three times over and the persistence and server suites
+# three times each, on both databases, against main. A test that fails on any run is listed on one
+# issue, which each night with flakes updates: a retry that passes is a bug report, not a pass
+# (STD-TEST-009, #985).
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  browser-tests:
+    name: Browser tests, three times (${{ matrix.shard }}/8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    env:
+      HOBBOTS_E2E_SHARD: ${{ matrix.shard }}/8
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: pnpm turbo run build --filter=@hobbots/web
+      - uses: ./.github/actions/playwright
+      # Three runs take about three times a CI shard, so the run's own time limit is raised to fit.
+      - working-directory: apps/web
+        run: pnpm exec playwright test --repeat-each=3 --fail-on-flaky-tests --global-timeout=2400000
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hunt-browser-${{ matrix.shard }}
+          path: apps/web/test-results/report.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hunt-browser-traces-${{ matrix.shard }}
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 14
+
+  server-tests:
+    name: Persistence and server tests, three times (${{ matrix.db }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite, postgres]
+    services:
+      postgres:
+        # The same database as the CI job; the SQLite run leaves it idle.
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      HOBBOTS_TEST_DB: ${{ matrix.db }}
+      HOBBOTS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      VITEST_MAX_WORKERS: 2
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # Each test runs three times with no retry, so a test that fails on any run fails the job.
+      # Each package writes its report beside its package.json. --continue lets the other package
+      # finish its runs and its report when one fails; the job still fails.
+      - run: >-
+          pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server --force
+          --continue=dependencies-successful -- --repeats=2 --retry=0 --reporter=default --reporter=json --outputFile.json=flake-hunt.json
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hunt-server-${{ matrix.db }}
+          path: |
+            packages/persistence/flake-hunt.json
+            apps/server/flake-hunt.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  report:
+    name: Report the flaky tests
+    needs: [browser-tests, server-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: "Flake hunt: flaky tests on main"
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      BROWSER: ${{ needs.browser-tests.result }}
+      SERVER: ${{ needs.server-tests.result }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: hunt-*
+          path: reports
+      - name: Open or update the flake hunt issue
+        run: |
+          found=$(find reports -name '*.json' -print0 | xargs -0 --no-run-if-empty node scripts/flaky-tests.mjs)
+          if [[ -z "$found" && "$BROWSER" == success && "$SERVER" == success ]]; then
+            echo "No flaky tests tonight." >> "$GITHUB_STEP_SUMMARY"
+            issue=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number')
+            if [[ -n "$issue" ]]; then
+              gh issue comment "$issue" --body "The [flake hunt]($RUN_URL) of $(date -u +%F) found no flaky tests."
+            fi
+            exit 0
+          fi
+          if [[ -z "$found" ]]; then
+            found="A job ended without listing a test: browser tests ${BROWSER}, server tests ${SERVER}. See the run's logs."
+          fi
+          body=$(printf '%s\n\n%s\n\n%s\n' \
+            "The nightly [flake hunt]($RUN_URL) of $(date -u +%F) ran main's tests several times over. Each test below failed on at least one run. Fix each one, or open an issue for it within a day (STD-TEST-009). The traces are in the run's \`hunt-browser-traces-N\` artifacts." \
+            "$found" \
+            "This issue is updated by \`.github/workflows/flake-hunt.yml\` each night that finds a flaky test.")
+          echo "$body" >> "$GITHUB_STEP_SUMMARY"
+          issue=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number')
+          if [[ -n "$issue" ]]; then
+            gh issue edit "$issue" --body "$body"
+            gh issue comment "$issue" --body "The [flake hunt]($RUN_URL) of $(date -u +%F) found flaky tests; the list above is tonight's."
+          else
+            gh issue create --title "$TITLE" --label "type: test" --label "area: ci" --body "$body"
+          fi

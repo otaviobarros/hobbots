@@ -1,13 +1,14 @@
 import type { AgentId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import type { HobState } from "../../lib/hob-state.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { HubWait } from "../loading/hub-wait.tsx";
 import { type RoomStatus, roomStatusLabel, roomTone } from "../quest/control-room.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
+import { LANE, LANE_HEAD } from "./lane-focus.ts";
 import { LaneItemRow } from "./lane-items.tsx";
 import { type Lane, type LaneRole, laneDomId } from "./lane-model.ts";
 import { messages } from "./messages.ts";
@@ -69,6 +70,8 @@ export function LaneView({
   onFlashed,
   slots = {},
   reads,
+  technical = false,
+  finished = false,
 }: {
   lane: Lane;
   hobs: HobLookup;
@@ -80,12 +83,22 @@ export function LaneView({
   slots?: LaneSlots;
   /** Where the reads of the hob's records stand; with none, the lane shows only the tree. */
   reads?: LaneReads | undefined;
+  /** Show the exact marks: commands, the files read and every refusal, in place of everyday words. */
+  technical?: boolean;
+  /** The Quest has ended: in everyday words the lane folds to its results until it is opened. */
+  finished?: boolean;
 }) {
   const hob = hobs(lane.hobId);
   const role = roleText(lane.role, hobs);
+  const [opened, setOpened] = useState(false);
+  const all = technical ? lane.items : lane.plain;
+  const results = all.filter((item) => item.kind === "result");
+  const folded = finished && !technical && !opened && results.length > 0 && results.length < all.length;
+  const shown = folded ? results : all;
   return (
     <section
       id={laneDomId(lane.hobId)}
+      {...LANE}
       aria-label={messages.lane({ name: hob.name })}
       onAnimationEnd={flashing ? onFlashed : undefined}
       className={cn(
@@ -97,6 +110,7 @@ export function LaneView({
       <div className="flex items-center gap-1 pe-2">
         <button
           type="button"
+          {...LANE_HEAD}
           aria-pressed={picked}
           aria-label={messages.show({ name: hob.name })}
           onClick={() => onPick(picked ? null : lane.hobId)}
@@ -108,7 +122,7 @@ export function LaneView({
               {hob.name}
               {role !== null && <span className="ms-1.5 font-sans text-meta font-normal text-label">{role}</span>}
             </span>
-            <span className="truncate text-detail text-text-secondary" title={lane.title}>
+            <span className="line-clamp-2 text-detail text-text-secondary" title={lane.title}>
               {lane.title}
             </span>
           </span>
@@ -119,10 +133,15 @@ export function LaneView({
       {slots.tries}
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pt-1 pb-3">
         <ol aria-label={messages.did({ name: hob.name })} className="m-0 flex list-none flex-col gap-1.5 p-0">
-          {lane.items.map((item) => (
+          {shown.map((item) => (
             <LaneItemRow key={item.key} item={item} hobs={hobs} />
           ))}
         </ol>
+        {folded && (
+          <Button variant="ghost" size="xs" className="self-start" onClick={() => setOpened(true)}>
+            {messages.showSteps({ count: all.length - results.length })}
+          </Button>
+        )}
         {reads !== undefined && <ReadState name={hob.name} reads={reads} />}
         {slots.cards}
       </div>

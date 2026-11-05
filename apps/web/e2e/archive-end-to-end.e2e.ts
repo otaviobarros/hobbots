@@ -103,11 +103,19 @@ test("[TC-CH-157] a thread archived from its menu is found in the Archive and in
   const result = finder.getByRole("option", { name: /Rename the newsletter/ });
   await expect(result).toContainText("Archived");
   await result.click();
-  await expect(main.getByRole("region", { name: "Archived" })).toBeVisible();
-  await expect(main.getByRole("textbox")).toHaveCount(0);
+  // It opens in the Archive's reading page, the one way an archived chat reads.
+  await expect(page).toHaveURL(new RegExp(`#/archive/chats/${pip.id}/`));
+  await expect(read.getByRole("note")).toContainText("Pip takes no new messages here");
+  await expect(read.getByRole("textbox")).toHaveCount(0);
+
+  const address = new URL(page.url()).hash.replace("#/archive/chats/", "#/hobs/").replace(/\/([^/]+)$/, "/threads/$1");
 
   // Restore: back in the hob's list with its history, and it takes messages again.
-  await main.getByRole("button", { name: "Restore “Rename the newsletter”" }).click();
+  await read.getByRole("button", { name: "Restore to Pip's chats" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Restored “Rename the newsletter” to Pip's chats." }),
+  ).toBeVisible();
+  await page.goto(`${current.url}/${address}`);
   await expect(threadLink(page, "Rename the newsletter")).toBeVisible();
   await expect(main.getByText("Echo: Rename the newsletter", { exact: true })).toBeVisible();
   const composer = main.getByRole("textbox", { name: /^Message Pip/ });

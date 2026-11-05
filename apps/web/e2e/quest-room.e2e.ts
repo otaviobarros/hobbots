@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { dock, lane, laneHead, openRoom, questRoom, ticket } from "./quest-room.ts";
+import { dock, lane, laneHead, laneTask, openRoom, questRoom, ticket } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -173,16 +173,84 @@ test("[TC-UX-205] at 960 px the chat starts folded and opens over the lanes, and
   await expect(rail).toBeVisible();
   await expect(rail.getByRole("button", { name: "Open the chat", exact: true })).toBeFocused();
 
-  // Tabbing through the room from its title keeps focus on a control, never on the page itself.
+  // Tabbing through the whole room, from its title to the chat's rail after it, keeps focus on a
+  // control at every step and never on the page itself. The walk starts once the Quest waits on
+  // Ada's question, so the room holds still while it runs, and ends on the rail, the last control
+  // on the page: one more Tab would leave the page whatever the room holds.
+  const asks = lane(page, "Ada").getByRole("region", { name: "Ada asks you" });
+  await expect(asks).toBeVisible({ timeout: 20_000 });
+  const last = rail.getByRole("button", { name: "Open the chat", exact: true });
   await room.getByRole("heading", { name: TITLE }).focus();
-  for (let step = 0; step < 12; step++) {
+  for (let step = 1; !(await last.evaluate((button) => button === document.activeElement)); step++) {
+    expect(step, "Tab reaches the chat's rail").toBeLessThanOrEqual(60);
     await page.keyboard.press("Tab");
     expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
   }
+
   await room.getByRole("button", { name: "Close room" }).focus();
   await page.keyboard.press("Enter");
   await expect(room).toBeHidden();
   expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+});
+
+/** Opens the Black Friday room at 960 px once Ada asks, and gives back her question and her Task. */
+const roomOnAdasQuestion = async (page: Page) => {
+  await page.setViewportSize({ width: 960, height: 800 });
+  const { url, aldric } = await questHub();
+  await startQuest(page, url, aldric);
+  await openRoom(page, TITLE);
+  const asks = lane(page, "Ada").getByRole("region", { name: "Ada asks you" });
+  await expect(asks).toBeVisible({ timeout: 20_000 });
+  const build = laneTask(page, "Build the campaign");
+  return { asks, build, backpack: build.getByRole("region", { name: "Backpack for Build the campaign" }) };
+};
+
+// covers UX-006
+test("[TC-UX-215] a backpack row that has focus when its item is handled hands focus to its card's details", async ({
+  page,
+}) => {
+  const { asks, build, backpack } = await roomOnAdasQuestion(page);
+  // The answer is sent without moving focus off the row; the row moves into the card's details.
+  await backpack.getByRole("button").focus();
+  await asks.getByRole("button", { name: /^Dec 12 for international/ }).dispatchEvent("click");
+  await expect(build.getByText("Everything in this task")).toBeFocused();
+  await expect(backpack).toHaveCount(0);
+});
+
+// covers UX-006
+test("[TC-UX-216] answering in a lane by a choice's key moves focus to the lane's header, not to a card the focus left", async ({
+  page,
+}) => {
+  const { asks, build, backpack } = await roomOnAdasQuestion(page);
+  // Focus visits the row, then moves to Ada's choice, which answers. The row and the choice both go,
+  // and the card does not take focus back: it had already left the card. With nothing else waiting
+  // in Ada's lane, focus moves to its header (#995), and a toast says what was sent.
+  await backpack.getByRole("button").focus();
+  const choice = asks.getByRole("button", { name: /^Dec 12 for international/ });
+  await choice.focus();
+  await page.keyboard.press("1");
+  await expect(backpack).toHaveCount(0);
+  await expect(laneHead(page, "Ada")).toBeFocused();
+  await expect(build.getByText("Everything in this task")).not.toBeFocused();
+  await expect(
+    page.getByRole("region", { name: /^Notifications/ }).getByText("Sent your answer to Ada: Dec 12 for international"),
+  ).toBeVisible();
+});
+
+// covers UX-006
+test("[TC-UX-217] answering in a lane by a choice chip moves focus to the lane's header once nothing else waits there", async ({
+  page,
+}) => {
+  const { asks } = await roomOnAdasQuestion(page);
+  // A chip pressed from the keyboard answers like its number key, and focus never drops to the page.
+  await asks.getByRole("button", { name: /^Dec 12 for international/ }).focus();
+  await page.keyboard.press("Enter");
+  await expect(asks).toHaveCount(0);
+  await expect(laneHead(page, "Ada")).toBeFocused();
+  expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+  await expect(
+    page.getByRole("region", { name: /^Notifications/ }).getByText("Sent your answer to Ada: Dec 12 for international"),
+  ).toBeVisible();
 });
 
 // covers UX-002, OR-001

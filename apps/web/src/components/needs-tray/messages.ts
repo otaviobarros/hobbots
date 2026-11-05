@@ -13,5 +13,7 @@ export const messages = {
   stuckTitle: ({ name }: { name: string }) => `${name}'s work is stuck`,
   passedUp: ({ names, task, when }: { names: ReadonlyArray<string>; task: string; when: string }) =>
     `${[...names, "you"].join(" → ")} · about ${task} · asked ${when}`,
+  /** A question the hub itself asks (#976): no lead passed it up. */
+  fromHub: ({ about, when }: { about: string; when: string }) => `Your hub → you · about ${about} · asked ${when}`,
   details: { approval: "Why, risk and who asked", question: "Who asked", stuck: "Tries and the error" },
 } as const;

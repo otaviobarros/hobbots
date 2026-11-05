@@ -21,6 +21,8 @@ Trusted Workspace is the default. The [design](../decisions/008-design.md) names
 | Read GitHub (a Charm) | Allow | Allow | Allow |
 | Open pull requests (a Charm) | Ask | Ask | Allow |
 | Comment on GitHub (a Charm) | Ask | Ask | Allow |
+| Search memory | Allow | Allow | Allow |
+| Save to memory (the hob's own memory) | Allow | Allow | Allow |
 | Anything outside the hob's folders | Deny | Deny | Deny |
 
 Careful keeps investigation automatic and asks before modifications and consequential work. Trusting is deliberately broad inside the hob's folders and the sandbox, with clear disclosure of actual runtime privileges; it never grants self-approval or Hobbots administration. Per-hob overrides only narrow the table; a widening needs a separately recorded user grant. The UI says **Never** for Deny.

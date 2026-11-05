@@ -218,6 +218,24 @@ describe("a Git repository in the sandbox", () => {
     },
     30_000,
   );
+
+  // covers PE-005
+  it.runIf(sandboxed)(
+    "[TC-PE-454] a here-document writes a file, since zsh keeps its temporary file in the turn's own folder",
+    async () => {
+      const project = newProject();
+      await inTurn(project, async (prepared) => {
+        const prefix = await runIn(prepared, project, 'echo "$TMPPREFIX"; echo "$TMPDIR"');
+        const [tmpPrefix, folder] = prefix.stdout.trim().split("\n");
+        expect(tmpPrefix).toBe(`${folder}/zsh`);
+        if (!existsSync("/bin/zsh")) return;
+        const written = await runIn(prepared, project, "/bin/zsh -c 'cat > note.md <<EOF\nkept\nEOF\ncat note.md'");
+        expect(written.ok, written.stderr).toBe(true);
+        expect(written.stdout.trim()).toBe("kept");
+      });
+    },
+    30_000,
+  );
 });
 
 describe("pointing a hob to what works in its sandbox", () => {

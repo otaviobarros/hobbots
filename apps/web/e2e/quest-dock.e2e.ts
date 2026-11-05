@@ -31,7 +31,7 @@ const startParty = async (page: Page, quillBrief: ReadonlyArray<string>) => {
       script("delegate_task", { key: "copy", hob: "Quill", brief: quillBrief.join("\n") }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
@@ -68,6 +68,15 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
 
   // Changes lists both hobs' files in one list, in the Quest's order, each saying whose it is.
   await bench.getByRole("tab", { name: /^Changes/ }).click();
+  // Expand makes the open dock as tall as the room lets it be, and takes it back again.
+  const expand = bench.getByRole("button", { name: "Make the Workbench as tall as it goes" });
+  const before = (await bench.boundingBox())?.height ?? 0;
+  await expand.click();
+  await expect(expand).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await bench.boundingBox())?.height ?? 0).toBeGreaterThan(before);
+  await expand.click();
+  await expect(expand).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(async () => (await bench.boundingBox())?.height ?? 0).toBe(before);
   await expect(changes.getByRole("button")).toHaveText([/^notes\.md, by Aldric/, /^copy\.md, by Quill/]);
   await changes.getByRole("button", { name: /^copy\.md/ }).click();
   await expect(
@@ -194,4 +203,63 @@ test("[TC-UX-282] a file two hobs changed opens the hob's own record when Files 
     .getByRole("button", { name: "Open in Files" })
     .click();
   await expect(files.getByRole("button", { name: /^notes\.md\s*, by Aldric/ })).toHaveAttribute("aria-pressed", "true");
+});
+
+// covers UX-006, CH-005, CH-009
+test("[TC-UX-283] a member's History opens an archived Quest's room in its lead's chat, and Close room reads the chat in the Archive", async ({
+  page,
+}) => {
+  const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);
+  const quill = members[0] ?? "";
+  await api("PATCH", `/agents/${quill}/permissions`, { ownFolders: [folder] });
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill(
+    [
+      TITLE,
+      script("start_quest", { key: "quest", goal: TITLE }),
+      script("delegate_task", {
+        key: "copy",
+        hob: "Quill",
+        brief: [
+          "Draft the copy",
+          'fake:write copy.md "# Copy\\n\\nHello.\\n"',
+          script("complete_task", { key: "drafted", summary: "Drafted." }),
+        ].join("\n"),
+      }),
+    ].join("\n"),
+  );
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+  await openRoom(page, TITLE);
+  await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
+  const threadId = /threads\/([^?/]+)/.exec(page.url())?.[1] ?? "";
+  // Aldric's turn on Quill's result has to end before the hub lets the thread be archived.
+  await expect
+    .poll(
+      () =>
+        api("POST", `/threads/${threadId}/archive`, {}).then(
+          () => "archived",
+          () => "busy",
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe("archived");
+
+  // Quill's History opens her Workbench in Aldric's chat, where the work was asked for.
+  await page.goto(`${url}/#/hobs/${quill}?tab=history`);
+  const history = page.getByRole("tabpanel", { name: "History" });
+  const drafted = history.getByRole("listitem").filter({ hasText: "Drafted." });
+  await drafted.getByRole("link", { name: "Workbench" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}/threads/${threadId}\\?`));
+
+  // The archived Quest's room stays open with its Workbench, and the chat beside it says where to read it.
+  await expect(dock(page)).toBeVisible();
+  const read = page.getByRole("link", { name: "Read it in the Archive" });
+  await expect(read).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /^Message Aldric/ })).toHaveCount(0);
+
+  // Closing the room reads the chat in the Archive.
+  await page.getByRole("button", { name: "Close room" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/archive/chats/${aldric}/${threadId}`));
 });

@@ -1,30 +1,45 @@
 import type { WaitingQuestion } from "@hobbots/api";
-import { type ApprovalRequest, type BackpackItem, openBlocker, type ThreadId } from "@hobbots/domain";
-import { approvalEntry, entryThread, type InboxEntry, questionEntry, stuckEntry } from "../inbox/inbox-entries.ts";
+import { type ApprovalRequest, type BackpackItem, type HubQuestion, openBlocker, type ThreadId } from "@hobbots/domain";
+import {
+  approvalEntry,
+  entryThread,
+  hubQuestionEntry,
+  type InboxEntry,
+  questionEntry,
+  stuckEntry,
+} from "../inbox/inbox-entries.ts";
 
-/** One thing the tray asks about: a request to approve, work that is stuck, or a question for you. */
-export type TrayEntry = Exclude<InboxEntry, { kind: "device" } | { kind: "failed" }>;
+/**
+ * One thing the tray asks about: a request to approve, work that is stuck, or a question for you, a
+ * hob's or the hub's. A hob asking to share what it learned waits in the Inbox and Memory, never in
+ * the way of a chat.
+ */
+export type TrayEntry = Exclude<InboxEntry, { kind: "device" } | { kind: "failed" } | { kind: "memory" }>;
 
 /**
  * What the tray holds, in the order it asks: pending approvals, then stuck work, then questions,
- * each oldest first. With `threadId`, only what is about that thread.
+ * hobs' then the hub's own (#976), each oldest first. With `threadId`, only what is about that
+ * thread: a hub question shows in the tray of the chat it concerns, and on Home.
  */
 export const trayEntries = ({
   requests,
   blockers,
   questions,
+  hubQuestions = [],
   threadId,
 }: {
   readonly requests: ReadonlyArray<ApprovalRequest>;
   readonly blockers: ReadonlyArray<BackpackItem>;
   readonly questions: ReadonlyArray<WaitingQuestion>;
+  readonly hubQuestions?: ReadonlyArray<HubQuestion>;
   readonly threadId?: ThreadId | undefined;
 }): ReadonlyArray<TrayEntry> => {
   const entries = [
     ...requests.filter((request) => request.state === "pending").map(approvalEntry),
     ...blockers.filter((item) => openBlocker(item) !== undefined).map(stuckEntry),
     ...questions.filter(({ question }) => question.state === "open").map(questionEntry),
-  ].filter((entry): entry is TrayEntry => entry.kind !== "device");
+    ...hubQuestions.filter((question) => question.state === "open").map(hubQuestionEntry),
+  ].filter((entry): entry is TrayEntry => entry.kind !== "device" && entry.kind !== "memory");
   return threadId === undefined ? entries : entries.filter((entry) => entryThread(entry) === threadId);
 };
 

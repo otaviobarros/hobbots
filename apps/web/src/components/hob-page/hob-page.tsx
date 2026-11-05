@@ -5,17 +5,21 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useActivity } from "../../api/activity.ts";
 import { useIsNewHob } from "../../api/history.ts";
+import { hobMemoryScopesQuery } from "../../api/memory-saves.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
-import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
+import { PageToastViewport } from "../archive/archive-toast.tsx";
 import type { WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
 import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
+import { MemoryIcon } from "../memory/memory-parts.tsx";
 import { HobAside } from "./hob-aside.tsx";
 import { ChatsLoading, HobChats } from "./hob-chats.tsx";
 import { HobHero } from "./hob-hero.tsx";
 import { HobHistory } from "./hob-history.tsx";
+import { HobMemory } from "./hob-memory.tsx";
 import { doingOf, type HobPageTab, isHobPageTab, statsLine } from "./hob-page-model.ts";
 import { HobCrumbs, HobPageSkeleton } from "./hob-page-skeleton.tsx";
+import { ownCount } from "./memory-model.ts";
 import { messages } from "./messages.ts";
 import { NewHob } from "./new-hob.tsx";
 import { useNeedLine } from "./use-need-line.ts";
@@ -49,9 +53,7 @@ export function HobPage({
         </p>
       )}
       {/* The archive toast with Undo stays in sight at the bottom while the page scrolls. */}
-      <div className="sticky bottom-6 z-10 mx-auto mt-auto w-full max-w-[520px] empty:hidden">
-        <ArchiveToastViewport />
-      </div>
+      <PageToastViewport />
     </main>
   );
 }
@@ -97,6 +99,11 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
               <ChatCount count={threads.isPending ? undefined : list.length} />
             </TabsTrigger>
             <TabsTrigger value="history">{copy.tabs.history}</TabsTrigger>
+            <TabsTrigger value="memory">
+              <MemoryIcon name="book" size={14} />
+              {copy.tabs.memory}
+              <MemoryCount hob={hob} />
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="chats">
             {threads.isPending ? (
@@ -109,6 +116,9 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
           </TabsContent>
           <TabsContent value="history">
             <HobHistory hob={hob} filter={show} onFilter={(next) => go("history", next)} />
+          </TabsContent>
+          <TabsContent value="memory">
+            <HobMemory hob={hob} />
           </TabsContent>
         </Tabs>
         <HobAside hob={hob} />
@@ -124,4 +134,11 @@ function ChatCount({ count }: { count: number | undefined }) {
       {count ?? <Skeleton surface="card" width="1ch" />}
     </span>
   );
+}
+
+/** The Memory tab's count of the hob's own pages, left out while memory does not answer. */
+function MemoryCount({ hob }: { hob: Agent }) {
+  const scopes = useQuery(hobMemoryScopesQuery(hob.id));
+  if (scopes.isError && scopes.data === undefined) return null;
+  return <ChatCount count={ownCount(scopes.data?.scopes)} />;
 }

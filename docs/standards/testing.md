@@ -66,3 +66,13 @@ Onboarding, summoning a hob, chatting and deciding an approval each have an end-
 - **Why:** a flow that needs a mouse at one step is closed to keyboard and screen-reader users (STD-UI-003).
 - **Enforced by:** the keyboard-only specs and the end-to-end CI job.
 - **Applies to:** `apps/web/e2e`.
+
+### STD-TEST-009 Tests wait on state, and a flaky test is a bug
+
+A test waits for the state it needs, with a time limit, never for a fixed time or a number of tries: a web-first assertion or `expect.poll` in a browser test, a wait on the hub's state in a server test. On CI a failed test runs once more. One that then passes leaves the run green, but it is listed as flaky in the job summary, and it gets an issue within a day or is fixed. The nightly flake hunt runs every suite several times over and keeps one issue listing the tests that failed on any run.
+
+- ✅ `await expect(page.getByRole("status")).toHaveText("Saved")`
+- ❌ `await page.waitForTimeout(300)`, or a loop of 1,500 tries 10 ms apart
+- **Why:** a fixed wait passes on a quiet laptop and fails on a busy runner, and a flaky test on `main` turns every pull request rebased on it red (#985).
+- **Enforced by:** review, the retry and flaky list in each CI job, the burn-in of changed browser tests on pull requests, and the nightly flake hunt.
+- **Applies to:** every test.

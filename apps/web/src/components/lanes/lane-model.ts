@@ -9,12 +9,19 @@ import {
   liveAttemptOn,
   pendingApprovalsOn,
   saysMore,
+  TASK_TOOLS,
   type Task,
   type TaskId,
   type TaskTree,
 } from "@hobbots/domain";
+import { blockedLine, changeLine, commandLine, type StepOutcome, stepDoing } from "../plain-words/plain-words.ts";
 import { type RoomStatus, roomRows, roomStatus } from "../quest/control-room.ts";
 import { questionForYou, taskTitle } from "../quest/work-model.ts";
+import { messages } from "./messages.ts";
+
+/** Why the hub refused a hob's Task tool call, in a few words, or nothing for a reason only the hob needs. */
+const refusalReason = (reason: string): string =>
+  Object.hasOwn(messages.refusal, reason) ? messages.refusal[reason as keyof typeof messages.refusal] : "";
 
 /**
  * The Quest room's lanes (ADR 027): one per hob on the Quest, built from the Task tree and the
@@ -45,15 +52,36 @@ export type LaneMark =
   | { readonly kind: "delete"; readonly key: string; readonly path: string }
   | { readonly kind: "run"; readonly key: string; readonly command: CommandRecord };
 
+/** Something the hob did, in everyday words in place of a mark (ADR 027), with how it went. */
+export interface LaneStep {
+  readonly kind: "step";
+  readonly key: string;
+  readonly text: string;
+  readonly outcome: StepOutcome;
+}
+
+/** What folds into a count: marks, or the steps that stand for them in everyday words. */
+export type LaneFoldable = LaneMark | LaneStep;
+
 /** What a lane shows, in its order. */
 export type LaneItem =
   | LaneMark
+  | LaneStep
   /** A milestone, finding or report the hob made, or a finding the hub made about its Task. */
   | { readonly kind: "beat"; readonly key: string; readonly text: string }
-  /** A tool call that was refused, with what the hob was told. */
-  | { readonly kind: "refused"; readonly key: string; readonly what: string; readonly reason: string }
+  /**
+   * A tool call that was refused, with what the hob was told. `plain` says it in everyday words, or
+   * is null for a refusal that is only the hub keeping order, which the hob goes on after.
+   */
+  | {
+      readonly kind: "refused";
+      readonly key: string;
+      readonly what: string;
+      readonly reason: string;
+      readonly plain: string | null;
+    }
   /** Older marks, folded into a count so a long lane stays readable. */
-  | { readonly kind: "folded"; readonly key: string; readonly marks: ReadonlyArray<LaneMark> }
+  | { readonly kind: "folded"; readonly key: string; readonly marks: ReadonlyArray<LaneFoldable> }
   | { readonly kind: "hand-out"; readonly key: string; readonly label: string; readonly to: AgentId }
   | { readonly kind: "hand-in"; readonly key: string; readonly label: string; readonly from: AgentId }
   | { readonly kind: "briefed"; readonly key: string; readonly members: ReadonlyArray<AgentId> }
@@ -61,7 +89,7 @@ export type LaneItem =
   | { readonly kind: "task"; readonly key: string; readonly title: string }
   | { readonly kind: "wait"; readonly key: string; readonly on: ReadonlyArray<LaneWaited> }
   /** A turn runs now: the step it is on, or null before it reported one. */
-  | { readonly kind: "now"; readonly key: string; readonly label: string | null }
+  | { readonly kind: "now"; readonly key: string; readonly label: string | null; readonly plain: string | null }
   | {
       readonly kind: "result";
       readonly key: string;
@@ -79,7 +107,10 @@ export interface Lane {
   readonly tasks: ReadonlyArray<Task>;
   readonly title: string;
   readonly status: RoomStatus;
+  /** What the hob did, with its exact marks: the technical steps. */
   readonly items: ReadonlyArray<LaneItem>;
+  /** The same in everyday words: no commands, reads left out, each refusal that matters once. */
+  readonly plain: ReadonlyArray<LaneItem>;
 }
 
 /** A lane, with the lanes of the party its hob leads when it leads a Quest of its own. */
@@ -189,7 +220,13 @@ const activityItems = (activity: AttemptActivity): ReadonlyArray<Timed> => {
   const steps = activity.steps.flatMap((step): ReadonlyArray<Timed> => {
     const at = step.startedAt ?? fallback;
     if (step.state === "denied") {
-      const item = { kind: "refused", key: `step-${step.id}`, what: step.label, reason: step.reason ?? "" } as const;
+      const item = {
+        kind: "refused",
+        key: `step-${step.id}`,
+        what: step.label,
+        reason: step.reason ?? "",
+        plain: blockedLine(step),
+      } as const;
       return [{ at, item }];
     }
     if (step.call?.operation !== "read-files") return [];
@@ -216,13 +253,23 @@ const beatItems = (tree: TaskTree, task: Task, attemptId: AttemptId | undefined)
     )
     .map((each) => ({ at: each.createdAt, item: { kind: "beat", key: `checkpoint-${each.id}`, text: each.summary } }));
 
-/** The Task tool calls the hub refused for the Task, with what it told the hob. */
+/**
+ * The Task tool calls the hub refused for the Task, in your words: the tool's own label, and why in
+ * a few words where the reason has some. The message the hub sent the hob is for the hob: it names
+ * Tasks by id and tells it how to go on.
+ */
 const refusalItems = (tree: TaskTree, task: Task): ReadonlyArray<Timed> =>
   tree.refusals
     .filter((each) => each.taskId === task.id)
     .map((each) => ({
       at: each.refusedAt,
-      item: { kind: "refused", key: `refusal-${each.id}`, what: each.tool, reason: each.message },
+      item: {
+        kind: "refused",
+        key: `refusal-${each.id}`,
+        what: TASK_TOOLS.find((tool) => tool.name === each.tool)?.label ?? each.tool,
+        reason: refusalReason(each.reason),
+        plain: null,
+      },
     }));
 
 /** Work handed from one hob's Task to another's: out in the giver's lane, in in the taker's. */
@@ -258,32 +305,34 @@ const briefedItems = (tree: TaskTree, unit: ReadonlyArray<Task>): ReadonlyArray<
   });
 
 /**
- * Folds every mark but the last `shown` into counts. Each run of hidden marks folds where it was,
- * so opening it shows its marks in place: beats, chips, refused calls, results and Task headings
- * stay where they happened, and no mark moves into another Task's part of the lane.
+ * Folds every mark but the last `shown` into one count for each Task's part of the lane, placed
+ * where its first hidden mark was: a long run of work reads as one "N more" instead of several.
+ * Beats, chips, refused calls, results and Task headings stay where they happened, and no mark
+ * moves into another Task's part of the lane.
  */
 export const foldMarks = (items: ReadonlyArray<LaneItem>, shown: number = SHOWN_MARKS): ReadonlyArray<LaneItem> => {
-  const isMark = (item: LaneItem): item is LaneMark =>
-    item.kind === "read" || item.kind === "edit" || item.kind === "delete" || item.kind === "run";
+  const isMark = (item: LaneItem): item is LaneFoldable =>
+    item.kind === "read" ||
+    item.kind === "edit" ||
+    item.kind === "delete" ||
+    item.kind === "run" ||
+    item.kind === "step";
   const marks = items.filter(isMark);
   const hidden = new Set<LaneItem>(marks.slice(0, Math.max(0, marks.length - shown)));
   if (hidden.size === 0) return items;
   const folded: Array<LaneItem> = [];
-  let run: Array<LaneMark> = [];
-  const close = () => {
-    const first = run[0];
-    if (first !== undefined) folded.push({ kind: "folded", key: `folded-${first.key}`, marks: run });
-    run = [];
-  };
+  let fold: { kind: "folded"; key: string; marks: Array<LaneFoldable> } | null = null;
   for (const item of items) {
-    if (isMark(item) && hidden.has(item)) {
-      run.push(item);
-    } else {
-      close();
+    if (item.kind === "task") fold = null;
+    if (!isMark(item) || !hidden.has(item)) {
       folded.push(item);
+    } else if (fold === null) {
+      fold = { kind: "folded", key: `folded-${item.key}`, marks: [item] };
+      folded.push(fold);
+    } else {
+      fold.marks.push(item);
     }
   }
-  close();
   return folded;
 };
 
@@ -326,7 +375,12 @@ const nowItem = (tree: TaskTree, unit: ReadonlyArray<Task>, read: Reads): LaneIt
   if (running === undefined) return null;
   const activity = running.currentAttemptId === null ? undefined : read.of(running.currentAttemptId);
   const step = activity?.steps.findLast((each) => each.state === "running");
-  return { kind: "now", key: `now-${running.id}`, label: step?.label ?? null };
+  return {
+    kind: "now",
+    key: `now-${running.id}`,
+    label: step?.label ?? null,
+    plain: step === undefined ? null : stepDoing(step),
+  };
 };
 
 /**
@@ -339,6 +393,51 @@ const laneStatus = (tree: TaskTree, unit: ReadonlyArray<Task>, task: Task): Room
   const status = roomStatus(tree, task);
   if (status !== "needs-you") return status;
   return task.state === "waiting" ? "waiting" : "running";
+};
+
+/** One lane item in everyday words, or null for one a lane leaves out then. */
+const plainItem = (item: LaneItem): LaneItem | null => {
+  const step = (text: string, outcome: StepOutcome): LaneStep => ({ kind: "step", key: item.key, text, outcome });
+  switch (item.kind) {
+    case "read":
+      return null;
+    case "edit":
+      return step(changeLine(item.change.kind, item.path), "done");
+    case "delete":
+      return step(changeLine("deleted", item.path), "done");
+    case "run": {
+      const line = commandLine(item.command);
+      return line === null ? null : step(line.text, line.outcome);
+    }
+    case "refused":
+      return item.plain === null ? null : step(item.plain, "blocked");
+    case "now":
+      return { ...item, label: item.plain };
+    default:
+      return item;
+  }
+};
+
+/**
+ * A lane in everyday words (ADR 027): what the hob did without commands or the files it only read,
+ * and each stopped step once for each of the hob's Tasks, however often the hob tried it again. A
+ * stopped step's words name who stopped it and what it wanted to do, so the same words are the same
+ * step; every file change and command keeps its own line.
+ */
+const plainItems = (items: ReadonlyArray<LaneItem>): ReadonlyArray<LaneItem> => {
+  const kept: Array<LaneItem> = [];
+  let stopped = new Set<string>();
+  for (const each of items) {
+    if (each.kind === "task") stopped = new Set();
+    const item = plainItem(each);
+    if (item === null) continue;
+    if (item.kind === "step" && item.outcome === "blocked") {
+      if (stopped.has(item.text)) continue;
+      stopped.add(item.text);
+    }
+    kept.push(item);
+  }
+  return kept;
 };
 
 /** Who a Task that has not ended waits on, or null when it waits on nobody. */
@@ -376,6 +475,7 @@ const laneOf = (tree: TaskTree, hobId: AgentId, tasks: Owned, role: LaneRole, re
     title: taskTitle(task),
     status: laneStatus(tree, owned, task),
     items: now === null ? foldMarks(items) : [...foldMarks(items), now],
+    plain: foldMarks(plainItems(now === null ? items : [...items, now])),
   };
 };
 

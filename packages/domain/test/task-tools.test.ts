@@ -3,15 +3,21 @@ import { describe, expect, it } from "vitest";
 import {
   AgentId,
   ancestorsOf,
+  answerHow,
   CHECKPOINT_WORDS,
   Checkpoint,
   CheckpointId,
+  choicesText,
+  collidingLabel,
   DEFAULT_QUEST_LIMITS,
   FINISH_RULE,
   isTaskToolName,
   LEAN_CHAT_RULE,
+  optionNamed,
+  pickedOption,
   Quest,
   QuestId,
+  Question,
   questChain,
   questPlacement,
   TASK_TOOLS,
@@ -119,6 +125,69 @@ describe("hob tools for Tasks and Quests", () => {
     expect(old.id).toBe(CheckpointId.make("c"));
   });
 
+  it("[TC-GEN-158] takes a question with no choices or 2 to 4, and a recommended one among them (#740)", () => {
+    const decode = Schema.decodeUnknownSync(TaskToolInputs.ask);
+    const choice = (label: string) => ({ label, consequence: `${label} it is.` });
+    expect(decode({ key: "k", question: "Which theme?" })).not.toHaveProperty("options");
+    expect(
+      decode({ key: "k", question: "Which theme?", options: [choice("Light"), choice("Dark")], recommended: 1 }),
+    ).toMatchObject({ options: [{ label: "Light" }, { label: "Dark" }], recommended: 1 });
+    expect(() => decode({ key: "k", question: "Which theme?", options: [choice("Light")] })).toThrow();
+    expect(() => decode({ key: "k", question: "Which?", options: ["A", "B", "C", "D", "E"].map(choice) })).toThrow();
+    expect(() => decode({ key: "k", question: "Which?", options: [choice("A"), choice("B")], recommended: 3 })).toThrow(
+      "recommended is the number of one of the 2 options.",
+    );
+    expect(() =>
+      decode({ key: "k", question: "Which?", options: [choice("A"), choice("B")], recommended: 0 }),
+    ).toThrow();
+    expect(() => decode({ key: "k", question: "Which?", recommended: 1 })).toThrow(
+      "recommended needs options to recommend one of.",
+    );
+    expect(() => decode({ key: "k", question: "Which?", options: [choice(""), choice("B")] })).toThrow();
+    // An answer names its choice by label, so two labels that read the same are refused, case and all.
+    expect(() => decode({ key: "k", question: "Which?", options: [choice("Light"), choice("Light")] })).toThrow(
+      'Two options are both "Light". Give each option its own label.',
+    );
+    expect(() => decode({ key: "k", question: "Which?", options: [choice("Light"), choice("light")] })).toThrow(
+      'Two options are both "light".',
+    );
+    expect(collidingLabel([{ label: "Light" }, { label: "Dark" }])).toBeUndefined();
+  });
+
+  it("[TC-GEN-159] reads a question's choices and how it was answered, and an old question as one without (#740)", () => {
+    const old = Schema.decodeUnknownSync(Question)({
+      id: "q",
+      taskId: "t",
+      askerId: "ada",
+      recipientId: null,
+      chain: [],
+      text: "Which theme?",
+      state: "open",
+      answer: null,
+      answeredBy: null,
+      createdAt: at,
+      answeredAt: null,
+      revision: 1,
+    });
+    expect([old.options, old.recommended, old.picked]).toEqual([[], null, null]);
+    expect(choicesText(old)).toBe("");
+    expect(answerHow(old)).toBe("");
+    const options = [
+      { label: "Light", consequence: "Matches the brand guide" },
+      { label: "Dark", consequence: "" },
+    ];
+    const asked = new Question({ ...old, options, recommended: 0 });
+    expect(choicesText(asked)).toBe(" Choices: 1. Light (recommended): Matches the brand guide; 2. Dark");
+    expect(optionNamed(options, "  dark ")).toBe(1);
+    expect(optionNamed(options, "Dark, but softer")).toBeNull();
+    const picked = new Question({ ...asked, state: "answered", answer: "Dark", picked: 1 });
+    expect(answerHow(picked)).toBe(" (choice 2 of 2)");
+    expect(pickedOption(picked)?.label).toBe("Dark");
+    const typed = new Question({ ...asked, state: "answered", answer: "Both", picked: null });
+    expect(answerHow(typed)).toBe(" (written in words, not one of the choices)");
+    expect(pickedOption(typed)).toBeUndefined();
+  });
+
   it("decodes what a model sends and refuses what it leaves out", () => {
     const decode = Schema.decodeUnknownSync(TaskToolInputs.delegate_task);
     expect(
@@ -131,6 +200,16 @@ describe("hob tools for Tasks and Quests", () => {
     expect(() =>
       decode({ key: "k", hob: "Quill", brief: "Draft", authority: { decisions: { push: "always" } } }),
     ).toThrow();
+  });
+
+  it("takes a step's milestones as titles and refuses the id of an existing one", () => {
+    const decode = Schema.decodeUnknownSync(TaskToolInputs.plan_steps);
+    expect(decode({ key: "k", steps: [{ brief: "Styles", milestones: ["Page renders"] }] })).toMatchObject({
+      steps: [{ milestones: ["Page renders"] }],
+    });
+    expect(() =>
+      decode({ key: "k", steps: [{ brief: "Styles", milestones: ["db8065be-d145-4ff1-8b6e-f822c8d67643"] }] }),
+    ).toThrow(/never the id of an existing milestone/);
   });
 
   it("reads back a result or a refusal as text the hob can act on", () => {

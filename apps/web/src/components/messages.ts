@@ -326,6 +326,8 @@ export const messages = {
     askWhat: "What are we making?",
     newThread: "New thread",
     openHob: ({ name }: { name: string }) => `Open ${name}'s page`,
+    /** The back arrow at the start of the chat header, which opens the hob's page on its chats. */
+    backToChats: ({ name }: { name: string }) => `Back to ${name}'s chats`,
     /** After the hob's name under the chat title: the hob leads this chat, and what it is doing now. */
     leadLine: ({ doing }: { doing: string }) => ` · lead · ${doing}`,
     hello: ({ name }: { name: string }) => `Hello, I'm ${name}!`,
@@ -564,6 +566,8 @@ export const messages = {
       "open-pull-request": "Opens a pull request others can see at once. You can close or edit it.",
       "comment-github": "Posts a comment others can see at once. You can edit or delete it.",
       "outside-folders": "Acts outside the folders this hob may use.",
+      "search-memory": "Reads only. Nothing changes.",
+      "save-memory": "Writes a page to its own memory. You can edit or undo it.",
     },
   },
   charms: {
@@ -957,7 +961,13 @@ export const messages = {
             other: `${count} rules are more careful than ${preset}`,
           }),
     changeSafety: "Change safety level",
-    groups: { files: "Files", commands: "Commands", internet: "Internet", outside: "Outside its folders" },
+    groups: {
+      files: "Files",
+      memory: "Memory",
+      commands: "Commands",
+      internet: "Internet",
+      outside: "Outside its folders",
+    },
     checked: "Checked",
     checkedHint: "Hobbots decides this rule, but a command the hob may run could still do it another way.",
     moreCareful: "More careful",
@@ -973,7 +983,7 @@ export const messages = {
     sandbox: "Sandbox",
     details: "Details: how these rules are kept",
     detailsNote: ({ name }: { name: string }) =>
-      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way.`,
+      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way. Memory rules are decided by Hobbots each time ${name} uses its memory tools: on Never, it cannot search its memory or save to it. Even then, each new session still starts with a short brief from the memory ${name} reads, and Hobbots still keeps a summary of each chat in ${name}'s own memory.`,
   },
   signing: {
     label: "Sign commits with my 1Password key",

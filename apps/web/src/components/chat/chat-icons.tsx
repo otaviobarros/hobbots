@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 
-// The chat's line icons, 1.5 stroke with round caps: the header's ⋯ menu and the composer's Send.
+// The chat's line icons, 1.5 stroke with round caps: the header's back arrow and ⋯ menu, and the
+// composer's Send.
 
-const LineIcon = ({ children, size }: { children: ReactNode; size: "menu" | "danger" | "send" }) => (
+const LineIcon = ({ children, size }: { children: ReactNode; size: "menu" | "danger" | "send" | "back" }) => (
   <svg
     viewBox="0 0 16 16"
     fill="none"
@@ -12,7 +13,7 @@ const LineIcon = ({ children, size }: { children: ReactNode; size: "menu" | "dan
     strokeLinejoin="round"
     aria-hidden
     className={
-      size === "send"
+      size === "send" || size === "back"
         ? "size-4 flex-none"
         : size === "menu"
           ? "size-3.5 flex-none text-text-secondary"
@@ -83,6 +84,13 @@ export const ArchiveMenuIcon = () => (
   <LineIcon size="danger">
     <rect x="2" y="3" width="12" height="3" rx="1" />
     <path d="M3 6v7h10V6M6.5 9h3" />
+  </LineIcon>
+);
+
+/** An arrow pointing back, at the start of the chat header: back to the hob's chats. */
+export const BackIcon = () => (
+  <LineIcon size="back">
+    <path d="M13 8H3M7.5 3.5 3 8l4.5 4.5" />
   </LineIcon>
 );
 

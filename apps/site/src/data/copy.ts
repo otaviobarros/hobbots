@@ -68,9 +68,11 @@ export const PLATFORMS: ReadonlyArray<{ name: string; icon: OsIcon; state: strin
 
 const NEXT = { state: "Next", fg: "var(--color-secondary-text)" };
 
+const NOW = { state: "Now", fg: "var(--color-mint)" };
+
 export const PROVIDERS = [
-  { name: "Claude", letter: "C", color: "#e39a74", state: "First", fg: "var(--color-mint)" },
-  { name: "ChatGPT", letter: "G", color: "#8fd3a8", ...NEXT },
+  { name: "Claude", letter: "C", color: "#e39a74", ...NOW },
+  { name: "ChatGPT", letter: "G", color: "#8fd3a8", ...NOW },
   { name: "Gemini", letter: "G", color: "var(--color-sky)", ...NEXT },
   { name: "Grok", letter: "X", color: "var(--color-secondary-text)", ...NEXT },
   { name: "Local models", letter: "L", color: "var(--color-moonlight)", ...NEXT },
@@ -90,7 +92,7 @@ export const TRUST = [
   },
   {
     title: "Bring the AI you already use",
-    body: "Hobs start on Claude, with your own plan. More providers follow, so you are never locked to one.",
+    body: "Hobs think on Claude or ChatGPT, with your own plan. More providers follow, so you are never locked to one.",
     color: "var(--color-lantern)",
   },
 ] as const;

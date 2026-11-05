@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "allow": "tsx src/allow.ts",
-    "restore": "tsx src/restore-command.ts"
+    "restore": "tsx src/restore-command.ts",
+    "reset": "tsx src/reset-command.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -18,6 +19,7 @@
     "@hobbots/charms": "workspace:*",
     "@hobbots/domain": "workspace:*",
     "@hobbots/inbox": "workspace:*",
+    "@hobbots/memory": "workspace:*",
     "@hobbots/orchestration": "workspace:*",
     "@hobbots/permissions": "workspace:*",
     "@hobbots/persistence": "workspace:*",

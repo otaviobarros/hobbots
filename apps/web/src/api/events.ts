@@ -5,6 +5,7 @@ import {
   EventEnvelope,
   type HobbotsEvent,
   isInProgress,
+  MemoryChanged,
   type Message,
   MessageDelta,
   RemoteAccessChanged,
@@ -23,8 +24,12 @@ import { devicesChanged } from "./devices.ts";
 import { failedTaskChanged } from "./failed-tasks.ts";
 import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
+import { hubQuestionChanged } from "./hub-questions.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
+import { applyMemoryChanged, refreshMemory } from "./memory-pages.ts";
+import { applyMemorySave, refreshMemorySaves } from "./memory-saves.ts";
+import { memorySharesChanged } from "./memory-shares.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
@@ -50,6 +55,7 @@ const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady))
 const decodeDelta = Schema.decodeUnknownSync(Schema.fromJsonString(MessageDelta));
 const decodeRemoteAccess = Schema.decodeUnknownSync(Schema.fromJsonString(RemoteAccessChanged));
 const decodeCommandOutput = Schema.decodeUnknownSync(Schema.fromJsonString(CommandOutput));
+const decodeMemoryChanged = Schema.decodeUnknownSync(Schema.fromJsonString(MemoryChanged));
 
 /** How long a stream the hub closed waits before it opens again. */
 const REOPEN_AFTER_MS = 2000;
@@ -127,6 +133,23 @@ const WORKBENCH_RECORDS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
 ]);
 const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent => WORKBENCH_RECORDS.has(event._tag);
 
+/** Events the cache takes nothing from. */
+const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  // The reply's own upsert, sent just before, already carries its stopping or stopped status.
+  "TurnStopRequested",
+  "TurnStopped",
+  // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
+  "TurnStarted",
+  "TurnEnded",
+]);
+type UnappliedEvent = Extract<
+  HobbotsEvent,
+  {
+    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded";
+  }
+>;
+const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
+
 /**
  * Applies an event to the Query cache and records what it changed in the sync generation's overlay.
  * Lists are only patched once loaded; creating a partial list here would hide the rest of it.
@@ -138,6 +161,11 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   // A running command's output is transient and kept as it comes, whichever stream brings it.
   if (isWorkbenchEvent(event)) {
     if (event._tag === "CommandOutput") applyCommandOutput(queryClient, event);
+    return;
+  }
+  if (isUnapplied(event)) return;
+  if (isMemoryEvent(event)) {
+    applyMemoryEvent(queryClient, event);
     return;
   }
   switch (event._tag) {
@@ -173,17 +201,32 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "MessageDelta":
       applyDelta(queryClient, event);
       return;
-    // The reply's own upsert, sent just before, already carries its stopping or stopped status.
-    case "TurnStopRequested":
-    case "TurnStopped":
-      return;
-    // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
-    case "TurnStarted":
-    case "TurnEnded":
-      return;
     default:
       applyWorkEvent(queryClient, event);
       return;
+  }
+};
+
+type MemoryEvent = Extract<
+  HobbotsEvent,
+  { readonly _tag: "MemorySaveRecorded" | "MemorySaveChanged" | "MemoryShareRequested" | "MemoryShareChanged" }
+>;
+const MEMORY_EVENTS = new Set<HobbotsEvent["_tag"]>([
+  "MemorySaveRecorded",
+  "MemorySaveChanged",
+  "MemoryShareRequested",
+  "MemoryShareChanged",
+]);
+const isMemoryEvent = (event: HobbotsEvent): event is MemoryEvent => MEMORY_EVENTS.has(event._tag);
+
+/** A hob's save or share, as memory's lists show it (ADR 028). */
+const applyMemoryEvent = (queryClient: QueryClient, event: MemoryEvent) => {
+  // A save shows under the reply it was made from; a share, or a share that moved, has the Inbox,
+  // To review and memory read it again.
+  if (event._tag === "MemorySaveRecorded" || event._tag === "MemorySaveChanged") {
+    void applyMemorySave(queryClient, event.save);
+  } else {
+    void memorySharesChanged(queryClient);
   }
 };
 
@@ -204,7 +247,10 @@ const applyWorkEvent = (
             | "BackpackItemChanged"
             | "PairingRequested"
             | "PairingChanged"
-            | "DeviceRevoked";
+            | "DeviceRevoked"
+            | "HubQuestionRaised"
+            | "HubQuestionAnswered"
+            | "HubQuestionWithdrawn";
         }
       >,
 ) => {
@@ -242,8 +288,12 @@ const applyWorkEvent = (
       void failedTaskChanged(queryClient, event.task);
       return;
     // The rest change Tasks and Quests (ADR 018). A question that reaches you, or leaves you, also
-    // changes what waits in your Inbox.
+    // changes what waits in your Inbox. A question the hub itself asks has no Task (#976).
     default:
+      if ("hubQuestion" in event) {
+        void hubQuestionChanged(queryClient, event.hubQuestion);
+        return;
+      }
       applyTaskEvent(queryClient, event);
       if ("question" in event) void questionChanged(queryClient, event.question);
       return;
@@ -294,6 +344,8 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         const ready = decodeReady(frame.data);
         sync.cursor = ready.cursor;
         if (!ready.resumed) startGeneration(queryClient);
+        void refreshMemory(queryClient);
+        void refreshMemorySaves(queryClient);
         setDeviceAccess(queryClient, "approved");
         report("live");
       } catch (error) {
@@ -330,6 +382,13 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
     source.addEventListener(STREAM_FRAME.remoteAccess, (frame) => {
       try {
         remoteAccessChanged(queryClient, decodeRemoteAccess(frame.data).status);
+      } catch (error) {
+        console.warn("Ignoring malformed event", error);
+      }
+    });
+    source.addEventListener(STREAM_FRAME.memory, (frame) => {
+      try {
+        void applyMemoryChanged(queryClient, decodeMemoryChanged(frame.data));
       } catch (error) {
         console.warn("Ignoring malformed event", error);
       }

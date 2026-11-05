@@ -24,7 +24,7 @@ import {
 } from "effect";
 import { GitHubError } from "./github-error.ts";
 import { GitHubSignIn, type GitHubSignInError, type UserTokens } from "./github-sign-in.ts";
-import { Keychain, type KeychainError } from "./keychain.ts";
+import { deleteOutcome, Keychain, type KeychainError } from "./keychain.ts";
 import { LocalGitHubSignIns, type LocalSource } from "./local-sign-ins.ts";
 
 /**
@@ -185,6 +185,11 @@ export class GitHubConnection extends Context.Service<
     readonly cancel: Effect.Effect<GitHubConnectionState>;
     /** Deletes the sign-in from the keychain and forgets the account. */
     readonly disconnect: Effect.Effect<GitHubConnectionState>;
+    /**
+     * For Start over (#948): deletes the sign-in from the keychain and, once it is gone, forgets the
+     * account. Answers null then, or why the sign-in may still be there, keeping the account.
+     */
+    readonly erase: Effect.Effect<string | null>;
     /** The sign-ins already on the hub the user can choose instead, each with its account. */
     readonly found: Effect.Effect<ReadonlyArray<{ readonly source: LocalSource; readonly login: string }>>;
     /** Connects with a sign-in already on the hub, replacing the app's. */
@@ -306,18 +311,25 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
           }),
         );
 
-      /** Forgets the account and deletes its keychain item, keeping why for Settings. Holds `committing`. */
+      /**
+       * Deletes the account's keychain item and forgets the account, keeping why for Settings. Holds
+       * `committing`. While the item may still be in the keychain, the account stays recorded, so the
+       * hub still knows it stored a sign-in there and Start over checks for it (#948).
+       */
       const forgetHeld = (why: GitHubProblem | null) =>
         Effect.gen(function* () {
           yield* nextGeneration;
           yield* Ref.set(cache, Option.none());
-          yield* accounts.clear;
           yield* Ref.set(problem, why);
-          yield* keychain.remove.pipe(
+          const deleted = yield* keychain.remove.pipe(
+            Effect.as(true),
             Effect.catch((error) =>
-              Effect.logWarning("The GitHub sign-in could not be deleted from the keychain", error),
+              Effect.logWarning("The GitHub sign-in could not be deleted from the keychain", error).pipe(
+                Effect.as(false),
+              ),
             ),
           );
+          if (deleted) yield* accounts.clear;
         });
       const forget = (why: GitHubProblem | null) =>
         forgetHeld(why).pipe(committing.withPermits(1), Effect.uninterruptible);
@@ -771,6 +783,22 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         connect,
         cancel: stopWaiting.pipe(Effect.andThen(state), connecting.withPermits(1)),
         disconnect: stopWaiting.pipe(Effect.andThen(forget(null)), Effect.andThen(state), connecting.withPermits(1)),
+        // The account stays recorded until its item is gone, so trying again still knows it was stored.
+        erase: stopWaiting.pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const recorded = (yield* accounts.get) !== null;
+              const kept = yield* keychain.remove.pipe(
+                Effect.as(null),
+                Effect.catch((error) => Effect.succeed(deleteOutcome(error, recorded, "the GitHub sign-in"))),
+              );
+              if (kept !== null) return kept;
+              yield* forgetHeld(null);
+              return null;
+            }).pipe(committing.withPermits(1), Effect.uninterruptible),
+          ),
+          connecting.withPermits(1),
+        ),
         found,
         use,
         repositories: Effect.gen(function* () {

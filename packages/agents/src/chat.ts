@@ -26,6 +26,7 @@ import {
   QueuedMessageTransitions,
   RUNTIME_NAMES,
   type RuntimeKind,
+  type RuntimeSession,
   sameBrain,
   stripEscapes,
   systemInstructions,
@@ -43,6 +44,8 @@ import { buildBriefing } from "./briefing.ts";
 import { type CharmTurn, charmOffer, combineHubTools } from "./charms.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
+import { MemoryProjects, MemoryStore } from "./memory.ts";
+import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief, turnMemoryBrief } from "./memory-brief.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import {
@@ -73,10 +76,15 @@ interface Reply {
 }
 
 /** Backpack items a turn carries (ADR 019): told to it, held under its claims, and accepted with its session. */
-type Carry = Pick<CarriedWork, "holding" | "accepted" | "routineOnly">;
+type Carry = Pick<CarriedWork, "holding" | "accepted" | "late" | "routineOnly">;
 
 /** What a turn carries when it carries no backpack items. */
-const NOTHING_CARRIED: Carry = { holding: [], accepted: () => Effect.void, routineOnly: true };
+const NOTHING_CARRIED: Carry = {
+  holding: [],
+  accepted: () => Effect.void,
+  late: Effect.succeed(false),
+  routineOnly: true,
+};
 
 /** How a turn starts: its reply's id, what it carries, and whether its end starts what waits next. */
 interface TurnStart {
@@ -274,6 +282,16 @@ export class ChatService extends Context.Service<
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
       // Without Charms or local Git tools, turns offer only the Task tools.
       const charmsFor = yield* charmOffer;
+      // Without memory, turns are told nothing from it (ADR 028).
+      const memoryStore = yield* Effect.serviceOption(MemoryStore);
+      // Without project identities, each folder is the project of its name.
+      const memoryProjects = yield* Effect.serviceOption(MemoryProjects);
+      // What the turn's session is told from the hob's memory: sent when the session is new or last
+      // received a different brief (ADR 028).
+      const memoryBriefFor = (agent: Agent, tools: ToolAccess | null, session: RuntimeSession | undefined) =>
+        Option.isNone(memoryStore)
+          ? Effect.succeed<TurnMemoryBrief | null>(null)
+          : turnMemoryBrief(memoryStore.value, memoryProjects, agent.id, tools?.folders ?? [], session?.memoryBrief);
       // Without a backpack, a thread starts only your queued messages.
       const continuations = yield* Effect.serviceOption(Continuations);
       // After a restore nothing that waited starts on its own until you resume work (ADR 026).
@@ -515,9 +533,31 @@ export class ChatService extends Context.Service<
           const recordToolStart = (event: ToolStartedEvent) =>
             saveStep(redactEvent(event, redactor)).pipe(Effect.map(Option.isSome));
 
+          // The brief the turn sent counts as received only once the runtime answers the prompt that
+          // carried it: anything it reports after starting the session. A runtime that starts the
+          // session and then refuses the prompt leaves it unknown, so the next turn sends it again.
+          let briefDelivered = false;
+          const confirmBrief = Effect.suspend(() => {
+            const digest = memory === null ? null : deliveredMemoryBrief(memory);
+            if (briefDelivered || digest === null || turnSession === null) return Effect.void;
+            briefDelivered = true;
+            const sessionId = turnSession;
+            return Effect.gen(function* () {
+              const updatedAt = yield* nowIso;
+              yield* changeThread(thread.id, (latest) => {
+                const known = latest.sessions.find((s) => s.runtime === brain.runtime);
+                if (known?.sessionId !== sessionId || known.memoryBrief === digest) return null;
+                const sessions = latest.sessions.map((s) => (s === known ? { ...known, memoryBrief: digest } : s));
+                return new Thread({ ...latest, sessions, updatedAt });
+              });
+            });
+          });
+
           // Secrets are redacted before a tool call's step is saved, journaled or announced, so a client
           // that reads the reply later never receives them either.
-          const handle = (raw: RuntimeEvent) => {
+          const handle = (raw: RuntimeEvent) =>
+            raw._tag === "SessionStarted" ? handleEvent(raw) : Effect.andThen(confirmBrief, handleEvent(raw));
+          const handleEvent = (raw: RuntimeEvent) => {
             const event = redactEvent(raw, redactor);
             switch (event._tag) {
               // The session has now seen the thread through this reply.
@@ -529,10 +569,23 @@ export class ChatService extends Context.Service<
                   yield* carry.accepted(event.sessionId);
                   const seenThrough = (yield* Ref.get(reply.current)).id;
                   const updatedAt = yield* nowIso;
-                  const session = { runtime: brain.runtime, sessionId: event.sessionId, seenThrough };
                   yield* changeThread(thread.id, (latest) => {
                     const known = latest.sessions.find((s) => s.runtime === brain.runtime);
-                    if (known?.sessionId === session.sessionId && known.seenThrough === seenThrough) return null;
+                    // Without memory, a session keeps whatever brief it was last told of.
+                    const memoryBrief =
+                      memory === null ? known?.memoryBrief : startedMemoryBrief(memory, expected, event.sessionId);
+                    const session: RuntimeSession = {
+                      runtime: brain.runtime,
+                      sessionId: event.sessionId,
+                      seenThrough,
+                      ...(memoryBrief === undefined ? {} : { memoryBrief }),
+                    };
+                    if (
+                      known?.sessionId === session.sessionId &&
+                      known.seenThrough === seenThrough &&
+                      known.memoryBrief === session.memoryBrief
+                    )
+                      return null;
                     const sessions =
                       known === undefined
                         ? [...latest.sessions, session]
@@ -622,7 +675,20 @@ export class ChatService extends Context.Service<
               )
             : null;
           onTask = taskTurn;
+          // A continuation whose work went late after its last check, as when you cancel its Quest
+          // while it starts, ends here before its runtime is asked anything (#993). Read after the
+          // turn's Attempt began, so a cancel that comes later waits for the turn to stop instead.
+          const current = yield* Ref.get(reply.current);
+          if (current.promptId === null && (yield* carry.late)) {
+            yield* update((m) => {
+              const stopping = MessageTransitions.requestStop(m);
+              return stopping instanceof Message ? MessageTransitions.interrupt(stopping) : stopping;
+            });
+            return;
+          }
           const tools = yield* grant(thread.id, agent);
+          const expected = thread.sessions.find((s) => s.runtime === brain.runtime);
+          const memory = yield* memoryBriefFor(agent, tools, expected);
           // What the turn runs and changes, recorded for the Workbench on the Attempt it works on (ADR 023).
           // Acquired after the Task's turn, so the end-of-turn compare lands before its Attempt ends.
           const activity = yield* activityOf(tools, taskTurn);
@@ -630,8 +696,11 @@ export class ChatService extends Context.Service<
             .run(
               {
                 prompt,
-                briefing: [briefing, taskTurn?.briefing ?? null].filter((part) => part !== null).join("\n\n") || null,
-                sessionId: thread.sessions.find((s) => s.runtime === brain.runtime)?.sessionId ?? null,
+                briefing:
+                  [memory?.text ?? null, briefing, taskTurn?.briefing ?? null]
+                    .filter((part) => part !== null)
+                    .join("\n\n") || null,
+                sessionId: expected?.sessionId ?? null,
                 instructions: systemInstructions(config.name, config),
                 instructionsChanged: changed,
                 model: brain.model,
@@ -928,6 +997,9 @@ export class ChatService extends Context.Service<
               if (queued !== null) return queued.turn;
               // The message it was to ride along is gone: routine progress waits for the next one.
               if (work.routineOnly) return null;
+              // Work that went late while the turn waited to start, as when you cancel its Quest,
+              // starts nothing: it resolves as late (#993).
+              if (yield* work.late) return null;
               const continued = yield* beginTurn(found.thread, found.agent, work.text("prompt"), saveMessage, start);
               return continued?.turn ?? null;
             }),

@@ -74,7 +74,11 @@ export function Choice({
       label={label}
       className={cn(
         "cut flex cursor-pointer items-center gap-2 border-(length:--edge) px-3 py-[7px] text-ui",
-        checked ? "border-text-strong bg-selected text-text-strong" : "border-control text-text-strong hover:bg-line",
+        // The picked chip wears the focus ring's color as a two-line edge: on a card in Lamplight the
+        // selected fill is the card itself, so the edge alone has to set it apart.
+        checked
+          ? "border-focus-ring bg-selected text-text-strong shadow-[inset_0_0_0_1px_var(--color-focus-ring)]"
+          : "border-control text-text-strong hover:bg-line",
         "focus-ring-within",
         className,
       )}

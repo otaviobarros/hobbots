@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { formatCount } from "../../lib/format.ts";
 import { NeedsTray } from "../needs-tray/needs-tray.tsx";
+import { TRAY_HOST } from "../needs-tray/tray-focus.ts";
 import { messages } from "./messages.ts";
 import { useHomeNeeds } from "./use-home-needs.ts";
 
@@ -16,7 +17,7 @@ const moreLink =
 export function NeedsYou() {
   const { entries, ready } = useHomeNeeds();
   return (
-    <section aria-label={copy.title} className="flex flex-col gap-2.5">
+    <section {...TRAY_HOST} aria-label={copy.title} className="flex flex-col gap-2.5">
       <div className="flex items-center gap-2">
         <span
           aria-hidden

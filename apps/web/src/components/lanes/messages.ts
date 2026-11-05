@@ -26,6 +26,27 @@ export const messages = {
     run: "Ran",
     refused: "Refused",
   },
+  /**
+   * Why the hub refused a hob's Task tool call, by its reason, as a lane shows it beside the tool's
+   * label. Most are the hub keeping order, such as a Task that tried to finish too soon, and the hob
+   * goes on after them. A reason missing here shows the label alone.
+   */
+  refusal: {
+    "children-open": "work under it was still open",
+    "dependencies-open": "a Task it depends on was not done yet",
+    "questions-open": "a question was still waiting",
+    "milestones-open": "a milestone was not reached yet",
+    "approvals-pending": "a request was waiting for you",
+    "items-open": "something in its backpack was unread",
+    "milestone-mismatch": "no planned milestone matched",
+    "checkpoint-kind": "that kind of report does not fit here",
+    "task-ended": "the Task had already ended",
+    "outside-subtree": "that Task is not under this one",
+    "authority-wider": "it asked for more than this hob may do",
+    "depth-limit": "the party is as deep as it may go",
+    "concurrency-limit": "too much is running at once",
+    "invalid-input": "the call was not filled in right",
+  },
   added: ({ count }: { count: number }) => `+${formatCount(count)}`,
   addedLabel: ({ count }: { count: number }) =>
     plural(count, { one: "1 line added", other: `${formatCount(count)} lines added` }),
@@ -37,8 +58,13 @@ export const messages = {
   failed: "failed",
   running: "running",
   uncertain: "unknown",
-  folded: ({ count }: { count: number }) =>
+  /** Older marks folded into one count, as the design draws it; the label says what opening it does. */
+  folded: ({ count }: { count: number }) => `+${formatCount(count)} more`,
+  foldedLabel: ({ count }: { count: number }) =>
     plural(count, { one: "Show 1 earlier step", other: `Show ${formatCount(count)} earlier steps` }),
+  /** A finished Quest's lane folds to its results; this opens the rest. */
+  showSteps: ({ count }: { count: number }) =>
+    plural(count, { one: "Show the 1 step", other: `Show the ${formatCount(count)} steps` }),
   handOut: ({ label, name }: { label: string; name: string }) => `${label} → ${name}`,
   handIn: ({ label, name }: { label: string; name: string }) => `← ${label} from ${name}`,
   briefed: ({ names }: { names: string }) => `Briefed ${names}`,

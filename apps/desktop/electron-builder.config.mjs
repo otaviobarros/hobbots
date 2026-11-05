@@ -1,4 +1,5 @@
 import { electronFuses } from "./scripts/electron-fuses.ts";
+import { ENGINE_RESOURCE, MEMORY_ENGINE_SIGN_IGNORE, prepareMemoryEngine } from "./scripts/memory-engine.ts";
 
 /** @type {import("electron-builder").Configuration} */
 export default {
@@ -19,7 +20,15 @@ export default {
   extraResources: [
     { from: "../web/dist", to: "web" },
     { from: "../../LICENSE", to: "LICENSE" },
+    // The memory engine for the architecture being built, as `fetch-engine` checked it (ADR 028),
+    // with its license. Its checksum is written after it is signed, by `afterPack`.
+    {
+      from: "../../packages/memory/engine/darwin-${arch}",
+      to: ENGINE_RESOURCE,
+      filter: ["ai-memory", "LICENSE"],
+    },
   ],
+  afterPack: prepareMemoryEngine,
   mac: {
     // One installer per architecture rather than a universal build: there are no native modules,
     // so universal would work, but it carries both Electron frameworks and roughly doubles the
@@ -32,6 +41,8 @@ export default {
     // a downloaded copy rather than calling it damaged. Real signing and notarization come later.
     identity: "-",
     hardenedRuntime: false,
+    // The memory engine is signed by afterPack, before its checksum is written.
+    signIgnore: [MEMORY_ENGINE_SIGN_IGNORE],
   },
   dmg: {
     artifactName: "${productName}-${version}-${arch}.${ext}",

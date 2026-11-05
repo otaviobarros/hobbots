@@ -127,6 +127,7 @@ const LINES: { [K in LaneItem["kind"]]: (item: Extract<LaneItem, { kind: K }>) =
   delete: (item) => `delete ${item.path}`,
   edit: (item) => `edit ${item.path}`,
   run: (item) => `run ${item.command.command}`,
+  step: (item) => `step ${item.outcome} ${item.text}`,
   beat: (item) => `beat ${item.text}`,
   refused: (item) => `refused ${item.what}: ${item.reason}`,
   folded: (item) => `folded ${item.marks.length}`,
@@ -244,9 +245,49 @@ describe("the Quest room's lanes", () => {
       "beat Page scaffolded",
       "now Running pnpm build",
     ]);
+    // In everyday words: no commands, the file it only read left out, and how each step went.
+    expect(lane.plain.map(line)).toEqual([
+      "step done Created page.astro",
+      "step done Deleted old.md",
+      "step done Built the project",
+      "step blocked Not allowed to delete dist",
+      "step failed Ran the tests",
+      `in Landing copy ← ${QUILL}`,
+      "beat Page scaffolded",
+      "now Building the project",
+    ]);
   });
 
-  it("shows the Task tool calls the hub refused, with what it told the hob", () => {
+  it("says a step that was stopped once, however often the hob tried it again", () => {
+    const denied = (id: string, second: number): ReplyStep => ({
+      id,
+      kind: "tool",
+      label: "Running rm -- scratch.txt && cat > check.sh <<'EOF'",
+      state: "denied",
+      call: { tool: "Bash", operation: "outside-folders", targets: ["/work/site"] },
+      reason: "Hobbots could not resolve the folder, so it stays closed.",
+      decidedBy: "policy",
+      startedAt: AT(second),
+    });
+    const records = activity(BUILD, {
+      steps: [denied("d1", 2), denied("d2", 3), denied("d3", 6)],
+      commands: [command(BUILD, "ls -la", 1), command(BUILD, "bash check.sh; echo done", 4)],
+      changes: [change(BUILD, "src/index.ts", "edited", 7), change(BUILD, "test/index.ts", "edited", 8)],
+    });
+    const lane = laneOf(laneRoom(handedOn(), [records]), ADA);
+    // The same stopped step tried again later still shows once; two files with one name keep a line each.
+    expect(lane.plain.map(line)).toEqual([
+      "step blocked Stopped a step that could reach outside its folders",
+      "step done Ran check.sh",
+      "step done Updated index.ts",
+      "step done Updated index.ts",
+      `in Landing copy ← ${QUILL}`,
+      "beat Page scaffolded",
+      "now -",
+    ]);
+  });
+
+  it("shows the Task tool calls the hub refused in plain words, never the message meant for the hob", () => {
     const refused = new RefusedCall({
       id: RefusedCallId.make("r1"),
       agentId: QUILL,
@@ -261,7 +302,12 @@ describe("the Quest room's lanes", () => {
       refusedAt: AT(4),
     });
     const lane = laneOf(laneRoom(tree({ ...blackFriday(), refusals: [refused] }), []), QUILL);
-    expect(lines(lane)).toEqual(["refused complete_task: Finish the steps under this Task first."]);
+    expect(lines(lane)).toEqual(["refused Completing the Task: work under it was still open"]);
+    // The hub keeping order is not news in everyday words: the hob goes on after it.
+    expect(lane.plain).toEqual([]);
+    const odd = new RefusedCall({ ...refused, id: RefusedCallId.make("r2"), reason: "claim-stale" });
+    const quiet = laneOf(laneRoom(tree({ ...blackFriday(), refusals: [odd] }), []), QUILL);
+    expect(lines(quiet)).toEqual(["refused Completing the Task: "]);
   });
 
   it("leaves out the hub's routine checkpoints and keeps its findings", () => {
@@ -386,7 +432,7 @@ describe("the Quest room's lanes", () => {
     expect(shown.at(-1)).toBe("beat Halfway");
   });
 
-  it("folds each run of older marks where it was, so no mark moves past a result or into another Task", () => {
+  it("folds a Task's older marks into one count where the first was, so no mark moves into another Task", () => {
     const mark = (key: string): LaneItem => ({ kind: "read", key, path: key });
     const items: ReadonlyArray<LaneItem> = [
       { kind: "task", key: "task-a", title: "A" },
@@ -403,16 +449,15 @@ describe("the Quest room's lanes", () => {
       "folded 1",
       "completed A done",
       "task B",
-      "folded 1",
+      "folded 2",
       `in Copy ← ${QUILL}`,
-      "folded 1",
       "read r1",
       "read r2",
     ]);
     const opened = foldMarks(items, 2).flatMap(
       (item): ReadonlyArray<LaneItem> => (item.kind === "folded" ? item.marks : [item]),
     );
-    expect(opened).toEqual(items);
+    expect(opened).toEqual([...items.slice(0, 5), items[6], items[5], ...items.slice(7)]);
   });
 
   it("folds a hob's older marks inside the Task they belong to when it has two Tasks", () => {

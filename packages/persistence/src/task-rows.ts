@@ -54,6 +54,9 @@ const fromRow = {
     ...row,
     chain: json(row.chain),
     answeredBy: json(row.answeredBy),
+    options: json(row.options) ?? [],
+    recommended: int(row.recommended),
+    picked: int(row.picked),
     revision: int(row.revision),
   }),
   artifact: (row: Row) => row,
@@ -384,7 +387,8 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
           ? []
           : yield* sql<Row>`SELECT * FROM questions WHERE recipient_id IS NULL AND ${sql.in("task_id", ids)}
               ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("question")));
-      return { tasks, delegations, quests, attempts, approvals, questions };
+      const owners = yield* threadOwners([...tasks, ...quests, ...approvals]);
+      return { tasks, delegations, quests, attempts, approvals, questions, threadOwners: owners };
     });
 
   /** Steps waiting to start: queued Tasks whose parent has the same owner and has not ended, oldest first. */

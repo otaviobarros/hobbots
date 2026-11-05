@@ -1,4 +1,5 @@
 import { lstat } from "node:fs/promises";
+import { join } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
 import { hubPort } from "@hobbots/server/network-settings";
 import { app, BrowserWindow, dialog, ipcMain, session, shell, utilityProcess } from "electron";
@@ -8,12 +9,14 @@ import { hubAddress } from "./hub-address.ts";
 import { followHub } from "./hub-events.ts";
 import { webClientDir } from "./local-pages.ts";
 import type { LoginItem } from "./login-item.ts";
+import { memoryEngineDir } from "./memory-engine.ts";
 import { startMenuBar } from "./menu-bar.ts";
 import { ServerSupervisor, StartTimedOut } from "./server.ts";
 import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server-identity.ts";
 import type { SettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
 import { handleShowFileIpc } from "./show-file.ts";
+import { handleShowMemoryIpc } from "./show-memory.ts";
 import { type SystemNotices, showOnLaunch, systemNotices } from "./system-notices.ts";
 import { windowBackground } from "./window-background.ts";
 import { fetchAsWindow, makeWindowKey, WINDOW_COOKIE } from "./window-key.ts";
@@ -43,6 +46,7 @@ export const startHub = async (
   // A packaged app carries the web client in its resources folder; a checkout uses the web build.
   // The server serves it, and the window loads it from there like any browser on the hub (ADR 012).
   const webDir = webClientDir(app.isPackaged ? process : null, import.meta.dirname);
+  const engineDir = memoryEngineDir(app.isPackaged ? process : null, import.meta.dirname);
 
   /** The pages the window may show, and the only ones the preload bridge answers. */
   const isAllowedUrl = (url: string) => url.startsWith(`${devWebUrl}/`) || url.startsWith(`${hub.apiUrl}/`);
@@ -92,6 +96,7 @@ export const startHub = async (
           HOBBOTS_DATA_DIR: app.getPath("userData"),
           HOBBOTS_VERSION: app.getVersion(),
           HOBBOTS_WEB_DIR: webDir,
+          HOBBOTS_MEMORY_ENGINE_DIR: engineDir,
         },
       });
       server.on("exit", (code) => console.log(`Hobbots server exited with code ${code}`));
@@ -216,6 +221,14 @@ export const startHub = async (
     },
     isFile: async (path) => (await lstat(path)).isFile(),
     showItemInFolder: (path) => shell.showItemInFolder(path),
+  });
+  handleShowMemoryIpc({
+    ipcMain,
+    isTrusted,
+    // The engine's pages (ADR 028), in the data folder this app starts the hub with.
+    folder: join(app.getPath("userData"), "memory", "wiki"),
+    isFolder: async (path) => (await lstat(path)).isDirectory(),
+    openPath: (path) => shell.openPath(path),
   });
   const menuBar = startMenuBar({ supervisor, settings, hub, fetchHub, createWindow });
   try {

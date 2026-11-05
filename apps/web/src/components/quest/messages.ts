@@ -31,6 +31,8 @@ export const messages = {
     send: "Send answer",
     sending: "Sending…",
     youAnswered: ({ answer }: { answer: string }) => `You answered: ${answer}`,
+    /** The toast once an answer is sent (#995), wherever it was given. */
+    sent: ({ name, answer }: { name: string; answer: string }) => `Sent your answer to ${name}: ${answer}`,
     /** Your answer and where you gave it, seen from where it shows (#671): `here` when that is the same place. */
     youAnsweredIn: {
       here: ({ answer }: { answer: string }) => `You answered here: ${answer}`,
@@ -38,6 +40,25 @@ export const messages = {
       inbox: ({ answer }: { answer: string }) => `You answered in the Inbox: ${answer}`,
       task: ({ answer }: { answer: string }) => `You answered in the Quest room: ${answer}`,
     },
+    /** A question's choices (#740): buttons that answer at once, then the box for anything else. */
+    choices: ({ name }: { name: string }) => `${name}'s choices`,
+    recommended: "Recommended",
+    recommendedMark: "★",
+    /** A chip's name: its label, whether it is recommended and what it does. */
+    chipSaid: ({ label, recommended, consequence }: { label: string; recommended: boolean; consequence: string }) =>
+      `${label}${recommended ? ", recommended" : ""}${consequence === "" ? "" : `. ${consequence}`}`,
+    orInWords: "or answer in your own words",
+    somethingElse: "Something else…",
+    youPicked: ({ answer }: { answer: string }) => `You picked: ${answer}`,
+    youPickedIn: {
+      here: ({ answer }: { answer: string }) => `You picked here: ${answer}`,
+      chat: ({ answer }: { answer: string }) => `You picked in the chat: ${answer}`,
+      inbox: ({ answer }: { answer: string }) => `You picked in the Inbox: ${answer}`,
+      task: ({ answer }: { answer: string }) => `You picked in the Quest room: ${answer}`,
+    },
+    inYourWords: "In your own words, not one of the choices.",
+    alsoOffered: ({ labels }: { labels: string }) => `Also offered: ${labels}`,
+    offered: ({ labels }: { labels: string }) => `Offered: ${labels}`,
     failed: "Your answer could not be sent. Try again.",
     closed: "This question was already answered.",
     withdrawn: "Withdrawn: the work it was about ended before anyone answered.",

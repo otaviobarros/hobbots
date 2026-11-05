@@ -12,6 +12,7 @@ import {
   type BackpackItem,
   isLiveAttempt,
   type KnownSecret,
+  type MemoryEngineHealth,
   openBlocker,
   type Quest,
   type QuestId,
@@ -181,6 +182,7 @@ export interface ReportInput {
   readonly createdAt: string;
   readonly hub: ReportHub;
   readonly runtimes: ReadonlyArray<RuntimeHealth>;
+  readonly memory: MemoryEngineHealth | null;
   readonly workHeld: boolean;
   readonly stalled: ReadonlyArray<StalledWork>;
   readonly recovery: ReadonlyArray<RecoveryError>;
@@ -285,6 +287,7 @@ export const allowlistedReport = (input: ReportInput): DiagnosticsReport =>
       availability: health.availability,
       signedIn: signedIn(health),
     })),
+    memory: input.memory,
     workHeld: input.workHeld,
     stalled: input.stalled,
     recovery: input.recovery,

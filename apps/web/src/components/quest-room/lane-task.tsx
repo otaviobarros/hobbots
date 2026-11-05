@@ -1,7 +1,10 @@
 import type { Task, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { OverflowTooltip } from "@hobbots/ui/components/overflow-tooltip";
+import { focusedElement } from "@hobbots/ui/lib/restore-focus";
+import { useEffect, useRef } from "react";
 import { formatWhen } from "../../lib/time.ts";
-import { TaskBackpack } from "../backpack/quest-backpack.tsx";
+import { TaskBackpack, useTaskWaiting } from "../backpack/quest-backpack.tsx";
 import type { PickedTry } from "../lane-actions/lane-actions-model.ts";
 import type { Lane } from "../lanes/lane-model.ts";
 import { attemptCount, type RoomRow, roomRows, roomStatusLabel, roomTone } from "../quest/control-room.ts";
@@ -51,9 +54,15 @@ export function TaskCards({
 }
 
 /**
- * One of a hob's Tasks in its lane: which try it shows and how a picked earlier one went, Show in the Workbench, its backpack and
- * everything else it holds behind a disclosure. A question for you, a failure and the controls are
+ * One of a hob's Tasks in its lane: which try it shows once there is more than one, how a picked
+ * earlier one went, what waits in its backpack, and everything else behind a disclosure, Show in
+ * the Workbench among it. A question for you, a failure and the controls are
  * the lane's own (lane-actions), as are its beats, marks and waits (ADR 027).
+ *
+ * The backpack shows on the card while something waits and moves into the details once nothing
+ * does. A row that had focus goes with it, so focus moves to the details' summary, which now holds
+ * it, rather than falling back to the page (#986). Only a card that holds focus when its row goes
+ * takes it: once focus has moved out of the card, the card forgets the row.
  */
 function TaskCard({
   tree,
@@ -75,32 +84,66 @@ function TaskCard({
   onWorkbench: (taskId: TaskId) => void;
 }) {
   const { task } = row;
+  const attempts = attemptCount(tree, task);
+  const waiting = useTaskWaiting(tree, task);
+  const onCard = waiting.count > 0;
+  const summary = useRef<HTMLElement>(null);
+  const focused = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (onCard || focused.current?.isConnected !== false || focusedElement() !== null) return;
+    focused.current = null;
+    summary.current?.focus();
+  }, [onCard]);
   return (
     <section
       aria-label={taskTitle(task)}
+      onFocus={(event) => {
+        focused.current = event.target;
+      }}
+      onBlur={(event) => {
+        const left = event.target;
+        // Focus that moves out of the card is no longer the card's to give back.
+        if (event.relatedTarget !== null) {
+          if (!event.currentTarget.contains(event.relatedTarget)) focused.current = null;
+          return;
+        }
+        // Focus that goes nowhere left with a removed row, which the card recovers; focus that left
+        // the page from a row still there, such as to another window, is not the card's either.
+        queueMicrotask(() => {
+          if (left.isConnected && focused.current === left) focused.current = null;
+        });
+      }}
       className="flex min-w-0 flex-col gap-2 border-t border-line pt-2.5 text-detail wrap-anywhere"
     >
       {titled && (
         <span className="flex items-center gap-2">
-          <h3 className="m-0 min-w-0 flex-1 truncate text-detail font-bold text-text-strong">{taskTitle(task)}</h3>
+          <OverflowTooltip text={taskTitle(task)}>
+            <h3 className="m-0 min-w-0 flex-1 truncate text-detail font-bold text-text-strong">{taskTitle(task)}</h3>
+          </OverflowTooltip>
           <StatusTag status={roomTone(row.status)}>{roomStatusLabel(row.status)}</StatusTag>
         </span>
       )}
-      <p className="m-0 text-meta text-label">
-        {messages.taskMeta({ attempt: tried?.number ?? attemptCount(tree, task), age: formatWhen(task.createdAt) })}
-      </p>
+      {/* Which try it is only matters once there is more than one. */}
+      {(tried !== null || attempts > 1) && (
+        <p className="m-0 text-meta text-label">
+          {messages.taskMeta({ attempt: tried?.number ?? attempts, age: formatWhen(task.createdAt) })}
+        </p>
+      )}
       {/* An earlier try picked in the lane says how it went; the lane shows the rest. */}
       {tried?.line != null && <p className="m-0 line-clamp-3 whitespace-pre-wrap text-text">{tried.line}</p>}
       <Flags row={row} hobs={hobs} />
-      <span className="flex">
-        <Button variant="outline" size="xs" onClick={() => onWorkbench(task.id)}>
-          {messages.showInWorkbench}
-        </Button>
-      </span>
-      <TaskBackpack tree={tree} task={task} hobs={hobs} onOpen={onOpen} />
+      {onCard && <TaskBackpack task={task} waiting={waiting} hobs={hobs} onOpen={onOpen} />}
       <details>
-        <summary className="cursor-pointer text-label">{messages.details}</summary>
+        <summary ref={summary} className="cursor-pointer text-label">
+          {messages.details}
+        </summary>
         <div className="mt-3 flex flex-col gap-4">
+          <span className="flex">
+            <Button variant="outline" size="xs" onClick={() => onWorkbench(task.id)}>
+              {messages.showInWorkbench}
+            </Button>
+          </span>
+          {!onCard && <TaskBackpack task={task} waiting={waiting} hobs={hobs} onOpen={onOpen} />}
           <TaskSummary tree={tree} task={task} hobs={hobs} />
           <TaskDetail tree={tree} task={task} hobs={hobs} onOpen={onOpen} />
         </div>

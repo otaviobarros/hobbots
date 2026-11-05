@@ -384,7 +384,9 @@ export const withCommitIdentity = (env: NodeJS.ProcessEnv, commitAs: CommitIdent
 // is often missing and cannot be made inside the sandbox, so the shell takes the turn's back first,
 // from a variable of Hobbots' own that every runtime keeps.
 const TEMP_VARIABLE = "HOBBOTS_SANDBOX_TMPDIR";
-const LAUNCHER = `[ -n "$${TEMP_VARIABLE}" ] && export TMPDIR="$${TEMP_VARIABLE}"; c=$${COMMAND_VARIABLE}; unset ${COMMAND_VARIABLE}; eval "exec $c"`;
+// zsh writes a here-document's temporary file under TMPPREFIX, `/tmp/zsh` by default, never under
+// TMPDIR, so `cat > file <<EOF` fails in the sandbox until TMPPREFIX points into the turn's folder too.
+const LAUNCHER = `[ -n "$${TEMP_VARIABLE}" ] && export TMPDIR="$${TEMP_VARIABLE}" TMPPREFIX="$${TEMP_VARIABLE}/zsh"; c=$${COMMAND_VARIABLE}; unset ${COMMAND_VARIABLE}; eval "exec $c"`;
 
 export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandboxShape>()(
   "@hobbots/runtimes/ProcessSandbox",
@@ -518,6 +520,8 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                       // The runtime keeps its state for this hob there, never in the user's own.
                       CLAUDE_CONFIG_DIR: scope.runtimeFolder,
                       TMPDIR: tempFolder,
+                      // zsh's here-documents go under TMPPREFIX, not TMPDIR (see LAUNCHER).
+                      TMPPREFIX: `${tempFolder}/zsh`,
                       [TEMP_VARIABLE]: tempFolder,
                       // Claude Code keeps its own temporary files under /tmp otherwise, outside the sandbox's reach.
                       CLAUDE_CODE_TMPDIR: tempFolder,

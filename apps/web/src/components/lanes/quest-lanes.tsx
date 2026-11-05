@@ -17,6 +17,10 @@ interface Shared {
   slots?: (lane: LaneData) => LaneSlots;
   /** Where the reads of each hob's records stand. */
   reads?: (hobId: AgentId) => LaneReads;
+  /** Show the exact marks in place of everyday words. */
+  technical?: boolean;
+  /** The Quest has ended, so each lane folds to its results. */
+  finished?: boolean;
 }
 
 function Lane({ node, ...shared }: Shared & { node: LaneNode }) {
@@ -32,6 +36,8 @@ function Lane({ node, ...shared }: Shared & { node: LaneNode }) {
       onFlashed={shared.onFlashed}
       slots={shared.slots?.(node.lane) ?? {}}
       reads={shared.reads?.(id)}
+      technical={shared.technical ?? false}
+      finished={shared.finished ?? false}
     />
   );
 }

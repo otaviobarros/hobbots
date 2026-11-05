@@ -4,8 +4,9 @@ import { delimiter, join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { RuntimeAdapterShape } from "@hobbots/agents";
 import { policySandbox } from "@hobbots/domain";
+import { waitUntil } from "@hobbots/domain/testing";
 import { PolicyEngine } from "@hobbots/permissions";
-import { type Duration, Effect, Exit, Fiber, Layer, Schedule, Stream } from "effect";
+import { type Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { binaryLocator } from "../src/binary.ts";
 import { codexEnforcement, makeCodex } from "../src/codex/adapter.ts";
@@ -123,6 +124,9 @@ describe("Codex's models", () => {
       ["gpt-6", ["low", "max"]],
       ["gpt-mini", ["low", "medium"]],
     ]);
+    // Its first `mini` is the small model for light work, such as memory's.
+    expect(listed.small).toBe("gpt-mini");
+    expect(toCodexModels([model({ model: "gpt-6" })]).small).toBeUndefined();
   });
 });
 
@@ -144,11 +148,10 @@ describe("the App Server client", () => {
           const account = yield* server.request("account/read", { refreshToken: false });
           // The answers to Codex's own requests go out on their own: the process keeps running
           // until the stand-in has read both, or ending the scope would stop it first.
-          yield* Effect.sync(() => fakeCodexLog(dir).map((message) => message.id)).pipe(
-            Effect.flatMap((ids) =>
-              ids.includes("ask-1") && ids.includes("ask-2") ? Effect.void : Effect.fail("not yet" as const),
-            ),
-            Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 300 }),
+          yield* waitUntil(
+            Effect.sync(() => fakeCodexLog(dir).map((message) => message.id)),
+            (ids) => ids.includes("ask-1") && ids.includes("ask-2"),
+            { what: "the stand-in to read the answers to ask-1 and ask-2" },
           );
           return { account, init: server.initialized };
         }),
@@ -166,7 +169,7 @@ describe("the App Server client", () => {
     expect(log.find((message) => message.method === "initialize")?.params).toMatchObject({
       capabilities: { experimentalApi: true },
     });
-  });
+  }, 30_000);
 
   it("[TC-RT-014] fails what is waiting and ends notifications when Codex exits", async () => {
     const binary = fakeCodex(folder(), { behavior: "exit" });

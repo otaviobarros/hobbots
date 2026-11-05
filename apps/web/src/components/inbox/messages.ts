@@ -14,6 +14,9 @@ export const messages = {
     `${formatCount(count)} waiting on you · ${expiry} for ${name}`,
   from: ({ name }: { name: string }) => `${name} → you`,
   devices: "Devices",
+  /** The group of shares: "Memory · Things hobs want to share". */
+  memory: "Memory",
+  memoryDetail: "Things hobs want to share",
   /** A group heading in full, for its tooltip: "Aldric's quest · Plan the spring launch". */
   groupTitle: ({ label, detail }: { label: string; detail: string }) => `${label} · ${detail}`,
   hub: "This hub",
@@ -31,18 +34,24 @@ export const messages = {
     stuck: "Stuck",
     failed: "Failed",
     device: "New device",
+    share: "Share",
   },
   /** One row of the list: who asked, as a chain, and when. */
   row: {
     arrow: " → ",
     you: "You",
     youEnd: "you",
+    /** Who asks a question the hub itself puts to you (#976). */
+    hub: "Your hub",
+    /** The same, inside a sentence: "Your answer to your hub". */
+    hubInSentence: "your hub",
     waitingOn: ({ name }: { name: string }) => `${name} is waiting on this`,
     stuckAfter: ({ count }: { count: number }) =>
       plural(count, { one: `Stuck after ${formatCount(count)} try`, other: `Stuck after ${formatCount(count)} tries` }),
     retired: ({ name }: { name: string }) => `${name} retired`,
     failed: ({ name }: { name: string }) => `${name}'s task failed`,
     deviceAsks: "A new device asks to join",
+    noRush: "No rush",
   },
   status: {
     pending: ({ expiry }: { expiry: string }) => `Waiting on you · ${expiry}`,
@@ -79,6 +88,7 @@ export const messages = {
     tries: "Tries",
     askedBy: "Asked by",
     passedUpBy: "Passed up by",
+    about: "About",
     when: "When",
     whenExpires: ({ asked, expiry }: { asked: string; expiry: string }) => `${asked} · ${expiry}`,
     copy: "Copy",
@@ -93,6 +103,8 @@ export const messages = {
     expiredFoot: "Expired requests can never be approved late. The hob asks again with what is true now.",
     pendingFoot: ({ name }: { name: string }) => `If it expires, nothing runs and ${name} asks again.`,
     onceOnlyFoot: "Allow once covers this one action only.",
+    shareLabel: ({ name }: { name: string }) => `Share from ${name}`,
+    shareDiff: "What would be shared",
   },
   history: {
     heading: "Decision history",
@@ -138,6 +150,9 @@ export const messages = {
     passedBy: ({ names }: { names: ReadonlyArray<string> }) => `Passed up to you by ${formatList(names)}.`,
     goesBack: ({ name }: { name: string }) => `Goes back to ${name}, who passes it to the hob that asked.`,
     goesStraight: ({ name }: { name: string }) => `Goes straight back to ${name}.`,
+    /** A question the hub itself asks (#976): no lead passed it, and only the hub can apply the answer. */
+    fromHub: "Only the hub can make this change, so it asks you itself. No hob is waiting on it.",
+    goesToHub: "Goes to your hub, which applies it.",
     loadFailed: "Hobbots could not read the questions for you.",
   },
   /** A party member's Task that failed while its Quest goes on (ADR 027), in Needs you. */

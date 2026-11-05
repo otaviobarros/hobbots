@@ -8,6 +8,7 @@ import {
   BackpackItemState,
   BlockerReason,
   DelegationId,
+  MemoryEngineHealth,
   MessageId,
   Quest,
   QuestId,
@@ -67,9 +68,14 @@ export const RecoveryError = Schema.Struct({
 });
 export type RecoveryError = typeof RecoveryError.Type;
 
-/** The Now view: each runtime's health, stalled work, the last startup's recovery errors and the hold. */
+/**
+ * The Now view: each runtime's health, the memory engine's, stalled work, the last startup's recovery
+ * errors and the hold.
+ */
 export const DiagnosticsNow = Schema.Struct({
   runtimes: Schema.Array(RuntimeHealth),
+  /** The memory engine's process (ADR 028); null on a hub that runs none. */
+  memory: Schema.NullOr(MemoryEngineHealth),
   stalled: Schema.Array(StalledWork),
   recovery: Schema.Array(RecoveryError),
   /** Whether work is held after a restore until you resume it (ADR 026). */
@@ -201,6 +207,7 @@ export const DiagnosticsReport = Schema.Struct({
   createdAt: Schema.String,
   hub: ReportHub,
   runtimes: Schema.Array(ReportRuntime),
+  memory: Schema.NullOr(MemoryEngineHealth),
   workHeld: Schema.Boolean,
   stalled: Schema.Array(StalledWork),
   recovery: Schema.Array(RecoveryError),

@@ -15,9 +15,14 @@ const textareaVariants = cva(
         deep: "rounded-control border-(length:--edge) border-control bg-deep text-text-strong",
         bare: "resize-none rounded-control border-0 bg-transparent px-1 text-text-strong",
       },
+      text: {
+        body: "",
+        mono: "font-mono text-ui leading-[22px]",
+      },
     },
     defaultVariants: {
       variant: "default",
+      text: "body",
     },
   },
 );
@@ -25,9 +30,10 @@ const textareaVariants = cva(
 function Textarea({
   className,
   variant = "default",
+  text = "body",
   ...props
 }: React.ComponentProps<"textarea"> & VariantProps<typeof textareaVariants>) {
-  return <textarea data-slot="textarea" className={cn(textareaVariants({ variant }), className)} {...props} />;
+  return <textarea data-slot="textarea" className={cn(textareaVariants({ variant, text }), className)} {...props} />;
 }
 
 export { Textarea };

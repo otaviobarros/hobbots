@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Smoke-tests a packaged Hobbots.app: launches it as the hub with the fake runtime, waits for its server's
-# health check, then quits it and checks that the server it launched stopped too.
+# health check and for the memory engine it runs, kills the engine to check it is started again, then
+# quits the app and checks that the server and the engine it launched stopped too.
 #
 #   apps/desktop/scripts/smoke-test.sh path/to/Hobbots.app [extra app arguments]
 #
@@ -41,6 +42,31 @@ until curl -fsS --max-time 1 "$health" >/dev/null 2>&1; do
 done
 echo "Hobbots answered on ${health}."
 
+# The bundled memory engine (ADR 028): the hub starts it once its checksum matches, and starts it
+# again after a crash.
+engine="${app}/Contents/Resources/memory/ai-memory serve"
+engine_pid() { pgrep -f "$engine" | head -n 1; }
+wait_for_engine() {
+  local not="$1" deadline=$((SECONDS + 30)) found
+  while :; do
+    found="$(engine_pid || true)"
+    if [[ -n "$found" && "$found" != "$not" ]]; then
+      echo "$found"
+      return
+    fi
+    if ((SECONDS >= deadline)); then
+      echo "The memory engine did not start within 30s." >&2
+      exit 1
+    fi
+    sleep 0.5
+  done
+}
+first="$(wait_for_engine none)"
+echo "The memory engine runs (pid ${first})."
+kill -KILL "$first"
+second="$(wait_for_engine "$first")"
+echo "The memory engine was started again after a crash (pid ${second})."
+
 # Electron quits gracefully on SIGTERM, which runs the app's before-quit handler.
 kill -TERM "$pid"
 deadline=$((SECONDS + 15))
@@ -63,3 +89,13 @@ while curl -fsS --max-time 1 "$health" >/dev/null 2>&1; do
   sleep 0.5
 done
 echo "Hobbots quit and its server stopped."
+
+deadline=$((SECONDS + 10))
+while [[ -n "$(engine_pid || true)" ]]; do
+  if ((SECONDS >= deadline)); then
+    echo "The memory engine Hobbots started kept running after it quit." >&2
+    exit 1
+  fi
+  sleep 0.5
+done
+echo "The memory engine stopped with it."

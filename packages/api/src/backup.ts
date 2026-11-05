@@ -4,7 +4,7 @@ import { InvalidFolder } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /** What a backup's copy is doing now, so Settings can show its progress. */
-export const BackupStep = Schema.Literals(["database", "workspace", "activity", "tool-logs", "manifest"]);
+export const BackupStep = Schema.Literals(["database", "workspace", "activity", "tool-logs", "memory", "manifest"]);
 export type BackupStep = typeof BackupStep.Type;
 
 /**
@@ -67,6 +67,13 @@ export class RestoreRefused extends Schema.TaggedError<RestoreRefused>()(
   { httpApiStatus: 409 },
 ) {}
 
+/** Start over cannot begin, and nothing changed (#948). */
+export class ResetRefused extends Schema.TaggedError<ResetRefused>()(
+  "ResetRefused",
+  { reason: Schema.String },
+  { httpApiStatus: 409 },
+) {}
+
 /** The data folder a restore set aside beside the restored one, until you delete it. */
 export const SetAsideFolder = Schema.Struct({ path: Schema.String, size: Schema.Number });
 
@@ -87,7 +94,7 @@ export const RestoreStatus = Schema.Struct({
 });
 export type RestoreStatus = typeof RestoreStatus.Type;
 
-/** Settings › Backup & export: Back up now and Restore (ADR 026). */
+/** Settings › Your data: Back up now and Restore (ADR 026), and Start over (#948). */
 export class BackupGroup extends HttpApiGroup.make("backup")
   .add(
     HttpApiEndpoint.get("status", "/backup", { success: BackupStatus }),
@@ -114,6 +121,9 @@ export class BackupGroup extends HttpApiGroup.make("backup")
     HttpApiEndpoint.post("resume", "/restore/resume", { success: RestoreStatus }),
     // Deletes the data folder the latest restore set aside.
     HttpApiEndpoint.delete("deleteSetAside", "/restore/set-aside", { success: RestoreStatus }),
+    // Start over (#948): the hub forgets its keychain sign-ins, stops, deletes all of its data and
+    // starts again empty, at First run.
+    HttpApiEndpoint.post("reset", "/reset", { error: ResetRefused }),
   )
   .middleware(DeviceSession)
   .prefix("/api") {}

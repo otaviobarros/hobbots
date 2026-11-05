@@ -1,0 +1,27 @@
+{
+  "name": "@hobbots/memory",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "fetch-engine": "node scripts/fetch-engine.ts"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@hobbots/agents": "workspace:*",
+    "@hobbots/domain": "workspace:*",
+    "@hobbots/permissions": "workspace:*",
+    "diff": "9.0.0",
+    "effect": "catalog:",
+    "tar": "7.5.22"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "vitest": "5.0.5"
+  }
+}

@@ -5,6 +5,7 @@ import {
   GrantId,
   GrantRule,
   type HobPolicy,
+  MemoryOperation,
   narrowest,
   PolicyDecision,
   PolicyOperation,
@@ -110,6 +111,12 @@ export const PolicyRequest = Schema.TaggedUnion({
   PullRequest: { folder: Schema.String, repository: Schema.String, base: Schema.String },
   /** Commenting on issue or pull request `number` of `repository` (ADR 020); a grant names the repository. */
   GitHubComment: { folder: Schema.String, repository: Schema.String, number: Schema.Number },
+  /**
+   * A memory tool call (ADR 028), which the hub serves outside the sandbox on scopes it worked out
+   * itself, so it is decided on the hob's answers alone. `scope` names the memory it reaches, for the
+   * approval card. No grant answers an Ask: a rule could name nothing narrower than the tool.
+   */
+  Memory: { operation: MemoryOperation, scope: Schema.String },
 });
 export type PolicyRequest = typeof PolicyRequest.Type;
 
@@ -209,7 +216,8 @@ export type ResolvedRequest =
       readonly folder: ResolvedTarget;
       readonly repository: string;
       readonly number: number;
-    };
+    }
+  | Extract<PolicyRequest, { readonly _tag: "Memory" }>;
 
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
@@ -262,6 +270,8 @@ const OPERATION_WORDS: Record<PolicyOperation, string> = {
   "open-pull-request": "opening pull requests",
   "comment-github": "commenting on GitHub",
   "outside-folders": "anything outside the hob's folders",
+  "search-memory": "searching memory",
+  "save-memory": "saving to memory",
 };
 
 interface Answer {
@@ -626,6 +636,8 @@ const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: Re
     case "PullRequest":
     case "GitHubComment":
       return evaluateGitHubWrite(context, scope, request);
+    case "Memory":
+      return { targets: [request.scope], answers: [fromLayers(context, request.operation)] };
   }
 };
 
@@ -758,6 +770,7 @@ export class PolicyEngine extends Context.Service<
                 );
           }
           case "Web":
+          case "Memory":
             return Effect.succeed(request);
           case "GitHub":
           case "PullRequest":

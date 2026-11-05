@@ -8,8 +8,8 @@ import { messages } from "./messages.ts";
 
 const copy = messages;
 
-/** The page's two tabs; Chats is the default and stays out of the URL. */
-const HOB_PAGE_TABS = ["chats", "history"] as const;
+/** The page's tabs; Chats is the default and stays out of the URL. */
+const HOB_PAGE_TABS = ["chats", "history", "memory"] as const;
 export const HobPageTab = Schema.Literals(HOB_PAGE_TABS);
 export type HobPageTab = typeof HobPageTab.Type;
 

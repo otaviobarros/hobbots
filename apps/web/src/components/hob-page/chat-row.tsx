@@ -130,7 +130,8 @@ export function ChatRow({
             aria-label={copy.menu({ title: thread.title })}
             title={copy.menu({ title: thread.title })}
             className={cn(
-              "absolute end-2 top-2 bg-tile opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 focus-visible:opacity-100",
+              // It shows when the row is hovered, on the row's own hover fill; only hovering it fills it.
+              "absolute end-2 top-2 text-text-secondary opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:bg-line hover:text-text-strong focus-visible:opacity-100 data-[state=open]:bg-line data-[state=open]:text-text-strong",
               menuOpen && "opacity-100",
             )}
           >

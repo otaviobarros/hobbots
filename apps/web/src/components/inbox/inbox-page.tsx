@@ -1,5 +1,13 @@
 import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
-import type { ApprovalRequest, BackpackItem, FailedTask, Quest, TaskId } from "@hobbots/domain";
+import type {
+  ApprovalRequest,
+  BackpackItem,
+  FailedTask,
+  HubQuestion,
+  MemoryShare,
+  Quest,
+  TaskId,
+} from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import {
   Empty,
@@ -16,10 +24,13 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockersQuery } from "../../api/blockers.ts";
 import { useFailedTasksQuery } from "../../api/failed-tasks.ts";
+import { useHubQuestionsQuery } from "../../api/hub-questions.ts";
+import { memorySharesQuery, waitingShares } from "../../api/memory-shares.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
 import { agentsQuery } from "../../api/queries.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
 import { readStored, writeStored } from "../../lib/storage.ts";
+import { PageToastViewport } from "../archive/archive-toast.tsx";
 import { messages as blockerCopy } from "../blockers/messages.ts";
 import { ChiefMark } from "../chief/chief-mark.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
@@ -35,6 +46,7 @@ import {
   selectedEntry,
   soonestExpiry,
 } from "./inbox-entries.ts";
+import { inboxTargets } from "./inbox-focus.ts";
 import { InboxHistory } from "./inbox-history.tsx";
 import { expiryText, type InboxTab, type InboxView, isInboxView, pendingCount, tabRequests } from "./inbox-items.ts";
 import { InboxKeyHints } from "./inbox-key-hints.tsx";
@@ -56,24 +68,30 @@ const ALL_CLEAR = { title: copy.allClear, hint: copy.allClearHint };
 const NO_ITEMS: ReadonlyArray<BackpackItem> = [];
 const NO_QUESTIONS: ReadonlyArray<WaitingQuestion> = [];
 const NO_FAILED: ReadonlyArray<FailedTask> = [];
+const NO_HUB: ReadonlyArray<HubQuestion> = [];
+const NO_SHARES: ReadonlyArray<MemoryShare> = [];
 
 type BlockersRead = ReturnType<typeof useBlockersQuery>;
 type QuestionsRead = ReturnType<typeof useWaitingQuestionsQuery>;
 type FailedRead = ReturnType<typeof useFailedTasksQuery>;
+type HubRead = ReturnType<typeof useHubQuestionsQuery>;
 
 /** The reads besides the requests that Needs you lists from. */
 interface WaitReads {
   readonly blockers: BlockersRead;
   readonly questions: QuestionsRead;
   readonly failed: FailedRead;
+  /** The questions the hub itself asks you (#976). */
+  readonly hub: HubRead;
 }
 type InboxRead = ReturnType<typeof useQuery<ReadonlyArray<ApprovalRequest>>>;
 
-/** How many things wait for you: pending requests, questions for you, stuck work and failed Tasks. */
-const waitingCount = (approvals: ReadonlyArray<ApprovalRequest>, { blockers, questions, failed }: WaitReads) =>
+/** How many things wait for you: pending requests, questions for you, the hub's own, stuck work and failed Tasks. */
+const waitingCount = (approvals: ReadonlyArray<ApprovalRequest>, { blockers, questions, failed, hub }: WaitReads) =>
   pendingCount(approvals) +
   (blockers.data ?? NO_ITEMS).length +
   (questions.data ?? NO_QUESTIONS).length +
+  (hub.data ?? NO_HUB).length +
   (failed.data ?? NO_FAILED).length;
 
 /** Whether a read has finished and holds nothing. */
@@ -86,7 +104,9 @@ const readEmpty = (read: { readonly isSuccess: boolean; readonly data?: Readonly
  */
 const emptyState = (tab: InboxTab, read: boolean, entries: ReadonlyArray<InboxEntry>, reads: WaitReads) => {
   if (tab === "history" || !read || entries.length > 0) return undefined;
-  if (!(readEmpty(reads.blockers) && readEmpty(reads.questions) && readEmpty(reads.failed))) return undefined;
+  if (!(readEmpty(reads.blockers) && readEmpty(reads.questions) && readEmpty(reads.failed) && readEmpty(reads.hub))) {
+    return undefined;
+  }
   return ALL_CLEAR;
 };
 
@@ -104,9 +124,11 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
   const blockers = useBlockersQuery();
   const questions = useWaitingQuestionsQuery();
   const failed = useFailedTasksQuery();
-  const reads: WaitReads = { blockers, questions, failed };
+  const hub = useHubQuestionsQuery();
+  const reads: WaitReads = { blockers, questions, failed, hub };
   const devices = usePromptedDevices();
-  const entries = tabEntries(tab, requests, devices, reads);
+  const shares = useQuery(memorySharesQuery).data ?? NO_SHARES;
+  const entries = tabEntries(tab, requests, devices, reads, shares, requestId);
   const questOf = useEntryQuests(entries);
   return {
     questOf,
@@ -117,7 +139,7 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
     reads,
     entries,
     selected: tab === "history" || shown.hold !== undefined ? undefined : selectedEntry(entries, requestId),
-    waiting: waitingCount(approvals, reads) + devices.length,
+    waiting: waitingCount(approvals, reads) + devices.length + waitingShares(shares).length,
     empty: emptyState(tab, inbox.isSuccess, entries, reads),
   };
 };
@@ -140,6 +162,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
   // decided here or elsewhere, and a click never lands on an entry that took its place.
   const shownKey = selected?.key;
   const listRef = useRef<HTMLUListElement>(null);
+  const clearRef = useRef<HTMLDivElement>(null);
   useListKeys(shownOrder(entries, view, questOf), shownKey, listRef);
   useEffect(() => {
     if (shownKey !== undefined && shownKey !== requestId) {
@@ -179,10 +202,11 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
           {needs ? (
             empty !== undefined ? (
-              <AllClear />
+              <AllClear ref={clearRef} />
             ) : (
               <Selected
                 entry={selected}
+                landing={{ list: listRef, clear: clearRef }}
                 hold={shown.hold}
                 onRetry={shown.retry}
                 directory={directory}
@@ -200,6 +224,8 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
               onRetry={() => void inbox.refetch()}
             />
           )}
+          {/* Says what a decision here sent once its entry leaves Needs you (#988). */}
+          <PageToastViewport />
         </main>
       </InboxPanel>
     </InboxTabs>
@@ -241,9 +267,10 @@ function NeedsList({
   listRef: RefObject<HTMLUListElement | null>;
 }) {
   // Until the reads land, the list holds three rows in skeleton, never a line in their place.
-  const { questions, blockers, failed } = reads;
+  const { questions, blockers, failed, hub } = reads;
   const reading =
-    entries.length === 0 && (inbox.isPending || questions.isPending || blockers.isPending || failed.isPending);
+    entries.length === 0 &&
+    (inbox.isPending || questions.isPending || blockers.isPending || failed.isPending || hub.isPending);
   return (
     <aside aria-label={copy.title} className="flex w-95 flex-none flex-col border-e border-line bg-panel">
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
@@ -251,6 +278,7 @@ function NeedsList({
         <ReadState read={questions} failed={copy.question.loadFailed} />
         <ReadState read={blockers} failed={blockerCopy.loadFailed} />
         <ReadState read={failed} failed={copy.failedTask.loadFailed} />
+        <ReadState read={hub} failed={copy.question.loadFailed} />
         {reading && (
           <div aria-busy="true" className="flex flex-col gap-2 px-2.5 py-1">
             <InboxRowsSkeleton />
@@ -261,6 +289,7 @@ function NeedsList({
                 void questions.refetch();
                 void blockers.refetch();
                 void failed.refetch();
+                void hub.refetch();
               }}
             />
           </div>
@@ -302,20 +331,26 @@ const tabEntries = (
   tab: InboxTab,
   requests: ReadonlyArray<ApprovalRequest>,
   devices: ReadonlyArray<WaitingDevice>,
-  { questions, blockers, failed }: WaitReads,
+  { questions, blockers, failed, hub }: WaitReads,
+  shares: ReadonlyArray<MemoryShare>,
+  selected: string | undefined,
 ): ReadonlyArray<InboxEntry> =>
   tab === "needs"
     ? needsEntries({
         devices,
         questions: questions.data ?? NO_QUESTIONS,
+        hubQuestions: hub.data ?? NO_HUB,
         blockers: blockers.data ?? NO_ITEMS,
         failed: failed.data ?? NO_FAILED,
         requests,
+        shares,
+        selected,
       })
     : [];
 
 function Selected({
   entry,
+  landing,
   hold,
   onRetry,
   directory,
@@ -324,6 +359,8 @@ function Selected({
   now,
 }: {
   entry: InboxEntry | undefined;
+  /** The list and the all-clear, where focus goes once a decided entry leaves. */
+  landing: { list: RefObject<HTMLElement | null>; clear: RefObject<HTMLElement | null> };
   questOf: (taskId: TaskId) => Quest | undefined;
   hold: ShownHold | undefined;
   onRetry: () => void;
@@ -346,14 +383,23 @@ function Selected({
   const hob = asker === undefined ? undefined : directory.hob(asker);
   // A request shows once the hob that asked is read, retired hobs included.
   if (entry.kind === "approval" && hob === undefined) return <DetailSkeleton />;
-  return <EntryDetail entry={entry} hob={hob} directory={directory} questOf={questOf} now={now} />;
+  return (
+    <EntryDetail
+      entry={entry}
+      hob={hob}
+      directory={directory}
+      questOf={questOf}
+      now={now}
+      targets={inboxTargets(landing.list, landing.clear, entry.key)}
+    />
+  );
 }
 
 /**
  * A read Needs you lists from besides the requests, when it failed: a way to read it again. While
  * it is read the list's skeleton rows stand in. A read again that failed keeps what was read before.
  */
-function ReadState({ read, failed }: { read: BlockersRead | QuestionsRead | FailedRead; failed: string }) {
+function ReadState({ read, failed }: { read: BlockersRead | QuestionsRead | FailedRead | HubRead; failed: string }) {
   return read.isError ? <LoadFailed message={failed} onRetry={() => void read.refetch()} /> : null;
 }
 
@@ -361,10 +407,10 @@ function ReadState({ read, failed }: { read: BlockersRead | QuestionsRead | Fail
  * Needs you with nothing waiting, across the whole page: a hob resting on its ground with a word
  * bubble, then the title and the way to History and Home. The chief stands in before any hob exists.
  */
-function AllClear() {
+function AllClear({ ref }: { ref: RefObject<HTMLDivElement | null> }) {
   const hob = useQuery(agentsQuery).data?.[0];
   return (
-    <Empty size="page" className="animate-hb-in">
+    <Empty ref={ref} size="page" className="animate-hb-in">
       <EmptyMedia>
         <div
           aria-hidden

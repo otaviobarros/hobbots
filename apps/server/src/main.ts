@@ -13,6 +13,11 @@ import {
   HobAdmission,
   HobLifecycle,
   HobService,
+  HubQuestions,
+  MemoryBriefReceipts,
+  MemoryCapture,
+  MemorySharesLive,
+  type MemoryStore,
   PermissionSummary,
   RecoveryLog,
   SecretRedaction,
@@ -39,6 +44,18 @@ import {
 } from "@hobbots/charms";
 import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
+import {
+  defaultEngineFolder,
+  engineSettingsFor,
+  loadOrCreateMemoryKeys,
+  MemoryEngine,
+  type MemoryKeys,
+  MemoryModelEndpoint,
+  MemoryProjectsLive,
+  MemoryStoreAiMemory,
+  MemoryToolsLive,
+} from "@hobbots/memory";
+import { MemoryStoreFake } from "@hobbots/memory/testing";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -52,6 +69,10 @@ import {
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   HobGitHubAppRepository,
+  HubQuestionRepositoryLive,
+  MemoryCaptureLive,
+  MemorySavesLive,
+  MemoryShareLogLive,
   RestoreRepository,
   SearchIndex,
   SetupRepository,
@@ -68,8 +89,8 @@ import {
   ProcessSandbox,
 } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
-import { Deferred, Effect, Layer, Option, References } from "effect";
-import { HttpRouter } from "effect/http";
+import { Deferred, Duration, Effect, Layer, Option, Redacted, References } from "effect";
+import { FetchHttpClient, HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
 import { BackupHolds, HeldActivityStore, HeldRuntimes } from "./backup-holds.ts";
 import { HubBackups } from "./backups.ts";
@@ -81,6 +102,8 @@ import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { ExportFoldersLive } from "./exports.ts";
+import { FakeHubQuestionsLive } from "./fake-hub-questions.ts";
+import { FakeMemoryLive } from "./fake-memory.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
@@ -88,6 +111,8 @@ import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
+import { MemoryChanges } from "./memory.ts";
+import { MemorySettingsStore, readMemorySettings } from "./memory-settings.ts";
 import { backupBeforeMigrations } from "./migration-backup.ts";
 import { readNetworkSettings } from "./network-settings.ts";
 import {
@@ -98,6 +123,7 @@ import {
   RemoteAccessStateLive,
 } from "./remote-access.ts";
 import { QuietRoutineReads } from "./request-log.ts";
+import { finishReset, HubReset, wipeHubData } from "./resets.ts";
 import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLive, WorkHoldLive } from "./restores.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
@@ -107,6 +133,89 @@ import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
 import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
+
+/**
+ * The memory the hub reads and writes for you (ADR 028): the fake memory when a run asks for it,
+ * otherwise the bundled ai-memory, which answers that memory is unavailable while its engine is off,
+ * missing or down. One layer, so the Memory page and the shares you approve reach the same memory.
+ */
+const memoryPageStore = (config: {
+  readonly fakeMemory: "off" | "empty" | "seeded" | "down";
+}): Layer.Layer<MemoryStore, never, EventBus | MemoryEngine> =>
+  config.fakeMemory === "off"
+    ? MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))
+    : FakeMemoryLive(config.fakeMemory);
+
+/** What the Memory page reads, and the watch behind What changed (ADR 028). */
+const memoryPageLayer = (
+  config: { readonly memoryLookSeconds: number },
+  store: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine>,
+) => MemoryChanges.layer(Duration.seconds(config.memoryLookSeconds)).pipe(Layer.provideMerge(store));
+
+/**
+ * The memory tools (ADR 028), beside the Task tools on every runtime while memory is on, and the
+ * shares hobs ask for with them, which wait for you or go through under the preset. A real
+ * runtime's hobs reach the bundled ai-memory through the engine the hub runs; the fake runtime keeps
+ * memory in the hub's process, to try memory without the engine: the fake memory the Memory page
+ * reads when a run asks for one, so a page a hob saves shows there and its Undo reaches it. With
+ * memory off there are none.
+ */
+const memoryToolsLayer = (
+  config: { readonly runtime: string; readonly memory: "on" | "off"; readonly fakeMemory: string },
+  pageStore: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine>,
+) => {
+  if (config.memory === "off") return Layer.empty;
+  const store = config.runtime === "fake" && config.fakeMemory === "off" ? MemoryStoreFake : pageStore;
+  return MemoryToolsLive.pipe(
+    Layer.provideMerge(MemorySharesLive),
+    Layer.provide(Layer.mergeAll(store, MemoryProjectsLive, PolicyEngine.node)),
+  );
+};
+
+/** The memory engine as the hub's settings choose it: turned off, missing, or the bundled binary. */
+const memoryEngineLayer = (
+  config: { readonly memory: "on" | "off"; readonly memoryEngineDir: Option.Option<string> },
+  dataDir: string,
+  keys: MemoryKeys,
+) => {
+  if (config.memory === "off") return MemoryEngine.off("disabled", dataDir, keys);
+  const folder = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
+  if (folder === "") return MemoryEngine.off("missing", dataDir, keys);
+  // The memory model you chose (ADR 028). The engine reaches it only through the hub's endpoint,
+  // which runs each memory task on the runtime's adapter and its sign-in.
+  const settings = engineSettingsFor(readMemorySettings(dataDir));
+  return MemoryEngine.layer({ folder, dataDir, keys, settings }).pipe(
+    Layer.provideMerge(MemoryModelEndpoint.layer(keys.model)),
+    Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+  );
+};
+
+/** What the fake runtime plays on the hub's records when asked: the scripted Quest, and the hub's own questions. */
+const fakePlays = (config: {
+  readonly runtime: string;
+  readonly fakeQuest: "off" | "black-friday";
+  readonly fakeHubQuestions: "off" | "on";
+}) =>
+  config.runtime !== "fake"
+    ? Layer.empty
+    : Layer.mergeAll(
+        config.fakeQuest === "black-friday" ? FakeQuestLive(FAKE_QUEST_STEP) : Layer.empty,
+        config.fakeHubQuestions === "on" ? FakeHubQuestionsLive : Layer.empty,
+      );
+
+/**
+ * Memory capture (ADR 028): with memory on, the worker sends what happens in each thread to the
+ * engine, and the journal keeps every entry it has still to send. With memory turned off, or no
+ * engine in this copy of Hobbots, nothing is captured and compaction keeps nothing for it.
+ */
+const memoryCaptureLayer = (config: {
+  readonly memory: "on" | "off";
+  readonly memoryEngineDir: Option.Option<string>;
+}) => {
+  const engine = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
+  if (config.memory === "off" || engine === "") return MemoryCapture.off;
+  return MemoryCapture.layer.pipe(Layer.provide(MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))));
+};
 
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -157,9 +266,13 @@ const ServerLive = Layer.unwrap(
       TaskRepositoryLive,
       TaskToolCallsLive,
       CharmCallsLive,
+      MemorySavesLive,
+      MemoryShareLogLive,
+      MemoryCaptureLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
+      HubQuestionRepositoryLive,
       RestoreRepository.layer,
       EventJournal.layer,
       SetupRepository.layer,
@@ -258,6 +371,14 @@ const ServerLive = Layer.unwrap(
     const LocalGit = LocalGitToolsLive({ stagingFolder: join(dataDir, "charms", "local-git") }).pipe(
       Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)),
     );
+    // One layer, so the fake runtime's memory tools and the Memory page share one fake memory.
+    const PageStore = memoryPageStore(config);
+    const MemoryTooling = memoryToolsLayer(config, PageStore);
+    // The memory engine (ADR 028): the bundled ai-memory, run beside the hub and stopped with it. Its
+    // two keys stay in the data folder and reach only the engine's environment. Without an engine,
+    // or one that fails its checksum, memory is off and everything else works.
+    const memoryKeys = loadOrCreateMemoryKeys(dataDir);
+    const Memory = memoryEngineLayer(config, dataDir, memoryKeys);
     // The hub's own path separator, which alone divides the folders a hob may be given (STD-SEC-003).
     const separator = sep === "\\" ? "\\" : "/";
     const App = HobLifecycle.layer
@@ -268,6 +389,8 @@ const ServerLive = Layer.unwrap(
             HobService.layer,
             PermissionSummary.layer,
             JournalCompaction,
+            // What happens in each thread goes to its hob's memory (ADR 028).
+            memoryCaptureLayer(config),
             // The Workbench's heavy details are cleared past their retention window (ADR 023).
             ActivityRetention,
             // Two Tasks of one Quest changing the same file is a finding for their lead (#570).
@@ -279,9 +402,10 @@ const ServerLive = Layer.unwrap(
             // Settings › Backup & export (ADR 026).
             HubBackups.layer,
             HubRestores.layer,
-            config.runtime === "fake" && config.fakeQuest === "black-friday"
-              ? FakeQuestLive(FAKE_QUEST_STEP)
-              : Layer.empty,
+            // Settings › Your data › Start over (#948).
+            HubReset.layer,
+            fakePlays(config),
+            memoryPageLayer(config, PageStore),
           ),
         ),
       )
@@ -340,11 +464,13 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       )
+      // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
+      .pipe(Layer.provideMerge(HubQuestions.layer))
       // Before the chat service, so turns can ask, and after a restart the requests left pending expire.
       .pipe(Layer.provideMerge(ApprovalService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
-      .pipe(Layer.provideMerge(Layer.mergeAll(Charms, LocalGit, CharmCallService.layer)))
+      .pipe(Layer.provideMerge(Layer.mergeAll(Charms, LocalGit, MemoryTooling, CharmCallService.layer)))
       // Before approvals, so a decision can save grants and every call reads the hob's live ones; before
       // the hob's own GitHub app, which revokes GitHub grants whenever the hob's identity changes (ADR 022).
       .pipe(Layer.provideMerge(GrantService.layer))
@@ -364,8 +490,21 @@ const ServerLive = Layer.unwrap(
             identity,
             // What the startup recovery could not do, for Settings › Diagnostics (ADR 026).
             RecoveryLog.layer,
-            // The hub's credentials, provider keys included, are redacted by value from what tools report.
-            SecretRedaction.layer(secretsFromEnv(process.env)),
+            Memory.pipe(Layer.provide(HeldRuntime)),
+            // Before every session, a chat's, a step's and a party member's: a hob's memory reaches the
+            // projects of its folders, and what each session was briefed from it (ADR 028).
+            MemoryProjectsLive,
+            MemoryBriefReceipts.layer,
+            // The memory model you chose, kept beside the engine's folder (ADR 028).
+            MemorySettingsStore.layer(dataDir),
+            // The hub's credentials, provider keys and memory keys included, are redacted by value
+            // from what tools report.
+            SecretRedaction.layer([
+              ...secretsFromEnv(process.env),
+              { value: Redacted.value(memoryKeys.root), kind: "AI_MEMORY_AUTH_TOKEN" },
+              { value: Redacted.value(memoryKeys.proxy), kind: "AI_MEMORY_AUTH__ACTOR_PROXY_BEARER_TOKEN" },
+              { value: Redacted.value(memoryKeys.model), kind: "LLM_API_KEY" },
+            ]),
             // The whole output of long tool calls, which their steps show cut.
             ToolLogsLive(join(dataDir, "tool-logs")),
           ),
@@ -419,10 +558,14 @@ const ServerLive = Layer.unwrap(
   }),
 );
 
+/** What stopped the hub: a restore of the backup in `backup` (ADR 026), or Start over (#948). */
+type Restart = { readonly _tag: "Restore"; readonly backup: string } | { readonly _tag: "Reset" };
+
 /**
- * Runs the hub until a restore asks it to stop (ADR 026): the hub stops, the backup is restored with
- * nothing using the data folder, and the hub starts again on the restored data, in the same process.
- * Before each start, a data folder that a migration will change is backed up first.
+ * Runs the hub until a restore or Start over asks it to stop (ADR 026, #948): the hub stops, the
+ * backup is restored or the data is deleted with nothing using the data folder, and the hub starts
+ * again on what is there, in the same process. Before each start, a reset that stopped halfway is
+ * finished, and a data folder that a migration will change is backed up first.
  */
 const Hub = Effect.gen(function* () {
   const config = yield* ServerConfig;
@@ -430,17 +573,25 @@ const Hub = Effect.gen(function* () {
   for (;;) {
     mkdirSync(config.dataDir, { recursive: true });
     const dataDir = realpathSync(config.dataDir);
+    if (yield* Effect.promise(() => finishReset(dataDir))) yield* Effect.log("Finished starting over");
     yield* backupBeforeMigrations(dataDir, config.version);
-    const asked = yield* Deferred.make<string>();
+    const asked = yield* Deferred.make<Restart>();
     const restart = Layer.succeed(HubRestart, {
-      restore: (backup: string) => Deferred.succeed(asked, backup).pipe(Effect.asVoid),
+      restore: (backup: string) => Deferred.succeed(asked, { _tag: "Restore", backup }).pipe(Effect.asVoid),
+      reset: Deferred.succeed(asked, { _tag: "Reset" }).pipe(Effect.asVoid),
     });
-    const backup: string = yield* Effect.raceFirst(
+    const next: Restart = yield* Effect.raceFirst(
       Layer.launch(ServerLive.pipe(Layer.provide(Layer.merge(restart, Layer.succeed(RestoreOutcome, { failed }))))),
       Deferred.await(asked),
     );
-    yield* Effect.log(`Stopped to restore the backup in ${backup}`);
-    failed = yield* performRestore(dataDir, backup).pipe(
+    if (next._tag === "Reset") {
+      yield* Effect.log("Stopped to start over");
+      yield* Effect.promise(() => wipeHubData(dataDir));
+      failed = null;
+      continue;
+    }
+    yield* Effect.log(`Stopped to restore the backup in ${next.backup}`);
+    failed = yield* performRestore(dataDir, next.backup).pipe(
       Effect.as(null),
       Effect.catchTag("RestoreRefused", (refused) => Effect.logWarning(refused.reason).pipe(Effect.as(refused.reason))),
     );

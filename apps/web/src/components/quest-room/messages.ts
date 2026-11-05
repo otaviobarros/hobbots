@@ -9,6 +9,8 @@ export const messages = {
   questEyebrow: ({ name }: { name: string }) => `${name}'s quest`,
   taskEyebrow: ({ name }: { name: string }) => `${name}'s task`,
   done: ({ done, total }: { done: number; total: number }) => `${formatCount(done)} of ${formatCount(total)} done`,
+  /** The count once the request has finished, with its check. */
+  allDone: ({ done, total }: { done: number; total: number }) => `✓ ${formatCount(done)} of ${formatCount(total)} done`,
   needYou: ({ count }: { count: number }) =>
     plural(count, { one: "1 needs you", other: `${formatCount(count)} need you` }),
   menu: ({ title }: { title: string }) => `${title} menu`,
@@ -26,6 +28,22 @@ export const messages = {
   taskMeta: ({ attempt, age }: { attempt: number; age: string }) =>
     attempt === 0 ? `not started · ${age}` : `attempt ${formatCount(attempt)} · ${age}`,
   ended: "The work has ended. The room stays as a recap.",
+  /** The banner a finished request shows under the header. */
+  finished: {
+    questTitle: "Quest finished",
+    taskTitle: "Task finished",
+    tasks: ({ done, total }: { done: number; total: number }) =>
+      `${formatCount(done)} of ${formatCount(total)} ${total === 1 ? "task" : "tasks"} done`,
+    took: ({ took }: { took: string }) => `took ${took}`,
+    nothingNeedsYou: "nothing needs you",
+    changes: "See what changed",
+    files: "Open the files",
+  },
+  technical: {
+    show: "Show technical steps",
+    hide: "Hide technical steps",
+    hint: "The exact commands and files each hob used",
+  },
   chat: {
     fold: "Fold the chat",
     foldHint: "Fold the chat to give the lanes more room",
@@ -40,5 +58,7 @@ export const messages = {
     named: ({ title }: { title: string }) => `Workbench for ${title}`,
     open: "Open the Workbench",
     fold: "Fold the Workbench",
+    expand: "Make the Workbench as tall as it goes",
+    shrink: "Bring the Workbench back to its height",
   },
 } as const;

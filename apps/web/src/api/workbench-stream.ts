@@ -2,6 +2,7 @@ import { CommandOutput, STREAM_FRAME, StreamReady, type TaskId } from "@hobbots/
 import { useQueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useEffect, useState } from "react";
+import { atMostEvery } from "../lib/at-most-every.ts";
 import { API_URL } from "./client.ts";
 import { applyCommandOutput, treeChanged } from "./workbench.ts";
 
@@ -10,6 +11,9 @@ const decodeCommandOutput = Schema.decodeUnknownSync(Schema.fromJsonString(Comma
 
 /** How long a stream the hub closed waits before it opens again. */
 const REOPEN_AFTER_MS = 2000;
+
+/** How often, at most, the stream's changes read the tree again. */
+const TREE_READ_EVERY_MS = 1000;
 
 /** Where a tree's Workbench stream is, resumed after `cursor` when there is one. */
 const workbenchStreamUrl = (taskId: TaskId, cursor: string | undefined): string => {
@@ -38,7 +42,10 @@ export const useWorkbenchStream = (taskId: TaskId, cursor: string | undefined) =
     if (from === undefined) return;
     let last = from;
     const source = new EventSource(workbenchStreamUrl(taskId, last));
-    const changed = () => void treeChanged(queryClient, taskId);
+    // A running party records several changes a second; the tree is read at most once a second for
+    // them, and always after the last one.
+    const refresh = atMostEvery(() => void treeChanged(queryClient, taskId), TREE_READ_EVERY_MS);
+    const changed = refresh.call;
     source.addEventListener(STREAM_FRAME.ready, (frame) => {
       try {
         if (!decodeReady(frame.data).resumed) changed();
@@ -67,6 +74,7 @@ export const useWorkbenchStream = (taskId: TaskId, cursor: string | undefined) =
     };
     return () => {
       clearTimeout(reopen);
+      refresh.cancel();
       source.close();
     };
   }, [queryClient, taskId, from, reopened]);

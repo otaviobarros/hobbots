@@ -13,6 +13,7 @@ import {
   isTerminalTask,
   type MessageId,
   POLICY_OPERATIONS,
+  type Question,
   type QuestLimits,
   questPlacement,
   questsAbove,
@@ -121,6 +122,20 @@ export const outcomesShown = (
 /** A hob as the caller's tools name it: "you" for the caller, its id for another hob, and null for the user. */
 export const nameFor = (agentId: string | null, caller: string): string =>
   agentId === caller ? "you" : (agentId ?? "the user");
+
+/**
+ * A question's choices as a tool result shows them (#740): each label with what it does, and the
+ * one its asker recommends; nothing for a question without choices.
+ */
+export const questionChoices = (question: Question) =>
+  question.options.length === 0
+    ? {}
+    : {
+        choices: question.options.map((option) =>
+          option.consequence === "" ? option.label : `${option.label}: ${option.consequence}`,
+        ),
+        ...(question.recommended !== null && { recommended: question.options[question.recommended]?.label }),
+      };
 
 /**
  * A request that pauses a Task's turn, as a lead's tools report it: only the user decides it, in the

@@ -1,4 +1,4 @@
-import { AgentId, AttemptId, HistoryFilter, TaskId, ThreadId } from "@hobbots/domain";
+import { AgentId, AttemptId, HistoryFilter, MemoryKind, MemoryScopeKey, TaskId, ThreadId } from "@hobbots/domain";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createHashHistory,
@@ -19,13 +19,15 @@ import { ArchivePage } from "./components/archive-page/archive-page.tsx";
 import { ArchivedChatPage, RetiredChatPage, RetiredHobPage } from "./components/archive-page/archive-read.tsx";
 import { HobPage } from "./components/hob-page/hob-page.tsx";
 import { HobPageTab } from "./components/hob-page/hob-page-model.ts";
-import { HobProfile } from "./components/hob-profile/hob-profile.tsx";
+import { HobProfile, ProfileTabName } from "./components/hob-profile/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-page/hobs-layout.tsx";
 import { HobsPage } from "./components/hobs-page/hobs-page.tsx";
 import { HobFilter } from "./components/hobs-page/hobs-page-model.ts";
 import { Home } from "./components/home/home.tsx";
 import { InboxTab } from "./components/inbox/inbox-items.ts";
 import { InboxPage } from "./components/inbox/inbox-page.tsx";
+import { ChangeFilter } from "./components/memory/memory-model.ts";
+import { MemoryPage } from "./components/memory/memory-page.tsx";
 import { OnboardingFirstHob } from "./components/onboarding/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding/onboarding-safety.tsx";
@@ -271,9 +273,12 @@ const profileRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "hobs/$hobId/profile",
+  // `?tab=` opens Charms or Permissions, as a hob's Memory tab links to what it may remember.
+  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ tab: searchParam(ProfileTabName) })),
   component: function ProfilePage() {
     const params = profileRoute.useParams();
-    return <HobProfile key={params.hobId} hobId={AgentId.make(params.hobId)} />;
+    const { tab } = profileRoute.useSearch();
+    return <HobProfile key={params.hobId} hobId={AgentId.make(params.hobId)} tab={tab ?? "profile"} />;
   },
 });
 
@@ -340,6 +345,32 @@ const usageRoute = createRoute({
     return <UsagePage days={days === 30 ? "30" : "7"} by={by ?? "hob"} />;
   },
 });
+// Memory (ADR 028): `?scope=` opens a scope and `&page=` a page in it, `&v=` shows what one version
+// changed, `?q=` searches (`&in=` in one scope), `?view=changes` opens What changed and `?view=review`
+// To review, with `&item=` the share or finding open there. `&edit=page` opens the page in the
+// editor, and `&edit=new` a new page in the scope.
+const memoryRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="home" />,
+  path: "memory",
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({
+      view: searchParam(Schema.Literals(["changes", "review"])),
+      item: searchParam(Schema.String),
+      scope: searchParam(MemoryScopeKey),
+      page: searchParam(Schema.String),
+      v: searchParam(Schema.String),
+      kind: searchParam(MemoryKind),
+      q: searchParam(SearchText),
+      in: searchParam(MemoryScopeKey),
+      show: searchParam(ChangeFilter),
+      edit: searchParam(Schema.Literals(["page", "new"])),
+    }),
+  ),
+  component: function Memory() {
+    return <MemoryPage search={memoryRoute.useSearch()} />;
+  },
+});
 // Settings opens on its overview; each section has its own address, such as `/settings/devices`.
 const settingsRoute = createRoute({
   getParentRoute: () => shellRoute,
@@ -390,14 +421,22 @@ const archiveListRoute = createRoute({
   },
 });
 
-// An archived chat, read-only, with Restore.
+// An archived chat, read-only, with Restore. `?message=` opens it on a search match.
 const archiveChatRoute = createRoute({
   getParentRoute: () => archiveRoute,
   errorComponent: (props) => <PageError error={props.error} way="archive" />,
   path: "chats/$hobId/$threadId",
+  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ message: searchParam(Schema.String) })),
   component: function ArchiveChat() {
     const params = archiveChatRoute.useParams();
-    return <ArchivedChatPage hobId={AgentId.make(params.hobId)} threadId={ThreadId.make(params.threadId)} />;
+    const { message } = archiveChatRoute.useSearch();
+    return (
+      <ArchivedChatPage
+        hobId={AgentId.make(params.hobId)}
+        threadId={ThreadId.make(params.threadId)}
+        focusMessageId={message}
+      />
+    );
   },
 });
 
@@ -476,6 +515,7 @@ const routeTree = rootRoute.addChildren([
     summonRoute,
     arrivedRoute,
     inboxRoute,
+    memoryRoute,
     usageRoute,
     settingsRoute,
     settingsSectionRoute,
