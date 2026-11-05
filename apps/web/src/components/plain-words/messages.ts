@@ -30,6 +30,8 @@ export const messages = {
     "open-pull-request": "Opening a pull request",
     "comment-github": "Commenting on GitHub",
     "outside-folders": "Working outside its folders",
+    "search-memory": "Searching its memory",
+    "save-memory": "Saving to its memory",
   },
   /** A command that only looks around, while it runs. */
   looking: "Looking through the files",

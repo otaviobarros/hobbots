@@ -14,6 +14,8 @@ const lead: Authority = {
     "open-pull-request": "ask",
     "comment-github": "ask",
     "outside-folders": "deny",
+    "search-memory": "allow",
+    "save-memory": "allow",
   },
   // Its own override asks before a push; the other Asks are the preset's.
   fixed: ["push"],

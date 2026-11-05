@@ -38,6 +38,8 @@ const requests = (h: Home): Record<PolicyOperation, PolicyRequest> => ({
   "open-pull-request": { _tag: "PullRequest", folder: h.project, repository: "otaviobarros/hobbots", base: "main" },
   "comment-github": { _tag: "GitHubComment", folder: h.project, repository: "otaviobarros/hobbots", number: 324 },
   "outside-folders": files("read-files", h.project, "../secret.txt"),
+  "search-memory": { _tag: "Memory", operation: "search-memory", scope: "your memory" },
+  "save-memory": { _tag: "Memory", operation: "save-memory", scope: "your memory" },
 });
 
 /** ADR 014's preset table, written out again so the engine is checked against the decision, not itself. */
@@ -54,6 +56,9 @@ const ADR_014: Record<PolicyOperation, readonly [PolicyDecision, PolicyDecision,
   "open-pull-request": ["ask", "ask", "allow"],
   "comment-github": ["ask", "ask", "allow"],
   "outside-folders": ["deny", "deny", "deny"],
+  // ADR 028's Memory group.
+  "search-memory": ["allow", "allow", "allow"],
+  "save-memory": ["allow", "allow", "allow"],
 };
 
 /** Ways a path can name something outside the hob's folders. */

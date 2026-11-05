@@ -150,6 +150,10 @@ const restCorrelationOf = (
       return { ...NONE, taskId: event.taskId };
     case "ToolCallRefused":
       return { ...NONE, agentId: event.refusal.agentId, taskId: event.refusal.taskId };
+    // A hob's save names its hob, and the reply it was made from when it came from a chat turn.
+    case "MemorySaveRecorded":
+    case "MemorySaveChanged":
+      return { ...NONE, agentId: event.save.agentId, threadId: event.save.threadId, messageId: event.save.messageId };
     default:
       return { ...NONE, threadId: event.threadId, messageId: event.messageId };
   }

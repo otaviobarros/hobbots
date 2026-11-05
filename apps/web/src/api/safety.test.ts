@@ -55,6 +55,8 @@ describe("per-hob rules", () => {
       "read-files",
       "read-github",
       "run-commands",
+      "save-memory",
+      "search-memory",
       "use-web",
     ]);
   });
@@ -90,6 +92,8 @@ describe("per-hob rules", () => {
       "open-pull-request": "ask",
       "comment-github": "ask",
       "outside-folders": "deny",
+      "search-memory": "allow",
+      "save-memory": "allow",
     } as const;
     expect(enforcement("delete-files", balanced)).toBe("checked");
     expect(enforcement("push", balanced)).toBe("checked");
@@ -111,6 +115,8 @@ describe("per-hob rules", () => {
       "open-pull-request": "ask",
       "comment-github": "ask",
       "outside-folders": "deny",
+      "search-memory": "allow",
+      "save-memory": "allow",
     } as const;
     expect(enforcement("local-git", balanced)).toBe("enforced");
     expect(enforcement("local-git", { ...balanced, "local-git": "deny" })).toBe("checked");

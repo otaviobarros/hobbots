@@ -1,8 +1,9 @@
 import { CharmCalls } from "@hobbots/agents";
 import { CharmCall } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
-import { SqlClient, SqlError } from "effect/sql";
+import { SqlClient } from "effect/sql";
 import { lockJournal } from "./journal.ts";
+import { sqlOrDie } from "./sql-errors.ts";
 
 interface Row {
   readonly agentId: string;
@@ -61,14 +62,6 @@ const toRow = (call: CharmCall) => ({
   updated_at: call.updatedAt,
 });
 
-const orDie = <A, R>(effect: Effect.Effect<A, SqlError.SqlError, R>) =>
-  effect.pipe(
-    Effect.catchIf(
-      (error): error is SqlError.SqlError => SqlError.isSqlError(error),
-      (error) => Effect.die(error),
-    ),
-  );
-
 /**
  * The SQL Charm call records (migration 0028), keyed by hob, scope and key (migration 0045). Recording a call checks its key and its site in the
  * same transaction, with the journal's head taken first so concurrent calls take turns on PostgreSQL.
@@ -103,7 +96,7 @@ export const CharmCallsLive = Layer.effect(
           }
           yield* sql`INSERT INTO charm_calls ${sql.insert(toRow(call))}`;
           return { _tag: "Started" } as const;
-        }).pipe(sql.withTransaction, orDie),
+        }).pipe(sql.withTransaction, sqlOrDie),
       // One conditional update, so of two outcomes racing for the same sending only the first lands,
       // and an outcome for an earlier sending of the key never lands on a later one. By attempt, not
       // scope, so a sending still settles after its reply's calls moved to the Task it started (#660).
@@ -112,29 +105,29 @@ export const CharmCallsLive = Layer.effect(
           UPDATE charm_calls SET state = ${state}, result = ${result}, updated_at = ${at}
           WHERE agent_id = ${call.agentId} AND call_key = ${call.key} AND attempt = ${call.attempt}
             AND state IN ('sending', 'uncertain')
-          RETURNING *`.pipe(Effect.flatMap(one), orDie),
-      find: (agentId, scopes, key) => orDie(find(agentId, scopes, key)),
+          RETURNING *`.pipe(Effect.flatMap(one), sqlOrDie),
+      find: (agentId, scopes, key) => sqlOrDie(find(agentId, scopes, key)),
       current: (call) =>
-        orDie(
+        sqlOrDie(
           sql<Row>`SELECT * FROM charm_calls
             WHERE agent_id = ${call.agentId} AND call_key = ${call.key} AND attempt = ${call.attempt}`.pipe(
             Effect.flatMap(one),
           ),
         ),
       findByStep: (threadId, messageId, stepId) =>
-        orDie(
+        sqlOrDie(
           sql<Row>`
             SELECT * FROM charm_calls
             WHERE thread_id = ${threadId} AND message_id = ${messageId} AND step_id = ${stepId}
             ORDER BY created_at DESC LIMIT 1`.pipe(Effect.flatMap(one)),
         ),
       listForThread: (threadId) =>
-        orDie(
+        sqlOrDie(
           sql<Row>`SELECT * FROM charm_calls WHERE thread_id = ${threadId} ORDER BY created_at`.pipe(
             Effect.flatMap((rows) => Effect.forEach(rows, fromRow)),
           ),
         ),
-      unsettled: orDie(
+      unsettled: sqlOrDie(
         sql<Row>`SELECT * FROM charm_calls WHERE state IN ('sending', 'uncertain') ORDER BY created_at`.pipe(
           Effect.flatMap((rows) => Effect.forEach(rows, fromRow)),
         ),

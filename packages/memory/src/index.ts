@@ -9,3 +9,4 @@ export * from "./engine/status.ts";
 export * from "./store/ai-memory.ts";
 export { makeMemoryStoreOff } from "./store/off.ts";
 export { MemoryProjectsLive } from "./store/projects.ts";
+export * from "./tools.ts";
