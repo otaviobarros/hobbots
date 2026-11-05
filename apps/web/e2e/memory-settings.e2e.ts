@@ -77,3 +77,56 @@ test("[TC-GEN-222] chooses the memory model in Your data, sees shares follow the
   await usage.getByRole("link", { name: "Choose the memory model" }).click();
   await expect(pick("Provider", "No AI")).toBeVisible();
 });
+
+// covers ADR 028
+test("[TC-GEN-224] keeps a choice the hub could not save, and sends it again or goes back", async ({ page }) => {
+  hub = await startHub(dataDir);
+  await finishSetup(hub);
+  // The hub refuses the first two saves, then takes them.
+  let refusals = 2;
+  await page.route("**/api/memory/settings", async (route) => {
+    if (refusals-- > 0) await route.fulfill({ status: 500, body: "" });
+    else await route.continue();
+  });
+  await page.goto(`${hub.url}/#/settings/data`);
+  const card = page.getByRole("region", { name: "Memory" });
+  const pick = (group: string, name: string) =>
+    card.getByRole("radiogroup", { name: group, exact: true }).getByRole("radio", { name, exact: true });
+  await expect(pick("Model", "Haiku")).toBeChecked();
+
+  // The refused choice stays shown, with a way back to the one memory still runs with.
+  await pick("Model", "Sonnet").click();
+  await expect(card.getByRole("alert")).toContainText("could not save this choice");
+  await expect(pick("Model", "Sonnet")).toBeChecked();
+  await card.getByRole("button", { name: "Keep the one before" }).click();
+  await expect(pick("Model", "Haiku")).toBeChecked();
+  await expect(card.getByRole("alert")).toHaveCount(0);
+
+  // Refused again, then sent again as it was.
+  await pick("Model", "Opus").click();
+  await expect(pick("Model", "Opus")).toBeChecked();
+  await card.getByRole("button", { name: "Try again" }).click();
+  await expect(card.getByRole("alert")).toHaveCount(0);
+  await expect(pick("Model", "Opus")).toBeChecked();
+  await expect
+    .poll(() => (JSON.parse(readFileSync(join(dataDir, "memory-settings.json"), "utf8")) as { model: string }).model)
+    .toBe("opus");
+});
+
+// covers ADR 028
+test("[TC-GEN-225] says when the desktop app could not show the memory files, and tries again", async ({ page }) => {
+  hub = await startHub(dataDir);
+  await finishSetup(hub);
+  // The desktop app's bridge: no folder yet the first time, then it opens.
+  await page.addInitScript(() => {
+    let calls = 0;
+    Object.assign(window, { hobbots: { showMemoryFiles: async () => ++calls > 1 } });
+  });
+  await page.goto(`${hub.url}/#/settings/data`);
+  const card = page.getByRole("region", { name: "Memory" });
+  await card.getByRole("button", { name: "Show the files" }).click();
+  await expect(card.getByRole("alert")).toContainText("could not open the memory files");
+  await card.getByRole("button", { name: "Try again" }).click();
+  await expect(card.getByRole("alert")).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Show the files" })).toBeEnabled();
+});

@@ -34,7 +34,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
-import { MemorySettingsStore, memorySettingsFile, readMemorySettings } from "../src/memory-settings.ts";
+import { folderBytes, MemorySettingsStore, memorySettingsFile, readMemorySettings } from "../src/memory-settings.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 // Settings › Your data › Memory (ADR 028, issue #962): the memory model is stored in the data
@@ -185,5 +185,23 @@ describe("the memory model in Settings", () => {
     expect(readMemorySettings(dataDir)).toEqual(DEFAULT_MEMORY_SETTINGS);
     writeFileSync(memorySettingsFile(dataDir), JSON.stringify({ ...DEFAULT_MEMORY_SETTINGS, effort: "extreme" }));
     expect(readMemorySettings(dataDir)).toEqual(DEFAULT_MEMORY_SETTINGS);
+  });
+
+  // covers ADR 028
+  it("[TC-GEN-223] measures the memory folder without blocking, once for requests that come together", async () => {
+    const memory = join(dataDir, "memory");
+    mkdirSync(join(memory, "wiki", "projects", "deep"), { recursive: true });
+    writeFileSync(join(memory, "wiki", "a.md"), "12345");
+    writeFileSync(join(memory, "wiki", "projects", "deep", "b.md"), "123");
+    expect(await Effect.runPromise(folderBytes(memory))).toBe(8);
+    expect(await Effect.runPromise(folderBytes(join(dataDir, "missing")))).toBeNull();
+
+    // Two overviews in a row measure once: a page added between them shows after the cache expires.
+    const first = await Promise.all([request("GET", "/api/memory"), request("GET", "/api/memory")]);
+    writeFileSync(join(memory, "wiki", "c.md"), "1234567890");
+    const second = await request("GET", "/api/memory");
+    expect(first.map(({ body }) => decode(body).bytes)).toEqual([8, 8]);
+    expect(decode(second.body).bytes).toBe(8);
+    expect(await Effect.runPromise(folderBytes(memory))).toBe(18);
   });
 });

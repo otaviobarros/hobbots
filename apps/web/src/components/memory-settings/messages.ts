@@ -16,6 +16,10 @@ export const messages = {
     },
     engine: ({ version }: { version: string }) => `Memory engine: ai-memory ${version}, bundled`,
     showFiles: "Show the files",
+    opening: "Opening…",
+    showFailed:
+      "Hobbots could not open the memory files. There may be none yet: they appear once a hob saves something. Try again after that.",
+    tryAgain: "Try again",
     failed: "Hobbots could not read your memory settings. Try again in a moment.",
   },
   chat: {
@@ -45,7 +49,9 @@ export const messages = {
     needsKey: ({ provider }: { provider: string }) =>
       `Hobbots can't hand ${provider} a key yet, so memory writes summaries with no AI for now. Your choice is kept for when it can.`,
     applies: "A change restarts only the memory engine, never the app.",
-    saveFailed: "Hobbots could not save the memory model. Try again in a moment.",
+    saveFailed: "Hobbots could not save this choice, so memory still runs with the one before.",
+    retry: "Try again",
+    keepBefore: "Keep the one before",
   },
   fallback: {
     title: "If it is not available",

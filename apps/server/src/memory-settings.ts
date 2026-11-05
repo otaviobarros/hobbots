@@ -1,9 +1,10 @@
-import { mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { HobbotsApi, type MemoryOverview } from "@hobbots/api";
 import { DEFAULT_MEMORY_SETTINGS, type MemoryModelVendor, MemorySettings } from "@hobbots/domain";
 import { engineSettingsFor, MemoryEngine } from "@hobbots/memory";
-import { Context, Effect, Layer, Option, Ref, Schema } from "effect";
+import { Context, Effect, Layer, Option, Ref, Schema, Semaphore } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 
 /**
@@ -50,27 +51,61 @@ interface MemorySettingsStoreShape {
 export class MemorySettingsStore extends Context.Service<MemorySettingsStore, MemorySettingsStoreShape>()(
   "@hobbots/server/MemorySettingsStore",
 ) {
-  /** The settings in the data folder, and the size of its `memory/` folder. */
+  /**
+   * The settings in the data folder, and the size of its `memory/` folder. The size is read off
+   * the request path: at most once every {@link FOLDER_SIZE_TTL}, shared by every request that asks
+   * meanwhile, and without blocking the hub while it walks the folder.
+   */
   static readonly layer = (dataDir: string) =>
-    Layer.succeed(MemorySettingsStore, {
-      get: Effect.sync(() => readMemorySettings(dataDir)),
-      set: (settings) => Effect.sync(() => writeMemorySettings(dataDir, settings)),
-      bytes: Effect.sync(() => folderBytes(join(dataDir, "memory"))),
-    });
+    Layer.effect(
+      MemorySettingsStore,
+      Effect.gen(function* () {
+        const bytes = yield* Effect.cachedWithTTL(folderBytes(join(dataDir, "memory")), FOLDER_SIZE_TTL);
+        return {
+          get: Effect.sync(() => readMemorySettings(dataDir)),
+          set: (settings) => Effect.sync(() => writeMemorySettings(dataDir, settings)),
+          bytes,
+        };
+      }),
+    );
 }
 
-/** The bytes of every file under `folder`, without following links; null when there is no folder. */
-const folderBytes = (folder: string): number | null => {
-  try {
-    let total = 0;
-    for (const entry of readdirSync(folder, { withFileTypes: true, recursive: true })) {
-      if (entry.isFile()) total += statSync(join(entry.parentPath, entry.name)).size;
-    }
-    return total;
-  } catch {
-    return null;
-  }
-};
+/** How long a measured folder size stands before the next request measures it again. */
+export const FOLDER_SIZE_TTL = "30 seconds";
+
+/** How many folder entries are read at once while the folder is measured. */
+const FOLDER_CONCURRENCY = 8;
+
+/**
+ * The bytes of every file under `folder`, without following links; null when there is no folder.
+ * At most {@link FOLDER_CONCURRENCY} reads of the file system run at once, however deep the folder
+ * goes, and an entry that goes away while it is measured counts as nothing.
+ */
+export const folderBytes = (folder: string): Effect.Effect<number | null> =>
+  Effect.suspend(() => {
+    const permit = Semaphore.withPermit(Semaphore.makeUnsafe(FOLDER_CONCURRENCY));
+    const read = <A>(call: () => Promise<A>) => permit(Effect.tryPromise(call));
+    const walk = (dir: string): Effect.Effect<number, unknown> =>
+      read(() => readdir(dir, { withFileTypes: true })).pipe(
+        Effect.flatMap((entries) =>
+          Effect.forEach(
+            entries,
+            (entry): Effect.Effect<number> => {
+              const path = join(dir, entry.name);
+              if (entry.isDirectory()) return walk(path).pipe(Effect.orElseSucceed(() => 0));
+              if (!entry.isFile()) return Effect.succeed(0);
+              return read(() => lstat(path)).pipe(
+                Effect.map((stats) => stats.size),
+                Effect.orElseSucceed(() => 0),
+              );
+            },
+            { concurrency: FOLDER_CONCURRENCY },
+          ),
+        ),
+        Effect.map((sizes) => sizes.reduce((total, size) => total + size, 0)),
+      );
+    return walk(folder).pipe(Effect.orElseSucceed((): number | null => null));
+  });
 
 // Settings › Your data › Memory (ADR 028). A changed model is stored first, then the engine is
 // reconfigured, which restarts only its process. A hub without an engine reports none.

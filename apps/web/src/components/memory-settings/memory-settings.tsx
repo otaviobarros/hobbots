@@ -6,6 +6,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { memoryOverviewQuery, useUpdateMemorySettings } from "../../api/memory.ts";
+import { CardFooter } from "./card-footer.tsx";
 import { Choice } from "./choice.tsx";
 import { messages } from "./messages.ts";
 import {
@@ -99,7 +100,9 @@ function MemoryModel({ settings, note }: { settings: MemorySettings; note: strin
   const update = useUpdateMemorySettings();
   const [perTask, setPerTask] = useState(false);
   const tasksId = useId();
-  const shown = update.isPending ? update.variables : settings;
+  // A choice shows at once and stays shown when it could not be saved, so it can be sent again.
+  const failed = update.isError ? update.variables : undefined;
+  const shown = (update.isPending ? update.variables : failed) ?? settings;
   const save = (next: MemorySettings) => update.mutate(next);
   const hint = modelHint(shown);
   const busy = update.isPending;
@@ -145,10 +148,18 @@ function MemoryModel({ settings, note }: { settings: MemorySettings; note: strin
         </div>
         <span className={cn("text-detail", hint.warn ? "text-lantern" : "text-text-secondary")}>{hint.text}</span>
         {note !== null && <span className="text-detail text-text-secondary">{note}</span>}
-        {update.isError && (
-          <p role="alert" className="m-0 text-ui text-rose">
-            {copy.model.saveFailed}
-          </p>
+        {failed !== undefined && (
+          <span className="flex flex-wrap items-center gap-2">
+            <p role="alert" className="m-0 text-ui text-rose">
+              {copy.model.saveFailed}
+            </p>
+            <Button variant="ghost" size="xs" onClick={() => save(failed)}>
+              {copy.model.retry}
+            </Button>
+            <Button variant="ghost" size="xs" onClick={() => update.reset()}>
+              {copy.model.keepBefore}
+            </Button>
+          </span>
         )}
       </div>
       {shown.provider !== "none" && (
@@ -200,23 +211,6 @@ function MemoryModel({ settings, note }: { settings: MemorySettings; note: strin
         </div>
       )}
       <span className="text-meta text-label">{copy.model.applies}</span>
-    </>
-  );
-}
-
-/** Show the files, on the desktop app on the hub, and which engine keeps memory. */
-function CardFooter({ version }: { version: string | null }) {
-  const showFiles = window.hobbots?.showMemoryFiles;
-  return (
-    <>
-      {showFiles !== undefined && (
-        <div className="flex flex-wrap gap-2 border-t border-line pt-3">
-          <Button variant="ghost" size="sm" onClick={() => void showFiles()}>
-            {copy.card.showFiles}
-          </Button>
-        </div>
-      )}
-      {version !== null && <span className="text-meta text-label">{copy.card.engine({ version })}</span>}
     </>
   );
 }
