@@ -80,14 +80,9 @@ export function WorkbenchDock({
           states={states}
           counts={counts}
           open={open}
-          filter={
-            ownerId === undefined || only === undefined
-              ? null
-              : {
-                  hob: hobs(ownerId),
-                  name: "taskId" in only && litTask !== undefined ? taskTitle(litTask) : hobs(ownerId).name,
-                }
-          }
+          // The chip names the hob, never a Task: a Task's title is its brief, which can run to a
+          // paragraph, and the lit Task's header over the panels already names it.
+          filter={ownerId === undefined || only === undefined ? null : hobs(ownerId)}
           party={party}
           onEveryone={() => moves.lane(undefined)}
           onFold={() => moves.tab(open ? undefined : "changes")}

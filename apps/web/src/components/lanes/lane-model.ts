@@ -258,9 +258,10 @@ const briefedItems = (tree: TaskTree, unit: ReadonlyArray<Task>): ReadonlyArray<
   });
 
 /**
- * Folds every mark but the last `shown` into counts. Each run of hidden marks folds where it was,
- * so opening it shows its marks in place: beats, chips, refused calls, results and Task headings
- * stay where they happened, and no mark moves into another Task's part of the lane.
+ * Folds every mark but the last `shown` into one count for each Task's part of the lane, placed
+ * where its first hidden mark was: a long run of work reads as one "N more" instead of several.
+ * Beats, chips, refused calls, results and Task headings stay where they happened, and no mark
+ * moves into another Task's part of the lane.
  */
 export const foldMarks = (items: ReadonlyArray<LaneItem>, shown: number = SHOWN_MARKS): ReadonlyArray<LaneItem> => {
   const isMark = (item: LaneItem): item is LaneMark =>
@@ -269,21 +270,18 @@ export const foldMarks = (items: ReadonlyArray<LaneItem>, shown: number = SHOWN_
   const hidden = new Set<LaneItem>(marks.slice(0, Math.max(0, marks.length - shown)));
   if (hidden.size === 0) return items;
   const folded: Array<LaneItem> = [];
-  let run: Array<LaneMark> = [];
-  const close = () => {
-    const first = run[0];
-    if (first !== undefined) folded.push({ kind: "folded", key: `folded-${first.key}`, marks: run });
-    run = [];
-  };
+  let fold: { kind: "folded"; key: string; marks: Array<LaneMark> } | null = null;
   for (const item of items) {
-    if (isMark(item) && hidden.has(item)) {
-      run.push(item);
-    } else {
-      close();
+    if (item.kind === "task") fold = null;
+    if (!isMark(item) || !hidden.has(item)) {
       folded.push(item);
+    } else if (fold === null) {
+      fold = { kind: "folded", key: `folded-${item.key}`, marks: [item] };
+      folded.push(fold);
+    } else {
+      fold.marks.push(item);
     }
   }
-  close();
   return folded;
 };
 

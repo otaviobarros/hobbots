@@ -102,7 +102,7 @@ function LaneMarkRow({ mark }: { mark: LaneMark }) {
   }
 }
 
-/** Older marks folded into a count; opening them shows them in place. */
+/** A Task's older marks folded into one count; opening it shows them where the first was. */
 function Folded({ marks }: { marks: ReadonlyArray<LaneMark> }) {
   const [open, setOpen] = useState(false);
   if (open) return marks.map((mark) => <LaneMarkRow key={mark.key} mark={mark} />);
@@ -110,6 +110,7 @@ function Folded({ marks }: { marks: ReadonlyArray<LaneMark> }) {
     <li>
       <button
         type="button"
+        aria-label={messages.foldedLabel({ count: marks.length })}
         onClick={() => setOpen(true)}
         className="cursor-pointer border-0 bg-transparent p-0 ps-5 text-meta text-label underline underline-offset-2 hover:text-text-strong"
       >

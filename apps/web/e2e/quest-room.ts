@@ -55,9 +55,12 @@ export const taskDetails = async (page: Page, title: string, owner?: string): Pr
 export const taskSummary = async (page: Page, title: string, owner?: string): Promise<Locator> =>
   (await taskDetails(page, title, owner)).locator('[data-slot="summary"]');
 
-/** Shows a Task's work in the Workbench docked under the lanes, on Changes, and gives back the dock. */
+/**
+ * Shows a Task's work in the Workbench docked under the lanes, on Changes, and gives back the dock.
+ * The button sits in the Task's details, which this opens first.
+ */
 export const showInWorkbench = async (page: Page, title: string, owner?: string): Promise<Locator> => {
-  await laneTask(page, title, owner).getByRole("button", { name: "Show in the Workbench" }).click();
+  await (await taskDetails(page, title, owner)).getByRole("button", { name: "Show in the Workbench" }).click();
   const bench = dock(page);
   await bench.getByRole("heading", { name: title }).waitFor();
   return bench;

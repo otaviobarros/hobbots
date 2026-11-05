@@ -211,8 +211,8 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   await expect((await laneMenu(page, "Quill")).getByRole("menuitem", { name: "Cancel task…" })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  // Retry queues the failed Task again for a new Attempt of the same Task.
-  await expect(banner).toContainText("attempt 1");
+  // Retry queues the failed Task again for a new Attempt of the same Task. One try needs no number.
+  await expect(banner).not.toContainText("attempt 1");
   await bannerFailed.getByRole("button", { name: "Retry" }).click();
   await expect(banner).toContainText("attempt 2", { timeout: 15_000 });
   // The lane is no longer rose; the failed try stays in its history.

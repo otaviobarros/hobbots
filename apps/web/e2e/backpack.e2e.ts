@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openRoom, questRoom } from "./quest-room.ts";
+import { openRoom, questRoom, taskDetails } from "./quest-room.ts";
 
 // Issue #297 in the browser: what a hob is waiting on, on the hob's card and on the lead's Task. The read
 // reads themselves are tested in packages/persistence/test/backpack.test.ts.
@@ -145,5 +145,7 @@ test("[TC-IN-150] Aldric's card and his Task's backpack show Quill's result as a
   });
   await page.keyboard.press("Escape");
   await lead();
+  // Once nothing waits, the backpack moves into the Task's details.
+  await taskDetails(page, "Plan the launch");
   await expect(room).toContainText("Consumed");
 });

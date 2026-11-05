@@ -52,8 +52,9 @@ export function TaskCards({
 }
 
 /**
- * One of a hob's Tasks in its lane: which try it shows and how a picked earlier one went, Show in the Workbench, its backpack and
- * everything else it holds behind a disclosure. A question for you, a failure and the controls are
+ * One of a hob's Tasks in its lane: which try it shows once there is more than one, how a picked
+ * earlier one went, what waits in its backpack, and everything else behind a disclosure, Show in
+ * the Workbench among it. A question for you, a failure and the controls are
  * the lane's own (lane-actions), as are its beats, marks and waits (ADR 027).
  */
 function TaskCard({
@@ -76,6 +77,7 @@ function TaskCard({
   onWorkbench: (taskId: TaskId) => void;
 }) {
   const { task } = row;
+  const attempts = attemptCount(tree, task);
   return (
     <section
       aria-label={taskTitle(task)}
@@ -89,21 +91,25 @@ function TaskCard({
           <StatusTag status={roomTone(row.status)}>{roomStatusLabel(row.status)}</StatusTag>
         </span>
       )}
-      <p className="m-0 text-meta text-label">
-        {messages.taskMeta({ attempt: tried?.number ?? attemptCount(tree, task), age: formatWhen(task.createdAt) })}
-      </p>
+      {/* Which try it is only matters once there is more than one. */}
+      {(tried !== null || attempts > 1) && (
+        <p className="m-0 text-meta text-label">
+          {messages.taskMeta({ attempt: tried?.number ?? attempts, age: formatWhen(task.createdAt) })}
+        </p>
+      )}
       {/* An earlier try picked in the lane says how it went; the lane shows the rest. */}
       {tried?.line != null && <p className="m-0 line-clamp-3 whitespace-pre-wrap text-text">{tried.line}</p>}
       <Flags row={row} hobs={hobs} />
-      <span className="flex">
-        <Button variant="outline" size="xs" onClick={() => onWorkbench(task.id)}>
-          {messages.showInWorkbench}
-        </Button>
-      </span>
-      <TaskBackpack tree={tree} task={task} hobs={hobs} onOpen={onOpen} />
+      <TaskBackpack tree={tree} task={task} hobs={hobs} onOpen={onOpen} waiting />
       <details>
         <summary className="cursor-pointer text-label">{messages.details}</summary>
         <div className="mt-3 flex flex-col gap-4">
+          <span className="flex">
+            <Button variant="outline" size="xs" onClick={() => onWorkbench(task.id)}>
+              {messages.showInWorkbench}
+            </Button>
+          </span>
+          <TaskBackpack tree={tree} task={task} hobs={hobs} onOpen={onOpen} waiting={false} />
           <TaskSummary tree={tree} task={task} hobs={hobs} />
           <TaskDetail tree={tree} task={task} hobs={hobs} onOpen={onOpen} />
         </div>
