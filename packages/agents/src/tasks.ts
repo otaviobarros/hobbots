@@ -29,6 +29,7 @@ import type {
   QuestId,
   Question,
   QuestionId,
+  QuestionOption,
   QuestionSurface,
   QuestLimits,
   RefusedCall,
@@ -164,6 +165,9 @@ export interface NewQuestion {
   readonly askerId: AgentId;
   readonly text: string;
   readonly createdAt: string;
+  /** The choices it offers (#740), and the index of the one its asker recommends. */
+  readonly options?: ReadonlyArray<QuestionOption>;
+  readonly recommended?: number | null;
 }
 
 /** A note you leave on a Task; its id is the command's idempotency key. */

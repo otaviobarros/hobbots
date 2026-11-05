@@ -63,7 +63,7 @@ const toRow = (save: MemorySave) => ({
 });
 
 /**
- * The SQL record of memory saves (migration 0054), keyed by hob, work and key. A save is recorded
+ * The SQL record of memory saves (migration 0055), keyed by hob, work and key. A save is recorded
  * and journaled in one transaction (ADR 028: the journal is the outbox), with the journal's head
  * taken first, so two calls with one key take turns on PostgreSQL and only the first is recorded.
  */
