@@ -193,7 +193,7 @@ function InboxItem({
         closed && "opacity-70",
       )}
     >
-      <EntryPortrait hob={hob} device={entry.kind === "device"} waiting={!closed} />
+      <EntryPortrait hob={hob} device={entry.kind === "device"} hub={entry.kind === "hub-question"} waiting={!closed} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-detail text-text-secondary">

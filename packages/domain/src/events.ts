@@ -5,6 +5,7 @@ import { ApprovalRequest } from "./approval.ts";
 import { BackpackItem } from "./backpack.ts";
 import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
+import { HubQuestion } from "./hub-question.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { MemoryShare } from "./memory-shares.ts";
 import { MemorySave } from "./memory-tools.ts";
@@ -96,6 +97,12 @@ const QuestionAnswered = Schema.TaggedStruct("QuestionAnswered", { question: Que
 const QuestionEscalated = Schema.TaggedStruct("QuestionEscalated", { question: Question });
 /** A question's Task ended as cancelled or failed before anyone answered it, so it was withdrawn. */
 const QuestionWithdrawn = Schema.TaggedStruct("QuestionWithdrawn", { question: Question });
+/** The hub put a question to you itself (#976): it goes straight to you, never to a lead. */
+const HubQuestionRaised = Schema.TaggedStruct("HubQuestionRaised", { hubQuestion: HubQuestion });
+/** You answered a question from the hub; the part of the hub that raised it applies the answer. */
+const HubQuestionAnswered = Schema.TaggedStruct("HubQuestionAnswered", { hubQuestion: HubQuestion });
+/** The hub no longer needs the answer to its question, so it was withdrawn. */
+const HubQuestionWithdrawn = Schema.TaggedStruct("HubQuestionWithdrawn", { hubQuestion: HubQuestion });
 /** You left a note on a Task; it goes to the Task's nearest lead (ADR 018). */
 const NoteLeft = Schema.TaggedStruct("NoteLeft", { note: TaskNote });
 /** A turn of a note's recipient picked it up: the backpack put it into that turn, which its runtime accepted (#900, ADR 019). */
@@ -210,6 +217,9 @@ export const JournaledEvent = Schema.Union([
   QuestionAnswered,
   QuestionEscalated,
   QuestionWithdrawn,
+  HubQuestionRaised,
+  HubQuestionAnswered,
+  HubQuestionWithdrawn,
   NoteLeft,
   NotePickedUp,
   HandedOff,
@@ -271,6 +281,9 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   QuestionAnswered: 1,
   QuestionEscalated: 1,
   QuestionWithdrawn: 1,
+  HubQuestionRaised: 1,
+  HubQuestionAnswered: 1,
+  HubQuestionWithdrawn: 1,
   // A note's `messageId`, `fromNoteId`, `pickedUpBy` and `pickedUpAt` were added with defaults, compatibly.
   NoteLeft: 1,
   NotePickedUp: 1,

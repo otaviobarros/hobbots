@@ -1,8 +1,8 @@
-import { AgentId, Question, QuestionId, TaskId } from "@hobbots/domain";
+import { AgentId, HubQuestion, HubQuestionId, Question, QuestionId, TaskId } from "@hobbots/domain";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AnswerForm } from "./question-card.tsx";
+import { AnswerForm, HubAnswerForm } from "./answer-form.tsx";
 import { AnsweredChoices } from "./question-choices.tsx";
 import { yourAnswer } from "./your-answer.ts";
 
@@ -96,5 +96,45 @@ describe("a question's choices", () => {
       "In your own words, not one of the choices. Offered: Light, Dark, and Both, with a switch",
     );
     expect(renderToStaticMarkup(<AnsweredChoices question={asked({ options: [], recommended: null })} />)).toBe("");
+  });
+});
+
+describe("a question the hub itself asks (#976)", () => {
+  it("[TC-UX-910] offers its choices on the same card, the recommended one marked, and keeps the box", () => {
+    const question = new HubQuestion({
+      id: HubQuestionId.make("h1"),
+      subject: { kind: "commit-identity", key: "default", title: "Commit identity" },
+      chat: null,
+      text: "Who should hobs commit as?",
+      options: [
+        { label: "My GitHub account", consequence: "Commits show as you on GitHub." },
+        { label: "A name and email I type", consequence: "" },
+      ],
+      recommended: 0,
+      state: "open",
+      answer: null,
+      picked: null,
+      createdAt: "2026-11-05T10:00:00.000Z",
+      answeredAt: null,
+      answeredByDeviceId: null,
+      answeredVia: null,
+      revision: 1,
+    });
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <HubAnswerForm
+          question={question}
+          askerName="your hub"
+          via="inbox"
+          hint="Goes to your hub, which applies it."
+        />
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('aria-label="your hub&#x27;s choices"');
+    expect(html.match(/data-recommended="true"/g)).toHaveLength(1);
+    expect(textOf(html)).toContain("1 My GitHub account ★ Recommended Commits show as you on GitHub.");
+    expect(textOf(html)).toContain("or answer in your own words");
+    expect(html).toContain('aria-label="Your answer to your hub"');
+    expect(textOf(html)).toContain("Goes to your hub, which applies it.");
   });
 });

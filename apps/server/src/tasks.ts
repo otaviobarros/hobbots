@@ -1,5 +1,12 @@
-import { HobbotsRepository, QuestionService, TaskControls, TaskRepository } from "@hobbots/agents";
-import { AgentNotFound, HobbotsApi, QuestNotFound, TaskNotFound, ThreadNotFound } from "@hobbots/api";
+import { HobbotsRepository, HubQuestions, QuestionService, TaskControls, TaskRepository } from "@hobbots/agents";
+import {
+  AgentNotFound,
+  HobbotsApi,
+  HubQuestionNotFound,
+  QuestNotFound,
+  TaskNotFound,
+  ThreadNotFound,
+} from "@hobbots/api";
 import { type AgentId, HISTORY_PAGE_DAYS, historyEvents, historyPage, partyOf, type TaskId } from "@hobbots/domain";
 import { EventJournal } from "@hobbots/persistence";
 import { DateTime, Effect, Layer, Option } from "effect";
@@ -88,13 +95,24 @@ export const QuestionsHandlers = HttpApiBuilder.group(HobbotsApi, "questions", (
   Effect.gen(function* () {
     const questions = yield* QuestionService;
     const journal = yield* EventJournal;
+    // The hub's own questions (#976) come from the hub's one HubQuestions, where the parts of the hub
+    // that raise them register to apply the answers. A hub built without it, as in tests, raises none.
+    const hubQuestions = Option.getOrUndefined(yield* Effect.serviceOption(HubQuestions));
+    const cursor = Effect.map(journal.head, (head) => formatCursor(head.epoch, head.sequence));
     return handlers.handleAll({
       list: () =>
         Effect.gen(function* () {
-          const head = yield* journal.head;
-          return { cursor: formatCursor(head.epoch, head.sequence), questions: yield* questions.listWaiting };
+          return { cursor: yield* cursor, questions: yield* questions.listWaiting };
         }),
       answer: ({ params, payload }) => questions.answer(params.questionId, payload.answer, payload.via),
+      listHub: () =>
+        Effect.gen(function* () {
+          return { cursor: yield* cursor, questions: hubQuestions === undefined ? [] : yield* hubQuestions.listOpen };
+        }),
+      answerHub: ({ params, payload }) =>
+        hubQuestions === undefined
+          ? Effect.fail(new HubQuestionNotFound({ hubQuestionId: params.hubQuestionId }))
+          : hubQuestions.answer(params.hubQuestionId, payload.answer, payload.via),
       leaveNote: ({ params, payload }) => questions.leaveNote(params.taskId, payload.key, payload.text),
     });
   }),

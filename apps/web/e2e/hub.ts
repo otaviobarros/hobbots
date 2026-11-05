@@ -2,7 +2,8 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
-import { type BrowserContext, test as base, type Page } from "@playwright/test";
+import { type BrowserContext, test as base, type Locator, type Page } from "@playwright/test";
+import { expectAccessible } from "./accessibility.ts";
 
 const web = resolve(import.meta.dirname, "..");
 const server = resolve(web, "../server");
@@ -146,8 +147,18 @@ export const admit = async (context: BrowserContext, hub: Hub) => {
 // The context of the test running on this worker; a hub started during the test admits it.
 let activeContext: BrowserContext | undefined;
 
-/** Playwright's `test`, whose browser context gets a device on each hub the test starts. */
-export const test = base.extend<{ readonly hubDevice: undefined }>({
+/**
+ * Playwright's `test`, whose browser context gets a device on each hub the test starts. `scan` checks
+ * what its page shows now, or one part of it, for serious and critical accessibility violations
+ * (STD-TEST-007).
+ */
+export const test = base.extend<{
+  readonly hubDevice: undefined;
+  readonly scan: (within?: Locator) => Promise<void>;
+}>({
+  scan: async ({ page }, use) => {
+    await use((within) => expectAccessible(page, within));
+  },
   hubDevice: [
     async ({ context }, use) => {
       activeContext = context;

@@ -5,6 +5,7 @@ import {
   type BackpackBlocker,
   type BackpackItem,
   type FailedTask,
+  type HubQuestion,
   type MemoryShare,
   memoryShareWaits,
   openBlocker,
@@ -24,14 +25,15 @@ const copy = messages;
 
 /**
  * One thing in the Inbox list. Every kind shows as the same row and opens beside the list: a
- * request to approve, a question no lead could answer, work that is stuck, a party member's Task
- * that failed while its Quest goes on (ADR 027), a device asking to pair, or a hob asking to share
- * what it learned (ADR 028). `key` names it in the address: a request by its own id, so links from Home and the chat
+ * request to approve, a question no lead could answer, a question the hub itself asks (#976), work
+ * that is stuck, a party member's Task that failed while its Quest goes on (ADR 027), a device
+ * asking to pair, or a hob asking to share what it learned (ADR 028). `key` names it in the address: a request by its own id, so links from Home and the chat
  * still open it, and the other kinds by their kind and id.
  */
 export type InboxEntry =
   | { readonly kind: "approval"; readonly key: string; readonly request: ApprovalRequest }
   | { readonly kind: "question"; readonly key: string; readonly waiting: WaitingQuestion }
+  | { readonly kind: "hub-question"; readonly key: string; readonly question: HubQuestion }
   | { readonly kind: "stuck"; readonly key: string; readonly item: BackpackItem }
   | { readonly kind: "failed"; readonly key: string; readonly failed: FailedTask }
   | { readonly kind: "device"; readonly key: string; readonly device: WaitingDevice }
@@ -43,6 +45,12 @@ export const questionEntry = (waiting: WaitingQuestion): InboxEntry => ({
   kind: "question",
   key: `question:${waiting.question.id}`,
   waiting,
+});
+
+export const hubQuestionEntry = (question: HubQuestion): InboxEntry => ({
+  kind: "hub-question",
+  key: `hub-question:${question.id}`,
+  question,
 });
 
 export const stuckEntry = (item: BackpackItem): InboxEntry => ({ kind: "stuck", key: `stuck:${item.id}`, item });
@@ -65,13 +73,14 @@ export const memoryEntry = (share: MemoryShare): InboxEntry => ({ kind: "memory"
 export const namesRequest = (key: string): boolean => !key.includes(":");
 
 /**
- * What Needs you lists, in one list: devices asking, questions for you, stuck work, failed Tasks,
- * the requests, then the shares that wait. A share decided while it is open stays, so its outcome
- * and Undo show, the way a decided request does.
+ * What Needs you lists, in one list: devices asking, questions for you, the hub's own, stuck work,
+ * failed Tasks, the requests, then the shares that wait. A share decided while it is open stays, so
+ * its outcome and Undo show, the way a decided request does.
  */
 export const needsEntries = ({
   devices,
   questions,
+  hubQuestions = [],
   blockers,
   failed,
   requests,
@@ -80,6 +89,7 @@ export const needsEntries = ({
 }: {
   readonly devices: ReadonlyArray<WaitingDevice>;
   readonly questions: ReadonlyArray<WaitingQuestion>;
+  readonly hubQuestions?: ReadonlyArray<HubQuestion>;
   readonly blockers: ReadonlyArray<BackpackItem>;
   readonly failed: ReadonlyArray<FailedTask>;
   readonly requests: ReadonlyArray<ApprovalRequest>;
@@ -89,19 +99,22 @@ export const needsEntries = ({
 }): Array<InboxEntry> => [
   ...devices.map(deviceEntry),
   ...questions.map(questionEntry),
+  ...hubQuestions.filter((question) => question.state === "open").map(hubQuestionEntry),
   ...blockers.filter((item) => openBlocker(item) !== undefined).map(stuckEntry),
   ...failed.map(failedEntry),
   ...requests.map(approvalEntry),
   ...shares.filter((share) => memoryShareWaits(share) || `memory:${share.id}` === selected).map(memoryEntry),
 ];
 
-/** The thread an entry is about, or null for a device, which is about this hub. */
+/** The thread an entry is about, or null for a device, or a hub question about no chat, which are about this hub. */
 export const entryThread = (entry: InboxEntry): ThreadId | null => {
   switch (entry.kind) {
     case "approval":
       return entry.request.threadId;
     case "question":
       return entry.waiting.task.threadId;
+    case "hub-question":
+      return entry.question.chat?.threadId ?? null;
     case "stuck":
       return entry.item.threadId;
     case "failed":
@@ -113,7 +126,7 @@ export const entryThread = (entry: InboxEntry): ThreadId | null => {
   }
 };
 
-/** The hob an entry comes from: the hob that asked, or whose work is stuck or failed. None for a device. */
+/** The hob an entry comes from: the hob that asked, or whose work is stuck or failed. None for a device or the hub. */
 export const entryAsker = (entry: InboxEntry): AgentId | undefined => {
   switch (entry.kind) {
     case "approval":
@@ -218,6 +231,8 @@ const urgency = (entry: InboxEntry) => {
     }
     case "question":
       return { closed: false, risky: false, expiresAt: null, since: entry.waiting.question.createdAt };
+    case "hub-question":
+      return { closed: false, risky: false, expiresAt: null, since: entry.question.createdAt };
     case "stuck":
       return {
         closed: false,
@@ -367,6 +382,15 @@ const failedRow = ({ task, leadId }: FailedTask, names: HobName, lead: AgentId |
   };
 };
 
+const hubQuestionRow = (question: HubQuestion): InboxRow => ({
+  chain: [copy.row.hub, copy.row.youEnd],
+  kind: copy.kind.question,
+  tag: "needs-you",
+  what: firstLine(question.text),
+  when: copy.row.waitingOn({ name: copy.row.hub }),
+  tone: "plain",
+});
+
 const shareRow = (share: MemoryShare, names: HobName): InboxRow => {
   const waits = memoryShareWaits(share);
   return {
@@ -398,6 +422,8 @@ export const entryRow = (entry: InboxEntry, names: HobName, lead: AgentId | unde
       return approvalRow(entry.request, names, lead, now);
     case "question":
       return questionRow(entry.waiting, names);
+    case "hub-question":
+      return hubQuestionRow(entry.question);
     case "stuck":
       return stuckRow(entry.item, names, lead);
     case "failed":

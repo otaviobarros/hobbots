@@ -13,6 +13,7 @@ import {
   HobAdmission,
   HobLifecycle,
   HobService,
+  HubQuestions,
   MemoryBriefReceipts,
   MemoryCapture,
   MemorySharesLive,
@@ -67,6 +68,7 @@ import {
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   HobGitHubAppRepository,
+  HubQuestionRepositoryLive,
   MemoryCaptureLive,
   MemorySavesLive,
   MemoryShareLogLive,
@@ -99,6 +101,7 @@ import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { ExportFoldersLive } from "./exports.ts";
+import { FakeHubQuestionsLive } from "./fake-hub-questions.ts";
 import { FakeMemoryLive } from "./fake-memory.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
@@ -183,6 +186,19 @@ const memoryEngineLayer = (
   );
 };
 
+/** What the fake runtime plays on the hub's records when asked: the scripted Quest, and the hub's own questions. */
+const fakePlays = (config: {
+  readonly runtime: string;
+  readonly fakeQuest: "off" | "black-friday";
+  readonly fakeHubQuestions: "off" | "on";
+}) =>
+  config.runtime !== "fake"
+    ? Layer.empty
+    : Layer.mergeAll(
+        config.fakeQuest === "black-friday" ? FakeQuestLive(FAKE_QUEST_STEP) : Layer.empty,
+        config.fakeHubQuestions === "on" ? FakeHubQuestionsLive : Layer.empty,
+      );
+
 /**
  * Memory capture (ADR 028): with memory on, the worker sends what happens in each thread to the
  * engine, and the journal keeps every entry it has still to send. With memory turned off, or no
@@ -252,6 +268,7 @@ const ServerLive = Layer.unwrap(
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
+      HubQuestionRepositoryLive,
       RestoreRepository.layer,
       EventJournal.layer,
       SetupRepository.layer,
@@ -382,9 +399,7 @@ const ServerLive = Layer.unwrap(
             HubRestores.layer,
             // Settings › Your data › Start over (#948).
             HubReset.layer,
-            config.runtime === "fake" && config.fakeQuest === "black-friday"
-              ? FakeQuestLive(FAKE_QUEST_STEP)
-              : Layer.empty,
+            fakePlays(config),
             memoryPageLayer(config, MemoryStoreForYou),
           ),
         ),
@@ -444,6 +459,8 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       )
+      // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
+      .pipe(Layer.provideMerge(HubQuestions.layer))
       // Before the chat service, so turns can ask, and after a restart the requests left pending expire.
       .pipe(Layer.provideMerge(ApprovalService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))

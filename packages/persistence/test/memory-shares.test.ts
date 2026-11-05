@@ -1,5 +1,14 @@
 import { HobbotsRepository, MemoryShareLog } from "@hobbots/agents";
-import { Agent, AgentId, MemoryPath, MemoryShare, MemoryVersion, MessageId, ThreadId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  MemoryPath,
+  MemoryProjectIdentity,
+  MemoryShare,
+  MemoryVersion,
+  MessageId,
+  ThreadId,
+} from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -45,7 +54,7 @@ const share = (key: string, overrides: Partial<MemoryShare> = {}) =>
     work: "reply:m1",
     key,
     input: "input-digest",
-    scope: { _tag: "Project", identity: "github.com/me/site" },
+    scope: { _tag: "Project", identity: MemoryProjectIdentity.make("github.com/me/site") },
     path: MemoryPath.make("howto/deploy.md"),
     markdown: "# Deploy\n\nRun `pnpm deploy`.",
     tags: ["deploy"],
