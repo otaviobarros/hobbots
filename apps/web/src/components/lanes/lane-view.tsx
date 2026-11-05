@@ -8,6 +8,7 @@ import { HubWait } from "../loading/hub-wait.tsx";
 import { type RoomStatus, roomStatusLabel, roomTone } from "../quest/control-room.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
+import { LANE, LANE_HEAD } from "./lane-focus.ts";
 import { LaneItemRow } from "./lane-items.tsx";
 import { type Lane, type LaneRole, laneDomId } from "./lane-model.ts";
 import { messages } from "./messages.ts";
@@ -97,6 +98,7 @@ export function LaneView({
   return (
     <section
       id={laneDomId(lane.hobId)}
+      {...LANE}
       aria-label={messages.lane({ name: hob.name })}
       onAnimationEnd={flashing ? onFlashed : undefined}
       className={cn(
@@ -108,6 +110,7 @@ export function LaneView({
       <div className="flex items-center gap-1 pe-2">
         <button
           type="button"
+          {...LANE_HEAD}
           aria-pressed={picked}
           aria-label={messages.show({ name: hob.name })}
           onClick={() => onPick(picked ? null : lane.hobId)}

@@ -2,6 +2,7 @@ import type { Question, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { chatTargets, WAITS } from "../move-on/places.ts";
 import { AnswerForm } from "./answer-form.tsx";
 import { messages } from "./messages.ts";
 import { AnsweredChoices } from "./question-choices.tsx";
@@ -13,8 +14,9 @@ const copy = messages.question;
 
 /**
  * A question that climbed every lead and reached you (ADR 018). Your answer goes back down the same
- * chain to the hob that asked; once answered, the card keeps your answer, and once its Task ends
- * unanswered, it says the question was withdrawn.
+ * chain to the hob that asked; once answered, the card keeps your answer, and focus moves to the
+ * chat's next question or its composer (#995). Once its Task ends unanswered, it says the question
+ * was withdrawn.
  */
 export function QuestionCard({
   tree,
@@ -32,6 +34,7 @@ export function QuestionCard({
   const open = question.state === "open";
   return (
     <section
+      {...(open ? WAITS : {})}
       aria-label={copy.asks({ name: asker.name })}
       className={cn(
         "cut ms-9 flex max-w-work-max animate-hb-in flex-col gap-2.5 border-(length:--edge) bg-card px-3.5 py-3",
@@ -51,7 +54,7 @@ export function QuestionCard({
       </div>
       <p className="m-0 leading-normal whitespace-pre-wrap">{question.text}</p>
       {open ? (
-        <AnswerForm question={question} askerName={asker.name} via="chat" />
+        <AnswerForm question={question} askerName={asker.name} via="chat" targets={chatTargets} />
       ) : question.state === "withdrawn" ? (
         <p className="m-0 animate-hb-in text-ui text-text-secondary">{copy.withdrawn}</p>
       ) : (

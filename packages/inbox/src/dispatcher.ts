@@ -65,6 +65,11 @@ export interface Delivery {
    */
   readonly accepted: (sessionId: string) => Effect.Effect<void, StaleBackpackClaim>;
   /**
+   * Whether the item is late now, read again each time: its Task ended, or its cancel was asked for,
+   * after the item was claimed and checked (#993). A turn reads it once more before it starts.
+   */
+  readonly late: Effect.Effect<boolean>;
+  /**
    * Commits one of the item's effects, once the runtime accepted the turn, in a transaction that
    * checks the claim still holds: a turn whose claim was lost writes nothing, and fails as stale.
    * With `consumes`, the item resolves as consumed in the same transaction as its last effect.
@@ -370,6 +375,7 @@ export class Dispatcher extends Context.Service<
           key: `backpack:${item.id}`,
           number: item.deliveries.length,
           held,
+          late: Effect.map(lateNow(item), (late) => late !== null),
           accepted: (sessionId) =>
             step(backpack.acknowledge(item.id, held, sessionId)).pipe(
               Effect.andThen(step(backpack.process(item.id, held))),

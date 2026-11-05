@@ -2,7 +2,7 @@ import { type ApprovalSurface, exactAction } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useDecideApproval } from "../../api/approvals.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { ApprovalActions } from "../approvals/approval-actions.tsx";
@@ -14,6 +14,8 @@ import { ChiefMark } from "../chief/chief-mark.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages as inboxCopy } from "../inbox/messages.ts";
 import { messages as appCopy } from "../messages.ts";
+import { useMoveOn } from "../move-on/move-on.tsx";
+import { WAITS } from "../move-on/places.ts";
 import { approvalAction } from "../plain-words/plain-words.ts";
 import { AnswerForm } from "../quest/answer-form.tsx";
 import { messages as questMessages } from "../quest/messages.ts";
@@ -23,6 +25,7 @@ import { Details } from "./details.tsx";
 import { HubQuestionBody } from "./hub-question-body.tsx";
 import { messages } from "./messages.ts";
 import { shownEntry, type TrayEntry } from "./tray-entries.ts";
+import { trayTargets } from "./tray-focus.ts";
 
 const copy = messages;
 const approvalCopy = appCopy.approval;
@@ -34,7 +37,8 @@ type Hob = ReturnType<HobLookup>;
  * Everything waiting on you, one item at a time, right above the composer: approvals, then stuck
  * work, then questions. "1 of 2" and Next step through them; deciding one shows the next. The
  * high-risk variant has a rose edge and its confirm box. Gone when nothing waits. The chat and Home
- * pass the entries they hold, and `via` names the surface a decision made here records.
+ * pass the entries they hold, and `via` names the surface a decision made here records. Focus that
+ * was on a decided item moves to the next one, or out of the tray once nothing waits (#995).
  */
 export function NeedsTray({
   entries,
@@ -60,6 +64,7 @@ export function NeedsTray({
   const asker = askerOf(entry, hobs);
   return (
     <section
+      data-tray=""
       aria-label={copy.label({ index: index + 1, count })}
       className={cn(
         "cut flex animate-hb-in gap-3 border-(length:--edge) bg-card p-4",
@@ -76,6 +81,7 @@ export function NeedsTray({
       </span>
       <section
         key={`${entry.key}-body`}
+        {...WAITS}
         aria-label={itemLabel(entry, asker)}
         data-state="pending"
         className="flex min-w-0 flex-1 animate-hb-in flex-col gap-2"
@@ -160,7 +166,7 @@ function TrayBody({
   return (
     <>
       <p className="m-0 whitespace-pre-wrap text-text">{question.text}</p>
-      <AnswerForm question={question} askerName={asker.name} via={via} />
+      <AnswerForm question={question} askerName={asker.name} via={via} targets={trayTargets} />
       <Details summary={copy.details.question}>
         {copy.passedUp({
           names: [asker.name, ...question.chain.map((id) => hobs(id).name)],
@@ -183,8 +189,10 @@ function ApprovalBody({
 }) {
   const { request } = entry;
   const decide = useDecideApproval(request, via);
+  const area = useRef<HTMLDivElement>(null);
+  const moveOn = useMoveOn();
   return (
-    <>
+    <div ref={area} className="contents">
       <p className="m-0 text-text">{request.reason}</p>
       <div className="flex gap-2 rounded-tag bg-deep px-3 py-2 font-mono text-code">
         <span aria-hidden className="text-label">
@@ -196,7 +204,10 @@ function ApprovalBody({
         approval={request}
         hob={asker}
         pending={decide.isPending}
-        onDecide={(decision) => decide.mutate(decision)}
+        // The decision's line shows in the transcript, so the tray says nothing more.
+        onDecide={(decision) =>
+          moveOn({ from: area.current, targets: trayTargets, sent: decide.mutateAsync(decision) })
+        }
         look="tray"
       />
       {decide.isError && (
@@ -216,7 +227,7 @@ function ApprovalBody({
           <span>{expiryText(request)}</span>
         </span>
       </Details>
-    </>
+    </div>
   );
 }
 
@@ -226,7 +237,7 @@ function StuckBody({ entry, asker }: { entry: Extract<TrayEntry, { kind: "stuck"
   return (
     <>
       <p className="m-0 text-text">{blockerWhat(entry.item)}</p>
-      <BlockerChoices item={entry.item} hob={asker} held={false} />
+      <BlockerChoices item={entry.item} hob={asker} held={false} targets={trayTargets} />
       <Details summary={copy.details.stuck}>
         {blockerWhy(entry.item, choice.blocker, asker.name)}
         {choice.blocker.diagnostic !== null && (

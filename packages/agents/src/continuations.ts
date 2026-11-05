@@ -12,6 +12,12 @@ export interface CarriedWork {
   readonly holding: ReadonlyArray<CarriedItem>;
   /** Records the adapter's evidence that the runtime accepted the turn: its session. */
   readonly accepted: (sessionId: string) => Effect.Effect<void>;
+  /**
+   * Whether the work needing the hob is all late now, read again each time: the Tasks it is about
+   * ended, or their cancel was asked for, after the dispatcher checked it (#993). A continuation
+   * that finds it so ends before its runtime is asked anything, so the work resolves as late.
+   */
+  readonly late: Effect.Effect<boolean>;
   /** True when the work is routine progress only: it rides along a message of yours and starts no turn alone (IN-005). */
   readonly routineOnly: boolean;
 }

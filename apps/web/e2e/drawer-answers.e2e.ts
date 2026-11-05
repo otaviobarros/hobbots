@@ -78,3 +78,27 @@ test("[TC-IN-489] an answer given in the Inbox says so in the Quest room and on 
   const drawer = laneTask(page, "Build the campaign");
   await expect(drawer).toContainText("You answered in the Inbox: Yes, Dec 12.");
 });
+
+// covers UX-006
+test("[TC-UX-218] answering in the chat's Needs-you tray moves focus to the composer once nothing else waits, and says what was sent", async ({
+  page,
+}) => {
+  const { url, aldric } = await questHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill("Plan a Black Friday campaign for the shop");
+  await composer.press("Enter");
+  const tray = page.getByRole("region", { name: /^Needs you/ });
+  const asks = tray.getByRole("region", { name: "Ada asks you" });
+  await expect(asks).toBeVisible({ timeout: 15_000 });
+
+  // The choice's key answers; the item leaves the tray with the control that had focus, and focus
+  // goes to the composer rather than the page (#995).
+  await asks.getByRole("button", { name: /^Dec 12 for international/ }).focus();
+  await page.keyboard.press("1");
+  await expect(asks).toHaveCount(0);
+  await expect(composer).toBeFocused();
+  await expect(
+    page.getByRole("region", { name: /^Notifications/ }).getByText("Sent your answer to Ada: Dec 12 for international"),
+  ).toBeVisible();
+});

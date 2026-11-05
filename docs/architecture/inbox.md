@@ -62,7 +62,7 @@ An approval request that expires because Hobbots restarted, so no live turn wait
 
 Each item has a dedupe key, unique per recipient. Keys reuse the hob tools' idempotency keys, the source record's id and version, or your command's key. An outcome write checks the token, the claim's owner and the lease's expiry in one conditional update. Expiring a claim clears its owner and raises its token in one update, so a worker whose lease expired is refused at once, before any other worker claims the item. A hob tool call from a turn that holds claims is fenced by them the same way, in the call's own transaction: once any of them no longer holds, the call writes nothing and is refused as `claim-stale`, and a turn whose claim is found lost when its runtime accepts it is stopped. Retry transport failures with bounded backoff. For effects outside the database, use provider idempotency where available and reconcile unknown outcomes before retry. [ADR 019](../decisions/019-hob-backpack-and-continuations.md) sets the key scope, retention, lease and retry defaults.
 
-Items for a cancelled or reassigned Task are recorded, checked against the Task's current owner and version, and resolved as late. They never restart work.
+Items for a cancelled or reassigned Task are recorded, checked against the Task's current owner and version, and resolved as late. They never restart work. A continuation checks its work again as it starts, and once more after its Attempt began and before its runtime is asked anything: work that went late since the dispatcher checked it, as when you cancel the Quest meanwhile, ends the turn there, stopped, and resolves as late ([#993](https://github.com/otaviobarros/hobbots/issues/993)).
 
 ## The dispatcher
 
