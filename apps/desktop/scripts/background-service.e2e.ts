@@ -193,10 +193,15 @@ describe("Hobbots.app as the hub's background service", { concurrency: false }, 
     const reply = async () => (await messages()).find((message) => message.role === "assistant");
     assert.equal((await reply())?.status, "streaming", "the reply is still streaming when the window closes");
 
-    const [window] = await windows();
-    assert.ok(window);
-    await evaluate(window, "window.close()");
-    await waitFor("the window to close", async () => ((await windows()).length === 0 ? true : undefined));
+    assert.ok((await windows()).length > 0, "the window is open");
+    // Finishing setup makes the window reload into Home, which replaces its DevTools page, so a
+    // close sent to the page it had a moment ago can fail. Each try asks for the page it has now.
+    await waitFor("the window to close", async () => {
+      const [window] = await windows();
+      if (window === undefined) return true;
+      await evaluate(window, "window.close()").catch(() => undefined);
+      return undefined;
+    });
 
     assert.equal(first.exitCode, null, "the app keeps running with no window");
     assert.equal(first.signalCode, null, "the app keeps running with no window");
