@@ -153,6 +153,20 @@ export const makeMemoryStoreFake = (): {
           .map(({ updatedAt: _, ...hit }) => hit);
       }),
     page: (_actor, scope, path) => Effect.map(up, () => pageOf(scope, path)),
+    pageAt: (_actor, scope, path, version) =>
+      Effect.map(up, () => {
+        if (currentOf(scope, path) === undefined) return null;
+        const found = pagesOf(scope)
+          .get(path)
+          ?.find((entry) => entry.version === version && !entry.forgotten);
+        if (found === undefined) return null;
+        const { markdown, tags, pinned, author, writtenAt } = found;
+        return { scope, path, markdown, tags, pinned, version, author, updatedAt: writtenAt };
+      }),
+    scopes: () =>
+      Effect.map(up, () =>
+        [...scopes.values()].filter((entry) => summaries(entry.scope).length > 0).map((entry) => entry.scope),
+      ),
     list: (_actor, scope, limit) =>
       Effect.map(up, () =>
         summaries(scope)

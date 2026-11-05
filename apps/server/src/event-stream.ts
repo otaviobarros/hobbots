@@ -52,6 +52,8 @@ const transientFrame = (event: HubTransientEvent) => {
       return STREAM_FRAME.remoteAccess;
     case "CommandOutput":
       return STREAM_FRAME.commandOutput;
+    case "MemoryChanged":
+      return STREAM_FRAME.memory;
     default:
       return STREAM_FRAME.turn;
   }

@@ -31,6 +31,7 @@ import { GrantsHandlers } from "./grants.ts";
 import { HobGitHubAppHandlers } from "./hob-github-app.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { Installation } from "./installation.ts";
+import { MemoryHandlers } from "./memory.ts";
 import { PairingHandlers, PairingRequestsHandlers, withRetryAfter } from "./pairing.ts";
 import { PermissionsHandlers } from "./permissions.ts";
 import { RemoteAccessHandlers } from "./remote-access.ts";
@@ -223,6 +224,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     DiagnosticsHandlers,
     ExportsHandlers,
     UsageHandlers,
+    MemoryHandlers,
   ]),
   Layer.provide(DeviceSessionLive),
 );

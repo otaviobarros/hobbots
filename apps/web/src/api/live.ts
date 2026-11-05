@@ -67,13 +67,17 @@ export const noteRefusal = (queryClient: QueryClient, error: unknown) => {
 // The hub refused this device: asking again gets the same answer.
 const REFUSALS = new Set(["DeviceRevoked", "DeviceRequired"]);
 
+/** Answers a retry cannot change, shown at once: memory is down, or the page is gone. */
+const ANSWERS = new Set(["MemoryNotAnswering", "MemoryPageNotFound"]);
+
 /**
  * A query's retry rule: a refusal is noted at once and never retried, so the only answer that says
- * this device was revoked is never lost behind retries; anything else is tried up to three times.
+ * this device was revoked is never lost behind retries. An answer a retry cannot change is not
+ * retried either; anything else is tried up to three times.
  */
 export const retryUnlessRefused = (queryClient: QueryClient, failures: number, error: unknown): boolean => {
   noteRefusal(queryClient, error);
-  if (error instanceof ApiError && REFUSALS.has(error.tag ?? "")) return false;
+  if (error instanceof ApiError && (REFUSALS.has(error.tag ?? "") || ANSWERS.has(error.tag ?? ""))) return false;
   return failures < 3;
 };
 

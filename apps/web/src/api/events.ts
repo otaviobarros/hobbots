@@ -5,6 +5,7 @@ import {
   EventEnvelope,
   type HobbotsEvent,
   isInProgress,
+  MemoryChanged,
   type Message,
   MessageDelta,
   RemoteAccessChanged,
@@ -25,6 +26,7 @@ import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
+import { applyMemoryChanged } from "./memory.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
@@ -50,6 +52,7 @@ const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady))
 const decodeDelta = Schema.decodeUnknownSync(Schema.fromJsonString(MessageDelta));
 const decodeRemoteAccess = Schema.decodeUnknownSync(Schema.fromJsonString(RemoteAccessChanged));
 const decodeCommandOutput = Schema.decodeUnknownSync(Schema.fromJsonString(CommandOutput));
+const decodeMemoryChanged = Schema.decodeUnknownSync(Schema.fromJsonString(MemoryChanged));
 
 /** How long a stream the hub closed waits before it opens again. */
 const REOPEN_AFTER_MS = 2000;
@@ -330,6 +333,13 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
     source.addEventListener(STREAM_FRAME.remoteAccess, (frame) => {
       try {
         remoteAccessChanged(queryClient, decodeRemoteAccess(frame.data).status);
+      } catch (error) {
+        console.warn("Ignoring malformed event", error);
+      }
+    });
+    source.addEventListener(STREAM_FRAME.memory, (frame) => {
+      try {
+        applyMemoryChanged(queryClient, decodeMemoryChanged(frame.data));
       } catch (error) {
         console.warn("Ignoring malformed event", error);
       }
