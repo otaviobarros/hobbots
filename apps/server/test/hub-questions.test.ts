@@ -26,7 +26,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Effect, Layer, ManagedRuntime, Schema, type Scope } from "effect";
+import { Effect, Fiber, Layer, ManagedRuntime, Schema, type Scope } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -206,5 +206,35 @@ describe("a question the hub asks you itself", () => {
     current.handle(identityHandler);
     await until(() => applied.length > 0);
     expect(applied).toEqual([{ answer: "Ada <ada@example.com>", picked: null }]);
+  }, 30_000);
+
+  // covers OR-004
+  it("[TC-OR-592] keeps an answer its handler failed to apply, and applies it once when the handler next registers", async () => {
+    applied = [];
+    hub = await startHub();
+    const current = hub;
+    // The first handler fails, as one would when what it changes is out of reach.
+    let tries = 0;
+    const failing = current.handle({
+      kind: SUBJECT.kind,
+      apply: () => Effect.suspend(() => (tries++, Effect.fail("unreachable"))),
+    });
+    const raised = await current.run(HubQuestions.use(raise));
+    const answered = await current.request("POST", `/api/hub-questions/${raised.id}/answer`, { answer: TYPED.label });
+    expect(answered.status).toBe(200);
+    await until(() => tries > 0);
+    expect(applied).toEqual([]);
+
+    // The answer is kept, not lost: when the handler registers again, as at the next start, it applies it once.
+    await Effect.runPromise(Fiber.interrupt(failing));
+    current.handle(identityHandler);
+    await until(() => applied.length > 0);
+    expect(applied).toEqual([{ answer: TYPED.label, picked: TYPED.label }]);
+    expect(tries).toBe(1);
+
+    // Applied answers are not applied again by a later registration.
+    current.handle(identityHandler);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(applied).toHaveLength(1);
   }, 30_000);
 });

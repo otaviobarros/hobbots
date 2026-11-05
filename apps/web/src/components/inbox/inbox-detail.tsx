@@ -67,7 +67,8 @@ export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob
     case "question":
       return <QuestionDetail waiting={entry.waiting} hob={hob} row={row} {...context} />;
     case "hub-question":
-      return <HubQuestionDetail question={entry.question} row={row} {...context} />;
+      // Keyed by the entry, so a draft or a failed send for one question never shows on the next.
+      return <HubQuestionDetail key={entry.key} question={entry.question} row={row} {...context} />;
     case "stuck":
       return <StuckDetail item={entry.item} hob={hob} row={row} {...context} />;
     case "failed":

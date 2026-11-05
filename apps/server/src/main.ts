@@ -92,6 +92,7 @@ import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { ExportFoldersLive } from "./exports.ts";
+import { FakeHubQuestionsLive } from "./fake-hub-questions.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
@@ -136,6 +137,19 @@ const memoryEngineLayer = (
     Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
   );
 };
+
+/** What the fake runtime plays on the hub's records when asked: the scripted Quest, and the hub's own questions. */
+const fakePlays = (config: {
+  readonly runtime: string;
+  readonly fakeQuest: "off" | "black-friday";
+  readonly fakeHubQuestions: "off" | "on";
+}) =>
+  config.runtime !== "fake"
+    ? Layer.empty
+    : Layer.mergeAll(
+        config.fakeQuest === "black-friday" ? FakeQuestLive(FAKE_QUEST_STEP) : Layer.empty,
+        config.fakeHubQuestions === "on" ? FakeHubQuestionsLive : Layer.empty,
+      );
 
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -316,9 +330,7 @@ const ServerLive = Layer.unwrap(
             HubRestores.layer,
             // Settings › Your data › Start over (#948).
             HubReset.layer,
-            config.runtime === "fake" && config.fakeQuest === "black-friday"
-              ? FakeQuestLive(FAKE_QUEST_STEP)
-              : Layer.empty,
+            fakePlays(config),
           ),
         ),
       )

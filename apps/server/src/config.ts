@@ -94,4 +94,8 @@ export const ServerConfig = Config.all({
   fakeTailscale: Config.Literals(["off", "on"], "HOBBOTS_FAKE_TAILSCALE").pipe(Config.withDefault("off" as const)),
   // A scripted Quest the fake runtime plays on the hub's records: asking for a Black Friday campaign starts it.
   fakeQuest: Config.Literals(["off", "black-friday"], "HOBBOTS_FAKE_QUEST").pipe(Config.withDefault("off" as const)),
+  // Questions the hub puts to you itself, with the fake runtime (#976): it asks two at start.
+  fakeHubQuestions: Config.Literals(["off", "on"], "HOBBOTS_FAKE_HUB_QUESTIONS").pipe(
+    Config.withDefault("off" as const),
+  ),
 });
