@@ -6,6 +6,7 @@ import {
   type BackpackItem,
   exactAction,
   type FailedTask,
+  type HubQuestion,
   type PolicyOperation,
   type Quest,
   type TaskId,
@@ -28,8 +29,8 @@ import { messages as blockerCopy } from "../blockers/messages.ts";
 import { messages as appCopy } from "../messages.ts";
 import { DeviceFacts, MatchingCode, PairingActions } from "../pairing/device-request.tsx";
 import { messages as pairingCopy } from "../pairing/messages.ts";
+import { AnswerForm, HubAnswerForm } from "../quest/answer-form.tsx";
 import { controlError } from "../quest/control-room.ts";
-import { AnswerForm } from "../quest/question-card.tsx";
 import { useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { roomSearch } from "../quest-room/room-search.ts";
@@ -65,6 +66,9 @@ export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob
       return hob === undefined ? null : <ApprovalDetail request={entry.request} hob={hob} row={row} {...context} />;
     case "question":
       return <QuestionDetail waiting={entry.waiting} hob={hob} row={row} {...context} />;
+    case "hub-question":
+      // Keyed by the entry, so a draft or a failed send for one question never shows on the next.
+      return <HubQuestionDetail key={entry.key} question={entry.question} row={row} {...context} />;
     case "stuck":
       return <StuckDetail item={entry.item} hob={hob} row={row} {...context} />;
     case "failed":
@@ -202,6 +206,48 @@ function QuestionDetail({
             ? copy.question.goesStraight({ name: asker })
             : copy.question.goesBack({ name: directory.hobName(lead) })
         }
+      />
+    </DetailFrame>
+  );
+}
+
+/**
+ * A question the hub itself asks you (#976): about a subject the hub names, not a Task, so it
+ * passed no lead. Your answer goes to the hub, which applies it.
+ */
+function HubQuestionDetail({
+  question,
+  row,
+  directory,
+  now,
+}: { question: HubQuestion; row: InboxRow } & DetailContext) {
+  const hub = copy.row.hub;
+  return (
+    <DetailFrame
+      label={copy.question.label({ name: hub })}
+      portrait={<EntryPortrait hob={undefined} device={false} hub waiting large />}
+      row={{ ...row, what: copy.question.title({ name: hub }) }}
+      why={copy.question.fromHub}
+      chat={question.chat === null ? undefined : chatLink(question.chat.agentId, question.chat.threadId, null)}
+    >
+      <div className="flex items-start gap-3">
+        <EntryPortrait hob={undefined} device={false} hub waiting={false} />
+        <blockquote className="m-0 min-w-0 flex-1 rounded-[4px_14px_14px_14px] bg-card px-4 py-3 text-reading leading-normal whitespace-pre-wrap text-text-strong [overflow-wrap:anywhere]">
+          {question.text}
+        </blockquote>
+      </div>
+      <Facts
+        rows={[
+          [copy.detail.about, question.subject.title],
+          [copy.detail.thread, question.chat === null ? undefined : directory.threadTitle(question.chat.threadId)],
+          [copy.detail.when, formatWhen(question.createdAt, now)],
+        ]}
+      />
+      <HubAnswerForm
+        question={question}
+        askerName={copy.row.hubInSentence}
+        via="inbox"
+        hint={copy.question.goesToHub}
       />
     </DetailFrame>
   );

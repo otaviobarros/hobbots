@@ -5,6 +5,7 @@ import {
   EVENT_SCHEMA_VERSIONS,
   type EventCorrelation,
   EventEnvelope,
+  type HubQuestion,
   JournaledEvent,
   type JournaledEvent as JournaledEventType,
   ThreadId,
@@ -115,6 +116,9 @@ const correlationOf = (event: JournaledEventType): RowCorrelation => {
   }
 };
 
+const hubQuestionCorrelation = (question: HubQuestion): RowCorrelation =>
+  question.chat === null ? NONE : { ...NONE, agentId: question.chat.agentId, threadId: question.chat.threadId };
+
 /** Task and Workbench events, and the message events that name their thread and message. */
 const restCorrelationOf = (
   event: Exclude<
@@ -137,6 +141,8 @@ const restCorrelationOf = (
     }
   >,
 ): RowCorrelation => {
+  // A hub question has no Task (#976): it names the chat it concerns, if any.
+  if ("hubQuestion" in event) return hubQuestionCorrelation(event.hubQuestion);
   if (isTaskEvent(event)) return taskCorrelationOf(event);
   // The Workbench's records name their Task (ADR 023).
   switch (event._tag) {

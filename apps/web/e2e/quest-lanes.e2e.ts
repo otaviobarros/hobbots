@@ -70,8 +70,11 @@ test("[TC-UX-209] a lane marks the files its hob changed and deleted, by their p
   // The technical steps show each mark by its path in the hob's folder, never the whole path.
   await page.getByRole("button", { name: "Show technical steps" }).click();
   await expect(aldricDid.getByRole("listitem").filter({ hasText: "Deleted" })).toContainText("web/badge.png");
-  await expect(quillDid.getByRole("listitem").filter({ hasText: "Edited" })).toContainText("web/badge.png");
-  await expect(quillDid).not.toContainText("/fake/shop");
+  const quillEdited = quillDid.getByRole("listitem").filter({ hasText: "Edited" });
+  await expect(quillEdited).toContainText("web/badge.png");
+  // Only the marks: Quill's note on what it left uncommitted names its folder on purpose, and it
+  // arrives whenever Quill finishes, so the lane as a whole may or may not show it yet.
+  await expect(quillEdited).not.toContainText("/fake/shop");
 });
 
 // covers UX-002, OR-004

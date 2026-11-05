@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { PolicyOverrides } from "./policy.ts";
-import { ArtifactKind, collidingLabel, MAX_QUESTION_OPTIONS, type Quest, TaskRefusal, WaitMode } from "./quest.ts";
+import { ArtifactKind, choicesProblem, MAX_QUESTION_OPTIONS, type Quest, TaskRefusal, WaitMode } from "./quest.ts";
 import { ancestorsOf, type Task } from "./task.ts";
 
 /**
@@ -166,15 +166,8 @@ export const TaskToolInputs = {
     ),
   }).check(
     Schema.makeFilter(
-      (input: { readonly options?: ReadonlyArray<{ readonly label: string }>; readonly recommended?: number }) => {
-        const same = input.options === undefined ? undefined : collidingLabel(input.options);
-        if (same !== undefined) return `Two options are both "${same}". Give each option its own label.`;
-        if (input.recommended === undefined) return undefined;
-        if (input.options === undefined) return "recommended needs options to recommend one of.";
-        return input.recommended > input.options.length
-          ? `recommended is the number of one of the ${input.options.length} options.`
-          : undefined;
-      },
+      (input: { readonly options?: ReadonlyArray<{ readonly label: string }>; readonly recommended?: number }) =>
+        choicesProblem(input.options, input.recommended, 1),
     ),
   ),
   answer: Schema.Struct({

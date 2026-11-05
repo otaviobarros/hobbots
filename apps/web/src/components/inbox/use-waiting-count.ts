@@ -3,6 +3,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockers } from "../../api/blockers.ts";
 import { useFailedTasks } from "../../api/failed-tasks.ts";
+import { useHubQuestions } from "../../api/hub-questions.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { useWaitingQuestions } from "../../api/questions.ts";
@@ -11,12 +12,13 @@ import { pendingCount } from "./inbox-items.ts";
 
 /**
  * How many things wait for the user, kept live by the journal: pending requests, questions no lead
- * could answer (ADR 018), stuck work (IN-007), party members' failed Tasks (ADR 027) and devices
+ * could answer (ADR 018), questions the hub itself asks (#976), stuck work (IN-007), party members' failed Tasks (ADR 027) and devices
  * asking to pair (ADR 021). 0 until the Inbox is read.
  */
 export const useWaitingCount = (): number =>
   (useQuery({ ...inboxQuery, select: pendingCount }).data ?? 0) +
   useWaitingQuestions().length +
+  useHubQuestions().length +
   useBlockers().length +
   useFailedTasks().length +
   usePromptedDevices().length;
