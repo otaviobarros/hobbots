@@ -31,7 +31,7 @@ const startParty = async (page: Page, quillBrief: ReadonlyArray<string>) => {
       script("delegate_task", { key: "copy", hob: "Quill", brief: quillBrief.join("\n") }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });

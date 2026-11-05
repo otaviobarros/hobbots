@@ -194,7 +194,7 @@ test("[TC-UX-082] the profile moves a hob to Codex with its model and effort, an
   await page.goto(`${hub.url}/#/hobs/${pip.id}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("hello");
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   // The fake reply can finish before Stop is seen, so the reply itself shows the turn ran.
   await expect(page.getByText("Echo: hello")).toBeVisible();
