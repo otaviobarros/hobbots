@@ -4,7 +4,8 @@ import { AgentId } from "./ids.ts";
 import { QuestId } from "./quest.ts";
 
 // The Usage screen (OP-002): what each hob's replies used, from the usage recorded with them (#398),
-// and each runtime's plan as the runtime reports it. Nothing here is estimated: a reply or a plan
+// with the turns its Tasks ran outside any chat as a planned step or a party member (#1011), and each
+// runtime's plan as the runtime reports it. Nothing here is estimated: a reply or a plan
 // that reported nothing says so.
 
 /** The periods the Usage screen offers, in days. */
@@ -12,8 +13,10 @@ export const UsagePeriod = Schema.Literals(["7", "30"]);
 export type UsagePeriod = typeof UsagePeriod.Type;
 
 /**
- * What one hob's replies on one runtime and model used in the period. `unreported` counts the replies
- * whose runtime reported no usage: a failed or stopped turn, or a reply older than #398.
+ * What one hob's replies on one runtime and model used in the period. A turn the hob ran outside any
+ * chat, as a planned step or a party member, counts as a reply. `unreported` counts the replies whose
+ * runtime reported no usage: a failed or stopped turn, or a reply older than #398. Turns outside a
+ * chat from before #1011 were never recorded, so they are missing rather than unreported.
  */
 export const HobUsage = Schema.Struct({
   hobId: AgentId,
@@ -32,9 +35,10 @@ export const HobUsage = Schema.Struct({
 export type HobUsage = typeof HobUsage.Type;
 
 /**
- * What the chat replies of one Quest used in the period, or of every chat outside a Quest when
- * `questId` is null. A reply counts for a Quest when it was written in the Quest's chat while the
- * Quest ran, from its start to its end; a sub-quest's replies count for the Quest above it.
+ * What one Quest's whole party used in the period, or everything outside a Quest when `questId` is
+ * null. A chat reply counts for a Quest when it was written in the Quest's chat while the Quest ran,
+ * from its start to its end. A turn outside any chat, a member's or a step's, counts for the Quest of
+ * its Task's tree (#1011). A sub-quest's count for the Quest above it.
  */
 export const QuestUsage = Schema.Struct({
   questId: Schema.NullOr(QuestId),
@@ -44,7 +48,7 @@ export const QuestUsage = Schema.Struct({
   leadName: Schema.NullOr(Schema.String),
   /** How many hobs are in the party, the lead included; 0 for the chats outside a Quest. */
   party: Schema.Number,
-  /** How many chats the replies were in. */
+  /** How many chats the replies were in; turns outside a chat are in none. */
   chats: Schema.Number,
   replies: Schema.Number,
   unreported: Schema.Number,

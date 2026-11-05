@@ -1,8 +1,9 @@
-import { HobbotsRepository } from "@hobbots/agents";
+import { HobbotsRepository, TaskRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
   type AgentStatus,
+  AttemptId,
   Message,
   MessageId,
   type MessageStatus,
@@ -13,7 +14,7 @@ import {
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepositoryLive, UsageLedger } from "../src/index.ts";
+import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, UsageLedger } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 const created = "2026-10-01T00:00:00.000Z";
@@ -101,6 +102,12 @@ const seed = Effect.gen(function* () {
 });
 
 const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, UsageLedger.layer).pipe(Layer.provideMerge(TestDatabase));
+const TasksLayer = Layer.mergeAll(
+  HobbotsRepositoryLive,
+  TaskRepositoryLive,
+  EventJournal.layer,
+  UsageLedger.layer,
+).pipe(Layer.provideMerge(TestDatabase));
 
 // Pip led a Quest in its chat from 09:30 to 10:00 on Oct 28, with Bramble in the party, and started a
 // sub-quest under it at 09:35. Only Pip's 09:40 reply was written while the Quest ran.
@@ -151,7 +158,97 @@ const run = <A>(effect: Effect.Effect<A, never, HobbotsRepository | UsageLedger 
     return yield* effect;
   }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
+// Bramble's Task on Pip's Quest ran two turns at 09:45 on Oct 28, on Haiku: the second resumed the
+// first and failed without a report. Moss ran a step of a Task outside any Quest that day.
+const seedTurns = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const repo = yield* HobbotsRepository;
+  yield* repo.upsertThread(
+    new Thread({
+      id: ThreadId.make("t-moss-plan"),
+      agentId: AgentId.make("moss"),
+      title: "t-moss-plan",
+      createdAt: created,
+      updatedAt: created,
+    }),
+  );
+  const at = "2026-10-28T09:45:00.000Z";
+  yield* sql`INSERT INTO tasks ${sql.insert({
+    id: "k-tidy",
+    owner_id: "moss",
+    parent_id: null,
+    root_id: "k-tidy",
+    thread_id: "t-moss-plan",
+    brief: "k-tidy",
+    state: "active",
+    created_at: at,
+    updated_at: at,
+  })}`;
+  for (const [id, task, agent] of [
+    ["a-draft", "k-draft", "bramble"],
+    ["a-tidy", "k-tidy", "moss"],
+  ] as const) {
+    yield* sql`INSERT INTO attempts ${sql.insert({
+      id,
+      task_id: task,
+      number: 1,
+      agent_id: agent,
+      runtime: "claude-code",
+      config_version: 1,
+      state: "running",
+      started_at: at,
+    })}`;
+  }
+  const tasks = yield* TaskRepository;
+  const turn = (attemptId: string, agentId: string, startedAt: string, usage: ReplyUsage | null) =>
+    tasks.recordTurnUsage({
+      attemptId: AttemptId.make(attemptId),
+      agentId: AgentId.make(agentId),
+      runtime: "claude-code",
+      model: "haiku",
+      startedAt,
+      usage,
+    });
+  yield* turn("a-draft", "bramble", at, tokens(40, 400, 4000, 0));
+  // Recording a turn again changes nothing.
+  yield* turn("a-draft", "bramble", at, tokens(40, 400, 4000, 0));
+  yield* turn("a-draft", "bramble", "2026-10-28T09:50:00.000Z", null);
+  yield* turn("a-tidy", "moss", "2026-10-28T11:00:00.000Z", tokens(1, 1));
+}).pipe(Effect.orDie);
+
 describe("UsageLedger", () => {
+  // regression for #1011: a party member's turns wrote no reply, so Usage left them out
+  // covers OP-002
+  it("[TC-OP-107] counts each turn outside a chat under its hob, and a party member's for its Quest", async () => {
+    const { hobs, quests, minutes } = await Effect.gen(function* () {
+      yield* seed;
+      yield* seedQuests;
+      yield* seedTurns;
+      return yield* UsageLedger.use((ledger) => ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z"));
+    }).pipe(Effect.provide(TasksLayer), Effect.scoped, Effect.runPromise);
+
+    expect(hobs.filter((row) => row.model === "haiku")).toMatchObject([
+      // Bramble's failed turn counts as one that reported nothing.
+      { hobId: "bramble", replies: 2, unreported: 1, inputTokens: 40, outputTokens: 400, cacheReadTokens: 4000 },
+      { hobId: "moss", replies: 1, unreported: 0, inputTokens: 1, outputTokens: 1 },
+    ]);
+    // Pip's Quest counts Bramble's turns with Pip's reply, in the one chat they were written in.
+    expect(quests.find((row) => row.questId === "q-plan")).toMatchObject({
+      party: 2,
+      chats: 1,
+      replies: 3,
+      unreported: 1,
+      tokens: 600 + 4440,
+    });
+    // Moss's step is outside any Quest.
+    expect(quests.find((row) => row.questId === null)).toMatchObject({ chats: 3, replies: 5, tokens: 1322 });
+    expect(minutes.find((row) => row.minute === "2026-10-28T09:45:00.000Z")).toEqual({
+      minute: "2026-10-28T09:45:00.000Z",
+      replies: 1,
+      tokens: 4440,
+    });
+  });
+
   // covers OP-002
   it("[TC-OP-070] sums each hob's settled replies in the period by runtime and model", async () => {
     const { hobs } = await run(

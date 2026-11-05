@@ -1050,6 +1050,18 @@ export const TaskRepositoryLive = Layer.effect(
       listFailedTasks: read.failedTasks.pipe(Effect.orDie),
       handOff,
       waitFor,
+      recordTurnUsage: (turn) =>
+        sql`INSERT INTO attempt_turns ${sql.insert({
+          attempt_id: turn.attemptId,
+          agent_id: turn.agentId,
+          runtime: turn.runtime,
+          model: turn.model,
+          started_at: turn.startedAt,
+          input_tokens: turn.usage?.inputTokens ?? null,
+          output_tokens: turn.usage?.outputTokens ?? null,
+          cache_read_tokens: turn.usage?.cacheReadTokens ?? null,
+          cache_write_tokens: turn.usage?.cacheWriteTokens ?? null,
+        })} ON CONFLICT (attempt_id, started_at) DO NOTHING`.pipe(Effect.asVoid, Effect.orDie),
       readLedger: (taskId) =>
         read.task(taskId).pipe(
           Effect.flatMap(([task]) =>

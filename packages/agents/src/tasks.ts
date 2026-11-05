@@ -33,6 +33,7 @@ import type {
   QuestionSurface,
   QuestLimits,
   RefusedCall,
+  ReplyUsage,
   ResponsibilityLedger,
   RuntimeKind,
   StaleTask,
@@ -229,6 +230,22 @@ export interface TaskMoveOptions {
   readonly reason?: string;
 }
 
+/**
+ * What one turn of an Attempt outside any chat used, a planned step's or a party member's (#1011). A
+ * chat turn's usage stays on its reply.
+ */
+export interface AttemptTurnUsage {
+  readonly attemptId: AttemptId;
+  /** The hob that ran the turn, and the runtime and model it ran on. */
+  readonly agentId: AgentId;
+  readonly runtime: RuntimeKind;
+  readonly model: string | null;
+  /** When the turn started (ISO 8601), which Usage counts it by. */
+  readonly startedAt: string;
+  /** What the runtime reported; null when it reported nothing, as for a turn that failed or was stopped. */
+  readonly usage: ReplyUsage | null;
+}
+
 export class TaskRepository extends Context.Service<
   TaskRepository,
   {
@@ -344,6 +361,8 @@ export class TaskRepository extends Context.Service<
       revision: number,
       wait: NewWait,
     ) => Changed<{ readonly task: Task; readonly wait: TaskWait }, TaskChange>;
+    /** Records what one turn of an Attempt outside any chat used, once it ends (#1011). Recording it again changes nothing. */
+    readonly recordTurnUsage: (turn: AttemptTurnUsage) => Effect.Effect<void>;
     /** What still keeps the Task open, as its completion gate reads it (ADR 019). */
     readonly readLedger: (taskId: TaskId) => Effect.Effect<Option.Option<ResponsibilityLedger>>;
     /** The Task and everything under it. */
