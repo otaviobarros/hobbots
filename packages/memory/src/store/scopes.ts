@@ -37,6 +37,19 @@ export const engineProjectOf = (scope: MemoryScope): EngineProject => {
   }
 };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * The scope an ai-memory project holds, or null for one Hobbots cannot name: a hob's own memory and
+ * `_global` read back, but a project's name keeps only part of its identity and a hash of the rest,
+ * so a project scope is not recovered from it.
+ */
+export const scopeOfEngineProject = (project: string): MemoryScope | null => {
+  if (project === GLOBAL.project) return { _tag: "Everyone" };
+  const id = project.startsWith(HOB_PREFIX) ? project.slice(HOB_PREFIX.length) : "";
+  return UUID.test(id) ? { _tag: "Hob", agentId: AgentId.make(id) } : null;
+};
+
 /** The name a hob's calls assert to ai-memory, so each page and audit row names the hob. */
 export const engineActorOf = (agentId: AgentId): string => `${HOB_PREFIX}${agentId}`;
 

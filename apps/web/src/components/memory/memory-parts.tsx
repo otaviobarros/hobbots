@@ -79,17 +79,9 @@ export function ScopeMark({
 }
 
 /** A card of the page, as the design's side cards and peeks. */
-export function MemoryCard({
-  label,
-  className,
-  children,
-}: {
-  label: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
+export function MemoryCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <section aria-label={label} className={cn("flex flex-col gap-2.5 rounded-card bg-card p-4", className)}>
+    <section aria-label={label} className="flex flex-col gap-2.5 rounded-card bg-card p-4">
       {children}
     </section>
   );

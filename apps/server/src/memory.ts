@@ -86,9 +86,9 @@ export const MemoryHandlers = HttpApiBuilder.group(HobbotsApi, "memory", (handle
           return { page, history };
         }).pipe(Effect.catchTag("MemoryUnavailable", notAnswering)),
       version: ({ query }) =>
-        store.pageAt(YOU, scopeOf(query.scope), query.path, query.version).pipe(
-          Effect.flatMap((page) =>
-            page === null ? Effect.fail(new MemoryPageNotFound({ path: query.path })) : Effect.succeed(page),
+        store.versionChanges(YOU, scopeOf(query.scope), query.path, query.version).pipe(
+          Effect.flatMap((changes) =>
+            changes === null ? Effect.fail(new MemoryPageNotFound({ path: query.path })) : Effect.succeed(changes),
           ),
           Effect.catchTag("MemoryUnavailable", notAnswering),
         ),

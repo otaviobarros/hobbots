@@ -173,11 +173,11 @@ describe("the Memory page's API", () => {
   });
 
   // covers ADR 028 (Browse), #958
-  it("[TC-GEN-236] reads an earlier version of a page, and searches one scope or all of them", async () => {
+  it("[TC-GEN-236] reads what a version of a page changed, and searches one scope or all of them", async () => {
     const first = await Effect.runPromise(
       store.write(asPip, pipsOwn, draft("howtos/preview.md", "# Preview\n\nAsk Ada."), fresh),
     );
-    await Effect.runPromise(
+    const second = await Effect.runPromise(
       store.write(asPip, pipsOwn, draft("howtos/preview.md", "# Preview\n\nAsk Ada for a preview link."), {
         _tag: "Version",
         version: first,
@@ -185,10 +185,19 @@ describe("the Memory page's API", () => {
     );
     await write(you, everyone, "rules/preview.md", "# Share a preview only with you");
 
-    const old = await get(
-      `/api/memory/version?${query({ scope: memoryScopeKey(pipsOwn), path: "howtos/preview.md", version: first })}`,
+    const changed = await get(
+      `/api/memory/version?${query({ scope: memoryScopeKey(pipsOwn), path: "howtos/preview.md", version: second })}`,
     );
-    expect(old.body).toMatchObject({ version: first, markdown: "# Preview\n\nAsk Ada." });
+    expect(changed.body).toEqual({
+      first: false,
+      cut: false,
+      lines: [
+        { op: "same", text: "# Preview" },
+        { op: "same", text: "" },
+        { op: "remove", text: "Ask Ada." },
+        { op: "add", text: "Ask Ada for a preview link." },
+      ],
+    });
     expect(
       (
         await get(

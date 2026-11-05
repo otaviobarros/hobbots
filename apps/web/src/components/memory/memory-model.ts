@@ -4,6 +4,7 @@ import {
   type AgentId,
   MEMORY_KINDS,
   type MemoryChange,
+  type MemoryChangedLine,
   type MemoryKind,
   type MemoryPageSummary,
   type MemoryPageVersion,
@@ -18,7 +19,6 @@ import {
   searchTerms,
   snippetOf,
 } from "@hobbots/domain";
-import { diffLines } from "diff";
 import { Schema } from "effect";
 import { messages } from "./messages.ts";
 
@@ -279,8 +279,6 @@ export interface HistoryRow {
   readonly what: string;
   readonly at: string;
   readonly latest: boolean;
-  /** The version before it, whose text the changes compare against, or null for the first. */
-  readonly before: MemoryVersion | null;
 }
 
 /** A page's History, newest first: who learned it, then who changed it each time after. */
@@ -301,41 +299,12 @@ export const historyRows = (history: ReadonlyArray<MemoryPageVersion>, hobs: Hob
       what,
       at: entry.writtenAt,
       latest: entry.latest,
-      before: history[at + 1]?.version ?? null,
     };
   });
 
-/** A line of a version's changes: added, removed, or kept for context. */
-export interface DiffLine {
-  readonly op: "add" | "remove" | "same";
-  readonly text: string;
-}
-
-/** How long a diff may take before it shows the whole of each side. */
-const DIFF_TIMEOUT_MS = 1_000;
-
-const linesOf = (text: string) => {
-  const lines = text.split("\n");
-  if (lines.at(-1) === "") lines.pop();
-  return lines;
-};
-
-/**
- * What a version changed: its text against the one before it, line by line. The first version has
- * nothing before it, so all of it is added. Blank lines are left out, so paragraphs read as lines.
- */
-export const versionChanges = (before: string | null, after: string): ReadonlyArray<DiffLine> => {
-  const was = before ?? "";
-  const parts = diffLines(was, after, { timeout: DIFF_TIMEOUT_MS }) ?? [
-    { value: was, added: false, removed: true, count: 0 },
-    { value: after, added: true, removed: false, count: 0 },
-  ];
-  return parts.flatMap((part) =>
-    linesOf(part.value)
-      .filter((text) => text.trim() !== "")
-      .map((text): DiffLine => ({ op: part.added ? "add" : part.removed ? "remove" : "same", text })),
-  );
-};
+/** A version's changed lines as the page shows them: blank lines left out, so paragraphs read as lines. */
+export const shownLines = (lines: ReadonlyArray<MemoryChangedLine>): ReadonlyArray<MemoryChangedLine> =>
+  lines.filter((line) => line.text.trim() !== "");
 
 /** The parts of a search hit's snippet, the words that match the search marked. */
 export const hitParts = (snippet: string, q: string): ReadonlyArray<SnippetPart> => {

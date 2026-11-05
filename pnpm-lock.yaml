@@ -541,6 +541,9 @@ importers:
       '@hobbots/domain':
         specifier: workspace:*
         version: link:../domain
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
       effect:
         specifier: 'catalog:'
         version: 4.1.0

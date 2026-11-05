@@ -132,6 +132,7 @@ export const messages = {
     firstVersion: "The first version of this page.",
     diffLoading: "Reading this version…",
     diffFailed: "Hobbots could not read this version.",
+    diffCut: "This change is too long to show in full.",
     gone: "This page is not in memory any more.",
     goneHint: "It may have been deleted, or it faded.",
     loadFailed: "Hobbots could not read this page.",

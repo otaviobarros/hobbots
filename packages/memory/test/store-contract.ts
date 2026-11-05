@@ -268,50 +268,61 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
     );
 
     // covers ADR 028 (Browse), #958
-    it("[TC-GEN-230] reads a page as each version of it left it, and none of a page it forgot", () =>
+    it("[TC-GEN-230] answers what each version changed against the one it replaced, and nothing for a page it forgot", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("howtos/preview.md");
-          const first = yield* store.write(asPip, pipsOwn, draft("howtos/preview.md", "# Preview\n\nAsk Ada."), fresh);
+          const first = yield* store.write(
+            asPip,
+            pipsOwn,
+            draft("howtos/preview.md", "# Preview\n\nAsk Ada.\n"),
+            fresh,
+          );
           const second = yield* store.write(
             asPip,
             pipsOwn,
-            draft("howtos/preview.md", "# Preview\n\nAsk Ada.\n\nLinks last 7 days."),
+            draft("howtos/preview.md", "# Preview\n\nAsk Ada.\n\nLinks last 7 days.\n"),
             { _tag: "Version", version: first },
           );
-          expect(yield* store.pageAt(you, pipsOwn, path, first)).toMatchObject({
-            version: first,
-            markdown: "# Preview\n\nAsk Ada.",
-            author: byPip,
-          });
-          expect(yield* store.pageAt(you, pipsOwn, path, second)).toMatchObject({
-            version: second,
-            markdown: "# Preview\n\nAsk Ada.\n\nLinks last 7 days.",
-          });
-          // A version of another page, or of a page that is gone, reads as none.
-          expect(yield* store.pageAt(you, pipsOwn, MemoryPath.make("howtos/other.md"), first)).toBeNull();
+          // The first version adds all of itself.
+          const added = yield* store.versionChanges(you, pipsOwn, path, first);
+          expect(added).toMatchObject({ first: true, cut: false });
+          expect(added?.lines.filter((line) => line.text !== "")).toEqual([
+            { op: "add", text: "# Preview" },
+            { op: "add", text: "Ask Ada." },
+          ]);
+          // A later one adds and removes only what it changed; the rest is kept.
+          const changed = yield* store.versionChanges(you, pipsOwn, path, second);
+          expect(changed).toMatchObject({ first: false, cut: false });
+          expect(changed?.lines).toContainEqual({ op: "add", text: "Links last 7 days." });
+          expect(changed?.lines).toContainEqual({ op: "same", text: "Ask Ada." });
+          expect(changed?.lines.some((line) => line.op === "remove")).toBe(false);
+          // A version of another page, or of a page that is gone, has nothing to show.
+          expect(yield* store.versionChanges(you, pipsOwn, MemoryPath.make("howtos/other.md"), first)).toBeNull();
           yield* store.forget(you, pipsOwn, path, any);
-          expect(yield* store.pageAt(you, pipsOwn, path, first)).toBeNull();
+          expect(yield* store.versionChanges(you, pipsOwn, path, first)).toBeNull();
           // A hob never reads another hob's versions.
-          expect(yield* died(store.pageAt(asQuill, pipsOwn, path, first))).toBe(true);
+          expect(yield* died(store.versionChanges(asQuill, pipsOwn, path, first))).toBe(true);
         }),
       ));
 
     // covers ADR 028 (Browse), #958
-    it("[TC-GEN-231] lists the scopes that hold pages, and only those a hob may touch", () =>
+    it("[TC-GEN-231] lists the hobs' and About you's scopes that hold pages, and only those a hob may touch", () =>
       run(({ store }) =>
         Effect.gen(function* () {
-          const keys = (scopes: ReadonlyArray<MemoryScope>) => scopes.map((scope) => JSON.stringify(scope)).sort();
+          const keys = (scopes: ReadonlyArray<MemoryScope>) =>
+            scopes
+              .filter((scope) => scope._tag !== "Project")
+              .map((scope) => JSON.stringify(scope))
+              .sort();
           yield* store.write(asPip, pipsOwn, draft("notes/a.md", "# A"), fresh);
           yield* store.write(asQuill, quillsOwn, draft("notes/b.md", "# B"), fresh);
-          yield* store.write(asQuill, theSite, draft("facts/c.md", "# C"), fresh);
           yield* store.write(you, everyone, draft("rules/d.md", "# D"), fresh);
-          // theApp holds nothing, so it is not listed.
-          expect(keys(yield* store.scopes(you))).toEqual(keys([pipsOwn, quillsOwn, theSite, everyone]));
+          expect(keys(yield* store.scopes(you))).toEqual(keys([pipsOwn, quillsOwn, everyone]));
           expect(keys(yield* store.scopes(asPip))).toEqual(keys([pipsOwn, everyone]));
           // A scope whose last page is forgotten holds nothing.
           yield* store.forget(you, pipsOwn, MemoryPath.make("notes/a.md"), any);
-          expect(keys(yield* store.scopes(you))).toEqual(keys([quillsOwn, theSite, everyone]));
+          expect(keys(yield* store.scopes(you))).toEqual(keys([quillsOwn, everyone]));
         }),
       ));
   });

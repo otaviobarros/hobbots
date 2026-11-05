@@ -89,45 +89,47 @@ function NotAnswering({ reads }: { reads: Reads }) {
   );
 }
 
+/** A read that failed while memory still answers, which the view says in place of its content. */
+const failedAlone = (read: { readonly isError: boolean; readonly data: unknown }, offline: boolean) =>
+  read.isError && read.data === undefined && !offline;
+
+function OverviewBody({ reads, now }: { reads: Reads; now: Date }) {
+  const { overview, changes, pages, hobs, offline } = reads;
+  if (overview.data === undefined) {
+    if (offline) return null;
+    if (overview.isError) return <ReadFailed message={copy.scope.loadFailed} onRetry={reads.retry} />;
+    return <MemoryOverviewSkeleton />;
+  }
+  if (memoryTotals(overview.data).pages === 0) return <MemoryNothingYet />;
+  return (
+    <MemoryOverviewView learned={recentlyLearned(changes.data ?? [], now)} about={pages.data} hobs={hobs} now={now} />
+  );
+}
+
+function PageBody({ view, reads, now }: { view: Extract<MemoryView, { _tag: "Page" }>; reads: Reads; now: Date }) {
+  const { page, hobs, offline } = reads;
+  if (page.data !== undefined) return <MemoryRead read={page.data} version={view.version} hobs={hobs} now={now} />;
+  if (memoryPageGone(page.error)) return <PageGone view={view} />;
+  if (page.isError && !offline) return <ReadFailed message={copy.page.loadFailed} onRetry={reads.retry} />;
+  return offline ? null : <MemoryOverviewSkeleton />;
+}
+
 /** The open view, from what its reads hold so far. */
 function ViewBody({ view, reads, now }: { view: MemoryView; reads: Reads; now: Date }) {
-  const { overview, changes, pages, page, search, hobs, offline } = reads;
+  const { overview, changes, pages, search, hobs, offline } = reads;
   switch (view._tag) {
-    case "Overview": {
-      if (overview.data === undefined) {
-        if (offline) return null;
-        if (overview.isError) return <ReadFailed message={copy.scope.loadFailed} onRetry={reads.retry} />;
-        return <MemoryOverviewSkeleton />;
-      }
-      if (memoryTotals(overview.data).pages === 0) return <MemoryNothingYet />;
-      return (
-        <MemoryOverviewView
-          learned={recentlyLearned(changes.data ?? [], now)}
-          about={pages.data}
-          hobs={hobs}
-          now={now}
-        />
-      );
-    }
+    case "Overview":
+      return <OverviewBody reads={reads} now={now} />;
     case "Changes":
-      if (changes.isError && changes.data === undefined && !offline) {
-        return <ReadFailed message={copy.changes.loadFailed} onRetry={reads.retry} />;
-      }
+      if (failedAlone(changes, offline)) return <ReadFailed message={copy.changes.loadFailed} onRetry={reads.retry} />;
       return <MemoryChangesView changes={changes.data} show={view.show} hobs={hobs} now={now} />;
     case "Scope":
-      if (pages.isError && pages.data === undefined && !offline) {
-        return <ReadFailed message={copy.scope.loadFailed} onRetry={reads.retry} />;
-      }
+      if (failedAlone(pages, offline)) return <ReadFailed message={copy.scope.loadFailed} onRetry={reads.retry} />;
       return <MemoryScopeView scope={view.scope} kind={view.kind} pages={pages.data} hobs={hobs} />;
     case "Page":
-      if (page.data !== undefined) return <MemoryRead read={page.data} version={view.version} hobs={hobs} now={now} />;
-      if (memoryPageGone(page.error)) return <PageGone view={view} />;
-      if (page.isError && !offline) return <ReadFailed message={copy.page.loadFailed} onRetry={reads.retry} />;
-      return offline ? null : <MemoryOverviewSkeleton />;
+      return <PageBody view={view} reads={reads} now={now} />;
     case "Search":
-      if (search.isError && search.data === undefined && !offline) {
-        return <ReadFailed message={copy.results.loadFailed} onRetry={reads.retry} />;
-      }
+      if (failedAlone(search, offline)) return <ReadFailed message={copy.results.loadFailed} onRetry={reads.retry} />;
       return (
         <MemoryResults
           q={view.q}

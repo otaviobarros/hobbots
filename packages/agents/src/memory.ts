@@ -11,6 +11,7 @@ import {
   type MemoryScope,
   type MemoryUnavailable,
   type MemoryVersion,
+  type MemoryVersionChanges,
   memoryScopeAllowed,
 } from "@hobbots/domain";
 import { Context, Effect } from "effect";
@@ -35,15 +36,15 @@ export interface MemoryStoreShape {
   /** The page at `path` as it is now, or null when there is none. */
   readonly page: (actor: MemoryActor, scope: MemoryScope, path: MemoryPath) => Memory<MemoryPage | null>;
   /**
-   * The page at `path` as `version` of it left it, or null when the page has no such version. The
-   * Memory page reads two of them to show what a version changed.
+   * What `version` of the page at `path` changed against the version it replaced, or null when the
+   * page has no such version: what the Memory page shows for a version in its History.
    */
-  readonly pageAt: (
+  readonly versionChanges: (
     actor: MemoryActor,
     scope: MemoryScope,
     path: MemoryPath,
     version: MemoryVersion,
-  ) => Memory<MemoryPage | null>;
+  ) => Memory<MemoryVersionChanges | null>;
   /** Every scope that holds a page now, that `actor` may touch: what the Memory page lists. */
   readonly scopes: (actor: MemoryActor) => Memory<ReadonlyArray<MemoryScope>>;
   /** The first `limit` pages in `scope`: pinned first, then the most recently changed. */
@@ -125,7 +126,7 @@ const one = <Args extends readonly [MemoryScope, ...ReadonlyArray<unknown>]>(arg
 export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => ({
   search: guarded("search", store.search, ([scopes]) => scopes),
   page: guarded("read", store.page, one),
-  pageAt: guarded("read", store.pageAt, one),
+  versionChanges: guarded("read", store.versionChanges, one),
   // Every scope is listed, then the ones the actor may not touch are left out, never refused.
   scopes: (actor) =>
     Effect.map(store.scopes(actor), (scopes) => scopes.filter((scope) => memoryScopeAllowed(actor, scope))),

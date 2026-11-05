@@ -1,5 +1,11 @@
 import type { MemoryPageRead } from "@hobbots/api";
-import { type MemoryPath, type MemoryScope, type MemoryVersion, memoryKindOf } from "@hobbots/domain";
+import {
+  type MemoryPath,
+  type MemoryScope,
+  type MemoryVersion,
+  type MemoryVersionChanges,
+  memoryKindOf,
+} from "@hobbots/domain";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -9,7 +15,6 @@ import { formatAgo, formatMoment } from "../../lib/format.ts";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import {
   authorName,
-  type DiffLine,
   type HistoryRow,
   type HobDirectory,
   historyRows,
@@ -17,7 +22,7 @@ import {
   pageBody,
   pageTitle,
   scopeName,
-  versionChanges,
+  shownLines,
 } from "./memory-model.ts";
 import { KindTag, MemoryCard, PinnedTag } from "./memory-parts.tsx";
 import { messages } from "./messages.ts";
@@ -156,15 +161,9 @@ function HistoryEntry({
   );
 }
 
-/** What one version changed: the lines it added and removed, against the version before it. */
+/** What one version changed: the lines it added and removed, against the version it replaced. */
 function VersionChanges({ scope, path, row }: { scope: MemoryScope; path: MemoryPath; row: HistoryRow }) {
-  const after = useQuery(memoryVersionQuery(scope, path, row.version));
-  const before = useQuery({
-    ...memoryVersionQuery(scope, path, row.before ?? row.version),
-    enabled: row.before !== null,
-  });
-  const ready = after.isSuccess && (row.before === null || before.isSuccess);
-  const failed = after.isError || before.isError;
+  const changes = useQuery(memoryVersionQuery(scope, path, row.version));
   return (
     <section
       aria-label={copy.page.changesIn({ when: formatMoment(row.at) })}
@@ -173,30 +172,25 @@ function VersionChanges({ scope, path, row }: { scope: MemoryScope; path: Memory
       <div className="flex items-center gap-2 border-b border-line bg-deep px-3 py-2.5 text-detail">
         {copy.page.changesIn({ when: formatMoment(row.at) })}
       </div>
-      {failed && <p className="m-0 px-3 py-2 text-ui text-text-secondary">{copy.page.diffFailed}</p>}
-      {!failed && !ready && (
+      {changes.isError && <p className="m-0 px-3 py-2 text-ui text-text-secondary">{copy.page.diffFailed}</p>}
+      {changes.isPending && (
         <div role="status" className="flex flex-col gap-2 px-3 py-2">
           <span className="sr-only">{copy.page.diffLoading}</span>
           <Skeleton surface="card" width="60%" />
           <Skeleton surface="card" width="40%" />
         </div>
       )}
-      {ready && (
-        <DiffLines
-          lines={versionChanges(row.before === null ? null : (before.data?.markdown ?? ""), after.data.markdown)}
-          first={row.before === null}
-        />
-      )}
+      {changes.isSuccess && <DiffLines changes={changes.data} />}
     </section>
   );
 }
 
-function DiffLines({ lines, first }: { lines: ReadonlyArray<DiffLine>; first: boolean }) {
+function DiffLines({ changes }: { changes: MemoryVersionChanges }) {
   return (
     <div>
-      {first && <p className="m-0 px-3 pt-2 text-meta text-label">{copy.page.firstVersion}</p>}
+      {changes.first && <p className="m-0 px-3 pt-2 text-meta text-label">{copy.page.firstVersion}</p>}
       <ul className="m-0 list-none p-0 py-1">
-        {lines.map((line, at) => (
+        {shownLines(changes.lines).map((line, at) => (
           <li
             // biome-ignore lint/suspicious/noArrayIndexKey: a diff's lines have no identity but their place (STD-REACT-020).
             key={at}
@@ -218,6 +212,7 @@ function DiffLines({ lines, first }: { lines: ReadonlyArray<DiffLine>; first: bo
           </li>
         ))}
       </ul>
+      {changes.cut && <p className="m-0 px-3 pb-2 text-meta text-label">{copy.page.diffCut}</p>}
     </div>
   );
 }

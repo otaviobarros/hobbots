@@ -2,6 +2,7 @@ import { guardMemoryStore, MemoryStore, type MemoryStoreShape } from "@hobbots/a
 import {
   foldWord,
   type MemoryAuthor,
+  type MemoryChangedLine,
   MemoryConflict,
   type MemoryExpected,
   type MemoryHit,
@@ -16,6 +17,7 @@ import {
   searchTerms,
   snippetOf,
 } from "@hobbots/domain";
+import { diffLines } from "diff";
 import { DateTime, Effect, Layer } from "effect";
 
 /**
@@ -23,6 +25,15 @@ import { DateTime, Effect, Layer } from "effect";
  * run on the fake runtime without the ai-memory binary. It keeps every version and can be taken down
  * to test an outage.
  */
+
+/** Every line of `after` against `before`: the ones added, removed and kept. */
+const changedLines = (before: string, after: string): Array<MemoryChangedLine> =>
+  diffLines(before, after).flatMap((part) => {
+    const lines = part.value.split("\n");
+    if (lines.at(-1) === "") lines.pop();
+    const op = part.added ? "add" : part.removed ? "remove" : "same";
+    return lines.map((text) => ({ op, text }));
+  });
 
 interface StoredVersion {
   readonly version: MemoryVersion;
@@ -153,15 +164,15 @@ export const makeMemoryStoreFake = (): {
           .map(({ updatedAt: _, ...hit }) => hit);
       }),
     page: (_actor, scope, path) => Effect.map(up, () => pageOf(scope, path)),
-    pageAt: (_actor, scope, path, version) =>
+    versionChanges: (_actor, scope, path, version) =>
       Effect.map(up, () => {
         if (currentOf(scope, path) === undefined) return null;
-        const found = pagesOf(scope)
-          .get(path)
-          ?.find((entry) => entry.version === version && !entry.forgotten);
+        const versions = (pagesOf(scope).get(path) ?? []).filter((entry) => !entry.forgotten);
+        const at = versions.findIndex((entry) => entry.version === version);
+        const found = versions[at];
         if (found === undefined) return null;
-        const { markdown, tags, pinned, author, writtenAt } = found;
-        return { scope, path, markdown, tags, pinned, version, author, updatedAt: writtenAt };
+        const before = at === 0 ? null : (versions[at - 1]?.markdown ?? null);
+        return { first: before === null, lines: changedLines(before ?? "", found.markdown), cut: false };
       }),
     scopes: () =>
       Effect.map(up, () =>

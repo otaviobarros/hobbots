@@ -29,7 +29,7 @@ import {
   recentlyLearned,
   scopeNav,
   searchScopes,
-  versionChanges,
+  shownLines,
 } from "./memory-model.ts";
 import { messages } from "./messages.ts";
 
@@ -251,7 +251,7 @@ describe("what changed", () => {
 
 describe("a page", () => {
   // covers ADR 028 (Read), #958
-  it("[TC-UX-948] tells each version's story, newest first, each against the one before it", () => {
+  it("[TC-UX-948] tells each version's story, newest first: who learned it, then who changed it", () => {
     const rows = historyRows(
       [
         { version: version("v3"), author: byYou, writtenAt: "2026-11-05T10:00:00.000Z", latest: true },
@@ -265,26 +265,29 @@ describe("a page", () => {
       ],
       hobs,
     );
-    expect(rows.map((row) => [row.what, row.before])).toEqual([
-      [copy.page.youChanged, "v2"],
-      [copy.page.changedThis({ who: "Ada" }), "v1"],
-      [copy.page.learnedThis({ who: "Pip" }), null],
+    expect(rows.map((row) => [row.what, row.latest])).toEqual([
+      [copy.page.youChanged, true],
+      [copy.page.changedThis({ who: "Ada" }), false],
+      [copy.page.learnedThis({ who: "Pip" }), false],
     ]);
     const yours = historyRows([{ version: version("v1"), author: byYou, writtenAt: "x", latest: true }], hobs);
     expect(yours[0]?.what).toBe(copy.page.wroteThis);
   });
 
   // covers ADR 028 (Read), #958
-  it("[TC-UX-949] shows the lines a version added and removed, and all of a first version as added", () => {
-    expect(versionChanges(null, "# Title\n\nOne line.\n")).toEqual([
-      { op: "add", text: "# Title" },
-      { op: "add", text: "One line." },
-    ]);
-    expect(versionChanges("# Title\n\nOld line.\nKept.\n", "# Title\n\nNew line.\nKept.\n")).toEqual([
+  it("[TC-UX-949] shows a version's changed lines without the blank ones, so paragraphs read as lines", () => {
+    expect(
+      shownLines([
+        { op: "same", text: "# Title" },
+        { op: "same", text: "" },
+        { op: "remove", text: "Old line." },
+        { op: "add", text: "  " },
+        { op: "add", text: "New line." },
+      ]),
+    ).toEqual([
       { op: "same", text: "# Title" },
       { op: "remove", text: "Old line." },
       { op: "add", text: "New line." },
-      { op: "same", text: "Kept." },
     ]);
   });
 });

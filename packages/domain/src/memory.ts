@@ -104,6 +104,24 @@ export const MemoryPageVersion = Schema.Struct({
 });
 export type MemoryPageVersion = typeof MemoryPageVersion.Type;
 
+/** A line of what a version changed: added, removed, or kept around a change. */
+export const MemoryChangedLine = Schema.Struct({
+  op: Schema.Literals(["add", "remove", "same"]),
+  text: Schema.String,
+});
+export type MemoryChangedLine = typeof MemoryChangedLine.Type;
+
+/**
+ * What one version of a page changed against the version it replaced: the first version adds all
+ * of itself. `cut` says the lines stop short of the whole change, as when it was too large.
+ */
+export const MemoryVersionChanges = Schema.Struct({
+  first: Schema.Boolean,
+  lines: Schema.Array(MemoryChangedLine),
+  cut: Schema.Boolean,
+});
+export type MemoryVersionChanges = typeof MemoryVersionChanges.Type;
+
 /** What a write or a forget expects to find, so a change made meanwhile is never overwritten unseen. */
 export type MemoryExpected =
   /** Whatever is there. */

@@ -8,6 +8,7 @@ import {
   MemoryScope,
   MemoryScopeKey,
   MemoryVersion,
+  MemoryVersionChanges,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
@@ -77,10 +78,10 @@ export class MemoryGroup extends HttpApiGroup.make("memory")
     }),
   )
   .add(
-    // A page as one version of it left it, to show what that version changed.
+    // What one version of a page changed against the version it replaced.
     HttpApiEndpoint.get("version", "/memory/version", {
       query: { ...pageQuery, version: MemoryVersion },
-      success: MemoryPage,
+      success: MemoryVersionChanges,
       error: [MemoryNotAnswering, MemoryPageNotFound],
     }),
   )

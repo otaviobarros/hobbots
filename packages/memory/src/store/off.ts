@@ -12,7 +12,7 @@ export const makeMemoryStoreOff = (message: string): MemoryStoreShape => {
   return guardMemoryStore({
     search: () => off,
     page: () => off,
-    pageAt: () => off,
+    versionChanges: () => off,
     scopes: () => off,
     list: () => off,
     changes: () => off,

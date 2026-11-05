@@ -1,6 +1,7 @@
 import { guardMemoryStore, MemoryStore, type MemoryStoreShape } from "@hobbots/agents";
 import {
   type MemoryActor,
+  type MemoryChangedLine,
   MemoryConflict,
   type MemoryExpected,
   type MemoryHit,
@@ -10,10 +11,12 @@ import {
   type MemoryScope,
   MemoryUnavailable,
   MemoryVersion,
+  type MemoryVersionChanges,
   memoryTitleOf,
   searchTerms,
 } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
+import { MEMORY_WORKSPACE } from "../engine/engine.ts";
 import {
   type EngineCaller,
   type EngineClient,
@@ -22,7 +25,13 @@ import {
   noSuchProject,
   ROOT,
 } from "./client.ts";
-import { authorOfUsername, type EngineProject, engineActorOf, engineProjectOf } from "./scopes.ts";
+import {
+  authorOfUsername,
+  type EngineProject,
+  engineActorOf,
+  engineProjectOf,
+  scopeOfEngineProject,
+} from "./scopes.ts";
 
 /**
  * `MemoryStore` on the bundled ai-memory (ADR 028). A hob's searches and writes go over `/mcp` with
@@ -62,6 +71,17 @@ const HitsJson = Schema.Struct({
     }),
   ),
 });
+const DiffJson = Schema.Struct({
+  diff: Schema.Struct({
+    from: Schema.NullOr(Schema.Struct({ id: Schema.String })),
+    status: Schema.String,
+    truncated: Schema.optionalKey(Schema.Boolean),
+    hunks: Schema.optionalKey(
+      Schema.Array(Schema.Struct({ lines: Schema.Array(Schema.Struct({ op: Schema.String, text: Schema.String })) })),
+    ),
+  }),
+});
+const ProjectsJson = Schema.Array(Schema.Struct({ project_name: Schema.String, page_count: Schema.Number }));
 const WrittenJson = Schema.Struct({ page_id: Schema.String });
 const DeletedJson = Schema.Struct({
   deleted: Schema.Boolean,
@@ -87,6 +107,21 @@ const PIN_FIRST_MAX = 10;
 const READ_CONCURRENCY = 8;
 /** A forgotten page comes back from the wiki's Git revision before its delete, marked so. */
 const REVISION = "rev:";
+
+const OPS: Record<string, MemoryChangedLine["op"]> = { "+": "add", "-": "remove", " ": "same" };
+
+/** What a version changed, from the diff ai-memory answers against the version it replaced. */
+const changesOf = (json: typeof DiffJson.Type): MemoryVersionChanges => ({
+  first: json.diff.from === null,
+  lines: (json.diff.hunks ?? []).flatMap((hunk) =>
+    hunk.lines.flatMap((line) => {
+      const op = OPS[line.op];
+      return op === undefined ? [] : [{ op, text: line.text }];
+    }),
+  ),
+  // A diff too large to answer has no lines; one cut short says so.
+  cut: json.diff.status === "too_large" || json.diff.truncated === true,
+});
 
 const callerOf = (actor: MemoryActor): EngineCaller =>
   actor._tag === "You" ? ROOT : { as: "hob", name: engineActorOf(actor.agentId) };
@@ -310,6 +345,27 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       }).pipe(refusalIsOutage),
     changes: (_actor, scope, since) =>
       Effect.flatMap(pinnedPaths(scope), (pinned) => changesFrom(scope, since, pinned)).pipe(refusalIsOutage),
+    versionChanges: (_actor, scope, path, version) =>
+      client.get(`${pagesRoute(engineProjectOf(scope))}/history/${path}`, DiffJson, { to: version, limit: "1" }).pipe(
+        Effect.map((json): MemoryVersionChanges | null => changesOf(json)),
+        // An unknown version is a 404 and a malformed one a 400: neither is a version of this page.
+        Effect.catchTag("EngineRefused", (refused) =>
+          refused.status === 404 || refused.status === 400 ? Effect.succeed(null) : Effect.fail(refused),
+        ),
+        refusalIsOutage,
+      ),
+    scopes: () =>
+      Effect.gen(function* () {
+        const ours = yield* client.get("projects", ProjectsJson, { workspace: MEMORY_WORKSPACE });
+        const shared = yield* client.get("projects", ProjectsJson, { workspace: "default" });
+        const held = [...ours, ...shared.filter((row) => row.project_name === "_global")].filter(
+          (row) => row.page_count > 0,
+        );
+        return held.flatMap((row) => {
+          const scope = scopeOfEngineProject(row.project_name);
+          return scope === null ? [] : [scope];
+        });
+      }).pipe(refusalIsOutage),
     history: (_actor, scope, path) =>
       Effect.gen(function* () {
         const where = engineProjectOf(scope);

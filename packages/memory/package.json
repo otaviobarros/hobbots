@@ -14,6 +14,7 @@
   "dependencies": {
     "@hobbots/agents": "workspace:*",
     "@hobbots/domain": "workspace:*",
+    "diff": "9.0.0",
     "effect": "catalog:"
   },
   "devDependencies": {
