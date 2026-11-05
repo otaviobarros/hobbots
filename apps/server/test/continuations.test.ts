@@ -99,35 +99,43 @@ let emptyDispatch: { readonly reached: Deferred.Deferred<void>; readonly proceed
 let dispatches = 0;
 
 /**
- * Holds the next continuation until `proceed`, once its items are claimed and checked: before the
- * chat starts it (`claimed`), or once the chat has read its work as still due and is about to save
- * its reply (`checked`). `reached` learns the items it holds.
+ * Holds the next continuation that runs until `proceed`, once its items are claimed and checked:
+ * before the chat starts it (`claimed`), or once the chat has read its work as still due and is
+ * about to save its reply (`checked`). `reached` learns the items it holds, and `settled` is done
+ * once its dispatch returned and the dispatch the thread's drain started after it found nothing.
  */
 let holdCarry: {
   readonly at: "claimed" | "checked";
   readonly reached: Deferred.Deferred<ReadonlyArray<BackpackItem["id"]>>;
   readonly proceed: Deferred.Deferred<void>;
+  readonly settled: Deferred.Deferred<void>;
 } | null = null;
+/** The held continuation's gate once its dispatch returned, until a later dispatch finds nothing. */
+let heldDispatched: Deferred.Deferred<void> | null = null;
 
-/** `turn`, held as `holdCarry` asks, once. */
-const holding = (turn: CarryingTurn): CarryingTurn => {
-  const gate = holdCarry;
-  if (gate === null) return turn;
-  holdCarry = null;
-  const hold = (work: CarriedWork) =>
+/** `turn`, its first run held as `holdCarry` asks; `wasHeld` tells whether this turn took the gate. */
+const holding = (turn: CarryingTurn) => {
+  let took: NonNullable<typeof holdCarry> | null = null;
+  const hold = (gate: NonNullable<typeof holdCarry>, work: CarriedWork) =>
     Deferred.succeed(
       gate.reached,
       work.holding.map((each) => each.itemId),
     ).pipe(Effect.andThen(Deferred.await(gate.proceed)));
-  return {
+  const held: CarryingTurn = {
     ...turn,
-    run: (turnId, work) => {
-      if (gate.at === "claimed") return Effect.andThen(hold(work), turn.run(turnId, work));
-      let reads = 0;
-      const late = Effect.tap(work.late, () => (reads++ === 0 ? hold(work) : Effect.void));
-      return turn.run(turnId, { ...work, late });
-    },
+    run: (turnId, work) =>
+      Effect.suspend(() => {
+        const gate = holdCarry;
+        if (gate === null) return turn.run(turnId, work);
+        holdCarry = null;
+        took = gate;
+        if (gate.at === "claimed") return Effect.andThen(hold(gate, work), turn.run(turnId, work));
+        let reads = 0;
+        const late = Effect.tap(work.late, () => (reads++ === 0 ? hold(gate, work) : Effect.void));
+        return turn.run(turnId, { ...work, late });
+      }),
   };
+  return { turn: held, took: () => took };
 };
 
 const observed = Layer.effect(
@@ -136,16 +144,25 @@ const observed = Layer.effect(
     const live = yield* Continuations;
     return Continuations.of({
       ...live,
-      deliver: (threadId, agentId, turn) =>
-        live.deliver(threadId, agentId, holding(turn)).pipe(
+      deliver: (threadId, agentId, turn) => {
+        const carried = holding(turn);
+        return live.deliver(threadId, agentId, carried.turn).pipe(
           Effect.tap((ran) => {
             dispatches += 1;
+            const took = carried.took();
+            if (took !== null) heldDispatched = took.settled;
+            else if (!ran && heldDispatched !== null) {
+              const settled = heldDispatched;
+              heldDispatched = null;
+              return Deferred.succeed(settled, undefined);
+            }
             const gate = emptyDispatch;
             if (ran || gate === null) return Effect.void;
             emptyDispatch = null;
             return Deferred.succeed(gate.reached, undefined).pipe(Effect.andThen(Deferred.await(gate.proceed)));
           }),
-        ),
+        );
+      },
     });
   }),
 ).pipe(Layer.provide(ContinuationsLive));
@@ -207,6 +224,7 @@ afterEach(async () => {
   cutContinuations = false;
   emptyDispatch = null;
   holdCarry = null;
+  heldDispatched = null;
   dispatches = 0;
   await runtime?.dispose();
   runtime = undefined;
@@ -531,7 +549,8 @@ describe("continuing a hob when work arrives", () => {
   const cancelWhileHeld = async (at: "claimed" | "checked") => {
     const reached = Deferred.makeUnsafe<ReadonlyArray<BackpackItem["id"]>>();
     const proceed = Deferred.makeUnsafe<void>();
-    holdCarry = { at, reached, proceed };
+    const settled = Deferred.makeUnsafe<void>();
+    holdCarry = { at, reached, proceed, settled };
     const { run, requests } = setUp();
     const prompt = [
       "Carry the ring",
@@ -554,11 +573,12 @@ describe("continuing a hob when work arrives", () => {
     );
     await run(Deferred.succeed(proceed, undefined));
 
-    // The work resolves as late, and nothing more is asked of the runtime or started.
-    const settled = await run(settledItems(held));
-    expect(settled.map((item) => item.disposition?._tag)).toEqual(held.map(() => "late"));
-    await run(messagesWhen(() => true));
-    await run(Effect.sleep("300 millis"));
+    // The work resolves as late. Once its dispatch returned and the thread's drain found nothing
+    // more, the thread is idle: nothing more was asked of the runtime or started.
+    const items = await run(settledItems(held));
+    expect(items.map((item) => item.disposition?._tag)).toEqual(held.map(() => "late"));
+    await run(Deferred.await(settled));
+    expect(await run(ChatService.use((chat) => chat.activeThreads))).toEqual([]);
     expect(requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"))).toEqual([]);
     const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
     expect(trees.map((each) => each.tasks.map((task) => [task.brief.split("\n")[0], task.state]))).toEqual([
