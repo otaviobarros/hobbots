@@ -1,11 +1,11 @@
 import type { DiagnosticsNow, StalledWork } from "@hobbots/api";
-import { RUNTIME_NAMES, type RuntimeHealth } from "@hobbots/domain";
+import { type MemoryEngineHealth, RUNTIME_NAMES, type RuntimeHealth } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { formatAgo } from "../../lib/format.ts";
 import { messages } from "./messages.ts";
-import { type HobName, recoveryText, runtimeFix, stalledText } from "./model.ts";
+import { type HobName, memoryNote, recoveryText, runtimeFix, stalledText } from "./model.ts";
 
 const copy = messages.now;
 
@@ -21,6 +21,22 @@ function RuntimeRow({ health }: { health: RuntimeHealth }) {
         </Badge>
       </span>
       {fix !== null && <span className="text-ui text-lantern">{fix}</span>}
+    </li>
+  );
+}
+
+function MemoryRow({ health }: { health: MemoryEngineHealth }) {
+  const note = memoryNote(health);
+  return (
+    <li className="flex flex-col gap-1 border-b-(length:--edge) border-line py-2">
+      <span className="flex items-center gap-2">
+        <span className="flex-1">{messages.memory.name}</span>
+        <span className="text-meta text-label">{health.version}</span>
+        <Badge variant={health.state === "running" ? "working" : "waiting"}>
+          {messages.memory.state[health.state]}
+        </Badge>
+      </span>
+      {note !== null && <span className="text-ui text-lantern">{note}</span>}
     </li>
   );
 }
@@ -66,6 +82,11 @@ export function DiagnosticsNowView({
           <RuntimeRow key={health.runtime} health={health} />
         ))}
       </ul>
+      {now.memory !== null && (
+        <ul aria-label={copy.memory} className="m-0 flex list-none flex-col p-0">
+          <MemoryRow health={now.memory} />
+        </ul>
+      )}
       <ul aria-label={copy.stalled} className="m-0 flex list-none flex-col p-0">
         {now.stalled.length === 0 && <li className="text-ui text-text-secondary">{copy.noStalled}</li>}
         {now.stalled.map((stalled) => (

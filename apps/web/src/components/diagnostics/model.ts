@@ -1,5 +1,5 @@
 import type { QuestTrace, RecoveryError, StalledWork } from "@hobbots/api";
-import type { Attempt, BackpackItem, Delegation, RuntimeHealth, Task } from "@hobbots/domain";
+import type { Attempt, BackpackItem, Delegation, MemoryEngineHealth, RuntimeHealth, Task } from "@hobbots/domain";
 import { RUNTIME_NAMES } from "@hobbots/domain";
 import { runtimeProblem } from "../../api/runtime-health.ts";
 import { firstLine, formatAgo, formatCount, plural } from "../../lib/format.ts";
@@ -12,6 +12,23 @@ export type HobName = (id: string) => string;
 export const runtimeFix = (health: RuntimeHealth): string | null => {
   const problem = runtimeProblem(health);
   return problem === null ? null : messages.runtimeFix[problem]({ name: RUNTIME_NAMES[health.runtime] });
+};
+
+/**
+ * What to know about the memory engine, when anything: why it is off, that it is starting again,
+ * or that it stopped and was started again since the hub started.
+ */
+export const memoryNote = (health: MemoryEngineHealth, now: Date = new Date()): string | null => {
+  if (health.state === "off") return messages.memory.off[health.offReason ?? "disabled"];
+  if (health.state === "restarting") return messages.memory.restarting;
+  if (health.restarts > 0 && health.lastExit !== null) {
+    const when = formatAgo(health.lastExit.at, now);
+    return plural(health.restarts, {
+      one: messages.memory.restarted.one({ when }),
+      other: messages.memory.restarted.other({ count: formatCount(health.restarts), when }),
+    });
+  }
+  return null;
 };
 
 /** What stalled and what to do about it, in one sentence. */

@@ -27,6 +27,8 @@ export const layers = {
     layer: "adapter",
     may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"],
   },
+  // Memory (ADR 028): the bundled ai-memory engine and the only code that knows it.
+  "@hobbots/memory": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents"] },
   // The Workbench's records (ADR 023): the scanner of a hob's folders and the store of logs and contents.
   "@hobbots/workbench": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents"] },
   // Pixel art that the app and the site both draw. Plain data and pure functions.
@@ -40,6 +42,7 @@ export const layers = {
       "@hobbots/agents",
       "@hobbots/charms",
       "@hobbots/inbox",
+      "@hobbots/memory",
       "@hobbots/orchestration",
       "@hobbots/permissions",
       "@hobbots/persistence",

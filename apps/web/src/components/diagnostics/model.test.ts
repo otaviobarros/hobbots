@@ -1,7 +1,7 @@
 import type { QuestTrace, StalledWork } from "@hobbots/api";
 import { AgentId, AttemptId, DelegationId, QuestId, RuntimeHealth, TaskId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { eventLabel, recoveryText, runtimeFix, stalledText, traceRows, triesText } from "./model.ts";
+import { eventLabel, memoryNote, recoveryText, runtimeFix, stalledText, traceRows, triesText } from "./model.ts";
 
 const now = new Date("2026-11-02T12:00:00.000Z");
 const names: Record<string, string> = { aldric: "Aldric", ada: "Ada" };
@@ -32,6 +32,25 @@ describe("Diagnostics copy", () => {
       "Claude Code is installed but not signed in. Open it in a terminal and sign in.",
     );
     expect(runtimeFix(health("unavailable", null))).toMatch(/^Claude Code was not found/);
+  });
+
+  it("says why memory is off, that it is starting again, or that it was started again", () => {
+    const base = { version: "3.4.2", restarts: 0, lastExit: null, runningSince: null } as const;
+    expect(memoryNote({ ...base, state: "running", offReason: null, runningSince: now.toISOString() }, now)).toBeNull();
+    expect(memoryNote({ ...base, state: "off", offReason: "checksum" }, now)).toMatch(/not the one it was built with/);
+    expect(memoryNote({ ...base, state: "off", offReason: "missing" }, now)).toMatch(
+      /^This copy of Hobbots has no memory/,
+    );
+    expect(memoryNote({ ...base, state: "restarting", offReason: null, restarts: 1 }, now)).toMatch(
+      /is starting it again/,
+    );
+    const lastExit = { code: 3, at: "2026-11-02T11:55:00.000Z" };
+    expect(memoryNote({ ...base, state: "running", offReason: null, restarts: 1, lastExit }, now)).toMatch(
+      /^Memory stopped .+ and Hobbots started it again\.$/,
+    );
+    expect(memoryNote({ ...base, state: "running", offReason: null, restarts: 4, lastExit }, now)).toMatch(
+      /^Memory stopped 4 times since Hobbots started/,
+    );
   });
 
   it("names the hob and how long ago stalled work last moved", () => {

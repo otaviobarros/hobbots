@@ -24,6 +24,11 @@ export const ServerConfig = Config.all({
   claudeExecutable: Config.String("HOBBOTS_CLAUDE_EXECUTABLE").pipe(Config.option),
   // Overrides the host Codex the runtime finds on its own.
   codexExecutable: Config.String("HOBBOTS_CODEX_EXECUTABLE").pipe(Config.option),
+  // Memory (ADR 028): `off` runs the hub without its memory engine, as tests and a hub without one do.
+  memory: Config.Literals(["on", "off"], "HOBBOTS_MEMORY").pipe(Config.withDefault("on" as const)),
+  // The folder with the memory engine's binary and checksum. The desktop app passes the copy in its
+  // resources folder; a checkout uses the one `pnpm --filter @hobbots/memory fetch-engine` made.
+  memoryEngineDir: Config.String("HOBBOTS_MEMORY_ENGINE_DIR").pipe(Config.option),
   // The least severe log lines the hub writes. `Debug` adds routine reads to the request log.
   logLevel: Config.LogLevel("HOBBOTS_LOG_LEVEL").pipe(Config.withDefault("Info" as const)),
   runtime: Config.Literals(["claude", "fake"], "HOBBOTS_RUNTIME").pipe(Config.withDefault("claude" as const)),

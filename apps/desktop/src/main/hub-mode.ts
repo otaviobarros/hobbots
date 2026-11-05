@@ -8,6 +8,7 @@ import { hubAddress } from "./hub-address.ts";
 import { followHub } from "./hub-events.ts";
 import { webClientDir } from "./local-pages.ts";
 import type { LoginItem } from "./login-item.ts";
+import { memoryEngineDir } from "./memory-engine.ts";
 import { startMenuBar } from "./menu-bar.ts";
 import { ServerSupervisor, StartTimedOut } from "./server.ts";
 import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server-identity.ts";
@@ -43,6 +44,7 @@ export const startHub = async (
   // A packaged app carries the web client in its resources folder; a checkout uses the web build.
   // The server serves it, and the window loads it from there like any browser on the hub (ADR 012).
   const webDir = webClientDir(app.isPackaged ? process : null, import.meta.dirname);
+  const engineDir = memoryEngineDir(app.isPackaged ? process : null, import.meta.dirname);
 
   /** The pages the window may show, and the only ones the preload bridge answers. */
   const isAllowedUrl = (url: string) => url.startsWith(`${devWebUrl}/`) || url.startsWith(`${hub.apiUrl}/`);
@@ -92,6 +94,7 @@ export const startHub = async (
           HOBBOTS_DATA_DIR: app.getPath("userData"),
           HOBBOTS_VERSION: app.getVersion(),
           HOBBOTS_WEB_DIR: webDir,
+          HOBBOTS_MEMORY_ENGINE_DIR: engineDir,
         },
       });
       server.on("exit", (code) => console.log(`Hobbots server exited with code ${code}`));

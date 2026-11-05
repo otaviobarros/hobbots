@@ -26,6 +26,7 @@ test("[TC-OP-053] follows a Quest that delegated to two hobs from Settings › D
   await page.getByText("Technical details").click();
   const diagnostics = page.getByRole("region", { name: "Diagnostics" });
   await expect(diagnostics.getByRole("list", { name: "AI providers" })).toContainText("Claude Code");
+  await expect(diagnostics.getByRole("list", { name: "Memory" })).toContainText("Memory is turned off on this hub.");
   await expect(diagnostics.getByRole("list", { name: "Stalled work" })).toContainText(
     "No delivery or task has stalled.",
   );
