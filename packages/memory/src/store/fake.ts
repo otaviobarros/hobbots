@@ -174,10 +174,6 @@ export const makeMemoryStoreFake = (): {
         const before = at === 0 ? null : (versions[at - 1]?.markdown ?? null);
         return { first: before === null, lines: changedLines(before ?? "", found.markdown), cut: false };
       }),
-    scopes: () =>
-      Effect.map(up, () =>
-        [...scopes.values()].filter((entry) => summaries(entry.scope).length > 0).map((entry) => entry.scope),
-      ),
     list: (_actor, scope, limit) =>
       Effect.map(up, () =>
         summaries(scope)
@@ -188,6 +184,10 @@ export const makeMemoryStoreFake = (): {
               a.path.localeCompare(b.path),
           )
           .slice(0, limit),
+      ),
+    scopes: () =>
+      Effect.map(up, () =>
+        [...scopes.values()].filter(({ scope }) => summaries(scope).length > 0).map(({ scope }) => scope),
       ),
     changes: (_actor, scope, since) =>
       Effect.map(up, () =>

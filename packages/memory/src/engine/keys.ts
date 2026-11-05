@@ -34,6 +34,23 @@ const read = (file: string): { readonly root: string; readonly proxy: string } |
   }
 };
 
+/** Writes two new keys over any there, owner-only, in one rename, and answers them. */
+const writeNewKeys = (file: string) => {
+  const keys = { root: newKey(), proxy: newKey() };
+  const draft = `${file}.${process.pid}.tmp`;
+  writeFileSync(draft, `${JSON.stringify({ version: 1, ...keys })}\n`, { mode: OWNER_ONLY });
+  renameSync(draft, file);
+  return keys;
+};
+
+/**
+ * Gives the hub new memory keys, as a restore does (ADR 028): the engine reads its keys only from
+ * its environment, so at its next start the new keys work and the old ones no longer do.
+ */
+export const replaceMemoryKeys = (dataDir: string): void => {
+  writeNewKeys(memoryKeysFile(dataDir));
+};
+
 /**
  * The hub's memory keys, made the first time and kept owner-only. A file that cannot be read, or
  * holds anything but two distinct keys, is replaced with new ones: the engine reads its keys only
@@ -42,12 +59,7 @@ const read = (file: string): { readonly root: string; readonly proxy: string } |
 export const loadOrCreateMemoryKeys = (dataDir: string): MemoryKeys => {
   const file = memoryKeysFile(dataDir);
   let keys = existsSync(file) ? read(file) : undefined;
-  if (keys === undefined) {
-    keys = { root: newKey(), proxy: newKey() };
-    const draft = `${file}.${process.pid}.tmp`;
-    writeFileSync(draft, `${JSON.stringify({ version: 1, ...keys })}\n`, { mode: OWNER_ONLY });
-    renameSync(draft, file);
-  }
+  if (keys === undefined) keys = writeNewKeys(file);
   // A copy restored or moved by hand can arrive readable by others.
   if ((statSync(file).mode & 0o777) !== OWNER_ONLY) chmodSync(file, OWNER_ONLY);
   return { root: Redacted.make(keys.root), proxy: Redacted.make(keys.proxy) };

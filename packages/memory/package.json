@@ -15,7 +15,8 @@
     "@hobbots/agents": "workspace:*",
     "@hobbots/domain": "workspace:*",
     "diff": "9.0.0",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "tar": "7.5.22"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

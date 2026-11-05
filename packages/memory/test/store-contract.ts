@@ -226,6 +226,43 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
         }),
       ));
 
+    // covers ADR 028 (Backups), OP-002
+    it(
+      "[TC-OP-103] names every page a scope holds as changed since the epoch, past the engine's longest answer",
+      () =>
+        run(({ store }) =>
+          Effect.gen(function* () {
+            // 101 pages stay after one is forgotten: more than one answer of the engine holds.
+            const paths = Array.from({ length: 102 }, (_, at) => `notes/n${String(at).padStart(3, "0")}.md`);
+            const [first = "", ...rest] = paths;
+            const version = yield* store.write(you, theApp, draft(first, "# Note"), fresh);
+            for (const path of rest) yield* store.write(you, theApp, draft(path, "# Note"), fresh);
+            yield* store.forget(you, theApp, MemoryPath.make(first), { _tag: "Version", version });
+            const everything = yield* store.changes(you, theApp, "1970-01-01T00:00:00.000Z");
+            expect(rest).toHaveLength(101);
+            expect(everything.map((page) => page.path).sort()).toEqual(rest);
+          }),
+        ),
+      120_000,
+    );
+
+    // covers ADR 028 (Backups), OP-002
+    it("[TC-OP-094] names the scopes that hold pages, within what the actor may reach", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          expect(yield* store.scopes(you)).toEqual([]);
+          yield* store.write(asPip, pipsOwn, draft("notes/a.md", "# A"), fresh);
+          yield* store.write(asQuill, theSite, draft("facts/site.md", "# Site"), fresh);
+          yield* store.write(you, everyone, draft("about-you.md", "# About you"), fresh);
+          const gone = yield* store.write(asQuill, quillsOwn, draft("notes/b.md", "# B"), fresh);
+          yield* store.forget(you, quillsOwn, MemoryPath.make("notes/b.md"), { _tag: "Version", version: gone });
+          const key = (scope: MemoryScope) => JSON.stringify(scope);
+          // A scope whose only page was forgotten holds nothing to name.
+          expect((yield* store.scopes(you)).map(key).sort()).toEqual([pipsOwn, theSite, everyone].map(key).sort());
+          expect((yield* store.scopes(asPip)).map(key).sort()).toEqual([pipsOwn, everyone].map(key).sort());
+        }),
+      ));
+
     // covers ADR 028 (Browse)
     it("[TC-GEN-192] lists every pinned page first, also more than a search answers and older than the newest", () =>
       run(({ store }) =>
@@ -303,24 +340,6 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           expect(yield* store.versionChanges(you, pipsOwn, path, first)).toBeNull();
           // A hob never reads another hob's versions.
           expect(yield* died(store.versionChanges(asQuill, pipsOwn, path, first))).toBe(true);
-        }),
-      ));
-
-    // covers ADR 028 (Browse), #958
-    it("[TC-GEN-231] lists the scopes that hold pages, projects included, and only those a hob may touch", () =>
-      run(({ store }) =>
-        Effect.gen(function* () {
-          const keys = (scopes: ReadonlyArray<MemoryScope>) => scopes.map((scope) => JSON.stringify(scope)).sort();
-          yield* store.write(asPip, pipsOwn, draft("notes/a.md", "# A"), fresh);
-          yield* store.write(asQuill, quillsOwn, draft("notes/b.md", "# B"), fresh);
-          yield* store.write(asQuill, theSite, draft("facts/c.md", "# C"), fresh);
-          yield* store.write(you, everyone, draft("rules/d.md", "# D"), fresh);
-          // theApp holds nothing, so it is not listed.
-          expect(keys(yield* store.scopes(you))).toEqual(keys([pipsOwn, quillsOwn, theSite, everyone]));
-          expect(keys(yield* store.scopes(asPip))).toEqual(keys([pipsOwn, everyone]));
-          // A scope whose last page is forgotten holds nothing.
-          yield* store.forget(you, pipsOwn, MemoryPath.make("notes/a.md"), any);
-          expect(keys(yield* store.scopes(you))).toEqual(keys([quillsOwn, theSite, everyone]));
         }),
       ));
   });

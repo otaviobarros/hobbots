@@ -72,6 +72,12 @@ const HitsJson = Schema.Struct({
     }),
   ),
 });
+const WrittenJson = Schema.Struct({ page_id: Schema.String });
+const DeletedJson = Schema.Struct({
+  deleted: Schema.Boolean,
+  pre_checkpoint: Schema.NullOr(Schema.String),
+  checkpoint: Schema.NullOr(Schema.String),
+});
 const DiffJson = Schema.Struct({
   diff: Schema.Struct({
     from: Schema.NullOr(Schema.Struct({ id: Schema.String })),
@@ -85,12 +91,6 @@ const DiffJson = Schema.Struct({
 const ProjectsJson = Schema.Array(
   Schema.Struct({ workspace_name: Schema.String, project_name: Schema.String, page_count: Schema.Number }),
 );
-const WrittenJson = Schema.Struct({ page_id: Schema.String });
-const DeletedJson = Schema.Struct({
-  deleted: Schema.Boolean,
-  pre_checkpoint: Schema.NullOr(Schema.String),
-  checkpoint: Schema.NullOr(Schema.String),
-});
 const PreconditionJson = Schema.Struct({
   reason: Schema.Literal("precondition_failed"),
   current_page_id: Schema.NullOr(Schema.String),
@@ -396,34 +396,6 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         ),
         refusalIsOutage,
       ),
-    scopes: () =>
-      Effect.gen(function* () {
-        const projects = yield* client.get("projects", ProjectsJson);
-        const held = projects.filter((each) => each.page_count > 0);
-        const found = yield* Effect.forEach(
-          held,
-          (each): Effect.Effect<MemoryScope | null, MemoryUnavailable | EngineRefused> => {
-            const known = scopeOfEngineProject({ workspace: each.workspace_name, project: each.project_name });
-            if (known !== "Project") return Effect.succeed(known);
-            return Effect.flatMap(identityOf(each.project_name), (identity) =>
-              identity === null
-                ? Effect.fail(unnamed(each.project_name))
-                : Effect.succeed({ _tag: "Project" as const, identity }),
-            );
-          },
-          { concurrency: READ_CONCURRENCY },
-        );
-        // A scope whose pages were all forgotten holds nothing to name.
-        const named = found.filter((scope): scope is MemoryScope => scope !== null);
-        return yield* Effect.filter(named, (scope) =>
-          Effect.map(
-            client
-              .get(`${pagesRoute(engineProjectOf(scope))}/recent`, Schema.Array(SummaryJson), { limit: "1" })
-              .pipe(orEmpty([] as ReadonlyArray<typeof SummaryJson.Type>)),
-            (recent) => recent.length > 0,
-          ),
-        );
-      }).pipe(refusalIsOutage),
     history: (_actor, scope, path) =>
       Effect.gen(function* () {
         const where = engineProjectOf(scope);
@@ -472,6 +444,34 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
           Effect.catchTag("EngineRefused", conflictOf(draft.path)),
           refusalIsOutage,
         ),
+    scopes: () =>
+      Effect.gen(function* () {
+        const projects = yield* client.get("projects", ProjectsJson);
+        const held = projects.filter((each) => each.page_count > 0);
+        const found = yield* Effect.forEach(
+          held,
+          (each): Effect.Effect<MemoryScope | null, MemoryUnavailable | EngineRefused> => {
+            const known = scopeOfEngineProject({ workspace: each.workspace_name, project: each.project_name });
+            if (known !== "Project") return Effect.succeed(known);
+            return Effect.flatMap(identityOf(each.project_name), (identity) =>
+              identity === null
+                ? Effect.fail(unnamed(each.project_name))
+                : Effect.succeed({ _tag: "Project" as const, identity }),
+            );
+          },
+          { concurrency: READ_CONCURRENCY },
+        );
+        // A scope whose pages were all forgotten holds nothing to name.
+        const named = found.filter((scope): scope is MemoryScope => scope !== null);
+        return yield* Effect.filter(named, (scope) =>
+          Effect.map(
+            client
+              .get(`${pagesRoute(engineProjectOf(scope))}/recent`, Schema.Array(SummaryJson), { limit: "1" })
+              .pipe(orEmpty([] as ReadonlyArray<typeof SummaryJson.Type>)),
+            (recent) => recent.length > 0,
+          ),
+        );
+      }).pipe(refusalIsOutage),
     forget: (_actor, scope, path, expected) => {
       if (expected._tag === "New") {
         return refusalIsOutage(
@@ -507,7 +507,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
   return store;
 };
 
-/** Never silently left out: a list that cannot name a project says memory did not answer in full. */
+/** Never silently left out: an export that cannot name a project says memory did not answer in full. */
 const unnamed = (project: string) =>
   new MemoryUnavailable({ message: `Memory holds a project Hobbots cannot name: ${project}` });
 

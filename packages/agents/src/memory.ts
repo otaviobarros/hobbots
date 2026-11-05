@@ -48,10 +48,10 @@ export interface MemoryStoreShape {
     path: MemoryPath,
     version: MemoryVersion,
   ) => Memory<MemoryVersionChanges | null>;
-  /** Every scope that holds a page now, that `actor` may touch: what the Memory page lists. */
-  readonly scopes: (actor: MemoryActor) => Memory<ReadonlyArray<MemoryScope>>;
   /** The first `limit` pages in `scope`: pinned first, then the most recently changed. */
   readonly list: (actor: MemoryActor, scope: MemoryScope, limit: number) => Memory<ReadonlyArray<MemoryPageSummary>>;
+  /** Every scope that holds a page now, among those `actor` may reach. */
+  readonly scopes: (actor: MemoryActor) => Memory<ReadonlyArray<MemoryScope>>;
   /** Pages in `scope` changed after `since` (an ISO date), oldest change first. */
   readonly changes: (actor: MemoryActor, scope: MemoryScope, since: string) => Memory<ReadonlyArray<MemoryPageSummary>>;
   /** Every version of the page at `path`, newest first; empty when there is no page. */
@@ -130,10 +130,10 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   search: guarded("search", store.search, ([scopes]) => scopes),
   page: guarded("read", store.page, one),
   versionChanges: guarded("read", store.versionChanges, one),
-  // Every scope is listed, then the ones the actor may not touch are left out, never refused.
-  scopes: (actor) =>
-    Effect.map(store.scopes(actor), (scopes) => scopes.filter((scope) => memoryScopeAllowed(actor, scope))),
   list: guarded("list", store.list, one),
+  // Nothing to refuse: what the engine answers is narrowed to what the actor may reach.
+  scopes: (actor) =>
+    Effect.map(store.scopes(actor), (found) => found.filter((scope) => memoryScopeAllowed(actor, scope))),
   changes: guarded("list", store.changes, one),
   history: guarded("read", store.history, one),
   write: guarded("write", store.write, one),
