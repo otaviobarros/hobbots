@@ -614,6 +614,22 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           ),
         );
 
+      /**
+       * Deletes the hob's key, answering why the keychain kept it, or null when it is gone. A hub
+       * whose keychain tool cannot run has no keychain, so it kept no key there either.
+       */
+      const removeKey = (agentId: AgentId) =>
+        keys.remove(agentId).pipe(
+          Effect.as(null),
+          Effect.catch((error) =>
+            Effect.succeed(
+              error.reason === "unavailable"
+                ? null
+                : `The hub's keychain did not delete the app's key: ${error.message}`,
+            ),
+          ),
+        );
+
       /** `dismiss`: whether a left-over app is dismissed, which only the user's disconnect does. */
       const disconnectHob = (agentId: AgentId, dismiss: boolean) =>
         writing.withPermits(1)(
@@ -623,40 +639,38 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
             const app = yield* apps.get(agentId);
             if (app === null) {
               // A key without its app is removed too, so nothing is left behind.
-              yield* keys.remove(agentId).pipe(Effect.ignore);
+              const keyKept = yield* removeKey(agentId);
               // Disconnecting a left-over app dismisses it. Without its key the hub cannot try its
               // installations again; only deleting the app on GitHub closes what is left.
               const left = yield* apps.leftOver(agentId);
-              if (left === null) return { deleteUrl: null, problem: null };
-              if (!dismiss) return { deleteUrl: deleteUrl(left.app.slug), problem: left.problem };
+              if (left === null) return { deleteUrl: null, problem: null, keyKept };
+              if (!dismiss) return { deleteUrl: deleteUrl(left.app.slug), problem: left.problem, keyKept };
               yield* apps.remove(agentId);
-              return { deleteUrl: deleteUrl(left.app.slug), problem: null };
+              return { deleteUrl: deleteUrl(left.app.slug), problem: null, keyKept };
             }
             // Tried once and shown, never retried in a loop (ADR 022).
             const problem = yield* uninstall(agentId, app);
-            const kept = yield* keys.remove(agentId).pipe(
-              Effect.as(null),
-              Effect.catch((error) =>
-                Effect.succeed(`The hub's keychain did not delete the app's key: ${error.message}`),
-              ),
-            );
+            const kept = yield* removeKey(agentId);
             const problems = [problem, kept].filter((each) => each !== null);
             // The hob acts as the bot until here, then as the user: nothing allowed for its bot runs as
             // them, and no request it asked as the bot saves a grant for them (ADR 022).
             if (problems.length === 0) {
               yield* grants.switchGitHub(agentId, apps.remove(agentId));
               yield* Effect.logInfo("A hob's GitHub app was disconnected", { agentId, slug: app.slug });
-              return { deleteUrl: deleteUrl(app.slug), problem: null };
+              return { deleteUrl: deleteUrl(app.slug), problem: null, keyKept: null };
             }
             // Kept as left over, so the problem and where to delete the app stay shown (ADR 022).
             const left = problems.join(" ");
             yield* grants.switchGitHub(agentId, apps.leave(agentId, left));
             yield* Effect.logWarning("A hob's GitHub app was not fully removed", { agentId, slug: app.slug });
-            return { deleteUrl: deleteUrl(app.slug), problem: left };
+            return { deleteUrl: deleteUrl(app.slug), problem: left, keyKept: kept };
           }),
         );
 
-      const disconnect = (agentId: AgentId) => Effect.andThen(agentOf(agentId), disconnectHob(agentId, true));
+      const disconnect = (agentId: AgentId) =>
+        Effect.andThen(agentOf(agentId), disconnectHob(agentId, true)).pipe(
+          Effect.map(({ deleteUrl, problem }) => ({ deleteUrl, problem })),
+        );
 
       const service = HobGitHubAppService.of({ status, start, form, complete, installations, disconnect });
       const retired = RetiredHobGitHubApp.of({
@@ -664,6 +678,7 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           // What could not be removed stays with the hob's app as left over, shown by its status.
           // Retiring again leaves it as it is.
           disconnectHob(agentId, false).pipe(Effect.asVoid),
+        erase: (agentId) => disconnectHob(agentId, false).pipe(Effect.map((result) => result.keyKept)),
       });
       return Context.make(HobGitHubAppService, service).pipe(
         Context.add(RetiredHobGitHubApp, retired),

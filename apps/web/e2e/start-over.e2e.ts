@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { admit, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 const folders: Array<string> = [];
@@ -19,10 +19,12 @@ const fileOf = (dataDir: string, name: string) => readFileSync(join(dataDir, nam
 test("[TC-OP-098] starts over from Settings › Your data, and the hub comes back empty at Welcome", async ({
   page,
   context,
+  browser,
 }) => {
   test.setTimeout(90_000);
   const dataDir = emptyDataDir();
-  folders.push(dataDir);
+  const destination = emptyDataDir();
+  folders.push(dataDir, destination);
   hub = await startHub(dataDir);
   const api = async (method: string, path: string, body: unknown) => {
     const response = await fetch(`${hub?.url}/api${path}`, {
@@ -50,6 +52,13 @@ test("[TC-OP-098] starts over from Settings › Your data, and the hub comes bac
   });
   const installation = fileOf(dataDir, "installation-id");
 
+  // Backups saves to a folder the person chose, and so does Back up first.
+  await page.goto(`${hub.url}/#/settings/data`);
+  await page
+    .getByRole("region", { name: "Backups" })
+    .getByRole("textbox", { name: "Save the backup in" })
+    .fill(destination);
+
   // Find a setting knows it by other names, and it sits at the bottom of Your data.
   await page.goto(`${hub.url}/#/settings`);
   await page.getByRole("searchbox", { name: "Find a setting" }).fill("reset");
@@ -70,6 +79,12 @@ test("[TC-OP-098] starts over from Settings › Your data, and the hub comes bac
   await expect(dialog).toBeHidden();
 
   await card.getByRole("button", { name: "Delete everything…" }).click();
+  await expect(
+    dialog.getByText(`Saves to ${destination}, the folder chosen under Backups.`, { exact: false }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Back up first" }).click();
+  await expect(dialog.getByRole("button", { name: "Backed up" })).toBeVisible({ timeout: 20_000 });
+  await expect(dialog.getByText(` to ${join(destination, "Hobbots backup ")}`, { exact: false })).toBeVisible();
   await dialog.getByRole("checkbox").check();
   await remove.click();
 
@@ -79,9 +94,25 @@ test("[TC-OP-098] starts over from Settings › Your data, and the hub comes bac
   expect(fileOf(dataDir, "installation-id")).not.toBe(installation);
   expect(existsSync(join(dataDir, "reset.json"))).toBe(false);
 
-  // This browser was a device of the old hub, so it pairs with the new one, and Start fresh opens Welcome.
-  await context.clearCookies();
-  await admit(context, { ...hub, headers: { authorization: `Bearer ${fileOf(dataDir, "window-key")}` } });
-  await done.getByRole("button", { name: "Start fresh" }).click();
+  // The hub forgot this browser: its old device no longer gets in.
+  const cookies = (await context.cookies(hub.url)).map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
+  expect((await fetch(`${hub.url}/api/setup`, { headers: { cookie: cookies } })).status).toBe(401);
+
+  // So it asks to be allowed again, and the hub's own window allows it, as on a first visit.
+  await expect(done).toContainText("This browser was one of the devices the hub forgot");
+  await done.getByRole("button", { name: "Ask to be allowed" }).click();
+  await page.getByRole("button", { name: "Ask for access" }).click();
+  const code = (await page.getByText(/^\d{3} \d{3}$/).textContent()) ?? "";
+  const hubWindow = await browser.newContext({
+    extraHTTPHeaders: { authorization: `Bearer ${fileOf(dataDir, "window-key")}` },
+  });
+  const inbox = await hubWindow.newPage();
+  await inbox.goto(`${hub.url}/#/inbox`);
+  const asking = inbox.getByRole("article", { name: /asks to use Hobbots$/ });
+  await expect(asking.getByText(code, { exact: true })).toBeVisible({ timeout: 20_000 });
+  await asking.getByRole("button", { name: "Allow", exact: true }).click();
+  await hubWindow.close();
+
+  // Allowed, the browser opens the new hub at Welcome.
   await expect(page.getByRole("link", { name: "Get started" })).toBeVisible({ timeout: 20_000 });
 });

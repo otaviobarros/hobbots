@@ -2,7 +2,8 @@ import { lstat, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { HobbotsRepository, RetiredHobGitHubApp } from "@hobbots/agents";
 import { ResetRefused } from "@hobbots/api";
-import { GitHubConnection } from "@hobbots/charms";
+import { GitHubConnection, HobAppKeys, Keychain, type KeychainError } from "@hobbots/charms";
+import type { Agent } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { HUB_ENTRIES } from "./backup-files.ts";
 import { HubRestart } from "./restores.ts";
@@ -55,6 +56,35 @@ export const finishReset = async (dataDir: string) => {
   return true;
 };
 
+/** Why a keychain item is still there, or null when it is gone. A keychain tool that cannot run means there is no keychain. */
+const keptBy = (what: string) => (error: KeychainError) =>
+  Effect.succeed(error.reason === "unavailable" ? null : `The keychain did not delete ${what}: ${error.message}`);
+
+/**
+ * Deletes the keychain items of a hub with no hub running (#948), for the `reset` command: every
+ * hob's GitHub App key and the GitHub sign-in. Answers what the keychain kept. The apps stay on
+ * GitHub with their installations: only a running hub can ask GitHub to remove those.
+ */
+export const eraseKeychain = (hobs: ReadonlyArray<Pick<Agent, "id" | "name">>) =>
+  Effect.gen(function* () {
+    const keys = yield* HobAppKeys;
+    const signIn = yield* Keychain;
+    const kept: Array<string> = [];
+    for (const hob of hobs) {
+      const problem = yield* keys
+        .remove(hob.id)
+        .pipe(Effect.as(null), Effect.catch(keptBy(`${hob.name}'s GitHub app key`)));
+      if (problem !== null) kept.push(problem);
+    }
+    const problem = yield* signIn.remove.pipe(Effect.as(null), Effect.catch(keptBy("the GitHub sign-in")));
+    if (problem !== null) kept.push(problem);
+    return kept;
+  });
+
+/** The words of a reset that stopped because the keychain kept items. */
+export const keptReason = (kept: ReadonlyArray<string>) =>
+  `Nothing was deleted, because the keychain kept sign-ins it was asked to delete. ${kept.join(" ")} Unlock the keychain and try again.`;
+
 /**
  * Settings › Your data › Start over (#948): forgets the sign-ins the hub keeps in the OS keychain,
  * then stops the hub, which deletes its data and starts again empty, at First run. Deleting the
@@ -73,13 +103,21 @@ export class HubReset extends Context.Service<HubReset, { readonly start: Effect
 
       // The keychain is outside the data folder, so its items go while the services that own them
       // still run. A hob's own GitHub app also loses its installations, as when the hob retires.
+      // Answers what the keychain kept: nothing is deleted then, so the database keeps the record of
+      // it and Start over can be tried again.
       const forgetSignIns = Effect.gen(function* () {
+        const kept: Array<string> = [];
         if (Option.isSome(hobApps)) {
           for (const hob of yield* hobs.listAgentsWithStatus(["active", "paused", "retired"])) {
-            yield* hobApps.value.remove(hob.id);
+            const problem = yield* hobApps.value.erase(hob.id);
+            if (problem !== null) kept.push(`${hob.name}: ${problem}`);
           }
         }
-        if (Option.isSome(github)) yield* github.value.disconnect;
+        if (Option.isSome(github)) {
+          const problem = yield* github.value.erase;
+          if (problem !== null) kept.push(problem);
+        }
+        return kept;
       });
 
       const start = Effect.gen(function* () {
@@ -88,7 +126,11 @@ export class HubReset extends Context.Service<HubReset, { readonly start: Effect
             reason: "This hub cannot restart itself. Stop it and delete its data folder instead.",
           });
         }
-        yield* forgetSignIns;
+        const kept = yield* forgetSignIns;
+        if (kept.length > 0) {
+          yield* Effect.logWarning("Start over stopped: the keychain kept sign-ins", { kept });
+          return yield* new ResetRefused({ reason: keptReason(kept) });
+        }
         yield* Effect.log("Starting over: the hub stops, deletes its data and starts again empty");
         // The answer leaves before the hub stops.
         yield* restart.value.reset.pipe(Effect.delay("300 millis"), Effect.forkDetach);

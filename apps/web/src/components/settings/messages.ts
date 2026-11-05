@@ -239,8 +239,10 @@ export const messages = {
         other: `${names} are working right now. They stop at once, and what they were writing is lost.`,
       }),
     wayBack: "Want a way back?",
-    backupDone: ({ when }: { when: string }) => `Backed up ${when}. You can restore it from the welcome screen.`,
-    backupNone: "Back up now and restore it later from the welcome screen.",
+    backupDone: ({ when, path }: { when: string; path: string }) =>
+      `Backed up ${when} to ${path}. You can restore it from the welcome screen.`,
+    backupNone: ({ folder }: { folder: string }) =>
+      `Saves to ${folder}, the folder chosen under Backups. You can restore it from the welcome screen.`,
     backupNoFolder: "Choose where backups go under Backups first.",
     backupRunning: "Backing up…",
     backupFailed: ({ reason }: { reason: string }) => `The backup did not finish: ${reason}`,
@@ -260,7 +262,10 @@ export const messages = {
     doneTitle: "All clear",
     doneBody:
       "Everything Hobbots kept on the hub is gone. Your folders and files are untouched. Set up again whenever you're ready.",
+    doneBrowser:
+      "This browser was one of the devices the hub forgot, so it asks to be allowed again. Allow it from the Hobbots window on the hub's computer.",
     startFresh: "Start fresh",
+    askAgain: "Ask to be allowed",
     failed: ({ reason }: { reason: string }) => `Hobbots could not finish starting over: ${reason}`,
     close: "Close",
   },

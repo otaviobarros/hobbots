@@ -105,5 +105,12 @@ export class HobGitHubApps extends Context.Service<
  */
 export class RetiredHobGitHubApp extends Context.Service<
   RetiredHobGitHubApp,
-  { readonly remove: (agentId: AgentId) => Effect.Effect<void> }
+  {
+    readonly remove: (agentId: AgentId) => Effect.Effect<void>;
+    /**
+     * Removes as `remove` does, for Start over (#948), and answers why the hob's key is still in the
+     * keychain, or null when it is gone. Installations GitHub kept do not count: the app stays there.
+     */
+    readonly erase: (agentId: AgentId) => Effect.Effect<string | null>;
+  }
 >()("@hobbots/agents/RetiredHobGitHubApp") {}

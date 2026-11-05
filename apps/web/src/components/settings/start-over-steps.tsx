@@ -33,8 +33,13 @@ export function Deleting({ step }: { step: StartOverStep }) {
   );
 }
 
-/** The hub answers again, empty: Start fresh opens the app at its root, which is Welcome on a new hub. */
+/**
+ * The hub answers again, empty: Start fresh opens the app at its root, which is Welcome on a new
+ * hub. The desktop app's window sets its key again by itself; a browser was one of the devices the
+ * hub forgot, so it lands on the pairing screen and asks to be allowed again (ADR 021).
+ */
 export function AllClear() {
+  const browser = globalThis.window?.hobbots === undefined;
   return (
     <>
       <span aria-hidden className="grid size-9 place-items-center rounded-full bg-mint/18 text-[18px] text-mint">
@@ -44,8 +49,11 @@ export function AllClear() {
       <DialogDescription id="start-over-lead" variant="lead">
         {copy.doneBody}
       </DialogDescription>
+      {browser && <p className="m-0 text-ui text-text-secondary">{copy.doneBrowser}</p>}
       <div className="flex justify-end">
-        <Button onClick={() => globalThis.location.assign(`${globalThis.location.origin}/`)}>{copy.startFresh}</Button>
+        <Button onClick={() => globalThis.location.assign(`${globalThis.location.origin}/`)}>
+          {browser ? copy.askAgain : copy.startFresh}
+        </Button>
       </div>
     </>
   );

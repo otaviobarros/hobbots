@@ -185,6 +185,11 @@ export class GitHubConnection extends Context.Service<
     readonly cancel: Effect.Effect<GitHubConnectionState>;
     /** Deletes the sign-in from the keychain and forgets the account. */
     readonly disconnect: Effect.Effect<GitHubConnectionState>;
+    /**
+     * Disconnects as `disconnect` does, for Start over (#948), and answers why the sign-in is still
+     * in the keychain, or null when it is gone.
+     */
+    readonly erase: Effect.Effect<string | null>;
     /** The sign-ins already on the hub the user can choose instead, each with its account. */
     readonly found: Effect.Effect<ReadonlyArray<{ readonly source: LocalSource; readonly login: string }>>;
     /** Connects with a sign-in already on the hub, replacing the app's. */
@@ -313,9 +318,17 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
           yield* Ref.set(cache, Option.none());
           yield* accounts.clear;
           yield* Ref.set(problem, why);
-          yield* keychain.remove.pipe(
+          return yield* keychain.remove.pipe(
+            Effect.as(null),
             Effect.catch((error) =>
-              Effect.logWarning("The GitHub sign-in could not be deleted from the keychain", error),
+              // A hub whose keychain tool cannot run has no keychain, so it kept no sign-in there.
+              Effect.logWarning("The GitHub sign-in could not be deleted from the keychain", error).pipe(
+                Effect.as(
+                  error.reason === "unavailable"
+                    ? null
+                    : `The keychain did not delete the GitHub sign-in: ${error.message}`,
+                ),
+              ),
             ),
           );
         });
@@ -771,6 +784,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         connect,
         cancel: stopWaiting.pipe(Effect.andThen(state), connecting.withPermits(1)),
         disconnect: stopWaiting.pipe(Effect.andThen(forget(null)), Effect.andThen(state), connecting.withPermits(1)),
+        erase: stopWaiting.pipe(Effect.andThen(forget(null)), connecting.withPermits(1)),
         found,
         use,
         repositories: Effect.gen(function* () {

@@ -2,12 +2,19 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HobbotsRepository, RetiredHobGitHubApp } from "@hobbots/agents";
-import { GitHubConnection } from "@hobbots/charms";
+import {
+  GitHubConnection,
+  HobAppKeys,
+  HobAppKeysMemory,
+  Keychain,
+  KeychainError,
+  KeychainMemory,
+} from "@hobbots/charms";
 import { Agent, AgentId } from "@hobbots/domain";
 import { HobbotsRepositoryLive, SqliteLive } from "@hobbots/persistence";
-import { Effect, Exit, Layer } from "effect";
+import { Effect, Exit, Layer, Option, Redacted } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { finishReset, HubReset, resetMarkerFile, wipeHubData } from "../src/resets.ts";
+import { eraseKeychain, finishReset, HubReset, resetMarkerFile, wipeHubData } from "../src/resets.ts";
 import { HubRestart } from "../src/restores.ts";
 
 // Start over (#948), on real data folders: what it deletes, what it keeps, and how a reset that
@@ -56,6 +63,66 @@ const seedHub = async () => {
   await write(join(root, "data-notes/keep.md"), "Not the hub's.");
 };
 
+/** Two hobs, one of them retired, on a hub that can restart itself. */
+const hobs = ["frodo", "sam"].map(
+  (id, index) =>
+    new Agent({
+      id: AgentId.make(id),
+      name: id,
+      roleTitle: "Hobbit",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+      lookSeed: index,
+      lookColor: "moss",
+      configVersion: 1,
+      createdAt: "2026-11-05T10:00:00.000Z",
+      ...(id === "sam" ? { status: "retired" as const, retiredAt: "2026-11-05T11:00:00.000Z" } : {}),
+    }),
+);
+
+/** Runs Start over with a keychain that keeps what `kept` names, and answers what was called. */
+const startOver = async (kept: Partial<Record<string, string>> = {}) => {
+  const calls: Array<string> = [];
+  const services = Layer.mergeAll(
+    Layer.succeed(HubRestart, {
+      restore: () => Effect.void,
+      reset: Effect.sync(() => void calls.push("restart")),
+    }),
+    Layer.succeed(RetiredHobGitHubApp, {
+      remove: () => Effect.die("Start over erases"),
+      erase: (id) =>
+        Effect.sync(() => {
+          calls.push(`app ${id}`);
+          return kept[id] ?? null;
+        }),
+    }),
+    Layer.succeed(GitHubConnection, {
+      erase: Effect.sync(() => {
+        calls.push("github");
+        return kept.github ?? null;
+      }),
+    } as unknown as GitHubConnection["Service"]),
+  );
+  const program = Effect.gen(function* () {
+    const repo = yield* HobbotsRepository;
+    for (const hob of hobs) yield* repo.insertAgent(hob);
+    yield* (yield* HubReset).start;
+  }).pipe(Effect.ensuring(Effect.sleep("400 millis")));
+  const exit = await program.pipe(
+    Effect.provide(
+      HubReset.layer.pipe(
+        Layer.provideMerge(HobbotsRepositoryLive),
+        Layer.provide(SqliteLive(join(dataDir, "hobbots.sqlite"))),
+        Layer.provide(services),
+      ),
+    ),
+    Effect.runPromiseExit,
+  );
+  return { calls, exit };
+};
+
 describe("start over", () => {
   // covers #948
   it("[TC-OP-094] deletes everything the hub keeps and leaves the desktop app's own files", async () => {
@@ -82,54 +149,17 @@ describe("start over", () => {
 
   // covers #948
   it("[TC-OP-096] forgets the GitHub sign-in and every hob's own app, then asks the hub to restart empty", async () => {
-    const calls: Array<string> = [];
-    const hobs = ["frodo", "sam"].map(
-      (id, index) =>
-        new Agent({
-          id: AgentId.make(id),
-          name: id,
-          roleTitle: "Hobbit",
-          runtime: "claude-code",
-          model: null,
-          effort: null,
-          instructions: "",
-          lookSeed: index,
-          lookColor: "moss",
-          configVersion: 1,
-          createdAt: "2026-11-05T10:00:00.000Z",
-          ...(id === "sam" ? { status: "retired" as const, retiredAt: "2026-11-05T11:00:00.000Z" } : {}),
-        }),
-    );
-    const services = Layer.mergeAll(
-      Layer.succeed(HubRestart, {
-        restore: () => Effect.void,
-        reset: Effect.sync(() => void calls.push("restart")),
-      }),
-      Layer.succeed(RetiredHobGitHubApp, { remove: (id) => Effect.sync(() => void calls.push(`app ${id}`)) }),
-      Layer.succeed(GitHubConnection, {
-        disconnect: Effect.sync(() => {
-          calls.push("github");
-          return { _tag: "Disconnected" };
-        }),
-      } as unknown as GitHubConnection["Service"]),
-    );
-    const program = Effect.gen(function* () {
-      const repo = yield* HobbotsRepository;
-      for (const hob of hobs) yield* repo.insertAgent(hob);
-      yield* (yield* HubReset).start;
-      yield* Effect.sleep("400 millis");
-    });
-    await program.pipe(
-      Effect.provide(
-        HubReset.layer.pipe(
-          Layer.provideMerge(HobbotsRepositoryLive),
-          Layer.provide(SqliteLive(join(dataDir, "hobbots.sqlite"))),
-          Layer.provide(services),
-        ),
-      ),
-      Effect.runPromise,
-    );
+    const { calls, exit } = await startOver();
+    expect(Exit.isSuccess(exit)).toBe(true);
     expect(calls).toEqual(["app frodo", "app sam", "github", "restart"]);
+  });
+
+  // covers #948
+  it("[TC-OP-099] deletes nothing and says why when the keychain keeps a sign-in", async () => {
+    const { calls, exit } = await startOver({ sam: "The hub's keychain did not delete the app's key: locked." });
+    expect(calls).toEqual(["app frodo", "app sam", "github"]);
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(JSON.stringify(exit)).toContain("sam: The hub's keychain did not delete the app's key: locked.");
   });
 
   // covers #948
@@ -145,5 +175,38 @@ describe("start over", () => {
     );
     expect(Exit.isFailure(exit)).toBe(true);
     expect(JSON.stringify(exit)).toContain("ResetRefused");
+  });
+  // covers #948
+  it("[TC-OP-100] the reset command's keychain step deletes every hob's key and the sign-in, and says what a locked keychain kept", async () => {
+    const pem = Redacted.make("-----BEGIN PRIVATE KEY-----");
+    const erased = await Effect.gen(function* () {
+      const keys = yield* HobAppKeys;
+      const signIn = yield* Keychain;
+      for (const hob of hobs) yield* keys.write(hob.id, pem);
+      yield* signIn.write(Redacted.make("gho_token"));
+      const kept = yield* eraseKeychain(hobs);
+      return {
+        kept,
+        keys: yield* Effect.forEach(hobs, (hob) => keys.read(hob.id)),
+        signIn: yield* signIn.read,
+      };
+    }).pipe(Effect.provide(Layer.mergeAll(HobAppKeysMemory, KeychainMemory)), Effect.runPromise);
+    expect(erased).toEqual({ kept: [], keys: [Option.none(), Option.none()], signIn: Option.none() });
+
+    const locked = new KeychainError({ reason: "failed", message: "The keychain is locked." });
+    const kept = await eraseKeychain(hobs).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          HobAppKeysMemory,
+          Layer.succeed(Keychain, {
+            read: Effect.succeed(Option.none()),
+            write: () => Effect.void,
+            remove: Effect.fail(locked),
+          }),
+        ),
+      ),
+      Effect.runPromise,
+    );
+    expect(kept).toEqual(["The keychain did not delete the GitHub sign-in: The keychain is locked."]);
   });
 });

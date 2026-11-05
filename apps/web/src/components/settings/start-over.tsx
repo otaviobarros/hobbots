@@ -5,6 +5,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useActivity } from "../../api/activity.ts";
 import { backupQuery, backupRunning, type StartOverStep, useStartBackup, useStartOver } from "../../api/backup.ts";
+import { useBackupFolder } from "../../api/backup-folder.ts";
 import { ApiError } from "../../api/client.ts";
 import { agentsQuery, archivedAgentsQuery, threadsQuery } from "../../api/queries.ts";
 import { formatAgo, formatList } from "../../lib/format.ts";
@@ -204,12 +205,12 @@ function Working() {
   );
 }
 
-/** Back up first, to the folder Backups saves to, without leaving the dialog. */
+/** Back up first, to the folder chosen under Backups, without leaving the dialog. */
 function WayBack() {
   const backup = useQuery(backupQuery);
   const start = useStartBackup();
   const state = backup.data?.state;
-  const destination = backup.data?.defaultDestination ?? "";
+  const destination = useBackupFolder(backup.data?.defaultDestination);
   const running = backupRunning(state) || start.isPending;
   const last = lastBackupAt(state);
   const saved = last !== null && start.isSuccess;
@@ -239,6 +240,6 @@ const backupLine = (state: BackupState | undefined, running: boolean, destinatio
   if (refused !== null) return copy.backupFailed({ reason: refused });
   if (running) return copy.backupRunning;
   if (state?._tag === "Failed") return copy.backupFailed({ reason: state.reason });
-  if (state?._tag === "Done") return copy.backupDone({ when: formatAgo(state.finishedAt) });
-  return destination === "" ? copy.backupNoFolder : copy.backupNone;
+  if (state?._tag === "Done") return copy.backupDone({ when: formatAgo(state.finishedAt), path: state.path });
+  return destination === "" ? copy.backupNoFolder : copy.backupNone({ folder: destination });
 };
