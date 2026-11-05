@@ -126,14 +126,38 @@ const GIT_LOOKS = new Set(["status", "diff", "log", "show", "branch", "rev-parse
 const withoutHeredocs = (command: string): string =>
   command.replace(/(<<-?\s*['"]?(\w+)['"]?[^\n]*)\n[\s\S]*?\n\s*\2[ \t]*(?=\n|$)/g, "$1");
 
-/** What one simple command runs, or null when it only looks around. */
-const senseOf = (segment: string): CommandSense | null => {
+/** The words of a simple command, without the variables it sets first or `sudo` and the like. */
+const wordsOf = (segment: string): Array<string> => {
   const parts = segment
     .trim()
     .split(/\s+/)
     .filter((word) => word !== "" && !/^[A-Za-z_]\w*=/.test(word));
   while (parts[0] !== undefined && PREFIXES.has(parts[0])) parts.shift();
-  const [head, ...rest] = parts;
+  return parts;
+};
+
+/** What a package manager runs: the tests, a build, an install or a script of the project's. */
+const packageSense = (tool: string, args: ReadonlyArray<string>): CommandSense => {
+  const [first, second] = args;
+  const name = first === "run" || first === "exec" ? second : first;
+  if (name === undefined) return { kind: tool === "npx" ? "other" : "install" };
+  if (["install", "i", "add", "ci"].includes(name)) return { kind: "install" };
+  if (/^test/.test(name) || name === "vitest" || name === "jest") return { kind: "tests" };
+  if (name === "build") return { kind: "build" };
+  if (name === "lint" || name === "biome" || name === "eslint") return { kind: "lint" };
+  return { kind: "packageScript", name };
+};
+
+/** What a git command does, or null for one that only looks. */
+const gitSense = (args: ReadonlyArray<string>): CommandSense | null => {
+  const sub = args[0];
+  if (sub !== undefined && GIT_LOOKS.has(sub)) return null;
+  return { kind: sub === "commit" ? "commit" : "git" };
+};
+
+/** What one simple command runs, or null when it only looks around. */
+const senseOf = (segment: string): CommandSense | null => {
+  const [head, ...rest] = wordsOf(segment);
   if (head === undefined) return null;
   const base = fileName(head);
   if (ROUTINE.has(base)) return null;
@@ -142,24 +166,10 @@ const senseOf = (segment: string): CommandSense | null => {
     const file = args[0];
     return file === undefined || rest.includes("-c") ? { kind: "other" } : { kind: "script", name: fileName(file) };
   }
-  if (PACKAGES.has(base)) {
-    const [first, second] = args;
-    const name = first === "run" || first === "exec" ? second : first;
-    if (name === undefined) return { kind: base === "npx" ? "other" : "install" };
-    if (["install", "i", "add", "ci"].includes(name)) return { kind: "install" };
-    if (/^test/.test(name) || name === "vitest" || name === "jest") return { kind: "tests" };
-    if (name === "build") return { kind: "build" };
-    if (name === "lint" || name === "biome" || name === "eslint") return { kind: "lint" };
-    return { kind: "packageScript", name };
-  }
-  if (base === "git") {
-    const sub = args[0];
-    if (sub !== undefined && GIT_LOOKS.has(sub)) return null;
-    return { kind: sub === "commit" ? "commit" : "git" };
-  }
+  if (PACKAGES.has(base)) return packageSense(base, args);
+  if (base === "git") return gitSense(args);
   // A path to a program, such as `./check.sh`, runs that script.
-  if (head.includes("/")) return { kind: "script", name: base };
-  return { kind: "other" };
+  return head.includes("/") ? { kind: "script", name: base } : { kind: "other" };
 };
 
 /** What a command line does: the first part of it that does more than look around. */
