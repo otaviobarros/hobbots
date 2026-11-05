@@ -31,6 +31,7 @@ The policy engine decides these operations for the MVP. Every runtime tool call 
 | Use the web | Fetching pages and reaching hosts from commands (package installs, downloads) | Sandbox network proxy, decided per host |
 | Read GitHub | Reading the repository, issues and pull requests of the hob's folders on GitHub | The GitHub Charm on the hub (see below); the sandbox holds no GitHub credential |
 | Anything outside the hob's folders | Reading or writing any other path on the hub | Sandbox (deny); policy hook |
+| Search memory, Save to memory | The Memory group: `memory_search` and `memory_save` ([ADR 028](028-memory.md)) | The hub, which alone holds memory's credentials; a share to a project or About you is decided by the preset as ADR 028 says |
 
 A rule is **enforced** when a runtime or OS boundary holds it whatever the hob does, and **checked** when Hobbots recognizes the operation and decides it but a determined command could perform it another way. Three rules can be checked. **Delete files:** a command allowed to run can delete files inside the hob's folders without saying so. **Push to a remote that needs no credentials:** where Run commands and Use the web are both Allow, a command can push to a host that accepts anonymous pushes (Git's `http.receivepack`), bypassing the Push Charm and its once-only approvals; the sandbox's proxy sees only the host, not the Git request. Pushes to remotes that need credentials stay enforced, because only the Charm holds them, and under Careful a new host still asks first. **Local Git narrower than Run commands:** where a hob's Local Git answer is narrower than its Run commands answer (Local Git Never with Run commands Allow, say), any permitted command can still run Git (`sh -c 'git commit'`), so Local Git is checked there and enforced otherwise (#209). The sandbox still guarantees nothing outside the folders is touched, and the Permissions tab marks these rules as checked. Every other rule in the table is enforced.
 
@@ -51,6 +52,8 @@ Allow proceeds without asking, Ask pauses the turn for an approval, Deny refuses
 | Push with force, or to the default branch | Ask (once only) | Ask (once only) | Ask (once only) |
 | Use the web | Ask, per host | Allow | Allow |
 | Read GitHub | Allow | Allow | Allow |
+| Search memory | Allow | Allow | Allow |
+| Save to memory (the hob's own scope) | Allow | Allow | Allow |
 | Anything outside the hob's folders | Deny | Deny | Deny |
 
 - Under Careful, Local Git asks because it is a command; reading needs no approval so investigation stays automatic, as the contract requires.

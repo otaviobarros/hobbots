@@ -29,3 +29,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [025 — The connected desktop](025-connected-desktop.md)
 - [026 — Backup, restore, export and diagnostics](026-backup-export-diagnostics.md)
 - [027 — The Quest room](027-quest-room.md)
+- [028 — Memory](028-memory.md)
