@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-05
 - **Issue:** [#953](https://github.com/otaviobarros/hobbots/issues/953)
-- **Pull request:** the pull request that closes #953
+- **Pull request:** [#967](https://github.com/otaviobarros/hobbots/pull/967)
 - **Commit:** the pull request's head; not yet on `main`
 - **Setup:** Linux x86_64 container (Ubuntu 24.04, Node 26.13.0) with ai-memory 3.4.2 for `linux-x64`, fetched and checked by `pnpm --filter @hobbots/memory fetch-engine`. Run with `HOBBOTS_MEMORY_CONTRACT=1 pnpm --filter @hobbots/memory test`. The sandbox case needs macOS, or Linux with `HOBBOTS_SANDBOX_TESTS=1` and sandbox-runtime's seccomp helper.
 - **Result:** Passed with gaps. Every ai-memory route and setting ADR 028 relies on behaves as documented on 3.4.2, and the supervisor starts, restarts and stops the engine. The packaged app and the sandbox case on macOS are not run yet.
