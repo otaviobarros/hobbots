@@ -7,6 +7,7 @@ import {
   exactAction,
   type FailedTask,
   type HubQuestion,
+  type MemoryShare,
   type PolicyOperation,
   type Quest,
   type TaskId,
@@ -26,6 +27,10 @@ import { ApprovalDecision } from "../approvals/approval-card.tsx";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
+import { scopeName } from "../memory/memory-model.ts";
+import { messages as memoryCopy } from "../memory/messages.ts";
+import { shareDestination } from "../memory/review-model.ts";
+import { ShareDecision, ShareDiff } from "../memory/share-card.tsx";
 import { messages as appCopy } from "../messages.ts";
 import { DeviceFacts, MatchingCode, PairingActions } from "../pairing/device-request.tsx";
 import { messages as pairingCopy } from "../pairing/messages.ts";
@@ -74,6 +79,8 @@ export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob
     case "failed":
       // Keyed by the entry, so a Retry sent from one failed Task never shows on the next.
       return <FailedDetail key={entry.key} failed={entry.failed} hob={hob} row={row} lead={lead} {...context} />;
+    case "memory":
+      return <ShareDetail key={entry.key} share={entry.share} hob={hob} row={row} {...context} />;
     default:
       return <DeviceDetail device={entry.device} row={row} now={context.now} />;
   }
@@ -378,6 +385,41 @@ function DeviceDetail({ device, row, now }: { device: WaitingDevice; row: InboxR
         <DeviceFacts device={device} now={now} />
       </div>
       <PairingActions device={device} canDefer />
+    </DetailFrame>
+  );
+}
+
+/**
+ * A hob asking to share what it learned (ADR 028): where it would go, the page it would add, and
+ * Share it, Keep it private, or Edit in Memory, which opens it in Memory › To review. Once decided
+ * it stays open with what happened, and Undo for a share that went through.
+ */
+function ShareDetail({
+  share,
+  hob,
+  row,
+  directory,
+  now,
+}: { share: MemoryShare; hob: Agent | undefined; row: InboxRow } & DetailContext) {
+  const hobs = new Map(hob === undefined ? [] : [[hob.id, hob] as const]);
+  const who = directory.hobName(share.agentId);
+  return (
+    <DetailFrame
+      label={copy.detail.shareLabel({ name: who })}
+      portrait={<EntryPortrait hob={hob} device={false} waiting={row.tag === "needs-you"} large />}
+      row={row}
+      why={memoryCopy.review.route({ who, destination: shareDestination(share, hobs) })}
+      chat={chatLink(share.agentId, share.threadId, share.messageId === null ? null : { messageId: share.messageId })}
+      foot={
+        share.scope._tag === "Project"
+          ? memoryCopy.review.footProject({ name: scopeName(share.scope, hobs) })
+          : memoryCopy.review.footEveryone
+      }
+    >
+      <h3 className="lbl m-0 text-label">{copy.detail.shareDiff}</h3>
+      <ShareDiff share={share} hobs={hobs} />
+      <Facts rows={[[memoryCopy.review.facts.suggestedBy, `${who} · ${formatWhen(share.createdAt, now)}`]]} />
+      <ShareDecision share={share} hobs={hobs} edit="in-memory" />
     </DetailFrame>
   );
 }

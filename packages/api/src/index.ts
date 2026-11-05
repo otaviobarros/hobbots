@@ -13,6 +13,7 @@ export * from "./hob-github-app.ts";
 export * from "./hob-memory.ts";
 export * from "./memory.ts";
 export * from "./memory-pages.ts";
+export * from "./memory-shares.ts";
 export * from "./permissions.ts";
 export * from "./remote-access.ts";
 export * from "./search.ts";

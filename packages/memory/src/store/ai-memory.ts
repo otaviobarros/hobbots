@@ -5,6 +5,7 @@ import {
   MemoryConflict,
   type MemoryDraft,
   type MemoryExpected,
+  type MemoryFinding,
   MemoryForgetDay,
   type MemoryHit,
   type MemoryPage,
@@ -68,6 +69,7 @@ const HistoryJson = Schema.Struct({
   versions: Schema.Array(
     Schema.Struct({
       id: Schema.String,
+      supersedes: Schema.optionalKey(Schema.NullOr(Schema.String)),
       is_latest: Schema.Boolean,
       created_at: Schema.String,
     }),
@@ -119,6 +121,11 @@ const PatchJson = Schema.Struct({
 const ProjectsJson = Schema.Array(
   Schema.Struct({ workspace_name: Schema.String, project_name: Schema.String, page_count: Schema.Number }),
 );
+const LintJson = Schema.Struct({
+  findings: Schema.Array(
+    Schema.Struct({ kind: Schema.String, message: Schema.String, pages: Schema.Array(Schema.String) }),
+  ),
+});
 const PreconditionJson = Schema.Struct({
   reason: Schema.Literal("precondition_failed"),
   current_page_id: Schema.NullOr(Schema.String),
@@ -153,6 +160,27 @@ const changesOf = (json: typeof DiffJson.Type): MemoryVersionChanges => ({
   // A diff too large to answer has no lines; one cut short says so.
   cut: json.diff.status === "too_large" || json.diff.truncated === true,
 });
+
+/**
+ * What Check now shows of each `memory_lint` finding kind: declared contradictions as pages that
+ * disagree, and aged pages or pages a hob or you flagged `stale` or `wrong` as out of date. The rest
+ * (broken links, duplicates, rule suggestions, similar pages) is not shown.
+ */
+const FINDING_KINDS: ReadonlyMap<string, MemoryFinding["kind"]> = new Map([
+  ["contradiction", "disagree"],
+  ["stale", "stale"],
+  ["feedback_flagged", "stale"],
+]);
+
+const isPath = Schema.is(MemoryPath);
+
+/** The findings Check now shows, from what `memory_lint` answered for `scope`. */
+const findingsOf = (scope: MemoryScope, json: typeof LintJson.Type): ReadonlyArray<MemoryFinding> =>
+  json.findings.flatMap((finding) => {
+    const kind = FINDING_KINDS.get(finding.kind);
+    const paths = finding.pages.filter(isPath);
+    return kind === undefined || paths.length === 0 ? [] : [{ kind, scope, paths, message: finding.message }];
+  });
 
 const callerOf = (actor: MemoryActor): EngineCaller =>
   actor._tag === "You" ? ROOT : { as: "hob", name: engineActorOf(actor.agentId) };
@@ -367,19 +395,35 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       );
 
   /**
-   * The text of `version` of the page, rebuilt from `current` and the line diff ai-memory answers
-   * between them, or null when it cannot be rebuilt whole: a diff cut short, or one that does not fit.
+   * The text of `version` of the page at `path`, rebuilt from `known`, a version whose text is held,
+   * and the line diff ai-memory answers between them, or null when it cannot be rebuilt whole: a diff
+   * cut short, one that does not fit, or a version the page never had.
    */
-  const versionText = (scope: MemoryScope, current: MemoryPage, version: MemoryVersion) =>
-    Effect.map(
-      client.get(`${pagesRoute(engineProjectOf(scope))}/history/${current.path}`, PatchJson, {
-        from: current.version,
-        to: version,
-        limit: "1",
-      }),
-      ({ diff }) =>
-        diff.truncated === true || diff.status === "too_large" ? null : applyHunks(current.markdown, diff.hunks ?? []),
-    );
+  const versionText = (
+    scope: MemoryScope,
+    path: MemoryPath,
+    version: MemoryVersion,
+    known: { readonly version: MemoryVersion; readonly markdown: string },
+  ) =>
+    version.startsWith(REVISION) || known.version.startsWith(REVISION)
+      ? Effect.succeed(null)
+      : client
+          .get(`${pagesRoute(engineProjectOf(scope))}/history/${path}`, PatchJson, {
+            from: known.version,
+            to: version,
+            limit: "1",
+          })
+          .pipe(
+            Effect.map(({ diff }) =>
+              diff.truncated === true || diff.status === "too_large"
+                ? null
+                : applyHunks(known.markdown, diff.hunks ?? []),
+            ),
+            // An unknown version is a 404 and a malformed one a 400: neither is a version of this page.
+            Effect.catchTag("EngineRefused", (refused) =>
+              refused.status === 404 || refused.status === 400 ? Effect.succeed(null) : Effect.fail(refused),
+            ),
+          );
 
   const currentConflict = (scope: MemoryScope, path: MemoryPath) =>
     Effect.flatMap(pageOf(scope, path), (page) =>
@@ -472,6 +516,8 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         ),
         refusalIsOutage,
       ),
+    versionText: (_actor, scope, path, version, known) =>
+      versionText(scope, path, version, known).pipe(refusalIsOutage),
     history: (_actor, scope, path) =>
       Effect.gen(function* () {
         const where = engineProjectOf(scope);
@@ -491,6 +537,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         const latest = yield* pageOf(scope, path);
         return versions.map((version) => ({
           version: MemoryVersion.make(version.id),
+          supersedes: version.supersedes == null ? null : MemoryVersion.make(version.supersedes),
           author: version.is_latest ? (latest?.author ?? null) : null,
           writtenAt: version.created_at,
           latest: version.is_latest,
@@ -556,8 +603,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         // makes conditional on that version, so a change since, by anyone, the engine included, is
         // refused and kept. The engine's own restore takes no precondition, so it never serves one.
         if (current !== null && expected._tag === "Version") {
-          if (version.startsWith(REVISION)) return yield* new MemoryConflict({ path, current: was });
-          const markdown = yield* versionText(scope, current, version);
+          const markdown = yield* versionText(scope, path, version, current);
           if (markdown === null) return yield* new MemoryConflict({ path, current: was });
           const draft = { path, markdown, tags: current.tags, pinned: current.pinned, forgetOn: current.forgetOn };
           return yield* writePage(actor, scope, draft, expected);
@@ -596,6 +642,15 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         // worker keeps the end and sends it again once you unpin it.
         note?.pinned === true ? Effect.succeed(false) : Effect.as(endOf(actor, scope, threadId, key), true),
       ).pipe(refusalIsOutage, changing.withPermit),
+    check: (_actor, scope) =>
+      client
+        // A dry run, so the engine keeps no report page of its own among your pages.
+        .tool(ROOT, "memory_lint", { ...target(scope, engineProjectOf(scope)), dry_run: true }, LintJson)
+        .pipe(
+          Effect.map((json) => findingsOf(scope, json)),
+          orEmpty([] as ReadonlyArray<MemoryFinding>),
+          refusalIsOutage,
+        ),
     health: client.health,
   };
 

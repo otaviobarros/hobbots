@@ -111,6 +111,11 @@ export type MemoryHit = typeof MemoryHit.Type;
 /** One version in a page's history, newest first. */
 export const MemoryPageVersion = Schema.Struct({
   version: MemoryVersion,
+  /**
+   * The version it replaced, or null for a page's first version, a page started again after a forget
+   * included. Memory names an author only for the latest version, so this is how a write is known.
+   */
+  supersedes: Schema.NullOr(MemoryVersion),
   author: Schema.NullOr(MemoryAuthor),
   writtenAt: Schema.String,
   latest: Schema.Boolean,
@@ -272,3 +277,17 @@ export interface MemoryCaptureItem {
   /** Already redacted. */
   readonly text: string;
 }
+
+/**
+ * Something Check now found (ADR 028): pages that disagree, or a page that looks out of date. It
+ * waits only in Memory › To review, never in the Inbox.
+ */
+export const MemoryFinding = Schema.Struct({
+  kind: Schema.Literals(["disagree", "stale"]),
+  scope: MemoryScope,
+  /** The pages it is about, in the scope, the first one first. */
+  paths: Schema.Array(MemoryPath),
+  /** What the engine said about them, as it said it. */
+  message: Schema.String,
+});
+export type MemoryFinding = typeof MemoryFinding.Type;

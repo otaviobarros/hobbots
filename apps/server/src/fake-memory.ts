@@ -8,8 +8,8 @@ import { EventBus } from "./event-bus.ts";
  * An in-memory stand-in for the memory engine (ADR 028), so the Memory page can be tried and tested
  * end to end before hobs save to memory themselves. `down` answers that memory is unavailable.
  * `seeded` holds a few pages About you and in one project, and gives every hob a few pages of its
- * own as it is summoned, saved as that hob, as its first chats would. Only `HOBBOTS_FAKE_MEMORY`
- * turns it on.
+ * own as it is summoned, saved as that hob, as its first chats would, and flags the annual plan as out
+ * of date, for Check now to find. Only `HOBBOTS_FAKE_MEMORY` turns it on.
  */
 
 const page = (path: string, markdown: string, pinned = false) => ({
@@ -69,6 +69,12 @@ export const FakeMemoryLive = (mode: "empty" | "seeded" | "down") =>
       const fresh = { _tag: "New" } as const;
       yield* Effect.forEach(ABOUT_YOU, (draft) => store.write(you, everyone, draft, fresh));
       yield* Effect.forEach(PROJECT, (draft) => store.write(you, project, draft, fresh));
+      controls.flag({
+        kind: "stale",
+        scope: project,
+        paths: [MemoryPath.make("facts/annual-plan.md")],
+        message: "The pricing page changed since this was saved.",
+      });
       // Each hob's pages are saved once, as that hob, when it is first upserted.
       const seeded = new Set<string>();
       const bus = yield* EventBus;

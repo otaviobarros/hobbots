@@ -12,8 +12,10 @@ import {
   noticeText,
   pendingRequests,
   questionNoticeText,
+  shareNoticeText,
   type TaskLink,
   waitingQuestions,
+  waitingShares,
 } from "./request-notices-model.ts";
 
 /** A notification the system shows; `close` takes it away. */
@@ -167,6 +169,21 @@ export const failedTaskNotices = (options: RequestNoticesOptions) =>
       return tasks.map((task) => failedNoticeText(task, names.get(task.ownerId)));
     },
     open: (task) => options.openTask?.(task.link),
+  });
+
+/**
+ * Notifies the user of each hob asking to share what it learned (ADR 028), as `requestNotices` does
+ * for requests: one decided anywhere closes. Clicking it opens the share in the Inbox. `check` it
+ * whenever the event stream connects and whenever a share changes.
+ */
+export const shareNotices = (options: RequestNoticesOptions) =>
+  makeNotices(options, {
+    path: "/api/memory/shares",
+    pending: waitingShares,
+    texts: async (shares) => {
+      const names = await hobNames(options.read);
+      return shares.map((share) => shareNoticeText(share, names.get(share.agentId)));
+    },
   });
 
 /**
