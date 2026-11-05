@@ -60,7 +60,8 @@ describe("a question's choices", () => {
     const html = form(asked(), "chips");
     expect(html.match(/data-variant="chip"/g)).toHaveLength(3);
     expect(html).toContain('title="Matches the brand guide."');
-    expect(textOf(html)).toContain("Light ★ , recommended . Matches the brand guide.");
+    expect(html).toContain('aria-label="Light, recommended. Matches the brand guide."');
+    expect(html).toContain('aria-label="Both, with a switch"');
   });
 
   it("[TC-UX-906] keeps today's box and primary Send answer for a question without choices", () => {

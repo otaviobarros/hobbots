@@ -69,6 +69,12 @@ function ChoiceList({
               data-recommended={recommended}
               aria-keyshortcuts={key}
               title={look === "chips" && option.consequence !== "" ? option.consequence : undefined}
+              // A chip shows only its label, so its name says the rest (#740).
+              aria-label={
+                look === "chips"
+                  ? copy.chipSaid({ label: option.label, recommended, consequence: option.consequence })
+                  : undefined
+              }
               disabled={disabled}
               onClick={() => onPick(option.label)}
             >
@@ -92,13 +98,9 @@ function ChoiceList({
                 <>
                   {option.label}
                   {recommended && (
-                    <span className="text-mint">
-                      <span aria-hidden>{copy.recommendedMark}</span>
-                      <span className="sr-only">{copy.recommendedSaid}</span>
+                    <span aria-hidden className="text-mint">
+                      {copy.recommendedMark}
                     </span>
-                  )}
-                  {option.consequence !== "" && (
-                    <span className="sr-only">{copy.consequenceSaid({ consequence: option.consequence })}</span>
                   )}
                 </>
               )}
