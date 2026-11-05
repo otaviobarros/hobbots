@@ -13,6 +13,7 @@ import {
   HobAdmission,
   HobLifecycle,
   HobService,
+  MemoryBriefReceipts,
   PermissionSummary,
   RecoveryLog,
   SecretRedaction,
@@ -46,6 +47,7 @@ import {
   MemoryEngine,
   type MemoryKeys,
   MemoryStoreOff,
+  MemoryProjectsLive,
 } from "@hobbots/memory";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -417,6 +419,10 @@ const ServerLive = Layer.unwrap(
             // What the startup recovery could not do, for Settings › Diagnostics (ADR 026).
             RecoveryLog.layer,
             Memory,
+            // Before every session, a chat's, a step's and a party member's: a hob's memory reaches the
+            // projects of its folders, and what each session was briefed from it (ADR 028).
+            MemoryProjectsLive,
+            MemoryBriefReceipts.layer,
             // The memory model you chose, kept beside the engine's folder (ADR 028).
             MemorySettingsStore.layer(dataDir),
             // The hub's credentials, provider keys and memory keys included, are redacted by value

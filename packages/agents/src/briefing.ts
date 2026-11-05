@@ -59,7 +59,7 @@ const ENDINGS: Partial<Record<Message["status"], string>> = {
   failed: "failed",
 };
 
-const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+export const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 /** `text` cut to `max` characters, marked with an ellipsis when it was cut. */
 export const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
@@ -92,7 +92,7 @@ const toolSteps = (message: Message) => {
  * Quotes a message's text line by line, so nothing in it reads as a speaker or a heading of the
  * briefing: a reply that quotes "## Now" or "**User:**" stays inside its quote.
  */
-const quote = (text: string) =>
+export const quote = (text: string) =>
   text
     .split("\n")
     .map((line) => (line === "" ? ">" : `> ${line}`))
