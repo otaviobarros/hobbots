@@ -3,6 +3,7 @@ import {
   type MemoryActor,
   type MemoryChangedLine,
   MemoryConflict,
+  type MemoryDraft,
   type MemoryExpected,
   type MemoryHit,
   type MemoryPage,
@@ -26,6 +27,7 @@ import {
   noSuchProject,
   ROOT,
 } from "./client.ts";
+import { applyHunks } from "./patch.ts";
 import {
   authorOfUsername,
   type EngineProject,
@@ -89,6 +91,22 @@ const DiffJson = Schema.Struct({
     ),
   }),
 });
+/** A diff between two versions, with where each hunk starts, to rebuild one version from another. */
+const PatchJson = Schema.Struct({
+  diff: Schema.Struct({
+    status: Schema.String,
+    truncated: Schema.optionalKey(Schema.Boolean),
+    hunks: Schema.optionalKey(
+      Schema.Array(
+        Schema.Struct({
+          old_start: Schema.Number,
+          old_len: Schema.Number,
+          lines: Schema.Array(Schema.Struct({ op: Schema.String, text: Schema.String })),
+        }),
+      ),
+    ),
+  }),
+});
 const ProjectsJson = Schema.Array(
   Schema.Struct({ workspace_name: Schema.String, project_name: Schema.String, page_count: Schema.Number }),
 );
@@ -111,6 +129,8 @@ const PIN_FIRST_MAX = 10;
 const READ_CONCURRENCY = 8;
 /** A forgotten page comes back from the wiki's Git revision before its delete, marked so. */
 const REVISION = "rev:";
+/** A restore writes the version back as you, as the engine's own restore does. */
+const YOU: MemoryActor = { _tag: "You" };
 
 const OPS: Record<string, MemoryChangedLine["op"]> = { "+": "add", "-": "remove", " ": "same" };
 
@@ -174,9 +194,9 @@ const refusalIsOutage = <A, E, R>(
 
 const makeStore = (client: EngineClient): MemoryStoreShape => {
   /**
-   * The engine's restore takes no precondition, so the hub's changes to pages run one at a time: a
-   * restore checks that the page is as expected and writes the version back before any other change
-   * of the hub's lands. Writes and forgets keep their own preconditions in the engine as well.
+   * The hub's changes to memory run one at a time. A restore of a page still there is a write
+   * conditional on its version, which the engine checks; a forgotten page comes back through the
+   * engine's restore, which takes no precondition, so no other change of the hub's lands meanwhile.
    */
   const changing = Semaphore.makeUnsafe(1);
   /**
@@ -312,6 +332,47 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       return Effect.fail(new MemoryConflict({ path, current: current === null ? null : MemoryVersion.make(current) }));
     };
 
+  /** Writes `draft` when the page is as `expected`; `write` and `restore` hold `changing` around it. */
+  const writePage = (actor: MemoryActor, scope: MemoryScope, draft: MemoryDraft, expected: MemoryExpected) =>
+    indexProject(scope)
+      .pipe(
+        Effect.andThen(
+          client.tool(
+            callerOf(actor),
+            "memory_write_page",
+            {
+              ...target(scope, engineProjectOf(scope)),
+              path: draft.path,
+              body: draft.markdown,
+              tags: draft.tags,
+              pinned: draft.pinned,
+              ...preconditionOf(expected),
+            },
+            WrittenJson,
+          ),
+        ),
+      )
+      .pipe(
+        Effect.map((json) => MemoryVersion.make(json.page_id)),
+        Effect.catchTag("EngineRefused", conflictOf(draft.path)),
+        refusalIsOutage,
+      );
+
+  /**
+   * The text of `version` of the page, rebuilt from `current` and the diff ai-memory answers between
+   * them, or null when it cannot be rebuilt whole: a diff cut short, or one that does not fit.
+   */
+  const versionText = (scope: MemoryScope, current: MemoryPage, version: MemoryVersion) =>
+    Effect.map(
+      client.get(`${pagesRoute(engineProjectOf(scope))}/history/${current.path}`, PatchJson, {
+        from: current.version,
+        to: version,
+        limit: "1",
+      }),
+      ({ diff }) =>
+        diff.truncated === true || diff.status === "too_large" ? null : applyHunks(current.markdown, diff.hunks ?? []),
+    );
+
   const currentConflict = (scope: MemoryScope, path: MemoryPath) =>
     Effect.flatMap(pageOf(scope, path), (page) =>
       Effect.fail(new MemoryConflict({ path, current: page?.version ?? null })),
@@ -427,31 +488,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
           latest: version.is_latest,
         }));
       }).pipe(refusalIsOutage),
-    write: (actor, scope, draft, expected) =>
-      indexProject(scope)
-        .pipe(
-          Effect.andThen(
-            client.tool(
-              callerOf(actor),
-              "memory_write_page",
-              {
-                ...target(scope, engineProjectOf(scope)),
-                path: draft.path,
-                body: draft.markdown,
-                tags: draft.tags,
-                pinned: draft.pinned,
-                ...preconditionOf(expected),
-              },
-              WrittenJson,
-            ),
-          ),
-        )
-        .pipe(
-          Effect.map((json) => MemoryVersion.make(json.page_id)),
-          Effect.catchTag("EngineRefused", conflictOf(draft.path)),
-          refusalIsOutage,
-          changing.withPermit,
-        ),
+    write: (actor, scope, draft, expected) => changing.withPermit(writePage(actor, scope, draft, expected)),
     scopes: () =>
       Effect.gen(function* () {
         const projects = yield* client.get("projects", ProjectsJson);
@@ -502,22 +539,38 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         changing.withPermit,
       );
     },
-    restore: (_actor, scope, path, version, expected) => {
-      const source = version.startsWith(REVISION) ? { rev: version.slice(REVISION.length) } : { page_id: version };
-      return Effect.gen(function* () {
+    restore: (_actor, scope, path, version, expected) =>
+      Effect.gen(function* () {
         const current = yield* pageOf(scope, path);
         if (!pageMeets(current?.version ?? null, expected)) {
           return yield* new MemoryConflict({ path, current: current?.version ?? null });
         }
-        const json = yield* client.admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson);
-        return MemoryVersion.make(json.page_id);
+        // A forgotten page comes back from Git, which only the engine's restore reaches. The engine
+        // takes no precondition there, so it runs while none of the hub's other changes can.
+        if (current === null || version.startsWith(REVISION)) {
+          const source = version.startsWith(REVISION) ? { rev: version.slice(REVISION.length) } : { page_id: version };
+          const json = yield* client.admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson);
+          return MemoryVersion.make(json.page_id);
+        }
+        // A page still there gets `version` back as a write conditional on the version just read,
+        // so any change since, by the hub or by the engine itself, is refused rather than overwritten.
+        const markdown = yield* versionText(scope, current, version);
+        if (markdown === null) return yield* new MemoryConflict({ path, current: current.version });
+        return yield* writePage(
+          YOU,
+          scope,
+          { path, markdown, tags: current.tags, pinned: current.pinned },
+          {
+            _tag: "Version",
+            version: current.version,
+          },
+        );
       }).pipe(
         // A version the page never had, or one gone with a forget, leaves the page as it is.
         Effect.catchTag("EngineRefused", () => currentConflict(scope, path)),
         refusalIsOutage,
         changing.withPermit,
-      );
-    },
+      ),
     capture: (actor, scope, threadId, items) =>
       Effect.gen(function* () {
         const where = engineProjectOf(scope);
@@ -550,6 +603,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
               : Effect.fail(new MemoryUnavailable({ message: "Memory did not take the end of a session." })),
           ),
           refusalIsOutage,
+          changing.withPermit,
         ),
     health: client.health,
   };
