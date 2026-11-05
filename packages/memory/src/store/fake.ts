@@ -30,7 +30,7 @@ interface StoredVersion {
   readonly pinned: boolean;
   readonly author: MemoryAuthor | null;
   readonly writtenAt: string;
-  /** A forget leaves a tombstone, so the page is gone but its history stays. */
+  /** A forget leaves a tombstone, so the page is gone and restore can still find its versions. */
   readonly forgotten: boolean;
 }
 
@@ -195,9 +195,11 @@ export const makeMemoryStoreFake = (): {
       Effect.flatMap(up, () => {
         if (!meets(latestOf(scope, path), expected)) return Effect.fail(conflict(scope, path));
         const current = currentOf(scope, path);
-        return current === undefined
-          ? Effect.void
-          : Effect.asVoid(append(scope, path, { ...current, author: memoryAuthorOf(actor), forgotten: true }));
+        if (current === undefined) return Effect.succeed(null);
+        return Effect.as(
+          append(scope, path, { ...current, author: memoryAuthorOf(actor), forgotten: true }),
+          current.version,
+        );
       }),
     restore: (actor, scope, path, version) =>
       Effect.flatMap(up, () => {

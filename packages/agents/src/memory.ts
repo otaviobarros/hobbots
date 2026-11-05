@@ -51,14 +51,20 @@ export interface MemoryStoreShape {
     draft: MemoryDraft,
     expected: MemoryExpected,
   ) => Memory<MemoryVersion, MemoryUnavailable | MemoryConflict>;
-  /** Removes the page when it is as `expected`. Its history is kept, so `restore` can bring it back. */
+  /**
+   * Removes the page, with its history, when it is as `expected`. Answers the version that `restore`
+   * brings it back from, or null when there was no page.
+   */
   readonly forget: (
     actor: MemoryActor,
     scope: MemoryScope,
     path: MemoryPath,
     expected: MemoryExpected,
-  ) => Memory<void, MemoryUnavailable | MemoryConflict>;
-  /** Writes `version` back as the latest version of the page, forgotten or not, and answers the new version. */
+  ) => Memory<MemoryVersion | null, MemoryUnavailable | MemoryConflict>;
+  /**
+   * Writes `version` back as the latest version of the page, and answers the new version. `version` is
+   * one from the page's history, or one `forget` answered.
+   */
   readonly restore: (
     actor: MemoryActor,
     scope: MemoryScope,

@@ -6,6 +6,7 @@ import {
   type MemoryDraft,
   MemoryPath,
   type MemoryScope,
+  type MemoryVersion,
   memoryProjectIdentity,
 } from "@hobbots/domain";
 import { Cause, Effect, Exit } from "effect";
@@ -101,10 +102,13 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             tags: ["repo"],
           });
           const history = yield* again.history(asPip, pipsOwn, path);
-          expect(history.map(({ version, author, latest }) => ({ version, author, latest }))).toEqual([
-            { version: second, author: { _tag: "You" }, latest: true },
-            { version: first, author: byPip, latest: false },
+          expect(history.map(({ version, latest }) => ({ version, latest }))).toEqual([
+            { version: second, latest: true },
+            { version: first, latest: false },
           ]);
+          expect(history[0]?.author).toEqual({ _tag: "You" });
+          // An engine may know who wrote only the latest version.
+          expect([null, byPip]).toContainEqual(history[1]?.author);
         }),
       ));
 
@@ -169,27 +173,33 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (forget, restore)
-    it("[TC-GEN-175] forgets a page and restores one of its versions", () =>
+    it("[TC-GEN-175] restores an earlier version, and brings back a page it forgot", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/style.md");
           const first = yield* store.write(asPip, pipsOwn, draft("notes/style.md", "# Style\n\nTabs."), fresh);
           const second = yield* store.write(asPip, pipsOwn, draft("notes/style.md", "# Style\n\nSpaces."), any);
-          const stale = yield* Effect.flip(store.forget(you, pipsOwn, path, { _tag: "Version", version: first }));
-          expect(stale).toMatchObject({ _tag: "MemoryConflict", current: second });
-          yield* store.forget(you, pipsOwn, path, { _tag: "Version", version: second });
-          expect(yield* store.page(asPip, pipsOwn, path)).toBeNull();
-          expect(yield* store.list(asPip, pipsOwn, 50)).toEqual([]);
-          // Forgetting what is already gone does nothing.
-          yield* store.forget(you, pipsOwn, path, any);
           const restored = yield* store.restore(you, pipsOwn, path, first);
+          expect(restored).not.toEqual(first);
           expect(yield* store.page(asPip, pipsOwn, path)).toMatchObject({
             version: restored,
             markdown: "# Style\n\nTabs.",
           });
-          const history = yield* store.history(you, pipsOwn, path);
-          expect(history[0]).toMatchObject({ version: restored, latest: true });
-          expect(history.map((entry) => entry.version)).toEqual(expect.arrayContaining([first, second]));
+          expect((yield* store.history(you, pipsOwn, path))[0]).toMatchObject({ version: restored, latest: true });
+
+          const stale = yield* Effect.flip(store.forget(you, pipsOwn, path, { _tag: "Version", version: second }));
+          expect(stale).toMatchObject({ _tag: "MemoryConflict", current: restored });
+          const point = yield* store.forget(you, pipsOwn, path, { _tag: "Version", version: restored });
+          expect(point).not.toBeNull();
+          expect(yield* store.page(asPip, pipsOwn, path)).toBeNull();
+          expect(yield* store.list(asPip, pipsOwn, 50)).toEqual([]);
+          // Forgetting what is already gone does nothing.
+          expect(yield* store.forget(you, pipsOwn, path, any)).toBeNull();
+          const back = yield* store.restore(you, pipsOwn, path, point as MemoryVersion);
+          expect(yield* store.page(asPip, pipsOwn, path)).toMatchObject({
+            version: back,
+            markdown: "# Style\n\nTabs.",
+          });
         }),
       ));
 

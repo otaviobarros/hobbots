@@ -35,7 +35,7 @@ It offers what its first callers need, and nothing that mirrors ai-memory's rout
 | Group | Operations | Used by |
 | --- | --- | --- |
 | Recall | `search` over a set of scopes | `memory_search` |
-| Writes | `write` a page as an actor when it is as expected (new, a given version, or anything), `forget`, `restore` a version | `memory_save`, approved shares, the Memory page |
+| Writes | `write` a page as an actor when it is as expected (new, a given version, or anything), `forget` (answering the version that brings the page back), `restore` a version | `memory_save`, approved shares, the Memory page |
 | Browse | `page`, `history`, `list` a scope up to a limit (pinned first, then the most recently changed), `changes` since a time | The brief, the Memory page, What changed |
 | Health | `health` | Diagnostics, the outage banner |
 
