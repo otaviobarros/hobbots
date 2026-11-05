@@ -39,7 +39,13 @@ import {
 } from "@hobbots/charms";
 import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
-import { defaultEngineFolder, loadOrCreateMemoryKeys, MemoryEngine, type MemoryKeys } from "@hobbots/memory";
+import {
+  defaultEngineFolder,
+  loadOrCreateMemoryKeys,
+  MemoryEngine,
+  type MemoryKeys,
+  MemoryProjectsLive,
+} from "@hobbots/memory";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -306,6 +312,8 @@ const ServerLive = Layer.unwrap(
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))
+      // Before the chat service: a hob's memory reaches the projects of its folders (ADR 028).
+      .pipe(Layer.provideMerge(MemoryProjectsLive))
       // Before the chat service: every turn you did not start with Send starts from the backpack, and
       // at start the dispatcher expires the claims an earlier process held (ADR 019).
       .pipe(Layer.provideMerge(ContinuationsLive))
