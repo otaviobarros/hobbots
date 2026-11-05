@@ -399,17 +399,6 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
             const { made, pem } = yield* exchange(open, code);
             const why = yield* refusalAfterMade(open);
             if (why !== null) return yield* notKept(why, made.slug);
-            // The key is in the keychain before the hob's app counts as connected.
-            yield* keys
-              .write(open.agentId, pem)
-              .pipe(
-                Effect.mapError((error: KeychainError) =>
-                  notKept(
-                    `GitHub made the app, but the hub's keychain did not keep its key: ${error.message} Delete the app on GitHub, then try again.`,
-                    made.slug,
-                  ),
-                ),
-              );
             const app: HobGitHubApp = {
               appId: made.id,
               clientId: made.client_id,
@@ -419,6 +408,23 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               htmlUrl: made.html_url,
               connectedAt: DateTime.formatIso(yield* DateTime.now),
             };
+            // The key is in the keychain before the hob's app counts as connected.
+            const unkept = yield* keys.write(open.agentId, pem).pipe(
+              Effect.as(null),
+              Effect.catch((error: KeychainError) => Effect.succeed(error)),
+            );
+            if (unkept !== null) {
+              const why = `GitHub made the app, but the hub's keychain did not keep its key: ${unkept.message} Delete the app on GitHub, then try again.`;
+              // A write that failed may still have stored the key. Unless it is surely gone, the app
+              // is kept as left over, so the hub still knows a key may be there (#948).
+              const kept = yield* removeKey(open.agentId, true);
+              if (kept !== null) {
+                yield* Effect.uninterruptible(
+                  apps.save(open.agentId, app).pipe(Effect.andThen(apps.leave(open.agentId, `${why} ${kept}`))),
+                );
+              }
+              return yield* notKept(why, made.slug);
+            }
             // What the user allowed the hob to do on GitHub as them is not allowed as its bot (ADR 022).
             yield* grants.switchGitHub(open.agentId, apps.save(open.agentId, app));
             yield* tokens.forget(open.agentId);

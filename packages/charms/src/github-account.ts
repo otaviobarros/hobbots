@@ -311,18 +311,25 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
           }),
         );
 
-      /** Forgets the account and deletes its keychain item, keeping why for Settings. Holds `committing`. */
+      /**
+       * Deletes the account's keychain item and forgets the account, keeping why for Settings. Holds
+       * `committing`. While the item may still be in the keychain, the account stays recorded, so the
+       * hub still knows it stored a sign-in there and Start over checks for it (#948).
+       */
       const forgetHeld = (why: GitHubProblem | null) =>
         Effect.gen(function* () {
           yield* nextGeneration;
           yield* Ref.set(cache, Option.none());
-          yield* accounts.clear;
           yield* Ref.set(problem, why);
-          yield* keychain.remove.pipe(
+          const deleted = yield* keychain.remove.pipe(
+            Effect.as(true),
             Effect.catch((error) =>
-              Effect.logWarning("The GitHub sign-in could not be deleted from the keychain", error),
+              Effect.logWarning("The GitHub sign-in could not be deleted from the keychain", error).pipe(
+                Effect.as(false),
+              ),
             ),
           );
+          if (deleted) yield* accounts.clear;
         });
       const forget = (why: GitHubProblem | null) =>
         forgetHeld(why).pipe(committing.withPermits(1), Effect.uninterruptible);
@@ -786,7 +793,8 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
                 Effect.catch((error) => Effect.succeed(deleteOutcome(error, recorded, "the GitHub sign-in"))),
               );
               if (kept !== null) return kept;
-              return yield* forgetHeld(null).pipe(Effect.as(null));
+              yield* forgetHeld(null);
+              return null;
             }).pipe(committing.withPermits(1), Effect.uninterruptible),
           ),
           connecting.withPermits(1),

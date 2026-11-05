@@ -629,6 +629,35 @@ describe("A hob's own GitHub App", () => {
     expect(Option.isNone(outcome.key)).toBe(true);
   });
 
+  // covers #948
+  it("[TC-OP-106] keeps the hob's app as left over when a key write fails and the key may still be there", async () => {
+    const w = world();
+    const timedOut = new KeychainError({ reason: "unavailable", message: "The keychain did not answer in time." });
+    const stalled = Layer.succeed(
+      HobAppKeys,
+      HobAppKeys.of({
+        usable: Effect.succeed(true),
+        read: () => Effect.succeed(Option.none()),
+        write: () => Effect.fail(timedOut),
+        remove: () => Effect.fail(timedOut),
+      }),
+    );
+    const outcome = await Effect.runPromise(
+      Effect.gen(function* () {
+        const flow = yield* throughGitHub(FRODO);
+        const failed = yield* Effect.flip((yield* HobGitHubAppService).complete(flow.state, flow.code));
+        const status = yield* (yield* HobGitHubAppService).status(FRODO);
+        const erased = yield* (yield* RetiredHobGitHubApp).erase(FRODO);
+        return { failed, status, erased };
+      }).pipe(Effect.provide(layer(w, stalled))),
+    );
+    expect(outcome.failed).toMatchObject({ reason: "failed" });
+    expect(outcome.status).toMatchObject({ _tag: "LeftOver" });
+    expect(outcome.erased).toBe(
+      "The hub could not tell whether the keychain deleted the app's key: The keychain did not answer in time.",
+    );
+  });
+
   // covers ADR 022
   it("[TC-PE-257] counts a platform without a keychain Hobbots can use as having none", async () => {
     const windows = HobAppKeysLive("win32", {}).pipe(Layer.provide(NodeServices.layer));

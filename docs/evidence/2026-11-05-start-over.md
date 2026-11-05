@@ -20,6 +20,8 @@
 | `[TC-OP-102]` | With GitHub connected and the sign-in delete timing out, erasing it says so and keeps the account; once the keychain answers, the item and the account are gone. Through the hub's own GitHub account service. | ✅ |
 | `[TC-OP-103]` | With no account connected and a keychain that cannot be reached, the GitHub sign-in counts as gone. | ✅ |
 | `[TC-OP-104]` | The `reset` command's keychain step reports a timed-out delete for a hob with an app and for a connected account, and none when the hub has no record of either. | ✅ |
+| `[TC-OP-105]` | Connected, then Disconnect while the keychain refuses the delete: the account stays recorded and the item is still there, so a later erase the keychain never answers says the hub could not tell. Through the hub's own GitHub account service. | ✅ |
+| `[TC-OP-106]` | A hob's key write and the cleanup delete both time out: the app is kept as left over, and erasing it says the hub could not tell whether the key was deleted. | ✅ |
 | `[TC-OP-097]` | A hub that cannot restart itself refuses and changes nothing. | ✅ |
 | `[TC-OP-100]` | The `reset` command's keychain step deletes every hob's key and the GitHub sign-in, and reports a locked keychain's refusal. | ✅ |
 | Manual | `pnpm --filter @hobbots/server reset` on a scratch data folder says what goes and changes nothing; with `--yes` it deletes the hub's files and keeps `desktop-settings.json`. | ✅ |

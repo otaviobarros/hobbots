@@ -872,6 +872,42 @@ describe("Starting over with GitHub connected", () => {
   });
 
   // covers #948
+  it("[TC-OP-105] keeps the account after a Disconnect the keychain refused, so a later erase it cannot answer is not taken as done", async () => {
+    const remove = { error: null as KeychainError | null };
+    const keychain = Layer.effect(
+      Keychain,
+      Effect.map(Keychain, (memory) =>
+        Keychain.of({
+          ...memory,
+          remove: Effect.suspend(() => (remove.error === null ? memory.remove : Effect.fail(remove.error))),
+        }),
+      ),
+    ).pipe(Layer.provide(KeychainMemory));
+    const script: Script = { polls: [{ _tag: "Granted", tokens: tokens("ghu_first") }], refreshes: [], asked: [] };
+    const outcome = await run(
+      Effect.gen(function* () {
+        const { row, layer } = yield* setup(script, { keychain });
+        return yield* Effect.gen(function* () {
+          const connection = yield* GitHubConnection;
+          yield* connection.connect;
+          yield* wait(5);
+          remove.error = new KeychainError({ reason: "failed", message: "The keychain is locked." });
+          yield* connection.disconnect;
+          const afterDisconnect = yield* Ref.get(row);
+          remove.error = new KeychainError({ reason: "unavailable", message: "The keychain did not answer in time." });
+          const erased = yield* connection.erase;
+          return { afterDisconnect, erased, item: yield* (yield* Keychain).read };
+        }).pipe(Effect.provide(layer), Effect.scoped);
+      }),
+    );
+    expect(outcome.afterDisconnect).not.toBeNull();
+    expect(Option.isSome(outcome.item)).toBe(true);
+    expect(outcome.erased).toBe(
+      "The hub could not tell whether the keychain deleted the GitHub sign-in: The keychain did not answer in time.",
+    );
+  });
+
+  // covers #948
   it("[TC-OP-103] counts a sign-in the hub never stored as gone, even when the keychain cannot be reached", async () => {
     const unreachable = Layer.succeed(
       Keychain,
