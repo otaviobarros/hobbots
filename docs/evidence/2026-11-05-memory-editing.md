@@ -21,21 +21,21 @@
 | `[TC-GEN-336]` | Delete answers the version that brings the page back, streams the delete to every client, and Undo restores it | ✅ hub, fake |
 | `[TC-GEN-337]` | An edit, a pin or a delete over a version a hob replaced is refused with the current version and writes nothing; saved over the current version, it goes through; a new page never replaces one at its path | ✅ hub, fake |
 | `[TC-GEN-338]` | About you's pages are yours, and every hob finds them | ✅ hub, fake |
-| `[TC-UX-980]` | Edit saves a new version, and Restore in History brings the older text back | ✅ browser, seeded fake |
-| `[TC-UX-981]` | Pin, a forget day with Keep it, and Delete with Undo | ✅ browser, seeded fake |
-| `[TC-UX-982]` | A house rule in About you, and a new page that asks for a title first | ✅ browser, seeded fake |
-| `[TC-UX-983]` | A save made while the editor is open refuses the editor's save and keeps its text; Save mine over it then writes it | ✅ browser, seeded fake |
-| `[TC-UX-985]` | A deleted page that Back opens again reads as gone, not as it was | ✅ browser, seeded fake |
-| `[TC-UX-986]` | A page deleted in one window leaves another window's list, and a third window open on it reads it as gone, with the hub not looking for changes | ✅ browser, seeded fake |
-| `[TC-UX-984]` | Open folder in the desktop app, and the line when it could not open | ✅ browser, stubbed desktop bridge |
+| `[TC-UX-990]` | Edit saves a new version, and Restore in History brings the older text back | ✅ browser, seeded fake |
+| `[TC-UX-991]` | Pin, a forget day with Keep it, and Delete with Undo | ✅ browser, seeded fake |
+| `[TC-UX-992]` | A house rule in About you, and a new page that asks for a title first | ✅ browser, seeded fake |
+| `[TC-UX-993]` | A save made while the editor is open refuses the editor's save and keeps its text; Save mine over it then writes it | ✅ browser, seeded fake |
+| `[TC-UX-995]` | A deleted page that Back opens again reads as gone, not as it was | ✅ browser, seeded fake |
+| `[TC-UX-996]` | A page deleted in one window leaves another window's list, and a third window open on it reads it as gone, with the hub not looking for changes | ✅ browser, seeded fake |
+| `[TC-UX-994]` | Open folder in the desktop app, and the line when it could not open | ✅ browser, stubbed desktop bridge |
 
 ## Findings
 
 - ai-memory 3.4.2's `/admin/write-page` and `/admin/delete-page` take no expected version, and its page write no forget day, so your edits go over `/mcp` with the root bearer, which takes both and stamps you as the author.
 - `/admin/restore-page` copies the old version's author, so the adapter writes the restored page once more as you; a restore makes two versions with the same text.
 - ai-memory writes a session's page again at every end, pinned or not, so the hub sends no session end while its chat note is pinned.
-- The first review found three gaps, each now covered: a pinned chat note's session end was dropped rather than kept for later (`[TC-GEN-339]`), a deleted page still showed as it was when Back opened it again (`[TC-UX-985]`), and a delete never reached other windows, since the hub's look only finds pages that are there (`[TC-UX-986]`).
-- `[TC-UX-983]` first failed: the editor saved over whatever version the page read had refreshed to, so a save made meanwhile was overwritten without asking. The editor now saves over the version it opened.
+- The first review found three gaps, each now covered: a pinned chat note's session end was dropped rather than kept for later (`[TC-GEN-339]`), a deleted page still showed as it was when Back opened it again (`[TC-UX-995]`), and a delete never reached other windows, since the hub's look only finds pages that are there (`[TC-UX-996]`).
+- `[TC-UX-993]` first failed: the editor saved over whatever version the page read had refreshed to, so a save made meanwhile was overwritten without asking. The editor now saves over the version it opened.
 
 ## Gaps
 
