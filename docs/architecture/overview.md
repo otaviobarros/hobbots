@@ -16,6 +16,7 @@ flowchart TB
   Engines --> MCP[Scoped Hobbots MCP tools]
   MCP --> Domain
   Durable --> SQL[SQLite]
+  Domain --> Memory[MemoryStore: bundled ai-memory, ADR 028]
   Durable --> Events[SSE projections]
   Events --> Browser
   Events --> Electron

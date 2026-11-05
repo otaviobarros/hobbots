@@ -18,3 +18,4 @@ playwright-report/
 !.dev.vars.example
 .wrangler/
 .astro/
+packages/memory/engine/

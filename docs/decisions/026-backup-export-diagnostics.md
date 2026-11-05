@@ -19,7 +19,7 @@ Some data in the database is private but not a credential. The [redaction rules]
 
 ### A backup is the whole hub, minus every managed credential
 
-A **managed credential** is a value the hub keeps so that someone or something can authenticate: the keychain items, device token hashes, pairing secret hashes, the window key, runtime sign-ins, and the credentials in the hub's environment. The hub knows each one and where it keeps it. Text you wrote, and the replies hobs wrote, are content, not managed credentials, even when they contain a token.
+A **managed credential** is a value the hub keeps so that someone or something can authenticate: the keychain items, device token hashes, pairing secret hashes, the window key, runtime sign-ins, memory's two bearers (ADR 028), and the credentials in the hub's environment. The hub knows each one and where it keeps it. Text you wrote, and the replies hobs wrote, are content, not managed credentials, even when they contain a token.
 
 A backup is a folder named `Hobbots backup <date> <time>.hobbots-backup`. It holds:
 
@@ -29,6 +29,7 @@ A backup is a folder named `Hobbots backup <date> <time>.hobbots-backup`. It hol
 | `database.sqlite` | The database, copied with the SQLite online backup API and then scrubbed (below). |
 | `activity/` | The Workbench contents: redacted text, images and folded command logs, stored once per hash. |
 | `tool-logs/` | The full logs of tool steps, already redacted when the hub wrote them. |
+| `memory/` | Memory pages, their history and their index, made with ai-memory's own backup ([ADR 028](028-memory.md)). |
 | `workspace/` | The default workspace from `workspaces/default`, where a hob without folders of its own works. |
 | `settings/network.json` | The port. Remote access is always off in a backup. |
 
@@ -84,6 +85,7 @@ On its first start after a restore the hub applies these rules in one transactio
 - **The GitHub account** is connected again only if this computer's keychain still has its item. Otherwise Settings › GitHub says to connect, as after a disconnect (ADR 020).
 - **A hob's own GitHub App** whose key is not in this computer's keychain needs a reconnect, with the reason "The app's key is not on this computer" (ADR 022). Its GitHub actions fail with that reason and never run as you.
 - **Runtime sessions.** A thread keeps its runtime session IDs. A session the runtime no longer has starts fresh, with the briefing a thread gets on a new runtime ([ADR 017](017-switching-brains.md)).
+- **Memory** gets new bearers, so the old ones no longer work ([ADR 028](028-memory.md)).
 - **Backup holds.** A cleanup or workspace hold recorded in the database is cleared.
 - **Hob folders.** The restore summary lists each hob folder that is not on this computer, so you can set that hob's folders again.
 
@@ -93,7 +95,7 @@ Settings › Your data › **Start over** deletes everything the hub keeps on it
 
 1. The dialog lists what goes and what stays, names the hobs that are replying, offers **Back up first** to the folder chosen under Backups (the hub's default until one is chosen), names that folder and then where the backup went, and enables **Delete everything** only after a high-risk check box, as on approvals.
 2. While the hub still runs, it removes the keychain items it owns: each hob's own GitHub App key, after removing the app's installations as a retired hob's are, then the GitHub account's tokens. They live outside the data folder, so deleting the folder alone would leave them behind. If any of them may still be there, the hub deletes nothing else, says which, and stays as it was, so the database still records what is left and Start over can be tried again. An item may still be there when the keychain refuses to delete it, such as a locked one, and when its tool cannot run or does not answer in time while the hub's records say it stored the item: a hob's app, left over or not, or a connected GitHub account. Each record goes only once its item is gone, in every path that deletes one: Disconnect and a refused sign-in keep the account while the keychain will not delete its item, and a hob's app whose key could not be written, or whose key could not be deleted, stays as left over. With no such record the hub never stored the item, so a keychain it cannot reach leaves nothing of it. An item stored by an earlier hub whose database was already lost is not known to the hub.
-3. The hub stops, as for a restore. It writes `reset.json` in the data folder, deletes every hub entry of the data folder (the same list a restore moves aside), the runtimes folder beside it and every `<data folder>.before-restore-<date>` folder, then deletes the marker. The desktop app's own files in the data folder stay.
+3. The hub stops, as for a restore. It writes `reset.json` in the data folder, deletes every hub entry of the data folder (the same list a restore moves aside) and the memory engine's `memory` folder and `memory-keys` (ADR 028), the runtimes folder beside it and every `<data folder>.before-restore-<date>` folder, then deletes the marker. The desktop app's own files in the data folder stay.
 4. The hub starts again in the same process. A marker found at any start means a reset stopped halfway, and the hub finishes it before it reads any data.
 
 Deleting the database signs out every device and ends every running reply. The folders hobs work in, backups and exports saved elsewhere, and the runtimes' own sign-ins outside the hub's folders, such as the user's Claude Code sign-in, are untouched. A hob's GitHub App itself stays on GitHub until you delete it there.

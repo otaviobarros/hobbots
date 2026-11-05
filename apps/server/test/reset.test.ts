@@ -52,6 +52,8 @@ const seedHub = async () => {
   await write(join(dataDir, "activity/a1/screenshot.txt"), "A picture.");
   await write(join(dataDir, "tool-logs/a1.log"), "ran: walk");
   await write(join(dataDir, "network.json"), "{}");
+  await write(join(dataDir, "memory/config.toml"), "[auth]");
+  await write(join(dataDir, "memory-keys"), "memory-keys-secret");
   await write(join(dataDir, "installation-id"), "original\n");
   await write(join(dataDir, "window-key"), "window-key-secret");
   await write(join(dataDir, "charms/github/sandbox/state"), "state");

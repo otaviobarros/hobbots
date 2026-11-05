@@ -1,6 +1,6 @@
 # ADR 013 — The event journal and resuming the event stream
 
-Status: **Accepted.** Refines the [API and events contract](../architecture/api-events.md) and the journal in [persistence](../architecture/persistence.md) for Slice 6.
+Status: **Accepted.** Refines the [API and events contract](../architecture/api-events.md) and the journal in [persistence](../architecture/persistence.md) for Slice 6. Its retention has an exception for memory capture, from [ADR 028](028-memory.md).
 
 ## Context
 
@@ -82,7 +82,8 @@ Clients take state from two sources, query responses and events, which can arriv
 ### Retention and compaction
 
 - The journal keeps entries for **7 days** and always keeps the **latest 10,000**, whichever retains more. Compaction deletes older entries at startup and then hourly.
-- The journal serves client resume only. Current state lives in its own tables, and durable work (inbox deliveries, responsibilities, attempts) keeps its own records, so compaction never removes something work depends on.
+- **Exception for memory** ([ADR 028](028-memory.md)): compaction never deletes an entry after memory's capture cursor, however old, so captures and saves made during a long memory outage are still sent when it ends. Once the cursor passes them, the rules above apply.
+- Apart from that, the journal serves client resume only. Current state lives in its own tables, and durable work (inbox deliveries, responsibilities, attempts) keeps its own records, so compaction never removes something work depends on.
 - A cursor older than the oldest retained entry is answered with a fresh `Ready`, never with a partial replay.
 
 ## Rationale
@@ -109,3 +110,4 @@ The scenarios that would show this decision holds. Each names the test case or e
 - A read of `GET /api/activity` made on `TurnStarted` or `TurnEnded` already agrees with it, even when the runtime exits well after its reply completed: `[TC-DP-054]`. A stopped turn is announced ended only once its runtime has finished shutting down: `[TC-DP-055]`.
 - A crash between commit and publish loses nothing: `[TC-CH-073]`. A crash mid-reply leaves the reply interrupted with its saved text, about 0.6 seconds of text lost, and a client resuming from before it gets each entry once: `[TC-CH-120]`, `[TC-CH-125]`, [evidence](../evidence/2026-10-31-reliable-chat.md).
 - A reconnect mid-reply and time offline replay exactly what was missed and fetch nothing again: `[TC-CH-071]`, `[TC-CH-121]`. A delayed messages response leaves a finished reply complete: `[TC-CH-076]`. A restored backup shows the restored state, not the cache: `[TC-CH-123]`.
+- Compaction keeps every entry after memory's capture cursor during an outage longer than 7 days, and deletes them by the usual rules once they are sent. Not proven yet: [#956](https://github.com/otaviobarros/hobbots/issues/956).

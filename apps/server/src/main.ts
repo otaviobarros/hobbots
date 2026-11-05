@@ -39,6 +39,7 @@ import {
 } from "@hobbots/charms";
 import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
+import { defaultEngineFolder, loadOrCreateMemoryKeys, MemoryEngine, type MemoryKeys } from "@hobbots/memory";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -68,8 +69,8 @@ import {
   ProcessSandbox,
 } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
-import { Deferred, Effect, Layer, Option, References } from "effect";
-import { HttpRouter } from "effect/http";
+import { Deferred, Effect, Layer, Option, Redacted, References } from "effect";
+import { FetchHttpClient, HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
 import { BackupHolds, HeldActivityStore, HeldRuntimes } from "./backup-holds.ts";
 import { HubBackups } from "./backups.ts";
@@ -108,6 +109,20 @@ import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
 import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
+
+/** The memory engine as the hub's settings choose it: turned off, missing, or the bundled binary. */
+const memoryEngineLayer = (
+  config: { readonly memory: "on" | "off"; readonly memoryEngineDir: Option.Option<string> },
+  dataDir: string,
+  keys: MemoryKeys,
+) => {
+  if (config.memory === "off") return MemoryEngine.off("disabled");
+  const folder = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
+  if (folder === "") return MemoryEngine.off("missing");
+  return MemoryEngine.layer({ folder, dataDir, keys }).pipe(
+    Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+  );
+};
 
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -259,6 +274,11 @@ const ServerLive = Layer.unwrap(
     const LocalGit = LocalGitToolsLive({ stagingFolder: join(dataDir, "charms", "local-git") }).pipe(
       Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)),
     );
+    // The memory engine (ADR 028): the bundled ai-memory, run beside the hub and stopped with it. Its
+    // two keys stay in the data folder and reach only the engine's environment. Without an engine,
+    // or one that fails its checksum, memory is off and everything else works.
+    const memoryKeys = loadOrCreateMemoryKeys(dataDir);
+    const Memory = memoryEngineLayer(config, dataDir, memoryKeys);
     // The hub's own path separator, which alone divides the folders a hob may be given (STD-SEC-003).
     const separator = sep === "\\" ? "\\" : "/";
     const App = HobLifecycle.layer
@@ -367,8 +387,14 @@ const ServerLive = Layer.unwrap(
             identity,
             // What the startup recovery could not do, for Settings › Diagnostics (ADR 026).
             RecoveryLog.layer,
-            // The hub's credentials, provider keys included, are redacted by value from what tools report.
-            SecretRedaction.layer(secretsFromEnv(process.env)),
+            Memory,
+            // The hub's credentials, provider keys and memory keys included, are redacted by value
+            // from what tools report.
+            SecretRedaction.layer([
+              ...secretsFromEnv(process.env),
+              { value: Redacted.value(memoryKeys.root), kind: "AI_MEMORY_AUTH_TOKEN" },
+              { value: Redacted.value(memoryKeys.proxy), kind: "AI_MEMORY_AUTH__ACTOR_PROXY_BEARER_TOKEN" },
+            ]),
             // The whole output of long tool calls, which their steps show cut.
             ToolLogsLive(join(dataDir, "tool-logs")),
           ),

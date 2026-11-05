@@ -18,6 +18,7 @@ import {
 import { DiagnosticsReportRefused, HobbotsApi, QuestNotFound, type QuestTrace } from "@hobbots/api";
 import type { BackpackItem, QuestId } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
+import { MemoryEngine } from "@hobbots/memory";
 import { DiagnosticsReadsLive, SetupRepository } from "@hobbots/persistence";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -42,6 +43,8 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
     const adapters = yield* runtimeAdapters;
     const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
     const recovery = yield* Effect.serviceOption(RecoveryLog);
+    // A hub built without a memory engine, as some tests build it, reports none.
+    const memory = yield* Effect.serviceOption(MemoryEngine);
     // Whether a restore holds work until you resume it (ADR 026).
     const held = yield* workHeld;
     // The handlers are built once, as the hub starts, after its recovery ran.
@@ -55,6 +58,7 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
       const errors = Option.isSome(recovery) ? yield* recovery.value.errors : [];
       return {
         runtimes: yield* everyRuntimeHealth(adapters),
+        memory: Option.isSome(memory) ? yield* memory.value.health : null,
         stalled: stalledWork({
           open: yield* backpack.listOpen({ _tag: "Workspace" }),
           blocked: yield* backpack.listBlocked({ _tag: "Workspace" }),
@@ -118,6 +122,7 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
             node: process.versions.node,
           },
           runtimes: current.runtimes,
+          memory: current.memory,
           workHeld: current.workHeld,
           stalled: current.stalled,
           recovery: current.recovery,

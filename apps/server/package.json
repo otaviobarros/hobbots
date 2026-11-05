@@ -19,6 +19,7 @@
     "@hobbots/charms": "workspace:*",
     "@hobbots/domain": "workspace:*",
     "@hobbots/inbox": "workspace:*",
+    "@hobbots/memory": "workspace:*",
     "@hobbots/orchestration": "workspace:*",
     "@hobbots/permissions": "workspace:*",
     "@hobbots/persistence": "workspace:*",

@@ -22,6 +22,12 @@ const exists = (path: string) =>
   );
 
 /**
+ * What the memory engine keeps in the data folder (ADR 028): ai-memory's own data folder and the
+ * hub's keys for it. Start over deletes them with the rest; the engine stops with the hub first.
+ */
+const MEMORY_ENTRIES = ["memory", "memory-keys"] as const;
+
+/**
  * The folders a restore set aside beside this data folder (ADR 026): copies of the hub's data that
  * Start over deletes too. Only folders named `<data folder>.before-restore-<date>`.
  */
@@ -40,7 +46,8 @@ const setAsideFolders = async (dataDir: string) => {
 export const wipeHubData = async (dataDir: string) => {
   const marker = resetMarkerFile(dataDir);
   await writeFile(marker, `${JSON.stringify({ startedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
-  for (const entry of HUB_ENTRIES) await rm(join(dataDir, entry), { recursive: true, force: true });
+  for (const entry of [...HUB_ENTRIES, ...MEMORY_ENTRIES])
+    await rm(join(dataDir, entry), { recursive: true, force: true });
   await rm(runtimeFolders(dataDir), { recursive: true, force: true });
   for (const folder of await setAsideFolders(dataDir)) await rm(folder, { recursive: true, force: true });
   await rm(marker, { force: true });
