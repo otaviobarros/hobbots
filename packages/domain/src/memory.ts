@@ -121,6 +121,16 @@ export interface MemoryDraft {
   readonly pinned: boolean;
 }
 
+/** A page's title: its first `# ` heading, or its file name without `.md`. */
+export const memoryTitleOf = (path: MemoryPath, markdown: string): string => {
+  const heading = markdown
+    .split("\n")
+    .find((line) => line.startsWith("# "))
+    ?.slice(2)
+    .trim();
+  return heading || (path.split("/").at(-1) ?? path).replace(/\.md$/, "");
+};
+
 /** The memory engine did not answer. Callers treat it as an outage, never as an empty memory. */
 export class MemoryUnavailable extends Schema.TaggedError<MemoryUnavailable>()("MemoryUnavailable", {
   message: Schema.String,
