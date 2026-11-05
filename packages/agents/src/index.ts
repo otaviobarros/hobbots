@@ -17,6 +17,7 @@ export * from "./grants.ts";
 export * from "./hobs.ts";
 export * from "./lifecycle.ts";
 export * from "./memory.ts";
+export * from "./memory-brief.ts";
 export * from "./permissions.ts";
 export * from "./ports.ts";
 export * from "./questions.ts";

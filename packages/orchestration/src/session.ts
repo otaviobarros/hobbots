@@ -1,11 +1,15 @@
 import {
   type ActivityRecorder,
+  deliveredMemoryBrief,
   type HubTools,
   nextSteps,
   type Redactor,
   type RuntimeEvent,
+  recordMemoryBrief,
   redactEvent,
   type runtimeAdapters,
+  sessionMemoryBrief,
+  startedMemoryBrief,
   type ToolAccess,
   type ToolStartedEvent,
   type TurnApprovals,
@@ -108,11 +112,24 @@ export const runSessionTurn = (
       attempt: Effect.succeed(turn.attemptId),
       redactor,
     });
+    // The hob's memory brief (ADR 028), as a chat session gets it: when the session is new, or did not
+    // last receive this brief.
+    const memory = yield* sessionMemoryBrief(turn.agent.id, turn.access?.folders ?? [], turn.sessionId);
+    const expected = turn.sessionId === null ? undefined : { sessionId: turn.sessionId };
+    // Counted as received only once the runtime answers the prompt that carried it.
+    let session: string | null = null;
+    let delivered = false;
+    const confirmBrief = Effect.suspend(() => {
+      const digest = memory === null ? null : deliveredMemoryBrief(memory);
+      if (delivered || digest === null || session === null) return Effect.void;
+      delivered = true;
+      return recordMemoryBrief(session, digest);
+    });
     yield* activity
       .run(
         {
           prompt: turn.prompt,
-          briefing: null,
+          briefing: memory?.text ?? null,
           sessionId: turn.sessionId,
           instructions: systemInstructions(turn.config.name, turn.config),
           instructionsChanged: false,
@@ -129,13 +146,23 @@ export const runSessionTurn = (
       )
       .pipe(
         Stream.runForEach((event) => {
-          if (event._tag === "SessionStarted")
-            return turn.started({
-              sessionId: event.sessionId,
-              ...(event.policyVersion && { policyVersion: event.policyVersion }),
-            });
+          if (event._tag === "SessionStarted") {
+            session = event.sessionId;
+            return turn
+              .started({
+                sessionId: event.sessionId,
+                ...(event.policyVersion && { policyVersion: event.policyVersion }),
+              })
+              .pipe(
+                Effect.andThen(
+                  memory === null
+                    ? Effect.void
+                    : recordMemoryBrief(event.sessionId, startedMemoryBrief(memory, expected, event.sessionId)),
+                ),
+              );
+          }
           if (event._tag === "Completed") ending = { _tag: "Replied", text: event.text };
-          return stepOf(event);
+          return Effect.andThen(confirmBrief, stepOf(event));
         }),
         Effect.catchTags({
           RuntimeError: (error) =>

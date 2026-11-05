@@ -1,4 +1,5 @@
 import {
+  type AgentId,
   type MemoryActor,
   type MemoryConflict,
   type MemoryDraft,
@@ -8,12 +9,14 @@ import {
   type MemoryPageSummary,
   type MemoryPageVersion,
   type MemoryPath,
+  type MemoryProjectIdentity,
   type MemoryScope,
   type MemoryUnavailable,
   type MemoryVersion,
+  memoryProjectIdentity,
   memoryScopeAllowed,
 } from "@hobbots/domain";
-import { Context, Effect } from "effect";
+import { Context, Effect, Option } from "effect";
 
 type Memory<A, E = MemoryUnavailable> = Effect.Effect<A, E>;
 
@@ -121,3 +124,33 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   restore: guarded("restore", store.restore, one),
   health: store.health,
 });
+
+export interface MemoryProjectsShape {
+  /** Who `folder` is across clones: its Git `origin` remote, or its name when it has none. */
+  readonly of: (folder: string) => Effect.Effect<MemoryProjectIdentity>;
+}
+
+/**
+ * The project identity of each folder a hob works in (ADR 028), read by the hub from the folder
+ * itself, never from a tool's input.
+ */
+export class MemoryProjects extends Context.Service<MemoryProjects, MemoryProjectsShape>()(
+  "@hobbots/agents/MemoryProjects",
+) {}
+
+const folderName = (folder: string) => folder.replace(/[/\\]+$/, "").replace(/^.*[/\\]/, "");
+
+/**
+ * The actor a hob's memory calls are made as: the hob, with the projects of the folders it works in,
+ * once each. Without `MemoryProjects`, each folder is the project of its name.
+ */
+export const memoryActorFor = (
+  projects: Option.Option<MemoryProjectsShape>,
+  agentId: AgentId,
+  folders: ReadonlyArray<string>,
+): Effect.Effect<Extract<MemoryActor, { _tag: "Hob" }>> =>
+  Effect.forEach(folders, (folder) =>
+    Option.isSome(projects)
+      ? projects.value.of(folder)
+      : Effect.succeed(memoryProjectIdentity(null, folderName(folder))),
+  ).pipe(Effect.map((identities) => ({ _tag: "Hob", agentId, projects: [...new Set(identities)] })));
