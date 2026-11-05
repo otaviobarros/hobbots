@@ -258,6 +258,32 @@ describe("the Quest room's lanes", () => {
     ]);
   });
 
+  it("[TC-UX-1004-01] names the command a turn waits on while no step runs, and when the hob last did something", () => {
+    // covers UX-004: a running lane says what the hob waits on, from records only (#1004)
+    const records = activity(BUILD, {
+      attempt: attempt(BUILD, "running"),
+      steps: [{ id: "think", kind: "thinking", label: "Thinking", state: "done", startedAt: AT(13) }],
+      commands: [
+        command(BUILD, "pnpm dev", 14, { state: "running", exitCode: null, endedAt: null }),
+        command(BUILD, "pnpm lint", 15, { endedAt: AT(16) }),
+      ],
+    });
+    const lane = laneOf(laneRoom(handedOn(), [records]), ADA);
+    expect(lane.items.at(-1)).toMatchObject({ kind: "now", label: "Waiting on pnpm dev", since: AT(16) });
+    expect(lane.plain.at(-1)).toMatchObject({ kind: "now", label: "Waiting for dev to finish", since: AT(16) });
+    // A step that runs is what the turn is on, even with a command left running beside it.
+    const busy = activity(BUILD, {
+      ...records,
+      steps: [{ id: "edit", kind: "tool", label: "Editing page.astro", state: "running", startedAt: AT(17) }],
+    });
+    expect(laneOf(laneRoom(handedOn(), [busy]), ADA).items.at(-1)).toMatchObject({
+      label: "Editing page.astro",
+      since: AT(17),
+    });
+    // With nothing read yet, the turn's last sign is the newest the tree records: here its last beat.
+    expect(laneOf(laneRoom(handedOn(), []), ADA).items.at(-1)).toMatchObject({ label: null, since: AT(12) });
+  });
+
   it("says a step that was stopped once, however often the hob tried it again", () => {
     const denied = (id: string, second: number): ReplyStep => ({
       id,
