@@ -14,7 +14,7 @@
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
-Hobbots is a personal, local-first, self-hostable workspace for AI agents. Each agent is a **hob**: a small helper with a name, a face and its own threads. Today your hobs chat, use tools in the folders you give them, and keep working after you close the window. Hobbots is being built so they can also delegate to each other, report back and close the loop on their own, within boundaries you trust.
+Hobbots is a personal, local-first, self-hostable workspace for AI agents. Each agent is a **hob**: a small helper with a name, a face and its own threads. Your hobs chat, use tools in the folders you give them, delegate to each other, report back and keep working after you close the window, within boundaries you trust.
 
 Hobbots does not build a new model or agent engine. It hosts existing runtimes such as Claude Code, Codex and ACP-compatible agents, and adds what they lack together: persistent identities and threads, durable delegation and inboxes, enforceable permissions and one view of all the work.
 
@@ -23,17 +23,17 @@ Hobbots does not build a new model or agent engine. It hosts existing runtimes s
 - **Hob:** one agent, with its own name, look, instructions, model and permissions. Every hob is a 14 × 14 pixel sprite drawn from a seed, so it looks the same everywhere.
 - **The chief:** the Hobbots mark, an elder hob in a gem crown with a lantern staff. While any hob works, the lantern burns brighter.
 - **Thread:** a conversation with one hob that survives restarts. Each reply shows the tools the hob used as steps.
-- **Folders and the sandbox:** where a hob may work, and the OS sandbox that holds it there. Each rule is Allow, Ask or Never; answering an Ask from the app is not built yet.
+- **Folders and the sandbox:** where a hob may work, and the OS sandbox that holds it there. Each rule is Allow, Ask or Never, and you answer an Ask from the chat or the Inbox.
 - **Hub:** the one computer that runs the hobs, their threads and every runtime. Hobs act only on the hub.
-- **Quest:** a goal that spans several hobs and threads, with who asked whom and what is still owed. _Not built yet._
-- **Inbox:** where hobs leave questions, approvals and results for you and for each other. _Not built yet._
-- **Charm:** a connection that gives a hob new abilities, such as GitHub with Push. _Not built yet._
+- **Quest:** a goal that spans several hobs and threads, with who asked whom and what is still owed. You follow it in its Quest room beside the lead's chat.
+- **Inbox:** where hobs leave questions, approvals and results for you and for each other.
+- **Charm:** a connection that gives a hob new abilities, such as GitHub with Push.
 
 The [glossary](docs/product/glossary.md) has the full list.
 
 ## Status
 
-**Early build.** Hobbots runs in the browser and as a Mac app: several hobs on Claude Code, persistent threads with streaming chat, and tools within the folders you choose. Delegation, inboxes, Quests, approvals and other runtimes are MVP work that is not built yet.
+**Beta.** Hobbots runs as a Mac app and in the browser. Hobs on Claude Code or Codex chat in persistent threads, use tools within the folders you choose under a policy you set, and lead Quests that other hobs join. The [0.0.1 release notes](docs/releases/0.0.1.md) list what is in the first beta and its known limits.
 
 The [status page](docs/STATUS.md) lists what has been proven end to end, on which setup, and what is not proven yet.
 
