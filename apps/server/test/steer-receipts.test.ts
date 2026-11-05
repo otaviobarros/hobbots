@@ -345,4 +345,44 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(passed?.note).toMatchObject({ recipientId: PIP, pickedUpBy: null });
     expect(passed?.receipt).toEqual({ _tag: "Unread" });
   }, 30_000);
+  // covers OR-002, UX-006
+  it("[TC-OR-546] a Task the lead delegates on your message carries it on, so the receipt names the member that picked it up (#1005)", async () => {
+    const hubbed = partyHub();
+    dispose = hubbed.dispose;
+    const { run } = hubbed;
+    await run(
+      send([
+        "Build the site",
+        stuck("pages", "Pip", "Build the pages"),
+        hub("wait_for", { key: "wait", tasks: ["$pages.task_id"] }),
+      ]),
+    );
+    await run(treeWhen((tree) => ownedBy(tree, PIP)?.state === "blocked"));
+    await run(messagesWhen((all) => all.length >= 2));
+
+    await run(
+      send([
+        "Keep the report under one page",
+        hub("delegate_task", { key: "report", hob: "Quill", brief: "Write a one-page report" }),
+      ]),
+    );
+    const all = await run(answeredTo("Keep the report under one page"));
+    const { message } = yours(all, "Keep the report under one page");
+    const tree = await run(pickedUp(message.id, 1));
+    const quill = ownedBy(tree, QUILL);
+    const [passed, ...others] = steerReceipt([tree], message.id);
+    expect(others).toEqual([]);
+    expect(passed?.note).toMatchObject({
+      taskId: quill?.id,
+      senderId: FRODO,
+      recipientId: QUILL,
+      messageId: message.id,
+      fromNoteId: null,
+    });
+    // It carries what you wrote, which the fake runtime reads its scripted calls from too.
+    expect(passed?.note.text.startsWith("Keep the report under one page")).toBe(true);
+    expect(passed?.receipt._tag).toBe("PickedUp");
+    // The request that started the work is no note: Pip's Task carries nothing of it.
+    expect(steerReceipt([tree], yours(all, "Build the site").message.id)).toEqual([]);
+  }, 30_000);
 });

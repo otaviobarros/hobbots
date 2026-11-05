@@ -70,6 +70,8 @@ export const makeChatResolver = (
     taskId,
     carried: carriedBy(taskId),
     ...(turn.promptId != null && { messageId: turn.promptId }),
+    // A message the turn was briefed with open work on steers that work; one that starts it does not.
+    ...(turn.promptId != null && briefedOn !== null && { steers: turn.prompt }),
   });
   return {
     /**
