@@ -115,9 +115,9 @@ const memoryEngineLayer = (
   dataDir: string,
   keys: MemoryKeys,
 ) => {
-  if (config.memory === "off") return MemoryEngine.off("disabled");
+  if (config.memory === "off") return MemoryEngine.off("disabled", dataDir, keys);
   const folder = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
-  if (folder === "") return MemoryEngine.off("missing");
+  if (folder === "") return MemoryEngine.off("missing", dataDir, keys);
   return MemoryEngine.layer({ folder, dataDir, keys }).pipe(
     Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
   );

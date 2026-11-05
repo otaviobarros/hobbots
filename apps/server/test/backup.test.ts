@@ -27,6 +27,13 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import {
+  checkMemoryArchive,
+  loadOrCreateMemoryKeys,
+  memoryFolder,
+  memoryKeysFile,
+  packStoppedMemory,
+} from "@hobbots/memory";
+import {
   copyLiveDatabase,
   DeviceRepositoryLive,
   EventJournal,
@@ -37,10 +44,10 @@ import {
   SqliteLive,
   TaskRepositoryLive,
 } from "@hobbots/persistence";
-import { Effect, Exit, Fiber, Latch, Layer, Option, Ref, Stream } from "effect";
+import { Effect, Exit, Fiber, Latch, Layer, Option, Redacted, Ref, Stream } from "effect";
 import { SqlClient } from "effect/sql";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { fileStamp, listFiles, readBackup, restoreInto, restoreMarkerFile } from "../src/backup-files.ts";
+import { fileStamp, listFiles, MEMORY_PART, readBackup, restoreInto, restoreMarkerFile } from "../src/backup-files.ts";
 import { BackupHolds, HeldActivityStore } from "../src/backup-holds.ts";
 import { HubBackups, writeBackup } from "../src/backups.ts";
 import { checkDestination } from "../src/destination.ts";
@@ -219,6 +226,16 @@ const backUp = (dir: string, folder: string) =>
       writeBackup({ dataDir: dir, folder, version: "0.15.0", installationId: "original-installation", copyDatabase }),
     ),
   );
+
+/** Memory as its engine leaves it in the data folder: a page in the wiki, its database and config. */
+const MEMORY_PAGE = "wiki/hobbots/hob-frodo/notes/route.md";
+const seedMemory = async (dir: string) => {
+  await mkdir(join(memoryFolder(dir), "wiki/hobbots/hob-frodo/notes"), { recursive: true });
+  await mkdir(join(memoryFolder(dir), "db"), { recursive: true });
+  await writeFile(join(memoryFolder(dir), MEMORY_PAGE), "# Route\n\nThrough Moria.");
+  await writeFile(join(memoryFolder(dir), "db", "memory.sqlite"), "an index");
+  await writeFile(join(memoryFolder(dir), "config.toml"), 'log_level = "info"\n');
+};
 
 const everyFileText = async (folder: string) => {
   const texts: Array<string> = [];
@@ -534,12 +551,15 @@ describe("backup and restore", () => {
     expect(await Effect.runPromise(backupBeforeMigrations(dataDir, "0.15.0"))).toBeNull();
     await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dataDir), older)));
     await writeFile(join(dataDir, "window-key"), SECRETS.windowKey);
+    await seedMemory(dataDir);
     const first = await Effect.runPromise(backupBeforeMigrations(dataDir, "0.15.0"));
     const second = await Effect.runPromise(backupBeforeMigrations(dataDir, "0.15.0"));
     expect(first).not.toBeNull();
     const kept = await readdir(migrationBackupsFolder(dataDir));
     expect(kept).toEqual([second?.split("/").at(-1)]);
     expect((await readBackup(second as string, 38)).schemaVersion).toBe(37);
+    // Memory's engine is not running before the hub starts, so its files are packed as they are.
+    expect((await readBackup(second as string, 38)).files.map((file) => file.path)).toContain(MEMORY_PART);
     expect(await everyFileText(second as string)).not.toContain(SECRETS.windowKey);
     // Once migrated, the next start makes none.
     await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dataDir))));
@@ -594,5 +614,65 @@ describe("backup and restore", () => {
       // The next start migrates it.
       await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dir))));
     }
+  });
+
+  // covers OP-003, ADR 028 (Backups)
+  it("[TC-OP-099] keeps memory in the backup with no bearer, restores it with new bearers, and stops when memory cannot be saved", async () => {
+    await onHub(dataDir, seed);
+    await seedFiles(dataDir);
+    await seedMemory(dataDir);
+    const old = loadOrCreateMemoryKeys(dataDir);
+    const folder = join(destination, "memory.hobbots-backup");
+    await onHub(
+      dataDir,
+      Effect.flatMap(liveCopy, (copyDatabase) =>
+        writeBackup({
+          dataDir,
+          folder,
+          version: "0.15.0",
+          installationId: "original-installation",
+          copyDatabase,
+          backupMemory: (target) => packStoppedMemory(memoryFolder(dataDir), target, old),
+        }),
+      ),
+    );
+    const manifest = await readBackup(folder, knownSchemaVersion());
+    expect(manifest.files.map((file) => file.path)).toContain(MEMORY_PART);
+    // Neither bearer is in the backup, in the archive or anywhere else.
+    await Effect.runPromise(checkMemoryArchive(join(folder, MEMORY_PART), old));
+    const text = await everyFileText(folder);
+    expect(text).not.toContain(Redacted.value(old.root));
+    expect(text).not.toContain(Redacted.value(old.proxy));
+    expect((await listFiles(folder)).filter((file) => file.includes("memory-keys"))).toEqual([]);
+
+    const setAside = (await Effect.runPromise(performRestore(dataDir, folder))) as string;
+    expect(await readFile(join(memoryFolder(dataDir), MEMORY_PAGE), "utf8")).toBe("# Route\n\nThrough Moria.");
+    const fresh = loadOrCreateMemoryKeys(dataDir);
+    expect(Redacted.value(fresh.root)).not.toBe(Redacted.value(old.root));
+    expect(Redacted.value(fresh.proxy)).not.toBe(Redacted.value(old.proxy));
+    expect((await lstat(memoryKeysFile(dataDir))).mode & 0o777).toBe(0o600);
+    // The old keys and memory went aside with the rest of the hub's data.
+    expect(await readFile(join(setAside, "memory-keys"), "utf8")).toContain(Redacted.value(old.root));
+    expect(await readFile(join(setAside, "memory", MEMORY_PAGE), "utf8")).toBe("# Route\n\nThrough Moria.");
+
+    // A backup whose memory cannot be saved stops, says why and leaves nothing behind.
+    const failing = join(destination, "no-memory.hobbots-backup");
+    const exit = await onHub(
+      dataDir,
+      Effect.flatMap(liveCopy, (copyDatabase) =>
+        writeBackup({
+          dataDir,
+          folder: failing,
+          version: "0.15.0",
+          installationId: "i",
+          copyDatabase,
+          backupMemory: () => Effect.fail({ reason: "memory is not answering right now" }),
+        }),
+      ).pipe(Effect.exit),
+    );
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toMatch(
+      /Hobbots could not back up memory: memory is not answering right now\./,
+    );
+    await expect(lstat(failing)).rejects.toThrow();
   });
 });

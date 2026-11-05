@@ -28,6 +28,7 @@ export const messages = {
       workspace: "Copying the default workspace…",
       activity: "Copying the Workbench…",
       "tool-logs": "Copying the tool logs…",
+      memory: "Copying memory…",
       manifest: "Finishing the backup…",
     },
     progress: ({ copied, total }: { copied: string; total: string }) => `${copied} of ${total}`,

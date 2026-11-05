@@ -1,9 +1,10 @@
-import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, rmdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SaveDestinations } from "@hobbots/agents";
 import { BackupRefused, type BackupState, type BackupStatus, type BackupStep, type InvalidFolder } from "@hobbots/api";
+import { MemoryEngine } from "@hobbots/memory";
 import { copyLiveDatabase, finishBackupCopy } from "@hobbots/persistence";
-import { Context, DateTime, Duration, Effect, FiberHandle, Layer, Ref, Schema, type Scope } from "effect";
+import { Context, DateTime, Duration, Effect, FiberHandle, Layer, Option, Ref, Schema, type Scope } from "effect";
 import {
   BACKUP_FORMAT,
   BACKUP_PARTS,
@@ -13,6 +14,7 @@ import {
   hashFile,
   isInside,
   type ManifestFile,
+  MEMORY_PART,
   sizeOf,
   writeManifest,
 } from "./backup-files.ts";
@@ -46,13 +48,19 @@ export interface WriteBackupOptions {
   readonly holdCleanup?: Effect.Effect<void, never, Scope.Scope>;
   /** Holds the default workspace until it is copied; absent with no hub running. */
   readonly holdWorkspace?: (waiting: (turns: number) => Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope>;
+  /**
+   * Writes memory's own backup to the path it is given (ADR 028), and answers whether there was
+   * memory to save. Absent with no memory engine, as in tests that do not need one.
+   */
+  readonly backupMemory?: (target: string) => Effect.Effect<boolean, { readonly reason: string }>;
   readonly progress?: (state: BackupState) => Effect.Effect<void>;
 }
 
 /**
  * Makes one backup (ADR 026): the database copied with SQLite's online backup API and scrubbed of
- * every device secret, the default workspace, the Workbench contents, the tool logs and the port, and
- * the manifest written last with each file's size and SHA-256. Owner-only throughout. A failure or
+ * every device secret, the default workspace, the Workbench contents, the tool logs, memory as its
+ * engine backs it up (ADR 028) and the port, and the manifest written last with each file's size and
+ * SHA-256. Owner-only throughout. A failure or
  * an interruption deletes what it wrote. Returns the folder and its size.
  */
 export const writeBackup = (options: WriteBackupOptions) =>
@@ -77,9 +85,10 @@ export const writeBackup = (options: WriteBackupOptions) =>
       workspace: join(dataDir, BACKUP_PARTS.workspace.data),
       activity: join(dataDir, BACKUP_PARTS.activity.data),
       toolLogs: join(dataDir, BACKUP_PARTS.toolLogs.data),
+      memory: join(dataDir, "memory"),
     };
     const total = yield* attempt("measure the data folder", async () =>
-      [sources.database, sources.workspace, sources.activity, sources.toolLogs]
+      [sources.database, sources.workspace, sources.activity, sources.toolLogs, sources.memory]
         .map((path) => sizeOf(path))
         .reduce(async (sum, next) => (await sum) + (await next), Promise.resolve(0)),
     );
@@ -177,6 +186,28 @@ export const writeBackup = (options: WriteBackupOptions) =>
       )),
     );
 
+    // Memory as its own engine backs it up while it runs, with no memory bearer in it (ADR 028).
+    if (options.backupMemory) {
+      yield* report("memory");
+      const archive = join(folder, MEMORY_PART);
+      yield* attempt("make the memory folder", () => mkdir(join(folder, "memory"), { mode: 0o700 }));
+      const saved = yield* options
+        .backupMemory(archive)
+        .pipe(
+          Effect.mapError(
+            (refused) => new BackupFailed({ reason: `Hobbots could not back up memory: ${refused.reason}.` }),
+          ),
+        );
+      if (saved) {
+        const entry = yield* attempt("read the memory backup", () => hashFile(archive));
+        yield* Ref.update(copied, (bytes) => bytes + entry.size);
+        files.push({ path: MEMORY_PART, ...entry });
+      } else {
+        // No memory was ever kept here: the backup holds no memory folder.
+        yield* attempt("tidy the memory folder", () => rmdir(join(folder, "memory")));
+      }
+    }
+
     // The port only: remote access is always off in a backup.
     yield* report("manifest");
     const { port } = readNetworkSettings(dataDir);
@@ -223,6 +254,7 @@ export class HubBackups extends Context.Service<
       const identity = yield* Installation;
       const holds = yield* BackupHolds;
       const destinations = yield* SaveDestinations;
+      const memory = yield* Effect.serviceOption(MemoryEngine);
       const context = yield* Effect.context<Effect.Services<ReturnType<typeof copyLiveDatabase>>>();
       const state = yield* Ref.make<BackupState>({ _tag: "Idle" });
       const running = yield* FiberHandle.make<void, never>();
@@ -250,6 +282,7 @@ export class HubBackups extends Context.Service<
             copyDatabase: (target) => copyLiveDatabase(target).pipe(Effect.provideContext(context)),
             holdCleanup: holds.holdCleanup,
             holdWorkspace: holds.holdWorkspace,
+            ...(Option.isSome(memory) ? { backupMemory: memory.value.backup } : {}),
             progress: (next) => Ref.set(state, next),
           }).pipe(
             Effect.flatMap(({ path, size }) =>

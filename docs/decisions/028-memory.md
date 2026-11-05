@@ -36,7 +36,7 @@ It offers what its first callers need, and nothing that mirrors ai-memory's rout
 | --- | --- | --- |
 | Recall | `search` over a set of scopes | `memory_search` |
 | Writes | `write` a page as an actor when it is as expected (new, a given version, or anything), `forget` (answering the version that brings the page back), `restore` a version | `memory_save`, approved shares, the Memory page |
-| Browse | `page`, `history`, `list` a scope up to a limit (pinned first, then the most recently changed), `changes` since a time | The brief, the Memory page, What changed |
+| Browse | `page`, `history`, `list` a scope up to a limit (pinned first, then the most recently changed), `changes` since a time, `scopes` that hold pages | The brief, the Memory page, What changed, Export |
 | Health | `health` | Diagnostics, the outage banner |
 
 - **The brief is not an operation.** Its rules (Everyone first, then the hob's own pages, then its projects', pinned first, within a budget) are Hobbots policy, so they are a pure function in `@hobbots/agents` over `list` and `page`, and every engine gets them unchanged. `list` takes a limit, so a brief never loads a hob's whole memory.
@@ -109,6 +109,12 @@ ADR 011's single database stays the store for everything Hobbots decides and jou
 
 A backup gains a `memory/` entry, made with ai-memory's own backup while the hub runs, and listed in the manifest with the others. The two bearers are managed credentials and never in a backup: they live outside `<data folder>/memory` and reach ai-memory only through its environment, and the backup refuses an ai-memory config that holds a bearer value. A restore writes new bearers, so a restored memory answers only the restored hub. Export includes each scope's pages as markdown.
 
+- **The archive is kept whole.** `memory/ai-memory.tar.gz` is ai-memory's own archive: its wiki with its Git history, a consistent copy of its database, and the config the hub wrote. Before it is kept, the hub reads it through and refuses it when any entry is not a file or folder under those three, when a config in it holds a credential setting, or when either bearer appears anywhere in it.
+- **Memory is in every backup.** While the engine starts or restarts, Back up now stops and says memory is not answering, rather than leave memory out. With the engine off, nothing writes its folder, so the hub packs that folder in the same shape, as it also does for the backup it makes before a migration, when no engine runs yet.
+- **The hub restores it itself.** A restore checks the archive the same way and unpacks it into `<data folder>/memory`, owner-only, in the same step that copies the rest, so a failure puts everything back. It does not run `ai-memory restore`, which refuses while any other ai-memory process runs on the computer, such as one the user runs for themselves. The engine opens the restored wiki and database at its next start.
+- **New bearers.** The old `memory-keys` file is set aside with the rest of the hub's data and a restore writes new keys, which the engine gets in its environment at its next start.
+- **Export.** An export of everything holds each scope's pages as `memory/everyone/`, `memory/hobs/<name>/` and `memory/projects/<project>/`, and a hob's export holds its own. Pages are redacted like every other string. Memory that does not answer leaves the rest of the export as it is, and its README says so.
+
 ### Out of scope
 
 The Curator routine, skill distillation into `procedures/`, `memory_feedback`, automatic rewrites and the recall test that gates them; using an existing ai-memory server; native Windows, which ai-memory marks experimental.
@@ -143,5 +149,5 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - A lesson saved in one thread is in the next thread's brief for the same hob and never in another hob's; the brief stays within its budget, is resent only when it changed, and says memory is unavailable during an outage. Not proven yet: [#957](https://github.com/otaviobarros/hobbots/issues/957).
 - A share under each preset behaves as decided, and About you asks under every preset. Not proven yet: [#960](https://github.com/otaviobarros/hobbots/issues/960).
 - A changed memory model applies to the next summary after restarting only the ai-memory process, never the app, and No AI makes no model call. Not proven yet: [#962](https://github.com/otaviobarros/hobbots/issues/962).
-- A restored backup brings back every page and its history, and the old bearers no longer work. Not proven yet: [#963](https://github.com/otaviobarros/hobbots/issues/963).
+- A restored backup brings back every page and its history, and the old bearers no longer work. Proven against the bundled ai-memory: `[TC-OP-098]`; and at hub level, with no bearer in the backup: `[TC-OP-095]` to `[TC-OP-097]`, `[TC-OP-099]` ([#963](https://github.com/otaviobarros/hobbots/issues/963)).
 - End to end on the fake runtime: a lesson learned in one thread shows up in the next, a share goes through the Inbox, an outage loses nothing, and a restore keeps memory. Not proven yet: [#964](https://github.com/otaviobarros/hobbots/issues/964).

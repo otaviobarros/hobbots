@@ -6,10 +6,11 @@ import { NodeServices } from "@effect/platform-node";
 import { Context, Effect, Exit, Layer, Option, Redacted, Schedule, Scope } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { restoreMemoryArchive } from "../src/engine/backup.ts";
 import { defaultEngineFolder, ENGINE_BINARY } from "../src/engine/binary.ts";
 import { configHoldsCredential, ROOT_USERNAME } from "../src/engine/config.ts";
-import { MEMORY_WORKSPACE, type MemoryEndpoint, MemoryEngine } from "../src/engine/engine.ts";
-import { loadOrCreateMemoryKeys, type MemoryKeys } from "../src/engine/keys.ts";
+import { MEMORY_WORKSPACE, type MemoryEndpoint, MemoryEngine, memoryFolder } from "../src/engine/engine.ts";
+import { loadOrCreateMemoryKeys, type MemoryKeys, replaceMemoryKeys } from "../src/engine/keys.ts";
 import { AI_MEMORY_VERSION } from "../src/engine/release.ts";
 
 // Contract tests against the bundled ai-memory release (ADR 028): every route and setting Hobbots
@@ -22,9 +23,28 @@ const required = process.env.HOBBOTS_MEMORY_CONTRACT === "1";
 const enabled = fetched || required;
 
 const dataDir = mkdtempSync(join(tmpdir(), "hobbots-memory-contract-"));
+/** Where a backup of `dataDir`'s memory is restored. */
+const restoredDir = mkdtempSync(join(tmpdir(), "hobbots-memory-restored-"));
 let scope: Scope.Closeable | undefined;
+let engine: MemoryEngine["Service"];
 let endpoint: MemoryEndpoint;
 let keys: MemoryKeys;
+
+/** Starts the engine on `data` with `withKeys` in `opened`, where it runs until that scope closes. */
+const startEngine = (data: string, withKeys: MemoryKeys, opened: Scope.Scope) => {
+  const layer = MemoryEngine.layer({ folder: folder ?? "", dataDir: data, keys: withKeys }).pipe(
+    Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+  );
+  return Effect.gen(function* () {
+    const started = Context.get(yield* Layer.buildWithScope(layer, opened), MemoryEngine);
+    yield* started.health.pipe(
+      Effect.repeat({ schedule: Schedule.spaced("100 millis"), until: (health) => health.state !== "starting" }),
+      Effect.timeout("60 seconds"),
+    );
+    const at = Option.getOrThrowWith(yield* started.endpoint, () => new Error("The memory engine did not start"));
+    return { engine: started, endpoint: at };
+  }).pipe(Effect.runPromise);
+};
 
 beforeAll(async () => {
   if (!enabled) return;
@@ -32,23 +52,13 @@ beforeAll(async () => {
   keys = loadOrCreateMemoryKeys(dataDir);
   const opened = await Effect.runPromise(Scope.make());
   scope = opened;
-  const layer = MemoryEngine.layer({ folder: folder ?? "", dataDir, keys }).pipe(
-    Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
-  );
-  endpoint = await Effect.gen(function* () {
-    // Built in a scope of its own, so the engine runs until afterAll closes it.
-    const engine = Context.get(yield* Layer.buildWithScope(layer, opened), MemoryEngine);
-    yield* engine.health.pipe(
-      Effect.repeat({ schedule: Schedule.spaced("100 millis"), until: (health) => health.state !== "starting" }),
-      Effect.timeout("60 seconds"),
-    );
-    return Option.getOrThrowWith(yield* engine.endpoint, () => new Error("The memory engine did not start"));
-  }).pipe(Effect.runPromise);
+  ({ engine, endpoint } = await startEngine(dataDir, keys, opened));
 }, 90_000);
 
 afterAll(async () => {
   if (scope !== undefined) await Effect.runPromise(Scope.close(scope, Exit.void));
   rmSync(dataDir, { recursive: true, force: true });
+  rmSync(restoredDir, { recursive: true, force: true });
 });
 
 type Caller =
@@ -74,9 +84,9 @@ const headersFor = (caller: Caller, extra: Record<string, string> = {}): Record<
 const call = async (
   caller: Caller,
   path: string,
-  init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
+  init: { method?: string; body?: unknown; headers?: Record<string, string>; at?: MemoryEndpoint } = {},
 ) => {
-  const response = await fetch(`${endpoint.url}${path}`, {
+  const response = await fetch(`${(init.at ?? endpoint).url}${path}`, {
     method: init.method ?? (init.body === undefined ? "GET" : "POST"),
     headers: headersFor(caller, {
       ...(init.body === undefined ? {} : { "content-type": "application/json" }),
@@ -258,4 +268,37 @@ describe.runIf(enabled)(`the bundled ai-memory ${AI_MEMORY_VERSION}`, () => {
     expect(tarball).not.toContain(Redacted.value(keys.root));
     expect(tarball).not.toContain(Redacted.value(keys.proxy));
   });
+
+  // covers ADR 028 (Backups), OP-003
+  it("[TC-OP-098] restores a backup with every page and its history, and the old bearers no longer work", async () => {
+    const archive = join(restoredDir, "ai-memory.tar.gz");
+    expect(await Effect.runPromise(engine.backup(archive))).toBe(true);
+
+    // What a restore does: unpack memory into a new data folder, and give the hub new bearers.
+    await Effect.runPromise(restoreMemoryArchive(archive, memoryFolder(restoredDir)));
+    replaceMemoryKeys(restoredDir);
+    const fresh = loadOrCreateMemoryKeys(restoredDir);
+    expect(Redacted.value(fresh.root)).not.toBe(Redacted.value(keys.root));
+    const opened = await Effect.runPromise(Scope.make());
+    try {
+      const restored = (await startEngine(restoredDir, fresh, opened)).endpoint;
+      const asNew = { as: "bearer", bearer: Redacted.value(fresh.root) } as const;
+      const page = await call(asNew, `${project("hob-h1")}/pages/notes/tests.md`, { at: restored });
+      expect(page.status).toBe(200);
+      expect(((await page.json()) as { body_markdown: string }).body_markdown).toContain("pnpm test:pg");
+      const history = await call(asNew, `${project("hob-h1")}/history/notes/tests.md`, { at: restored });
+      expect(((await history.json()) as { total: number }).total).toBe(2);
+      // The index came back with it: search finds the page.
+      const hits = await call(asNew, `/api/v1/search?q=pnpm&workspace=${MEMORY_WORKSPACE}&project=hob-h1`, {
+        at: restored,
+      });
+      expect(await hits.json()).toEqual(expect.arrayContaining([expect.objectContaining({ path: "notes/tests.md" })]));
+
+      // Neither old bearer reaches the restored memory.
+      expect((await call({ as: "root" }, "/identity", { at: restored })).status).toBe(401);
+      expect((await call({ as: "hob", hob: "h1" }, "/identity", { at: restored })).status).toBe(401);
+    } finally {
+      await Effect.runPromise(Scope.close(opened, Exit.void));
+    }
+  }, 90_000);
 });

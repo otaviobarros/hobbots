@@ -225,5 +225,22 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           expect(yield* store.changes(asPip, pipsOwn, future)).toEqual([]);
         }),
       ));
+
+    // covers ADR 028 (Backups), OP-002
+    it("[TC-OP-094] names the scopes that hold pages, within what the actor may reach", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          expect(yield* store.scopes(you)).toEqual([]);
+          yield* store.write(asPip, pipsOwn, draft("notes/a.md", "# A"), fresh);
+          yield* store.write(asQuill, theSite, draft("facts/site.md", "# Site"), fresh);
+          yield* store.write(you, everyone, draft("about-you.md", "# About you"), fresh);
+          const gone = yield* store.write(asQuill, quillsOwn, draft("notes/b.md", "# B"), fresh);
+          yield* store.forget(you, quillsOwn, MemoryPath.make("notes/b.md"), { _tag: "Version", version: gone });
+          const key = (scope: MemoryScope) => JSON.stringify(scope);
+          // A scope whose only page was forgotten holds nothing to name.
+          expect((yield* store.scopes(you)).map(key).sort()).toEqual([pipsOwn, theSite, everyone].map(key).sort());
+          expect((yield* store.scopes(asPip)).map(key).sort()).toEqual([pipsOwn, everyone].map(key).sort());
+        }),
+      ));
   });
 };

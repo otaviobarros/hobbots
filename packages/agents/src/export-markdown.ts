@@ -188,6 +188,20 @@ const whatOf = (data: HobbotsExport, names: ExportNames): string => {
 };
 
 /** The README at the top of an export: what it holds, when and by which Hobbots, and that redaction is best effort. */
+/** What the export holds of memory (ADR 028), if its scope covers any. */
+const memoryLines = (data: HobbotsExport): ReadonlyArray<string> => {
+  switch (data.memory.state) {
+    case "none":
+      return [];
+    case "unavailable":
+      return ["- `memory/`: memory did not answer when this export was made, so it holds none of it."];
+    case "included":
+      return [
+        `- \`memory/\`: ${data.memory.pages.length} pages your hobs remember, one Markdown file each: \`everyone/\` for everyone, \`hobs/\` for each hob's own and \`projects/\` for each project's.`,
+      ];
+  }
+};
+
 export const readmeMarkdown = (data: HobbotsExport, names: ExportNames, files: number): string =>
   [
     "# Hobbots export",
@@ -197,13 +211,14 @@ export const readmeMarkdown = (data: HobbotsExport, names: ExportNames, files: n
     `- \`threads/\`: ${data.threads.length} threads, one Markdown file each.`,
     `- \`quests/\`: ${data.quests.length} Quests and Tasks, one Markdown file for each Task you asked for.`,
     `- \`files/\`: ${files} files the Tasks made, copied from the hobs' folders.`,
+    ...memoryLines(data),
     `- \`export.json\`: all of the above as data, format \`${EXPORT_FORMAT}\` version ${EXPORT_VERSION}, with Hobbots' own IDs.`,
     "",
     "## Redaction",
     "",
     "Every piece of text in this export went through Hobbots' redactor, your own messages included: secrets it knows by value and anything shaped like a key or token are replaced with `[redacted: …]`. Redaction is best effort, and a secret it cannot recognize still passes through.",
     "",
-    "Text files in `files/` went through the redactor too. Any other file is copied as it is only when the redactor found nothing in it, and is listed and not copied otherwise. A file whose name marks it as one that may hold secrets, such as `.env`, is listed and not copied.",
+    "Text files in `files/` and the memory pages in `memory/` went through the redactor too. Any other file is copied as it is only when the redactor found nothing in it, and is listed and not copied otherwise. A file whose name marks it as one that may hold secrets, such as `.env`, is listed and not copied.",
     "",
     "## What is not here",
     "",

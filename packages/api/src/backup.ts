@@ -4,7 +4,7 @@ import { InvalidFolder } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /** What a backup's copy is doing now, so Settings can show its progress. */
-export const BackupStep = Schema.Literals(["database", "workspace", "activity", "tool-logs", "manifest"]);
+export const BackupStep = Schema.Literals(["database", "workspace", "activity", "tool-logs", "memory", "manifest"]);
 export type BackupStep = typeof BackupStep.Type;
 
 /**

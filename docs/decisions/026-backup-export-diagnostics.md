@@ -112,6 +112,7 @@ An export is a folder named `Hobbots export <what> <date>`:
 | `threads/<date> <title>.md` | Each thread as Markdown: who wrote each message and when, the replies, and each tool step as one line with its outcome. |
 | `quests/<date> <title>.md` | Each Quest as a tree: each Task's hob, state, result, artifacts, questions with answers and notes, and each Attempt's outcome, commands and changed files as lists. |
 | `files/` | The files the Tasks made, copied from the hob's folders (below). |
+| `memory/` | Memory pages as Markdown, by scope: everyone's, each hob's own and each project's in an export of everything, the hob's own in a hob's ([ADR 028](028-memory.md)). |
 | `export.json` | Everything above as data: format `hobbots.export`, version 1, with the hub's own IDs, so a program can read it. |
 
 - **Artifacts.** A file artifact is copied into `files/<task id>/` when it is still a regular file in the hob's folders, up to 100 MiB each and 1 GiB per export, counted on what is written after redaction. A file that is UTF-8 text goes through the redactor like every other string. Any other file is copied as it is only when the redactor finds nothing in its bytes. Past the limits, when it is gone, or when it holds a secret that cannot be redacted, the Quest file lists it with its path and why it was not copied. A link or text artifact is written in place.

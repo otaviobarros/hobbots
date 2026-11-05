@@ -9,6 +9,8 @@ import {
   type ExportedArtifact,
   type ExportedAttempt,
   type ExportedHob,
+  type ExportedMemory,
+  type ExportedMemoryPage,
   type ExportedMessage,
   type ExportedQuest,
   type ExportedTask,
@@ -17,6 +19,7 @@ import {
   type ExportScope,
   HobbotsExport,
   isSecretFile,
+  type MemoryScope,
   type Message,
   type Quest,
   safeFileName,
@@ -31,6 +34,7 @@ import { ActivityRepository } from "./activity.ts";
 import { SaveDestinations } from "./destinations.ts";
 import { EXPORT_LIMITS, type ExportLimits, exportedContents, overLimits } from "./export-files.ts";
 import { type ExportNames, readmeMarkdown, threadMarkdown, treeMarkdown } from "./export-markdown.ts";
+import { MemoryStore } from "./memory.ts";
 import { hobFoldersNow } from "./permissions.ts";
 import { FolderChecks, InstallationSettings } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -178,6 +182,34 @@ interface FileSource {
   readonly value: string;
 }
 
+/** The most pages an export takes from one memory scope. */
+const MEMORY_PAGES_PER_SCOPE = 10_000;
+
+/** Memory as an export reads it: each page's record and, at the same index, its Markdown. */
+interface GatheredMemory {
+  readonly memory: ExportedMemory;
+  readonly markdown: ReadonlyArray<string>;
+}
+
+const NO_MEMORY: GatheredMemory = { memory: { state: "none", pages: [] }, markdown: [] };
+
+/** Everyone's memory first, then each hob's, then each project's, each by its folder's name. */
+const SCOPE_ORDER: Record<MemoryScope["_tag"], number> = { Everyone: 0, Hob: 1, Project: 2 };
+
+/** The folder of a scope's pages in an export: `memory/everyone`, `memory/hobs/<name>`, `memory/projects/<identity>`. */
+const memoryFolderOf = (scope: MemoryScope, hobs: ReadonlyArray<Agent>): string => {
+  switch (scope._tag) {
+    case "Everyone":
+      return "memory/everyone";
+    case "Hob": {
+      const name = hobs.find((hob) => hob.id === scope.agentId)?.name ?? scope.agentId;
+      return `memory/hobs/${safeFileName(name, "hob")}`;
+    }
+    case "Project":
+      return `memory/projects/${safeFileName(scope.identity, "project")}`;
+  }
+};
+
 /** The name of the export's folder, from its redacted records: `Hobbots export <what> <date>`. */
 const folderName = (data: HobbotsExport): string => {
   const date = data.exportedAt.slice(0, 10);
@@ -217,6 +249,8 @@ export class DataExport extends Context.Service<
         const files = yield* HobFiles;
         const folderChecks = yield* FolderChecks;
         const setup = yield* InstallationSettings;
+        // A hub without memory exports none.
+        const memoryStore = yield* Effect.serviceOption(MemoryStore);
         // Without the hub's redactor, secret shapes are still redacted.
         const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
 
@@ -345,6 +379,51 @@ export class DataExport extends Context.Service<
             } satisfies ExportedTree;
           });
 
+        /**
+         * Each memory page the scope covers, as you read it (ADR 028): every scope for everything, the
+         * hob's own memory for a hob, none for a thread. Memory that does not answer leaves the rest
+         * of the export as it is, and the README says so.
+         */
+        const gatherMemory = (scope: ExportScope, hobs: ReadonlyArray<Agent>) =>
+          Effect.gen(function* () {
+            if (Option.isNone(memoryStore) || scope._tag === "Thread") return NO_MEMORY;
+            const store = memoryStore.value;
+            const you = { _tag: "You" } as const;
+            const held = yield* store.scopes(you);
+            const wanted = held
+              .filter((each) => scope._tag === "Everything" || (each._tag === "Hob" && each.agentId === scope.agentId))
+              .map((each) => ({ scope: each, folder: memoryFolderOf(each, hobs) }))
+              .sort(
+                (a, b) => SCOPE_ORDER[a.scope._tag] - SCOPE_ORDER[b.scope._tag] || a.folder.localeCompare(b.folder),
+              );
+            const taken = new Set<string>();
+            const pages: Array<ExportedMemoryPage> = [];
+            const markdown: Array<string> = [];
+            for (const { scope: each, folder } of wanted) {
+              // Two hobs of one name, or two projects that read alike, each keep a folder of their own.
+              const unique = uniqueName(taken, folder);
+              for (const summary of yield* store.list(you, each, MEMORY_PAGES_PER_SCOPE)) {
+                const page = yield* store.page(you, each, summary.path);
+                if (page === null) continue;
+                pages.push({
+                  scope: each,
+                  path: page.path,
+                  title: summary.title,
+                  pinned: page.pinned,
+                  author: page.author,
+                  updatedAt: page.updatedAt,
+                  file: `${unique}/${page.path}`,
+                });
+                markdown.push(page.markdown);
+              }
+            }
+            return { memory: { state: "included", pages }, markdown } satisfies GatheredMemory;
+          }).pipe(
+            Effect.catchTag("MemoryUnavailable", () =>
+              Effect.succeed<GatheredMemory>({ memory: { state: "unavailable", pages: [] }, markdown: [] }),
+            ),
+          );
+
         /** The hobs the export names: every hob for everything, else those its records mention. */
         const namedHobs = (scope: ExportScope, gathered: Gathered, trees: ReadonlyArray<ExportedTree>) => {
           if (scope._tag === "Everything") return gathered.hobs;
@@ -361,7 +440,7 @@ export class DataExport extends Context.Service<
         };
 
         /** The export's records, unredacted, with where each file artifact's bytes come from. */
-        const records = (scope: ExportScope, gathered: Gathered, exportedAt: string) =>
+        const records = (scope: ExportScope, gathered: Gathered, exportedAt: string, memory: ExportedMemory) =>
           Effect.gen(function* () {
             const threads = yield* Effect.forEach(gathered.threads, (thread) =>
               Effect.map(
@@ -399,6 +478,7 @@ export class DataExport extends Context.Service<
               hobs: namedHobs(scope, gathered, trees).map(exportedHob),
               threads,
               quests: trees,
+              memory,
             };
             return { data, sources };
           });
@@ -484,13 +564,17 @@ export class DataExport extends Context.Service<
             return { ...data, quests };
           });
 
-        const write = (folder: string, data: HobbotsExport) =>
+        const write = (folder: string, data: HobbotsExport, memoryMarkdown: ReadonlyArray<string>) =>
           Effect.gen(function* () {
             const names: ExportNames = new Map(data.hobs.map((hob) => [hob.id, hob.name]));
             const artifacts = data.quests.flatMap((tree) => tree.tasks.flatMap((task) => task.artifacts));
             const copied = artifacts.filter((artifact) => artifact.copiedTo !== null).length;
             for (const thread of data.threads) yield* folders.write(folder, thread.file, threadMarkdown(thread, names));
             for (const tree of data.quests) yield* folders.write(folder, tree.file, treeMarkdown(tree, names));
+            // Each memory page as its Markdown, through the redactor like every other string.
+            for (const [index, page] of data.memory.pages.entries()) {
+              yield* folders.write(folder, page.file, redactor.text(memoryMarkdown[index] ?? ""));
+            }
             yield* folders.write(folder, "export.json", `${JSON.stringify(encodeExport(data), null, 2)}\n`);
             yield* folders.write(folder, "README.md", readmeMarkdown(data, names, copied));
             return {
@@ -507,13 +591,14 @@ export class DataExport extends Context.Service<
             const parent = yield* destinations.check(destination);
             const exportedAt = DateTime.formatIso(yield* DateTime.now);
             const gathered = yield* gather(scope);
-            const { data, sources } = yield* records(scope, gathered, exportedAt);
+            const memory = yield* gatherMemory(scope, gathered.hobs);
+            const { data, sources } = yield* records(scope, gathered, exportedAt, memory.memory);
             // Every string, your own messages and the hobs' replies included (ADR 026).
             const redacted = named(redactor.value(data));
             const folder = yield* folders.create(parent, folderName(redacted));
             return yield* Effect.gen(function* () {
               const copied = yield* copyFiles(folder, redacted, sources, gathered.hobs);
-              return yield* write(folder, copied);
+              return yield* write(folder, copied, memory.markdown);
             }).pipe(Effect.onError(() => folders.remove(folder)));
           });
 
