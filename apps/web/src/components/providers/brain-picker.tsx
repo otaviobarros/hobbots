@@ -3,6 +3,7 @@ import {
   type Brain,
   brainLabel,
   type Effort,
+  offeredModels,
   RUNTIME_NAMES,
   type RuntimeHealth,
   type RuntimeKind,
@@ -21,7 +22,7 @@ import { type ReactNode, useId, useRef, useState } from "react";
 import { effortWords } from "../../api/first-hob.ts";
 import { modelsQuery, runtimesQuery, threadBrain, useSetBrain } from "../../api/queries.ts";
 import { modelName, pickedBrain } from "../../lib/brains.ts";
-import { PROVIDER_MARKS } from "../../lib/providers.ts";
+import { PROVIDER_MARKS, RUNTIME_STATE_WORDS } from "../../lib/providers.ts";
 import { messages } from "../messages.ts";
 import { providerFix } from "./provider-fix.tsx";
 
@@ -40,14 +41,6 @@ export const RuntimeTile = ({ runtime }: { runtime: RuntimeKind }) => (
   </span>
 );
 
-const STATE_WORDS: Record<RuntimeHealth["availability"], string> = {
-  ready: "ready",
-  outdated: "outdated",
-  signedOut: "signed out",
-  unavailable: "unavailable",
-  unverified: "unverified",
-};
-
 /** "Claude Code · Sonnet", with the model's own name when the runtime lists it. */
 export const useBrainLabel = (brain: { readonly runtime: RuntimeKind; readonly model: string | null }) => {
   const models = useQuery(modelsQuery(brain.runtime));
@@ -62,7 +55,7 @@ const unavailableReason = (health: RuntimeHealth) => {
     providerFix(health.runtime, health) ??
     (health.availability === "unverified"
       ? copy.notOnThisHub({ runtime })
-      : copy.notReady({ runtime, state: STATE_WORDS[health.availability] }))
+      : copy.notReady({ runtime, state: RUNTIME_STATE_WORDS[health.availability] }))
   );
 };
 
@@ -73,7 +66,7 @@ export const useThreadBrain = (hob: Agent, thread: Thread | undefined) => {
   const label = brain.effort === null ? modelLabel : `${modelLabel} · ${effortWords(brain.effort).label}`;
   const runtimes = useQuery(runtimesQuery);
   const health = runtimes.data?.find((h) => h.runtime === brain.runtime);
-  const state = runtimes.isPending ? "checking" : health ? STATE_WORDS[health.availability] : "unknown";
+  const state = runtimes.isPending ? "checking" : health ? RUNTIME_STATE_WORDS[health.availability] : "unknown";
   return { brain, label, state, checking: runtimes.isPending, ready: health?.availability === "ready" };
 };
 
@@ -187,7 +180,7 @@ function RuntimeChoices({
         <RuntimeTile runtime={health.runtime} />
         <b className="flex-1">{RUNTIME_NAMES[health.runtime]}</b>
         <span className={reason === null ? "text-meta text-mint" : "text-meta text-lantern"}>
-          {STATE_WORDS[health.availability]}
+          {RUNTIME_STATE_WORDS[health.availability]}
         </span>
       </span>
       {reason !== null ? (
@@ -300,9 +293,7 @@ function EffortChoices({
 
 /** The runtime's main models, the one the thread thinks with even if it is not main, or its default. */
 const modelChoices = (models: RuntimeModels | undefined, current: Brain, runtime: RuntimeKind) => {
-  const listed = (models?.models ?? []).filter(
-    (m) => m.id !== "default" && (m.main || (current.runtime === runtime && current.model === m.id)),
-  );
+  const listed = offeredModels(models, current.runtime === runtime ? current.model : null);
   return [
     { model: null, name: copy.defaultModel },
     ...listed.map((m) => ({ model: m.id as string | null, name: m.displayName })),

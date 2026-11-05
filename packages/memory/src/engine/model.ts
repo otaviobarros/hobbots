@@ -1,80 +1,44 @@
 import {
-  type MemoryModelName,
-  type MemoryModelState,
+  MEMORY_RUNTIMES,
   type MemoryModelVendor,
   type MemorySettings,
+  NO_MEMORY_MODEL,
   otherMemoryProvider,
-  STRONGER_MEMORY_MODEL,
+  SAME_MEMORY_MODEL,
 } from "@hobbots/domain";
-import { type EngineModel, type EngineSettings, type EngineTask, NO_MODEL } from "./config.ts";
+import { type EngineModel, type EngineSettings, type EngineTask, NO_MODEL, SMALLEST_MODEL } from "./config.ts";
 
-/** Each provider as the engine names it, and how it signs in. */
-const ENGINE_PROVIDERS: Readonly<Record<MemoryModelVendor, string>> = {
-  // An Anthropic API key. A Claude subscription's sign-in is refused for other apps.
-  claude: "anthropic",
-  // The ChatGPT sign-in, through Codex.
-  chatgpt: "codex",
-};
-
-/** Each model's id at its provider. */
-const ENGINE_MODELS: Readonly<Record<MemoryModelName, string>> = {
-  haiku: "claude-haiku-5-5",
-  sonnet: "claude-sonnet-5-5",
-  opus: "claude-opus-5-5",
-  mini: "gpt-5.4-mini",
-  "gpt-5.5": "gpt-5.5",
-};
-
-/** The variable each provider's key is in; the ChatGPT sign-in has its own files instead. */
-const KEY_ENV: Readonly<Record<MemoryModelVendor, string | undefined>> = {
-  claude: "ANTHROPIC_API_KEY",
-  chatgpt: undefined,
-};
-
-const engineModel = (provider: MemoryModelVendor, model: MemoryModelName): EngineModel => ({
-  provider: ENGINE_PROVIDERS[provider],
-  name: ENGINE_MODELS[model],
-  keyEnv: KEY_ENV[provider],
+/** A model on the provider's runtime: the one chosen, or its smallest when none is. */
+const onRuntime = (provider: MemoryModelVendor, model: string | null): EngineModel => ({
+  runtime: MEMORY_RUNTIMES[provider],
+  name: model ?? SMALLEST_MODEL,
 });
 
-/** The engine settings for a memory model, and what memory runs with because of them. */
-export interface EngineChoice {
-  readonly engine: EngineSettings;
-  readonly state: MemoryModelState;
-}
+/** A task's own model, or none when it uses the memory model itself. */
+const taskModel = (provider: MemoryModelVendor, choice: string): EngineModel | undefined =>
+  choice === SAME_MEMORY_MODEL || choice === NO_MEMORY_MODEL ? undefined : onRuntime(provider, choice);
 
 /**
- * The engine settings for the memory model you chose (ADR 028). The engine refuses to start with
- * a provider it has no credential for, so a provider `canRun` does not answer for is left out: the
- * engine runs with no AI when it is the chosen one, and plain summaries stand in for it as a
- * fallback. No AI leaves out every model, so no task calls one.
+ * The engine settings for the memory model you chose (ADR 028). Every model runs on its provider's
+ * runtime through the hub's endpoint, which checks the model against what the runtime offers when
+ * a task asks for it, so these depend on nothing but your choice: a runtime that is signed out or
+ * limited fails the task, and the fallback applies. No AI leaves out every model, so no task calls
+ * one.
  */
-export const engineSettingsFor = (
-  settings: MemorySettings,
-  canRun: (provider: MemoryModelVendor) => boolean,
-): EngineChoice => {
+export const engineSettingsFor = (settings: MemorySettings): EngineSettings => {
   const provider = settings.provider;
-  if (provider === "none") return { engine: NO_MODEL, state: { _tag: "NoAi" } };
-  if (!canRun(provider)) return { engine: NO_MODEL, state: { _tag: "NeedsKey", provider } };
-  const other = otherMemoryProvider(provider);
-  const fallbacks = settings.fallback === "other" && canRun(other) ? [engineModel(other, otherSmallModel(other))] : [];
-  const stronger = engineModel(provider, STRONGER_MEMORY_MODEL[provider]);
-  const tasks: Partial<Record<EngineTask, EngineModel>> = {
-    ...(settings.tasks.summaries === "stronger" && { consolidation: stronger }),
-    ...(settings.tasks.check === "stronger" && { lint: stronger }),
-    ...(settings.tasks.answers === "stronger" && { query_answer: stronger }),
-  };
+  if (provider === "none") return NO_MODEL;
+  const fallbacks = settings.fallback === "other" ? [onRuntime(otherMemoryProvider(provider), null)] : [];
+  const own: ReadonlyArray<readonly [EngineTask, EngineModel | undefined]> = [
+    ["consolidation", taskModel(provider, settings.tasks.summaries)],
+    ["lint", taskModel(provider, settings.tasks.check)],
+    ["query_answer", taskModel(provider, settings.tasks.answers)],
+  ];
   return {
-    engine: {
-      model: engineModel(provider, settings.model),
-      effort: settings.effort,
-      fallbacks,
-      tasks,
-      summarize: settings.tasks.summaries !== "none",
-    },
-    state: { _tag: "Model" },
+    model: onRuntime(provider, settings.model),
+    effort: settings.effort,
+    fallbacks,
+    tasks: Object.fromEntries(own.filter(([, model]) => model !== undefined)),
+    summarize: settings.tasks.summaries !== NO_MEMORY_MODEL,
   };
 };
-
-/** The model a fallback to `provider` uses: its smallest. */
-const otherSmallModel = (provider: MemoryModelVendor): MemoryModelName => (provider === "claude" ? "haiku" : "mini");

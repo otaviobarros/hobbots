@@ -331,6 +331,8 @@ const openThread = (server: AppServer, request: PromptRequest, cwd: string, inst
         ...model,
         developerInstructions: instructions,
         dynamicTools: dynamicToolsOf(request.hubTools),
+        // A turn of no hob's keeps no thread on disk.
+        ...(request.ephemeral ? { ephemeral: true } : {}),
       });
 };
 

@@ -24,8 +24,8 @@ export const messages = {
   },
   chat: {
     title: "In a chat",
-    body: ", each hob saves notes with its own model.",
-    note: "Change a hob's model on its profile.",
+    body: ", a hob saves what it learns as it works, with no extra model call.",
+    note: "Summaries after a chat use the memory model below.",
   },
   model: {
     title: "Memory model",
@@ -36,18 +36,24 @@ export const messages = {
     effort: "Effort",
     providers: { claude: "Claude", chatgpt: "ChatGPT", gemini: "Gemini", none: "No AI" },
     geminiLater: "Gemini arrives in a later update.",
-    models: { haiku: "Haiku", sonnet: "Sonnet", opus: "Opus", mini: "GPT-5.4 mini", "gpt-5.5": "GPT-5.5" },
-    efforts: { low: "Low", medium: "Medium", high: "High" },
     hints: {
       none: "Summaries are short lists of what happened, with no AI. Free, and nothing leaves the hub.",
       high: "High effort can be too slow for summaries: they may time out and fall back. Low is enough for this work.",
-      claude: "Uses an Anthropic API key.",
+      claude: "Uses your Claude Code sign-in.",
       chatgpt: "Uses your ChatGPT sign-in through Codex.",
       small: "A small, fast model is enough for summaries.",
-      opus: "Opus is the most careful, and costs the most.",
+      bigger: "A bigger model is more careful, and uses more of your plan.",
     },
-    needsKey: ({ provider }: { provider: string }) =>
-      `Hobbots can't hand ${provider} a key yet, so memory writes summaries with no AI for now. Your choice is kept for when it can.`,
+    noModels: "The models appear once the provider answers.",
+    replaced: ({ chosen, model }: { chosen: string; model: string }) =>
+      `${chosen} is no longer offered, so memory uses ${model} instead.`,
+    taskReplaced: ({ task, chosen, model }: { task: string; chosen: string; model: string }) =>
+      `${task}: ${chosen} is no longer offered, so it uses ${model} instead.`,
+    notReady: "Until it is back, summaries follow your choice below.",
+    limited: ({ provider }: { provider: string }) =>
+      `Your ${provider} plan reached its limit. Until it refills, summaries follow your choice below.`,
+    limitedUntil: ({ provider, until }: { provider: string; until: string }) =>
+      `Your ${provider} plan reached its limit. Until it refills at ${until}, summaries follow your choice below.`,
     applies: "A change restarts only the memory engine, never the app.",
     saveFailed: "Hobbots could not save this choice, so memory still runs with the one before.",
     retry: "Try again",
@@ -56,7 +62,7 @@ export const messages = {
   fallback: {
     title: "If it is not available",
     options: { plain: "Write simple summaries", other: ({ other }: { other: string }) => `Use ${other}` },
-    note: "For example, when a plan runs out for the week. Nothing is lost either way: a summary written without AI can be improved later.",
+    note: "For example, when a plan runs out for the week or a provider is signed out. Nothing is lost either way: a summary written without AI can be improved later.",
   },
   tasks: {
     show: "Choose a model per task…",
@@ -67,6 +73,7 @@ export const messages = {
       answers: { title: "Answering questions about memory", detail: "When you ask Memory a question in plain words" },
     },
     same: "Same",
+    gone: ({ model }: { model: string }) => `${model} (no longer offered)`,
     none: "No AI",
     pickFirst: "Pick a provider first.",
     note: "Effort is shared by every task. Searching and saving never need a model.",
@@ -92,7 +99,9 @@ export const messages = {
   usage: {
     label: "Memory",
     noAi: "No AI: memory makes no model calls.",
-    needsKey: "Memory writes summaries with no AI until Hobbots can hand its model a key.",
+    unavailable: ({ provider, state }: { provider: string; state: string }) =>
+      `${provider} is ${state}, so summaries follow your fallback for now.`,
+    limited: "at its plan's limit",
     calls: ({ calls, tokens }: { calls: string; tokens: string }) => `${calls} · ${tokens} since memory last started`,
     callCount: { one: "1 call", other: (count: string) => `${count} calls` },
     tokens: ({ count }: { count: string }) => `${count} tokens`,
