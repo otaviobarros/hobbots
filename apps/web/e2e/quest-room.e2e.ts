@@ -187,19 +187,49 @@ test("[TC-UX-205] at 960 px the chat starts folded and opens over the lanes, and
     expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
   }
 
-  // A row in a card's backpack that has focus when its item is handled moves into the card's details
-  // with it, and focus goes to their summary. The answer is sent without moving focus off the row.
-  const build = laneTask(page, "Build the campaign");
-  const row = build.getByRole("region", { name: "Backpack for Build the campaign" }).getByRole("button");
-  await row.focus();
-  await asks.getByRole("button", { name: /^Dec 12 for international/ }).dispatchEvent("click");
-  await expect(build.getByText("Everything in this task")).toBeFocused();
-  await expect(build.getByRole("region", { name: "Backpack for Build the campaign" })).toHaveCount(0);
-
   await room.getByRole("button", { name: "Close room" }).focus();
   await page.keyboard.press("Enter");
   await expect(room).toBeHidden();
   expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+});
+
+/** Opens the Black Friday room at 960 px once Ada asks, and gives back her question and her Task. */
+const roomOnAdasQuestion = async (page: Page) => {
+  await page.setViewportSize({ width: 960, height: 800 });
+  const { url, aldric } = await questHub();
+  await startQuest(page, url, aldric);
+  await openRoom(page, TITLE);
+  const asks = lane(page, "Ada").getByRole("region", { name: "Ada asks you" });
+  await expect(asks).toBeVisible({ timeout: 20_000 });
+  const build = laneTask(page, "Build the campaign");
+  return { asks, build, backpack: build.getByRole("region", { name: "Backpack for Build the campaign" }) };
+};
+
+// covers UX-006
+test("[TC-UX-215] a backpack row that has focus when its item is handled hands focus to its card's details", async ({
+  page,
+}) => {
+  const { asks, build, backpack } = await roomOnAdasQuestion(page);
+  // The answer is sent without moving focus off the row; the row moves into the card's details.
+  await backpack.getByRole("button").focus();
+  await asks.getByRole("button", { name: /^Dec 12 for international/ }).dispatchEvent("click");
+  await expect(build.getByText("Everything in this task")).toBeFocused();
+  await expect(backpack).toHaveCount(0);
+});
+
+// covers UX-006
+test("[TC-UX-216] a card whose backpack row had focus earlier leaves focus alone once focus has moved on", async ({
+  page,
+}) => {
+  const { asks, build, backpack } = await roomOnAdasQuestion(page);
+  // Focus visits the row, then moves to Ada's choice, which answers. The row and the choice both go,
+  // and the card does not take focus back: it had already left the card.
+  await backpack.getByRole("button").focus();
+  const choice = asks.getByRole("button", { name: /^Dec 12 for international/ });
+  await choice.focus();
+  await page.keyboard.press("1");
+  await expect(backpack).toHaveCount(0);
+  await expect(build.getByText("Everything in this task")).not.toBeFocused();
 });
 
 // covers UX-002, OR-001

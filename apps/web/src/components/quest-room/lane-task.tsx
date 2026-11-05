@@ -61,7 +61,8 @@ export function TaskCards({
  *
  * The backpack shows on the card while something waits and moves into the details once nothing
  * does. A row that had focus goes with it, so focus moves to the details' summary, which now holds
- * it, rather than falling back to the page (#986).
+ * it, rather than falling back to the page (#986). Only a card that holds focus when its row goes
+ * takes it: once focus has moved out of the card, the card forgets the row.
  */
 function TaskCard({
   tree,
@@ -98,6 +99,19 @@ function TaskCard({
       aria-label={taskTitle(task)}
       onFocus={(event) => {
         focused.current = event.target;
+      }}
+      onBlur={(event) => {
+        const left = event.target;
+        // Focus that moves out of the card is no longer the card's to give back.
+        if (event.relatedTarget !== null) {
+          if (!event.currentTarget.contains(event.relatedTarget)) focused.current = null;
+          return;
+        }
+        // Focus that goes nowhere left with a removed row, which the card recovers; focus that left
+        // the page from a row still there, such as to another window, is not the card's either.
+        queueMicrotask(() => {
+          if (left.isConnected && focused.current === left) focused.current = null;
+        });
       }}
       className="flex min-w-0 flex-col gap-2 border-t border-line pt-2.5 text-detail wrap-anywhere"
     >
