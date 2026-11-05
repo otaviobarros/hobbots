@@ -232,12 +232,14 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       () =>
         run(({ store }) =>
           Effect.gen(function* () {
-            const paths = Array.from({ length: 101 }, (_, at) => `notes/n${String(at).padStart(3, "0")}.md`);
+            // 101 pages stay after one is forgotten: more than one answer of the engine holds.
+            const paths = Array.from({ length: 102 }, (_, at) => `notes/n${String(at).padStart(3, "0")}.md`);
             const [first = "", ...rest] = paths;
             const version = yield* store.write(you, theApp, draft(first, "# Note"), fresh);
             for (const path of rest) yield* store.write(you, theApp, draft(path, "# Note"), fresh);
             yield* store.forget(you, theApp, MemoryPath.make(first), { _tag: "Version", version });
             const everything = yield* store.changes(you, theApp, "1970-01-01T00:00:00.000Z");
+            expect(rest).toHaveLength(101);
             expect(everything.map((page) => page.path).sort()).toEqual(rest);
           }),
         ),
