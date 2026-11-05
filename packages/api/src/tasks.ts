@@ -3,6 +3,8 @@ import {
   FailedTask,
   HistoryFilter,
   HistoryPage,
+  HubQuestion,
+  HubQuestionId,
   MemberWork,
   NoteId,
   Quest,
@@ -22,6 +24,8 @@ import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import {
   AgentNotFound,
   HobUnavailable,
+  HubQuestionClosed,
+  HubQuestionNotFound,
   NoteRefused,
   QuestionClosed,
   QuestionNotFound,
@@ -138,6 +142,10 @@ export type WaitingQuestion = typeof WaitingQuestion.Type;
 export const WaitingQuestionsRead = Schema.Struct({ cursor: Schema.String, questions: Schema.Array(WaitingQuestion) });
 export type WaitingQuestionsRead = typeof WaitingQuestionsRead.Type;
 
+/** The questions the hub itself waits on you for (#976), oldest first, with the cursor as above. */
+export const HubQuestionsRead = Schema.Struct({ cursor: Schema.String, questions: Schema.Array(HubQuestion) });
+export type HubQuestionsRead = typeof HubQuestionsRead.Type;
+
 /** `via` says where you answered: the card in the chat, the Inbox or the Task's drawer (#671). */
 export const AnswerQuestionPayload = Schema.Struct({
   answer: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(4000)),
@@ -166,6 +174,14 @@ export class QuestionsGroup extends HttpApiGroup.make("questions")
       payload: AnswerQuestionPayload,
       success: Question,
       error: [QuestionNotFound, QuestionClosed],
+    }),
+    // Questions the hub itself puts to you (#976): open ones, oldest first, and your answer.
+    HttpApiEndpoint.get("listHub", "/hub-questions", { success: HubQuestionsRead }),
+    HttpApiEndpoint.post("answerHub", "/hub-questions/:hubQuestionId/answer", {
+      params: { hubQuestionId: HubQuestionId },
+      payload: AnswerQuestionPayload,
+      success: HubQuestion,
+      error: [HubQuestionNotFound, HubQuestionClosed],
     }),
     HttpApiEndpoint.post("leaveNote", "/tasks/:taskId/notes", {
       params: { taskId: TaskId },

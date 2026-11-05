@@ -13,6 +13,7 @@ import {
   HobAdmission,
   HobLifecycle,
   HobService,
+  HubQuestions,
   MemoryBriefReceipts,
   PermissionSummary,
   RecoveryLog,
@@ -61,6 +62,7 @@ import {
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   HobGitHubAppRepository,
+  HubQuestionRepositoryLive,
   RestoreRepository,
   SearchIndex,
   SetupRepository,
@@ -187,6 +189,7 @@ const ServerLive = Layer.unwrap(
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
+      HubQuestionRepositoryLive,
       RestoreRepository.layer,
       EventJournal.layer,
       SetupRepository.layer,
@@ -374,6 +377,8 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       )
+      // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
+      .pipe(Layer.provideMerge(HubQuestions.layer))
       // Before the chat service, so turns can ask, and after a restart the requests left pending expire.
       .pipe(Layer.provideMerge(ApprovalService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))

@@ -6,6 +6,7 @@ import {
   ApprovalState,
   CharmCallState,
   GrantId,
+  HubQuestionId,
   MessageId,
   PolicyOperation,
   QuestId,
@@ -200,6 +201,19 @@ export class QuestionNotFound extends Schema.TaggedError<QuestionNotFound>()(
 export class QuestionClosed extends Schema.TaggedError<QuestionClosed>()(
   "QuestionClosed",
   { questionId: QuestionId },
+  { httpApiStatus: 409 },
+) {}
+
+export class HubQuestionNotFound extends Schema.TaggedError<HubQuestionNotFound>()(
+  "HubQuestionNotFound",
+  { hubQuestionId: HubQuestionId },
+  { httpApiStatus: 404 },
+) {}
+
+/** A question from the hub that is no longer yours to answer: it was answered or withdrawn (#976). */
+export class HubQuestionClosed extends Schema.TaggedError<HubQuestionClosed>()(
+  "HubQuestionClosed",
+  { hubQuestionId: HubQuestionId },
   { httpApiStatus: 409 },
 ) {}
 

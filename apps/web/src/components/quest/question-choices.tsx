@@ -5,6 +5,9 @@ import { messages } from "./messages.ts";
 
 const copy = messages.question;
 
+/** What the buttons read from a question, a hob's or the hub's own (#976). */
+type Choices = Pick<Question, "options" | "recommended">;
+
 /** How a question's choices show: full rows with what each does, or chips where space is short. */
 export type ChoicesLook = "rows" | "chips";
 
@@ -20,7 +23,7 @@ export function QuestionChoices({
   disabled,
   onPick,
 }: {
-  question: Question;
+  question: Choices;
   askerName: string;
   look: ChoicesLook;
   disabled: boolean;
@@ -43,7 +46,7 @@ function ChoiceList({
   disabled,
   onPick,
 }: {
-  question: Question;
+  question: Choices;
   askerName: string;
   look: ChoicesLook;
   disabled: boolean;
@@ -127,7 +130,7 @@ function Recommended() {
  * An answered question's choices, under your answer on its card: what the one you picked does, and
  * what else was offered; for an answer in words, that it was none of them.
  */
-export function AnsweredChoices({ question }: { question: Question }) {
+export function AnsweredChoices({ question }: { question: Pick<Question, "options" | "picked"> }) {
   if (question.options.length === 0) return null;
   const picked = question.picked === null ? undefined : question.options[question.picked];
   const others = question.options.filter((_, index) => index !== question.picked).map((option) => option.label);

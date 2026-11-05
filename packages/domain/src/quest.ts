@@ -282,7 +282,7 @@ export class Question extends Schema.Class<Question>("Question")({
 }) {}
 
 /** The choice an answered question's answer picked, or undefined for a typed answer. */
-export const pickedOption = (question: Question): QuestionOption | undefined =>
+export const pickedOption = (question: Pick<Question, "options" | "picked">): QuestionOption | undefined =>
   question.picked === null ? undefined : question.options[question.picked];
 
 /**
@@ -320,6 +320,26 @@ export const collidingLabel = (options: ReadonlyArray<{ readonly label: string }
     seen.add(key);
   }
   return undefined;
+};
+
+/**
+ * Why `options` with `recommended` can't be offered, or undefined when they can (#740): each label
+ * reads differently once case is ignored, and `recommended` points at one of them. A hob counts
+ * its choices from 1 and the hub from 0 (#976), so `from` says which.
+ */
+export const choicesProblem = (
+  options: ReadonlyArray<{ readonly label: string }> | undefined,
+  recommended: number | undefined,
+  from: 0 | 1,
+): string | undefined => {
+  const same = options === undefined ? undefined : collidingLabel(options);
+  if (same !== undefined) return `Two options are both "${same}". Give each option its own label.`;
+  if (recommended === undefined) return undefined;
+  if (options === undefined) return "recommended needs options to recommend one of.";
+  if (recommended - from < options.length) return undefined;
+  return from === 1
+    ? `recommended is the number of one of the ${options.length} options.`
+    : `recommended is the index of one of the ${options.length} options, from 0.`;
 };
 
 /**
