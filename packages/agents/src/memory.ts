@@ -3,6 +3,7 @@ import {
   type Committed,
   type EventEnvelope,
   type MemoryActor,
+  type MemoryCaptureItem,
   type MemoryConflict,
   type MemoryDraft,
   type MemoryExpected,
@@ -19,6 +20,7 @@ import {
   type MemoryVersion,
   memoryProjectIdentity,
   memoryScopeAllowed,
+  type ThreadId,
 } from "@hobbots/domain";
 import { Context, Effect, Option } from "effect";
 import type { CharmTurn } from "./charms.ts";
@@ -82,6 +84,24 @@ export interface MemoryStoreShape {
     path: MemoryPath,
     version: MemoryVersion,
   ) => Memory<MemoryVersion, MemoryUnavailable | MemoryConflict>;
+  /**
+   * Sends what happened in a thread (ADR 028, Capture and summaries) to its session in `scope`, a
+   * hob's own memory, in order, and answers how many of the first items memory acknowledged. The
+   * thread is the session, so a brain switch never splits it. An item whose key memory has seen in the
+   * last 30 days is acknowledged and skipped.
+   */
+  readonly capture: (
+    actor: MemoryActor,
+    scope: MemoryScope,
+    threadId: ThreadId,
+    items: ReadonlyArray<MemoryCaptureItem>,
+  ) => Memory<number>;
+  /**
+   * Ends the thread's session, so memory writes its summary page, `sessions/<thread id>.md`, with the
+   * memory model or without one. `key` names this end, as an item's does. Items captured later
+   * continue the same session, and the next end writes its page again.
+   */
+  readonly endSession: (actor: MemoryActor, scope: MemoryScope, threadId: ThreadId, key: string) => Memory<void>;
   /** Succeeds while the engine answers. */
   readonly health: Memory<void>;
 }
@@ -90,6 +110,8 @@ export class MemoryStore extends Context.Service<MemoryStore, MemoryStoreShape>(
 
 /** Calls only you may make: a hob has no delete tool and never restores (ADR 028). */
 const YOURS_ONLY: ReadonlySet<string> = new Set(["forget", "restore"]);
+/** Calls that reach only a hob's own memory: what happened in its threads is kept there (ADR 028). */
+const OWN_ONLY: ReadonlySet<string> = new Set(["capture"]);
 
 /** A call the hub should never have made: its callers build scopes from the actor. */
 const refused = (actor: MemoryActor, what: string) =>
@@ -109,9 +131,9 @@ const guarded =
   ) =>
   (actor: MemoryActor, ...args: Args): Effect.Effect<A, E> => {
     if (YOURS_ONLY.has(what) && actor._tag !== "You") return refused(actor, what);
-    return scopesOf(args).every((scope) => memoryScopeAllowed(actor, scope))
-      ? run(actor, ...args)
-      : refused(actor, what);
+    const scopes = scopesOf(args);
+    if (OWN_ONLY.has(what) && scopes.some((scope) => scope._tag !== "Hob")) return refused(actor, what);
+    return scopes.every((scope) => memoryScopeAllowed(actor, scope)) ? run(actor, ...args) : refused(actor, what);
   };
 
 const one = <Args extends readonly [MemoryScope, ...ReadonlyArray<unknown>]>(args: Args) => [args[0]];
@@ -133,6 +155,8 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   write: guarded("write", store.write, one),
   forget: guarded("forget", store.forget, one),
   restore: guarded("restore", store.restore, one),
+  capture: guarded("capture", store.capture, one),
+  endSession: guarded("capture", store.endSession, one),
   health: store.health,
 });
 
@@ -232,3 +256,48 @@ export class MemoryTools extends Context.Service<
     readonly forTurn: (turn: CharmTurn) => Effect.Effect<HubTools | null>;
   }
 >()("@hobbots/agents/MemoryTools") {}
+
+/** A thread whose memory session is open (ADR 028): its hob, when it was last active, and the key of its last item. */
+export interface MemoryCaptureSession {
+  readonly threadId: ThreadId;
+  readonly agentId: AgentId;
+  /** When the thread's last captured entry was committed (ISO 8601), so a backlog sent late still ends on time. */
+  readonly lastAt: string;
+  /** The key of the thread's last captured item, which names the session's end. */
+  readonly lastKey: string;
+}
+
+/** Where capture stands: the last journal entry memory acknowledged, and the threads with an open session. */
+export interface MemoryCaptureState {
+  readonly sequence: number;
+  readonly sessions: ReadonlyArray<MemoryCaptureSession>;
+}
+
+/**
+ * The capture worker's cursor over the event journal (ADR 028, Capture and summaries). The journal
+ * is the outbox: while the cursor holds, journal compaction keeps every entry after it, however old.
+ */
+export class MemoryCaptureLog extends Context.Service<
+  MemoryCaptureLog,
+  {
+    /**
+     * Takes the hold, so compaction keeps every entry after the cursor, and answers where capture
+     * stands. A cursor that was not holding, because memory was off or never on, starts again at the
+     * journal's head with no open session: memory gets what happens from now on.
+     */
+    readonly hold: Effect.Effect<MemoryCaptureState>;
+    /** Lets compaction go on as if there were no capture, for a hub whose memory is turned off. */
+    readonly release: Effect.Effect<void>;
+    /** Committed journal entries after `sequence`, in order, at most `limit` of them. */
+    readonly readAfter: (sequence: number, limit: number) => Effect.Effect<ReadonlyArray<EventEnvelope>>;
+    /**
+     * Saves, in one transaction, the cursor at `sequence`, the sessions still open (`active`, each as it now stands), and
+     * the ends of the sessions in `ended`, once memory acknowledged everything up to there.
+     */
+    readonly save: (
+      sequence: number,
+      active: ReadonlyArray<MemoryCaptureSession>,
+      ended: ReadonlyArray<ThreadId>,
+    ) => Effect.Effect<void>;
+  }
+>()("@hobbots/agents/MemoryCaptureLog") {}

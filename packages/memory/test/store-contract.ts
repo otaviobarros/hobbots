@@ -8,6 +8,7 @@ import {
   type MemoryScope,
   type MemoryVersion,
   memoryProjectIdentity,
+  ThreadId,
 } from "@hobbots/domain";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
@@ -303,5 +304,25 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
         ),
       120_000,
     );
+
+    // covers ADR 028 (The MemoryStore service, Capture and summaries)
+    it("[TC-GEN-307] keeps a thread's capture in its hob's own memory, refusing any other scope", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f1");
+          const items = [{ key: "message:m1", kind: "message", text: "How do the tests run?" }] as const;
+          expect(yield* store.capture(asPip, pipsOwn, thread, items)).toBe(1);
+          // Sent again, it is acknowledged and skipped.
+          expect(yield* store.capture(asPip, pipsOwn, thread, items)).toBe(1);
+          yield* store.endSession(asPip, pipsOwn, thread, "end:m1");
+          const page = yield* store.page(you, pipsOwn, MemoryPath.make(`sessions/${thread}.md`));
+          expect(page?.markdown).toContain("How do the tests run?");
+          expect(page?.author).toEqual(byPip);
+          for (const scope of [quillsOwn, theApp, everyone]) {
+            expect(yield* died(store.capture(asPip, scope, thread, items))).toBe(true);
+            expect(yield* died(store.endSession(asPip, scope, thread, "end:m1"))).toBe(true);
+          }
+        }),
+      ));
   });
 };

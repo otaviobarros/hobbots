@@ -399,8 +399,8 @@ export class EventJournal extends Context.Service<
     /** Committed entries after `sequence`, in sequence order, at most `limit` of them. */
     readonly readAfter: (sequence: number, limit?: number) => Effect.Effect<ReadonlyArray<EventEnvelope>>;
     /**
-     * Deletes entries past retention: older than seven days and outside the latest 10,000. Returns
-     * how many it deleted. The journal serves client resume only, so nothing durable depends on them.
+     * Deletes entries past retention: older than seven days and outside the latest 10,000, and none
+     * that memory capture has still to send (ADR 028). Returns how many it deleted.
      */
     readonly compact: Effect.Effect<number>;
   }
@@ -432,9 +432,11 @@ export class EventJournal extends Context.Service<
       const compact = Effect.gen(function* () {
         const now = yield* DateTime.now;
         const cutoff = DateTime.formatIso(DateTime.subtractDuration(now, JOURNAL_RETENTION.age));
+        // While memory capture holds its cursor, every entry after it is kept, however old (ADR 028).
         const deleted = yield* sql`DELETE FROM event_journal
           WHERE sequence <= (SELECT sequence FROM event_journal_head WHERE id = 1) - ${JOURNAL_RETENTION.entries}
             AND ${occurredAt} < ${cutoff}
+            AND sequence <= COALESCE((SELECT sequence FROM memory_capture WHERE id = 1 AND holding = 1), sequence)
           RETURNING sequence`;
         return deleted.length;
       });

@@ -15,6 +15,7 @@ import {
   searchTerms,
 } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
+import { acknowledgedPrefix, HOOK_BATCH_MAX, HookBatchJson, hookEventOf } from "./capture.ts";
 import {
   type EngineCaller,
   type EngineClient,
@@ -466,6 +467,39 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         refusalIsOutage,
       );
     },
+    capture: (actor, scope, threadId, items) =>
+      Effect.gen(function* () {
+        const where = engineProjectOf(scope);
+        let acknowledged = 0;
+        // In order, one batch at a time: a batch only partly acknowledged stops the rest, which is sent again.
+        while (acknowledged < items.length) {
+          const batch = items.slice(acknowledged, acknowledged + HOOK_BATCH_MAX);
+          const json = yield* client.hookBatch(
+            callerOf(actor),
+            batch.map((item) => hookEventOf(where, threadId, item)),
+            HookBatchJson,
+          );
+          const prefix = Math.min(acknowledgedPrefix(json), batch.length);
+          acknowledged += prefix;
+          if (prefix < batch.length) break;
+        }
+        return acknowledged;
+      }).pipe(refusalIsOutage),
+    endSession: (actor, scope, threadId, key) =>
+      client
+        .hookBatch(
+          callerOf(actor),
+          [hookEventOf(engineProjectOf(scope), threadId, { kind: "end", key, text: "" })],
+          HookBatchJson,
+        )
+        .pipe(
+          Effect.flatMap((json) =>
+            acknowledgedPrefix(json) >= 1
+              ? Effect.void
+              : Effect.fail(new MemoryUnavailable({ message: "Memory did not take the end of a session." })),
+          ),
+          refusalIsOutage,
+        ),
     health: client.health,
   };
   return store;
