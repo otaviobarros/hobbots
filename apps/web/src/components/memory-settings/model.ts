@@ -90,25 +90,40 @@ export const modelHint = (
 const nameOf = (models: RuntimeModels | undefined, id: string) =>
   models?.models.find((model) => model.id === id)?.displayName ?? id;
 
+/** What each model memory runs in place of one you chose says: the memory model's, then each task's. */
+const replacedNotes = (state: Extract<MemoryModelState, { _tag: "Model" }>, models: RuntimeModels | undefined) => {
+  const instead = (model: string | null) => (model === null ? null : nameOf(models, model));
+  const main = instead(state.model);
+  return [
+    ...(state.replaced === null || main === null ? [] : [copy.model.replaced({ chosen: state.replaced, model: main })]),
+    ...state.tasks.flatMap(({ task, replaced, model }) => {
+      const used = instead(model);
+      return used === null
+        ? []
+        : [copy.model.taskReplaced({ task: copy.tasks.rows[task].title, chosen: replaced, model: used })];
+    }),
+  ];
+};
+
 /**
- * What memory runs with when it is not the model you chose, or why it can't run it now; null when
- * it runs the model you chose. A runtime that is signed out or missing says how to fix it on its own.
+ * What memory runs with when it is not the model you chose, for the memory model and for each task
+ * given its own, or why it can't run it now; none when it runs what you chose. A runtime that is
+ * signed out or missing says how to fix it on its own.
  */
-export const stateNote = (
+export const stateNotes = (
   state: MemoryModelState,
   models: RuntimeModels | undefined,
   locale?: string,
-): string | null => {
-  if (state._tag === "Model")
-    return state.replaced === null || state.model === null
-      ? null
-      : copy.model.replaced({ chosen: state.replaced, model: nameOf(models, state.model) });
-  if (state._tag !== "Unavailable") return null;
+): ReadonlyArray<string> => {
+  if (state._tag === "Model") return replacedNotes(state, models);
+  if (state._tag !== "Unavailable") return [];
   const provider = copy.model.providers[state.provider];
-  if (state.state !== "limited") return copy.model.notReady;
-  return state.resetsAt === null
-    ? copy.model.limited({ provider })
-    : copy.model.limitedUntil({ provider, until: formatMoment(state.resetsAt, locale) });
+  if (state.state !== "limited") return [copy.model.notReady];
+  return [
+    state.resetsAt === null
+      ? copy.model.limited({ provider })
+      : copy.model.limitedUntil({ provider, until: formatMoment(state.resetsAt, locale) }),
+  ];
 };
 
 /** The fallback choices, with the other provider's smallest model named when its runtime lists it. */
@@ -141,11 +156,21 @@ export const taskOptions = (
   models: RuntimeModels | undefined,
   chosen: string,
   withNone: boolean,
-): ReadonlyArray<ChoiceOption<string>> => [
-  { value: SAME_MEMORY_MODEL, label: copy.tasks.same },
-  ...modelOptions(models, chosen === SAME_MEMORY_MODEL || chosen === NO_MEMORY_MODEL ? null : chosen),
-  ...(withNone ? [{ value: NO_MEMORY_MODEL, label: copy.tasks.none }] : []),
-];
+): ReadonlyArray<ChoiceOption<string>> => {
+  const own = chosen === SAME_MEMORY_MODEL || chosen === NO_MEMORY_MODEL ? null : chosen;
+  const offered = modelOptions(models, own);
+  // A model the runtime stopped offering stays shown as chosen, marked, until you pick another.
+  const gone =
+    own !== null && models !== undefined && !offered.some((option) => option.value === own)
+      ? [{ value: own, label: copy.tasks.gone({ model: own }) }]
+      : [];
+  return [
+    { value: SAME_MEMORY_MODEL, label: copy.tasks.same },
+    ...offered,
+    ...gone,
+    ...(withNone ? [{ value: NO_MEMORY_MODEL, label: copy.tasks.none }] : []),
+  ];
+};
 
 /** The engine's state as the card's tag says it, and the tag's look. */
 export const engineTag = (

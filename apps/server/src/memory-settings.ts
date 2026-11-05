@@ -9,6 +9,7 @@ import {
   type MemoryModelState,
   MemorySettings,
   memoryModelOn,
+  replacedMemoryTasks,
 } from "@hobbots/domain";
 import { engineSettingsFor, MemoryEngine, MemoryModelEndpoint, type MemoryModelEndpointShape } from "@hobbots/memory";
 import { Context, Effect, Layer, Option, Ref, Schema, Semaphore } from "effect";
@@ -63,8 +64,14 @@ const memoryModelState = (
     const limit = endpoint === undefined ? Option.none() : yield* endpoint.limited(runtime);
     if (Option.isSome(limit))
       return { _tag: "Unavailable", provider, state: "limited", resetsAt: limit.value.resetsAt } as const;
-    const { model, replaced } = memoryModelOn(yield* adapter.models, settings.model);
-    return { _tag: "Model", model: model?.id ?? null, replaced } as const;
+    const models = yield* adapter.models;
+    const { model, replaced } = memoryModelOn(models, settings.model);
+    return {
+      _tag: "Model",
+      model: model?.id ?? null,
+      replaced,
+      tasks: replacedMemoryTasks(models, settings.tasks),
+    } as const;
   });
 
 interface MemorySettingsStoreShape {

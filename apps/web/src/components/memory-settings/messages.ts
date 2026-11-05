@@ -47,6 +47,8 @@ export const messages = {
     noModels: "The models appear once the provider answers.",
     replaced: ({ chosen, model }: { chosen: string; model: string }) =>
       `${chosen} is no longer offered, so memory uses ${model} instead.`,
+    taskReplaced: ({ task, chosen, model }: { task: string; chosen: string; model: string }) =>
+      `${task}: ${chosen} is no longer offered, so it uses ${model} instead.`,
     notReady: "Until it is back, summaries follow your choice below.",
     limited: ({ provider }: { provider: string }) =>
       `Your ${provider} plan reached its limit. Until it refills, summaries follow your choice below.`,
@@ -71,6 +73,7 @@ export const messages = {
       answers: { title: "Answering questions about memory", detail: "When you ask Memory a question in plain words" },
     },
     same: "Same",
+    gone: ({ model }: { model: string }) => `${model} (no longer offered)`,
     none: "No AI",
     pickFirst: "Pick a provider first.",
     note: "Effort is shared by every task. Searching and saving never need a model.",

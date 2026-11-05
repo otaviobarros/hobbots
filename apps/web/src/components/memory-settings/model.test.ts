@@ -9,7 +9,7 @@ import {
   modelOptions,
   shareAnswer,
   shownModel,
-  stateNote,
+  stateNotes,
   taskOptions,
   usageLine,
   withProvider,
@@ -87,6 +87,13 @@ describe("the memory model's choices", () => {
       "No AI",
     ]);
     expect(taskOptions(codex, "same", false).map((option) => option.label)).toEqual(["Same", "Big", "Small"]);
+    // A task's own model the runtime stopped offering stays shown as chosen, marked.
+    expect(taskOptions(codex, "gone-2", false).map((option) => option.label)).toEqual([
+      "Same",
+      "Big",
+      "Small",
+      "gone-2 (no longer offered)",
+    ]);
   });
 
   it("says which sign-in it uses, warns about high effort, and says what memory runs with instead", () => {
@@ -98,15 +105,27 @@ describe("the memory model's choices", () => {
       "Uses your ChatGPT sign-in through Codex. A bigger model is more careful, and uses more of your plan.",
     );
     expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, provider: "none" }, undefined).text).toContain("no AI");
-    expect(stateNote({ _tag: "Model", model: "quick", replaced: null }, claude)).toBeNull();
-    expect(stateNote({ _tag: "Model", model: "quick", replaced: "gone-1" }, claude)).toBe(
+    expect(stateNotes({ _tag: "Model", model: "quick", replaced: null, tasks: [] }, claude)).toEqual([]);
+    expect(stateNotes({ _tag: "Model", model: "quick", replaced: "gone-1", tasks: [] }, claude)).toEqual([
       "gone-1 is no longer offered, so memory uses Quick instead.",
-    );
-    expect(stateNote({ _tag: "Unavailable", provider: "chatgpt", state: "limited", resetsAt: null }, codex)).toContain(
-      "Your ChatGPT plan reached its limit",
-    );
-    expect(stateNote({ _tag: "Unavailable", provider: "claude", state: "signedOut", resetsAt: null }, claude)).toBe(
-      "Until it is back, summaries follow your choice below.",
+    ]);
+    // The memory model is still offered, but a task's own model is not.
+    expect(
+      stateNotes(
+        {
+          _tag: "Model",
+          model: "careful",
+          replaced: null,
+          tasks: [{ task: "check", replaced: "gone-2", model: "quick" }],
+        },
+        claude,
+      ),
+    ).toEqual(["Check now: gone-2 is no longer offered, so it uses Quick instead."]);
+    expect(
+      stateNotes({ _tag: "Unavailable", provider: "chatgpt", state: "limited", resetsAt: null }, codex)[0],
+    ).toContain("Your ChatGPT plan reached its limit");
+    expect(stateNotes({ _tag: "Unavailable", provider: "claude", state: "signedOut", resetsAt: null }, claude)).toEqual(
+      ["Until it is back, summaries follow your choice below."],
     );
   });
 });
@@ -145,7 +164,7 @@ describe("how shares follow the preset", () => {
 describe("Usage's Memory line", () => {
   it("counts calls and tokens, or says why memory makes none", () => {
     const usage = { calls: 40, inputTokens: 90_000, outputTokens: 10_000, since: null };
-    expect(usageLine({ state: { _tag: "Model", model: "quick", replaced: null }, usage }, "en-US")).toBe(
+    expect(usageLine({ state: { _tag: "Model", model: "quick", replaced: null, tasks: [] }, usage }, "en-US")).toBe(
       "40 calls · 100K tokens since memory last started",
     );
     expect(usageLine({ state: { _tag: "NoAi" }, usage: null })).toBe("No AI: memory makes no model calls.");

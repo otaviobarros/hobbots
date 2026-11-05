@@ -6,7 +6,7 @@ import { runtimesQuery } from "../../api/queries.ts";
 import { providerFix } from "../providers/provider-fix.tsx";
 import { Choice } from "./choice.tsx";
 import { messages } from "./messages.ts";
-import { effortOptions, fallbackOptions, modelOptions, shownModel, stateNote, taskOptions } from "./model.ts";
+import { effortOptions, fallbackOptions, modelOptions, shownModel, stateNotes, taskOptions } from "./model.ts";
 
 /** The parts of the memory model's settings below the provider. */
 
@@ -95,8 +95,8 @@ export function TaskModels({ shown, models, busy, save }: ModelChoiceProps) {
 }
 
 /**
- * What the runtime cannot do now, with its fix, and what memory runs with when it differs. The note
- * is about what the hub runs now, so it shows only for the provider it reports.
+ * What the runtime cannot do now, with its fix, and what memory runs with when it differs. The notes
+ * are about what the hub runs now, so it shows only for the provider it reports.
  */
 export function ModelStatus({
   runtime,
@@ -110,13 +110,15 @@ export function ModelStatus({
   current: boolean;
 }) {
   const health = useQuery(runtimesQuery).data?.find((each) => each.runtime === runtime);
-  const note = current ? stateNote(state, models) : null;
+  const notes = current ? stateNotes(state, models) : [];
   const fix = state._tag === "Unavailable" && state.state !== "limited" ? providerFix(runtime, health) : null;
-  if (fix === null && note === null) return null;
+  if (fix === null && notes.length === 0) return null;
   return (
     <span role="status" className="flex flex-col gap-0.5 text-detail text-lantern [&_code]:font-mono">
       {fix !== null && <span>{fix}</span>}
-      {note !== null && <span>{note}</span>}
+      {notes.map((note) => (
+        <span key={note}>{note}</span>
+      ))}
     </span>
   );
 }

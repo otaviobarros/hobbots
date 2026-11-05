@@ -118,6 +118,29 @@ export const memoryModelOn = (
   return { model: smallestModel(models), replaced: asked };
 };
 
+/** A task given its own model that the runtime no longer offers, and the model it runs on instead. */
+export const MemoryTaskReplaced = Schema.Struct({
+  task: Schema.Literals(["summaries", "check", "answers"]),
+  replaced: Schema.String,
+  model: Schema.NullOr(Schema.String),
+});
+export type MemoryTaskReplaced = typeof MemoryTaskReplaced.Type;
+
+/**
+ * The tasks given a model of their own that the runtime no longer offers, each with the model it
+ * runs on instead, as `memoryModelOn` resolves it when the task runs.
+ */
+export const replacedMemoryTasks = (
+  models: RuntimeModels | undefined,
+  tasks: MemoryTasks,
+): ReadonlyArray<MemoryTaskReplaced> =>
+  (["summaries", "check", "answers"] as const).flatMap((task) => {
+    const chosen = tasks[task];
+    if (chosen === SAME_MEMORY_MODEL || chosen === NO_MEMORY_MODEL) return [];
+    const { model, replaced } = memoryModelOn(models, chosen);
+    return replaced === null ? [] : [{ task, replaced, model: model?.id ?? null }];
+  });
+
 /**
  * The effort a memory task asks its model for: the one chosen when the model takes it, else the
  * lowest it takes, or none for a model that takes no effort setting.
@@ -143,12 +166,17 @@ export type MemoryModelUnavailable = typeof MemoryModelUnavailable.Type;
 
 /**
  * What memory runs with now, beside what you chose: `Model` when the provider's runtime runs it,
- * with `model` the one it runs and `replaced` the model you chose when the runtime no longer offers
- * it; `NoAi` when you chose No AI; `Unavailable` when the runtime cannot run it now, so summaries
- * follow your fallback until it can.
+ * with `model` the one it runs, `replaced` the model you chose when the runtime no longer offers it,
+ * and `tasks` each task whose own model it no longer offers; `NoAi` when you chose No AI;
+ * `Unavailable` when the runtime cannot run it now, so summaries follow your fallback until it can.
  */
 export const MemoryModelState = Schema.Union([
-  Schema.TaggedStruct("Model", { model: Schema.NullOr(Schema.String), replaced: Schema.NullOr(Schema.String) }),
+  Schema.TaggedStruct("Model", {
+    model: Schema.NullOr(Schema.String),
+    replaced: Schema.NullOr(Schema.String),
+    /** The tasks given a model of their own that the runtime no longer offers. */
+    tasks: Schema.Array(MemoryTaskReplaced),
+  }),
   Schema.TaggedStruct("NoAi", {}),
   Schema.TaggedStruct("Unavailable", {
     provider: Schema.Literals(["claude", "chatgpt"]),

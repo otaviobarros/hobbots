@@ -113,9 +113,17 @@ describe("memory archives", () => {
     );
     expect(unpacked._tag).toBe("Failure");
     expect(() => statSync(restoredPepper)).toThrow();
-    // Either bearer, anywhere in the archive.
-    const inAPage = memoryFolder({ "wiki/hobbots/hob-pip/notes/leak.md": `token ${Redacted.value(keys.proxy)}` });
-    expect(await refusal(await archiveOf(inAPage, ["wiki"]))).toMatch(/leak\.md holds a memory bearer/);
+    // Any of the three bearers, anywhere in the archive: a page, its Git history or the database.
+    for (const bearer of [keys.root, keys.proxy, keys.model]) {
+      const inAPage = memoryFolder({ "wiki/hobbots/hob-pip/notes/leak.md": `token ${Redacted.value(bearer)}` });
+      expect(await refusal(await archiveOf(inAPage, ["wiki"]))).toMatch(/leak\.md holds a memory bearer/);
+      const inHistory = memoryFolder({ "wiki/.git/objects/ab/cdef": `blob ${Redacted.value(bearer)}` });
+      expect(await refusal(await archiveOf(inHistory, ["wiki"]))).toMatch(/cdef holds a memory bearer/);
+      const inTheDatabase = memoryFolder({ "db/memory.sqlite": `SQLite format 3\u0000${Redacted.value(bearer)}` });
+      expect(await refusal(await archiveOf(inTheDatabase, ["wiki", "db"]))).toMatch(
+        /memory\.sqlite holds a memory bearer/,
+      );
+    }
 
     const linked = memoryFolder();
     symlinkSync("/etc/passwd", join(linked, "wiki", "passwd"));

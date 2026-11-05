@@ -161,7 +161,7 @@ describe("the memory model in Settings", () => {
     expect(overview.settings).toEqual(DEFAULT_MEMORY_SETTINGS);
     expect(overview.settings).toMatchObject({ model: null, effort: "low" });
     // Claude Code is ready: memory runs on its smallest main model, as the runtime reports it.
-    expect(overview.state).toEqual({ _tag: "Model", model: "fake-thinker", replaced: null });
+    expect(overview.state).toEqual({ _tag: "Model", model: "fake-thinker", replaced: null, tasks: [] });
     expect(overview.engine).toEqual(RUNNING);
     expect(overview.pages).toBe(12);
     expect(overview.bytes).toBe("# Notes\n".length);
@@ -220,6 +220,21 @@ describe("the memory model in Settings", () => {
       _tag: "Model",
       model: "fake-thinker",
       replaced: "gone-1",
+      tasks: [],
+    });
+
+    // The memory model is still offered, but the model Check now was given is not: it runs on the
+    // smallest, and says so for that task.
+    await request("PUT", "/api/memory/settings", {
+      ...DEFAULT_MEMORY_SETTINGS,
+      model: "fake-thinker",
+      tasks: { summaries: "same", check: "gone-2", answers: "fake-thinker" },
+    });
+    expect(decode((await request("GET", "/api/memory")).body).state).toEqual({
+      _tag: "Model",
+      model: "fake-thinker",
+      replaced: null,
+      tasks: [{ task: "check", replaced: "gone-2", model: "fake-thinker" }],
     });
 
     // The fake Codex answers as signed out: its own state, as provider health reports it.
