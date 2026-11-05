@@ -14,13 +14,14 @@ import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { MemorySettingsCard } from "../memory-settings/memory-settings.tsx";
 import { messages } from "./messages.ts";
 import { SettingsGroup } from "./settings-group.tsx";
+import { StartOver } from "./start-over.tsx";
 
 const copy = messages.yourData;
 const retiredCopy = archiveMessages.hobs;
 
 /**
- * Settings › Your data: Backups (with Restore and Export as files), Memory, the hobs you retired, and the
- * folder on the hub where everything lives.
+ * Settings › Your data: Backups (with Restore and Export as files), Memory, the hobs you retired,
+ * the folder on the hub where everything lives, and Start over (#948).
  */
 export function YourData() {
   return (
@@ -29,6 +30,7 @@ export function YourData() {
       <MemorySettingsCard />
       <RetiredHobs />
       <DataFolder />
+      <StartOver />
     </>
   );
 }

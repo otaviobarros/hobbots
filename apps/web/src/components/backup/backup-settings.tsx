@@ -14,6 +14,7 @@ import {
   useResumeWork,
   useStartBackup,
 } from "../../api/backup.ts";
+import { chooseBackupFolder, useBackupFolder } from "../../api/backup-folder.ts";
 import { ApiError } from "../../api/client.ts";
 import { formatAgo, formatBytes, formatMoment } from "../../lib/format.ts";
 import { ExportSettings } from "../export/export-settings.tsx";
@@ -274,13 +275,12 @@ export function BackupSettings() {
   const restore = useQuery(restoreStatusQuery);
   const start = useStartBackup();
   const cancel = useCancelBackup();
-  const [typed, setTyped] = useState<string | null>(null);
   const [open, setOpen] = useState<Open>(null);
+  const destination = useBackupFolder(status.data?.defaultDestination);
   const toggle = (next: Exclude<Open, null>) => setOpen((now) => (now === next ? null : next));
   if (status.isError) return <p className="m-0 text-ui text-rose">{copy.failedToRead}</p>;
   const state = status.data?.state;
   const loading = state === undefined || restore.isPending;
-  const destination = typed ?? status.data?.defaultDestination ?? "";
   const running = state !== undefined && backupRunning(state);
   return (
     <section aria-label={copy.heading} aria-busy={loading} className="flex flex-col gap-3 rounded-card bg-card p-4">
@@ -298,7 +298,7 @@ export function BackupSettings() {
         value={destination}
         disabled={loading || running || start.isPending}
         onChange={(next) => {
-          setTyped(next);
+          chooseBackupFolder(next);
           start.reset();
         }}
       />
