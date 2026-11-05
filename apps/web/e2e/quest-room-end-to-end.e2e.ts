@@ -289,10 +289,31 @@ test("[TC-UX-293] the room holds up in all four themes at 1280, 1024 and 960 px,
         expect(Math.round(box?.width ?? 0), at).toBeGreaterThanOrEqual(column - 1);
         expect(Math.round(box?.width ?? 0), at).toBeLessThanOrEqual(column);
       }
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      );
-      expect(overflow, at).toBeLessThanOrEqual(0);
+      // The page never scrolls sideways. A failure names the outermost elements that stick out past
+      // the window's right edge with nothing around them to clip or scroll them.
+      const overflow = await page.evaluate(() => {
+        const edge = document.documentElement.clientWidth;
+        const unclipped = (element: Element) => {
+          for (let up = element.parentElement; up !== null && up !== document.body; up = up.parentElement) {
+            if (getComputedStyle(up).overflowX !== "visible") return false;
+          }
+          return true;
+        };
+        const sticking = [...document.body.querySelectorAll("*")].filter(
+          (element) => element.getBoundingClientRect().right > edge + 0.5 && unclipped(element),
+        );
+        return {
+          by: document.documentElement.scrollWidth - edge,
+          sticking: sticking
+            .filter((element) => !sticking.includes(element.parentElement as Element))
+            .slice(0, 5)
+            .map(
+              (element) =>
+                `${element.tagName.toLowerCase()}.${element.getAttribute("class") ?? ""} → ${element.getBoundingClientRect().right}`,
+            ),
+        };
+      });
+      expect(overflow, at).toEqual({ by: 0, sticking: [] });
     }
   }
 });
