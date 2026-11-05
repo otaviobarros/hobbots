@@ -16,7 +16,7 @@ import {
   memoryTitleOf,
   searchTerms,
 } from "@hobbots/domain";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema, Semaphore } from "effect";
 import { acknowledgedPrefix, HOOK_BATCH_MAX, HookBatchJson, hookEventOf } from "./capture.ts";
 import {
   type EngineCaller,
@@ -173,6 +173,12 @@ const refusalIsOutage = <A, E, R>(
   ) as Effect.Effect<A, Exclude<E, EngineRefused> | MemoryUnavailable, R>;
 
 const makeStore = (client: EngineClient): MemoryStoreShape => {
+  /**
+   * The engine's restore takes no precondition, so the hub's changes to pages run one at a time: a
+   * restore checks that the page is as expected and writes the version back before any other change
+   * of the hub's lands. Writes and forgets keep their own preconditions in the engine as well.
+   */
+  const changing = Semaphore.makeUnsafe(1);
   /**
    * A project's engine name is hashed, so the identity it holds is kept in the index project, one
    * page per project, written before the project's first page: `scopes` reads it back.
@@ -444,6 +450,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
           Effect.map((json) => MemoryVersion.make(json.page_id)),
           Effect.catchTag("EngineRefused", conflictOf(draft.path)),
           refusalIsOutage,
+          changing.withPermit,
         ),
     scopes: () =>
       Effect.gen(function* () {
@@ -492,15 +499,23 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         Effect.catchTag("EngineRefused", conflictOf(path)),
         orEmpty(null),
         refusalIsOutage,
+        changing.withPermit,
       );
     },
-    restore: (_actor, scope, path, version) => {
+    restore: (_actor, scope, path, version, expected) => {
       const source = version.startsWith(REVISION) ? { rev: version.slice(REVISION.length) } : { page_id: version };
-      return client.admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson).pipe(
-        Effect.map((json) => MemoryVersion.make(json.page_id)),
+      return Effect.gen(function* () {
+        const current = yield* pageOf(scope, path);
+        if (!pageMeets(current?.version ?? null, expected)) {
+          return yield* new MemoryConflict({ path, current: current?.version ?? null });
+        }
+        const json = yield* client.admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson);
+        return MemoryVersion.make(json.page_id);
+      }).pipe(
         // A version the page never had, or one gone with a forget, leaves the page as it is.
         Effect.catchTag("EngineRefused", () => currentConflict(scope, path)),
         refusalIsOutage,
+        changing.withPermit,
       );
     },
     capture: (actor, scope, threadId, items) =>
@@ -544,6 +559,18 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
 /** Never silently left out: an export that cannot name a project says memory did not answer in full. */
 const unnamed = (project: string) =>
   new MemoryUnavailable({ message: `Memory holds a project Hobbots cannot name: ${project}` });
+
+/** Whether a page whose latest version is `current`, or null when there is none, is as `expected`. */
+const pageMeets = (current: MemoryVersion | null, expected: MemoryExpected) => {
+  switch (expected._tag) {
+    case "Any":
+      return true;
+    case "New":
+      return current === null;
+    case "Version":
+      return current === expected.version;
+  }
+};
 
 const preconditionOf = (expected: MemoryExpected): Record<string, unknown> => {
   switch (expected._tag) {

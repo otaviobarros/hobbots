@@ -262,8 +262,9 @@ export const makeMemoryStoreFake = (): {
           current.version,
         );
       }),
-    restore: (actor, scope, path, version) =>
+    restore: (actor, scope, path, version, expected) =>
       Effect.flatMap(up, () => {
+        if (!meets(latestOf(scope, path), expected)) return Effect.fail(conflict(scope, path));
         const old = pagesOf(scope)
           .get(path)
           ?.find((entry) => entry.version === version && !entry.forgotten);

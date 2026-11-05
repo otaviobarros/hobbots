@@ -86,14 +86,15 @@ export interface MemoryStoreShape {
     expected: MemoryExpected,
   ) => Memory<MemoryVersion | null, MemoryUnavailable | MemoryConflict>;
   /**
-   * Writes `version` back as the latest version of the page, and answers the new version. `version` is
-   * one from the page's history, or one `forget` answered.
+   * Writes `version` back as the latest version of the page when the page is as `expected`, and
+   * answers the new version. `version` is one from the page's history, or one `forget` answered.
    */
   readonly restore: (
     actor: MemoryActor,
     scope: MemoryScope,
     path: MemoryPath,
     version: MemoryVersion,
+    expected: MemoryExpected,
   ) => Memory<MemoryVersion, MemoryUnavailable | MemoryConflict>;
   /**
    * Sends what happened in a thread (ADR 028, Capture and summaries) to its session in `scope`, a

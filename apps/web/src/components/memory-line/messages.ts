@@ -10,6 +10,9 @@ export const messages = {
   openLabel: ({ title }: { title: string }) => `Open ${title} in Memory`,
   undo: "Undo",
   undoLabel: ({ title }: { title: string }) => `Undo saving ${title}`,
+  unread: ({ name }: { name: string }) =>
+    `Hobbots could not read what ${name} saved to memory in this chat, so those lines are hidden for now.`,
+  retry: "Try again",
   failed: {
     newer: ({ name }: { name: string }) =>
       `${name}'s memory changed after this, so Undo would lose that. Open it to change it.`,

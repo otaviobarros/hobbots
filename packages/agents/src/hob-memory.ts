@@ -42,10 +42,13 @@ export const undoMemorySave = (
     const index = history.findIndex((entry) => entry.version === version);
     if (index === -1 || history[index]?.latest !== true) return yield* new MemoryUndoRefused({ reason: "newer" });
     const before = history[index + 1];
+    // Both are conditional on the save's version, so a change that lands after the history read is
+    // refused rather than overwritten.
+    const still = { _tag: "Version", version } as const;
     yield* (
       before === undefined
-        ? store.forget(YOU, save.scope, save.path, { _tag: "Version", version })
-        : store.restore(YOU, save.scope, save.path, before.version)
+        ? store.forget(YOU, save.scope, save.path, still)
+        : store.restore(YOU, save.scope, save.path, before.version, still)
     ).pipe(Effect.catchTag("MemoryConflict", () => new MemoryUndoRefused({ reason: "newer" })));
     const marked = yield* saves.markUndone(save.id, at);
     if (Option.isNone(marked)) return yield* new MemoryUndoRefused({ reason: "undone" });

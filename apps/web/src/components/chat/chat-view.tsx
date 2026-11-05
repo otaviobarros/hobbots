@@ -46,7 +46,7 @@ import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
 import { ChatSearch, ChatSearchButton } from "../chat-search/chat-search.tsx";
 import { HobSprite, stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
 import { replySaves } from "../memory-line/memory-line-model.ts";
-import { MemorySavedLines } from "../memory-line/memory-saved-line.tsx";
+import { MemorySavedLines, MemorySavesUnread } from "../memory-line/memory-saved-line.tsx";
 import { messages } from "../messages.ts";
 import { NeedsTray } from "../needs-tray/needs-tray.tsx";
 import { useThreadNeeds } from "../needs-tray/use-thread-needs.ts";
@@ -516,6 +516,9 @@ function Transcript({
           {work.after(message.id)}
         </Fragment>
       ))}
+      {saves.isError && saves.data === undefined && (
+        <MemorySavesUnread name={hob.name} retry={() => void saves.refetch()} />
+      )}
       {changes && <BrainSwitchNote brain={next} next />}
     </>
   );

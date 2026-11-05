@@ -199,7 +199,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     // A hob's save to its memory, under the reply it was made from (ADR 028).
     case "MemorySaveRecorded":
     case "MemorySaveChanged":
-      applyMemorySave(queryClient, event.save);
+      void applyMemorySave(queryClient, event.save);
       return;
     default:
       applyWorkEvent(queryClient, event);

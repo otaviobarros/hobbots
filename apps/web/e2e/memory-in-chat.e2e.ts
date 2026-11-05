@@ -169,3 +169,31 @@ test("[TC-UX-973] a hob's Memory tab shows what it learned and what it reads, an
   await expect(remember.getByRole("radio", { name: "Never" })).toBeChecked();
   await expect(group).toContainText("More careful");
 });
+
+// covers ADR 028 (The memory tools), #961, STD-REACT-015
+test("[TC-UX-977] when a chat's saves cannot be read, it says so and Try again brings the lines back", async ({
+  page,
+}) => {
+  const { url, pip } = await hubWithMemory("empty");
+  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await send(page, [
+    "Remember that launch emails go out on Tuesday at 9 AM.",
+    saveLine("tuesday", "# Launch emails go out Tuesday at 9 AM"),
+  ]);
+  await expect(savedLines(page)).toBeVisible();
+
+  const threadSaves = "**/api/threads/*/memory-saves";
+  await page.route(threadSaves, (route) => route.fulfill({ status: 500, body: "" }));
+  await page.reload();
+  const chat = page.getByRole("main", { name: "Chat" });
+  // The client asks again a few times before it gives up.
+  await expect(chat.getByRole("alert")).toContainText("Hobbots could not read what Pip saved to memory in this chat", {
+    timeout: 20_000,
+  });
+  await expect(savedLines(page)).toHaveCount(0);
+
+  await page.unroute(threadSaves);
+  await chat.getByRole("button", { name: "Try again" }).click();
+  await expect(savedLines(page)).toContainText("Saved to Pip's memory");
+  await expect(chat.getByRole("alert")).toHaveCount(0);
+});

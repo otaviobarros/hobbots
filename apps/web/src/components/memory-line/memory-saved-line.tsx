@@ -1,4 +1,5 @@
 import type { Agent, MemorySave } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { Link } from "@tanstack/react-router";
 import { useUndoMemorySave } from "../../api/memory-saves.ts";
 import { memorySearchOf } from "../memory/memory-model.ts";
@@ -24,6 +25,22 @@ export function MemorySavedLines({ saves, hob }: { saves: ReadonlyArray<MemorySa
         <MemorySavedLine key={save.id} save={save} name={hob.name} />
       ))}
     </ul>
+  );
+}
+
+/**
+ * Says that a thread's saves could not be read, so no reply shows its line, and offers to read them
+ * again: without it, a failed read would look like a chat in which nothing was saved.
+ */
+export function MemorySavesUnread({ name, retry }: { name: string; retry: () => void }) {
+  return (
+    <p role="alert" className="m-0 flex items-center gap-3 rounded-card bg-notice px-4 py-3 text-detail text-text">
+      <MemoryIcon name="book" size={14} />
+      <span className="min-w-0 flex-1">{copy.unread({ name })}</span>
+      <Button variant="outline" size="xs" onClick={retry}>
+        {copy.retry}
+      </Button>
+    </p>
   );
 }
 
