@@ -1,6 +1,8 @@
 import {
   ApprovalRepository,
   ApprovalService,
+  type CarriedWork,
+  type CarryingTurn,
   ChatService,
   Continuations,
   HobAdmission,
@@ -9,8 +11,10 @@ import {
   HobTools,
   type PromptRequest,
   RuntimeAdapter,
+  TaskControls,
   TaskRepository,
 } from "@hobbots/agents";
+import { UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -26,6 +30,7 @@ import {
   TaskId,
   Thread,
   ThreadId,
+  WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher, type DispatchLimits, decideBlocker } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -93,6 +98,38 @@ let emptyDispatch: { readonly reached: Deferred.Deferred<void>; readonly proceed
 /** Dispatches that have returned so far. */
 let dispatches = 0;
 
+/**
+ * Holds the next continuation until `proceed`, once its items are claimed and checked: before the
+ * chat starts it (`claimed`), or once the chat has read its work as still due and is about to save
+ * its reply (`checked`). `reached` learns the items it holds.
+ */
+let holdCarry: {
+  readonly at: "claimed" | "checked";
+  readonly reached: Deferred.Deferred<ReadonlyArray<BackpackItem["id"]>>;
+  readonly proceed: Deferred.Deferred<void>;
+} | null = null;
+
+/** `turn`, held as `holdCarry` asks, once. */
+const holding = (turn: CarryingTurn): CarryingTurn => {
+  const gate = holdCarry;
+  if (gate === null) return turn;
+  holdCarry = null;
+  const hold = (work: CarriedWork) =>
+    Deferred.succeed(
+      gate.reached,
+      work.holding.map((each) => each.itemId),
+    ).pipe(Effect.andThen(Deferred.await(gate.proceed)));
+  return {
+    ...turn,
+    run: (turnId, work) => {
+      if (gate.at === "claimed") return Effect.andThen(hold(work), turn.run(turnId, work));
+      let reads = 0;
+      const late = Effect.tap(work.late, () => (reads++ === 0 ? hold(work) : Effect.void));
+      return turn.run(turnId, { ...work, late });
+    },
+  };
+};
+
 const observed = Layer.effect(
   Continuations,
   Effect.gen(function* () {
@@ -100,7 +137,7 @@ const observed = Layer.effect(
     return Continuations.of({
       ...live,
       deliver: (threadId, agentId, turn) =>
-        live.deliver(threadId, agentId, turn).pipe(
+        live.deliver(threadId, agentId, holding(turn)).pipe(
           Effect.tap((ran) => {
             dispatches += 1;
             const gate = emptyDispatch;
@@ -127,7 +164,7 @@ const makeApp = (
   before: Before,
   limits: DispatchLimits,
 ) =>
-  Layer.mergeAll(WakeOnArrival, BlockOnRetirement, HobLifecycle.layer).pipe(
+  Layer.mergeAll(WakeOnArrival, BlockOnRetirement, HobLifecycle.layer, TaskControls.layer).pipe(
     Layer.provideMerge(ChatService.layer),
     Layer.provideMerge(
       observed.pipe(Layer.provideMerge(Dispatcher.layer(limits)), Layer.provideMerge(DispatcherHostLive)),
@@ -150,6 +187,12 @@ const makeApp = (
         NoTools,
         HobAdmission.layer,
         held(gate, requests),
+        Layer.succeed(UserSession, {
+          deviceId: WINDOW_DEVICE_ID,
+          name: "This computer's Hobbots window",
+          kind: "window",
+          whileApproved: (write) => write,
+        }),
       ),
     ),
     Layer.provideMerge(TestDatabase),
@@ -163,6 +206,7 @@ afterEach(async () => {
   holdPrompt = null;
   cutContinuations = false;
   emptyDispatch = null;
+  holdCarry = null;
   dispatches = 0;
   await runtime?.dispose();
   runtime = undefined;
@@ -477,6 +521,73 @@ describe("continuing a hob when work arrives", () => {
     expect(all[0]?.content).toContain("ended as failed.");
     const [settled] = await run(settledItems([failure.id]));
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
+  });
+
+  /**
+   * Frodo plans one step and scripts his next turn to plan another. The step's result is claimed
+   * for a continuation, which `holdCarry` holds at `at`; you cancel the request meanwhile. Returns
+   * the items the continuation held, and the thread's messages once it settled.
+   */
+  const cancelWhileHeld = async (at: "claimed" | "checked") => {
+    const reached = Deferred.makeUnsafe<ReadonlyArray<BackpackItem["id"]>>();
+    const proceed = Deferred.makeUnsafe<void>();
+    holdCarry = { at, reached, proceed };
+    const { run, requests } = setUp();
+    const prompt = [
+      "Carry the ring",
+      hub("plan_steps", { key: "plan", steps: [{ brief: "Walk" }] }),
+      `fake:then ${hub("plan_steps", { key: "again", steps: [{ brief: "Walk again" }] })}`,
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    const held = await run(Deferred.await(reached));
+    const [tree] = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    const top = tree?.tasks[0];
+    if (top === undefined) throw new Error("no Task");
+    await run(TaskControls.use((controls) => controls.cancel(top.id)));
+    await run(
+      retry(
+        Effect.gen(function* () {
+          const [now] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+          return now?.tasks[0]?.state === "cancelled" ? undefined : yield* Effect.fail("not yet" as const);
+        }),
+      ),
+    );
+    await run(Deferred.succeed(proceed, undefined));
+
+    // The work resolves as late, and nothing more is asked of the runtime or started.
+    const settled = await run(settledItems(held));
+    expect(settled.map((item) => item.disposition?._tag)).toEqual(held.map(() => "late"));
+    await run(messagesWhen(() => true));
+    await run(Effect.sleep("300 millis"));
+    expect(requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"))).toEqual([]);
+    const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    expect(trees.map((each) => each.tasks.map((task) => [task.brief.split("\n")[0], task.state]))).toEqual([
+      [
+        ["Carry the ring", "cancelled"],
+        ["Walk", "completed"],
+      ],
+    ]);
+    return { held, all: await run(messages()) };
+  };
+
+  // covers OR-006, IN-004
+  it("[TC-OR-086] a continuation claimed before you cancel its request never starts: its work resolves as late, and no runtime request goes out", async () => {
+    const { held, all } = await cancelWhileHeld("claimed");
+    expect(held).toHaveLength(1);
+    expect(all.map((m) => [m.role, m.status])).toEqual([
+      ["user", "complete"],
+      ["assistant", "complete"],
+    ]);
+  });
+
+  // covers OR-006, IN-004
+  it("[TC-OR-087] a continuation you cancel the request of as it starts ends stopped before its runtime is asked, and starts no Task in its place", async () => {
+    const { all } = await cancelWhileHeld("checked");
+    expect(all.map((m) => [m.role, m.status, m.content])).toEqual([
+      ["user", "complete", expect.any(String)],
+      ["assistant", "complete", expect.any(String)],
+      ["assistant", "stopped", ""],
+    ]);
   });
 });
 

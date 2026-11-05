@@ -76,10 +76,15 @@ interface Reply {
 }
 
 /** Backpack items a turn carries (ADR 019): told to it, held under its claims, and accepted with its session. */
-type Carry = Pick<CarriedWork, "holding" | "accepted" | "routineOnly">;
+type Carry = Pick<CarriedWork, "holding" | "accepted" | "late" | "routineOnly">;
 
 /** What a turn carries when it carries no backpack items. */
-const NOTHING_CARRIED: Carry = { holding: [], accepted: () => Effect.void, routineOnly: true };
+const NOTHING_CARRIED: Carry = {
+  holding: [],
+  accepted: () => Effect.void,
+  late: Effect.succeed(false),
+  routineOnly: true,
+};
 
 /** How a turn starts: its reply's id, what it carries, and whether its end starts what waits next. */
 interface TurnStart {
@@ -670,6 +675,17 @@ export class ChatService extends Context.Service<
               )
             : null;
           onTask = taskTurn;
+          // A continuation whose work went late after its last check, as when you cancel its Quest
+          // while it starts, ends here before its runtime is asked anything (#993). Read after the
+          // turn's Attempt began, so a cancel that comes later waits for the turn to stop instead.
+          const current = yield* Ref.get(reply.current);
+          if (current.promptId === null && (yield* carry.late)) {
+            yield* update((m) => {
+              const stopping = MessageTransitions.requestStop(m);
+              return stopping instanceof Message ? MessageTransitions.interrupt(stopping) : stopping;
+            });
+            return;
+          }
           const tools = yield* grant(thread.id, agent);
           const expected = thread.sessions.find((s) => s.runtime === brain.runtime);
           const memory = yield* memoryBriefFor(agent, tools, expected);
@@ -981,6 +997,9 @@ export class ChatService extends Context.Service<
               if (queued !== null) return queued.turn;
               // The message it was to ride along is gone: routine progress waits for the next one.
               if (work.routineOnly) return null;
+              // Work that went late while the turn waited to start, as when you cancel its Quest,
+              // starts nothing: it resolves as late (#993).
+              if (yield* work.late) return null;
               const continued = yield* beginTurn(found.thread, found.agent, work.text("prompt"), saveMessage, start);
               return continued?.turn ?? null;
             }),
