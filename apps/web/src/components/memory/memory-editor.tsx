@@ -131,7 +131,7 @@ export function MemoryEditor({
           aria-invalid={shown("title") !== undefined}
           onChange={(event) => set({ title: event.target.value })}
           onBlur={blur("title")}
-          className="h-11 font-heading text-[20px]"
+          variant="title"
         />
         {shown("title") !== undefined && <p className="m-0 text-ui text-rose">{shown("title")}</p>}
         <span className="lbl text-label">{copy.editor.kind}</span>
@@ -163,7 +163,7 @@ export function MemoryEditor({
           aria-invalid={shown("body") !== undefined}
           onChange={(event) => set({ body: event.target.value })}
           onBlur={blur("body")}
-          className="font-mono text-ui leading-[22px]"
+          text="mono"
         />
         <span className="text-meta text-label">{shown("body") ?? copy.editor.bodyHint}</span>
         {refusal !== null && (

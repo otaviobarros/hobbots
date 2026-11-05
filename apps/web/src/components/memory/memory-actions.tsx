@@ -132,9 +132,9 @@ export function MemoryActions({ read, writes, say }: { read: MemoryPageRead; wri
         </form>
       )}
       <Button
-        variant="quiet"
+        variant="quietDeny"
         size="sm"
-        className={`${action} text-rose hover:text-rose`}
+        className={action}
         aria-expanded={open === "delete"}
         onClick={() => setOpen(open === "delete" ? "none" : "delete")}
       >
