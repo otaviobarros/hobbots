@@ -38,6 +38,11 @@ export const messages = {
   /** Before the error the last try recorded, shown as it was recorded. */
   diagnostic: "Details:",
   next: { retry: "Next: retry it", reassign: "Next: reassign it", dismiss: "Next: dismiss it" },
+  /** The toast once a choice is sent from a card that then leaves (#988). */
+  decided: {
+    retry: ({ name }: { name: string }) => `Sent back to ${name} for another try.`,
+    dismiss: ({ name }: { name: string }) => `Dismissed ${name}'s stuck work.`,
+  },
   retry: "Retry",
   reassign: "Reassign",
   dismiss: "Dismiss",

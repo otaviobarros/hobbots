@@ -66,6 +66,14 @@ const makeCarrier = Effect.gen(function* () {
       text: (as) => (as === "start" ? startingText(items) : arrivalsText(items, as)),
       routineOnly: !items.some((item) => item.actionable),
       holding: deliveries.map(({ item, held }) => ({ itemId: item.id, owner: held.owner, token: held.token })),
+      // Routine progress rides along a turn and never starts one, so only the work needing the hob counts.
+      late: Effect.map(
+        Effect.forEach(
+          deliveries.filter(({ item }) => item.actionable),
+          (delivery) => delivery.late,
+        ),
+        (late) => late.length > 0 && late.every(Boolean),
+      ),
       accepted: (sessionId) =>
         Effect.forEach(deliveries, (delivery) => delivery.accepted(sessionId), { discard: true }).pipe(
           Effect.catchTag("StaleBackpackClaim", (stale) =>

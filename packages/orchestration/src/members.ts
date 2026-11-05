@@ -118,6 +118,9 @@ const lastSession = (task: Task, tree: TaskTree): string | null => {
   return current !== undefined && current.agentId === task.ownerId ? current.sessionId : null;
 };
 
+/** Why a turn that broke on a bug in Hobbots failed, as its lead and the Quest room show it. */
+const TURN_BROKE = "Hobbots hit an internal error during this turn.";
+
 /**
  * The Attempt the member's next turn on the Task goes on in, as a lead's later turns do (#577,
  * #668): its current one, when its owner's last turn there finished, or was stopped by Hobbots, on
@@ -344,7 +347,15 @@ export const makeMemberRunner = (deps: MemberDeps) => {
           deps.recorder,
         ).pipe(Effect.ensuring(handle === null ? Effect.void : handle.close));
         return yield* settle(task.id, attemptId, ending, work);
-      }).pipe(Effect.onInterrupt(() => stopped(taskId, attemptId, run))),
+      }).pipe(
+        // A bug in a turn must not leave its Attempt live, which would hold the Task from any other turn.
+        Effect.catchDefect((defect) =>
+          Effect.logWarning("A member's turn stopped on a defect", defect).pipe(
+            Effect.andThen(settle(taskId, attemptId, { _tag: "Failed", reason: TURN_BROKE }, work)),
+          ),
+        ),
+        Effect.onInterrupt(() => stopped(taskId, attemptId, run)),
+      ),
   });
 
   /** Starts the member's turns on its Task under its hob's lock, so a retirement sees every one admitted before it. */

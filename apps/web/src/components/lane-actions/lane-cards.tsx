@@ -1,6 +1,7 @@
 import type { AgentId, Task, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { type ReactNode, useEffect, useRef } from "react";
+import { WAITS } from "../move-on/places.ts";
 import { controlError } from "../quest/control-room.ts";
 import { messages as questCopy } from "../quest/messages.ts";
 import { ConfirmCancel, Outcome, Refusal, taskLine } from "../quest/room-controls.tsx";
@@ -82,6 +83,7 @@ function FailCard({
   const retrying = actions.sending(task.id) === "retry";
   return (
     <section
+      {...WAITS}
       aria-label={messages.failed({ name })}
       className="flex flex-col gap-2 rounded-control border-(length:--edge) border-solid border-rose bg-[color-mix(in_srgb,var(--color-rose)_12%,var(--color-card))] p-2.5"
     >

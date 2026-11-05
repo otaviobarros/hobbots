@@ -1,8 +1,10 @@
 import { type BackpackBlocker, type BackpackItem, openBlocker } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { type ReactNode, useId } from "react";
+import { type ReactNode, useId, useRef } from "react";
 import { useDecideBlocker } from "../../api/blockers.ts";
 import { ApiError } from "../../api/client.ts";
+import type { FocusTargets } from "../move-on/follow-focus.ts";
+import { useMoveOn } from "../move-on/move-on.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { messages } from "./messages.ts";
 
@@ -29,33 +31,43 @@ export const blockerChoice = (
 /**
  * Retry, Reassign and Dismiss for a stuck item, bound to the blocker shown, with why Reassign is
  * held and what went wrong when a choice could not be saved. `children` joins the buttons' row.
- * Without `held`, Reassign is left out instead of shown disabled.
+ * Without `held`, Reassign is left out instead of shown disabled. With `targets`, the card leaves
+ * once a choice is sent: focus moves there and a toast says what was sent (#988).
  */
 export function BlockerChoices({
   item,
   hob,
   held: showHeld = true,
+  targets,
   children,
 }: {
   item: BackpackItem;
   hob: Hob;
   held?: boolean;
+  targets?: FocusTargets;
   children?: ReactNode;
 }) {
   const decide = useDecideBlocker(item);
   const held = useId();
+  const area = useRef<HTMLDivElement>(null);
+  const moveOn = useMoveOn();
   const choice = blockerChoice(item, hob);
   if (choice === null) return null;
   const { blocker, retired, next } = choice;
+  const choose = (action: "retry" | "dismiss") => {
+    const sent = decide.mutateAsync({ blocker: blocker.number, action });
+    if (targets === undefined) sent.catch(() => undefined);
+    else moveOn({ from: area.current, targets, sent, say: copy.decided[action]({ name: hob.name }) });
+  };
   return (
-    <>
+    <div ref={area} className="contents">
       <div className="flex flex-wrap items-center gap-2">
         {!retired && (
           <Button
             size="xs"
             variant={next === "retry" ? "default" : "outline"}
             disabled={decide.isPending}
-            onClick={() => decide.mutate({ blocker: blocker.number, action: "retry" })}
+            onClick={() => choose("retry")}
           >
             {copy.retry}
           </Button>
@@ -69,7 +81,7 @@ export function BlockerChoices({
           size="xs"
           variant={next === "dismiss" ? "default" : "outline"}
           disabled={decide.isPending}
-          onClick={() => decide.mutate({ blocker: blocker.number, action: "dismiss" })}
+          onClick={() => choose("dismiss")}
         >
           {copy.dismiss}
         </Button>
@@ -87,6 +99,6 @@ export function BlockerChoices({
             : copy.failed}
         </p>
       )}
-    </>
+    </div>
   );
 }
