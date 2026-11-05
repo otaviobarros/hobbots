@@ -20,7 +20,6 @@ import {
   type ToolAccess,
 } from "@hobbots/agents";
 import {
-  type EventEnvelope,
   isMemoryToolName,
   MEMORY_SAVE_DESCRIPTION,
   MEMORY_SAVE_LABEL,
