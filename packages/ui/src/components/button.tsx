@@ -14,7 +14,10 @@ const buttonVariants = cva(
         approve: "press bg-mint font-bold text-ground [--press-color:var(--color-mint-deep)]",
         outline: "border-(length:--edge) border-solid border-control bg-transparent text-text-strong hover:bg-line",
         deny: "border-(length:--edge) border-solid border-rose bg-transparent text-rose hover:bg-line",
-        chip: "border-(length:--edge) border-solid border-control bg-transparent text-detail text-text-strong hover:bg-line",
+        chip: "border-(length:--edge) border-solid border-control bg-transparent text-detail text-text-strong hover:bg-line data-[recommended=true]:border-mint-deep",
+        // One of a question's choices (#740): a row with its label and what it does; the recommended one has a mint edge.
+        choice:
+          "border-(length:--edge) border-solid border-line-2 bg-panel text-start whitespace-normal text-text-strong items-start justify-start hover:border-control hover:bg-hover data-[recommended=true]:border-mint-deep",
         ghost: "bg-transparent text-text-strong hover:bg-hover",
         // A quiet action that should not draw the eye, such as the chat header's back arrow.
         quiet: "bg-transparent text-text-secondary hover:bg-hover hover:text-text-strong",
@@ -34,6 +37,7 @@ const buttonVariants = cva(
     compoundVariants: [
       { variant: ["outline", "deny"], size: "default", className: "px-3 py-1.5" },
       { variant: "chip", size: "default", className: "px-2.5 py-[5px]" },
+      { variant: "choice", size: "default", className: "px-2.5 py-2" },
     ],
     defaultVariants: {
       variant: "default",

@@ -63,6 +63,9 @@ export const makeAsking = ({ tasks }: Deps) => ({
             askerId: scope.caller.agentId,
             text: input.question,
             createdAt: scope.at,
+            ...(input.options === undefined ? {} : { options: input.options }),
+            // The tool counts choices from 1; the record keeps the index.
+            ...(input.recommended === undefined ? {} : { recommended: input.recommended - 1 }),
           }),
         ),
       );
