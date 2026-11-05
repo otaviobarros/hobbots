@@ -3,27 +3,24 @@ import { Button } from "@hobbots/ui/components/button";
 import { SearchField } from "@hobbots/ui/components/search-field";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { memoryPageGone } from "../../api/memory-pages.ts";
+import { useShowMemoryFiles } from "../../lib/show-memory-files.ts";
 import { PageHeader } from "../shell/pages.tsx";
-import { MemoryChangesView } from "./memory-changes.tsx";
+import type { Say } from "./memory-actions.tsx";
 import {
+  flashKeyOf,
   headLine,
   type MemorySearch,
   type MemoryView,
   memorySearchOf,
-  memoryTotals,
   memoryViewOf,
-  recentlyLearned,
   scopeNav,
 } from "./memory-model.ts";
 import { MemoryNav } from "./memory-nav.tsx";
-import { MemoryNothingYet, MemoryOverviewSkeleton, MemoryOverviewView } from "./memory-overview.tsx";
-import { MemoryIcon, ReadFailed } from "./memory-parts.tsx";
-import { MemoryRead } from "./memory-read.tsx";
-import { MemoryResults } from "./memory-results.tsx";
-import { MemoryScopeView } from "./memory-scope.tsx";
+import { FlashLine, MemoryIcon } from "./memory-parts.tsx";
+import { ViewBody } from "./memory-view-body.tsx";
 import { messages } from "./messages.ts";
 import { useMemory } from "./use-memory.ts";
+import { type MemoryFlash, useMemoryWrites } from "./use-memory-writes.ts";
 
 const copy = messages;
 
@@ -89,75 +86,6 @@ function NotAnswering({ reads }: { reads: Reads }) {
   );
 }
 
-/** A read that failed while memory still answers, which the view says in place of its content. */
-const failedAlone = (read: { readonly isError: boolean; readonly data: unknown }, offline: boolean) =>
-  read.isError && read.data === undefined && !offline;
-
-function OverviewBody({ reads, now }: { reads: Reads; now: Date }) {
-  const { overview, changes, pages, hobs, offline } = reads;
-  if (overview.data === undefined) {
-    if (offline) return null;
-    if (overview.isError) return <ReadFailed message={copy.scope.loadFailed} onRetry={reads.retry} />;
-    return <MemoryOverviewSkeleton />;
-  }
-  if (memoryTotals(overview.data).pages === 0) return <MemoryNothingYet />;
-  return (
-    <MemoryOverviewView learned={recentlyLearned(changes.data ?? [], now)} about={pages.data} hobs={hobs} now={now} />
-  );
-}
-
-function PageBody({ view, reads, now }: { view: Extract<MemoryView, { _tag: "Page" }>; reads: Reads; now: Date }) {
-  const { page, hobs, offline } = reads;
-  if (page.data !== undefined) return <MemoryRead read={page.data} version={view.version} hobs={hobs} now={now} />;
-  if (memoryPageGone(page.error)) return <PageGone view={view} />;
-  if (page.isError && !offline) return <ReadFailed message={copy.page.loadFailed} onRetry={reads.retry} />;
-  return offline ? null : <MemoryOverviewSkeleton />;
-}
-
-/** The open view, from what its reads hold so far. */
-function ViewBody({ view, reads, now }: { view: MemoryView; reads: Reads; now: Date }) {
-  const { overview, changes, pages, search, hobs, offline } = reads;
-  switch (view._tag) {
-    case "Overview":
-      return <OverviewBody reads={reads} now={now} />;
-    case "Changes":
-      if (failedAlone(changes, offline)) return <ReadFailed message={copy.changes.loadFailed} onRetry={reads.retry} />;
-      return <MemoryChangesView changes={changes.data} show={view.show} hobs={hobs} now={now} />;
-    case "Scope":
-      if (failedAlone(pages, offline)) return <ReadFailed message={copy.scope.loadFailed} onRetry={reads.retry} />;
-      return <MemoryScopeView scope={view.scope} kind={view.kind} pages={pages.data} hobs={hobs} />;
-    case "Page":
-      return <PageBody view={view} reads={reads} now={now} />;
-    case "Search":
-      if (failedAlone(search, offline)) return <ReadFailed message={copy.results.loadFailed} onRetry={reads.retry} />;
-      return (
-        <MemoryResults
-          q={view.q}
-          within={view.within}
-          hits={search.data}
-          nav={scopeNav(overview.data, reads.active, hobs)}
-          hobs={hobs}
-        />
-      );
-  }
-}
-
-function PageGone({ view }: { view: Extract<MemoryView, { _tag: "Page" }> }) {
-  return (
-    <div className="flex flex-col items-start gap-2">
-      <h2 className="m-0 font-heading text-heading font-bold text-text-strong">{copy.page.gone}</h2>
-      <p className="m-0 text-text-secondary">{copy.page.goneHint}</p>
-      <Link
-        to="/memory"
-        search={memorySearchOf({ _tag: "Scope", scope: view.scope, kind: null })}
-        className="text-link"
-      >
-        {copy.nav.overview}
-      </Link>
-    </div>
-  );
-}
-
 /** How many changes arrived since What changed was last open. */
 const useNewChanges = (view: MemoryView, changes: ReadonlyArray<MemoryChange> | undefined) => {
   const latest = changes?.[0]?.at ?? "";
@@ -167,15 +95,43 @@ const useNewChanges = (view: MemoryView, changes: ReadonlyArray<MemoryChange> | 
   return seen === null ? 0 : (changes ?? []).filter((change) => change.at > seen).length;
 };
 
+/** Open folder, on the desktop app on the hub: memory's pages as markdown files, in Finder. */
+function OpenFolder({ say }: { say: Say }) {
+  const { open, state } = useShowMemoryFiles();
+  if (open === undefined) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={state === "pending"}
+      aria-busy={state === "pending"}
+      onClick={() =>
+        void open().then((shown) => (shown ? undefined : say({ tone: "failed", message: copy.openFailed })))
+      }
+    >
+      {state === "pending" ? copy.opening : state === "failed" ? copy.retry : copy.openFolder}
+    </Button>
+  );
+}
+
+/** The line a change left, kept with the view it belongs to: another view drops it. */
+const useFlash = (view: MemoryView) => {
+  const [flash, setFlash] = useState<{ readonly key: string; readonly flash: MemoryFlash } | null>(null);
+  const say: Say = (next, at = view) => setFlash({ key: flashKeyOf(at), flash: next });
+  return { flash: flash?.key === flashKeyOf(view) ? flash.flash : null, say };
+};
+
 /**
- * The Memory page: what every hob remembers, About you and each project, read through the hub.
- * Its views live in the address (STD-REACT-002): the overview, What changed, a scope, a page with
- * its history, and a search. While memory does not answer it shows the pages it last loaded under
- * a notice, and tries again every 30 seconds.
+ * The Memory page: what every hob remembers, About you and each project, read through the hub, and
+ * changed through it (#959). Its views live in the address (STD-REACT-002): the overview, What
+ * changed, a scope, a page with its history, the editor, and a search. While memory does not answer
+ * it shows the pages it last loaded under a notice, and tries again every 30 seconds.
  */
 export function MemoryPage({ search }: { search: MemorySearch }) {
   const view = memoryViewOf(search);
   const reads = useMemory(view);
+  const writes = useMemoryWrites();
+  const { flash, say } = useFlash(view);
   const now = new Date();
   const nav = scopeNav(reads.overview.data, reads.active, reads.hobs);
   const newChanges = useNewChanges(view, reads.changes.data);
@@ -187,13 +143,19 @@ export function MemoryPage({ search }: { search: MemorySearch }) {
         title={copy.title}
         intro={headLine(reads.active.length, reads.overview.data, { offline: reads.offline })}
         introClassName={reads.offline ? "text-rose" : undefined}
-        actions={<MemorySearchForm view={view} />}
+        actions={
+          <span className="flex items-center gap-2">
+            <OpenFolder say={say} />
+            <MemorySearchForm view={view} />
+          </span>
+        }
       />
       <div className="flex min-h-0 min-w-0 flex-1">
         <MemoryNav nav={nav} view={view} loading={reads.overview.isPending} newChanges={newChanges} />
         <main aria-label={copy.title} className="min-w-0 flex-1 overflow-y-auto px-8 pt-6 pb-8 max-[1180px]:px-6">
           {reads.offline && <NotAnswering reads={reads} />}
-          <ViewBody view={view} reads={reads} now={now} />
+          {flash !== null && <FlashLine message={flash.message} tone={flash.tone} onUndo={flash.undo} />}
+          <ViewBody view={view} reads={reads} now={now} act={{ writes, say }} />
         </main>
       </div>
     </div>

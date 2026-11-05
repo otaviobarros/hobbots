@@ -6,6 +6,7 @@ import {
   type MemoryVersionChanges,
   memoryKindOf,
 } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -13,11 +14,13 @@ import { Link } from "@tanstack/react-router";
 import { memoryVersionQuery } from "../../api/memory-pages.ts";
 import { formatAgo, formatMoment } from "../../lib/format.ts";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
+import { ForgetNotice, MemoryActions, type Say, useRestore } from "./memory-actions.tsx";
 import {
   authorName,
   type HistoryRow,
   type HobDirectory,
   historyRows,
+  keptInOf,
   memorySearchOf,
   pageBody,
   pageTitle,
@@ -26,6 +29,7 @@ import {
 } from "./memory-model.ts";
 import { KindTag, MemoryCard, PinnedTag } from "./memory-parts.tsx";
 import { messages } from "./messages.ts";
+import type { MemoryWrites } from "./use-memory-writes.ts";
 
 const copy = messages;
 
@@ -38,17 +42,6 @@ const bylineOf = (read: MemoryPageRead, hobs: HobDirectory, now: Date) => {
   return copy.page.learned({ who: authorName(first, hobs), when });
 };
 
-const keptIn = (scope: MemoryScope, hobs: HobDirectory) => {
-  switch (scope._tag) {
-    case "Hob":
-      return copy.page.keptInHob({ name: scopeName(scope, hobs) });
-    case "Project":
-      return copy.page.keptInProject({ name: scopeName(scope, hobs) });
-    case "Everyone":
-      return copy.page.keptInAbout;
-  }
-};
-
 /**
  * A page: its kind, title and body, then beside it where it came from and its History. Show
  * changes on a version lays out what that version changed against the one before it.
@@ -58,17 +51,22 @@ export function MemoryRead({
   version,
   hobs,
   now,
+  writes,
+  say,
 }: {
   read: MemoryPageRead;
   /** The version whose changes show, or null. */
   version: MemoryVersion | null;
   hobs: HobDirectory;
   now: Date;
+  writes: MemoryWrites;
+  say: Say;
 }) {
   const { page } = read;
   const kind = memoryKindOf(page.path);
   const rows = historyRows(read.history, hobs);
   const shown = rows.find((row) => row.version === version);
+  const restore = useRestore(writes, say);
   return (
     <div className="flex flex-wrap items-start gap-7">
       <article className="flex min-w-0 max-w-[680px] flex-[1_1_520px] flex-col gap-4">
@@ -94,11 +92,13 @@ export function MemoryRead({
             {pageTitle(page.markdown, page.path)}
           </h2>
           <p className="m-0 text-ui text-text-secondary">{bylineOf(read, hobs, now)}</p>
+          {page.forgetOn !== null && <ForgetNotice read={read} writes={writes} say={say} />}
         </header>
         {shown !== undefined && <VersionChanges scope={page.scope} path={page.path} row={shown} />}
         <ReplyMarkdown content={pageBody(page.markdown)} streaming={false} caret={false} />
       </article>
       <aside aria-label={copy.page.aside} className="flex w-[280px] flex-none flex-col gap-4">
+        <MemoryActions key={page.version} read={read} writes={writes} say={say} />
         <MemoryCard label={copy.page.origin}>
           <h3 className="lbl m-0 text-label">{copy.page.origin}</h3>
           <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-detail">
@@ -109,7 +109,7 @@ export function MemoryRead({
               </>
             )}
             <dt className="text-label">{copy.page.keptIn}</dt>
-            <dd className="m-0">{keptIn(page.scope, hobs)}</dd>
+            <dd className="m-0">{keptInOf(page.scope, hobs)}</dd>
           </dl>
         </MemoryCard>
         <MemoryCard label={copy.page.history}>
@@ -122,6 +122,8 @@ export function MemoryRead({
                 scope={page.scope}
                 path={page.path}
                 open={row.version === version}
+                busy={writes.busy}
+                onRestore={row.latest ? undefined : () => restore(page, row.version, copy.actions.restored)}
               />
             ))}
           </ol>
@@ -136,11 +138,16 @@ function HistoryEntry({
   scope,
   path,
   open,
+  busy,
+  onRestore,
 }: {
   row: HistoryRow;
   scope: MemoryScope;
   path: MemoryPath;
   open: boolean;
+  busy: boolean;
+  /** Writes this version back as the latest; absent for the latest version. */
+  onRestore: (() => void) | undefined;
 }) {
   return (
     <li className="flex items-start gap-2 text-detail">
@@ -157,6 +164,17 @@ function HistoryEntry({
       >
         {open ? copy.page.hideChanges : copy.page.showChanges}
       </Link>
+      {onRestore !== undefined && (
+        <Button
+          variant="quiet"
+          size="xs"
+          aria-label={copy.actions.restoreLabel({ when: formatMoment(row.at) })}
+          disabled={busy}
+          onClick={onRestore}
+        >
+          {copy.actions.restore}
+        </Button>
+      )}
     </li>
   );
 }
