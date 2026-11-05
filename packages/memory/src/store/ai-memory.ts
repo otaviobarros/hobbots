@@ -83,7 +83,7 @@ const VERSION_LIMIT = 200;
  */
 const PINNED_ONLY = '"hobbots0pinned0pages0only0x9q"';
 const PIN_FIRST_MAX = 10;
-/** How many pages are read at once when every page of a scope is read for its pin. */
+/** How many pin queries run at once. */
 const READ_CONCURRENCY = 8;
 /** A forgotten page comes back from the wiki's Git revision before its delete, marked so. */
 const REVISION = "rev:";
@@ -151,30 +151,63 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       return page as MemoryPage | null;
     }).pipe(orEmpty(null));
 
-  /** Every page of the scope, read one by one: the only complete answer to which are pinned. */
-  const pinnedByReading = (scope: MemoryScope) =>
+  /** The scope's pinned pages under `prefix`, the newest first and at most `PIN_FIRST_MAX` of them. */
+  const pinsUnder = (where: EngineProject, prefix: string) =>
+    client
+      .tool(
+        ROOT,
+        "memory_query",
+        {
+          ...where,
+          query: PINNED_ONLY,
+          pin_first: true,
+          limit: PAGE_LIMIT,
+          ...(prefix === "" ? {} : { path_prefix: prefix }),
+        },
+        HitsJson,
+      )
+      .pipe(Effect.map((json) => json.hits.filter((hit) => hit.pinned === true).map((hit) => hit.path)));
+
+  /**
+   * Every pinned page of the scope, from pin metadata alone. ai-memory answers at most ten pins a
+   * query, so a prefix that fills the answer is split by the next character of the scope's paths
+   * until each part answers in full. No page body is read, but for a path that is itself a prefix
+   * of a full answer.
+   */
+  const pinnedPaths = (scope: MemoryScope): Effect.Effect<ReadonlySet<string>, MemoryUnavailable | EngineRefused> =>
     Effect.gen(function* () {
       const where = engineProjectOf(scope);
-      const all = yield* client.get(`${pagesRoute(where)}/pages`, Schema.Array(SummaryJson));
-      const pages = yield* Effect.forEach(all, (each) => pageOf(scope, MemoryPath.make(each.path)), {
-        concurrency: READ_CONCURRENCY,
-      });
-      return new Set(pages.flatMap((page) => (page?.pinned === true ? [page.path as string] : [])));
-    });
-
-  const pinnedPaths = (scope: MemoryScope) => {
-    const where = engineProjectOf(scope);
-    return client
-      .tool(ROOT, "memory_query", { ...where, query: PINNED_ONLY, pin_first: true, limit: PAGE_LIMIT }, HitsJson)
-      .pipe(
-        Effect.map((json) => new Set(json.hits.filter((hit) => hit.pinned === true).map((hit) => hit.path))),
-        // A full answer may have left pins out, so the scope's pages say which are pinned.
-        Effect.flatMap((pinned) =>
-          pinned.size < PIN_FIRST_MAX ? Effect.succeed(pinned as ReadonlySet<string>) : pinnedByReading(scope),
-        ),
-        orEmpty(new Set<string>() as ReadonlySet<string>),
+      const first = yield* pinsUnder(where, "");
+      if (first.length < PIN_FIRST_MAX) return new Set(first);
+      const paths = (yield* client.get(`${pagesRoute(where)}/pages`, Schema.Array(SummaryJson))).map(
+        (each) => each.path,
       );
-  };
+      const pinned = new Set<string>();
+      const walk = (
+        prefix: string,
+        found: ReadonlyArray<string>,
+      ): Effect.Effect<void, MemoryUnavailable | EngineRefused> =>
+        Effect.gen(function* () {
+          if (found.length < PIN_FIRST_MAX) {
+            for (const path of found) pinned.add(path);
+            return;
+          }
+          if (paths.includes(prefix) && (yield* pageOf(scope, MemoryPath.make(prefix)))?.pinned === true) {
+            pinned.add(prefix);
+          }
+          const next = new Set(
+            paths
+              .filter((path) => path.length > prefix.length && path.startsWith(prefix))
+              .map((path) => path.slice(0, prefix.length + 1)),
+          );
+          yield* Effect.forEach(next, (child) => Effect.flatMap(pinsUnder(where, child), (hits) => walk(child, hits)), {
+            concurrency: READ_CONCURRENCY,
+            discard: true,
+          });
+        });
+      yield* walk("", first);
+      return pinned;
+    }).pipe(orEmpty(new Set<string>() as ReadonlySet<string>));
 
   const summaryOf =
     (scope: MemoryScope, pinned: ReadonlySet<string>) =>

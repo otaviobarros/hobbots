@@ -20,7 +20,7 @@ A hob never reaches the engine: it has no address or key for it, and the OS sand
 - A hob's searches and writes go over `/mcp` with the trusted-proxy bearer and `X-Memory-Actor-User: hob-<hob id>`, so ai-memory stamps the hob in each page's `last_modified_by`. Your edits and every read use the root bearer. ai-memory records the author only in a page's frontmatter, so `history` names the author of the latest version alone.
 - Writes take ai-memory's preconditions (`create_only`, `expected_page_id`), and a lost one is a `MemoryConflict`. ai-memory removes a page's versions when it deletes it, so `forget` answers the Git revision from before the delete, and `restore` takes either that or a version id.
 - Every request is decoded with `Schema`. A refusal that is not a conflict or a missing scope reads as an outage, never as data. `restore` reads any refusal as a version it cannot bring back, a conflict naming the page's current version.
-- `list` and `changes` mark pins from ai-memory's pinned-first search, which answers at most ten; with ten or more, every page of the scope is read for its pin. `history` reads the versions page by page.
+- `list` and `changes` mark pins from ai-memory's pinned-first search, which answers at most ten; a prefix that fills the answer is split by the next character of the scope's paths until each part answers in full, so no page body is read for it. `history` reads the versions page by page.
 - `@hobbots/memory/testing` exports `MemoryStoreFake`, which keeps pages in memory and can be taken down.
 
 ## Tests
