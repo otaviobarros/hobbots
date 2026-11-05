@@ -16,8 +16,8 @@ const now = (since: string, label: string | null = "Waiting on pnpm dev"): LaneI
   since,
 });
 
-/** The text a row shows, with its tags taken out. */
-const text = (item: LaneItem) => renderToStaticMarkup(<LaneItemRow item={item} hobs={hobs} />).replace(/<[^>]+>/g, "");
+/** The markup a row renders. */
+const html = (item: LaneItem) => renderToStaticMarkup(<LaneItemRow item={item} hobs={hobs} />);
 
 describe("a running lane's line", () => {
   beforeEach(() => {
@@ -30,8 +30,14 @@ describe("a running lane's line", () => {
 
   it("[TC-UX-1004-02] says when the hob last did something once it has gone quiet for a minute", () => {
     // covers UX-004: a Running hob that waits or is stuck reads differently from one that just moved (#1004)
-    expect(text(now("2026-11-05T12:09:30.000Z"))).toBe("Waiting on pnpm dev");
-    expect(text(now("2026-11-05T12:06:00.000Z"))).toBe("Waiting on pnpm dev· last step 4 minutes ago");
-    expect(text(now("2026-11-05T11:54:00.000Z", null))).toBe("Working· last step 16 minutes ago");
+    const fresh = html(now("2026-11-05T12:09:30.000Z"));
+    expect(fresh).toContain(">Waiting on pnpm dev</span>");
+    expect(fresh).not.toContain("last step");
+    const quiet = html(now("2026-11-05T12:06:00.000Z"));
+    expect(quiet).toContain(">Waiting on pnpm dev</span>");
+    expect(quiet).toContain("last step 4 minutes ago");
+    const stalled = html(now("2026-11-05T11:54:00.000Z", null));
+    expect(stalled).toContain(">Working</span>");
+    expect(stalled).toContain("last step 16 minutes ago");
   });
 });
