@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { dock, lane, laneHead, openRoom, questRoom, ticket } from "./quest-room.ts";
+import { dock, lane, laneHead, laneTask, openRoom, questRoom, ticket } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -173,12 +173,29 @@ test("[TC-UX-205] at 960 px the chat starts folded and opens over the lanes, and
   await expect(rail).toBeVisible();
   await expect(rail.getByRole("button", { name: "Open the chat", exact: true })).toBeFocused();
 
-  // Tabbing through the room from its title keeps focus on a control, never on the page itself.
+  // Tabbing through the whole room, from its title to the chat's rail after it, keeps focus on a
+  // control at every step and never on the page itself. The walk starts once the Quest waits on
+  // Ada's question, so the room holds still while it runs, and ends on the rail, the last control
+  // on the page: one more Tab would leave the page whatever the room holds.
+  const asks = lane(page, "Ada").getByRole("region", { name: "Ada asks you" });
+  await expect(asks).toBeVisible({ timeout: 20_000 });
+  const last = rail.getByRole("button", { name: "Open the chat", exact: true });
   await room.getByRole("heading", { name: TITLE }).focus();
-  for (let step = 0; step < 12; step++) {
+  for (let step = 1; !(await last.evaluate((button) => button === document.activeElement)); step++) {
+    expect(step, "Tab reaches the chat's rail").toBeLessThanOrEqual(60);
     await page.keyboard.press("Tab");
     expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
   }
+
+  // A row in a card's backpack that has focus when its item is handled moves into the card's details
+  // with it, and focus goes to their summary. The answer is sent without moving focus off the row.
+  const build = laneTask(page, "Build the campaign");
+  const row = build.getByRole("region", { name: "Backpack for Build the campaign" }).getByRole("button");
+  await row.focus();
+  await asks.getByRole("button", { name: /^Dec 12 for international/ }).dispatchEvent("click");
+  await expect(build.getByText("Everything in this task")).toBeFocused();
+  await expect(build.getByRole("region", { name: "Backpack for Build the campaign" })).toHaveCount(0);
+
   await room.getByRole("button", { name: "Close room" }).focus();
   await page.keyboard.press("Enter");
   await expect(room).toBeHidden();

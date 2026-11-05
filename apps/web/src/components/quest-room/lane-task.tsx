@@ -1,8 +1,10 @@
 import type { Task, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { OverflowTooltip } from "@hobbots/ui/components/overflow-tooltip";
+import { focusedElement } from "@hobbots/ui/lib/restore-focus";
+import { useEffect, useRef } from "react";
 import { formatWhen } from "../../lib/time.ts";
-import { TaskBackpack } from "../backpack/quest-backpack.tsx";
+import { TaskBackpack, useTaskWaiting } from "../backpack/quest-backpack.tsx";
 import type { PickedTry } from "../lane-actions/lane-actions-model.ts";
 import type { Lane } from "../lanes/lane-model.ts";
 import { attemptCount, type RoomRow, roomRows, roomStatusLabel, roomTone } from "../quest/control-room.ts";
@@ -56,6 +58,10 @@ export function TaskCards({
  * earlier one went, what waits in its backpack, and everything else behind a disclosure, Show in
  * the Workbench among it. A question for you, a failure and the controls are
  * the lane's own (lane-actions), as are its beats, marks and waits (ADR 027).
+ *
+ * The backpack shows on the card while something waits and moves into the details once nothing
+ * does. A row that had focus goes with it, so focus moves to the details' summary, which now holds
+ * it, rather than falling back to the page (#986).
  */
 function TaskCard({
   tree,
@@ -78,9 +84,21 @@ function TaskCard({
 }) {
   const { task } = row;
   const attempts = attemptCount(tree, task);
+  const waiting = useTaskWaiting(tree, task);
+  const onCard = waiting.count > 0;
+  const summary = useRef<HTMLElement>(null);
+  const focused = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (onCard || focused.current?.isConnected !== false || focusedElement() !== null) return;
+    focused.current = null;
+    summary.current?.focus();
+  }, [onCard]);
   return (
     <section
       aria-label={taskTitle(task)}
+      onFocus={(event) => {
+        focused.current = event.target;
+      }}
       className="flex min-w-0 flex-col gap-2 border-t border-line pt-2.5 text-detail wrap-anywhere"
     >
       {titled && (
@@ -100,16 +118,18 @@ function TaskCard({
       {/* An earlier try picked in the lane says how it went; the lane shows the rest. */}
       {tried?.line != null && <p className="m-0 line-clamp-3 whitespace-pre-wrap text-text">{tried.line}</p>}
       <Flags row={row} hobs={hobs} />
-      <TaskBackpack tree={tree} task={task} hobs={hobs} onOpen={onOpen} waiting />
+      {onCard && <TaskBackpack task={task} waiting={waiting} hobs={hobs} onOpen={onOpen} />}
       <details>
-        <summary className="cursor-pointer text-label">{messages.details}</summary>
+        <summary ref={summary} className="cursor-pointer text-label">
+          {messages.details}
+        </summary>
         <div className="mt-3 flex flex-col gap-4">
           <span className="flex">
             <Button variant="outline" size="xs" onClick={() => onWorkbench(task.id)}>
               {messages.showInWorkbench}
             </Button>
           </span>
-          <TaskBackpack tree={tree} task={task} hobs={hobs} onOpen={onOpen} waiting={false} />
+          {!onCard && <TaskBackpack task={task} waiting={waiting} hobs={hobs} onOpen={onOpen} />}
           <TaskSummary tree={tree} task={task} hobs={hobs} />
           <TaskDetail tree={tree} task={task} hobs={hobs} onOpen={onOpen} />
         </div>
