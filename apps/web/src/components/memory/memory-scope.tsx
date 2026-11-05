@@ -1,4 +1,5 @@
 import { type MemoryKind, type MemoryPageSummary, type MemoryScope, memoryKindOf } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -57,22 +58,32 @@ function ScopeHeader({ scope, hobs, pages }: { scope: MemoryScope; hobs: HobDire
           {copy.scope.openHob({ name })}
         </Link>
       )}
+      <Button variant="outline" size="sm" asChild>
+        <Link to="/memory" search={memorySearchOf({ _tag: "New", scope, kind: null })}>
+          {copy.newPage}
+        </Link>
+      </Button>
     </header>
   );
 }
 
-/** A scope's pages: kind chips, then each kind as its own group. */
+/**
+ * A scope's pages: kind chips, then each kind as its own group, and New page. `children` follows the
+ * groups, as About you's house rule composer does.
+ */
 export function MemoryScopeView({
   scope,
   kind,
   pages,
   hobs,
+  children,
 }: {
   scope: MemoryScope;
   kind: MemoryKind | null;
   /** Undefined while the pages are read. */
   pages: ReadonlyArray<MemoryPageSummary> | undefined;
   hobs: HobDirectory;
+  children?: React.ReactNode;
 }) {
   const navigate = useNavigate();
   const who = scopeName(scope, hobs);
@@ -119,6 +130,7 @@ export function MemoryScopeView({
             </RowList>
           </section>
         ))}
+        {children}
         {scope._tag === "Hob" && <p className="m-0 text-detail text-label">{copy.scope.hobFooter({ name: who })}</p>}
       </div>
       {scope._tag === "Project" && (

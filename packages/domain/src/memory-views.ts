@@ -78,6 +78,28 @@ export const memoryKindOf = (path: MemoryPathType): MemoryKind => {
   return (slash === -1 ? undefined : KIND_FOLDERS.get(path.slice(0, slash))) ?? "note";
 };
 
+/** The folder a page of `kind` is kept in; a note, which no folder names, goes in `notes/`. */
+export const memoryFolderOf = (kind: MemoryKind): string =>
+  [...KIND_FOLDERS].find(([, each]) => each === kind)?.[0] ?? "notes";
+
+/** The most characters of a title a new page's file name keeps. */
+const SLUG_MAX = 60;
+
+/**
+ * The path of a new page of `kind` titled `title`, in its kind's folder: `rules/use-pnpm-not-npm.md`.
+ * The file name keeps the title's letters and digits, without accents, lower case, joined by `-`.
+ */
+export const memoryPathFor = (kind: MemoryKind, title: string): MemoryPathType => {
+  const slug = title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, SLUG_MAX)
+    .replace(/^-+|-+$/g, "");
+  return MemoryPath.make(`${memoryFolderOf(kind)}/${slug || "page"}.md`);
+};
+
 /** The kinds in the order the Memory page groups them. */
 export const MEMORY_KINDS: ReadonlyArray<MemoryKind> = MemoryKind.literals;
 

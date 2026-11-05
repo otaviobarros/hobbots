@@ -247,3 +247,175 @@ describe("the Memory page's API", () => {
     ]);
   });
 });
+
+const post = async (path: string, body: unknown) => {
+  const response = await handler(
+    new Request(`http://localhost:4317${path}`, {
+      method: "POST",
+      headers: { ...AS_WINDOW, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+  const text = await response.text();
+  return { status: response.status, body: text === "" ? undefined : JSON.parse(text) };
+};
+
+/** What the Memory page sends to save a page as you. */
+const saved = (scope: MemoryScope, path: string, markdown: string, more: Record<string, unknown> = {}) => ({
+  scope: memoryScopeKey(scope),
+  path,
+  markdown,
+  tags: [],
+  pinned: false,
+  forgetOn: null,
+  expected: null,
+  ...more,
+});
+
+const readPage = (scope: MemoryScope, path: string) =>
+  get(`/api/memory/page?${query({ scope: memoryScopeKey(scope), path })}`);
+
+describe("changing memory from the Memory page", () => {
+  // covers ADR 028 (Writes), #959
+  it("[TC-GEN-334] saves an edit as a new version by you, and restores the hob's version as another", async () => {
+    const learned = await Effect.runPromise(
+      store.write(asPip, pipsOwn, draft("howtos/preview.md", "# Preview\n\nAsk Ada."), fresh),
+    );
+    const edit = await post(
+      "/api/memory/page",
+      saved(pipsOwn, "howtos/preview.md", "# Preview\n\nAsk Ada for a preview link.", { expected: learned }),
+    );
+    expect(edit.status).toBe(200);
+    expect(edit.body.page).toMatchObject({ markdown: "# Preview\n\nAsk Ada for a preview link.", author: you });
+    expect(edit.body.history.map((entry: { version: string }) => entry.version)).toEqual([
+      edit.body.page.version,
+      learned,
+    ]);
+    // What changed lists your edit without waiting for the next look.
+    expect((await get("/api/memory/changes")).body).toContainEqual(
+      expect.objectContaining({ path: "howtos/preview.md", version: edit.body.page.version, author: you }),
+    );
+
+    const restored = await post("/api/memory/page/restore", {
+      scope: memoryScopeKey(pipsOwn),
+      path: "howtos/preview.md",
+      version: learned,
+    });
+    expect(restored.status).toBe(200);
+    expect(restored.body.page).toMatchObject({ markdown: "# Preview\n\nAsk Ada.", author: you });
+    expect(restored.body.history).toHaveLength(3);
+    expect(restored.body.history[0]).toMatchObject({ latest: true, author: you });
+  });
+
+  // covers ADR 028 (Writes), #959
+  it("[TC-GEN-335] pins a page and sets the day it is forgotten, each as a version History can restore", async () => {
+    const learned = await Effect.runPromise(store.write(asPip, theSite, draft("facts/plan.md", "# Plan"), fresh));
+    const pinned = await post(
+      "/api/memory/page",
+      saved(theSite, "facts/plan.md", "# Plan", { pinned: true, expected: learned }),
+    );
+    expect(pinned.body.page).toMatchObject({ pinned: true, forgetOn: null, author: you });
+    const forget = await post(
+      "/api/memory/page",
+      saved(theSite, "facts/plan.md", "# Plan", {
+        pinned: true,
+        forgetOn: "2099-12-31",
+        expected: pinned.body.page.version,
+      }),
+    );
+    expect(forget.body.page).toMatchObject({ pinned: true, forgetOn: "2099-12-31" });
+    expect(forget.body.history).toHaveLength(3);
+    // Restoring the version before the forget day keeps the page.
+    const kept = await post("/api/memory/page/restore", {
+      scope: memoryScopeKey(theSite),
+      path: "facts/plan.md",
+      version: pinned.body.page.version,
+    });
+    expect(kept.body.page).toMatchObject({ pinned: true, forgetOn: null, author: you });
+    // A day that is not one is refused before memory is reached.
+    const wrong = await post("/api/memory/page", saved(theSite, "facts/plan.md", "# Plan", { forgetOn: "soon" }));
+    expect(wrong.status).toBe(400);
+  });
+
+  // covers ADR 028 (Writes), #959
+  it("[TC-GEN-336] deletes a page with its history, and Undo brings it back as a version by you", async () => {
+    const learned = await Effect.runPromise(
+      store.write(asPip, pipsOwn, draft("gotchas/link.md", "# Link first"), fresh),
+    );
+    const deleted = await post("/api/memory/page/delete", {
+      scope: memoryScopeKey(pipsOwn),
+      path: "gotchas/link.md",
+      version: learned,
+    });
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.restoreFrom).not.toBeNull();
+    expect((await readPage(pipsOwn, "gotchas/link.md")).status).toBe(404);
+    const undone = await post("/api/memory/page/restore", {
+      scope: memoryScopeKey(pipsOwn),
+      path: "gotchas/link.md",
+      version: deleted.body.restoreFrom,
+    });
+    expect(undone.status).toBe(200);
+    expect(undone.body.page).toMatchObject({ markdown: "# Link first", author: you });
+  });
+
+  // covers ADR 028 (MemoryConflict), #959
+  it("[TC-GEN-337] refuses an edit, a pin or a delete that races a hob's save, and writes nothing", async () => {
+    const opened = await Effect.runPromise(
+      store.write(asPip, pipsOwn, draft("howtos/tests.md", "# Tests\n\nRun pnpm check."), fresh),
+    );
+    // Pip saves the page while you have it open in the editor.
+    const hobs = await Effect.runPromise(
+      store.write(asPip, pipsOwn, draft("howtos/tests.md", "# Tests\n\nRun pnpm check, then pnpm test:pg."), {
+        _tag: "Version",
+        version: opened,
+      }),
+    );
+    for (const [path, body] of [
+      ["/api/memory/page", saved(pipsOwn, "howtos/tests.md", "# Tests\n\nRun pnpm test.", { expected: opened })],
+      [
+        "/api/memory/page",
+        saved(pipsOwn, "howtos/tests.md", "# Tests\n\nRun pnpm check.", { pinned: true, expected: opened }),
+      ],
+      ["/api/memory/page/delete", { scope: memoryScopeKey(pipsOwn), path: "howtos/tests.md", version: opened }],
+    ] as const) {
+      const refused = await post(path, body);
+      expect(refused.status).toBe(409);
+      expect(refused.body).toEqual({ _tag: "MemoryPageChanged", path: "howtos/tests.md", current: hobs });
+    }
+    const page = await readPage(pipsOwn, "howtos/tests.md");
+    expect(page.body.page).toMatchObject({ version: hobs, author: { _tag: "Hob", agentId: pip }, pinned: false });
+    expect(page.body.history).toHaveLength(2);
+    // Saved again over the version it now knows, your edit goes through.
+    const over = await post(
+      "/api/memory/page",
+      saved(pipsOwn, "howtos/tests.md", "# Tests\n\nRun pnpm test.", { expected: hobs }),
+    );
+    expect(over.status).toBe(200);
+    expect(over.body.page).toMatchObject({ markdown: "# Tests\n\nRun pnpm test.", author: you });
+    // A new page never replaces one already at its path.
+    const taken = await post("/api/memory/page", saved(pipsOwn, "howtos/tests.md", "# Tests again"));
+    expect(taken.status).toBe(409);
+  });
+
+  // covers ADR 028 (Sharing: About you), #959
+  it("[TC-GEN-338] writes About you, which every hob reads, as your own pages", async () => {
+    const added = await post(
+      "/api/memory/page",
+      saved(everyone, "rules/short-emails.md", "# Keep customer emails short"),
+    );
+    expect(added.status).toBe(200);
+    expect(added.body.page).toMatchObject({ scope: everyone, author: you });
+    const about = await get(`/api/memory/pages?${query({ scope: "everyone" })}`);
+    expect(about.body).toEqual([
+      expect.objectContaining({ path: "rules/short-emails.md", title: "Keep customer emails short" }),
+    ]);
+    // Every hob finds it.
+    expect(await Effect.runPromise(store.search(asPip, [pipsOwn, everyone], "customer emails", 10))).toEqual([
+      expect.objectContaining({ path: "rules/short-emails.md" }),
+    ]);
+    controls.setDown(true);
+    const down = await post("/api/memory/page", saved(everyone, "rules/later.md", "# Later"));
+    expect(down.status).toBe(503);
+  });
+});
