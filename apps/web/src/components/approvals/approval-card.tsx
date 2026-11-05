@@ -8,9 +8,10 @@ import {
 import { cn } from "@hobbots/ui/lib/utils";
 import { useEffect, useRef } from "react";
 import { useDecideApproval } from "../../api/approvals.ts";
-import { operationLabel } from "../../lib/reply-steps.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
+import { messages as plainCopy } from "../plain-words/messages.ts";
+import { approvalAction, capitalized } from "../plain-words/plain-words.ts";
 import { ApprovalActions } from "./approval-actions.tsx";
 import { decisionErrorText, expiryText, resultText } from "./approval-text.ts";
 
@@ -131,7 +132,7 @@ function ApprovalDetails({ approval, hob }: { approval: ApprovalRequest; hob: Ag
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ui">
       <dt className="text-label">{copy.action}</dt>
       <dd className="m-0 flex flex-col gap-0.5">
-        <span>{operationLabel(approval.operation)}</span>
+        <span className="font-bold">{plainCopy.question({ what: capitalized(approvalAction(approval)) })}</span>
         <code className="bg-deep px-2 py-1 font-mono text-code break-all whitespace-pre-wrap">{action}</code>
       </dd>
       <dt className="text-label">{copy.target}</dt>

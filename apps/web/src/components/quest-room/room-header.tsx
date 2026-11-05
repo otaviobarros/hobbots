@@ -36,6 +36,7 @@ export function RoomHeader({
   width,
   headingRef,
   onClose,
+  technical,
 }: {
   tree: TaskTree;
   /** The party's sprites, each going to its lane. */
@@ -45,6 +46,8 @@ export function RoomHeader({
   width: RoomWidth;
   headingRef: RefObject<HTMLHeadingElement | null>;
   onClose: () => void;
+  /** Whether the lanes show the technical steps, and the switch for it. */
+  technical: { readonly on: boolean; readonly toggle: () => void };
 }) {
   const [asking, setAsking] = useState(false);
   const card = workCard(tree);
@@ -83,10 +86,22 @@ export function RoomHeader({
         <span
           className={cn("shrink-0 text-detail whitespace-nowrap text-text-secondary", width === "narrow" && "sr-only")}
         >
-          {total > 0 && messages.done({ done, total })}
+          <DoneCount done={done} total={total} finished={top.state === "completed"} />
           {needs > 0 && <span className="font-bold text-lantern"> · {messages.needYou({ count: needs })}</span>}
         </span>
         <span className="ms-auto shrink-0">{lineup}</span>
+        {width !== "narrow" && (
+          <Button
+            variant="quiet"
+            size="sm"
+            aria-pressed={technical.on}
+            title={messages.technical.hint}
+            onClick={technical.toggle}
+            className="shrink-0"
+          >
+            {technical.on ? messages.technical.hide : messages.technical.show}
+          </Button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="icon" size="icon" aria-label={messages.menu({ title: taskTitle(top) })}>
@@ -94,6 +109,7 @@ export function RoomHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <TechnicalItem shown={width === "narrow"} technical={technical} />
             <DropdownMenuItem onSelect={() => pins.toggle(top.id)}>
               {pins.pinned.includes(top.id) ? messages.unpin : messages.pin}
             </DropdownMenuItem>
@@ -122,6 +138,29 @@ export function RoomHeader({
       </div>
     </>
   );
+}
+
+/** In a narrow window, where the header has no room for it, the switch for the technical steps. */
+function TechnicalItem({
+  shown,
+  technical,
+}: {
+  shown: boolean;
+  technical: { readonly on: boolean; readonly toggle: () => void };
+}) {
+  if (!shown) return null;
+  return (
+    <DropdownMenuItem onSelect={technical.toggle}>
+      {technical.on ? messages.technical.hide : messages.technical.show}
+    </DropdownMenuItem>
+  );
+}
+
+/** How much of the work is done, with a check once the request has finished. */
+function DoneCount({ done, total, finished }: { done: number; total: number; finished: boolean }) {
+  if (total === 0) return null;
+  if (!finished) return messages.done({ done, total });
+  return <span className="font-bold text-mint">{messages.allDone({ done, total })}</span>;
 }
 
 /** A Quest pinned from another thread says so, with a link to its own thread. */

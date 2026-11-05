@@ -2,9 +2,11 @@ import type { AgentId } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useState } from "react";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
+import { messages as plainCopy } from "../plain-words/messages.ts";
+import type { StepOutcome } from "../plain-words/plain-words.ts";
 import type { HobLookup } from "../quest/use-work.ts";
 import { useLineCounts } from "../workbench/changes/use-line-counts.ts";
-import type { LaneItem, LaneMark } from "./lane-model.ts";
+import type { LaneFoldable, LaneItem, LaneMark, LaneStep } from "./lane-model.ts";
 import { messages } from "./messages.ts";
 
 type Mark = Extract<LaneMark, { kind: "edit" }>;
@@ -51,6 +53,34 @@ function MarkRow({
       )}
     </li>
   );
+}
+
+/** How a step in everyday words went: a glyph beside its words, which a screen reader hears as words. */
+const STEP: Readonly<Record<StepOutcome, { readonly glyph: string; readonly tone: string }>> = {
+  done: { glyph: "✓", tone: "text-mint" },
+  failed: { glyph: "✗", tone: "text-rose" },
+  running: { glyph: "·", tone: "text-label" },
+  blocked: { glyph: "⊘", tone: "text-rose" },
+  unknown: { glyph: "?", tone: "text-label" },
+};
+
+/** Something the hob did, in everyday words, with how it went. */
+function StepRow({ step }: { step: LaneStep }) {
+  const look = STEP[step.outcome];
+  return (
+    <li className="flex items-baseline gap-2 ps-0.5 text-detail text-text-secondary">
+      <span aria-hidden className={cn("w-3 shrink-0 text-center font-bold", look.tone)}>
+        {look.glyph}
+      </span>
+      <span className="min-w-0 flex-1 wrap-anywhere">{step.text}</span>
+      <span className="sr-only">{plainCopy.outcome[step.outcome]}</span>
+    </li>
+  );
+}
+
+/** A folded mark or step, shown where it was once its count opens. */
+function FoldableRow({ item }: { item: LaneFoldable }) {
+  return item.kind === "step" ? <StepRow step={item} /> : <LaneMarkRow mark={item} />;
 }
 
 /** An edit, with the lines it added once the kept versions are read. */
@@ -103,9 +133,9 @@ function LaneMarkRow({ mark }: { mark: LaneMark }) {
 }
 
 /** A Task's older marks folded into one count; opening it shows them where the first was. */
-function Folded({ marks }: { marks: ReadonlyArray<LaneMark> }) {
+function Folded({ marks }: { marks: ReadonlyArray<LaneFoldable> }) {
   const [open, setOpen] = useState(false);
-  if (open) return marks.map((mark) => <LaneMarkRow key={mark.key} mark={mark} />);
+  if (open) return marks.map((mark) => <FoldableRow key={mark.key} item={mark} />);
   return (
     <li>
       <button
@@ -140,6 +170,8 @@ export function LaneItemRow({ item, hobs }: { item: LaneItem; hobs: HobLookup })
     case "delete":
     case "run":
       return <LaneMarkRow mark={item} />;
+    case "step":
+      return <StepRow step={item} />;
     case "folded":
       return <Folded marks={item.marks} />;
     case "beat":

@@ -106,6 +106,15 @@ export const useRoomMoves = (hobId: AgentId, threadId: ThreadId, top: TaskId | u
         }),
         replace: true,
       }),
+    /** Shows everyone's work in the dock on a tab: no lane lit, no try or file picked. */
+    everyone: (tab: WorkbenchTab) =>
+      void navigate({
+        from: to,
+        to,
+        params,
+        search: (prev) => ({ room: top ?? prev.room, tab }),
+        replace: true,
+      }),
     /** Opens the dock on a tab, with a file to show first and the try that recorded it, or folds it. */
     tab: (tab: WorkbenchTab | undefined, file?: string, recordedBy?: AttemptId) =>
       void navigate({
