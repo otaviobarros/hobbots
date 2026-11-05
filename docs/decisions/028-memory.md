@@ -27,18 +27,23 @@ So memory never runs a turn, never reads a runtime's session or files, and never
 `MemoryStore` is a `Context.Service` in `@hobbots/agents`, beside the other ports. Its types live in `@hobbots/domain` (`memory.ts`) and use Hobbots' terms:
 
 - **Scope:** `Hob` (one hob's own memory), `Project` (a repository or folder) or `Everyone`. A thread is not a scope: what happened in a thread is a session page in its hob's scope, tagged with the thread. Quests are tags too.
-- **Actor:** a hob or you. Every write names one.
-- **Page:** a path, its markdown, tags, its version, its author and whether it is pinned.
+- **Actor:** who a call is made for: a hob, with the project identities of the folders it works in, or you. The hub builds it from what it knows, never from a tool's input.
+- **Page:** a path, its markdown, tags, its version, its author (a hob or you) and whether it is pinned.
 
-It offers what the slice needs, and nothing that mirrors ai-memory's routes, projects or keys:
+It offers what its first callers need, and nothing that mirrors ai-memory's routes, projects or keys. Policy is built on top of it, never inside it:
 
 | Group | Operations | Used by |
 | --- | --- | --- |
-| Recall | `search` over a set of scopes, `brief` for a hob and its projects within a budget | `memory_search`, the brief |
-| Writes | `write` a page as an actor with a key, `forget`, `pin`, `restore` a version | `memory_save`, approved shares, the Memory page |
-| Capture | `capture` a batch of journal events with keys, `endSession` for a thread | Capture |
-| Browse | `page`, `history`, `list` a scope, `changes` since a time, `check` (contradictions and stale pages) | The Memory page, What changed, Check now, a later Curator |
+| Recall | `search` over a set of scopes | `memory_search` |
+| Writes | `write` a page as an actor when it is as expected (new, a given version, or anything), `forget` (answering the version that brings the page back), `restore` a version | `memory_save`, approved shares, the Memory page |
+| Browse | `page`, `history`, `list` a scope up to a limit (pinned first, then the most recently changed), `changes` since a time | The brief, the Memory page, What changed |
 | Health | `health` | Diagnostics, the outage banner |
+
+- **The brief is not an operation.** Its rules (Everyone first, then the hob's own pages, then its projects', pinned first, within a budget) are Hobbots policy, so they are a pure function in `@hobbots/agents` over `list` and `page`, and every engine gets them unchanged. `list` takes a limit, so a brief never loads a hob's whole memory.
+- **No idempotency key.** ai-memory's page write has none, only "create only" and "expected version". The key a hob gives `memory_save` lives in the hub's record of the tool call, as Task tool calls already keep theirs, so a retried call returns its first answer without reaching `MemoryStore` again.
+- **Pinning is a write** with `pinned` set, against the version the caller read.
+- **One guard for every engine.** Every `MemoryStore` layer is built through `guardMemoryStore`, which refuses a call before the engine sees it when its actor may not touch a scope it names: a hob reaches its own scope, the projects of its folders and `Everyone`, never another hob's scope or another project, and only you `forget` or `restore`. Its callers only name scopes the hub worked out, so a refusal is a defect.
+- **Each later operation arrives with its first caller.** `capture` and `endSession` come with capture ([#956](https://github.com/otaviobarros/hobbots/issues/956)), and `check` (contradictions and stale pages) with Check now ([#960](https://github.com/otaviobarros/hobbots/issues/960)), each one more method on the same service, added to the shared `MemoryStore` tests then.
 
 Two errors: `MemoryUnavailable` (the engine does not answer) and `MemoryConflict` (a write lost to a newer version). Callers treat the first as an outage (below) and show the second.
 
@@ -83,7 +88,7 @@ On approval the hub writes the page as the hob, with you as the approver in its 
 
 ### The memory brief
 
-- At the start of a runtime session, the hub asks `MemoryStore.brief` for the hob's brief: `Everyone` rules first, then the hob's own pages, then its projects' facts, within a budget of about 8,000 characters, dropping the lowest-priority pages first. Pinned pages come first within their scope.
+- At the start of a runtime session, the hub builds the hob's brief from `MemoryStore.list` and `page`: `Everyone` rules first, then the hob's own pages, then its projects' facts, within a budget of about 8,000 characters, dropping the lowest-priority pages first. Pinned pages come first within their scope.
 - The hub puts it in the turn's context block, beside the ADR 017 briefing, as a labeled section that says it is reference data, not instructions, with each page quoted as the briefing quotes messages.
 - It is sent again only when it changed since the session last received it, so a long thread does not pay for it on every turn.
 - When memory does not answer, the section says memory is unavailable instead, and the turn goes on.
@@ -114,6 +119,7 @@ The Curator routine, skill distillation into `procedures/`, `memory_feedback`, a
 - **ai-memory writes summaries, not the thread's brain.** #937 had the thread's current brain write the session page. That spends a turn of the thread's model, often the most expensive one, with the whole conversation in context, on the cheapest job, and it would tie memory to each runtime. ai-memory consolidates from what capture sent, with a small model or none.
 - **One `memory_save` instead of `memory_save` and `memory_propose`.** Whether a write goes through or is reviewed is the preset's call, not the hob's, so the hob says where and the hub decides. `memory_feedback` waits for the Curator, which is its only reader.
 - **One hub key acting as each hob, instead of a user and key per hob.** Scopes come from projects and tags whichever key is used, so separation is the same. Hobs never hold a key, so per-hob keys would only repeat a boundary the hub already holds, at the cost of provisioning, keychain items and new keys on every restore. Proxy mode keeps what per-hob users gave: history that names the hob.
+- **A port of plain reads and writes.** The brief's rules, write retries and Check now's findings are Hobbots policy or belong to later callers, so the port keeps none of them. Each engine then implements less, and each later operation is shaped by the issue that first needs it, not guessed ahead of it.
 - **The journal as the queue.** It is already the outbox, so capture and offline saves need one cursor, not a second queue. Its cost is a retention exception in ADR 013 and a deduplication bound of 30 days, which the cursor's prompt save makes practically unreachable.
 
 ## Consequences
