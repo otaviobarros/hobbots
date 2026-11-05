@@ -48,6 +48,7 @@ const PageJson = Schema.Struct({
 const SummaryJson = Schema.Struct({ path: Schema.String, title: Schema.String, updated_at: Schema.String });
 const ChangesJson = Schema.Struct({ pages: Schema.Array(SummaryJson), next_cursor: Schema.NullOr(Schema.String) });
 const HistoryJson = Schema.Struct({
+  total: Schema.Number,
   versions: Schema.Array(Schema.Struct({ id: Schema.String, is_latest: Schema.Boolean, created_at: Schema.String })),
 });
 const HitsJson = Schema.Struct({
@@ -74,11 +75,16 @@ const PreconditionJson = Schema.Struct({
 
 /** The most pages one request reads back; ai-memory clamps its limits to 100. */
 const PAGE_LIMIT = 100;
+/** The most versions one history request reads back, ai-memory's own cap. */
+const VERSION_LIMIT = 200;
 /**
  * A search no page can match: `memory_query` with `pin_first` then answers only the scope's pinned
- * pages, which is how ai-memory lists them.
+ * pages, which is how ai-memory lists them, the newest first and at most `PIN_FIRST_MAX` of them.
  */
 const PINNED_ONLY = '"hobbots0pinned0pages0only0x9q"';
+const PIN_FIRST_MAX = 10;
+/** How many pages are read at once when every page of a scope is read for its pin. */
+const READ_CONCURRENCY = 8;
 /** A forgotten page comes back from the wiki's Git revision before its delete, marked so. */
 const REVISION = "rev:";
 
@@ -145,13 +151,28 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       return page as MemoryPage | null;
     }).pipe(orEmpty(null));
 
+  /** Every page of the scope, read one by one: the only complete answer to which are pinned. */
+  const pinnedByReading = (scope: MemoryScope) =>
+    Effect.gen(function* () {
+      const where = engineProjectOf(scope);
+      const all = yield* client.get(`${pagesRoute(where)}/pages`, Schema.Array(SummaryJson));
+      const pages = yield* Effect.forEach(all, (each) => pageOf(scope, MemoryPath.make(each.path)), {
+        concurrency: READ_CONCURRENCY,
+      });
+      return new Set(pages.flatMap((page) => (page?.pinned === true ? [page.path as string] : [])));
+    });
+
   const pinnedPaths = (scope: MemoryScope) => {
     const where = engineProjectOf(scope);
     return client
       .tool(ROOT, "memory_query", { ...where, query: PINNED_ONLY, pin_first: true, limit: PAGE_LIMIT }, HitsJson)
       .pipe(
         Effect.map((json) => new Set(json.hits.filter((hit) => hit.pinned === true).map((hit) => hit.path))),
-        orEmpty(new Set<string>()),
+        // A full answer may have left pins out, so the scope's pages say which are pinned.
+        Effect.flatMap((pinned) =>
+          pinned.size < PIN_FIRST_MAX ? Effect.succeed(pinned as ReadonlySet<string>) : pinnedByReading(scope),
+        ),
+        orEmpty(new Set<string>() as ReadonlySet<string>),
       );
   };
 
@@ -259,13 +280,21 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
     history: (_actor, scope, path) =>
       Effect.gen(function* () {
         const where = engineProjectOf(scope);
-        const json = yield* client
-          .get(`${pagesRoute(where)}/history/${path}`, HistoryJson, { limit: "200" })
-          .pipe(orEmpty({ versions: [] } as typeof HistoryJson.Type));
-        if (json.versions.length === 0) return [];
+        const versions: Array<(typeof HistoryJson.Type)["versions"][number]> = [];
+        let total = 0;
+        do {
+          const params = { limit: `${VERSION_LIMIT}`, offset: `${versions.length}` };
+          const json: typeof HistoryJson.Type = yield* client
+            .get(`${pagesRoute(where)}/history/${path}`, HistoryJson, params)
+            .pipe(orEmpty({ total: 0, versions: [] } as typeof HistoryJson.Type));
+          if (json.versions.length === 0) break;
+          versions.push(...json.versions);
+          total = json.total;
+        } while (versions.length < total);
+        if (versions.length === 0) return [];
         // ai-memory stamps the author in the page's frontmatter, so only the latest version names one.
         const latest = yield* pageOf(scope, path);
-        return json.versions.map((version) => ({
+        return versions.map((version) => ({
           version: MemoryVersion.make(version.id),
           author: version.is_latest ? (latest?.author ?? null) : null,
           writtenAt: version.created_at,
