@@ -21,6 +21,7 @@ import {
   ledgerRefusal,
   Milestone,
   noteRecipientOf,
+  optionNamed,
   Quest,
   Question,
   type QuestState,
@@ -790,6 +791,8 @@ export const TaskRepositoryLive = Layer.effect(
           const [lead] = leadsAbove(task, yield* read.treeOf(task.rootId));
           const question = new Question({
             ...input,
+            options: input.options ?? [],
+            recommended: input.recommended ?? null,
             recipientId: lead ?? null,
             chain: [],
             state: "open",
@@ -810,6 +813,8 @@ export const TaskRepositoryLive = Layer.effect(
             answered_by: null,
             created_at: question.createdAt,
             answered_at: null,
+            options: JSON.stringify(question.options),
+            recommended: question.recommended,
             revision,
           })}`;
           return { value: question, events: [{ _tag: "QuestionAsked", question } as const] };
@@ -847,7 +852,8 @@ export const TaskRepositoryLive = Layer.effect(
         state = ${question.state}, answer = ${question.answer},
         answered_by = ${question.answeredBy === null ? null : JSON.stringify(question.answeredBy)},
         answered_at = ${question.answeredAt}, answered_by_device_id = ${question.answeredByDeviceId},
-        answered_via = ${question.answeredVia}, revision = ${question.revision} WHERE id = ${question.id}`;
+        answered_via = ${question.answeredVia}, picked = ${question.picked},
+        revision = ${question.revision} WHERE id = ${question.id}`;
 
     /** The copies of `question` still waiting for the hob that just handled it, resolved as answered (#573). */
     const settleCopies = (question: Question, first: number) =>
@@ -859,10 +865,13 @@ export const TaskRepositoryLive = Layer.effect(
       change((revision) =>
         Effect.gen(function* () {
           const before = yield* openQuestion(questionId, by);
+          // An answer that names one of its choices picked that choice, in the choice's own words (#740).
+          const picked = optionNamed(before.options, answer);
           const question = new Question({
             ...before,
             state: "answered",
-            answer,
+            answer: picked === null ? answer : (before.options[picked]?.label ?? answer),
+            picked,
             answeredBy: by,
             answeredAt: at,
             answeredByDeviceId: from?.deviceId ?? null,
