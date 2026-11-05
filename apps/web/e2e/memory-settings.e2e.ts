@@ -36,13 +36,17 @@ test("[TC-GEN-222] chooses the memory model in Your data, sees shares follow the
     card.getByRole("radiogroup", { name: group, exact: true }).getByRole("radio", { name, exact: true });
   // Browser tests run without the engine, so memory is off and the hobs work without it.
   await expect(card).toContainText("Memory is turned off on this hub.");
+  await expect(card).toContainText("a hob saves what it learns as it works, with no extra model call");
+  // The models are the runtime's own, as the brain picker lists them: its smallest is the default.
   await expect(pick("Provider", "Claude")).toBeChecked();
-  await expect(pick("Model", "Haiku")).toBeChecked();
+  await expect(pick("Model", "Fake Thinker")).toBeChecked();
   await expect(pick("Effort", "Low")).toBeChecked();
-  await expect(card).toContainText("can't hand Claude a key yet");
+  await expect(card).toContainText("Uses your Claude Code sign-in.");
+  await expect(card).not.toContainText("API key");
 
   await pick("Provider", "ChatGPT").click();
-  await expect(pick("Model", "GPT-5.4 mini")).toBeChecked();
+  await expect(pick("Model", "Fake Coder")).toBeChecked();
+  await expect(card).toContainText("Uses your ChatGPT sign-in through Codex.");
   await pick("Effort", "High").click();
   await expect(card).toContainText("High effort can be too slow for summaries");
   await card.getByRole("button", { name: "Choose a model per task…" }).click();
@@ -51,7 +55,7 @@ test("[TC-GEN-222] chooses the memory model in Your data, sees shares follow the
   const stored = () =>
     JSON.parse(readFileSync(join(dataDir, "memory-settings.json"), "utf8")) as Record<string, unknown>;
   await expect.poll(() => stored().tasks).toEqual({ summaries: "none", check: "same", answers: "same" });
-  expect(stored()).toMatchObject({ provider: "chatgpt", model: "mini", effort: "high" });
+  expect(stored()).toMatchObject({ provider: "chatgpt", model: null, effort: "high" });
 
   // No AI hides the model, and is kept after a reload.
   await pick("Provider", "No AI").click();
@@ -92,25 +96,25 @@ test("[TC-GEN-224] keeps a choice the hub could not save, and sends it again or 
   const card = page.getByRole("region", { name: "Memory" });
   const pick = (group: string, name: string) =>
     card.getByRole("radiogroup", { name: group, exact: true }).getByRole("radio", { name, exact: true });
-  await expect(pick("Model", "Haiku")).toBeChecked();
+  await expect(pick("Effort", "Low")).toBeChecked();
 
   // The refused choice stays shown, with a way back to the one memory still runs with.
-  await pick("Model", "Sonnet").click();
+  await pick("Effort", "Medium").click();
   await expect(card.getByRole("alert")).toContainText("could not save this choice");
-  await expect(pick("Model", "Sonnet")).toBeChecked();
+  await expect(pick("Effort", "Medium")).toBeChecked();
   await card.getByRole("button", { name: "Keep the one before" }).click();
-  await expect(pick("Model", "Haiku")).toBeChecked();
+  await expect(pick("Effort", "Low")).toBeChecked();
   await expect(card.getByRole("alert")).toHaveCount(0);
 
   // Refused again, then sent again as it was.
-  await pick("Model", "Opus").click();
-  await expect(pick("Model", "Opus")).toBeChecked();
+  await pick("Effort", "Max").click();
+  await expect(pick("Effort", "Max")).toBeChecked();
   await card.getByRole("button", { name: "Try again" }).click();
   await expect(card.getByRole("alert")).toHaveCount(0);
-  await expect(pick("Model", "Opus")).toBeChecked();
+  await expect(pick("Effort", "Max")).toBeChecked();
   await expect
-    .poll(() => (JSON.parse(readFileSync(join(dataDir, "memory-settings.json"), "utf8")) as { model: string }).model)
-    .toBe("opus");
+    .poll(() => (JSON.parse(readFileSync(join(dataDir, "memory-settings.json"), "utf8")) as { effort: string }).effort)
+    .toBe("max");
 });
 
 // covers ADR 028

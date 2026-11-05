@@ -4,27 +4,38 @@ import { renderEngineConfig } from "../src/engine/config.ts";
 import { engineSettingsFor } from "../src/engine/model.ts";
 import { usageOf } from "../src/engine/status.ts";
 
-const both = () => true;
+const ENDPOINT = "http://127.0.0.1:4555";
 const settings = (change: Partial<MemorySettings> = {}): MemorySettings => ({ ...DEFAULT_MEMORY_SETTINGS, ...change });
-const configFor = (chosen: MemorySettings, canRun: (provider: "claude" | "chatgpt") => boolean = both) =>
-  renderEngineConfig(engineSettingsFor(chosen, canRun).engine);
+const configFor = (chosen: MemorySettings) => renderEngineConfig(engineSettingsFor(chosen), ENDPOINT);
+
+/** A model's table as the engine reads it: always the hub's endpoint, with the model bearer's variable. */
+const table = (name: string, runtime: string, model: string) =>
+  `[${name}]\nprovider = "openai-compat"\nmodel = "${model}"\nbase_url = "${ENDPOINT}/${runtime}/v1"\napi_key_env = "LLM_API_KEY"`;
 
 describe("the memory model as the engine's provider settings", () => {
   // covers ADR 028
-  it("[TC-GEN-212] writes the provider, model and effort, and sums up chats with the model", () => {
+  it("[TC-GEN-212] sends every task to the hub's endpoint for the provider's runtime, with the model and effort", () => {
     const config = configFor(settings());
-    expect(config).toContain('llm_provider = "anthropic"');
-    expect(config).toContain('llm_model = "claude-haiku-5-5"');
+    expect(config).toContain('llm_provider = "openai-compat"');
+    // No model chosen: the runtime's smallest, which the endpoint picks from what the runtime offers.
+    expect(config).toContain('llm_model = "smallest"');
+    expect(config).toContain(`llm_base_url = "${ENDPOINT}/claude-code/v1"`);
+    expect(config).toContain("llm_compat_strict = false");
     expect(config).toContain('llm_reasoning_effort = "low"');
     expect(config).toContain("consolidate_on_session_end = true");
     // The engine's own learning scheduler waits for the Curator.
     expect(config).toContain("[auto_improve.scheduler]\nenabled = false");
     expect(config).not.toContain("llm_fallbacks");
+    // No engine provider of its own, no key and no sign-in file.
+    expect(config).not.toMatch(/anthropic|"codex"|api_key\s*=|auth\.json/);
 
-    const chatgpt = configFor(settings({ provider: "chatgpt", model: "gpt-5.5", effort: "medium" }));
-    expect(chatgpt).toContain('llm_provider = "codex"');
-    expect(chatgpt).toContain('llm_model = "gpt-5.5"');
+    const chatgpt = configFor(settings({ provider: "chatgpt", model: "gpt-9.9", effort: "medium" }));
+    expect(chatgpt).toContain('llm_model = "gpt-9.9"');
+    expect(chatgpt).toContain(`llm_base_url = "${ENDPOINT}/codex/v1"`);
     expect(chatgpt).toContain('llm_reasoning_effort = "medium"');
+
+    // Without the endpoint, the engine gets no model at all.
+    expect(renderEngineConfig(engineSettingsFor(settings()), null)).not.toContain("llm_");
   });
 
   // covers ADR 028
@@ -32,55 +43,40 @@ describe("the memory model as the engine's provider settings", () => {
     const chosen = settings({
       provider: "none",
       fallback: "other",
-      tasks: { summaries: "stronger", check: "stronger", answers: "stronger" },
+      tasks: { summaries: "careful", check: "careful", answers: "careful" },
     });
-    const { engine, state } = engineSettingsFor(chosen, both);
-    expect(state).toEqual({ _tag: "NoAi" });
-    const config = renderEngineConfig(engine);
+    const config = configFor(chosen);
     expect(config).not.toMatch(/llm|consolidate|auto_improve/);
     expect(config).toContain("[auth]");
   });
 
   // covers ADR 028
-  it("[TC-GEN-214] falls back to the other provider's small model, naming its key", () => {
-    const claude = configFor(settings({ fallback: "other" }));
-    expect(claude).toContain('[[llm_fallbacks]]\nprovider = "codex"\nmodel = "gpt-5.4-mini"');
-    const chatgpt = configFor(settings({ provider: "chatgpt", model: "mini", fallback: "other" }));
-    expect(chatgpt).toContain(
-      '[[llm_fallbacks]]\nprovider = "anthropic"\nmodel = "claude-haiku-5-5"\napi_key_env = "ANTHROPIC_API_KEY"',
+  it("[TC-GEN-214] falls back to the other runtime's smallest model through the same endpoint", () => {
+    expect(configFor(settings({ fallback: "other" }))).toContain(table("[llm_fallbacks]", "codex", "smallest"));
+    expect(configFor(settings({ provider: "chatgpt", fallback: "other" }))).toContain(
+      table("[llm_fallbacks]", "claude-code", "smallest"),
     );
     // Plain summaries need no fallback: the engine writes one without a model.
     expect(configFor(settings({ fallback: "plain" }))).not.toContain("llm_fallbacks");
   });
 
   // covers ADR 028
-  it("[TC-GEN-215] gives a task the stronger model with its own fallbacks, or sums up chats with no AI", () => {
+  it("[TC-GEN-215] gives a task its own model of the runtime with its own fallbacks, or sums up chats with no AI", () => {
     const config = configFor(
-      settings({ fallback: "other", tasks: { summaries: "stronger", check: "stronger", answers: "same" } }),
+      settings({ fallback: "other", tasks: { summaries: "careful", check: "claude-opus-4-8[1m]", answers: "same" } }),
     );
-    expect(config).toContain('[llm.consolidation]\nprovider = "anthropic"\nmodel = "claude-sonnet-5-5"');
-    expect(config).toContain('[llm.lint]\nprovider = "anthropic"\nmodel = "claude-sonnet-5-5"');
-    expect(config).toContain('[[llm.lint.fallbacks]]\nprovider = "codex"');
+    expect(config).toContain(table("llm.consolidation", "claude-code", "careful"));
+    expect(config).toContain(table("llm.lint", "claude-code", "claude-opus-4-8[1m]"));
+    expect(config).toContain(table("[llm.lint.fallbacks]", "codex", "smallest"));
     expect(config).not.toContain("[llm.query_answer]");
 
-    const plain = configFor(settings({ tasks: { summaries: "none", check: "same", answers: "stronger" } }));
+    const plain = configFor(settings({ tasks: { summaries: "none", check: "same", answers: "careful" } }));
     expect(plain).toContain("consolidate_on_session_end = false");
-    expect(plain).toContain('[llm.query_answer]\nprovider = "anthropic"');
+    expect(plain).toContain(table("llm.query_answer", "claude-code", "careful"));
     expect(plain).not.toContain("[llm.consolidation]");
     // Every top-level key comes before the first table, as TOML needs.
     const firstTable = plain.indexOf("\n[");
     expect(plain.lastIndexOf("consolidate_on_session_end")).toBeLessThan(firstTable);
-  });
-
-  // covers ADR 028
-  it("[TC-GEN-216] runs with no AI while the chosen provider has no key, and drops a fallback without one", () => {
-    const { engine, state } = engineSettingsFor(settings(), () => false);
-    expect(state).toEqual({ _tag: "NeedsKey", provider: "claude" });
-    expect(renderEngineConfig(engine)).not.toContain("llm_");
-
-    const onlyClaude = configFor(settings({ fallback: "other" }), (provider) => provider === "claude");
-    expect(onlyClaude).toContain('llm_provider = "anthropic"');
-    expect(onlyClaude).not.toContain("llm_fallbacks");
   });
 });
 

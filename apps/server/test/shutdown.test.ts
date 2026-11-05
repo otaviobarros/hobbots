@@ -4,6 +4,8 @@ import { Agent, get, request } from "node:http";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { waitFor } from "@hobbots/domain/testing";
+import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 
 const server = resolve(import.meta.dirname, "..");
@@ -40,15 +42,30 @@ const startHub = async () => {
   dataDir = mkdtempSync(join(tmpdir(), "hobbots-shutdown-"));
   const child = spawn(join(server, "node_modules", ".bin", "tsx"), ["src/main.ts"], {
     cwd: server,
-    env: { ...process.env, HOBBOTS_PORT: String(port), HOBBOTS_DATA_DIR: dataDir, HOBBOTS_RUNTIME: "fake" },
-    stdio: "ignore",
+    env: {
+      ...process.env,
+      HOBBOTS_PORT: String(port),
+      HOBBOTS_DATA_DIR: dataDir,
+      HOBBOTS_RUNTIME: "fake",
+      // The hub's Debug lines say when it has a request and when it starts to stop.
+      HOBBOTS_LOG_LEVEL: "Debug",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
   });
   hub = child;
+  let output = "";
+  const collect = (chunk: Buffer) => {
+    output += chunk.toString("utf8");
+  };
+  child.stdout?.on("data", collect);
+  child.stderr?.on("data", collect);
+  /** Waits until the hub has written a line that matches `line`. */
+  const logged = (what: string, line: RegExp) => Effect.runPromise(waitFor(what, () => line.test(output)));
   const url = `http://127.0.0.1:${port}`;
   await waitForHealth(url, child);
   // As the hub's window, with the key this start of the hub wrote (ADR 021).
   const key = readFileSync(join(dataDir, "window-key"), "utf8").trim();
-  return { port, url, child, asWindow: { authorization: `Bearer ${key}` } };
+  return { port, url, child, logged, asWindow: { authorization: `Bearer ${key}` } };
 };
 
 afterEach(() => {
@@ -63,12 +80,15 @@ describe("hub shutdown", () => {
     const { port, url, child, asWindow } = await startHub();
 
     // A browser window's subscription: the hub holds the request open until it ends the stream.
+    let subscribed: () => void = () => {};
+    const streaming = new Promise<void>((done) => (subscribed = done));
     const ended = new Promise<void>((done, fail) => {
       const subscription = request(
         `${url}/api/events`,
         { headers: { accept: "text/event-stream", ...asWindow } },
         (response) => {
           expect(response.statusCode).toBe(200);
+          subscribed();
           response.resume();
           response.once("end", () => done());
         },
@@ -84,8 +104,8 @@ describe("hub shutdown", () => {
     );
     const spare = connect(port, "127.0.0.1");
     await new Promise((done) => spare.once("connect", done));
-    // Leaves the subscription time to reach the stream before the hub is asked to stop.
-    await new Promise((done) => setTimeout(done, 500));
+    // The subscription has reached the stream before the hub is asked to stop.
+    await streaming;
 
     const exited = new Promise<number | null>((done) => child.once("exit", (code) => done(code)));
     const stopping = performance.now();
@@ -103,7 +123,7 @@ describe("hub shutdown", () => {
     ["a request whose body is still arriving", {}],
     ["one sent with Expect: 100-continue", { expect: "100-continue" }],
   ])("[TC-DP-033] lets %s finish while the hub stops", { timeout: 60_000 }, async (_, headers) => {
-    const { url, child, asWindow } = await startHub();
+    const { url, child, logged, asWindow } = await startHub();
     const body = JSON.stringify({ completed: true });
     const half = Math.floor(body.length / 2);
 
@@ -120,15 +140,18 @@ describe("hub shutdown", () => {
       });
       call.once("error", fail);
     });
+    // Handled now, so a failure is this test's, not an unhandled rejection; it is awaited below.
+    answered.catch(() => {});
     if ("expect" in headers) call.once("continue", () => call.write(body.slice(0, half), () => started()));
     else call.write(body.slice(0, half), () => started());
     await sending;
-    // Leaves the first half time to reach the hub before it is asked to stop.
-    await new Promise((done) => setTimeout(done, 300));
+    // The hub has the request before it is asked to stop.
+    await logged("the hub to receive the request", /Received HTTP request \{[^}]*PATCH/);
 
     const exited = new Promise((done) => child.once("exit", done));
     child.kill("SIGTERM");
-    await new Promise((done) => setTimeout(done, 300));
+    // The rest of the body arrives once the hub is stopping, with the request still in progress.
+    await logged("the hub to start stopping", /Stopping; HTTP requests in progress: 1/);
     call.end(body.slice(half));
     expect(await answered).toBe(200);
     await exited;

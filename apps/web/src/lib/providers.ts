@@ -16,6 +16,15 @@ export const PROVIDER_MARKS: Readonly<Record<RuntimeKind, { readonly mark: strin
   codex: { mark: "G", tile: "bg-provider-codex" },
 };
 
+/** A runtime's state in a few words, as the brain picker and Settings › Memory say it. */
+export const RUNTIME_STATE_WORDS: Readonly<Record<RuntimeHealth["availability"], string>> = {
+  ready: "ready",
+  outdated: "outdated",
+  signedOut: "signed out",
+  unavailable: "unavailable",
+  unverified: "unverified",
+};
+
 /** The providers ready to think now, in the order the pickers list them. */
 export const readyProviders = (
   runtimes: ReadonlyArray<RuntimeHealth> | undefined,

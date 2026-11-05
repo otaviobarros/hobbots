@@ -93,8 +93,12 @@ test("[TC-OP-036] backs up from Settings, and Welcome restores it after the data
   await expect(dialog).toContainText("This backup holds");
   await expect(dialog).toContainText(/3 hobs, 1 thread, 1 quest and \d+ tasks/);
   await expect(dialog).toContainText("Devices, keychain items and runtime sign-ins do not come back");
+  // Once the restored hub answers, the page loads again by itself. The test waits for that load
+  // before it goes anywhere, since a navigation of its own meanwhile would be aborted (#985).
+  const reloaded = page.waitForEvent("load", { timeout: 60_000 });
   await dialog.getByRole("button", { name: "Restore and restart" }).click();
   await expect(dialog.getByRole("status")).toContainText("Restoring");
+  await reloaded;
 
   // The restored hub revoked every device but its window, so this browser pairs again with it.
   const restoredKey = async () => {

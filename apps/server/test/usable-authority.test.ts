@@ -1,3 +1,4 @@
+import { waitToFind } from "@hobbots/domain/testing";
 import { PolicyEngine } from "@hobbots/permissions";
 import { toolRequests, toolTurn } from "@hobbots/runtimes";
 import { Effect } from "effect";
@@ -8,7 +9,6 @@ import {
   PIP,
   promptsTo,
   ROOK,
-  retry,
   send,
   sharedDatabase,
   startHub,
@@ -73,14 +73,7 @@ describe("a delegation whose authority leaves the member no tool for its brief",
     const rook = taskOf(await run(treeWhen((each) => memberTask(each, ROOK) !== undefined)), ROOK);
     expect(answers.get("commit")).toContain("Rook will have: file reads, file edits, commands, git_init.");
 
-    const request = await run(
-      retry(
-        Effect.suspend(() => {
-          const [found] = promptsTo(requests, rook);
-          return found === undefined ? Effect.fail("not yet") : Effect.succeed(found);
-        }),
-      ),
-    );
+    const request = await run(waitToFind("Rook's first prompt", () => promptsTo(requests, rook)[0]));
     const turn = toolTurn(request.tools, "on");
     expect(turn?.tools).toContain("Bash");
     const cwd = turn?.folders[0] as string;
@@ -115,14 +108,7 @@ describe("a delegation whose authority leaves the member no tool for its brief",
     );
     expect(answer).not.toContain("will have: ");
 
-    const request = await run(
-      retry(
-        Effect.suspend(() => {
-          const [found] = promptsTo(requests, rook);
-          return found === undefined ? Effect.fail("not yet") : Effect.succeed(found);
-        }),
-      ),
-    );
+    const request = await run(waitToFind("Rook's first prompt", () => promptsTo(requests, rook)[0]));
     expect(toolTurn(request.tools, "on")).toBeNull();
   }, 30_000);
 });

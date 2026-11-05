@@ -49,6 +49,7 @@ import {
   loadOrCreateMemoryKeys,
   MemoryEngine,
   type MemoryKeys,
+  MemoryModelEndpoint,
   MemoryProjectsLive,
   MemoryStoreAiMemory,
   MemoryToolsLive,
@@ -109,7 +110,7 @@ import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
 import { MemoryChanges } from "./memory.ts";
-import { MemorySettingsStore, memoryModelCanRun, readMemorySettings } from "./memory-settings.ts";
+import { MemorySettingsStore, readMemorySettings } from "./memory-settings.ts";
 import { backupBeforeMigrations } from "./migration-backup.ts";
 import { readNetworkSettings } from "./network-settings.ts";
 import {
@@ -168,9 +169,11 @@ const memoryEngineLayer = (
   if (config.memory === "off") return MemoryEngine.off("disabled", dataDir, keys);
   const folder = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
   if (folder === "") return MemoryEngine.off("missing", dataDir, keys);
-  // The memory model you chose, as the engine can run it now (ADR 028).
-  const settings = engineSettingsFor(readMemorySettings(dataDir), memoryModelCanRun).engine;
+  // The memory model you chose (ADR 028). The engine reaches it only through the hub's endpoint,
+  // which runs each memory task on the runtime's adapter and its sign-in.
+  const settings = engineSettingsFor(readMemorySettings(dataDir));
   return MemoryEngine.layer({ folder, dataDir, keys, settings }).pipe(
+    Layer.provideMerge(MemoryModelEndpoint.layer(keys.model)),
     Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
   );
 };
@@ -472,7 +475,7 @@ const ServerLive = Layer.unwrap(
             identity,
             // What the startup recovery could not do, for Settings › Diagnostics (ADR 026).
             RecoveryLog.layer,
-            Memory,
+            Memory.pipe(Layer.provide(HeldRuntime)),
             // Before every session, a chat's, a step's and a party member's: a hob's memory reaches the
             // projects of its folders, and what each session was briefed from it (ADR 028).
             MemoryProjectsLive,
@@ -485,6 +488,7 @@ const ServerLive = Layer.unwrap(
               ...secretsFromEnv(process.env),
               { value: Redacted.value(memoryKeys.root), kind: "AI_MEMORY_AUTH_TOKEN" },
               { value: Redacted.value(memoryKeys.proxy), kind: "AI_MEMORY_AUTH__ACTOR_PROXY_BEARER_TOKEN" },
+              { value: Redacted.value(memoryKeys.model), kind: "LLM_API_KEY" },
             ]),
             // The whole output of long tool calls, which their steps show cut.
             ToolLogsLive(join(dataDir, "tool-logs")),

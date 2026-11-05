@@ -103,3 +103,31 @@ export function ReadFailed({ message, onRetry }: { message: string; onRetry: () 
     </div>
   );
 }
+
+/** The line a change leaves at the top of the view: what happened, and Undo when it can be undone. */
+export function FlashLine({
+  message,
+  tone,
+  onUndo,
+}: {
+  message: string;
+  tone: "done" | "failed";
+  onUndo?: (() => void) | undefined;
+}) {
+  return (
+    <p
+      role={tone === "failed" ? "alert" : "status"}
+      className={cn(
+        "m-0 mb-5 flex max-w-[680px] flex-wrap items-center gap-2.5 rounded-card px-3.5 py-2.5 text-ui text-text-strong",
+        tone === "done" ? "bg-[color-mix(in_srgb,var(--color-mint)_12%,var(--color-card))]" : "bg-notice",
+      )}
+    >
+      <span className="min-w-0 flex-1">{message}</span>
+      {onUndo !== undefined && (
+        <Button variant="text" size="xs" onClick={onUndo}>
+          {copy.actions.undo}
+        </Button>
+      )}
+    </p>
+  );
+}

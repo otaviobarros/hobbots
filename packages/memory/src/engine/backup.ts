@@ -55,13 +55,13 @@ const searcher = (needles: ReadonlyArray<string>) => {
 /**
  * Reads a memory archive through without unpacking it, and refuses it unless every entry is a file
  * or folder under the wiki, the database or the config, and when a config in it holds a credential
- * setting. With `keys`, it is also refused when either bearer appears anywhere in it: a backup never
+ * setting. With `keys`, it is also refused when any bearer, the model bearer included, appears anywhere in it: a backup never
  * holds a memory bearer (ADR 028).
  */
 export const checkMemoryArchive = (file: string, keys?: MemoryKeys) =>
   Effect.tryPromise({
     try: async () => {
-      const bearers = keys === undefined ? [] : [Redacted.value(keys.root), Redacted.value(keys.proxy)];
+      const bearers = keys === undefined ? [] : [keys.root, keys.proxy, keys.model].map(Redacted.value);
       const problems: Array<string> = [];
       const configs: Array<{ readonly path: string; readonly chunks: Array<Buffer> }> = [];
       let entries = 0;

@@ -13,8 +13,13 @@ import {
   PermissionSummary,
 } from "@hobbots/agents";
 import { MemoryOverview } from "@hobbots/api";
-import { DEFAULT_MEMORY_SETTINGS, type MemoryEngineHealth, type MemorySettings } from "@hobbots/domain";
-import { type EngineSettings, MemoryEngine } from "@hobbots/memory";
+import {
+  DEFAULT_MEMORY_SETTINGS,
+  type MemoryEngineHealth,
+  type MemorySettings,
+  type RuntimeKind,
+} from "@hobbots/domain";
+import { type EngineSettings, MemoryEngine, MemoryModelEndpoint } from "@hobbots/memory";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -26,7 +31,7 @@ import {
   TaskRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { FakeAdditionalRuntimesLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -65,7 +70,16 @@ const RecordingEngine = Layer.sync(MemoryEngine, () =>
   }),
 );
 
+/** The plans' limits as the memory model endpoint last met them. */
+const limited = new Map<RuntimeKind, string | null>();
+const LimitsEndpoint = Layer.succeed(MemoryModelEndpoint, {
+  url: "http://127.0.0.1:9",
+  limited: (runtime) =>
+    Effect.succeed(limited.has(runtime) ? Option.some({ resetsAt: limited.get(runtime) ?? null }) : Option.none()),
+});
+
 beforeEach(async () => {
+  limited.clear();
   dataDir = mkdtempSync(join(tmpdir(), "hobbots-memory-settings-"));
   reconfigured = [];
   const App = HobLifecycle.layer.pipe(
@@ -93,8 +107,10 @@ beforeEach(async () => {
         EventBus.layer,
         HobAdmission.layer,
         NodeFolderChecks,
-        FakeRuntimeLayer({ availability: "signedOut" }),
+        FakeRuntimeLayer(),
+        FakeAdditionalRuntimesLayer({ availability: "signedOut" }),
         RecordingEngine,
+        LimitsEndpoint,
         MemorySettingsStore.layer(dataDir),
         Layer.succeed(Installation, { app: "hobbots", installationId: "memory-test", version: "0.0.0", dataDir }),
       ),
@@ -136,16 +152,16 @@ const request = async (method: "GET" | "PUT", path: string, body?: unknown) => {
 
 describe("the memory model in Settings", () => {
   // covers ADR 028
-  it("[TC-GEN-219] starts from a small model at low effort, and shows the engine, its pages and its use", async () => {
+  it("[TC-GEN-219] starts from the runtime's smallest model at low effort, and shows the engine, its pages and its use", async () => {
     mkdirSync(join(dataDir, "memory", "wiki"), { recursive: true });
     writeFileSync(join(dataDir, "memory", "wiki", "notes.md"), "# Notes\n");
     const { status, body } = await request("GET", "/api/memory");
     expect(status).toBe(200);
     const overview = decode(body);
     expect(overview.settings).toEqual(DEFAULT_MEMORY_SETTINGS);
-    expect(overview.settings).toMatchObject({ model: "haiku", effort: "low" });
-    // No provider key can reach the engine yet, so memory runs with no AI and says so.
-    expect(overview.state).toEqual({ _tag: "NeedsKey", provider: "claude" });
+    expect(overview.settings).toMatchObject({ model: null, effort: "low" });
+    // Claude Code is ready: memory runs on its smallest main model, as the runtime reports it.
+    expect(overview.state).toEqual({ _tag: "Model", model: "fake-thinker", replaced: null, tasks: [] });
     expect(overview.engine).toEqual(RUNNING);
     expect(overview.pages).toBe(12);
     expect(overview.bytes).toBe("# Notes\n".length);
@@ -159,33 +175,86 @@ describe("the memory model in Settings", () => {
     const chosen: MemorySettings = {
       ...DEFAULT_MEMORY_SETTINGS,
       provider: "chatgpt",
-      model: "gpt-5.5",
+      model: "fake-coder",
       effort: "medium",
       fallback: "other",
-      tasks: { summaries: "none", check: "stronger", answers: "same" },
+      tasks: { summaries: "none", check: "fake-coder", answers: "same" },
     };
     const { status, body } = await request("PUT", "/api/memory/settings", chosen);
     expect(status).toBe(200);
     expect(decode(body).settings).toEqual(chosen);
     expect(readMemorySettings(dataDir)).toEqual(chosen);
     expect(JSON.parse(readFileSync(memorySettingsFile(dataDir), "utf8"))).toEqual(chosen);
-    // The engine gets what it can run now: no model, since no key reaches it yet.
-    expect(reconfigured).toEqual([{ model: null }]);
+    // The engine gets the chosen runtime's model, the other's smallest as its fallback, and the task's own.
+    expect(reconfigured).toEqual([
+      {
+        model: { runtime: "codex", name: "fake-coder" },
+        effort: "medium",
+        fallbacks: [{ runtime: "claude-code", name: "smallest" }],
+        tasks: { lint: { runtime: "codex", name: "fake-coder" } },
+        summarize: false,
+      },
+    ]);
 
     const off = await request("PUT", "/api/memory/settings", { ...chosen, provider: "none" });
     expect(decode(off.body).state).toEqual({ _tag: "NoAi" });
-    expect(reconfigured).toEqual([{ model: null }, { model: null }]);
+    expect(reconfigured.at(-1)).toEqual({ model: null });
   });
 
   // covers ADR 028
-  it("[TC-GEN-221] refuses a model its provider does not offer, and reads a damaged file as the default", async () => {
-    const refused = await request("PUT", "/api/memory/settings", { ...DEFAULT_MEMORY_SETTINGS, model: "gpt-5.5" });
+  it("[TC-GEN-221] refuses a model id that is not a plain name, and reads a damaged file as the default", async () => {
+    const refused = await request("PUT", "/api/memory/settings", { ...DEFAULT_MEMORY_SETTINGS, model: 'x"\n[auth]' });
     expect(refused.status).toBe(400);
     expect(reconfigured).toEqual([]);
     writeFileSync(memorySettingsFile(dataDir), "{ not json");
     expect(readMemorySettings(dataDir)).toEqual(DEFAULT_MEMORY_SETTINGS);
     writeFileSync(memorySettingsFile(dataDir), JSON.stringify({ ...DEFAULT_MEMORY_SETTINGS, effort: "extreme" }));
     expect(readMemorySettings(dataDir)).toEqual(DEFAULT_MEMORY_SETTINGS);
+  });
+
+  // covers ADR 028
+  it("[TC-GEN-320] says when the chosen runtime is signed out or limited, and runs the smallest model in place of one it stopped offering", async () => {
+    // A model the runtime no longer lists falls back to its smallest, and says which.
+    await request("PUT", "/api/memory/settings", { ...DEFAULT_MEMORY_SETTINGS, model: "gone-1" });
+    expect(decode((await request("GET", "/api/memory")).body).state).toEqual({
+      _tag: "Model",
+      model: "fake-thinker",
+      replaced: "gone-1",
+      tasks: [],
+    });
+
+    // The memory model is still offered, but the model Check now was given is not: it runs on the
+    // smallest, and says so for that task.
+    await request("PUT", "/api/memory/settings", {
+      ...DEFAULT_MEMORY_SETTINGS,
+      model: "fake-thinker",
+      tasks: { summaries: "same", check: "gone-2", answers: "fake-thinker" },
+    });
+    expect(decode((await request("GET", "/api/memory")).body).state).toEqual({
+      _tag: "Model",
+      model: "fake-thinker",
+      replaced: null,
+      tasks: [{ task: "check", replaced: "gone-2", model: "fake-thinker" }],
+    });
+
+    // The fake Codex answers as signed out: its own state, as provider health reports it.
+    await request("PUT", "/api/memory/settings", { ...DEFAULT_MEMORY_SETTINGS, provider: "chatgpt" });
+    expect(decode((await request("GET", "/api/memory")).body).state).toEqual({
+      _tag: "Unavailable",
+      provider: "chatgpt",
+      state: "signedOut",
+      resetsAt: null,
+    });
+
+    // Claude Code's plan refused the last memory task for its limit.
+    await request("PUT", "/api/memory/settings", DEFAULT_MEMORY_SETTINGS);
+    limited.set("claude-code", "2026-11-06T00:00:00.000Z");
+    expect(decode((await request("GET", "/api/memory")).body).state).toEqual({
+      _tag: "Unavailable",
+      provider: "claude",
+      state: "limited",
+      resetsAt: "2026-11-06T00:00:00.000Z",
+    });
   });
 
   // covers ADR 028

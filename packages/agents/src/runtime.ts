@@ -314,6 +314,11 @@ export interface PromptRequest {
    * Task (ADR 018). Absent or null, it offers none. The hub decides each call, not the policy hook.
    */
   readonly hubTools?: HubTools | null;
+  /**
+   * A turn that belongs to no hob or thread, such as a memory task (ADR 028): the runtime keeps no
+   * session of it, so it can never be resumed or listed. It starts a new session (`sessionId` null).
+   */
+  readonly ephemeral?: boolean;
 }
 
 /** Why a tool call is refused when Hobbots could not record it before it ran. */

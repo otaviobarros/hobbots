@@ -29,6 +29,7 @@ import {
   ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
+import { waitUntil } from "@hobbots/domain/testing";
 import { Backpack, Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -42,7 +43,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Deferred, Effect, Exit, Layer, ManagedRuntime, Schedule, Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Layer, ManagedRuntime, Scope, Stream } from "effect";
 import { afterAll, afterEach } from "vitest";
 import { DispatcherHostLive } from "../src/backpack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
@@ -312,9 +313,6 @@ export const startHub = async (
   };
 };
 
-export const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 1500 }));
-
 export const send = (prompt: ReadonlyArray<string>) =>
   ChatService.use((chat) => chat.sendPrompt(threadId, prompt.join("\n")));
 
@@ -322,11 +320,13 @@ const isLive = (state: string) => state === "starting" || state === "running";
 
 /** The request's whole tree once `ready` holds for it. */
 export const treeWhen = (ready: (tree: TaskTree) => boolean) =>
-  retry(
-    Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
-      return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
-    }),
+  waitUntil(
+    Effect.map(
+      TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+      ([tree]) => tree,
+    ),
+    (tree): tree is TaskTree => tree !== undefined && ready(tree),
+    { what: "the Task tree" },
   );
 
 /** The tree once `ready` holds for it and nothing runs in it. */
@@ -335,23 +335,25 @@ export const settledTree = (ready: (tree: TaskTree) => boolean) =>
 
 /** The thread's messages once `ready` holds for them, every reply ended. */
 export const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
-  retry(
-    Effect.gen(function* () {
-      const all = yield* HobbotsRepository.use((repo) => repo.listMessages(threadId));
-      const ended = all.every((m) => m.status !== "streaming" && m.status !== "stopping");
-      return ended && ready(all) ? all : yield* Effect.fail("not yet" as const);
-    }),
+  waitUntil(
+    HobbotsRepository.use((repo) => repo.listMessages(threadId)),
+    (all) => all.every((m) => m.status !== "streaming" && m.status !== "stopping") && ready(all),
+    { what: "the thread's messages" },
   );
 
 /** Nothing waits in any hob's backpack, routine progress included, nor in yours. */
-export const nothingOpen = retry(
-  Effect.gen(function* () {
-    const backpack = yield* Backpack;
-    const scopes = [ALDRIC, QUILL, ROOK, PIP].map((agentId) => ({ _tag: "Hob" as const, agentId }));
-    for (const scope of [...scopes, { _tag: "Workspace" as const }]) {
-      if ((yield* backpack.listOpen(scope)).length > 0) return yield* Effect.fail("not yet" as const);
-    }
-  }),
+export const nothingOpen = Effect.asVoid(
+  waitUntil(
+    Effect.gen(function* () {
+      const backpack = yield* Backpack;
+      const scopes = [ALDRIC, QUILL, ROOK, PIP].map((agentId) => ({ _tag: "Hob" as const, agentId }));
+      const open = [];
+      for (const scope of [...scopes, { _tag: "Workspace" as const }]) open.push(...(yield* backpack.listOpen(scope)));
+      return open;
+    }),
+    (open) => open.length === 0,
+    { what: "every backpack to be empty" },
+  ),
 );
 
 /** The Task a member owns in the tree, below the Task you asked for. */

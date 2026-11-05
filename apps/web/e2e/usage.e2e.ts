@@ -127,16 +127,25 @@ test("[TC-OP-074] a hub where no hob has replied says so", async ({ page }) => {
   await expect(page.getByRole("region", { name: "Day by day" })).toContainText("0 replies in the last 30 days");
 });
 
-/** Answers the plans with the fake Claude Code plan's windows at these percents. */
+/**
+ * Answers the plans with the fake Claude Code plan's windows at these percents, and returns how
+ * to move them. One route serves every percent: swapping routes while a plans request is still in
+ * its handler leaves that request to fail (#985).
+ */
 const planAt = async (page: Page, session: number, week: number) => {
+  const windows = { session, week };
   await page.route("**/api/usage/plans", async (route) => {
     const response = await route.fetch();
     const plans = (await response.json()) as Array<{ runtime: string; meters: Array<{ percent: number }> }>;
     const claude = plans.find((plan) => plan.runtime === "claude-code");
-    if (claude?.meters[0]) claude.meters[0].percent = session;
-    if (claude?.meters[1]) claude.meters[1].percent = week;
+    if (claude?.meters[0]) claude.meters[0].percent = windows.session;
+    if (claude?.meters[1]) claude.meters[1].percent = windows.week;
     await route.fulfill({ response, json: plans });
   });
+  return (nextSession: number, nextWeek: number) => {
+    windows.session = nextSession;
+    windows.week = nextWeek;
+  };
 };
 
 /** The Usage report's own request, not the plans beside it. */
@@ -186,7 +195,7 @@ test("[TC-OP-092] Usage and Home keep their places while Claude Code is asked fo
   expect(await boxOf(daily)).toEqual(waitingDaily);
 
   // Home's plan line keeps its tile, title and empty bar, with the wait line where the numbers go.
-  await page.unrouteAll();
+  await page.unrouteAll({ behavior: "wait" });
   release = await holdPlans(page);
   await page.goto(`${hub.url}/#/`);
   await page.reload();
@@ -238,15 +247,14 @@ test("[TC-OP-077] a plan warns when it runs low and says when paused hobs come b
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
 
-  await planAt(page, 40, 20);
+  const moveTo = await planAt(page, 40, 20);
   await page.goto(`${hub.url}/#/usage`);
   const claude = page.getByRole("region", { name: "Claude Code plan" });
   await expect(claude).toContainText("Plenty left");
   await expect(page.getByRole("status").filter({ hasText: "running low" })).toHaveCount(0);
 
   // From 80% of a window used, the plan runs low and a banner says what happens.
-  await page.unrouteAll();
-  await planAt(page, 40, 85);
+  moveTo(40, 85);
   await page.reload();
   await expect(claude).toContainText("Running low");
   const low = page.getByRole("status").filter({ hasText: "This week on Claude Code is running low" });
@@ -262,8 +270,7 @@ test("[TC-OP-077] a plan warns when it runs low and says when paused hobs come b
   ).toBeVisible();
 
   // A used-up window pauses the hobs until it refills.
-  await page.unrouteAll();
-  await planAt(page, 100, 85);
+  moveTo(100, 85);
   await page.reload();
   await expect(claude).toContainText(/Paused until \d/);
   const paused = page.getByRole("status").filter({ hasText: "Your hobs are paused" });

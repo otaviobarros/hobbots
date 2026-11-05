@@ -21,8 +21,9 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { checkMemoryArchive, MemoryArchiveRefused, packStoppedMemory } from "./backup.ts";
 import { verifyEngine } from "./binary.ts";
-import { configHoldsCredential, type EngineSettings, NO_MODEL, renderEngineConfig } from "./config.ts";
+import { configHoldsCredential, type EngineSettings, MODEL_KEY_ENV, NO_MODEL, renderEngineConfig } from "./config.ts";
 import type { MemoryKeys } from "./keys.ts";
+import { MemoryModelEndpoint } from "./model-endpoint.ts";
 import { AI_MEMORY_VERSION } from "./release.ts";
 import { type EngineStatus, readEngineStatus } from "./status.ts";
 
@@ -100,10 +101,11 @@ const freePort = Effect.callback<number, Error>((resume) => {
 });
 
 /**
- * The engine's whole environment (ADR 028): the two bearers, which reach it nowhere else, and only
- * what a process needs to run. The hub's own environment, with its provider keys and tokens, is not
- * passed on. `HOME` is the engine's data folder, so it reads none of the user's own settings, such
- * as an ai-memory or Git configuration of theirs.
+ * The engine's whole environment (ADR 028): the three bearers, which reach it nowhere else, and
+ * only what a process needs to run. The hub's own environment, with its provider keys and tokens,
+ * is not passed on, and no runtime's sign-in reaches it: its models run through the hub's endpoint.
+ * `HOME` is the engine's data folder, so it reads none of the user's own settings, such as an
+ * ai-memory, Codex or Git configuration of theirs.
  */
 export const engineEnvironment = (
   keys: MemoryKeys,
@@ -111,6 +113,7 @@ export const engineEnvironment = (
 ): Record<string, string | Redacted.Redacted<string>> => ({
   AI_MEMORY_AUTH_TOKEN: keys.root,
   AI_MEMORY_AUTH__ACTOR_PROXY_BEARER_TOKEN: keys.proxy,
+  [MODEL_KEY_ENV]: keys.model,
   HOME: memoryDir,
   PATH: "/usr/bin:/bin",
   NO_COLOR: "1",
@@ -207,6 +210,11 @@ const run = (options: MemoryEngineOptions) =>
     const stableAfter = Duration.toMillis(Duration.fromInputUnsafe(options.stableAfter ?? "1 minute"));
     const checkEvery = options.checkEvery ?? "5 seconds";
     const settings = yield* Ref.make(options.settings ?? NO_MODEL);
+    // Where the engine reaches its models; without the endpoint it runs with no model at all.
+    const modelUrl = Option.match(yield* Effect.serviceOption(MemoryModelEndpoint), {
+      onNone: () => null,
+      onSome: (endpoint) => endpoint.url,
+    });
     const status = yield* Ref.make<Status>({
       state: "starting",
       offReason: null,
@@ -226,7 +234,7 @@ const run = (options: MemoryEngineOptions) =>
       );
 
     const writeConfig = Effect.gen(function* () {
-      const text = renderEngineConfig(yield* Ref.get(settings));
+      const text = renderEngineConfig(yield* Ref.get(settings), modelUrl);
       // The rendered config never holds one; this guards against a future setting that would.
       if (configHoldsCredential(text, options.keys))
         return yield* Effect.die("The memory engine's config held a credential");
@@ -419,9 +427,9 @@ const run = (options: MemoryEngineOptions) =>
       endpoint: Effect.map(Ref.get(status), (current) => current.endpoint),
       reconfigure: (next) =>
         Effect.gen(function* () {
-          const before = renderEngineConfig(yield* Ref.get(settings));
+          const before = renderEngineConfig(yield* Ref.get(settings), modelUrl);
           // Rendering first refuses a setting that is not a plain name before anything changes.
-          if (renderEngineConfig(next) === before) return;
+          if (renderEngineConfig(next, modelUrl) === before) return;
           yield* Ref.set(settings, next);
           yield* Deferred.succeed(restartNow, undefined);
         }),
