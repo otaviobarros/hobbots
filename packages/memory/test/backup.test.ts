@@ -92,6 +92,23 @@ describe("memory archives", () => {
     // A credential setting is refused whatever its value.
     const pepper = memoryFolder({ "config.toml": '[auth]\ntoken_pepper = "anything"\n' });
     expect(await refusal(await archiveOf(pepper, ["wiki", "config.toml"]))).toMatch(/config\.toml holds a credential/);
+    // With no keys known, as a migration backup without memory-keys and every restore check it.
+    expect(await refusal(await archiveOf(pepper, ["wiki", "config.toml"]), undefined)).toMatch(
+      /config\.toml holds a credential/,
+    );
+    expect(await refusal(await archiveOf(bearerInConfig, ["wiki", "config.toml"]), undefined)).toMatch(
+      /config\.toml holds a credential/,
+    );
+    const keyless = join(tempFolder("hobbots-backup-"), "ai-memory.tar.gz");
+    const packed = await Effect.runPromiseExit(packStoppedMemory(pepper, keyless, undefined));
+    expect(packed._tag).toBe("Failure");
+    expect(() => statSync(keyless)).toThrow();
+    const restoredPepper = join(tempFolder("hobbots-restored-"), "memory");
+    const unpacked = await Effect.runPromiseExit(
+      restoreMemoryArchive(await archiveOf(pepper, ["wiki", "config.toml"]), restoredPepper),
+    );
+    expect(unpacked._tag).toBe("Failure");
+    expect(() => statSync(restoredPepper)).toThrow();
     // Either bearer, anywhere in the archive.
     const inAPage = memoryFolder({ "wiki/hobbots/hob-pip/notes/leak.md": `token ${Redacted.value(keys.proxy)}` });
     expect(await refusal(await archiveOf(inAPage, ["wiki"]))).toMatch(/leak\.md holds a memory bearer/);

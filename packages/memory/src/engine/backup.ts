@@ -54,8 +54,8 @@ const searcher = (needles: ReadonlyArray<string>) => {
 
 /**
  * Reads a memory archive through without unpacking it, and refuses it unless every entry is a file
- * or folder under the wiki, the database or the config. With `keys`, it is also refused when its
- * config holds a credential setting, or when either bearer appears anywhere in it: a backup never
+ * or folder under the wiki, the database or the config, and when a config in it holds a credential
+ * setting. With `keys`, it is also refused when either bearer appears anywhere in it: a backup never
  * holds a memory bearer (ADR 028).
  */
 export const checkMemoryArchive = (file: string, keys?: MemoryKeys) =>
@@ -88,11 +88,10 @@ export const checkMemoryArchive = (file: string, keys?: MemoryKeys) =>
         },
       });
       if (entries === 0) problems.push("it is empty");
-      if (keys !== undefined) {
-        for (const config of configs) {
-          if (configHoldsCredential(Buffer.concat(config.chunks).toString("utf8"), keys)) {
-            problems.push(`${config.path} holds a credential`);
-          }
+      // A credential setting is refused whatever its value, so with no keys to match too.
+      for (const config of configs) {
+        if (configHoldsCredential(Buffer.concat(config.chunks).toString("utf8"), keys)) {
+          problems.push(`${config.path} holds a credential`);
         }
       }
       if (problems.length > 0) throw new MemoryArchiveRefused({ reason: problems.join("; ") });
