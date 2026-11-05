@@ -1,9 +1,12 @@
 import { EventPublisher } from "@hobbots/agents";
-import type { EventEnvelope, RemoteAccessChanged, TransientEvent } from "@hobbots/domain";
+import type { EventEnvelope, MemoryChanged, RemoteAccessChanged, TransientEvent } from "@hobbots/domain";
 import { Context, Effect, Layer, PubSub, type Scope, Stream } from "effect";
 
-/** A transient event of the use cases, or one only the hub itself sends, such as a change to remote access. */
-export type HubTransientEvent = TransientEvent | RemoteAccessChanged;
+/**
+ * A transient event of the use cases, or one only the hub itself sends, such as a change to remote
+ * access or what memory saved since the hub last looked.
+ */
+export type HubTransientEvent = TransientEvent | RemoteAccessChanged | MemoryChanged;
 
 /** What the bus carries: a committed journal entry, or a transient reply chunk (ADR 013). */
 export type BusEvent =

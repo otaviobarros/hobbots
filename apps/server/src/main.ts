@@ -39,7 +39,13 @@ import {
 } from "@hobbots/charms";
 import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
-import { defaultEngineFolder, loadOrCreateMemoryKeys, MemoryEngine, type MemoryKeys } from "@hobbots/memory";
+import {
+  defaultEngineFolder,
+  loadOrCreateMemoryKeys,
+  MemoryEngine,
+  type MemoryKeys,
+  MemoryStoreOff,
+} from "@hobbots/memory";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -69,7 +75,7 @@ import {
   ProcessSandbox,
 } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
-import { Deferred, Effect, Layer, Option, Redacted, References } from "effect";
+import { Deferred, Duration, Effect, Layer, Option, Redacted, References } from "effect";
 import { FetchHttpClient, HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
 import { BackupHolds, HeldActivityStore, HeldRuntimes } from "./backup-holds.ts";
@@ -82,6 +88,7 @@ import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { ExportFoldersLive } from "./exports.ts";
+import { FakeMemoryLive } from "./fake-memory.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
@@ -89,6 +96,7 @@ import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
+import { MemoryChanges } from "./memory.ts";
 import { backupBeforeMigrations } from "./migration-backup.ts";
 import { readNetworkSettings } from "./network-settings.ts";
 import {
@@ -108,6 +116,22 @@ import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
 import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
+
+/**
+ * What the Memory page reads, and the watch behind What changed (ADR 028): the fake memory when a
+ * run asks for it, otherwise a store that says memory is not connected yet.
+ */
+const memoryPageLayer = (config: {
+  readonly fakeMemory: "off" | "empty" | "seeded" | "down";
+  readonly memoryLookSeconds: number;
+}) =>
+  MemoryChanges.layer(Duration.seconds(config.memoryLookSeconds)).pipe(
+    Layer.provideMerge(
+      config.fakeMemory === "off"
+        ? MemoryStoreOff("Memory is not connected to this hub yet.")
+        : FakeMemoryLive(config.fakeMemory),
+    ),
+  );
 
 /** The memory engine as the hub's settings choose it: turned off, missing, or the bundled binary. */
 const memoryEngineLayer = (
@@ -302,6 +326,7 @@ const ServerLive = Layer.unwrap(
             config.runtime === "fake" && config.fakeQuest === "black-friday"
               ? FakeQuestLive(FAKE_QUEST_STEP)
               : Layer.empty,
+            memoryPageLayer(config),
           ),
         ),
       )
