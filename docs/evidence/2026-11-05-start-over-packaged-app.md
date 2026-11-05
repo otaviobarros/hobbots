@@ -3,7 +3,7 @@
 - **Date:** 2026-11-05
 - **Issue:** [#950](https://github.com/otaviobarros/hobbots/issues/950)
 - **Pull request:** [#998](https://github.com/otaviobarros/hobbots/pull/998)
-- **Commit:** the pull request's head, on `main` at `5f18030`
+- **Commit:** `5f18030` plus the uncommitted `apps/server/src/main.ts` change later committed as `9c58f4d`, the build made at 19:55 (UTC−3) for the [memory record](2026-11-05-memory-packaged-app.md). No build was made for this run, and neither `9c58f4d` nor the pull request's later head was built. Start over ran on it from about 20:03 to 20:11 (UTC−3).
 - **Setup:** Apple M1 Pro, macOS 27.0.1, arm64, an ad hoc signed `pnpm package:mac` build on the fake runtime, Node 24.15.0. The app ran with its own `HOME` and data folder, so `security` used a throwaway keychain in that `HOME`. The owner's login keychain and data folder were checked before and after, and did not change.
 - **Result:** Passed with gaps. Start over works from the app's own window, a keychain that refuses a delete stops it, and the `reset` command works. A locked keychain does not stop it: macOS deletes the items, so the check the issue asked for holds for a refusal and not for a lock.
 
