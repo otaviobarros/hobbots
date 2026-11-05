@@ -167,12 +167,19 @@ export const turnMemoryBrief = (
   });
 
 /**
- * The fingerprint a session keeps once a turn on it started: the brief the turn sent, or the one it
- * already had when the turn sent none. A different session than the one the turn expected never
- * received it, so it is told again next turn.
+ * The fingerprint a session keeps once the runtime starts it, before the turn's prompt is known to
+ * have reached it. A turn that sent no brief leaves the session it expected as it was. A turn that
+ * sent one, or that a different session took, leaves it unknown until `deliveredMemoryBrief`, so a
+ * prompt the runtime never took is not counted as received and the next turn sends the brief again.
  */
-export const receivedMemoryBrief = (
+export const startedMemoryBrief = (
   brief: TurnMemoryBrief,
-  expected: { readonly sessionId: string; readonly memoryBrief?: string | null } | undefined,
+  expected: { readonly sessionId: string } | undefined,
   sessionId: string,
-): string | null => (brief.sent || expected?.sessionId === sessionId ? brief.digest : null);
+): string | null => (!brief.sent && expected?.sessionId === sessionId ? brief.digest : null);
+
+/**
+ * The fingerprint a session keeps once the runtime answered the turn's prompt, which carried the
+ * brief: null when the turn sent none, and nothing changes.
+ */
+export const deliveredMemoryBrief = (brief: TurnMemoryBrief): string | null => (brief.sent ? brief.digest : null);

@@ -7,13 +7,15 @@ import {
   MemoryStore,
   type PromptRequest,
   RuntimeAdapter,
+  RuntimeError,
+  type RuntimeEvent,
 } from "@hobbots/agents";
 import { Agent, AgentId, MemoryPath, type MemoryScope, type ThreadId } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
-import { Effect, Layer, Option, Schedule } from "effect";
+import { Effect, Layer, Option, Schedule, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 
@@ -43,11 +45,19 @@ const memoryHub = () => {
   const memory = makeMemoryStoreFake();
   const asked: Array<PromptRequest> = [];
   const fake = makeFakeRuntime();
+  // While set, the runtime starts the session and then refuses the prompt, as Codex can after
+  // reporting its thread and before `turn/start` succeeds.
+  let refuse = false;
   const runtime = Layer.succeed(RuntimeAdapter, {
     ...fake,
     sendPrompt: (request) => {
       asked.push(request);
-      return fake.sendPrompt(request);
+      if (!refuse) return fake.sendPrompt(request);
+      return Stream.succeed<RuntimeEvent>({
+        _tag: "SessionStarted",
+        sessionId: request.sessionId ?? "fake-refused",
+        billing: "fake",
+      }).pipe(Stream.concat(Stream.fail(new RuntimeError({ message: "The runtime refused the turn." }))));
     },
   });
   const summon = Effect.gen(function* () {
@@ -97,7 +107,10 @@ const memoryHub = () => {
     );
   const run = <A, E>(effect: Effect.Effect<A, E, ChatService | HobbotsRepository>) =>
     Effect.runPromise(Effect.scoped(effect.pipe(Effect.provide(layer))) as Effect.Effect<A, E>);
-  return { run, say, learn, controls: memory.controls };
+  const refusePrompts = (value: boolean) => {
+    refuse = value;
+  };
+  return { run, say, learn, refusePrompts, controls: memory.controls };
 };
 
 describe("the memory brief", () => {
@@ -175,6 +188,31 @@ describe("the memory brief", () => {
         // Back up, the session is told what it missed while memory was down.
         hub.controls.setDown(false);
         expect((yield* hub.say(thread.id, "Again.")).briefing).toContain("#### Tests");
+      }),
+    );
+  });
+  // covers CH-001, CH-002
+  it("[TC-CH-288] a brief whose prompt the runtime refused after starting the session is sent again next turn", async () => {
+    const hub = memoryHub();
+    await hub.run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const thread = yield* chat.createThread(PIP);
+        yield* hub.say(thread.id, "Hello.");
+        yield* hub.learn("notes/tests.md", "# Tests\n\nRun the fast suite first.");
+
+        hub.refusePrompts(true);
+        const refused = yield* hub.say(thread.id, "Run the tests.");
+        expect(refused.briefing).toContain("#### Tests");
+        expect((yield* repo.listMessages(thread.id)).at(-1)?.status).not.toBe("complete");
+
+        // The session never took that prompt, so the unchanged brief is still owed to it.
+        hub.refusePrompts(false);
+        const retried = yield* hub.say(thread.id, "Run the tests.");
+        expect(retried.sessionId).toBe(refused.sessionId);
+        expect(retried.briefing).toContain("#### Tests");
+        expect((yield* hub.say(thread.id, "Thanks.")).briefing).toBeNull();
       }),
     );
   });

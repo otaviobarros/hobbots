@@ -45,7 +45,7 @@ import { type CharmTurn, charmOffer, combineHubTools } from "./charms.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
 import { MemoryProjects, MemoryStore } from "./memory.ts";
-import { receivedMemoryBrief, type TurnMemoryBrief, turnMemoryBrief } from "./memory-brief.ts";
+import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief, turnMemoryBrief } from "./memory-brief.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import {
@@ -528,9 +528,31 @@ export class ChatService extends Context.Service<
           const recordToolStart = (event: ToolStartedEvent) =>
             saveStep(redactEvent(event, redactor)).pipe(Effect.map(Option.isSome));
 
+          // The brief the turn sent counts as received only once the runtime answers the prompt that
+          // carried it: anything it reports after starting the session. A runtime that starts the
+          // session and then refuses the prompt leaves it unknown, so the next turn sends it again.
+          let briefDelivered = false;
+          const confirmBrief = Effect.suspend(() => {
+            const digest = memory === null ? null : deliveredMemoryBrief(memory);
+            if (briefDelivered || digest === null || turnSession === null) return Effect.void;
+            briefDelivered = true;
+            const sessionId = turnSession;
+            return Effect.gen(function* () {
+              const updatedAt = yield* nowIso;
+              yield* changeThread(thread.id, (latest) => {
+                const known = latest.sessions.find((s) => s.runtime === brain.runtime);
+                if (known?.sessionId !== sessionId || known.memoryBrief === digest) return null;
+                const sessions = latest.sessions.map((s) => (s === known ? { ...known, memoryBrief: digest } : s));
+                return new Thread({ ...latest, sessions, updatedAt });
+              });
+            });
+          });
+
           // Secrets are redacted before a tool call's step is saved, journaled or announced, so a client
           // that reads the reply later never receives them either.
-          const handle = (raw: RuntimeEvent) => {
+          const handle = (raw: RuntimeEvent) =>
+            raw._tag === "SessionStarted" ? handleEvent(raw) : Effect.andThen(confirmBrief, handleEvent(raw));
+          const handleEvent = (raw: RuntimeEvent) => {
             const event = redactEvent(raw, redactor);
             switch (event._tag) {
               // The session has now seen the thread through this reply.
@@ -546,7 +568,7 @@ export class ChatService extends Context.Service<
                     const known = latest.sessions.find((s) => s.runtime === brain.runtime);
                     // Without memory, a session keeps whatever brief it was last told of.
                     const memoryBrief =
-                      memory === null ? known?.memoryBrief : receivedMemoryBrief(memory, expected, event.sessionId);
+                      memory === null ? known?.memoryBrief : startedMemoryBrief(memory, expected, event.sessionId);
                     const session: RuntimeSession = {
                       runtime: brain.runtime,
                       sessionId: event.sessionId,
