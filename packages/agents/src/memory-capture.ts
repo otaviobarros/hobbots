@@ -3,6 +3,8 @@ import {
   type EventEnvelope,
   type MemoryActor,
   type MemoryCaptureItem,
+  type MemoryExpected,
+  type MemorySave,
   MemoryUnavailable,
   type Message,
   type MessageStatus,
@@ -45,6 +47,12 @@ const TEXT_MAX = 8_000;
 
 const ENDED_REPLY: ReadonlySet<MessageStatus> = new Set(["complete", "failed", "stopped", "interrupted", "limited"]);
 const ENDED_STEP: ReadonlySet<ReplyStepState> = new Set(["done", "failed", "denied", "uncertain"]);
+
+/** A save a newer write to its page replaced before it reached memory: refused, as a conflict is. */
+const SUPERSEDED = { state: "refused", version: null } as const;
+
+const sameTags = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
+  a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n");
 
 const cut = (text: string) => (text.length > TEXT_MAX ? `${text.slice(0, TEXT_MAX - 1)}…` : text);
 
@@ -224,7 +232,30 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
             Effect.ignoreCause(events.publish(entries), { log: "Warn", message: "Could not announce a sent save" }),
         });
 
-      /** The `memory_save` calls memory did not take, sent again with the same record (ADR 028, When memory is down). */
+      /**
+       * Where a save still to send stands against its page as memory holds it now (ADR 028, When
+       * memory is down). Memory may have taken it already, from a hub that stopped before settling
+       * it: then the page holds it, and nothing is written again. A page written after the save was
+       * made, by a later save or by you, is newer, so the older save never replaces it. Otherwise it
+       * is written on the version just read, and a write that lands in between wins the same way.
+       */
+      const resend = (save: MemorySave) =>
+        Effect.gen(function* () {
+          const actor = hobActor(save.agentId);
+          const draft = { path: save.path, markdown: save.markdown, tags: save.tags, pinned: false };
+          const page = yield* store.page(actor, save.scope, save.path);
+          if (page !== null && page.markdown === draft.markdown && sameTags(page.tags, draft.tags)) {
+            return { state: "saved", version: page.version } as const;
+          }
+          if (page !== null && Date.parse(page.updatedAt) >= Date.parse(save.createdAt)) return SUPERSEDED;
+          const expected: MemoryExpected = page === null ? { _tag: "New" } : { _tag: "Version", version: page.version };
+          return yield* store.write(actor, save.scope, draft, expected).pipe(
+            Effect.map((version) => ({ state: "saved", version }) as const),
+            Effect.catchTag("MemoryConflict", () => Effect.succeed(SUPERSEDED)),
+          );
+        });
+
+      /** The `memory_save` calls memory did not take, or a stopped hub never settled, oldest first. */
       const sendSaves = Effect.gen(function* () {
         if (Option.isNone(saves)) return;
         const staleSending = yield* before(SENDING_STALE);
@@ -234,11 +265,7 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
             (save.state === "queued" || (save.state === "sending" && save.updatedAt < staleSending)),
         );
         for (const save of unsent) {
-          const draft = { path: save.path, markdown: save.markdown, tags: save.tags, pinned: false };
-          const outcome = yield* store.write(hobActor(save.agentId), save.scope, draft, { _tag: "Any" }).pipe(
-            Effect.map((version) => ({ state: "saved", version }) as const),
-            Effect.catchTag("MemoryConflict", () => Effect.succeed({ state: "refused", version: null } as const)),
-          );
+          const outcome = yield* resend(save);
           const committed = yield* saves.value.settle(save, outcome.state, outcome.version, yield* now);
           if (Option.isSome(committed)) yield* announce(committed.value.entries);
         }

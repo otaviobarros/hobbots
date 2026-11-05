@@ -2,6 +2,7 @@ import {
   MemoryCapture,
   MemoryCaptureLog,
   type MemoryCaptureSession,
+  MemorySaves,
   MemoryStore,
   type MemoryStoreShape,
   makeRedactor,
@@ -13,6 +14,8 @@ import {
   EventEnvelope,
   type JournaledEvent,
   MemoryPath,
+  MemorySave,
+  type MemorySaveState,
   Message,
   MessageId,
   Quest,
@@ -22,9 +25,10 @@ import {
   Thread,
   ThreadId,
 } from "@hobbots/domain";
-import { Context, Duration, Effect, Layer, type Scope } from "effect";
+import { Context, DateTime, Duration, Effect, Layer, Logger, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
+import { makeMemorySavesFake } from "../src/testing.ts";
 
 /**
  * The capture worker's tests (ADR 028, Capture and summaries, When memory is down), run on every
@@ -50,6 +54,27 @@ const SECRET = "hobbots-test-secret-0123456789abcdef";
 const pip = AgentId.make("0d6e2f0a-0000-4000-8000-0000000000a1");
 const pipsOwn = { _tag: "Hob", agentId: pip } as const;
 const you = { _tag: "You" } as const;
+const asPip = { _tag: "Hob", agentId: pip, projects: [] } as const;
+
+/** A `memory_save` of Pip's as the hub records it, made at the test clock's time. */
+const recordedSave = (path: MemoryPath, markdown: string, state: MemorySaveState, at: string) =>
+  new MemorySave({
+    id: crypto.randomUUID(),
+    agentId: pip,
+    work: "thread:tests",
+    key: crypto.randomUUID(),
+    input: "input",
+    scope: pipsOwn,
+    path,
+    markdown,
+    tags: ["release"],
+    state,
+    version: null,
+    threadId: null,
+    messageId: null,
+    createdAt: at,
+    updatedAt: at,
+  });
 
 /** The journal and the worker's record of it, kept in the test. */
 const makeJournal = (start: string) => {
@@ -181,25 +206,30 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       memory: CaptureUnderTest;
       journal: Journal;
       capture: MemoryCapture["Service"];
+      saves: ReturnType<typeof makeMemorySavesFake>;
     }) => Effect.Effect<A, unknown, Scope.Scope>,
+    clock: "journal" | "now" = "journal",
   ) => {
     const memory = await Effect.runPromise(open());
     return Effect.gen(function* () {
       const start = "2026-11-05T12:00:00.000Z";
-      yield* TestClock.setTime(Date.parse(start));
+      // Saves are compared with the page's time as the engine wrote it, so their tests run at the real time.
+      yield* TestClock.setTime(clock === "now" ? Date.now() : Date.parse(start));
       const journal = makeJournal(start);
+      const saves = makeMemorySavesFake();
       const context = yield* Layer.build(
         MemoryCapture.make.pipe(
           Layer.provide(
             Layer.mergeAll(
               Layer.succeed(MemoryStore, memory.store),
               Layer.succeed(MemoryCaptureLog, journal.log),
+              Layer.succeed(MemorySaves, saves.service),
               Layer.succeed(SecretRedaction, makeRedactor([{ value: SECRET, kind: "TEST_TOKEN" }])),
             ),
           ),
         ),
       );
-      return yield* body({ memory, journal, capture: Context.get(context, MemoryCapture) });
+      return yield* body({ memory, journal, saves, capture: Context.get(context, MemoryCapture) });
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer()), Effect.runPromise) as Promise<A>;
   };
 
@@ -381,6 +411,75 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           yield* TestClock.adjust(Duration.minutes(2));
           yield* capture.runOnce;
           expect(yield* memory.store.page(you, pipsOwn, sessionPage(threadId))).not.toBeNull();
+        }),
+      ));
+
+    // covers ADR 028 (When memory is down)
+    it("[TC-GEN-309] settles a save memory took before the hub stopped without writing it again", () =>
+      run(
+        ({ memory, saves, capture }) =>
+          Effect.gen(function* () {
+            const path = MemoryPath.make("notes/release.md");
+            const at = DateTime.formatIso(yield* DateTime.now);
+            const save = recordedSave(path, "# Release\n\nTag from main.", "sending", at);
+            yield* saves.service.begin(save);
+            // Memory took the write; the hub stopped before it settled the save.
+            const taken = yield* memory.store.write(
+              asPip,
+              pipsOwn,
+              { path, markdown: save.markdown, tags: save.tags, pinned: false },
+              { _tag: "Any" },
+            );
+            yield* TestClock.adjust(Duration.minutes(3));
+            yield* capture.runOnce;
+            expect(saves.saves().map((settled) => [settled.state, settled.version])).toEqual([["saved", taken]]);
+            expect(yield* memory.store.history(you, pipsOwn, path)).toHaveLength(1);
+          }),
+        "now",
+      ));
+
+    // covers ADR 028 (When memory is down)
+    it("[TC-GEN-310] never lets a save kept through an outage replace a page written after it", () =>
+      run(
+        ({ memory, saves, capture }) =>
+          Effect.gen(function* () {
+            const path = MemoryPath.make("notes/release.md");
+            const at = DateTime.formatIso(yield* DateTime.now);
+            const older = recordedSave(path, "# Release\n\nTag from a branch.", "queued", at);
+            const kept = recordedSave(MemoryPath.make("notes/ports.md"), "# Ports\n\n4180.", "queued", at);
+            yield* saves.service.begin(older);
+            yield* saves.service.begin(kept);
+            yield* TestClock.adjust(Duration.seconds(1));
+            // Memory is back, and a newer save of the same page went through before the worker's round.
+            const newer = "# Release\n\nTag from main.";
+            yield* memory.store.write(
+              asPip,
+              pipsOwn,
+              { path, markdown: newer, tags: [], pinned: false },
+              { _tag: "Any" },
+            );
+            yield* capture.runOnce;
+            expect((yield* memory.store.page(you, pipsOwn, path))?.markdown).toBe(newer);
+            expect(saves.saves().map((settled) => settled.state)).toEqual(["refused", "saved"]);
+            expect((yield* memory.store.page(you, pipsOwn, kept.path))?.markdown).toBe(kept.markdown);
+          }),
+        "now",
+      ));
+
+    // covers ADR 028 (When memory is down)
+    it("[TC-GEN-311] warns when it sends entries older than memory's 30-day replay window", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          exchange(journal, threadId, "Which branch do releases tag from?", "From main.");
+          yield* TestClock.adjust(Duration.days(31));
+          const warnings: Array<string> = [];
+          const recorder = Logger.make(({ logLevel, message }) => {
+            if (logLevel === "Warn") warnings.push(JSON.stringify(message));
+          });
+          yield* capture.runOnce.pipe(Effect.provide(Logger.layer([recorder])));
+          expect(warnings.some((warning) => warning.includes("older than memory's 30-day replay window"))).toBe(true);
+          expect(yield* memory.observations(pip, threadId)).toBeGreaterThan(0);
         }),
       ));
   });
