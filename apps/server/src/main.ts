@@ -98,6 +98,7 @@ import {
   RemoteAccessStateLive,
 } from "./remote-access.ts";
 import { QuietRoutineReads } from "./request-log.ts";
+import { finishReset, HubReset, wipeHubData } from "./resets.ts";
 import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLive, WorkHoldLive } from "./restores.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
@@ -279,6 +280,8 @@ const ServerLive = Layer.unwrap(
             // Settings › Backup & export (ADR 026).
             HubBackups.layer,
             HubRestores.layer,
+            // Settings › Your data › Start over (#948).
+            HubReset.layer,
             config.runtime === "fake" && config.fakeQuest === "black-friday"
               ? FakeQuestLive(FAKE_QUEST_STEP)
               : Layer.empty,
@@ -419,10 +422,14 @@ const ServerLive = Layer.unwrap(
   }),
 );
 
+/** What stopped the hub: a restore of the backup in `backup` (ADR 026), or Start over (#948). */
+type Restart = { readonly _tag: "Restore"; readonly backup: string } | { readonly _tag: "Reset" };
+
 /**
- * Runs the hub until a restore asks it to stop (ADR 026): the hub stops, the backup is restored with
- * nothing using the data folder, and the hub starts again on the restored data, in the same process.
- * Before each start, a data folder that a migration will change is backed up first.
+ * Runs the hub until a restore or Start over asks it to stop (ADR 026, #948): the hub stops, the
+ * backup is restored or the data is deleted with nothing using the data folder, and the hub starts
+ * again on what is there, in the same process. Before each start, a reset that stopped halfway is
+ * finished, and a data folder that a migration will change is backed up first.
  */
 const Hub = Effect.gen(function* () {
   const config = yield* ServerConfig;
@@ -430,17 +437,25 @@ const Hub = Effect.gen(function* () {
   for (;;) {
     mkdirSync(config.dataDir, { recursive: true });
     const dataDir = realpathSync(config.dataDir);
+    if (yield* Effect.promise(() => finishReset(dataDir))) yield* Effect.log("Finished starting over");
     yield* backupBeforeMigrations(dataDir, config.version);
-    const asked = yield* Deferred.make<string>();
+    const asked = yield* Deferred.make<Restart>();
     const restart = Layer.succeed(HubRestart, {
-      restore: (backup: string) => Deferred.succeed(asked, backup).pipe(Effect.asVoid),
+      restore: (backup: string) => Deferred.succeed(asked, { _tag: "Restore", backup }).pipe(Effect.asVoid),
+      reset: Deferred.succeed(asked, { _tag: "Reset" }).pipe(Effect.asVoid),
     });
-    const backup: string = yield* Effect.raceFirst(
+    const next: Restart = yield* Effect.raceFirst(
       Layer.launch(ServerLive.pipe(Layer.provide(Layer.merge(restart, Layer.succeed(RestoreOutcome, { failed }))))),
       Deferred.await(asked),
     );
-    yield* Effect.log(`Stopped to restore the backup in ${backup}`);
-    failed = yield* performRestore(dataDir, backup).pipe(
+    if (next._tag === "Reset") {
+      yield* Effect.log("Stopped to start over");
+      yield* Effect.promise(() => wipeHubData(dataDir));
+      failed = null;
+      continue;
+    }
+    yield* Effect.log(`Stopped to restore the backup in ${next.backup}`);
+    failed = yield* performRestore(dataDir, next.backup).pipe(
       Effect.as(null),
       Effect.catchTag("RestoreRefused", (refused) => Effect.logWarning(refused.reason).pipe(Effect.as(refused.reason))),
     );

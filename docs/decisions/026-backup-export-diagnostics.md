@@ -1,6 +1,6 @@
 # ADR 026 — Backup, restore, export and diagnostics
 
-Status: **Accepted.** Decides what [ADR 011](011-sqlite-storage.md), the [persistence contract](../architecture/persistence.md) and the [API and events contract](../architecture/api-events.md#operational-observability) leave open for OP-002 and OP-003 of the [MVP requirements](../product/mvp-requirements.md), for Slice 15 ([#16](https://github.com/otaviobarros/hobbots/issues/16)). Builds on the event journal of [ADR 013](013-event-journal.md), the redaction of [ADR 014](014-tool-policy-and-enforcement.md), the Tasks and Attempts of [ADR 018](018-tasks-and-quests.md), the credentials of [ADR 020](020-github-charm.md), [ADR 021](021-devices-and-remote-access.md) and [ADR 022](022-hob-github-app.md), and the Workbench records of [ADR 023](023-workbench.md).
+Status: **Accepted.** Start over added for [#948](https://github.com/otaviobarros/hobbots/issues/948). Decides what [ADR 011](011-sqlite-storage.md), the [persistence contract](../architecture/persistence.md) and the [API and events contract](../architecture/api-events.md#operational-observability) leave open for OP-002 and OP-003 of the [MVP requirements](../product/mvp-requirements.md), for Slice 15 ([#16](https://github.com/otaviobarros/hobbots/issues/16)). Builds on the event journal of [ADR 013](013-event-journal.md), the redaction of [ADR 014](014-tool-policy-and-enforcement.md), the Tasks and Attempts of [ADR 018](018-tasks-and-quests.md), the credentials of [ADR 020](020-github-charm.md), [ADR 021](021-devices-and-remote-access.md) and [ADR 022](022-hob-github-app.md), and the Workbench records of [ADR 023](023-workbench.md).
 
 ## Context
 
@@ -86,6 +86,17 @@ On its first start after a restore the hub applies these rules in one transactio
 - **Runtime sessions.** A thread keeps its runtime session IDs. A session the runtime no longer has starts fresh, with the briefing a thread gets on a new runtime ([ADR 017](017-switching-brains.md)).
 - **Backup holds.** A cleanup or workspace hold recorded in the database is cleared.
 - **Hob folders.** The restore summary lists each hob folder that is not on this computer, so you can set that hob's folders again.
+
+### Start over
+
+Settings › Your data › **Start over** deletes everything the hub keeps on its computer and starts it again empty, at First run ([#948](https://github.com/otaviobarros/hobbots/issues/948)). It is not a restore: nothing is set aside, and the way back is a backup made first.
+
+1. The dialog lists what goes and what stays, names the hobs that are replying, offers **Back up first** to the folder Backups saves to, and enables **Delete everything** only after a high-risk check box, as on approvals.
+2. While the hub still runs, it removes the keychain items it owns: each hob's own GitHub App key, after removing the app's installations as a retired hob's are, then the GitHub account's tokens. They live outside the data folder, so deleting the folder alone would leave them behind.
+3. The hub stops, as for a restore. It writes `reset.json` in the data folder, deletes every hub entry of the data folder (the same list a restore moves aside), the runtimes folder beside it and every `<data folder>.before-restore-<date>` folder, then deletes the marker. The desktop app's own files in the data folder stay.
+4. The hub starts again in the same process. A marker found at any start means a reset stopped halfway, and the hub finishes it before it reads any data.
+
+Deleting the database signs out every device and ends every running reply. The folders hobs work in, backups and exports saved elsewhere, and the runtimes' own sign-ins outside the hub's folders, such as the user's Claude Code sign-in, are untouched. A hob's GitHub App itself stays on GitHub until you delete it there. A hub without the app has no reset command yet.
 
 ### Export
 
@@ -217,3 +228,4 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - Usage over 7 and 30 days is the same after a backup and restore. Not proven yet: [#454](https://github.com/otaviobarros/hobbots/issues/454), [#457](https://github.com/otaviobarros/hobbots/issues/457).
 - On PostgreSQL, `backup files` without a `backup begin` that still holds is refused, and a file named by a database backup taken under the holds is still there when the files are copied. The first-start rules after a restore, export and diagnostics give the same results on PostgreSQL. Not proven yet: [#457](https://github.com/otaviobarros/hobbots/issues/457).
 - A manual backup and restore on the packaged Mac app is recorded as evidence, and the checks run in CI on SQLite. Not proven yet: [#457](https://github.com/otaviobarros/hobbots/issues/457).
+- Start over deletes every hub entry of the data folder, the runtimes folder and the folders a restore set aside, keeps the desktop app's own files, and finishes a reset that stopped halfway on the next start. It forgets every hob's GitHub App and the GitHub account before the hub stops, refuses on a hub that cannot restart itself, and the hub comes back with a new installation at Welcome. Checked by `[TC-OP-094]` to `[TC-OP-097]` in `apps/server/test/reset.test.ts` and `[TC-OP-098]` in `apps/web/e2e/start-over.e2e.ts`, with the fake runtime.
