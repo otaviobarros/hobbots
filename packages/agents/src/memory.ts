@@ -112,9 +112,10 @@ export interface MemoryStoreShape {
   /**
    * Ends the thread's session, so memory writes its summary page, `sessions/<thread id>.md`, with the
    * memory model or without one. `key` names this end, as an item's does. Items captured later
-   * continue the same session, and the next end writes its page again.
+   * continue the same session, and the next end writes its page again. Answers false, writing
+   * nothing, while you have that page pinned: the end waits, and is sent again until it is taken.
    */
-  readonly endSession: (actor: MemoryActor, scope: MemoryScope, threadId: ThreadId, key: string) => Memory<void>;
+  readonly endSession: (actor: MemoryActor, scope: MemoryScope, threadId: ThreadId, key: string) => Memory<boolean>;
   /**
    * Checks `scope` for pages that disagree and pages that look out of date (ADR 028, Check now), and
    * answers what it found, changing nothing. Only you check.

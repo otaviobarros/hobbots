@@ -123,6 +123,9 @@ describe("Codex's models", () => {
       ["gpt-6", ["low", "max"]],
       ["gpt-mini", ["low", "medium"]],
     ]);
+    // Its first `mini` is the small model for light work, such as memory's.
+    expect(listed.small).toBe("gpt-mini");
+    expect(toCodexModels([model({ model: "gpt-6" })]).small).toBeUndefined();
   });
 });
 

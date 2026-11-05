@@ -5,6 +5,7 @@ import {
   MemoryConflict,
   type MemoryExpected,
   type MemoryFinding,
+  MemoryForgetDay,
   type MemoryHit,
   type MemoryPage,
   type MemoryPageSummary,
@@ -16,8 +17,9 @@ import {
   type MemoryVersionChanges,
   memoryTitleOf,
   searchTerms,
+  type ThreadId,
 } from "@hobbots/domain";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { acknowledgedPrefix, HOOK_BATCH_MAX, HookBatchJson, hookEventOf } from "./capture.ts";
 import {
   type EngineCaller,
@@ -54,6 +56,7 @@ const PageJson = Schema.Struct({
   body_markdown: Schema.String,
   frontmatter: Schema.Struct({
     tags: Schema.optionalKey(Schema.Array(Schema.String)),
+    expires_at: Schema.optionalKey(Schema.String),
     last_modified_by: Schema.optionalKey(Schema.Struct({ username: Schema.optionalKey(Schema.String) })),
   }),
 });
@@ -249,6 +252,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         markdown: json.body_markdown,
         tags: json.frontmatter.tags ?? [],
         pinned: json.pinned,
+        forgetOn: forgetDayOf(json.frontmatter.expires_at),
         version: MemoryVersion.make(json.id),
         author: authorOfUsername(json.frontmatter.last_modified_by?.username),
         updatedAt: json.updated_at,
@@ -461,6 +465,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
                 body: draft.markdown,
                 tags: draft.tags,
                 pinned: draft.pinned,
+                ...(draft.forgetOn ? { expires_at: draft.forgetOn } : {}),
                 ...preconditionOf(expected),
               },
               WrittenJson,
@@ -521,12 +526,13 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         refusalIsOutage,
       );
     },
-    restore: (_actor, scope, path, version) => {
+    restore: (actor, scope, path, version) => {
       const source = version.startsWith(REVISION) ? { rev: version.slice(REVISION.length) } : { page_id: version };
       return client.admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson).pipe(
         Effect.map((json) => MemoryVersion.make(json.page_id)),
         // A version the page never had, or one gone with a forget, leaves the page as it is.
         Effect.catchTag("EngineRefused", () => currentConflict(scope, path)),
+        Effect.flatMap((restored) => stampedYours(actor, scope, path, restored)),
         refusalIsOutage,
       );
     },
@@ -549,20 +555,12 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         return acknowledged;
       }).pipe(refusalIsOutage),
     endSession: (actor, scope, threadId, key) =>
-      client
-        .hookBatch(
-          callerOf(actor),
-          [hookEventOf(engineProjectOf(scope), threadId, { kind: "end", key, text: "" })],
-          HookBatchJson,
-        )
-        .pipe(
-          Effect.flatMap((json) =>
-            acknowledgedPrefix(json) >= 1
-              ? Effect.void
-              : Effect.fail(new MemoryUnavailable({ message: "Memory did not take the end of a session." })),
-          ),
-          refusalIsOutage,
-        ),
+      Effect.flatMap(pageOf(scope, MemoryPath.make(`sessions/${threadId}.md`)), (note) =>
+        // The engine writes a session's page again at every end, pinned or not, so the end of a
+        // session whose chat note you pinned is not sent: the note stays as it is, and the capture
+        // worker keeps the end and sends it again once you unpin it.
+        note?.pinned === true ? Effect.succeed(false) : Effect.as(endOf(actor, scope, threadId, key), true),
+      ).pipe(refusalIsOutage),
     check: (_actor, scope) =>
       client
         // A dry run, so the engine keeps no report page of its own among your pages.
@@ -574,12 +572,47 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         ),
     health: client.health,
   };
+
+  const endOf = (actor: MemoryActor, scope: MemoryScope, threadId: ThreadId, key: string) =>
+    client
+      .hookBatch(
+        callerOf(actor),
+        [hookEventOf(engineProjectOf(scope), threadId, { kind: "end", key, text: "" })],
+        HookBatchJson,
+      )
+      .pipe(
+        Effect.flatMap((json) =>
+          acknowledgedPrefix(json) >= 1
+            ? Effect.void
+            : Effect.fail(new MemoryUnavailable({ message: "Memory did not take the end of a session." })),
+        ),
+      );
+
+  /**
+   * The engine restores a version with the frontmatter it had, the author who wrote it included, so
+   * a version a hob wrote is written once more, unchanged, as you: every restore is yours in History.
+   */
+  const stampedYours = (actor: MemoryActor, scope: MemoryScope, path: MemoryPath, restored: MemoryVersion) =>
+    Effect.flatMap(pageOf(scope, path), (page) =>
+      page === null || page.version !== restored || page.author?._tag === "You"
+        ? Effect.succeed(restored)
+        : store.write(
+            actor,
+            scope,
+            { path, markdown: page.markdown, tags: page.tags, pinned: page.pinned, forgetOn: page.forgetOn },
+            { _tag: "Version", version: restored },
+          ),
+    );
   return store;
 };
 
 /** Never silently left out: an export that cannot name a project says memory did not answer in full. */
 const unnamed = (project: string) =>
   new MemoryUnavailable({ message: `Memory holds a project Hobbots cannot name: ${project}` });
+
+/** The day a page's `expires_at` names, or null for none, or for a time Hobbots did not write. */
+const forgetDayOf = (expiresAt: string | undefined): MemoryForgetDay | null =>
+  Option.getOrNull(Schema.decodeUnknownOption(MemoryForgetDay)(expiresAt?.slice(0, 10)));
 
 const preconditionOf = (expected: MemoryExpected): Record<string, unknown> => {
   switch (expected._tag) {

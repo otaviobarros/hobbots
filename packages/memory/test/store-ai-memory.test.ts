@@ -1,5 +1,12 @@
 import type { MemoryStoreShape } from "@hobbots/agents";
-import { AgentId, MemoryPath, type MemoryScope, MemoryUnavailable, memoryProjectIdentity } from "@hobbots/domain";
+import {
+  AgentId,
+  MemoryForgetDay,
+  MemoryPath,
+  type MemoryScope,
+  MemoryUnavailable,
+  memoryProjectIdentity,
+} from "@hobbots/domain";
 import { Effect, Exit, Redacted, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { engineProjectOf, INDEX_PROJECT, scopeOfEngineProject } from "../src/store/scopes.ts";
@@ -126,5 +133,40 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
     const refused = await Effect.runPromise(Effect.flip(store.scopes(you)));
     expect(refused).toBeInstanceOf(MemoryUnavailable);
     expect(refused.message).toMatch(/repo-foreign-0123456789/);
+  });
+});
+
+describe.runIf(engineEnabled)("aging on ai-memory", () => {
+  // covers ADR 028 (Writes), #959
+  it("[TC-GEN-333] has the engine's sweep delete a page past its forget day for good, and leave a pinned page as it is", async () => {
+    const { store, endpoint, keys } = await Effect.runPromise(open());
+    const you = { _tag: "You" } as const;
+    const own: MemoryScope = { _tag: "Hob", agentId: AgentId.make("h-pip") };
+    const write = (path: string, more: { pinned?: boolean; forgetOn?: MemoryForgetDay }) =>
+      Effect.runPromise(
+        store.write(
+          you,
+          own,
+          { path: MemoryPath.make(path), markdown: "# Page", tags: [], pinned: false, ...more },
+          {
+            _tag: "New",
+          },
+        ),
+      );
+    const pinned = await write("rules/kept.md", { pinned: true });
+    await write("notes/gone.md", { forgetOn: MemoryForgetDay.make("2000-01-01") });
+    const sweep = await fetch(`${endpoint.url}/admin/forget-sweep`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${Redacted.value(keys.root)}`, "content-type": "application/json" },
+      body: JSON.stringify(engineProjectOf(own)),
+    });
+    expect(sweep.status).toBe(200);
+    expect(await sweep.json()).toMatchObject({ expired: [expect.objectContaining({ path: "notes/gone.md" })] });
+    expect(await Effect.runPromise(store.page(you, own, MemoryPath.make("notes/gone.md")))).toBeNull();
+    expect(await Effect.runPromise(store.history(you, own, MemoryPath.make("notes/gone.md")))).toEqual([]);
+    expect(await Effect.runPromise(store.page(you, own, MemoryPath.make("rules/kept.md")))).toMatchObject({
+      version: pinned,
+      pinned: true,
+    });
   });
 });

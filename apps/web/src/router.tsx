@@ -344,7 +344,8 @@ const usageRoute = createRoute({
 });
 // Memory (ADR 028): `?scope=` opens a scope and `&page=` a page in it, `&v=` shows what one version
 // changed, `?q=` searches (`&in=` in one scope), `?view=changes` opens What changed and `?view=review`
-// To review, with `&item=` the share or finding open there.
+// To review, with `&item=` the share or finding open there. `&edit=page` opens the page in the
+// editor, and `&edit=new` a new page in the scope.
 const memoryRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="home" />,
@@ -360,6 +361,7 @@ const memoryRoute = createRoute({
       q: searchParam(SearchText),
       in: searchParam(MemoryScopeKey),
       show: searchParam(ChangeFilter),
+      edit: searchParam(Schema.Literals(["page", "new"])),
     }),
   ),
   component: function Memory() {

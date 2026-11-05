@@ -10,6 +10,7 @@ import { ENGINE_BINARY, ENGINE_CHECKSUM, parseChecksum, parseVersion, verifyEngi
 import { configHoldsCredential, renderEngineConfig } from "../src/engine/config.ts";
 import { MemoryEngine, type MemoryEngineOptions } from "../src/engine/engine.ts";
 import { loadOrCreateMemoryKeys, memoryKeysFile } from "../src/engine/keys.ts";
+import { MemoryModelEndpoint } from "../src/engine/model-endpoint.ts";
 import { AI_MEMORY_VERSION } from "../src/engine/release.ts";
 import { standInEngine } from "./stand-in-engine.ts";
 
@@ -45,6 +46,13 @@ const isAlive = (pid: number) => {
   }
 };
 
+/** Where the engine's models are, as the hub's endpoint would answer; nothing answers there in these tests. */
+const MODEL_URL = "http://127.0.0.1:9";
+const StubModelEndpoint = Layer.succeed(MemoryModelEndpoint, {
+  url: MODEL_URL,
+  limited: () => Effect.succeedNone,
+});
+
 /** Runs `body` against an engine on the stand-in binary, then closes its scope. */
 const withEngine = <A>(
   overrides: Partial<MemoryEngineOptions>,
@@ -63,7 +71,7 @@ const withEngine = <A>(
       folder,
       dataDir,
       keys,
-    }).pipe(Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)));
+    }).pipe(Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, StubModelEndpoint)));
     return yield* Effect.gen(function* () {
       const engine = yield* MemoryEngine;
       return yield* body(engine, dataDir);
@@ -117,9 +125,20 @@ describe("the hub's memory keys", () => {
     const again = loadOrCreateMemoryKeys(dataDir);
     expect(Redacted.value(again.root)).toBe(Redacted.value(first.root));
     expect(Redacted.value(again.proxy)).toBe(Redacted.value(first.proxy));
-    expect(Redacted.value(first.root)).not.toBe(Redacted.value(first.proxy));
+    expect(Redacted.value(again.model)).toBe(Redacted.value(first.model));
+    expect(new Set([first.root, first.proxy, first.model].map(Redacted.value)).size).toBe(3);
     expect(Redacted.value(first.root)).toMatch(/^[0-9a-f]{64}$/);
     expect(statSync(memoryKeysFile(dataDir)).mode & 0o777).toBe(0o600);
+  });
+
+  it("keep the two keys of a file from before the model bearer, and add one", () => {
+    const dataDir = tempFolder("hobbots-keys-");
+    const [root, proxy] = ["1".repeat(64), "2".repeat(64)];
+    writeFileSync(memoryKeysFile(dataDir), JSON.stringify({ version: 1, root, proxy }), { mode: 0o600 });
+    const keys = loadOrCreateMemoryKeys(dataDir);
+    expect([Redacted.value(keys.root), Redacted.value(keys.proxy)]).toEqual([root, proxy]);
+    expect(Redacted.value(keys.model)).toMatch(/^[0-9a-f]{64}$/);
+    expect(Redacted.value(loadOrCreateMemoryKeys(dataDir).model)).toBe(Redacted.value(keys.model));
   });
 
   it("are replaced when the file is damaged, and made owner-only again when it is not", () => {
@@ -138,17 +157,21 @@ describe("the hub's memory keys", () => {
 describe("the engine's config file", () => {
   it("holds no credential and names the root user", () => {
     const keys = loadOrCreateMemoryKeys(tempFolder("hobbots-keys-"));
-    const config = renderEngineConfig({ model: { provider: "anthropic", name: "claude-haiku-4-5" } });
+    const config = renderEngineConfig({ model: { runtime: "claude-code", name: "haiku" } }, MODEL_URL);
     expect(config).toContain('root_username = "you"');
-    expect(config).toContain('llm_provider = "anthropic"');
+    expect(config).toContain('llm_provider = "openai-compat"');
     expect(config).toContain('embedding_provider = "none"');
     expect(configHoldsCredential(config, keys)).toBe(false);
     expect(configHoldsCredential(`${config}\nbearer_token = "x"\n`, keys)).toBe(true);
     expect(configHoldsCredential(`${config}\n# ${Redacted.value(keys.proxy)}\n`, keys)).toBe(true);
+    expect(configHoldsCredential(`${config}\n# ${Redacted.value(keys.model)}\n`, keys)).toBe(true);
+    expect(configHoldsCredential(`${config}\nllm_api_key = "x"\n`, keys)).toBe(true);
   });
 
   it("refuses a setting that is not a plain name", () => {
-    expect(() => renderEngineConfig({ model: { provider: 'x"\n[auth]\nbearer_token = "y', name: "m" } })).toThrow();
+    expect(() =>
+      renderEngineConfig({ model: { runtime: "codex", name: 'x"\n[auth]\nbearer_token = "y' } }, MODEL_URL),
+    ).toThrow();
   });
 });
 
@@ -173,13 +196,21 @@ describe("the supervised engine", () => {
           const keys = loadOrCreateMemoryKeys(data);
           expect(start?.env.AI_MEMORY_AUTH_TOKEN).toBe(Redacted.value(keys.root));
           expect(start?.env.AI_MEMORY_AUTH__ACTOR_PROXY_BEARER_TOKEN).toBe(Redacted.value(keys.proxy));
+          expect(start?.env.LLM_API_KEY).toBe(Redacted.value(keys.model));
           expect(start?.env.HOBBOTS_TEST_SECRET).toBeUndefined();
           expect(
             Object.keys(start?.env ?? {})
               // The stand-in is a Node script: the shell and macOS's Node add these to its own environment.
               .filter((key) => !["PWD", "SHLVL", "_", "__CF_USER_TEXT_ENCODING"].includes(key))
               .sort(),
-          ).toEqual(["AI_MEMORY_AUTH_TOKEN", "AI_MEMORY_AUTH__ACTOR_PROXY_BEARER_TOKEN", "HOME", "NO_COLOR", "PATH"]);
+          ).toEqual([
+            "AI_MEMORY_AUTH_TOKEN",
+            "AI_MEMORY_AUTH__ACTOR_PROXY_BEARER_TOKEN",
+            "HOME",
+            "LLM_API_KEY",
+            "NO_COLOR",
+            "PATH",
+          ]);
           expect(start?.args.slice(0, 3)).toEqual(["serve", "--transport", "http"]);
           expect(start?.args).not.toContain("run");
 
@@ -245,12 +276,14 @@ describe("the supervised engine", () => {
         yield* Effect.sleep("300 millis");
         expect(startsOf(data)).toHaveLength(1);
 
-        yield* engine.reconfigure({ model: { provider: "anthropic", name: "claude-haiku-4-5" } });
+        yield* engine.reconfigure({ model: { runtime: "claude-code", name: "haiku" } });
         yield* until(engine, (each) => each.state === "running" && startsOf(data).length === 2);
         const [first, second] = startsOf(data);
         expect(second?.pid).not.toBe(first?.pid);
         expect(isAlive(first?.pid ?? 0)).toBe(false);
-        expect(readFileSync(join(data, "memory", "config.toml"), "utf8")).toContain('llm_model = "claude-haiku-4-5"');
+        const config = readFileSync(join(data, "memory", "config.toml"), "utf8");
+        expect(config).toContain('llm_model = "haiku"');
+        expect(config).toContain(`llm_base_url = "${MODEL_URL}/claude-code/v1"`);
         // A restart that was asked for is not a crash.
         expect((yield* engine.health).lastExit).toBeNull();
       }),
@@ -341,7 +374,7 @@ describe("the supervised engine", () => {
         expect(failed.reason).toMatch(/memory's backup failed/);
         expect(existsSync(join(out, "none.tar.gz"))).toBe(false);
 
-        yield* Effect.promise(() => serve(data, renderEngineConfig({ model: null })));
+        yield* Effect.promise(() => serve(data, renderEngineConfig({ model: null }, null)));
         expect(yield* engine.backup(join(out, "good.tar.gz"))).toBe(true);
         expect(statSync(join(out, "good.tar.gz")).mode & 0o777).toBe(0o600);
 

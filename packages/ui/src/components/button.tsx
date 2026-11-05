@@ -21,6 +21,8 @@ const buttonVariants = cva(
         ghost: "bg-transparent text-text-strong hover:bg-hover",
         // A quiet action that should not draw the eye, such as the chat header's back arrow.
         quiet: "bg-transparent text-text-secondary hover:bg-hover hover:text-text-strong",
+        // A quiet action that removes something, such as Delete in a Memory page's actions.
+        quietDeny: "bg-transparent text-rose hover:bg-hover",
         icon: "border-(length:--edge) border-solid border-line-2 bg-transparent text-text-secondary [clip-path:none] hover:bg-line hover:text-text-strong aria-pressed:bg-line aria-pressed:text-text-strong",
         // A link that acts: `link`, underlined, and the underline turns lantern on hover.
         link: "bg-transparent text-link underline underline-offset-2 [clip-path:none] hover:decoration-lantern",
