@@ -1,4 +1,4 @@
-import type { MemoryOverview } from "@hobbots/api";
+import type { MemoryScopes } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
@@ -159,7 +159,7 @@ const EVERYONE: MemoryScope = { _tag: "Everyone" };
  * with none; a hob scope whose hob is not active is listed only while it holds pages.
  */
 export const scopeNav = (
-  overview: MemoryOverview | undefined,
+  overview: MemoryScopes | undefined,
   active: ReadonlyArray<Agent>,
   hobs: HobDirectory,
 ): ScopeNav => {
@@ -190,7 +190,7 @@ export const scopeNav = (
 };
 
 /** How many pages memory holds in all, and in how many shared places (About you and the projects). */
-export const memoryTotals = (overview: MemoryOverview) => ({
+export const memoryTotals = (overview: MemoryScopes) => ({
   pages: overview.scopes.reduce((sum, entry) => sum + entry.pages, 0),
   shared: overview.scopes.filter((entry) => entry.scope._tag !== "Hob").length,
 });
@@ -198,7 +198,7 @@ export const memoryTotals = (overview: MemoryOverview) => ({
 /** The line under the title. */
 export const headLine = (
   hobs: number,
-  overview: MemoryOverview | undefined,
+  overview: MemoryScopes | undefined,
   state: { readonly offline: boolean },
 ): string => {
   if (state.offline) return copy.head.offline;

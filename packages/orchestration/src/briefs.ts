@@ -1,6 +1,7 @@
 import { clip } from "@hobbots/agents";
 import {
   ancestorsOf,
+  answerHow,
   type BackpackItem,
   CHECKPOINT_WORDS,
   checkpointText,
@@ -316,7 +317,8 @@ export const ownerBriefing = (task: Task, tree: TaskTree): string => {
   const under = briefedUnder(task, tree);
   const above = ancestorsOf(task, tree.tasks).length;
   const answers = answeredFor(task, tree).map(
-    (question) => `- ${cut(question.text, SUMMARY_LIMIT)} Answer: ${cut(question.answer ?? "", SUMMARY_LIMIT)}`,
+    (question) =>
+      `- ${cut(question.text, SUMMARY_LIMIT)} Answer: ${cut(question.answer ?? "", SUMMARY_LIMIT)}${answerHow(question)}`,
   );
   return [
     `You are working on Task ${task.id} (${task.state}) for this conversation${above === 0 ? "" : ", under another Task"}: ${firstLine(task.brief)}`,

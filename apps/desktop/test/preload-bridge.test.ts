@@ -45,7 +45,9 @@ describe("the preload bridge", () => {
       "retry",
     ]);
     // On the hub, the folder pickers, the backup folder picker included, and Show in Finder stay.
-    expect(await bridgeWith([])).toEqual([...shared, "chooseBackupFolder", "chooseFolder", "showFile"].sort());
+    expect(await bridgeWith([])).toEqual(
+      [...shared, "chooseBackupFolder", "chooseFolder", "showFile", "showMemoryFiles"].sort(),
+    );
   });
 
   // covers DP-001, PE-006

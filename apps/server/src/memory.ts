@@ -60,7 +60,7 @@ const notAnswering = (_: MemoryUnavailable) => Effect.fail(new MemoryNotAnswerin
 /** The scope a decoded key names; the API's Schema only lets through keys that name one. */
 const scopeOf = (key: string): MemoryScope => memoryScopeOfKey(key) as MemoryScope;
 
-export const MemoryHandlers = HttpApiBuilder.group(HobbotsApi, "memory", (handlers) =>
+export const MemoryPagesHandlers = HttpApiBuilder.group(HobbotsApi, "memoryPages", (handlers) =>
   Effect.gen(function* () {
     // A hub built without memory, as most tests build it, answers that memory is not answering.
     const store: MemoryStoreShape = Option.getOrElse(yield* Effect.serviceOption(MemoryStore), () =>
@@ -69,7 +69,7 @@ export const MemoryHandlers = HttpApiBuilder.group(HobbotsApi, "memory", (handle
     const changes = Option.getOrElse(yield* Effect.serviceOption(MemoryChanges), () => null);
     const watch = changes ?? (yield* makeMemoryChangeWatch(store));
     return handlers.handleAll({
-      overview: () =>
+      scopes: () =>
         memoryScopeCounts(store).pipe(
           Effect.map((scopes) => ({ scopes })),
           Effect.catchTag("MemoryUnavailable", notAnswering),

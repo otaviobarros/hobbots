@@ -3,7 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { SearchField } from "@hobbots/ui/components/search-field";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { memoryPageGone } from "../../api/memory.ts";
+import { memoryPageGone } from "../../api/memory-pages.ts";
 import { PageHeader } from "../shell/pages.tsx";
 import { MemoryChangesView } from "./memory-changes.tsx";
 import {

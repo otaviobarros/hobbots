@@ -149,7 +149,7 @@ describe("the Memory page's API", () => {
     await write(asPip, theSite, "facts/plan.md", "# The annual plan costs $10 a month");
     await write(you, everyone, "rules/ask.md", "# Ask before emailing");
 
-    const overview = await get("/api/memory");
+    const overview = await get("/api/memory/scopes");
     expect(overview.status).toBe(200);
     expect(overview.body.scopes).toHaveLength(3);
     expect(overview.body.scopes).toContainEqual({ scope: pipsOwn, pages: 1 });
@@ -215,13 +215,13 @@ describe("the Memory page's API", () => {
   it("[TC-GEN-237] answers 503, never an empty memory, while memory does not answer", async () => {
     await write(asPip, pipsOwn, "howtos/preview.md", "# Preview");
     controls.setDown(true);
-    for (const path of ["/api/memory", "/api/memory/changes", `/api/memory/search?${query({ q: "preview" })}`]) {
+    for (const path of ["/api/memory/scopes", "/api/memory/changes", `/api/memory/search?${query({ q: "preview" })}`]) {
       const answer = await get(path);
       expect(answer.status).toBe(503);
       expect(answer.body).toMatchObject({ _tag: "MemoryNotAnswering" });
     }
     controls.setDown(false);
-    expect((await get("/api/memory")).status).toBe(200);
+    expect((await get("/api/memory/scopes")).status).toBe(200);
   });
 
   // covers ADR 028 (What changed), #958

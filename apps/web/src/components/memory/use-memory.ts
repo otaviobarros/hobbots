@@ -4,11 +4,11 @@ import {
   memoryChangesQuery,
   memoryKeys,
   memoryNotAnswering,
-  memoryOverviewQuery,
   memoryPageQuery,
   memoryPagesQuery,
+  memoryScopesQuery,
   memorySearchQuery,
-} from "../../api/memory.ts";
+} from "../../api/memory-pages.ts";
 import { agentsQuery, archivedAgentsQuery } from "../../api/queries.ts";
 import type { HobDirectory, MemoryView } from "./memory-model.ts";
 
@@ -33,7 +33,7 @@ export const useMemory = (view: MemoryView) => {
   const queryClient = useQueryClient();
   const agents = useQuery(agentsQuery);
   const archived = useQuery(archivedAgentsQuery);
-  const overview = useQuery(memoryOverviewQuery);
+  const overview = useQuery(memoryScopesQuery);
   const changes = useQuery(memoryChangesQuery);
   const scope = pagesScope(view);
   const pages = useQuery({ ...memoryPagesQuery(scope ?? EVERYONE), enabled: scope !== null });

@@ -1,4 +1,4 @@
-import type { MemoryOverview } from "@hobbots/api";
+import type { MemoryScopes } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -13,7 +13,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import { retryUnlessRefused } from "../../api/live.ts";
-import { withChanges } from "../../api/memory.ts";
+import { withChanges } from "../../api/memory-pages.ts";
 import {
   changesByDay,
   filterChanges,
@@ -120,7 +120,7 @@ describe("the Memory page's address", () => {
 describe("the scope list and the line under the title", () => {
   // covers ADR 028 (Browse), #958
   it("[TC-UX-941] lists About you, each project by name, each hob, and a former hob only while it holds pages", () => {
-    const overview: MemoryOverview = {
+    const overview: MemoryScopes = {
       scopes: [
         { scope: everyone, pages: 2 },
         { scope: site, pages: 3 },
@@ -159,7 +159,7 @@ describe("the scope list and the line under the title", () => {
   it("[TC-UX-942] says loading, nothing yet, what memory holds, or that it is not answering", () => {
     expect(headLine(2, undefined, { offline: false })).toBe(copy.head.loading({ hobs: 2 }));
     expect(headLine(2, { scopes: [] }, { offline: false })).toBe(copy.head.empty({ hobs: 2 }));
-    const full: MemoryOverview = {
+    const full: MemoryScopes = {
       scopes: [
         { scope: everyone, pages: 2 },
         { scope: site, pages: 3 },

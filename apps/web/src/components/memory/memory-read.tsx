@@ -10,7 +10,7 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { memoryVersionQuery } from "../../api/memory.ts";
+import { memoryVersionQuery } from "../../api/memory-pages.ts";
 import { formatAgo, formatMoment } from "../../lib/format.ts";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import {

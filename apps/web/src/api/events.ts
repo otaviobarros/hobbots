@@ -26,7 +26,7 @@ import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
-import { applyMemoryChanged } from "./memory.ts";
+import { applyMemoryChanged } from "./memory-pages.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
