@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-05
 - **Issue:** [#959](https://github.com/otaviobarros/hobbots/issues/959)
-- **Pull request:** to be opened from `claude/project-thread-dx4jmp`.
+- **Pull request:** [#983](https://github.com/otaviobarros/hobbots/pull/983)
 - **Commit:** the head of `claude/project-thread-dx4jmp`, the branch of the pull request, after merging `main`; not yet on `main`.
 - **Setup:** Linux x86_64 container (Ubuntu 24.04.5, Node 22.23.4) with ai-memory 3.4.2 for `linux-x64`, fetched and checked by `pnpm --filter @hobbots/memory fetch-engine`, and the store's contract run with `HOBBOTS_MEMORY_CONTRACT=1`. Browser runs use the bundled Chromium through Playwright against a hub started per test with `HOBBOTS_FAKE_MEMORY=seeded`.
 - **Result:** Passed with gaps: memory 114 tests, domain 153, web 836, server 552 of 553 (the one failure, `[TC-DP-008]`, needs IPv6, which this container lacks, and fails on `main` too), and the ten Memory end-to-end cases.
