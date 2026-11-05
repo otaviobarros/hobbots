@@ -161,18 +161,41 @@ export const memoryProjectIdentity = (origin: string | null, folderName: string)
   return MemoryProjectIdentity.make(remote ?? (folderName.trim().toLowerCase() || "folder"));
 };
 
+const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+/** `text` without `char` at its start and end. Plain loops, so a long run of it costs no more than reading it. */
+const trimChar = (text: string, char: string) => {
+  let start = 0;
+  let end = text.length;
+  while (start < end && text[start] === char) start++;
+  while (end > start && text[end - 1] === char) end--;
+  return text.slice(start, end);
+};
+
+// Split with indexOf rather than one regular expression, so no remote, however long, backtracks.
 const remoteIdentity = (origin: string): string | null => {
   const trimmed = origin.trim();
-  // `user@host:path`, Git's scp-like form, has no scheme and no slash before the colon.
-  const scp = /^(?:[^@/]+@)?([^/:]+):(?!\/)(.+)$/.exec(trimmed);
-  const url = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i.exec(trimmed);
-  const parts = url ?? scp;
-  if (!parts) return null;
-  const path = (parts[2] as string)
-    .replace(/[?#].*$/, "")
-    .replace(/\/+$/, "")
-    .replace(/\.git$/i, "")
-    .replace(/^\/+/, "");
-  if (path === "") return null;
-  return `${(parts[1] as string).toLowerCase()}/${path.toLowerCase()}`;
+  const scheme = SCHEME.exec(trimmed);
+  let authority: string;
+  let rest: string;
+  if (scheme) {
+    const after = trimmed.slice(scheme[0].length);
+    const slash = after.indexOf("/");
+    if (slash === -1) return null;
+    authority = after.slice(0, slash);
+    rest = after.slice(slash + 1);
+  } else {
+    // `user@host:path`, Git's scp-like form, has no slash before its colon.
+    const colon = trimmed.indexOf(":");
+    const slash = trimmed.indexOf("/");
+    if (colon <= 0 || (slash !== -1 && slash < colon)) return null;
+    authority = trimmed.slice(0, colon);
+    rest = trimmed.slice(colon + 1);
+  }
+  const host = authority.slice(authority.lastIndexOf("@") + 1).split(":")[0] as string;
+  const end = [rest.indexOf("?"), rest.indexOf("#")].filter((at) => at !== -1);
+  let path = trimChar(end.length === 0 ? rest : rest.slice(0, Math.min(...end)), "/");
+  if (path.toLowerCase().endsWith(".git")) path = trimChar(path.slice(0, -4), "/");
+  if (host === "" || path === "") return null;
+  return `${host.toLowerCase()}/${path.toLowerCase()}`;
 };

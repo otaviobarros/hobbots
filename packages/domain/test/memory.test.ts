@@ -26,6 +26,12 @@ describe("memory project identity", () => {
     );
   });
 
+  it("reads a remote of any length in one pass", () => {
+    const long = `https://github.com/me/app${"/".repeat(100_000)}`;
+    expect(memoryProjectIdentity(long, "app")).toBe("github.com/me/app");
+    expect(memoryProjectIdentity(`#${"#".repeat(100_000)}`, "app")).toBe("app");
+  });
+
   it("falls back to the folder's name with no remote, or one it cannot read", () => {
     expect(memoryProjectIdentity(null, "Notes")).toBe("notes");
     expect(memoryProjectIdentity("/srv/git/app.git", "app")).toBe("app");
