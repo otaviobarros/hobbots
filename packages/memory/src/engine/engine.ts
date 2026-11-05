@@ -9,15 +9,17 @@ import {
   Deferred,
   Duration,
   Effect,
+  FileSystem,
   Layer,
   Option,
-  type Redacted,
+  Redacted,
   Ref,
   Schedule,
   Stream,
 } from "effect";
-import { HttpClient } from "effect/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { checkMemoryArchive, MemoryArchiveRefused, packStoppedMemory } from "./backup.ts";
 import { verifyEngine } from "./binary.ts";
 import { configHoldsCredential, type EngineSettings, NO_MODEL, renderEngineConfig } from "./config.ts";
 import type { MemoryKeys } from "./keys.ts";
@@ -45,6 +47,13 @@ export interface MemoryEngineShape {
    * a change restarts the engine's process, never the hub; the same settings change nothing.
    */
   readonly reconfigure: (settings: EngineSettings) => Effect.Effect<void>;
+  /**
+   * Writes the engine's own backup of memory (ADR 028) to `target`, a new owner-only file, and checks
+   * it holds no bearer; a refused one is deleted. With the engine off, nothing is writing its folder,
+   * so its files are packed as they are. Answers false, writing nothing, when there is no memory to
+   * save. Fails while the engine is starting or restarting, so a backup never leaves memory out unsaid.
+   */
+  readonly backup: (target: string) => Effect.Effect<boolean, MemoryArchiveRefused>;
   /** How many pages the engine keeps and how much its model was used; null while it does not answer. */
   readonly status: Effect.Effect<EngineStatus | null>;
 }
@@ -142,10 +151,15 @@ const offHealth = (offReason: MemoryEngineOffReason): MemoryEngineHealth => ({
   runningSince: null,
 });
 
-const offEngine = (reason: MemoryEngineOffReason): MemoryEngineShape => ({
+/** The engine's data folder in the hub's data folder. */
+export const memoryFolder = (dataDir: string) => join(dataDir, "memory");
+
+const offEngine = (reason: MemoryEngineOffReason, dataDir?: string, keys?: MemoryKeys): MemoryEngineShape => ({
   health: Effect.succeed(offHealth(reason)),
   endpoint: Effect.succeed(Option.none()),
   reconfigure: () => Effect.void,
+  backup: (target) =>
+    dataDir === undefined ? Effect.succeed(false) : packStoppedMemory(memoryFolder(dataDir), target, keys),
   status: Effect.succeed(null),
 });
 
@@ -156,8 +170,12 @@ const now = Effect.map(Clock.currentTimeMillis, (millis) => new Date(millis).toI
  * loopback, restarted when it exits or stops answering, and stopped with the hub.
  */
 export class MemoryEngine extends Context.Service<MemoryEngine, MemoryEngineShape>()("@hobbots/memory/MemoryEngine") {
-  /** An engine that never starts, for a hub without memory: the hub and its hobs work without it. */
-  static readonly off = (reason: MemoryEngineOffReason) => Layer.succeed(MemoryEngine, offEngine(reason));
+  /**
+   * An engine that never starts, for a hub without memory: the hub and its hobs work without it. With
+   * the hub's data folder, a backup still saves the memory an earlier engine kept there.
+   */
+  static readonly off = (reason: MemoryEngineOffReason, dataDir?: string, keys?: MemoryKeys) =>
+    Layer.succeed(MemoryEngine, offEngine(reason, dataDir, keys));
 
   /**
    * Verifies the bundled engine, then runs it for as long as the layer's scope is open. A binary
@@ -170,7 +188,7 @@ export class MemoryEngine extends Context.Service<MemoryEngine, MemoryEngineShap
         const binary = yield* verifyEngine(options.folder);
         if (binary._tag !== "Verified") {
           yield* Effect.logWarning(`Memory is off: ${binary.detail}`);
-          return offEngine(binary._tag === "Missing" ? "missing" : "checksum");
+          return offEngine(binary._tag === "Missing" ? "missing" : "checksum", options.dataDir, options.keys);
         }
         return yield* run(options);
       }),
@@ -181,7 +199,8 @@ const run = (options: MemoryEngineOptions) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const http = yield* HttpClient.HttpClient;
-    const memoryDir = join(options.dataDir, "memory");
+    const fs = yield* FileSystem.FileSystem;
+    const memoryDir = memoryFolder(options.dataDir);
     const configFile = join(memoryDir, "config.toml");
 
     const startTimeout = Duration.fromInputUnsafe(options.startTimeout ?? "30 seconds");
@@ -370,6 +389,24 @@ const run = (options: MemoryEngineOptions) =>
     );
     yield* Effect.forkScoped(supervise);
 
+    const backup = (target: string) =>
+      Effect.gen(function* () {
+        const current = yield* Ref.get(status);
+        if (current.state === "off") return yield* packStoppedMemory(memoryDir, target, options.keys);
+        if (Option.isNone(current.endpoint)) {
+          return yield* new MemoryArchiveRefused({ reason: "memory is not answering right now" });
+        }
+        const { url, root } = current.endpoint.value;
+        // The engine snapshots its database with SQLite's online backup while it keeps serving.
+        yield* http.post(`${url}/admin/backup`, { headers: { authorization: `Bearer ${Redacted.value(root)}` } }).pipe(
+          Effect.flatMap(HttpClientResponse.filterStatusOk),
+          Effect.flatMap((response) => Stream.run(response.stream, fs.sink(target, { flag: "wx", mode: 0o600 }))),
+          Effect.mapError((cause) => new MemoryArchiveRefused({ reason: `memory's backup failed: ${cause.message}` })),
+        );
+        yield* checkMemoryArchive(target, options.keys);
+        return true;
+      }).pipe(Effect.tapError(() => fs.remove(target, { force: true }).pipe(Effect.ignore)));
+
     return MemoryEngine.of({
       health: Effect.map(Ref.get(status), (current) => ({
         state: current.state,
@@ -388,6 +425,7 @@ const run = (options: MemoryEngineOptions) =>
           yield* Ref.set(settings, next);
           yield* Deferred.succeed(restartNow, undefined);
         }),
+      backup,
       status: Effect.flatMap(Ref.get(status), (current) =>
         Option.match(current.endpoint, {
           onNone: () => Effect.succeed(null),

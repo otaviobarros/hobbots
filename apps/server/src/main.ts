@@ -141,9 +141,9 @@ const memoryEngineLayer = (
   dataDir: string,
   keys: MemoryKeys,
 ) => {
-  if (config.memory === "off") return MemoryEngine.off("disabled");
+  if (config.memory === "off") return MemoryEngine.off("disabled", dataDir, keys);
   const folder = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
-  if (folder === "") return MemoryEngine.off("missing");
+  if (folder === "") return MemoryEngine.off("missing", dataDir, keys);
   // The memory model you chose, as the engine can run it now (ADR 028).
   const settings = engineSettingsFor(readMemorySettings(dataDir), memoryModelCanRun).engine;
   return MemoryEngine.layer({ folder, dataDir, keys, settings }).pipe(

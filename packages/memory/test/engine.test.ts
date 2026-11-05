@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer, Option, Redacted, Schedule, type Scope } from "effect";
 import { FetchHttpClient } from "effect/http";
+import { create } from "tar";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENGINE_BINARY, ENGINE_CHECKSUM, parseChecksum, parseVersion, verifyEngine } from "../src/engine/binary.ts";
 import { configHoldsCredential, renderEngineConfig } from "../src/engine/config.ts";
@@ -317,5 +318,53 @@ describe("the supervised engine", () => {
         expect(startsOf(data)).toHaveLength(2);
       }),
     );
+  });
+
+  // covers ADR 028 (Backups), OP-003
+  it("[TC-OP-097] backs up through the engine with the root bearer, refuses an archive holding a bearer, and packs memory while off", async () => {
+    /** A memory archive whose config is `config`, served by the stand-in as its backup. */
+    const serve = async (data: string, config: string) => {
+      const source = tempFolder("hobbots-source-");
+      mkdirSync(join(source, "wiki"), { recursive: true });
+      writeFileSync(join(source, "wiki", "page.md"), "# Page");
+      writeFileSync(join(source, "config.toml"), config);
+      await create({ file: join(data, "memory", "stand-in-backup.tar.gz"), cwd: source, gzip: true }, [
+        "wiki",
+        "config.toml",
+      ]);
+    };
+    await withEngine({}, (engine, data) =>
+      Effect.gen(function* () {
+        yield* until(engine, (each) => each.state === "running");
+        const out = tempFolder("hobbots-backup-");
+        const failed = yield* Effect.flip(engine.backup(join(out, "none.tar.gz")));
+        expect(failed.reason).toMatch(/memory's backup failed/);
+        expect(existsSync(join(out, "none.tar.gz"))).toBe(false);
+
+        yield* Effect.promise(() => serve(data, renderEngineConfig({ model: null })));
+        expect(yield* engine.backup(join(out, "good.tar.gz"))).toBe(true);
+        expect(statSync(join(out, "good.tar.gz")).mode & 0o777).toBe(0o600);
+
+        const keys = loadOrCreateMemoryKeys(data);
+        rmSync(join(data, "memory", "stand-in-backup.tar.gz"));
+        yield* Effect.promise(() => serve(data, `token = "${Redacted.value(keys.proxy)}"\n`));
+        const refused = yield* Effect.flip(engine.backup(join(out, "bad.tar.gz")));
+        expect(refused.reason).toMatch(/config\.toml holds a memory bearer/);
+        expect(existsSync(join(out, "bad.tar.gz"))).toBe(false);
+      }),
+    );
+
+    // With the engine off, its folder is packed as it is.
+    const folder = await standInEngine();
+    folders.push(folder);
+    writeFileSync(join(folder, ENGINE_CHECKSUM), `${"0".repeat(64)}  ai-memory\n`);
+    const dataDir = tempFolder("hobbots-data-");
+    const out = tempFolder("hobbots-backup-");
+    await withEngine({ folder, dataDir }, (engine) => engine.backup(join(out, "empty.tar.gz")));
+    expect(existsSync(join(out, "empty.tar.gz"))).toBe(false);
+    mkdirSync(join(dataDir, "memory", "wiki"), { recursive: true });
+    writeFileSync(join(dataDir, "memory", "wiki", "page.md"), "# Page");
+    expect(await withEngine({ folder, dataDir }, (engine) => engine.backup(join(out, "off.tar.gz")))).toBe(true);
+    expect(existsSync(join(out, "off.tar.gz"))).toBe(true);
   });
 });

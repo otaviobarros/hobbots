@@ -1,3 +1,4 @@
+export * from "./engine/backup.ts";
 export * from "./engine/binary.ts";
 export * from "./engine/config.ts";
 export * from "./engine/engine.ts";

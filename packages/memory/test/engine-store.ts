@@ -41,10 +41,9 @@ export const startEngineStore = (dataDir: string, keys: MemoryKeys) =>
       Effect.repeat({ schedule: Schedule.spaced("100 millis"), until: (health) => health.state !== "starting" }),
       Effect.timeout("60 seconds"),
     );
-    if (Option.isNone(yield* Context.get(context, MemoryEngine).endpoint)) {
-      return yield* Effect.die(new Error("The memory engine did not start"));
-    }
-    return { store: Context.get(context, MemoryStore), scope };
+    const endpoint = yield* Context.get(context, MemoryEngine).endpoint;
+    if (Option.isNone(endpoint)) return yield* Effect.die(new Error("The memory engine did not start"));
+    return { store: Context.get(context, MemoryStore), scope, endpoint: endpoint.value };
   }).pipe(Effect.orDie);
 
 /** A new data folder with its keys, cleaned up after the tests. */

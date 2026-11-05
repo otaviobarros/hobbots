@@ -45,6 +45,8 @@ export interface MemoryStoreShape {
   readonly page: (actor: MemoryActor, scope: MemoryScope, path: MemoryPath) => Memory<MemoryPage | null>;
   /** The first `limit` pages in `scope`: pinned first, then the most recently changed. */
   readonly list: (actor: MemoryActor, scope: MemoryScope, limit: number) => Memory<ReadonlyArray<MemoryPageSummary>>;
+  /** Every scope that holds a page now, among those `actor` may reach. */
+  readonly scopes: (actor: MemoryActor) => Memory<ReadonlyArray<MemoryScope>>;
   /** Pages in `scope` changed after `since` (an ISO date), oldest change first. */
   readonly changes: (actor: MemoryActor, scope: MemoryScope, since: string) => Memory<ReadonlyArray<MemoryPageSummary>>;
   /** Every version of the page at `path`, newest first; empty when there is no page. */
@@ -123,6 +125,9 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   search: guarded("search", store.search, ([scopes]) => scopes),
   page: guarded("read", store.page, one),
   list: guarded("list", store.list, one),
+  // Nothing to refuse: what the engine answers is narrowed to what the actor may reach.
+  scopes: (actor) =>
+    Effect.map(store.scopes(actor), (found) => found.filter((scope) => memoryScopeAllowed(actor, scope))),
   changes: guarded("list", store.changes, one),
   history: guarded("read", store.history, one),
   write: guarded("write", store.write, one),

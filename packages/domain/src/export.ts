@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { CommandState, FileChangeKind } from "./activity.ts";
 import { AgentStatus, Effort, RuntimeKind } from "./agent.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { MemoryAuthor, MemoryPath, MemoryScope } from "./memory.ts";
 import { MessageRole, MessageStatus, ReplyStepState, ReplyUsage } from "./message.ts";
 import { ArtifactId, ArtifactKind, QuestId, QuestionId, QuestionState, QuestState } from "./quest.ts";
 import { RoleId } from "./roles.ts";
@@ -214,6 +215,29 @@ export const ExportedTree = Schema.Struct({
 });
 export type ExportedTree = typeof ExportedTree.Type;
 
+/** A memory page (ADR 028): where it is and who last wrote it. Its Markdown is in its own file. */
+export const ExportedMemoryPage = Schema.Struct({
+  scope: MemoryScope,
+  path: MemoryPath,
+  title: Schema.String,
+  pinned: Schema.Boolean,
+  author: Schema.NullOr(MemoryAuthor),
+  updatedAt: Schema.String,
+  /** Its Markdown file, relative to the export folder. */
+  file: Schema.String,
+});
+export type ExportedMemoryPage = typeof ExportedMemoryPage.Type;
+
+/**
+ * The memory an export holds: `included` with its pages, `unavailable` when memory did not answer,
+ * or `none` when the export covers no memory, as one thread's does.
+ */
+export const ExportedMemory = Schema.Struct({
+  state: Schema.Literals(["included", "unavailable", "none"]),
+  pages: Schema.Array(ExportedMemoryPage),
+});
+export type ExportedMemory = typeof ExportedMemory.Type;
+
 export const HobbotsExport = Schema.Struct({
   format: Schema.Literal(EXPORT_FORMAT),
   version: Schema.Literal(EXPORT_VERSION),
@@ -223,6 +247,7 @@ export const HobbotsExport = Schema.Struct({
   hobs: Schema.Array(ExportedHob),
   threads: Schema.Array(ExportedThread),
   quests: Schema.Array(ExportedTree),
+  memory: ExportedMemory,
 });
 export type HobbotsExport = typeof HobbotsExport.Type;
 

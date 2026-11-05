@@ -116,11 +116,10 @@ const CREDENTIAL_KEYS =
   /^\s*(bearer_token|bearer_token_file|actor_proxy_bearer_token|recovery_token|initial_root_password|token_pepper)\s*=/m;
 
 /**
- * Whether a config file holds a credential: a credential setting, or either of the hub's bearers
- * anywhere in its text. The hub refuses to start the engine with such a file, and a backup refuses
+ * Whether a config file holds a credential: a credential setting, whatever its value, or, with the
+ * hub's keys, either of its bearers anywhere in its text. The hub refuses to start the engine with such a file, and a backup refuses
  * to include one.
  */
-export const configHoldsCredential = (config: string, keys: MemoryKeys): boolean =>
+export const configHoldsCredential = (config: string, keys?: MemoryKeys): boolean =>
   CREDENTIAL_KEYS.test(config) ||
-  config.includes(Redacted.value(keys.root)) ||
-  config.includes(Redacted.value(keys.proxy));
+  (keys !== undefined && (config.includes(Redacted.value(keys.root)) || config.includes(Redacted.value(keys.proxy))));

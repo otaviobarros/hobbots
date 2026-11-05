@@ -37,6 +37,25 @@ export const engineProjectOf = (scope: MemoryScope): EngineProject => {
   }
 };
 
+/**
+ * Where the adapter keeps each project scope's identity, which its hashed engine name loses: one page
+ * per project, named after it. Its name matches no scope's, so it is never read as one.
+ */
+export const INDEX_PROJECT: EngineProject = { workspace: MEMORY_WORKSPACE, project: "hobbots-scopes" };
+
+/**
+ * The scope an engine project holds, `"Project"` for a project scope, whose identity only the index
+ * names, and null for a project that is no scope's, such as the index or ai-memory's own.
+ */
+export const scopeOfEngineProject = (where: EngineProject): MemoryScope | "Project" | null => {
+  if (where.workspace === GLOBAL.workspace && where.project === GLOBAL.project) return { _tag: "Everyone" };
+  if (where.workspace !== MEMORY_WORKSPACE) return null;
+  if (where.project.startsWith(HOB_PREFIX) && where.project.length > HOB_PREFIX.length) {
+    return { _tag: "Hob", agentId: AgentId.make(where.project.slice(HOB_PREFIX.length)) };
+  }
+  return where.project.startsWith("repo-") ? "Project" : null;
+};
+
 /** The name a hob's calls assert to ai-memory, so each page and audit row names the hob. */
 export const engineActorOf = (agentId: AgentId): string => `${HOB_PREFIX}${agentId}`;
 
