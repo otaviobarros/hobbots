@@ -43,6 +43,7 @@ import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/d
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
 import {
   defaultEngineFolder,
+  engineSettingsFor,
   loadOrCreateMemoryKeys,
   MemoryEngine,
   type MemoryKeys,
@@ -101,6 +102,7 @@ import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
+import { MemorySettingsStore, memoryModelCanRun, readMemorySettings } from "./memory-settings.ts";
 import { backupBeforeMigrations } from "./migration-backup.ts";
 import { readNetworkSettings } from "./network-settings.ts";
 import {
@@ -123,22 +125,18 @@ import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
 
 /**
- * The memory tools (ADR 028), beside the Task tools on every runtime. On the fake runtime they keep
- * memory in the hub's process, to try memory without the engine; with a real runtime, they come with
- * the ai-memory store.
+ * The memory tools (ADR 028), beside the Task tools on every runtime while memory is on. A real
+ * runtime's hobs reach the bundled ai-memory through the engine the hub runs; the fake runtime keeps
+ * memory in the hub's process, to try memory without the engine. With memory off there are none.
  */
-const memoryToolsLayer = (config: { readonly runtime: string }) =>
-  config.runtime === "fake"
-    ? MemoryToolsLive.pipe(
-        Layer.provide(
-          Layer.mergeAll(
-            MemoryStoreFake,
-            MemoryProjectsLive.pipe(Layer.provide(NodeServices.layer)),
-            PolicyEngine.node,
-          ),
-        ),
-      )
-    : Layer.empty;
+const memoryToolsLayer = (config: { readonly runtime: string; readonly memory: "on" | "off" }) => {
+  if (config.memory === "off") return Layer.empty;
+  const store =
+    config.runtime === "fake" ? MemoryStoreFake : MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer));
+  return MemoryToolsLive.pipe(
+    Layer.provide(Layer.mergeAll(store, MemoryProjectsLive.pipe(Layer.provide(NodeServices.layer)), PolicyEngine.node)),
+  );
+};
 
 /** The memory engine as the hub's settings choose it: turned off, missing, or the bundled binary. */
 const memoryEngineLayer = (
@@ -149,7 +147,9 @@ const memoryEngineLayer = (
   if (config.memory === "off") return MemoryEngine.off("disabled");
   const folder = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
   if (folder === "") return MemoryEngine.off("missing");
-  return MemoryEngine.layer({ folder, dataDir, keys }).pipe(
+  // The memory model you chose, as the engine can run it now (ADR 028).
+  const settings = engineSettingsFor(readMemorySettings(dataDir), memoryModelCanRun).engine;
+  return MemoryEngine.layer({ folder, dataDir, keys, settings }).pipe(
     Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
   );
 };
@@ -437,6 +437,8 @@ const ServerLive = Layer.unwrap(
             // What the startup recovery could not do, for Settings › Diagnostics (ADR 026).
             RecoveryLog.layer,
             Memory,
+            // The memory model you chose, kept beside the engine's folder (ADR 028).
+            MemorySettingsStore.layer(dataDir),
             // The hub's credentials, provider keys and memory keys included, are redacted by value
             // from what tools report.
             SecretRedaction.layer([

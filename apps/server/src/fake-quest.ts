@@ -1,4 +1,4 @@
-import { ActivityRepository, HobbotsRepository, TaskRepository, TaskTurns } from "@hobbots/agents";
+import { ActivityRepository, HobbotsRepository, type NewQuestion, TaskRepository, TaskTurns } from "@hobbots/agents";
 import {
   type AgentId,
   ArtifactId,
@@ -15,6 +15,7 @@ import {
   Message,
   MessageId,
   MilestoneId,
+  pickedOption,
   QuestId,
   QuestionId,
   type Task,
@@ -211,11 +212,32 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
           })
           .pipe(Effect.flatMap(announce));
       });
-    const ask = (questionId: string, taskId: TaskId, askerId: AgentId, text: string) =>
+    const ask = (
+      questionId: string,
+      taskId: TaskId,
+      askerId: AgentId,
+      text: string,
+      choices: Pick<NewQuestion, "options" | "recommended"> = {},
+    ) =>
       Effect.gen(function* () {
         return yield* tasks
-          .askQuestion({ id: QuestionId.make(id(questionId)), taskId, askerId, text, createdAt: yield* iso })
+          .askQuestion({
+            id: QuestionId.make(id(questionId)),
+            taskId,
+            askerId,
+            text,
+            createdAt: yield* iso,
+            ...choices,
+          })
           .pipe(Effect.flatMap(announce));
+      });
+    /** Once a question with choices is answered, its asker reports the choice it goes on with. */
+    const goingWith = (questionId: QuestionId, taskId: TaskId) =>
+      Effect.gen(function* () {
+        const tree = Option.getOrUndefined(yield* tasks.readTree(taskId));
+        const question = tree?.questions.find((each) => each.id === questionId);
+        const choice = question === undefined ? undefined : pickedOption(question);
+        if (choice !== undefined) yield* report(taskId, "progress", `Going with ${choice.label}`, null);
       });
     const complete = (
       taskId: TaskId,
@@ -543,6 +565,14 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
           build.id,
           cast.ada,
           "Carriers stop international deliveries on Dec 10. Should international orders get an earlier cutoff, Dec 12, while everything else stays Dec 18?",
+          {
+            // Two choices, one recommended, so the card offers them as buttons (#740).
+            options: [
+              { label: "Dec 12 for international", consequence: "International orders arrive before carriers stop." },
+              { label: "Dec 18 for everyone", consequence: "Some international orders may arrive after Dec 25." },
+            ],
+            recommended: 0,
+          },
         );
         yield* tasks.escalateQuestion(asked.id, cast.lead).pipe(Effect.flatMap(announce));
         yield* say("Ada has one question for you about the international cutoff. Answer it on its card.");
@@ -553,6 +583,8 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
 
     // Once you answer, Ada finishes and Aldric wraps up in your chat. Work you cancelled is skipped.
     if (Option.isSome(cutoff)) yield* answered(cutoff.value.id, build.id, step);
+    // Ada says which choice she goes on with, so you see the answer reached her.
+    if (Option.isSome(cutoff)) yield* whileOpen(build.id, goingWith(cutoff.value.id, build.id));
     yield* pause;
     yield* whileOpen(
       build.id,

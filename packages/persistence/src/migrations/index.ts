@@ -53,8 +53,9 @@ import attemptSteps from "./0050_attempt_steps.ts";
 import steerReceipts from "./0051_steer_receipts.ts";
 import checkpointDetail from "./0052_checkpoint_detail.ts";
 import threadReads from "./0053_thread_reads.ts";
-import memorySaves from "./0054_memory_saves.ts";
-import memoryCapture from "./0055_memory_capture.ts";
+import questionOptions from "./0054_question_options.ts";
+import memorySaves from "./0055_memory_saves.ts";
+import memoryCapture from "./0056_memory_capture.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -115,6 +116,7 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0051_steer_receipts": steerReceipts,
   "0052_checkpoint_detail": checkpointDetail,
   "0053_thread_reads": threadReads,
-  "0054_memory_saves": memorySaves,
-  "0055_memory_capture": memoryCapture,
+  "0054_question_options": questionOptions,
+  "0055_memory_saves": memorySaves,
+  "0056_memory_capture": memoryCapture,
 };

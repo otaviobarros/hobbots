@@ -1,28 +1,29 @@
 import type { MemoryStoreShape } from "@hobbots/agents";
 import { memoryProjectIdentity } from "@hobbots/domain";
-import { Effect } from "effect";
+import { Effect, Exit, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { engineProjectOf } from "../src/store/scopes.ts";
-import { engineEnabled as enabled, freshDataDir, startEngine } from "./ai-memory-engine.ts";
+import { engineDataDir, engineEnabled, startEngineStore } from "./engine-store.ts";
 import { memoryStoreContract } from "./store-contract.ts";
 
 // The shared MemoryStore tests on the bundled ai-memory (ADR 028), run as the engine's contract tests
 // are: skipped without the engine, and failed for its absence in CI (HOBBOTS_MEMORY_CONTRACT=1).
+
 vi.setConfig({ testTimeout: 60_000 });
 
 const open = () =>
   Effect.gen(function* () {
-    const { dataDir, keys } = freshDataDir();
-    const first = yield* startEngine(dataDir, keys);
+    const { dataDir, keys } = engineDataDir();
+    const first = yield* startEngineStore(dataDir, keys);
     // A second run: the engine stops with the hub and starts again on the same data.
     const reopen: Effect.Effect<MemoryStoreShape> = Effect.gen(function* () {
-      yield* first.stop;
-      return (yield* startEngine(dataDir, keys)).store;
+      yield* Scope.close(first.scope, Exit.void);
+      return (yield* startEngineStore(dataDir, keys)).store;
     });
     return { store: first.store, reopen };
   });
 
-describe.runIf(enabled)("the ai-memory MemoryStore", () => {
+describe.runIf(engineEnabled)("the ai-memory MemoryStore", () => {
   memoryStoreContract("ai-memory", open);
 });
 

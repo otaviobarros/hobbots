@@ -204,6 +204,7 @@ export interface MemoryShareRequest {
   readonly actor: Extract<MemoryActor, { readonly _tag: "Hob" }>;
   readonly scope: Exclude<MemoryScope, { readonly _tag: "Hob" }>;
   readonly draft: MemoryDraft;
+  /** The SHA-256 of the call's key, never its text. */
   readonly key: string;
   readonly turn: CharmTurn;
 }

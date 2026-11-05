@@ -1,10 +1,10 @@
 import type { MemoryStoreShape } from "@hobbots/agents";
-import { Effect, Redacted } from "effect";
+import { Effect, Exit, Redacted, Scope } from "effect";
 import { describe, vi } from "vitest";
 import { MEMORY_WORKSPACE } from "../src/engine/engine.ts";
 import { engineActorOf } from "../src/store/scopes.ts";
-import { engineEnabled, freshDataDir, type RunningEngine, startEngine } from "./ai-memory-engine.ts";
 import { captureContract } from "./capture-contract.ts";
+import { engineDataDir, engineEnabled, startEngineStore } from "./engine-store.ts";
 
 // The capture worker's tests on the bundled ai-memory (ADR 028): an outage stops the real engine and
 // starts it again on its data, and replays are skipped by ai-memory's own ingest keys.
@@ -14,6 +14,8 @@ vi.setConfig({ testTimeout: 90_000 });
  * How many observations ai-memory keeps of a thread's session, its ends left out, read as the hob:
  * ai-memory shows a session only to the actor that owns it.
  */
+type RunningEngine = Effect.Success<ReturnType<typeof startEngineStore>>;
+
 const observationsOf = (engine: RunningEngine, hob: string, threadId: string) =>
   Effect.promise(async () => {
     const response = await fetch(`${engine.endpoint.url}/mcp`, {
@@ -48,8 +50,8 @@ const observationsOf = (engine: RunningEngine, hob: string, threadId: string) =>
 describe.runIf(engineEnabled)("memory capture on ai-memory", () => {
   captureContract("ai-memory", () =>
     Effect.gen(function* () {
-      const { dataDir, keys } = freshDataDir();
-      let engine = yield* startEngine(dataDir, keys);
+      const { dataDir, keys } = engineDataDir();
+      let engine = yield* startEngineStore(dataDir, keys);
       // The worker keeps the store it was given, as the hub's does across an engine restart.
       const store = new Proxy({} as MemoryStoreShape, {
         get: (_target, key) => Reflect.get(engine.store, key),
@@ -57,9 +59,9 @@ describe.runIf(engineEnabled)("memory capture on ai-memory", () => {
       return {
         store,
         observations: (agentId, threadId) => observationsOf(engine, engineActorOf(agentId), threadId),
-        down: Effect.promise(() => Effect.runPromise(engine.stop)),
+        down: Effect.promise(() => Effect.runPromise(Scope.close(engine.scope, Exit.void))),
         up: Effect.promise(async () => {
-          engine = await Effect.runPromise(startEngine(dataDir, keys));
+          engine = await Effect.runPromise(startEngineStore(dataDir, keys));
         }),
       };
     }),

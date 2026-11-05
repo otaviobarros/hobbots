@@ -1,13 +1,14 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
 
-// Memory saves (ADR 028). Every `memory_save` to a hob's own memory is recorded, with the key the hob
-// sent and journaled, before it is sent, so a retried call returns the first answer and a save made
-// while memory is down is kept for the capture worker to send once it is back. `scope` is the work
-// the key belongs to, as for the other keyed calls (#660), so a key is free again in the next Task.
-// `memory_scope` is the memory it writes, as JSON, and `input` the call's input as stable JSON
-// without its key. `id` names the save, so it settles even after its work moved to the Task its
-// reply started (#660). The markdown and tags are redacted before they are recorded.
+// Memory saves (ADR 028). Every `memory_save` to a hob's own memory is recorded and journaled before
+// it is sent, so a retried call returns the first answer and a save made while memory is down is kept
+// for the capture worker to send once it is back. `scope` is the work the key belongs to, as for the
+// other keyed calls (#660), so a key is free again in the next Task. `call_key` is the SHA-256 of the
+// key the hob sent and `input` the SHA-256 of the call's input as stable JSON without its key: neither
+// keeps their text, which may hold a secret, and two that redact alike stay apart. `memory_scope` is
+// the memory it writes, as JSON. `id` names the save, so it settles even after its work moved to the
+// Task its reply started (#660). The markdown and tags are redacted before they are recorded.
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`

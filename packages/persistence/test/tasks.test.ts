@@ -604,6 +604,78 @@ describe("Task records", () => {
     expect(result.topAsk.value.recipientId).toBeNull();
   });
 
+  // covers OR-003, DP-003
+  it("[TC-DP-253] keeps a question's choices and whether its answer picked one or was written in words (#740)", async () => {
+    const options = [
+      { label: "Light", consequence: "Matches the brand guide." },
+      { label: "Dark", consequence: "Stands out more." },
+    ];
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const ask = (id: string) =>
+          tasks.askQuestion({
+            id: QuestionId.make(id),
+            taskId: TaskId.make("build"),
+            askerId: ADA,
+            text: "Which theme?",
+            createdAt: now,
+            options,
+            recommended: 0,
+          });
+        const asked = yield* ask("q-picked");
+        yield* ask("q-typed");
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-plain"),
+          taskId: TaskId.make("build"),
+          askerId: ADA,
+          text: "Any tagline?",
+          createdAt: now,
+        });
+        // A lead that answers with a choice's label, in any case, picks that choice.
+        yield* tasks.answerQuestion(QuestionId.make("q-picked"), { _tag: "Lead", agentId: ALDRIC }, " dark ", now);
+        yield* tasks.escalateQuestion(QuestionId.make("q-typed"), ALDRIC);
+        yield* tasks.answerQuestion(QuestionId.make("q-typed"), { _tag: "User" }, "Light, with a dark hero", later);
+        yield* tasks.answerQuestion(QuestionId.make("q-plain"), { _tag: "Lead", agentId: ALDRIC }, "Light", now);
+        // Two choices that read the same could not be told apart by their label, so the hub refuses them.
+        const colliding = yield* tasks
+          .askQuestion({
+            id: QuestionId.make("q-same"),
+            taskId: TaskId.make("build"),
+            askerId: ADA,
+            text: "Which theme?",
+            createdAt: now,
+            options: [options[0], { label: "LIGHT", consequence: "Brighter still." }].filter(
+              (each) => each !== undefined,
+            ),
+          })
+          .pipe(Effect.flip);
+        const tree = Option.getOrThrow(yield* tasks.readTree(TaskId.make("campaign")));
+        return { asked, colliding, questions: tree.questions };
+      }),
+    );
+
+    expect(result.asked.value).toMatchObject({ options, recommended: 0, picked: null });
+    expect(result.colliding).toMatchObject({ _tag: "TaskRefused", reason: "options-collide" });
+    expect(
+      result.questions
+        .toSorted((a, b) => a.id.localeCompare(b.id))
+        .map(({ id, options: offered, recommended, picked, answer }) => ({
+          id,
+          offered: offered.length,
+          recommended,
+          picked,
+          answer,
+        })),
+    ).toEqual([
+      { id: "q-picked", offered: 2, recommended: 0, picked: 1, answer: "Dark" },
+      { id: "q-plain", offered: 0, recommended: null, picked: null, answer: "Light" },
+      { id: "q-typed", offered: 2, recommended: 0, picked: null, answer: "Light, with a dark hero" },
+    ]);
+    expect(result.questions.find((each) => each.id === "q-picked")?.options).toEqual(options);
+  });
+
   // covers OR-002, OR-004
   it("[TC-OR-135] gives your note to the Task's nearest lead once, keeps it on the tree, and lists only the questions that wait for you", async () => {
     const result = await run(

@@ -105,8 +105,9 @@ export class MemorySave extends Schema.Class<MemorySave>("MemorySave")({
   agentId: AgentId,
   /** The work the key belongs to, such as `task:<Task id>`: a key is unique within it (#660). */
   work: Schema.String,
+  /** The SHA-256 of the key the hob sent, never its text: two keys that redact alike stay apart. */
   key: Schema.String,
-  /** The call's input as stable JSON without its key, so a key sent again with another call is told apart. */
+  /** The SHA-256 of the call's input as stable JSON without its key, so a key sent again with another call is told apart. */
   input: Schema.String,
   scope: MemoryScope,
   path: MemoryPath,
