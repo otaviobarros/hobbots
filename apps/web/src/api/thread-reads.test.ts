@@ -25,13 +25,8 @@ const reply = (id: string, status: Message["status"], content = "The plan is rea
 const listed = (client: QueryClient) =>
   client.getQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId))?.[0]?.unread;
 
-const syncedListOf = (rows: Promise<ReadonlyArray<Thread>>) =>
-  syncedThreads(
-    agentId,
-    () => rows,
-    (threads) => threads,
-    false,
-  );
+const syncedListOf = (fetch: () => Promise<ReadonlyArray<Thread>>) =>
+  syncedThreads(agentId, fetch, (threads) => threads, false);
 
 const withThread = () => {
   const client = new QueryClient();
@@ -75,8 +70,17 @@ describe("unread threads", () => {
       });
       return { rows, answer: (threads: ReadonlyArray<Thread>) => answer(threads) };
     };
+    // Each load reads the list again: the threads query is otherwise fresh forever, as it follows events.
+    let reads = 0;
     const load = (client: QueryClient, rows: Promise<ReadonlyArray<Thread>>) =>
-      client.fetchQuery({ ...threadsQuery(agentId), queryFn: syncedListOf(rows) });
+      client.fetchQuery({
+        ...threadsQuery(agentId),
+        staleTime: 0,
+        queryFn: syncedListOf(() => {
+          reads += 1;
+          return rows;
+        }),
+      });
 
     // The hub read the list before the reply ended; the reply's events land before its answer does.
     const early = new QueryClient();
@@ -87,16 +91,19 @@ describe("unread threads", () => {
     applyEvent(early, { _tag: "MessageUpserted", message: at("complete", 6) });
     first.answer([thread(3)]);
     await loading;
+    expect(reads).toBe(1);
     expect(listed(early)).toBe(true);
 
     // A list read after the reply ended keeps its dot, though the thread's last event came before it.
     await load(early, Promise.resolve([thread(3, true)]));
+    expect(reads).toBe(2);
     expect(listed(early)).toBe(true);
 
     // Reading it on another device moves the thread on: the dot goes, and a list read later agrees.
     applyEvent(early, { _tag: "ThreadUpserted", thread: thread(8) });
     expect(listed(early)).toBe(false);
     await load(early, Promise.resolve([thread(8)]));
+    expect(reads).toBe(3);
     expect(listed(early)).toBe(false);
   });
 
