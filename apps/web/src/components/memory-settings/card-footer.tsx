@@ -1,5 +1,5 @@
 import { Button } from "@hobbots/ui/components/button";
-import { useState } from "react";
+import { useShowMemoryFiles } from "../../lib/show-memory-files.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages;
@@ -9,33 +9,24 @@ const copy = messages;
  * says when it could not, as when no hob has saved anything yet, and can be tried again.
  */
 export function CardFooter({ version }: { version: string | null }) {
-  const showFiles = window.hobbots?.showMemoryFiles;
-  const [opening, setOpening] = useState<"idle" | "pending" | "failed">("idle");
-  const open = async (show: () => Promise<boolean>) => {
-    setOpening("pending");
-    const shown = await show().catch(() => false);
-    setOpening(shown ? "idle" : "failed");
-  };
+  const files = useShowMemoryFiles();
+  const { open, state } = files;
   return (
     <>
-      {showFiles !== undefined && (
+      {open !== undefined && (
         <div className="flex flex-col gap-2 border-t border-line pt-3">
           <span className="flex flex-wrap gap-2">
             <Button
               variant="ghost"
               size="sm"
-              disabled={opening === "pending"}
-              aria-busy={opening === "pending"}
-              onClick={() => void open(showFiles)}
+              disabled={state === "pending"}
+              aria-busy={state === "pending"}
+              onClick={() => void open()}
             >
-              {opening === "pending"
-                ? copy.card.opening
-                : opening === "failed"
-                  ? copy.card.tryAgain
-                  : copy.card.showFiles}
+              {state === "pending" ? copy.card.opening : state === "failed" ? copy.card.tryAgain : copy.card.showFiles}
             </Button>
           </span>
-          {opening === "failed" && (
+          {state === "failed" && (
             <p role="alert" className="m-0 text-ui text-rose">
               {copy.card.showFailed}
             </p>

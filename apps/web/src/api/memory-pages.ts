@@ -1,12 +1,14 @@
+import type { MemoryPageRead, MemoryPageSave, MemoryPageVersionRef } from "@hobbots/api";
 import {
   type MemoryChange,
   type MemoryChanged,
   type MemoryPath,
   type MemoryScope,
-  type MemoryVersion,
+  MemoryVersion,
   memoryScopeKey,
 } from "@hobbots/domain";
 import { keepPreviousData, type Query, type QueryClient, queryOptions } from "@tanstack/react-query";
+import { Option, Schema } from "effect";
 import { ApiError, call } from "./client.ts";
 
 /**
@@ -20,6 +22,16 @@ const MEMORY_RETRY_MS = 30_000;
 /** Whether `error` says memory did not answer, rather than that the hub could not be reached. */
 export const memoryNotAnswering = (error: unknown): boolean =>
   error instanceof ApiError && error.tag === "MemoryNotAnswering";
+
+/** Whether `error` says the page changed since it was read, so nothing was written. */
+export const memoryPageChanged = (error: unknown): boolean =>
+  error instanceof ApiError && error.tag === "MemoryPageChanged";
+
+/** The version a page has now, from a change refused because it changed since: null when it is gone. */
+export const memoryVersionNow = (error: unknown): MemoryVersion | null =>
+  error instanceof ApiError && error.tag === "MemoryPageChanged"
+    ? Option.getOrNull(Schema.decodeUnknownOption(MemoryVersion)(error.fields.current))
+    : null;
 
 /** Whether `error` says there is no such page. */
 export const memoryPageGone = (error: unknown): boolean =>
@@ -124,5 +136,34 @@ export const applyMemoryChanged = async (queryClient: QueryClient, event: Memory
  */
 export const refreshMemory = async (queryClient: QueryClient) => {
   await queryClient.cancelQueries(live);
+  await queryClient.invalidateQueries(live);
+};
+
+/** Saves a page as a new version by you (#959): an edit, a pin, a forget day or a new page. */
+export const saveMemoryPage = (payload: MemoryPageSave) => call((c) => c.memoryPages.save({ payload }));
+
+/** Deletes a page and its history; answers the version Undo brings it back from. */
+export const deleteMemoryPage = (payload: MemoryPageVersionRef) => call((c) => c.memoryPages.delete({ payload }));
+
+/** Writes a version, from History or from a delete, back as a new version by you. */
+export const restoreMemoryPage = (payload: MemoryPageVersionRef) => call((c) => c.memoryPages.restore({ payload }));
+
+/**
+ * Drops what was read of a page you deleted, once nothing shows it, so going Back to it reads it
+ * again and finds it gone rather than showing it as it was.
+ */
+export const dropDeletedPage = (queryClient: QueryClient, deleted: MemoryPageVersionRef) => {
+  for (const kind of ["page", "version"]) {
+    queryClient.removeQueries({ queryKey: [...memoryKeys.all, kind, deleted.scope, deleted.path], type: "inactive" });
+  }
+};
+
+/**
+ * What a change you made did to memory: the page it wrote shows as the hub answered at once, and
+ * every memory read, a count, a list or What changed, is read again (STD-REACT-012).
+ */
+export const applyMemoryWrite = async (queryClient: QueryClient, read: MemoryPageRead) => {
+  await queryClient.cancelQueries(live);
+  queryClient.setQueryData(memoryKeys.page(read.page.scope, read.page.path), read);
   await queryClient.invalidateQueries(live);
 };

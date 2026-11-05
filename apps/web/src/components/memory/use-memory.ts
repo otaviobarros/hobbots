@@ -24,6 +24,12 @@ const pagesScope = (view: MemoryView): MemoryScope | null => {
   return null;
 };
 
+/** The page `view` reads, for a page and its editor. */
+const openedPage = (view: MemoryView) =>
+  view._tag === "Page" || view._tag === "Edit"
+    ? { open: true, scope: view.scope, path: view.path }
+    : { open: false, scope: EVERYONE, path: NO_PAGE };
+
 /**
  * Everything the Memory page reads for `view`: the hobs it names, the scopes and their counts,
  * What changed, and the view's own read. Memory not answering in any of them is the outage the
@@ -37,10 +43,8 @@ export const useMemory = (view: MemoryView) => {
   const changes = useQuery(memoryChangesQuery);
   const scope = pagesScope(view);
   const pages = useQuery({ ...memoryPagesQuery(scope ?? EVERYONE), enabled: scope !== null });
-  const page = useQuery({
-    ...memoryPageQuery(view._tag === "Page" ? view.scope : EVERYONE, view._tag === "Page" ? view.path : NO_PAGE),
-    enabled: view._tag === "Page",
-  });
+  const opened = openedPage(view);
+  const page = useQuery({ ...memoryPageQuery(opened.scope, opened.path), enabled: opened.open });
   const search = useQuery(
     memorySearchQuery(view._tag === "Search" ? view.q : "", view._tag === "Search" ? view.within : null),
   );
@@ -50,7 +54,7 @@ export const useMemory = (view: MemoryView) => {
   const hobs: HobDirectory = new Map<AgentId, Agent>(
     [...(archived.data ?? NO_HOBS), ...active].map((hob) => [hob.id, hob]),
   );
-  const viewRead = view._tag === "Page" ? page : view._tag === "Search" ? search : scope === null ? changes : pages;
+  const viewRead = opened.open ? page : view._tag === "Search" ? search : scope === null ? changes : pages;
   const offline = [overview, changes, viewRead].some((read) => read.isError && memoryNotAnswering(read.error));
 
   return {

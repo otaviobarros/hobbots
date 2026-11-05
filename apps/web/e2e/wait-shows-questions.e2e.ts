@@ -88,7 +88,7 @@ test("[TC-OR-245] a question from a Task the lead waits for reaches the lead and
       `fake:then fake:then ${hubCall("complete_task", { key: "wrap", summary: "Release shipped" })}`,
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
 

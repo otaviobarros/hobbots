@@ -17,6 +17,8 @@ export const StopWithoutWaitingForClients = (server: Server) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
       const bus = yield* EventBus;
+      // Logs from the server's own callbacks, at the hub's log level.
+      const log = Effect.runForkWith(yield* Effect.context<never>());
       // Requests in progress on each open connection.
       const connections = new Map<Socket, number>();
       let stopping = false;
@@ -32,6 +34,11 @@ export const StopWithoutWaitingForClients = (server: Server) =>
       const track = (request: IncomingMessage, response: ServerResponse) => {
         const socket = request.socket;
         connections.set(socket, (connections.get(socket) ?? 0) + 1);
+        log(
+          Effect.logDebug("Received HTTP request").pipe(
+            Effect.annotateLogs({ "http.method": request.method, "http.url": request.url?.split("?")[0] }),
+          ),
+        );
         response.once("close", () => {
           connections.set(socket, (connections.get(socket) ?? 1) - 1);
           endIfIdle(socket);
@@ -42,9 +49,14 @@ export const StopWithoutWaitingForClients = (server: Server) =>
       server.on("checkContinue", track);
       yield* Effect.addFinalizer(() =>
         Effect.andThen(
-          Effect.sync(() => {
+          Effect.suspend(() => {
             stopping = true;
-            for (const socket of connections.keys()) endIfIdle(socket);
+            let inProgress = 0;
+            for (const [socket, requests] of connections) {
+              inProgress += requests;
+              endIfIdle(socket);
+            }
+            return Effect.logDebug(`Stopping; HTTP requests in progress: ${inProgress}`);
           }),
           bus.close,
         ),

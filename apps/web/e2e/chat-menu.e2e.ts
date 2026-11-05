@@ -18,7 +18,7 @@ test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searche
   for (const prompt of ["Plan the sale emails", "Draft the spring banner copy"]) {
     await page.goto(`${url}/#/hobs/${aldric}/new`);
     await composer.fill(prompt);
-    await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
     await composer.press("Enter");
     await expect(page.getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
   }

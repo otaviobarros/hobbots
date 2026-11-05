@@ -45,6 +45,8 @@ export interface MemorySearch {
   /** The scope a search looks in, by its key; everywhere without it. */
   readonly in?: string | undefined;
   readonly show?: ChangeFilter | undefined;
+  /** `page` opens the open page in the editor; `new`, with a scope, a new page there. */
+  readonly edit?: "page" | "new" | undefined;
 }
 
 /** The view the Memory page shows. */
@@ -58,9 +60,22 @@ export type MemoryView =
       readonly path: MemoryPath;
       readonly version: MemoryVersion | null;
     }
-  | { readonly _tag: "Search"; readonly q: string; readonly within: MemoryScope | null };
+  | { readonly _tag: "Search"; readonly q: string; readonly within: MemoryScope | null }
+  | { readonly _tag: "Edit"; readonly scope: MemoryScope; readonly path: MemoryPath }
+  | { readonly _tag: "New"; readonly scope: MemoryScope; readonly kind: MemoryKind | null };
 
 const PATH = /^(?:[a-z0-9_][a-z0-9._-]*\/)*[a-z0-9_][a-z0-9._-]*\.md$/;
+
+/** The view a scope's address names: a page, its editor, a new page, or the scope's list. */
+const scopeViewOf = (scope: MemoryScope, search: MemorySearch): MemoryView => {
+  if (search.page !== undefined && PATH.test(search.page)) {
+    const path = search.page as MemoryPath;
+    if (search.edit === "page") return { _tag: "Edit", scope, path };
+    return { _tag: "Page", scope, path, version: (search.v as MemoryVersion | undefined) ?? null };
+  }
+  if (search.edit === "new") return { _tag: "New", scope, kind: search.kind ?? null };
+  return { _tag: "Scope", scope, kind: search.kind ?? null };
+};
 
 /** The view an address names. A search wins, then a page, then a scope; anything unreadable opens the overview. */
 export const memoryViewOf = (search: MemorySearch): MemoryView => {
@@ -68,16 +83,7 @@ export const memoryViewOf = (search: MemorySearch): MemoryView => {
   if (q !== "") return { _tag: "Search", q, within: search.in === undefined ? null : memoryScopeOfKey(search.in) };
   if (search.view === "changes") return { _tag: "Changes", show: search.show ?? "all" };
   const scope = search.scope === undefined ? null : memoryScopeOfKey(search.scope);
-  if (scope === null) return { _tag: "Overview" };
-  if (search.page !== undefined && PATH.test(search.page)) {
-    return {
-      _tag: "Page",
-      scope,
-      path: search.page as MemoryPath,
-      version: (search.v as MemoryVersion | undefined) ?? null,
-    };
-  }
-  return { _tag: "Scope", scope, kind: search.kind ?? null };
+  return scope === null ? { _tag: "Overview" } : scopeViewOf(scope, search);
 };
 
 /** The address of a view, the inverse of `memoryViewOf`. */
@@ -93,6 +99,27 @@ export const memorySearchOf = (view: MemoryView): MemorySearch => {
       return { scope: memoryScopeKey(view.scope), page: view.path, v: view.version ?? undefined };
     case "Search":
       return { q: view.q, in: view.within === null ? undefined : memoryScopeKey(view.within) };
+    case "Edit":
+      return { scope: memoryScopeKey(view.scope), page: view.path, edit: "page" };
+    case "New":
+      return { scope: memoryScopeKey(view.scope), kind: view.kind ?? undefined, edit: "new" };
+  }
+};
+
+/**
+ * Which view a line said after a change belongs to: a page and its editor share one, so Save shows
+ * its line on the page it returns to, and any other view drops it.
+ */
+export const flashKeyOf = (view: MemoryView): string => {
+  switch (view._tag) {
+    case "Page":
+    case "Edit":
+      return `page\n${memoryScopeKey(view.scope)}\n${view.path}`;
+    case "Scope":
+    case "New":
+      return `scope\n${memoryScopeKey(view.scope)}`;
+    default:
+      return view._tag;
   }
 };
 
@@ -123,6 +150,18 @@ export const scopeWhere = (scope: MemoryScope, hobs: HobDirectory): string => {
       return copy.where.hob({ name: scopeName(scope, hobs) });
     case "Project":
       return copy.where.project({ name: scopeName(scope, hobs) });
+  }
+};
+
+/** Where a page is kept, as its side says it: a hob's memory only, a project, or About you. */
+export const keptInOf = (scope: MemoryScope, hobs: HobDirectory): string => {
+  switch (scope._tag) {
+    case "Hob":
+      return copy.page.keptInHob({ name: scopeName(scope, hobs) });
+    case "Project":
+      return copy.page.keptInProject({ name: scopeName(scope, hobs) });
+    case "Everyone":
+      return copy.page.keptInAbout;
   }
 };
 

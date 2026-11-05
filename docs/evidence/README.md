@@ -69,3 +69,4 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-05 Start over deletes everything the hub keeps and brings it back empty at Welcome](2026-11-05-start-over.md)
 - [2026-11-05 Memory goes into backups and exports, with no memory bearer in either](2026-11-05-memory-backups.md)
 - [2026-11-05 The Memory page shows what hobs learned, from the fake and from ai-memory](2026-11-05-memory-page.md)
+- [2026-11-05 You edit memory and About you, and an edit never overwrites a hob's save](2026-11-05-memory-editing.md)

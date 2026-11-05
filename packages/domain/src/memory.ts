@@ -62,6 +62,17 @@ export type MemoryPath = typeof MemoryPath.Type;
 export const MemoryVersion = Schema.String.pipe(Schema.brand("MemoryVersion"));
 export type MemoryVersion = typeof MemoryVersion.Type;
 
+/**
+ * The day memory forgets a page, `YYYY-MM-DD`: once that day is over the page leaves every list and
+ * search, and the engine's next sweep deletes it for good, with its history.
+ */
+export const MemoryForgetDay = Schema.String.check(
+  Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/, {
+    message: "A day to forget a page on is YYYY-MM-DD.",
+  }),
+).pipe(Schema.brand("MemoryForgetDay"));
+export type MemoryForgetDay = typeof MemoryForgetDay.Type;
+
 /** A page as it is now. */
 export const MemoryPage = Schema.Struct({
   scope: MemoryScope,
@@ -69,6 +80,8 @@ export const MemoryPage = Schema.Struct({
   markdown: Schema.String,
   tags: Schema.Array(Schema.String),
   pinned: Schema.Boolean,
+  /** The day memory forgets the page, or null while it keeps it. */
+  forgetOn: Schema.NullOr(MemoryForgetDay),
   version: MemoryVersion,
   /** Who wrote this version, or null when the engine has no record of it. */
   author: Schema.NullOr(MemoryAuthor),
@@ -136,8 +149,15 @@ export interface MemoryDraft {
   readonly path: MemoryPath;
   readonly markdown: string;
   readonly tags: ReadonlyArray<string>;
+  /** A pinned page is never changed by aging: the engine's sweep and summaries leave it as it is. */
   readonly pinned: boolean;
+  /** The day memory forgets the page; absent or null, it keeps it. */
+  readonly forgetOn?: MemoryForgetDay | null | undefined;
 }
+
+/** Whether a page set to be forgotten on `day` is gone at `now`: the day is over, in UTC as the engine counts it. */
+export const memoryForgotten = (day: MemoryForgetDay | null | undefined, now: Date): boolean =>
+  day !== null && day !== undefined && now.toISOString() > `${day}T23:59:59.999Z`;
 
 /** A page's title: its first `# ` heading, or its file name without `.md`. */
 export const memoryTitleOf = (path: MemoryPath, markdown: string): string => {
