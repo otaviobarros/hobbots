@@ -31,7 +31,8 @@ test("[TC-CH-281] the back arrow in the chat header returns to the hob's chats",
   await header.getByRole("link", { name: "Back to Aldric's chats" }).click();
   await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}$`));
   await expect(page.getByRole("tab", { name: /^Chats/ })).toHaveAttribute("aria-selected", "true");
-  // The underlined tabs never scroll, so no scrollbar shows beside them.
+  // The underlined tabs are no scroll container, so the selected tab's bar, which hangs over the line
+  // under them, cannot show a scrollbar beside them.
   const list = page.getByRole("tablist").first();
-  expect(await list.evaluate((node) => node.scrollHeight - node.clientHeight)).toBe(0);
+  expect(await list.evaluate((node) => getComputedStyle(node).overflowY)).toBe("visible");
 });
