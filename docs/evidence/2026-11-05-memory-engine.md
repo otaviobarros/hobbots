@@ -4,8 +4,8 @@
 - **Issue:** [#953](https://github.com/otaviobarros/hobbots/issues/953)
 - **Pull request:** [#967](https://github.com/otaviobarros/hobbots/pull/967)
 - **Commit:** the pull request's head; not yet on `main`
-- **Setup:** Linux x86_64 container (Ubuntu 24.04, Node 26.13.0) with ai-memory 3.4.2 for `linux-x64`, fetched and checked by `pnpm --filter @hobbots/memory fetch-engine`. Run with `HOBBOTS_MEMORY_CONTRACT=1 pnpm --filter @hobbots/memory test`. The sandbox case needs macOS, or Linux with `HOBBOTS_SANDBOX_TESTS=1` and sandbox-runtime's seccomp helper.
-- **Result:** Passed with gaps. On 3.4.2, the routes and settings the cases below name behave as ADR 028 expects: both bearers from the environment, the proxy-asserted author, ingest deduplication, `/mcp`, `/api/v1` and `/admin`. The hub runs no ai-memory command but `serve` and `--version`, both exercised here. The supervisor starts, restarts and stops the engine. The packaged app and the sandbox case on macOS are not run yet.
+- **Setup:** Linux x86_64 container (Ubuntu 24.04, Node 26.13.0) with ai-memory 3.4.2 for `linux-x64`, fetched and checked by `pnpm --filter @hobbots/memory fetch-engine`. Run with `HOBBOTS_MEMORY_CONTRACT=1 pnpm --filter @hobbots/memory test`. The sandbox case needs macOS, or Linux with `HOBBOTS_SANDBOX_TESTS=1` and sandbox-runtime's seccomp helper. The macOS runs were on an Apple M1 Pro (macOS 27.0.1, Node 26.13.0) at commit `145d280`, with ai-memory 3.4.2 for `darwin-arm64` and an ad hoc signed `pnpm package:mac` build.
+- **Result:** Passed with gaps. On 3.4.2, the routes and settings the cases below name behave as ADR 028 expects: both bearers from the environment, the proxy-asserted author, ingest deduplication, `/mcp`, `/api/v1` and `/admin`. The hub runs no ai-memory command but `serve` and `--version`, both exercised here. The supervisor starts, restarts and stops the engine. On macOS the sandbox case passes, and the packaged app starts the engine, starts it again after `kill -9`, shows it in Diagnostics and stops it with the app, in five of six smoke runs; the first run did not quit in time, for a reason not yet known.
 
 ## Checks
 
@@ -26,8 +26,8 @@
 | `[TC-GEN-188]` | `/api/v1` lists, reads, gives the history of and searches pages | ✅ |
 | `[TC-GEN-189]` | `/admin/write-page` as you is attributed to you whatever actor header it carries, `/admin/delete-page` removes a page, a hob gets 403 on `/admin`, and `/admin/backup` holds the config but neither bearer | ✅ |
 | `[TC-OP-050]`, `[TC-OP-053]` | Diagnostics' Right now and its report show the engine's state; a hub whose engine failed its checksum says so | ✅ server test; browser test not run here |
-| `[TC-PE-455]` | A sandboxed command cannot read another process's environment (`ps eww`, `ps -E`, `/proc/<pid>/environ`) | ⚠️ Not run: sandbox-runtime's seccomp helper is missing in this container, so no sandboxed command runs (`TC-PE-114` fails the same way). By hand, bubblewrap with sandbox-runtime's `--unshare-pid --proc /proc` showed only the sandbox's own processes, and the environment of a process outside could not be read. On macOS sandbox-runtime's profile allows `process-info*` only within the same sandbox and no `kern.procargs2` read; to be run there |
-| Smoke test | The packaged app starts the engine, starts it again after `kill -9`, and stops it on Quit | ⚠️ Not run: needs a Mac (`pnpm package:mac`, then `apps/desktop/scripts/smoke-test.sh`) |
+| `[TC-PE-455]` | A sandboxed command cannot read another process's environment (`ps eww`, `ps -E`, `/proc/<pid>/environ`) | ✅ macOS (Seatbelt). Not run on Linux here: sandbox-runtime's seccomp helper is missing in this container (`TC-PE-114` fails the same way); by hand, bubblewrap with `--unshare-pid --proc /proc` could not read the environment of a process outside |
+| Smoke test | The packaged arm64 app starts the engine, starts it again after `kill -9`, and stops it with the app; the engine's environment (`ps eww`) is the two bearers, `HOME`, `NO_COLOR` and `PATH` only; `/api/diagnostics` shows running, then restarting with one restart, then running again, and off with `HOBBOTS_MEMORY=off`; the bundled binary's signature verifies and its SHA-256 matches `ai-memory.sha256` | ⚠️ Five of six runs pass. The first, on a freshly built app, restarted the engine but then the server exited with code 130 and the app did not quit within 15 seconds; three more runs and two on fresh copies passed, and no process was left behind |
 
 ## Findings
 
@@ -38,4 +38,5 @@
 
 ## Gaps
 
-- The packaged app on macOS, with the engine signed inside it, and `[TC-PE-455]` on macOS: run them on a Mac before this is proven.
+- One of six smoke runs did not quit within 15 seconds, for a reason not yet known; it needs a sample of a failing run.
+- Not run: the x64 app, the Diagnostics screen itself (the API was checked), Quit from the menu (the smoke test sends SIGTERM), and a Developer ID signed and notarized build.

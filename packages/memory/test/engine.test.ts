@@ -175,7 +175,8 @@ describe("the supervised engine", () => {
           expect(start?.env.HOBBOTS_TEST_SECRET).toBeUndefined();
           expect(
             Object.keys(start?.env ?? {})
-              .filter((key) => !["PWD", "SHLVL", "_"].includes(key))
+              // The stand-in is a Node script: the shell and macOS's Node add these to its own environment.
+              .filter((key) => !["PWD", "SHLVL", "_", "__CF_USER_TEXT_ENCODING"].includes(key))
               .sort(),
           ).toEqual(["AI_MEMORY_AUTH_TOKEN", "AI_MEMORY_AUTH__ACTOR_PROXY_BEARER_TOKEN", "HOME", "NO_COLOR", "PATH"]);
           expect(start?.args.slice(0, 3)).toEqual(["serve", "--transport", "http"]);
