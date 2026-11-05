@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { openWorkbench, ticket } from "./quest-room.ts";
 import { colored, hobTerminal, rows } from "./terminal.ts";
@@ -300,4 +300,67 @@ test("[TC-UX-185] the terminal stays dark, with its own palette, in the light th
     expect(colors.screen, theme).toBe("rgb(12, 12, 17)");
   }
   await expect(bench).toBeVisible();
+});
+
+/** How far each box the Terminal sits in, from its dock's panel up to the window, is scrolled. */
+const scrolledAround = (panel: Locator) =>
+  panel.evaluate((element) => {
+    const offsets: Array<number> = [];
+    for (let box = element.parentElement; box !== null; box = box.parentElement) offsets.push(box.scrollTop);
+    return { boxes: Math.max(...offsets), window: document.scrollingElement?.scrollTop ?? 0 };
+  });
+
+/** How far the terminal's rows run past the bottom of the box they are fitted to, in pixels. */
+const rowsPast = (terminal: Locator) =>
+  terminal.evaluate((element) => {
+    const screen = element.querySelector('[data-slot="terminal-screen"]');
+    const shown = element.querySelector(".xterm-screen");
+    if (screen === null || shown === null) return Number.POSITIVE_INFINITY;
+    return Math.round(shown.getBoundingClientRect().bottom - screen.getBoundingClientRect().bottom);
+  });
+
+// Issue #1002: the terminal took xterm.js's default 24 rows whatever the dock's height, ran past the
+// dock and scrolled the panel, the room and the window to show its last row.
+// covers UX-002, UX-006
+test("[TC-UX-998] the Terminal fits the docked Workbench at any height, and reading it scrolls nothing around it", async ({
+  page,
+}) => {
+  const { url, aldric } = await aldricHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await send(page, [
+    "Count the lines",
+    "fake:tool Bash seq 300",
+    script("start_quest", { key: "quest", goal: "Count the lines" }),
+    script("complete_task", { key: "done", summary: "Counted." }),
+  ]);
+  await settled(page);
+  const { bench, panel } = await openTerminal(page, "Count the lines");
+  const terminal = hobTerminal(panel, "Aldric");
+  await expect(rows(terminal)).toContainText("300");
+
+  // In the dock's first height the terminal is shorter than its default 24 rows, and fits.
+  const fits = async () => {
+    await expect.poll(() => rowsPast(terminal)).toBeLessThanOrEqual(0);
+    await expect.poll(() => panel.evaluate((element) => element.scrollHeight - element.clientHeight)).toBe(0);
+    await expect(panel.getByRole("tab", { name: /^Aldric/ })).toBeInViewport({ ratio: 1 });
+    await expect(panel.getByRole("searchbox", { name: "Find in the terminal" })).toBeInViewport({ ratio: 1 });
+  };
+  await fits();
+  const shownRows = () => terminal.locator(".xterm-rows > div").count();
+  const docked = await shownRows();
+  expect(docked).toBeLessThan(24);
+
+  // Reading it to its last row, by the mouse and by the keyboard, scrolls nothing around it.
+  await terminal.locator(".xterm-screen").click();
+  await terminal.locator(".xterm-accessibility-tree > div").last().focus();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("End");
+  await expect.poll(() => scrolledAround(panel)).toEqual({ boxes: 0, window: 0 });
+  await expect(page.getByRole("button", { name: "Close room" })).toBeInViewport();
+
+  // Expanded, the terminal grows to the taller dock and still fits.
+  await bench.getByRole("button", { name: "Make the Workbench as tall as it goes" }).click();
+  await expect.poll(shownRows).toBeGreaterThan(docked);
+  await fits();
+  await expect.poll(() => scrolledAround(panel)).toEqual({ boxes: 0, window: 0 });
 });

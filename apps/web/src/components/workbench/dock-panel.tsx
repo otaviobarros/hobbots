@@ -46,7 +46,11 @@ export function DockPanel({
 }) {
   return (
     <div inert={!on} className={cn("@container absolute inset-0 overflow-y-auto", !on && "invisible")}>
-      <TabsContent value={tab} forceMount className="min-h-full">
+      {/*
+       * A list grows past the panel and scrolls in it; the Terminal fills the panel exactly, as
+       * xterm.js scrolls its own rows and fits the space it is given.
+       */}
+      <TabsContent value={tab} forceMount className={tab === "terminal" ? "h-full" : "min-h-full"}>
         {tab === "browser" ? (
           <Notices>
             <Notice text={messages.comingSoon} />
@@ -56,18 +60,23 @@ export function DockPanel({
             <Notice text={messages.dock.readFailed} onRetry={onRetry} />
           </Notices>
         ) : (
-          <>
+          <Fill on={tab === "terminal"}>
             {labels && <HobLabels tab={tab} sources={props.sources} hobs={props.hobs} />}
             <HobNotices tab={tab} sources={props.sources} hobs={props.hobs} />
             <Panel
               tab={tab}
               props={{ ...props, state, focus: on ? file : undefined, from: on ? from : undefined, shown: on }}
             />
-          </>
+          </Fill>
         )}
       </TabsContent>
     </div>
   );
+}
+
+/** The Terminal's column, which fills the panel; a list's content is left as it is. */
+function Fill({ on, children }: { on: boolean; children: ReactNode }) {
+  return on ? <div className="flex h-full flex-col">{children}</div> : children;
 }
 
 /**
