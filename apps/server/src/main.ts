@@ -108,13 +108,14 @@ import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
 import { ApiRoutes } from "./http.ts";
+import { forgetHubPresence, recordHubPresence } from "./hub-presence.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
 import { MemoryChanges } from "./memory.ts";
 import { MemorySettingsStore, readMemorySettings } from "./memory-settings.ts";
 import { backupBeforeMigrations } from "./migration-backup.ts";
-import { readNetworkSettings } from "./network-settings.ts";
+import { hubPort, readNetworkSettings } from "./network-settings.ts";
 import {
   HubHostsLive,
   KnownTailnetPeersOnly,
@@ -570,9 +571,15 @@ type Restart = { readonly _tag: "Restore"; readonly backup: string } | { readonl
 const Hub = Effect.gen(function* () {
   const config = yield* ServerConfig;
   let failed: string | null = null;
+  mkdirSync(config.dataDir, { recursive: true });
+  const presenceDir = realpathSync(config.dataDir);
+  yield* Effect.addFinalizer(() => forgetHubPresence(presenceDir));
   for (;;) {
     mkdirSync(config.dataDir, { recursive: true });
     const dataDir = realpathSync(config.dataDir);
+    // Before anything reads the folder, so the command-line tools know a hub is using it (#999). Each
+    // start records its port again, since a restore can bring another one.
+    yield* recordHubPresence(dataDir, hubPort(dataDir, process.env));
     if (yield* Effect.promise(() => finishReset(dataDir))) yield* Effect.log("Finished starting over");
     yield* backupBeforeMigrations(dataDir, config.version);
     const asked = yield* Deferred.make<Restart>();
@@ -596,7 +603,7 @@ const Hub = Effect.gen(function* () {
       Effect.catchTag("RestoreRefused", (refused) => Effect.logWarning(refused.reason).pipe(Effect.as(refused.reason))),
     );
   }
-});
+}).pipe(Effect.scoped);
 
 Hub.pipe(
   // HOBBOTS_LOG_LEVEL sets the least severe line the hub writes; Debug adds routine reads.

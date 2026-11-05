@@ -10,7 +10,7 @@ import {
   SqliteLive,
 } from "@hobbots/persistence";
 import { Console, Effect, Layer } from "effect";
-import { exitOnFailure, hubRunning } from "./command-line.ts";
+import { exitOnFailure, hubUsing } from "./command-line.ts";
 import { ServerConfig } from "./config.ts";
 import { eraseKeychain, keptReason, wipeHubData } from "./resets.ts";
 
@@ -47,9 +47,9 @@ const reset = Effect.gen(function* () {
   const confirmed = process.argv.slice(2).includes("--yes");
   mkdirSync(config.dataDir, { recursive: true });
   const dataDir = realpathSync(config.dataDir);
-  if (yield* hubRunning(dataDir)) {
-    return yield* Effect.fail(`A hub is using ${dataDir}. Stop it first, or start over from its Settings.`);
-  }
+  const using = yield* hubUsing(dataDir);
+  if (using !== undefined)
+    return yield* Effect.fail(`${using} Stop it first, or start over from its Settings. Nothing changed.`);
   const keychains = Layer.mergeAll(
     KeychainLive(process.platform, process.env),
     HobAppKeysLive(process.platform, process.env),

@@ -1,5 +1,5 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { Agent, get, request } from "node:http";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { waitFor } from "@hobbots/domain/testing";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
+import { hubPresenceFile, readHubPresence } from "../src/hub-presence.ts";
 
 const server = resolve(import.meta.dirname, "..");
 
@@ -155,5 +156,49 @@ describe("hub shutdown", () => {
     call.end(body.slice(half));
     expect(await answered).toBe(200);
     await exited;
+  });
+});
+
+/** Runs a command-line tool of the hub on `dataDir` in a shell without HOBBOTS_PORT, as #999 did. */
+const command = (script: string, folder: string, args: ReadonlyArray<string> = []) =>
+  new Promise<{ code: number; output: string }>((done) => {
+    const { HOBBOTS_PORT: _port, ...env } = process.env;
+    execFile(
+      join(server, "node_modules", ".bin", "tsx"),
+      [`src/${script}.ts`, ...args],
+      { cwd: server, env: { ...env, HOBBOTS_DATA_DIR: folder } },
+      (error, stdout, stderr) => done({ code: error === null ? 0 : Number(error.code ?? 1), output: stdout + stderr }),
+    );
+  });
+
+describe("the command-line tools and a running hub", () => {
+  // covers OP-003 (#999)
+  it("[TC-OP-108] reset and restore refuse a hub on a port only it knows, and go ahead once it stops", {
+    timeout: 90_000,
+  }, async () => {
+    const { port, child } = await startHub();
+    const folder = dataDir as string;
+    // tsx runs the hub in a child process of its own, so the record names that process.
+    const presence = readHubPresence(folder);
+    expect(presence?.port).toBe(port);
+    const before = readdirSync(folder).sort();
+
+    const reset = await command("reset-command", folder, ["--yes"]);
+    expect(reset.code).toBe(1);
+    expect(reset.output).toContain(`A hub is using ${folder} (process ${presence?.pid}, port ${port})`);
+    expect(reset.output).toContain("Nothing changed.");
+    const restore = await command("restore-command", folder, [join(folder, "no-backup"), "--yes"]);
+    expect(restore.code).toBe(1);
+    expect(restore.output).toContain(`A hub is using ${folder}`);
+    expect(readdirSync(folder).sort()).toEqual(before);
+
+    const exited = new Promise((done) => child.once("exit", done));
+    child.kill("SIGTERM");
+    await exited;
+    expect(existsSync(hubPresenceFile(folder))).toBe(false);
+    // Without --yes the command only says what it would delete.
+    const after = await command("reset-command", folder);
+    expect(after.code).toBe(0);
+    expect(after.output).toContain("Run again with --yes to delete everything.");
   });
 });
