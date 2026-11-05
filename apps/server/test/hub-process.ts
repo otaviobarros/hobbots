@@ -35,6 +35,30 @@ export interface HubProcess {
   readonly stop: () => Promise<void>;
 }
 
+/** Every hub this module started that has not exited yet. */
+const running = new Set<ChildProcess>();
+
+/**
+ * Stops `child` and waits for it to exit. `tsx` passes SIGTERM on to the hub it runs, which stops
+ * its engine with it; SIGKILL follows after `grace`, when the hub has not stopped by then.
+ */
+const exited = (child: ChildProcess, grace: number) =>
+  new Promise<void>((done) => {
+    if (child.exitCode !== null || child.signalCode !== null) return done();
+    const kill = setTimeout(() => child.kill("SIGKILL"), grace);
+    child.once("exit", () => {
+      clearTimeout(kill);
+      done();
+    });
+    child.kill("SIGTERM");
+  });
+
+/**
+ * Stops every hub still running and waits for each to exit: for a test's teardown, so a hub that
+ * never answered, or one a timed-out test left, keeps no process on its data folder.
+ */
+export const killHubProcesses = () => Promise.all([...running].map((child) => exited(child, 5_000)));
+
 const healthy = (url: string) =>
   fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1000) }).then(
     (response) => response.ok,
@@ -59,6 +83,8 @@ export const startHubProcess = async (
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  running.add(child);
+  child.once("exit", () => running.delete(child));
   let output = "";
   const collect = (chunk: Buffer) => {
     output += chunk.toString("utf8");
@@ -75,7 +101,11 @@ export const startHubProcess = async (
     }
     throw new Error(`The hub did not answer on ${url} within 60s:\n${output}`);
   };
-  await answers();
+  // A hub that never answers is stopped before the failure is reported.
+  await answers().catch(async (error: unknown) => {
+    await exited(child, 5_000);
+    throw error;
+  });
   return {
     port: listening,
     url,
@@ -84,11 +114,6 @@ export const startHubProcess = async (
     logged: (what, line) => Effect.runPromise(waitFor(what, () => line.test(output))),
     asWindow: () => ({ authorization: `Bearer ${readFileSync(join(dataDir, "window-key"), "utf8").trim()}` }),
     answers,
-    stop: () =>
-      new Promise<void>((done) => {
-        if (child.exitCode !== null || child.signalCode !== null) return done();
-        child.once("exit", () => done());
-        child.kill("SIGTERM");
-      }),
+    stop: () => exited(child, 30_000),
   };
 };

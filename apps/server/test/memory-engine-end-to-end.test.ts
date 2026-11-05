@@ -16,7 +16,7 @@ import {
 } from "@hobbots/domain";
 import { testEngine } from "@hobbots/memory/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type HubProcess, startHubProcess } from "./hub-process.ts";
+import { type HubProcess, killHubProcesses, startHubProcess } from "./hub-process.ts";
 
 // #964: ADR 028's memory scenarios end to end, on the hub as `main.ts` composes it, in its own
 // process, with the fake runtime making the hobs' scripted calls and the bundled ai-memory as the
@@ -28,6 +28,8 @@ let hub: HubProcess | undefined;
 
 afterEach(async () => {
   await hub?.stop();
+  // A hub that never answered, or that a timed-out test left running, is killed before its data goes.
+  await killHubProcesses();
   hub = undefined;
   if (root !== "") rmSync(root, { recursive: true, force: true });
   root = "";

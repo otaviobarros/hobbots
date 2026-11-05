@@ -4,7 +4,7 @@ import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type HubProcess, startHubProcess } from "./hub-process.ts";
+import { type HubProcess, killHubProcesses, startHubProcess } from "./hub-process.ts";
 
 let hub: HubProcess | undefined;
 let dataDir: string | undefined;
@@ -18,8 +18,8 @@ const startHub = async () => {
   return { ...hub, asWindow: hub.asWindow() };
 };
 
-afterEach(() => {
-  hub?.child.kill("SIGKILL");
+afterEach(async () => {
+  await killHubProcesses();
   if (dataDir) rmSync(dataDir, { recursive: true, force: true });
   hub = dataDir = undefined;
 });
