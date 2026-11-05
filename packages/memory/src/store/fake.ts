@@ -6,6 +6,7 @@ import {
   type MemoryChangedLine,
   MemoryConflict,
   type MemoryExpected,
+  type MemoryForgetDay,
   type MemoryHit,
   type MemoryPage,
   type MemoryPageSummary,
@@ -14,6 +15,7 @@ import {
   MemoryUnavailable,
   MemoryVersion,
   memoryAuthorOf,
+  memoryForgotten,
   memoryTitleOf,
   searchTerms,
   snippetOf,
@@ -42,6 +44,7 @@ interface StoredVersion {
   readonly markdown: string;
   readonly tags: ReadonlyArray<string>;
   readonly pinned: boolean;
+  readonly forgetOn: MemoryForgetDay | null;
   readonly author: MemoryAuthor | null;
   readonly writtenAt: string;
   /** A forget leaves a tombstone, so the page is gone and restore can still find its versions. */
@@ -148,10 +151,11 @@ export const makeMemoryStoreFake = (): {
       return version;
     });
 
+  // As the engine does, a page past its forget day leaves every list and search; a read still finds it.
   const summaries = (scope: MemoryScope): Array<MemoryPageSummary> =>
     [...pagesOf(scope).entries()].flatMap(([path, history]) => {
       const latest = history.at(-1);
-      if (latest === undefined || latest.forgotten) return [];
+      if (latest === undefined || latest.forgotten || memoryForgotten(latest.forgetOn, new Date())) return [];
       return [
         {
           scope,
@@ -166,8 +170,8 @@ export const makeMemoryStoreFake = (): {
   const pageOf = (scope: MemoryScope, path: MemoryPath): MemoryPage | null => {
     const current = currentOf(scope, path);
     if (current === undefined) return null;
-    const { version, markdown, tags, pinned, author, writtenAt } = current;
-    return { scope, path, markdown, tags, pinned, version, author, updatedAt: writtenAt };
+    const { version, markdown, tags, pinned, forgetOn, author, writtenAt } = current;
+    return { scope, path, markdown, tags, pinned, forgetOn, version, author, updatedAt: writtenAt };
   };
 
   const store: MemoryStoreShape = {
@@ -247,6 +251,7 @@ export const makeMemoryStoreFake = (): {
               markdown: draft.markdown,
               tags: draft.tags,
               pinned: draft.pinned,
+              forgetOn: draft.forgetOn ?? null,
               author: memoryAuthorOf(actor),
               forgotten: false,
             })
@@ -285,15 +290,19 @@ export const makeMemoryStoreFake = (): {
     endSession: (actor, scope, threadId, key) =>
       Effect.flatMap(up, () => {
         const session = sessionOf(scope, threadId);
-        if (session.seen.has(key)) return Effect.void;
+        const path = MemoryPath.make(`sessions/${threadId.toLowerCase()}.md`);
+        // A pinned chat note is never rewritten: the end waits, its key unused, until you unpin it.
+        if (currentOf(scope, path)?.pinned === true) return Effect.succeed(false);
+        if (session.seen.has(key)) return Effect.succeed(true);
         session.seen.add(key);
-        return append(scope, MemoryPath.make(`sessions/${threadId.toLowerCase()}.md`), {
+        return append(scope, path, {
           markdown: summaryOf(threadId, session.items),
           tags: [],
           pinned: false,
+          forgetOn: null,
           author: memoryAuthorOf(actor),
           forgotten: false,
-        }).pipe(Effect.asVoid);
+        }).pipe(Effect.as(true));
       }),
     health: up,
   };

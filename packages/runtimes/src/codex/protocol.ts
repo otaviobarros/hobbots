@@ -232,6 +232,8 @@ interface ThreadStartParams extends ThreadSettings {
   /** Kept for the thread's life: a resumed thread ignores new ones (ADR 024). */
   readonly developerInstructions?: string | null;
   readonly dynamicTools?: ReadonlyArray<DynamicToolSpec> | null;
+  /** Kept in memory only: Codex saves no rollout of the thread, so it can never be resumed or listed. */
+  readonly ephemeral?: boolean | null;
 }
 
 interface ThreadResumeParams extends ThreadSettings {

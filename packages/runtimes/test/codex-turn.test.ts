@@ -234,6 +234,16 @@ describe("a Codex turn", () => {
     expect(Object.keys(command?.env ?? {}).every((key) => !/TOKEN|SECRET|KEY/.test(key))).toBe(true);
   });
 
+  // covers ADR 028
+  it("[TC-RT-506] starts an ephemeral turn's Codex thread without saving it, and a hob's as it was", async () => {
+    const server = fakeServer({ script: [completed("completed")] });
+    await run(config(server.start), prompt({ ephemeral: true, model: "gpt-mini" }));
+    await run(config(server.start), prompt());
+    const starts = server.requests.filter((request) => request.method === "thread/start");
+    expect(starts[0]?.params).toMatchObject({ ephemeral: true, model: "gpt-mini", dynamicTools: [] });
+    expect(starts[1]?.params).not.toHaveProperty("ephemeral");
+  });
+
   // covers RT-001, CH-004, ADR 017
   it("[TC-RT-022] resumes the thread's Codex session, with changed instructions and a briefing inside the turn", async () => {
     const server = fakeServer({ script: [completed("completed")] });

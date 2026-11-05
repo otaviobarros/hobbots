@@ -259,6 +259,12 @@ describe("a hob's brain on Claude Code", () => {
     ]);
   });
 
+  it("names its fastest alias as the small model for light work, such as memory's, when it lists it", () => {
+    expect(toRuntimeModels([{ value: "haiku", displayName: "Haiku", description: "" }]).small).toBe("haiku");
+    expect(toRuntimeModels([{ value: "opus", displayName: "Opus", description: "" }]).small).toBeUndefined();
+    expect(fallbackModels.small).toBe("haiku");
+  });
+
   it("falls back to the documented aliases, starting with Claude Code's default", () => {
     expect(fallbackModels.models.map((m) => m.id)).toEqual(["default", "opus", "fable", "sonnet", "haiku"]);
   });
@@ -399,6 +405,40 @@ describe("stopping a Claude Code turn", () => {
 
     expect(child.signalCode).toBe("SIGKILL");
   });
+});
+
+describe("a Claude Code turn of no hob's", () => {
+  // covers ADR 028
+  it("[TC-RT-505] keeps no session of an ephemeral turn, and keeps a hob's", async () => {
+    const argsFile = join(newHome(), "args");
+    // Records how it was started, then fails, as no session can run here.
+    const executable = executableAt(
+      join(newHome(), "claude"),
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2.1.400 (Claude Code)"; exit 0; fi\necho "$@" >> "${argsFile}"\nexit 1\n`,
+    );
+    const adapter = await Effect.runPromise(makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable }));
+    const run = (ephemeral: boolean) =>
+      Effect.runPromiseExit(
+        Stream.runDrain(
+          adapter.sendPrompt({
+            prompt: "Sum up the session.",
+            sessionId: null,
+            instructions: "",
+            instructionsChanged: false,
+            model: "haiku",
+            effort: null,
+            tools: null,
+            hubTools: null,
+            ephemeral,
+          }),
+        ),
+      );
+    await run(true);
+    await run(false);
+    const [memoryTurn, hobTurn] = readFileSync(argsFile, "utf8").trim().split("\n");
+    expect(memoryTurn).toContain("--no-session-persistence");
+    expect(hobTurn).not.toContain("--no-session-persistence");
+  }, 20_000);
 });
 
 describe("a Claude Code turn that fails", () => {

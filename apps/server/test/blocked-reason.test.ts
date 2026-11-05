@@ -1,18 +1,8 @@
+import { waitToFind } from "@hobbots/domain/testing";
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import {
-  ALDRIC,
-  hub,
-  memberTask,
-  ROOK,
-  retry,
-  send,
-  sharedDatabase,
-  startHub,
-  taskOf,
-  treeWhen,
-} from "./dependency-hub.ts";
+import { ALDRIC, hub, memberTask, ROOK, send, sharedDatabase, startHub, taskOf, treeWhen } from "./dependency-hub.ts";
 
 // Issue #571: a member whose Task was only waiting was shown Blocked, its lead guessed "most likely
 // an approval" and delegated the same work again. A member that waits on something reads waiting;
@@ -62,11 +52,8 @@ describe("blocked says why, and waiting is not blocked", () => {
     // Aldric's next turn is told Rook's Task is blocked, and why.
     await run(send(["How is the frontend going?"]));
     const lead = await run(
-      retry(
-        Effect.suspend(() => {
-          const found = requests.find((each) => each.prompt.includes("How is the frontend going?"));
-          return found === undefined ? Effect.fail("not yet") : Effect.succeed(found);
-        }),
+      waitToFind("Aldric's next turn", () =>
+        requests.find((each) => each.prompt.includes("How is the frontend going?")),
       ),
     );
     const briefing = `${lead.briefing ?? ""}\n${lead.prompt}`;

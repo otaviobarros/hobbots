@@ -19,7 +19,7 @@ test("[TC-OR-306] a Task tool call the hub refused shows as a failed step in the
       script("delegate_task", { key: "nobody", hob: "Nobody", brief: "Tidy half of them" }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });

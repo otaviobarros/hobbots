@@ -1,25 +1,15 @@
-import type { MemorySettings } from "@hobbots/domain";
+import { MEMORY_RUNTIMES, type MemoryModelState, type MemorySettings } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
-import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { useId, useState } from "react";
 import { memoryOverviewQuery, useUpdateMemorySettings } from "../../api/memory.ts";
+import { modelsQuery } from "../../api/queries.ts";
 import { CardFooter } from "./card-footer.tsx";
 import { Choice } from "./choice.tsx";
 import { messages } from "./messages.ts";
-import {
-  engineTag,
-  fallbackOptions,
-  keptLine,
-  modelHint,
-  modelOptions,
-  providerOptions,
-  stateNote,
-  taskOptions,
-  withProvider,
-} from "./model.ts";
+import { engineTag, keptLine, modelHint, otherRuntime, providerOptions, withProvider } from "./model.ts";
+import { FallbackChoice, ModelRows, ModelStatus, SaveFailed, TaskModels } from "./model-choices.tsx";
 
 const copy = messages;
 
@@ -55,7 +45,7 @@ export function MemorySettingsCard() {
         <>
           <span className="text-ui text-text-secondary">{keptLine(data)}</span>
           <InAChat />
-          <MemoryModel settings={data.settings} note={stateNote(data.state)} />
+          <MemoryModel settings={data.settings} state={data.state} />
           <CardFooter version={data.engine?.version ?? null} />
         </>
       )}
@@ -63,7 +53,7 @@ export function MemorySettingsCard() {
   );
 }
 
-/** Notes saved during a chat use each hob's own model, so this setting is not about them. */
+/** A hob saves notes during its own reply, with no extra model call, so this setting is not about them. */
 function InAChat() {
   return (
     <div className="flex items-start gap-3 rounded-control bg-ground px-3 py-2.5">
@@ -93,19 +83,22 @@ function InAChat() {
 }
 
 /**
- * Provider, model and effort, the hint under them, what memory runs with when it differs, the
- * fallback and, behind a toggle, a model per task. A pending change shows at once.
+ * Provider, model and effort, from the provider's runtime as the brain picker lists them, the hint
+ * under them, what memory runs with when it differs, the fallback and, behind a toggle, a model per
+ * task. A pending change shows at once.
  */
-function MemoryModel({ settings, note }: { settings: MemorySettings; note: string | null }) {
+function MemoryModel({ settings, state }: { settings: MemorySettings; state: MemoryModelState }) {
   const update = useUpdateMemorySettings();
-  const [perTask, setPerTask] = useState(false);
-  const tasksId = useId();
   // A choice shows at once and stays shown when it could not be saved, so it can be sent again.
   const failed = update.isError ? update.variables : undefined;
   const shown = (update.isPending ? update.variables : failed) ?? settings;
+  const vendor = shown.provider === "none" ? null : shown.provider;
+  const runtime = MEMORY_RUNTIMES[vendor ?? "claude"];
+  const models = useQuery({ ...modelsQuery(runtime), enabled: vendor !== null }).data;
+  const otherModels = useQuery({ ...modelsQuery(otherRuntime(vendor ?? "claude")), enabled: vendor !== null }).data;
   const save = (next: MemorySettings) => update.mutate(next);
-  const hint = modelHint(shown);
   const busy = update.isPending;
+  const hint = modelHint(shown, models);
   return (
     <>
       <div className="flex flex-col gap-2.5">
@@ -122,94 +115,16 @@ function MemoryModel({ settings, note }: { settings: MemorySettings; note: strin
             disabled={busy}
             onPick={(provider) => provider !== "gemini" && save(withProvider(shown, provider))}
           />
-          {shown.provider !== "none" && (
-            <>
-              <span className="text-detail text-label">{copy.model.model}</span>
-              <Choice
-                label={copy.model.model}
-                value={shown.model}
-                options={modelOptions(shown.provider)}
-                disabled={busy}
-                onPick={(model) => save({ ...shown, model })}
-              />
-              <span className="text-detail text-label">{copy.model.effort}</span>
-              <Choice
-                label={copy.model.effort}
-                value={shown.effort}
-                options={(["low", "medium", "high"] as const).map((value) => ({
-                  value,
-                  label: copy.model.efforts[value],
-                }))}
-                disabled={busy}
-                onPick={(effort) => save({ ...shown, effort })}
-              />
-            </>
-          )}
+          {vendor !== null && <ModelRows shown={shown} models={models} busy={busy} save={save} />}
         </div>
         <span className={cn("text-detail", hint.warn ? "text-lantern" : "text-text-secondary")}>{hint.text}</span>
-        {note !== null && <span className="text-detail text-text-secondary">{note}</span>}
-        {failed !== undefined && (
-          <span className="flex flex-wrap items-center gap-2">
-            <p role="alert" className="m-0 text-ui text-rose">
-              {copy.model.saveFailed}
-            </p>
-            <Button variant="ghost" size="xs" onClick={() => save(failed)}>
-              {copy.model.retry}
-            </Button>
-            <Button variant="ghost" size="xs" onClick={() => update.reset()}>
-              {copy.model.keepBefore}
-            </Button>
-          </span>
+        {vendor !== null && (
+          <ModelStatus runtime={runtime} state={state} models={models} current={vendor === settings.provider} />
         )}
+        {failed !== undefined && <SaveFailed retry={() => save(failed)} keep={() => update.reset()} />}
       </div>
-      {shown.provider !== "none" && (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-ui font-semibold">{copy.fallback.title}</span>
-          <Choice
-            label={copy.fallback.title}
-            value={shown.fallback}
-            options={fallbackOptions(shown.provider)}
-            disabled={busy}
-            onPick={(fallback) => save({ ...shown, fallback })}
-          />
-          <span className="text-detail text-text-secondary">{copy.fallback.note}</span>
-        </div>
-      )}
-      <Button
-        variant="ghost"
-        size="xs"
-        className="self-start"
-        aria-expanded={perTask}
-        aria-controls={tasksId}
-        onClick={() => setPerTask(!perTask)}
-      >
-        {perTask ? copy.tasks.hide : copy.tasks.show}
-      </Button>
-      {perTask && (
-        <div id={tasksId} className="flex flex-col gap-1">
-          {(["summaries", "check", "answers"] as const).map((task) => (
-            <div key={task} className="flex items-center gap-3 rounded-control bg-ground px-3 py-2">
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="text-ui">{copy.tasks.rows[task].title}</span>
-                <span className="text-meta text-label">{copy.tasks.rows[task].detail}</span>
-              </span>
-              <Choice
-                label={copy.tasks.rows[task].title}
-                value={shown.tasks[task]}
-                options={taskOptions(shown.provider, task === "summaries")}
-                disabled={busy}
-                onPick={(choice) =>
-                  save({
-                    ...shown,
-                    tasks: { ...shown.tasks, [task]: task === "summaries" || choice !== "none" ? choice : "same" },
-                  })
-                }
-              />
-            </div>
-          ))}
-          <span className="text-meta text-label">{copy.tasks.note}</span>
-        </div>
-      )}
+      {vendor !== null && <FallbackChoice shown={shown} models={otherModels} busy={busy} save={save} />}
+      <TaskModels shown={shown} models={models} busy={busy || vendor === null} save={save} />
       <span className="text-meta text-label">{copy.model.applies}</span>
     </>
   );

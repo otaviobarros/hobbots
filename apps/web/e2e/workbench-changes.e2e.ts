@@ -24,7 +24,7 @@ const run = (command: string, writes: Record<string, string | null>) =>
 const playTurn = async (page: Page, lines: ReadonlyArray<string>) => {
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(lines.join("\n"));
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
@@ -149,7 +149,7 @@ test("[TC-UX-036] Changes are Live while the turn runs, showing each file as the
   await playTurn(page, ["Draft the notes", script("start_quest", { key: "quest", goal: "Draft the notes" })]);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(['fake:write notes.md "# Notes\\n\\nA first draft.\\n"', "fake:tool Bash sleep 120"].join("\n"));
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 

@@ -21,7 +21,11 @@ afterEach(() => {
   for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true });
 });
 
-const keys: MemoryKeys = { root: Redacted.make("1".repeat(64)), proxy: Redacted.make("2".repeat(64)) };
+const keys: MemoryKeys = {
+  root: Redacted.make("1".repeat(64)),
+  proxy: Redacted.make("2".repeat(64)),
+  model: Redacted.make("3".repeat(64)),
+};
 
 /** An engine's data folder as a stopped engine leaves it: a wiki with Git, a database, logs and the hub's config. */
 const memoryFolder = (files: Record<string, string> = {}) => {
@@ -34,7 +38,7 @@ const memoryFolder = (files: Record<string, string> = {}) => {
   write("wiki/.git/HEAD", "ref: refs/heads/master\n");
   write("db/memory.sqlite", "SQLite format 3\u0000");
   write("logs/ai-memory.log", "started");
-  write("config.toml", renderEngineConfig(NO_MODEL));
+  write("config.toml", renderEngineConfig(NO_MODEL, null));
   for (const [path, text] of Object.entries(files)) write(path, text);
   return memory;
 };
@@ -109,9 +113,17 @@ describe("memory archives", () => {
     );
     expect(unpacked._tag).toBe("Failure");
     expect(() => statSync(restoredPepper)).toThrow();
-    // Either bearer, anywhere in the archive.
-    const inAPage = memoryFolder({ "wiki/hobbots/hob-pip/notes/leak.md": `token ${Redacted.value(keys.proxy)}` });
-    expect(await refusal(await archiveOf(inAPage, ["wiki"]))).toMatch(/leak\.md holds a memory bearer/);
+    // Any of the three bearers, anywhere in the archive: a page, its Git history or the database.
+    for (const bearer of [keys.root, keys.proxy, keys.model]) {
+      const inAPage = memoryFolder({ "wiki/hobbots/hob-pip/notes/leak.md": `token ${Redacted.value(bearer)}` });
+      expect(await refusal(await archiveOf(inAPage, ["wiki"]))).toMatch(/leak\.md holds a memory bearer/);
+      const inHistory = memoryFolder({ "wiki/.git/objects/ab/cdef": `blob ${Redacted.value(bearer)}` });
+      expect(await refusal(await archiveOf(inHistory, ["wiki"]))).toMatch(/cdef holds a memory bearer/);
+      const inTheDatabase = memoryFolder({ "db/memory.sqlite": `SQLite format 3\u0000${Redacted.value(bearer)}` });
+      expect(await refusal(await archiveOf(inTheDatabase, ["wiki", "db"]))).toMatch(
+        /memory\.sqlite holds a memory bearer/,
+      );
+    }
 
     const linked = memoryFolder();
     symlinkSync("/etc/passwd", join(linked, "wiki", "passwd"));

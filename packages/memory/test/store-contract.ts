@@ -4,6 +4,7 @@ import {
   type MemoryActor,
   MemoryConflict,
   type MemoryDraft,
+  MemoryForgetDay,
   MemoryPath,
   type MemoryScope,
   type MemoryVersion,
@@ -366,6 +367,110 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           expect(yield* store.versionChanges(you, pipsOwn, path, first)).toBeNull();
           // A hob never reads another hob's versions.
           expect(yield* died(store.versionChanges(asQuill, pipsOwn, path, first))).toBe(true);
+        }),
+      ));
+
+    // covers ADR 028 (Writes), #959
+    it("[TC-GEN-330] keeps a page's forget day until a write clears it, and leaves a page past it out of lists and search", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const path = MemoryPath.make("notes/launch.md");
+          const later = MemoryForgetDay.make("2099-12-31");
+          const first = yield* store.write(you, pipsOwn, draft("notes/launch.md", "# Launch\n\nTuesday."), fresh);
+          const set = yield* store.write(
+            you,
+            pipsOwn,
+            draft("notes/launch.md", "# Launch\n\nTuesday.", { forgetOn: later }),
+            { _tag: "Version", version: first },
+          );
+          expect(yield* store.page(you, pipsOwn, path)).toMatchObject({ version: set, forgetOn: later, author: you });
+          // Until that day it is listed and found like any page.
+          expect((yield* store.list(asPip, pipsOwn, 50)).map((page) => page.path)).toEqual([path]);
+          const kept = yield* store.write(you, pipsOwn, draft("notes/launch.md", "# Launch\n\nTuesday."), {
+            _tag: "Version",
+            version: set,
+          });
+          expect(yield* store.page(you, pipsOwn, path)).toMatchObject({ version: kept, forgetOn: null });
+          const history = yield* store.history(you, pipsOwn, path);
+          expect(history.map((entry) => entry.version)).toEqual([kept, set, first]);
+
+          // A page whose day is over is gone from lists and search; a read by its path still finds it.
+          yield* store.write(
+            you,
+            pipsOwn,
+            draft("notes/old.md", "# Old launch", { forgetOn: MemoryForgetDay.make("2000-01-01") }),
+            fresh,
+          );
+          expect((yield* store.list(asPip, pipsOwn, 50)).map((page) => page.path)).toEqual([path]);
+          expect(yield* store.search(asPip, [pipsOwn], "old launch", 10)).toEqual([]);
+          expect(yield* store.page(you, pipsOwn, MemoryPath.make("notes/old.md"))).toMatchObject({
+            forgetOn: "2000-01-01",
+          });
+        }),
+      ));
+
+    // covers ADR 028 (Writes), #959
+    it("[TC-GEN-331] restores a hob's version as a new version written by you, with its tags and pin", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const path = MemoryPath.make("howtos/deploy.md");
+          const first = yield* store.write(
+            asPip,
+            pipsOwn,
+            draft("howtos/deploy.md", "# Deploy\n\nWith fly.", { tags: ["ops"], pinned: true }),
+            fresh,
+          );
+          yield* store.write(asPip, pipsOwn, draft("howtos/deploy.md", "# Deploy\n\nBy hand."), any);
+          const restored = yield* store.restore(you, pipsOwn, path, first, any);
+          expect(yield* store.page(you, pipsOwn, path)).toMatchObject({
+            version: restored,
+            markdown: "# Deploy\n\nWith fly.",
+            tags: ["ops"],
+            pinned: true,
+            author: you,
+          });
+          const history = yield* store.history(you, pipsOwn, path);
+          expect(history[0]).toMatchObject({ version: restored, latest: true, author: you });
+          // The version it replaced is still in History, and can be restored in turn.
+          expect(history.map((entry) => entry.version)).toContain(first);
+          const back = yield* store.restore(
+            you,
+            pipsOwn,
+            path,
+            history[history.length - 2]?.version as MemoryVersion,
+            any,
+          );
+          expect(yield* store.page(you, pipsOwn, path)).toMatchObject({ version: back, author: you });
+        }),
+      ));
+
+    // covers ADR 028 (Capture and summaries), #959
+    it("[TC-GEN-332] never rewrites a chat note you pinned when its thread's session ends again", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f2");
+          const path = MemoryPath.make(`sessions/${thread}.md`);
+          yield* store.capture(asPip, pipsOwn, thread, [
+            { key: "message:m1", kind: "message", text: "How do the tests run?" },
+          ]);
+          expect(yield* store.endSession(asPip, pipsOwn, thread, "end:m1")).toBe(true);
+          const note = yield* store.page(you, pipsOwn, path);
+          expect(note).not.toBeNull();
+          const pinned = yield* store.write(
+            you,
+            pipsOwn,
+            draft(path, note?.markdown ?? "", { tags: note?.tags ?? [], pinned: true }),
+            { _tag: "Version", version: note?.version as MemoryVersion },
+          );
+          // The thread goes on and ends again: the pinned note stays as it was.
+          yield* store.capture(asPip, pipsOwn, thread, [
+            { key: "message:m2", kind: "message", text: "And the linter?" },
+          ]);
+          // The end is put off, not taken: memory answers that it waits.
+          expect(yield* store.endSession(asPip, pipsOwn, thread, "end:m2")).toBe(false);
+          const after = yield* store.page(you, pipsOwn, path);
+          expect(after).toMatchObject({ version: pinned, pinned: true, author: you });
+          expect(after?.markdown).not.toContain("And the linter?");
         }),
       ));
 

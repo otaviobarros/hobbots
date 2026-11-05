@@ -5,6 +5,7 @@ import {
   MemoryConflict,
   type MemoryDraft,
   type MemoryExpected,
+  MemoryForgetDay,
   type MemoryHit,
   type MemoryPage,
   type MemoryPageSummary,
@@ -16,8 +17,9 @@ import {
   type MemoryVersionChanges,
   memoryTitleOf,
   searchTerms,
+  type ThreadId,
 } from "@hobbots/domain";
-import { Effect, Layer, Schema, Semaphore } from "effect";
+import { Effect, Layer, Option, Schema, Semaphore } from "effect";
 import { acknowledgedPrefix, HOOK_BATCH_MAX, HookBatchJson, hookEventOf } from "./capture.ts";
 import {
   type EngineCaller,
@@ -27,7 +29,6 @@ import {
   noSuchProject,
   ROOT,
 } from "./client.ts";
-import { applyHunks } from "./patch.ts";
 import {
   authorOfUsername,
   type EngineProject,
@@ -55,6 +56,7 @@ const PageJson = Schema.Struct({
   body_markdown: Schema.String,
   frontmatter: Schema.Struct({
     tags: Schema.optionalKey(Schema.Array(Schema.String)),
+    expires_at: Schema.optionalKey(Schema.String),
     last_modified_by: Schema.optionalKey(Schema.Struct({ username: Schema.optionalKey(Schema.String) })),
   }),
 });
@@ -62,7 +64,14 @@ const SummaryJson = Schema.Struct({ path: Schema.String, title: Schema.String, u
 const ChangesJson = Schema.Struct({ pages: Schema.Array(SummaryJson), next_cursor: Schema.NullOr(Schema.String) });
 const HistoryJson = Schema.Struct({
   total: Schema.Number,
-  versions: Schema.Array(Schema.Struct({ id: Schema.String, is_latest: Schema.Boolean, created_at: Schema.String })),
+  versions: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      supersedes: Schema.optionalKey(Schema.NullOr(Schema.String)),
+      is_latest: Schema.Boolean,
+      created_at: Schema.String,
+    }),
+  ),
 });
 const HitsJson = Schema.Struct({
   hits: Schema.Array(
@@ -91,22 +100,6 @@ const DiffJson = Schema.Struct({
     ),
   }),
 });
-/** A diff between two versions, with where each hunk starts, to rebuild one version from another. */
-const PatchJson = Schema.Struct({
-  diff: Schema.Struct({
-    status: Schema.String,
-    truncated: Schema.optionalKey(Schema.Boolean),
-    hunks: Schema.optionalKey(
-      Schema.Array(
-        Schema.Struct({
-          old_start: Schema.Number,
-          old_len: Schema.Number,
-          lines: Schema.Array(Schema.Struct({ op: Schema.String, text: Schema.String })),
-        }),
-      ),
-    ),
-  }),
-});
 const ProjectsJson = Schema.Array(
   Schema.Struct({ workspace_name: Schema.String, project_name: Schema.String, page_count: Schema.Number }),
 );
@@ -129,8 +122,6 @@ const PIN_FIRST_MAX = 10;
 const READ_CONCURRENCY = 8;
 /** A forgotten page comes back from the wiki's Git revision before its delete, marked so. */
 const REVISION = "rev:";
-/** A restore writes the version back as you, as the engine's own restore does. */
-const YOU: MemoryActor = { _tag: "You" };
 
 const OPS: Record<string, MemoryChangedLine["op"]> = { "+": "add", "-": "remove", " ": "same" };
 
@@ -194,9 +185,8 @@ const refusalIsOutage = <A, E, R>(
 
 const makeStore = (client: EngineClient): MemoryStoreShape => {
   /**
-   * The hub's changes to memory run one at a time. A restore of a page still there is a write
-   * conditional on its version, which the engine checks; a forgotten page comes back through the
-   * engine's restore, which takes no precondition, so no other change of the hub's lands meanwhile.
+   * The hub's changes to memory run one at a time, so none lands between a restore's check of the
+   * page and the engine's restore, which takes no precondition of its own.
    */
   const changing = Semaphore.makeUnsafe(1);
   /**
@@ -248,6 +238,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         markdown: json.body_markdown,
         tags: json.frontmatter.tags ?? [],
         pinned: json.pinned,
+        forgetOn: forgetDayOf(json.frontmatter.expires_at),
         version: MemoryVersion.make(json.id),
         author: authorOfUsername(json.frontmatter.last_modified_by?.username),
         updatedAt: json.updated_at,
@@ -346,6 +337,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
               body: draft.markdown,
               tags: draft.tags,
               pinned: draft.pinned,
+              ...(draft.forgetOn ? { expires_at: draft.forgetOn } : {}),
               ...preconditionOf(expected),
             },
             WrittenJson,
@@ -358,19 +350,16 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         refusalIsOutage,
       );
 
-  /**
-   * The text of `version` of the page, rebuilt from `current` and the diff ai-memory answers between
-   * them, or null when it cannot be rebuilt whole: a diff cut short, or one that does not fit.
-   */
-  const versionText = (scope: MemoryScope, current: MemoryPage, version: MemoryVersion) =>
+  /** The version that `version` of the page replaced, or null when it replaced none or has gone. */
+  const replacedBy = (scope: MemoryScope, path: MemoryPath, version: MemoryVersion) =>
     Effect.map(
-      client.get(`${pagesRoute(engineProjectOf(scope))}/history/${current.path}`, PatchJson, {
-        from: current.version,
-        to: version,
-        limit: "1",
-      }),
-      ({ diff }) =>
-        diff.truncated === true || diff.status === "too_large" ? null : applyHunks(current.markdown, diff.hunks ?? []),
+      client
+        .get(`${pagesRoute(engineProjectOf(scope))}/history/${path}`, HistoryJson, { limit: "5" })
+        .pipe(orEmpty({ total: 0, versions: [] } as typeof HistoryJson.Type)),
+      (json) => {
+        const found = json.versions.find((each) => each.id === version)?.supersedes ?? null;
+        return found === null ? null : MemoryVersion.make(found);
+      },
     );
 
   const currentConflict = (scope: MemoryScope, path: MemoryPath) =>
@@ -539,38 +528,32 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         changing.withPermit,
       );
     },
-    restore: (_actor, scope, path, version, expected) =>
+    restore: (actor, scope, path, version, expected) =>
       Effect.gen(function* () {
         const current = yield* pageOf(scope, path);
-        if (!pageMeets(current?.version ?? null, expected)) {
-          return yield* new MemoryConflict({ path, current: current?.version ?? null });
-        }
-        // A forgotten page comes back from Git, which only the engine's restore reaches. The engine
-        // takes no precondition there, so it runs while none of the hub's other changes can.
-        if (current === null || version.startsWith(REVISION)) {
-          const source = version.startsWith(REVISION) ? { rev: version.slice(REVISION.length) } : { page_id: version };
-          const json = yield* client.admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson);
-          return MemoryVersion.make(json.page_id);
-        }
-        // A page still there gets `version` back as a write conditional on the version just read,
-        // so any change since, by the hub or by the engine itself, is refused rather than overwritten.
-        const markdown = yield* versionText(scope, current, version);
-        if (markdown === null) return yield* new MemoryConflict({ path, current: current.version });
-        return yield* writePage(
-          YOU,
-          scope,
-          { path, markdown, tags: current.tags, pinned: current.pinned },
-          {
-            _tag: "Version",
-            version: current.version,
-          },
+        const was = current?.version ?? null;
+        if (!pageMeets(was, expected)) return yield* new MemoryConflict({ path, current: was });
+        const source = version.startsWith(REVISION) ? { rev: version.slice(REVISION.length) } : { page_id: version };
+        const restored = MemoryVersion.make(
+          (yield* client
+            .admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson)
+            // A version the page never had, or one gone with a forget, leaves the page as it is.
+            .pipe(Effect.catchTag("EngineRefused", () => currentConflict(scope, path)))).page_id,
         );
-      }).pipe(
-        // A version the page never had, or one gone with a forget, leaves the page as it is.
-        Effect.catchTag("EngineRefused", () => currentConflict(scope, path)),
-        refusalIsOutage,
-        changing.withPermit,
-      ),
+        // The engine's restore takes no precondition. The hub's own changes wait for it, but the
+        // engine may write the page itself, as a session's summary, between the check and the
+        // restore: then the restore replaced a version it never saw, which is put back as the latest.
+        const replaced = yield* replacedBy(scope, path, restored);
+        if (replaced !== null && replaced !== was) {
+          const back = yield* client.admin(
+            "restore-page",
+            { ...engineProjectOf(scope), path, page_id: replaced },
+            WrittenJson,
+          );
+          return yield* new MemoryConflict({ path, current: MemoryVersion.make(back.page_id) });
+        }
+        return yield* stampedYours(actor, scope, path, restored);
+      }).pipe(refusalIsOutage, changing.withPermit),
     capture: (actor, scope, threadId, items) =>
       Effect.gen(function* () {
         const where = engineProjectOf(scope);
@@ -590,23 +573,45 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         return acknowledged;
       }).pipe(refusalIsOutage),
     endSession: (actor, scope, threadId, key) =>
-      client
-        .hookBatch(
-          callerOf(actor),
-          [hookEventOf(engineProjectOf(scope), threadId, { kind: "end", key, text: "" })],
-          HookBatchJson,
-        )
-        .pipe(
-          Effect.flatMap((json) =>
-            acknowledgedPrefix(json) >= 1
-              ? Effect.void
-              : Effect.fail(new MemoryUnavailable({ message: "Memory did not take the end of a session." })),
-          ),
-          refusalIsOutage,
-          changing.withPermit,
-        ),
+      Effect.flatMap(pageOf(scope, MemoryPath.make(`sessions/${threadId}.md`)), (note) =>
+        // The engine writes a session's page again at every end, pinned or not, so the end of a
+        // session whose chat note you pinned is not sent: the note stays as it is, and the capture
+        // worker keeps the end and sends it again once you unpin it.
+        note?.pinned === true ? Effect.succeed(false) : Effect.as(endOf(actor, scope, threadId, key), true),
+      ).pipe(refusalIsOutage, changing.withPermit),
     health: client.health,
   };
+
+  const endOf = (actor: MemoryActor, scope: MemoryScope, threadId: ThreadId, key: string) =>
+    client
+      .hookBatch(
+        callerOf(actor),
+        [hookEventOf(engineProjectOf(scope), threadId, { kind: "end", key, text: "" })],
+        HookBatchJson,
+      )
+      .pipe(
+        Effect.flatMap((json) =>
+          acknowledgedPrefix(json) >= 1
+            ? Effect.void
+            : Effect.fail(new MemoryUnavailable({ message: "Memory did not take the end of a session." })),
+        ),
+      );
+
+  /**
+   * The engine restores a version with the frontmatter it had, the author who wrote it included, so
+   * a version a hob wrote is written once more, unchanged, as you: every restore is yours in History.
+   */
+  const stampedYours = (actor: MemoryActor, scope: MemoryScope, path: MemoryPath, restored: MemoryVersion) =>
+    Effect.flatMap(pageOf(scope, path), (page) =>
+      page === null || page.version !== restored || page.author?._tag === "You"
+        ? Effect.succeed(restored)
+        : writePage(
+            actor,
+            scope,
+            { path, markdown: page.markdown, tags: page.tags, pinned: page.pinned, forgetOn: page.forgetOn },
+            { _tag: "Version", version: restored },
+          ),
+    );
   return store;
 };
 
@@ -625,6 +630,10 @@ const pageMeets = (current: MemoryVersion | null, expected: MemoryExpected) => {
       return current === expected.version;
   }
 };
+
+/** The day a page's `expires_at` names, or null for none, or for a time Hobbots did not write. */
+const forgetDayOf = (expiresAt: string | undefined): MemoryForgetDay | null =>
+  Option.getOrNull(Schema.decodeUnknownOption(MemoryForgetDay)(expiresAt?.slice(0, 10)));
 
 const preconditionOf = (expected: MemoryExpected): Record<string, unknown> => {
   switch (expected._tag) {

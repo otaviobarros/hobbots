@@ -1,9 +1,11 @@
 import type { Task, TaskTree } from "@hobbots/domain";
+import { waitToFind } from "@hobbots/domain/testing";
 import { describe, expect, it } from "vitest";
 import {
   ALDRIC,
   hold,
   hub,
+  messagesWhen,
   promptsTo,
   type Reaction,
   send,
@@ -135,7 +137,16 @@ describe("a step that stops on a finding holds the steps after it", () => {
 
   // covers OR-002, EX-004
   it("[TC-OR-403] a step held for Aldric stays held, with step 2 queued, after Hobbots restarts", async () => {
-    const { database, stop } = await untilBlocked([]);
+    const { database, run, requests, stop } = await untilBlocked([]);
+    // Stops once Aldric's turn that hears of the block has ended, so the first hub has nothing
+    // left to start on the shared database while the second one recovers.
+    await run(
+      waitToFind("Aldric's turn on the blocked step", () =>
+        requests.find((each) => each.prompt.includes(BLOCKED_ARRIVAL)),
+      ),
+    );
+    await run(messagesWhen(() => true));
+    await run(settledTree((tree) => stepsOf(tree)[0]?.state === "blocked"));
     stop();
     const again = await startHub(database);
     // Startup recovery ends the steps left open with no live Attempt; a held one is not among them.

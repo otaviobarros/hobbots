@@ -1,5 +1,12 @@
 import type { MemoryStoreShape } from "@hobbots/agents";
-import { AgentId, MemoryPath, type MemoryScope, MemoryUnavailable, memoryProjectIdentity } from "@hobbots/domain";
+import {
+  AgentId,
+  MemoryForgetDay,
+  MemoryPath,
+  type MemoryScope,
+  MemoryUnavailable,
+  memoryProjectIdentity,
+} from "@hobbots/domain";
 import { Effect, Exit, Redacted, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { engineProjectOf, INDEX_PROJECT, scopeOfEngineProject } from "../src/store/scopes.ts";
@@ -99,7 +106,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
   });
 
   // covers ADR 028 (Writes), #961
-  it("[TC-GEN-348] refuses a restore when the page changes inside ai-memory after the restore read it, and keeps that change", async () => {
+  it("[TC-GEN-348] refuses a restore when ai-memory changes the page after the restore checked it, and puts that change back", async () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const pip: MemoryScope = { _tag: "Hob", agentId: AgentId.make("0d6e2f0a-0000-4000-8000-000000000031") };
     const you = { _tag: "You" } as const;
@@ -107,7 +114,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
     const draft = (markdown: string) => ({ path, markdown, tags: [], pinned: false });
     const first = await Effect.runPromise(store.write(you, pip, draft("# Session\n\nMonday."), { _tag: "New" }));
     const second = await Effect.runPromise(store.write(you, pip, draft("# Session\n\nTuesday."), { _tag: "Any" }));
-    // ai-memory writes the page itself, as a session's summary does, once the restore has read it.
+    // ai-memory writes the page itself, as a session's summary does, once the restore has checked it.
     const where = engineProjectOf(pip);
     const engineWrite = () =>
       realFetch(`${endpoint.url}/mcp`, {
@@ -129,7 +136,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
       });
     let wrote = false;
     beforeFetch = async (url) => {
-      if (wrote || !url.includes("/history/") || !url.includes("from=")) return;
+      if (wrote || !url.includes("/admin/restore-page")) return;
       wrote = true;
       expect((await engineWrite()).status).toBe(200);
     };
@@ -144,6 +151,41 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
     }
     expect(await Effect.runPromise(store.page(you, pip, path))).toMatchObject({
       markdown: "# Session\n\nThe summary.",
+    });
+  });
+});
+
+describe.runIf(engineEnabled)("aging on ai-memory", () => {
+  // covers ADR 028 (Writes), #959
+  it("[TC-GEN-333] has the engine's sweep delete a page past its forget day for good, and leave a pinned page as it is", async () => {
+    const { store, endpoint, keys } = await Effect.runPromise(open());
+    const you = { _tag: "You" } as const;
+    const own: MemoryScope = { _tag: "Hob", agentId: AgentId.make("h-pip") };
+    const write = (path: string, more: { pinned?: boolean; forgetOn?: MemoryForgetDay }) =>
+      Effect.runPromise(
+        store.write(
+          you,
+          own,
+          { path: MemoryPath.make(path), markdown: "# Page", tags: [], pinned: false, ...more },
+          {
+            _tag: "New",
+          },
+        ),
+      );
+    const pinned = await write("rules/kept.md", { pinned: true });
+    await write("notes/gone.md", { forgetOn: MemoryForgetDay.make("2000-01-01") });
+    const sweep = await fetch(`${endpoint.url}/admin/forget-sweep`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${Redacted.value(keys.root)}`, "content-type": "application/json" },
+      body: JSON.stringify(engineProjectOf(own)),
+    });
+    expect(sweep.status).toBe(200);
+    expect(await sweep.json()).toMatchObject({ expired: [expect.objectContaining({ path: "notes/gone.md" })] });
+    expect(await Effect.runPromise(store.page(you, own, MemoryPath.make("notes/gone.md")))).toBeNull();
+    expect(await Effect.runPromise(store.history(you, own, MemoryPath.make("notes/gone.md")))).toEqual([]);
+    expect(await Effect.runPromise(store.page(you, own, MemoryPath.make("rules/kept.md")))).toMatchObject({
+      version: pinned,
+      pinned: true,
     });
   });
 });

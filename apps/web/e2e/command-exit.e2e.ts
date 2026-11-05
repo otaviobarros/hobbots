@@ -28,7 +28,7 @@ test("[TC-RT-105] a command that exits non-zero shows as Failed with its exit co
       script("complete_task", { key: "done", summary: "Red, then green." }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
@@ -72,7 +72,7 @@ test("[TC-RT-500] a line of commands run one after another that exits 0 shows as
       script("complete_task", { key: "done", summary: "Initialized." }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
