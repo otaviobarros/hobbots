@@ -68,7 +68,7 @@ describe("a question with choices, through the tools", () => {
     const told = requests.filter((request) => request.prompt.includes(`Your question ${question.id} was answered`));
     expect(told).toHaveLength(1);
     expect(told[0]?.prompt).toContain(
-      "Your question " + question.id + ' was answered by the user: "Formal" (choice 2 of 2)',
+      `Your question ${question.id} was answered by the user: "Formal" (choice 2 of 2)`,
     );
   }, 30_000);
 });
