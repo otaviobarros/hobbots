@@ -1,6 +1,7 @@
 import type { AgentId, MessageId, ThreadId } from "@hobbots/domain";
 import { Context, Effect, Option, Schema, type Scope } from "effect";
-import type { HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
+import { MemoryTools } from "./memory.ts";
+import type { HubToolAnswer, HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
 
 /** A turn that may offer Charm tools: its hob, and how to read the hob's tool access now. */
@@ -51,6 +52,19 @@ export class LocalGitTools extends Context.Service<
 >()("@hobbots/agents/LocalGitTools") {}
 
 /**
+ * A hub tool call's answer as the hob reads it: a refusal, with its reason, as a refused answer, and
+ * every answer redacted, as everything a hob reads is.
+ */
+export const hubAnswer = <R>(
+  redactor: Redactor,
+  call: Effect.Effect<HubToolAnswer, { readonly _tag: "Refused"; readonly message: string }, R>,
+): Effect.Effect<HubToolAnswer, never, R> =>
+  call.pipe(
+    Effect.catchTag("Refused", (refused) => Effect.succeed<HubToolAnswer>({ text: refused.message, refused: true })),
+    Effect.map((answer) => ({ ...answer, text: redactor.text(answer.text) })),
+  );
+
+/**
  * Every tool of several sets, as one: a call goes to the set that offers its tool. A name two sets
  * offer goes to the first. Null when no set is given.
  */
@@ -76,20 +90,23 @@ export const combineHubTools = (...sets: ReadonlyArray<HubTools | null>): HubToo
 };
 
 /**
- * The local Git and Charm tools a turn offers, read at its start under the access the turn reads
- * (ADR 014): a chat turn's, a party member's or a step's, each narrowed by its Delegations. Every
- * kind of turn offers them this one way, so the tools a delegation promises are the tools its member
- * gets (#699). Without either service, a turn offers none of its tools.
+ * The local Git, Charm and memory tools a turn offers, read at its start under the access the turn
+ * reads (ADR 014): a chat turn's, a party member's or a step's, each narrowed by its Delegations.
+ * Every kind of turn that offers Task tools offers them this one way, so the tools a delegation
+ * promises are the tools its member gets (#699), and every runtime that serves hub tools serves
+ * memory (ADR 028). Without a service, a turn offers none of its tools.
  */
 export const charmOffer = Effect.gen(function* () {
   const localGit = yield* Effect.serviceOption(LocalGitTools);
   const charms = yield* Effect.serviceOption(CharmTools);
+  const memory = yield* Effect.serviceOption(MemoryTools);
   // Each reads the turn's access itself, so they are read side by side.
   return (turn: CharmTurn) =>
     Effect.all(
       [
         Option.isSome(localGit) ? localGit.value.forTurn(turn) : Effect.succeed(null),
         Option.isSome(charms) ? charms.value.forTurn(turn) : Effect.succeed(null),
+        Option.isSome(memory) ? memory.value.forTurn(turn) : Effect.succeed(null),
       ],
       { concurrency: "unbounded" },
     ).pipe(Effect.map((sets) => combineHubTools(...sets)));

@@ -8,3 +8,4 @@ export * from "./engine/release.ts";
 export * from "./engine/status.ts";
 export * from "./store/ai-memory.ts";
 export { MemoryProjectsLive } from "./store/projects.ts";
+export * from "./tools.ts";

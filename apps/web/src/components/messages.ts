@@ -566,6 +566,8 @@ export const messages = {
       "open-pull-request": "Opens a pull request others can see at once. You can close or edit it.",
       "comment-github": "Posts a comment others can see at once. You can edit or delete it.",
       "outside-folders": "Acts outside the folders this hob may use.",
+      "search-memory": "Reads only. Nothing changes.",
+      "save-memory": "Writes a page to its own memory. You can edit or undo it.",
     },
   },
   charms: {

@@ -138,7 +138,7 @@ export const TaskToolCallsLive = Layer.effect(
           })}`;
           // A call that started its turn's Task takes what the turn did so far into that Task's work.
           if (outcome.scope !== undefined && outcome.scope !== call.scope) {
-            for (const table of ["task_tool_calls", "task_tool_refusals", "charm_calls"]) {
+            for (const table of ["task_tool_calls", "task_tool_refusals", "charm_calls", "memory_saves"]) {
               yield* sql`UPDATE ${sql(table)} SET scope = ${outcome.scope}
                 WHERE agent_id = ${call.agentId} AND scope = ${call.scope}`;
             }

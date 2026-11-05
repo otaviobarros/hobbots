@@ -1,5 +1,7 @@
 import {
   type AgentId,
+  type Committed,
+  type EventEnvelope,
   type MemoryActor,
   type MemoryConflict,
   type MemoryDraft,
@@ -10,6 +12,8 @@ import {
   type MemoryPageVersion,
   type MemoryPath,
   type MemoryProjectIdentity,
+  type MemorySave,
+  type MemorySaveState,
   type MemoryScope,
   type MemoryUnavailable,
   type MemoryVersion,
@@ -17,6 +21,8 @@ import {
   memoryScopeAllowed,
 } from "@hobbots/domain";
 import { Context, Effect, Option } from "effect";
+import type { CharmTurn } from "./charms.ts";
+import type { HubToolAnswer, HubTools } from "./runtime.ts";
 
 type Memory<A, E = MemoryUnavailable> = Effect.Effect<A, E>;
 
@@ -159,3 +165,70 @@ export const memoryActorFor = (
       ? projects.value.of(folder)
       : Effect.succeed(memoryProjectIdentity(null, folderName(folder))),
   ).pipe(Effect.map((identities) => ({ _tag: "Hob", agentId, projects: [...new Set(identities)] })));
+
+/** What recording a save found: it is new, and journaled, or the hob used its key before in the same work. */
+export type MemorySaveStart =
+  | { readonly _tag: "Started"; readonly entries: ReadonlyArray<EventEnvelope> }
+  | { readonly _tag: "Existing"; readonly save: MemorySave };
+
+/**
+ * The record of every `memory_save` to a hob's own memory (ADR 028). A save is recorded, and
+ * journaled, before it is sent: the journal is the outbox, so a save memory could not take is kept,
+ * and the capture worker sends it once memory is back. A retried key returns the first save.
+ */
+export class MemorySaves extends Context.Service<
+  MemorySaves,
+  {
+    /**
+     * Records `save`, in `sending`, and journals it, unless the hob's key is already taken in the same
+     * work or in `also`: that save is returned instead, and nothing is written.
+     */
+    readonly begin: (save: MemorySave, also?: string) => Effect.Effect<MemorySaveStart>;
+    /**
+     * Moves a save that is still `sending` or `queued` to `state`, with the version memory answered,
+     * and journals it. None when it has settled already, so a late outcome never overwrites a settled one.
+     */
+    readonly settle: (
+      save: MemorySave,
+      state: Exclude<MemorySaveState, "sending">,
+      version: MemoryVersion | null,
+      at: string,
+    ) => Effect.Effect<Option.Option<Committed<MemorySave>>>;
+    /**
+     * The saves still to send, oldest first: those memory did not take, and those a hub stopped
+     * while sending. For the capture worker, which sends them with the same key.
+     */
+    readonly unsent: Effect.Effect<ReadonlyArray<MemorySave>>;
+  }
+>()("@hobbots/agents/MemorySaves") {}
+
+/** A `memory_save` that asks to share a page beyond the hob's own memory, as the hub worked it out. */
+export interface MemoryShareRequest {
+  readonly actor: Extract<MemoryActor, { readonly _tag: "Hob" }>;
+  readonly scope: Exclude<MemoryScope, { readonly _tag: "Hob" }>;
+  readonly draft: MemoryDraft;
+  /** The SHA-256 of the call's key, never its text. */
+  readonly key: string;
+  readonly turn: CharmTurn;
+}
+
+/**
+ * Shares the hobs ask for (ADR 028, Sharing): the safety preset decides whether a share goes through
+ * or waits for your review. Absent, the hub takes no shares, and a hob saves to its own memory only.
+ */
+export class MemoryShares extends Context.Service<
+  MemoryShares,
+  { readonly share: (request: MemoryShareRequest) => Effect.Effect<HubToolAnswer> }
+>()("@hobbots/agents/MemoryShares") {}
+
+/**
+ * The memory tools a turn offers its runtime (ADR 028), served on the hub, which alone reaches memory.
+ * The hub decides every call under the hob's Memory policy group. Absent, a turn offers none.
+ */
+export class MemoryTools extends Context.Service<
+  MemoryTools,
+  {
+    /** The tools the turn offers, read at its start: none (null) for a hob without tools. */
+    readonly forTurn: (turn: CharmTurn) => Effect.Effect<HubTools | null>;
+  }
+>()("@hobbots/agents/MemoryTools") {}

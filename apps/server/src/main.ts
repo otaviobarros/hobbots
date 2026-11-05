@@ -47,7 +47,10 @@ import {
   MemoryEngine,
   type MemoryKeys,
   MemoryProjectsLive,
+  MemoryStoreAiMemory,
+  MemoryToolsLive,
 } from "@hobbots/memory";
+import { MemoryStoreFake } from "@hobbots/memory/testing";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -61,6 +64,7 @@ import {
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   HobGitHubAppRepository,
+  MemorySavesLive,
   RestoreRepository,
   SearchIndex,
   SetupRepository,
@@ -118,6 +122,18 @@ import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
 import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
+
+/**
+ * The memory tools (ADR 028), beside the Task tools on every runtime while memory is on. A real
+ * runtime's hobs reach the bundled ai-memory through the engine the hub runs; the fake runtime keeps
+ * memory in the hub's process, to try memory without the engine. With memory off there are none.
+ */
+const memoryToolsLayer = (config: { readonly runtime: string; readonly memory: "on" | "off" }) => {
+  if (config.memory === "off") return Layer.empty;
+  const store =
+    config.runtime === "fake" ? MemoryStoreFake : MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer));
+  return MemoryToolsLive.pipe(Layer.provide(Layer.mergeAll(store, MemoryProjectsLive, PolicyEngine.node)));
+};
 
 /** The memory engine as the hub's settings choose it: turned off, missing, or the bundled binary. */
 const memoryEngineLayer = (
@@ -184,6 +200,7 @@ const ServerLive = Layer.unwrap(
       TaskRepositoryLive,
       TaskToolCallsLive,
       CharmCallsLive,
+      MemorySavesLive,
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
@@ -285,6 +302,7 @@ const ServerLive = Layer.unwrap(
     const LocalGit = LocalGitToolsLive({ stagingFolder: join(dataDir, "charms", "local-git") }).pipe(
       Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)),
     );
+    const MemoryTooling = memoryToolsLayer(config);
     // The memory engine (ADR 028): the bundled ai-memory, run beside the hub and stopped with it. Its
     // two keys stay in the data folder and reach only the engine's environment. Without an engine,
     // or one that fails its checksum, memory is off and everything else works.
@@ -378,7 +396,7 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(ApprovalService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
-      .pipe(Layer.provideMerge(Layer.mergeAll(Charms, LocalGit, CharmCallService.layer)))
+      .pipe(Layer.provideMerge(Layer.mergeAll(Charms, LocalGit, MemoryTooling, CharmCallService.layer)))
       // Before approvals, so a decision can save grants and every call reads the hob's live ones; before
       // the hob's own GitHub app, which revokes GitHub grants whenever the hob's identity changes (ADR 022).
       .pipe(Layer.provideMerge(GrantService.layer))

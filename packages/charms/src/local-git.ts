@@ -3,13 +3,15 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import {
   type AskableVerdict,
   approvalNote,
-  askUntilDecided,
+  askOnStep,
   type CharmTurn,
   type HubCallStep,
   type HubToolAnswer,
+  hubAnswer,
   LocalGitTools,
   openTools,
   operationDecision,
+  showStarted,
   type ToolAccess,
 } from "@hobbots/agents";
 import {
@@ -361,13 +363,11 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
             return yield* new Refused({ message: `Give the folder as an absolute path, not ${folder}.` });
           }
           const stub = yield* checkPlace(folder);
-          const decision = yield* askUntilDecided({
+          const decision = yield* askOnStep({
             call: { id: step?.id ?? GIT_INIT_TOOL, tool: GIT_INIT_TOOL, arguments: { folder }, label: GIT_INIT_LABEL },
-            // A call without a step has no card to show, so it cannot ask.
-            approvals: step === undefined ? null : turn.approvals,
+            step,
+            approvals: turn.approvals,
             decide: decideBoth(turn, access, folder, stub),
-            report: step?.report ?? (() => {}),
-            unknown: "Hobbots cannot decide this call.",
           });
           if (decision._tag === "Refuse") return yield* new Refused({ message: decision.reason });
           // The folder as the engine resolved it, links followed, so the repository goes where it was decided.
@@ -377,14 +377,7 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
           if (writable === undefined) {
             return yield* new Refused({ message: `${target} is outside this hob's folders, so nothing was created.` });
           }
-          step?.report({
-            _tag: "ToolStarted",
-            id: step.id,
-            tool: GIT_INIT_TOOL,
-            operation: decision.verdict.operation,
-            targets: decision.verdict.targets,
-            label: GIT_INIT_LABEL,
-          });
+          showStarted(step, GIT_INIT_TOOL, GIT_INIT_LABEL, decision.verdict);
           yield* create(writable, target, replace);
           return createdText(
             target,
@@ -395,27 +388,23 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
         });
 
       const call = (turn: CharmTurn, name: string, input: unknown, step?: HubCallStep) =>
-        Effect.gen(function* () {
-          if (name !== GIT_INIT_TOOL) return yield* new Refused({ message: `Hobbots has no tool named ${name}.` });
-          const decoded = yield* Schema.decodeUnknownEffect(GitInitInput)(input).pipe(
-            Effect.mapError(
-              () => new Refused({ message: "Give the folder to make a repository, as an absolute path." }),
-            ),
-          );
-          const access = yield* turn.currentAccess;
-          if (access === null || access.folders.length === 0) {
-            return yield* new Refused({
-              message: "You have no folders this turn, so there is nowhere to create a repository.",
-            });
-          }
-          return yield* init(turn, access, decoded.folder, step);
-        }).pipe(
-          Effect.map((text): HubToolAnswer => ({ text, refused: false })),
-          Effect.catchTag("Refused", (refused) =>
-            Effect.succeed<HubToolAnswer>({ text: refused.message, refused: true }),
-          ),
-          // What the hob reads is redacted, as every hub tool's answer is.
-          Effect.map((answer) => ({ ...answer, text: turn.redactor.text(answer.text) })),
+        hubAnswer(
+          turn.redactor,
+          Effect.gen(function* () {
+            if (name !== GIT_INIT_TOOL) return yield* new Refused({ message: `Hobbots has no tool named ${name}.` });
+            const decoded = yield* Schema.decodeUnknownEffect(GitInitInput)(input).pipe(
+              Effect.mapError(
+                () => new Refused({ message: "Give the folder to make a repository, as an absolute path." }),
+              ),
+            );
+            const access = yield* turn.currentAccess;
+            if (access === null || access.folders.length === 0) {
+              return yield* new Refused({
+                message: "You have no folders this turn, so there is nowhere to create a repository.",
+              });
+            }
+            return yield* init(turn, access, decoded.folder, step);
+          }).pipe(Effect.map((text): HubToolAnswer => ({ text, refused: false }))),
         );
 
       return LocalGitTools.of({
