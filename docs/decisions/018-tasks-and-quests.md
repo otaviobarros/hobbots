@@ -138,8 +138,8 @@ Hobs act through Hobbots tools on the runtime's control channel, as Charms are e
 | `start_quest` | A Task's owner | Turns its Task into a Quest with a goal, milestones, limits and the folders its work is in | Quest |
 | `delegate_task` | A Task's owner, which becomes or already is its lead | Gives another hob a Task with a brief, milestones and dependencies; the first call makes the Task a Quest | Task, Delegation |
 | `report_checkpoint` | A Task's owner | Reports a milestone, finding, blocker or progress | Checkpoint |
-| `ask` | A Task's owner | Asks a question; the server routes it to the nearest lead | Question |
-| `answer` | A lead | Answers a question from its subtree | The answer on the Question |
+| `ask` | A Task's owner | Asks a question, optionally with two to four choices and the one it recommends; the server routes it to the nearest lead | Question |
+| `answer` | A lead | Answers a question from its subtree; an answer that names a choice picks it | The answer on the Question |
 | `escalate` | A lead | Passes a question it cannot answer to the next lead, and from the top lead to you | The Question's new recipient |
 | `hand_off` | A lead | Gives one Task's result to another Task as context | Artifact reference on the receiving brief |
 | `wait_for` | A Task's owner | Waits for any or all of its child Tasks, steps or members' Tasks, without blocking its chat. The hob then ends its turn, and the Task shows as waiting once the turn has ended | Wait record |
