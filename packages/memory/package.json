@@ -3,11 +3,13 @@
   "private": true,
   "type": "module",
   "exports": {
+    ".": "./src/index.ts",
     "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "fetch-engine": "node scripts/fetch-engine.ts"
   },
   "dependencies": {
     "@hobbots/agents": "workspace:*",
@@ -15,6 +17,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@types/node": "26.6.5",
     "vitest": "5.0.5"
   }

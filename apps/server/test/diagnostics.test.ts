@@ -30,6 +30,7 @@ import {
   Thread,
   ThreadId,
 } from "@hobbots/domain";
+import { MemoryEngine } from "@hobbots/memory";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -90,6 +91,8 @@ const App = HobLifecycle.layer.pipe(
       NodeFolderChecks,
       FakeRuntimeLayer({ availability: "signedOut" }),
       RecoveryLog.layer,
+      // A copy of Hobbots whose memory engine failed its checksum: memory is off, the hub runs.
+      MemoryEngine.off("checksum"),
       Layer.succeed(
         WorkHold,
         WorkHold.of({
@@ -426,12 +429,14 @@ describe("Diagnostics", () => {
       expect.objectContaining({ tag: "SqlError", message: "database is locked near [redacted: GitHub token]" }),
     ]);
     expect(current.workHeld).toBe(false);
+    expect(current.memory).toMatchObject({ state: "off", offReason: "checksum", restarts: 0 });
 
     // A report without a Quest carries the same, in its own fields.
     const report = Schema.decodeUnknownSync(DiagnosticsReport)((await get("/api/diagnostics/report")).body);
     expect(report.quest).toBeNull();
     expect(report.stalled).toEqual(current.stalled);
     expect(report.recovery[0]?.message).toBe("database is locked near [redacted: GitHub token]");
+    expect(report.memory).toEqual(current.memory);
   });
 
   // covers OP-002, OP-003

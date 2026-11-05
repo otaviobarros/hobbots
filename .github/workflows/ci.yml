@@ -30,7 +30,16 @@ jobs:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
+      # The memory engine's contract tests run against the pinned ai-memory release (ADR 028), which
+      # fetch-engine downloads and checks against its pinned SHA-256; the pin names the cache.
+      - uses: actions/cache@v6
+        with:
+          path: packages/memory/engine
+          key: memory-engine-${{ runner.os }}-${{ hashFiles('packages/memory/src/engine/release.ts') }}
+      - run: pnpm --filter @hobbots/memory fetch-engine
       - run: pnpm check
+        env:
+          HOBBOTS_MEMORY_CONTRACT: 1
 
   postgres:
     name: Persistence and server tests (PostgreSQL)

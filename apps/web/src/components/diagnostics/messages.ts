@@ -7,6 +7,7 @@ export const messages = {
   now: {
     heading: "Right now",
     providers: "AI providers",
+    memory: "Memory",
     stalled: "Stalled work",
     noStalled: "No delivery or task has stalled.",
     recovery: "Last start",
@@ -20,6 +21,28 @@ export const messages = {
     signedOut: "Signed out",
     unavailable: "Unavailable",
     unverified: "Unverified",
+  },
+  memory: {
+    name: "Memory",
+    state: {
+      starting: "Starting",
+      running: "Running",
+      restarting: "Restarting",
+      off: "Off",
+    },
+    restarted: {
+      one: ({ when }: { when: string }) => `Memory stopped ${when} and Hobbots started it again.`,
+      other: ({ count, when }: { count: string; when: string }) =>
+        `Memory stopped ${count} times since Hobbots started, last ${when}. Hobbots started it again each time.`,
+    },
+    restarting: "Memory stopped. Hobbots is starting it again; hobs keep working without it meanwhile.",
+    off: {
+      disabled: "Memory is turned off on this hub. Hobs work without it.",
+      missing:
+        "This copy of Hobbots has no memory engine, so hobs work without memory. Reinstall Hobbots to bring it back.",
+      checksum:
+        "The memory engine in this copy of Hobbots is not the one it was built with, so it was not started. Reinstall Hobbots.",
+    },
   },
   runtimeFix: {
     notFound: ({ name }: { name: string }) =>

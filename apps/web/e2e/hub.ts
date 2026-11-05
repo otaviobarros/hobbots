@@ -55,6 +55,8 @@ export const startHub = async (dataDir: string, env: Record<string, string> = {}
       HOBBOTS_DATA_DIR: dataDir,
       HOBBOTS_WEB_DIR: join(web, "dist"),
       HOBBOTS_RUNTIME: "fake",
+      // No memory engine: browser tests run without the bundled ai-memory (ADR 028).
+      HOBBOTS_MEMORY: "off",
       // A hub on the real runtimes never finds a Codex installed on this machine unless a test gives it one.
       HOBBOTS_CODEX_EXECUTABLE: join(dataDir, "bin", "codex"),
       ...env,
