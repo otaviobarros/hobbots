@@ -1,6 +1,7 @@
 import { guardMemoryStore, MemoryStore, type MemoryStoreShape } from "@hobbots/agents";
 import {
   type MemoryActor,
+  type MemoryChangedLine,
   MemoryConflict,
   type MemoryExpected,
   type MemoryHit,
@@ -11,6 +12,7 @@ import {
   type MemoryScope,
   MemoryUnavailable,
   MemoryVersion,
+  type MemoryVersionChanges,
   memoryTitleOf,
   searchTerms,
 } from "@hobbots/domain";
@@ -77,6 +79,16 @@ const DeletedJson = Schema.Struct({
   pre_checkpoint: Schema.NullOr(Schema.String),
   checkpoint: Schema.NullOr(Schema.String),
 });
+const DiffJson = Schema.Struct({
+  diff: Schema.Struct({
+    from: Schema.NullOr(Schema.Struct({ id: Schema.String })),
+    status: Schema.String,
+    truncated: Schema.optionalKey(Schema.Boolean),
+    hunks: Schema.optionalKey(
+      Schema.Array(Schema.Struct({ lines: Schema.Array(Schema.Struct({ op: Schema.String, text: Schema.String })) })),
+    ),
+  }),
+});
 const ProjectsJson = Schema.Array(
   Schema.Struct({ workspace_name: Schema.String, project_name: Schema.String, page_count: Schema.Number }),
 );
@@ -99,6 +111,21 @@ const PIN_FIRST_MAX = 10;
 const READ_CONCURRENCY = 8;
 /** A forgotten page comes back from the wiki's Git revision before its delete, marked so. */
 const REVISION = "rev:";
+
+const OPS: Record<string, MemoryChangedLine["op"]> = { "+": "add", "-": "remove", " ": "same" };
+
+/** What a version changed, from the diff ai-memory answers against the version it replaced. */
+const changesOf = (json: typeof DiffJson.Type): MemoryVersionChanges => ({
+  first: json.diff.from === null,
+  lines: (json.diff.hunks ?? []).flatMap((hunk) =>
+    hunk.lines.flatMap((line) => {
+      const op = OPS[line.op];
+      return op === undefined ? [] : [{ op, text: line.text }];
+    }),
+  ),
+  // A diff too large to answer has no lines; one cut short says so.
+  cut: json.diff.status === "too_large" || json.diff.truncated === true,
+});
 
 const callerOf = (actor: MemoryActor): EngineCaller =>
   actor._tag === "You" ? ROOT : { as: "hob", name: engineActorOf(actor.agentId) };
@@ -361,6 +388,15 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       }).pipe(refusalIsOutage),
     changes: (_actor, scope, since) =>
       Effect.flatMap(pinnedPaths(scope), (pinned) => changesFrom(scope, since, pinned)).pipe(refusalIsOutage),
+    versionChanges: (_actor, scope, path, version) =>
+      client.get(`${pagesRoute(engineProjectOf(scope))}/history/${path}`, DiffJson, { to: version, limit: "1" }).pipe(
+        Effect.map((json): MemoryVersionChanges | null => changesOf(json)),
+        // An unknown version is a 404 and a malformed one a 400: neither is a version of this page.
+        Effect.catchTag("EngineRefused", (refused) =>
+          refused.status === 404 || refused.status === 400 ? Effect.succeed(null) : Effect.fail(refused),
+        ),
+        refusalIsOutage,
+      ),
     history: (_actor, scope, path) =>
       Effect.gen(function* () {
         const where = engineProjectOf(scope);

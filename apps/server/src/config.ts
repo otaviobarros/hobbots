@@ -98,4 +98,11 @@ export const ServerConfig = Config.all({
   fakeHubQuestions: Config.Literals(["off", "on"], "HOBBOTS_FAKE_HUB_QUESTIONS").pipe(
     Config.withDefault("off" as const),
   ),
+  // An in-memory stand-in for the memory engine (ADR 028), to try the Memory page without it:
+  // `empty`, `seeded` with pages for every hob, or `down` to show memory not answering.
+  fakeMemory: Config.Literals(["off", "empty", "seeded", "down"], "HOBBOTS_FAKE_MEMORY").pipe(
+    Config.withDefault("off" as const),
+  ),
+  // How often, in seconds, the hub asks memory what changed for Memory › What changed.
+  memoryLookSeconds: Config.Int("HOBBOTS_MEMORY_LOOK_SECONDS").pipe(Config.withDefault(60)),
 });

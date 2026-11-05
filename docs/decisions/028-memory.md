@@ -36,7 +36,7 @@ It offers what its first callers need, and nothing that mirrors ai-memory's rout
 | --- | --- | --- |
 | Recall | `search` over a set of scopes | `memory_search` |
 | Writes | `write` a page as an actor when it is as expected (new, a given version, or anything), `forget` (answering the version that brings the page back), `restore` a version | `memory_save`, approved shares, the Memory page |
-| Browse | `page`, `history`, `list` a scope up to a limit (pinned first, then the most recently changed), `changes` since a time, `scopes` that hold pages | The brief, the Memory page, What changed, Export |
+| Browse | `page`, `history`, `versionChanges` (what a version changed against the one it replaced), `list` a scope up to a limit (pinned first, then the most recently changed), `changes` since a time, `scopes` that hold pages | The brief, the Memory page, What changed, Export |
 | Health | `health` | Diagnostics, the outage banner |
 
 - **The brief is not an operation.** Its rules (Everyone first, then the hob's own pages, then its projects', pinned first, within a budget) are Hobbots policy, so they are a pure function in `@hobbots/agents` over `list` and `page`, and every engine gets them unchanged. `list` takes a limit, so a brief never loads a hob's whole memory.

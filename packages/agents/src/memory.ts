@@ -18,6 +18,7 @@ import {
   type MemoryScope,
   type MemoryUnavailable,
   type MemoryVersion,
+  type MemoryVersionChanges,
   memoryProjectIdentity,
   memoryScopeAllowed,
   type ThreadId,
@@ -45,6 +46,16 @@ export interface MemoryStoreShape {
   ) => Memory<ReadonlyArray<MemoryHit>>;
   /** The page at `path` as it is now, or null when there is none. */
   readonly page: (actor: MemoryActor, scope: MemoryScope, path: MemoryPath) => Memory<MemoryPage | null>;
+  /**
+   * What `version` of the page at `path` changed against the version it replaced, or null when the
+   * page has no such version: what the Memory page shows for a version in its History.
+   */
+  readonly versionChanges: (
+    actor: MemoryActor,
+    scope: MemoryScope,
+    path: MemoryPath,
+    version: MemoryVersion,
+  ) => Memory<MemoryVersionChanges | null>;
   /** The first `limit` pages in `scope`: pinned first, then the most recently changed. */
   readonly list: (actor: MemoryActor, scope: MemoryScope, limit: number) => Memory<ReadonlyArray<MemoryPageSummary>>;
   /** Every scope that holds a page now, among those `actor` may reach. */
@@ -146,6 +157,7 @@ const one = <Args extends readonly [MemoryScope, ...ReadonlyArray<unknown>]>(arg
 export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => ({
   search: guarded("search", store.search, ([scopes]) => scopes),
   page: guarded("read", store.page, one),
+  versionChanges: guarded("read", store.versionChanges, one),
   list: guarded("list", store.list, one),
   // Nothing to refuse: what the engine answers is narrowed to what the actor may reach.
   scopes: (actor) =>

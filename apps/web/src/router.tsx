@@ -1,4 +1,4 @@
-import { AgentId, AttemptId, HistoryFilter, TaskId, ThreadId } from "@hobbots/domain";
+import { AgentId, AttemptId, HistoryFilter, MemoryKind, MemoryScopeKey, TaskId, ThreadId } from "@hobbots/domain";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createHashHistory,
@@ -26,6 +26,8 @@ import { HobFilter } from "./components/hobs-page/hobs-page-model.ts";
 import { Home } from "./components/home/home.tsx";
 import { InboxTab } from "./components/inbox/inbox-items.ts";
 import { InboxPage } from "./components/inbox/inbox-page.tsx";
+import { ChangeFilter } from "./components/memory/memory-model.ts";
+import { MemoryPage } from "./components/memory/memory-page.tsx";
 import { OnboardingFirstHob } from "./components/onboarding/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding/onboarding-safety.tsx";
@@ -340,6 +342,28 @@ const usageRoute = createRoute({
     return <UsagePage days={days === 30 ? "30" : "7"} by={by ?? "hob"} />;
   },
 });
+// Memory (ADR 028): `?scope=` opens a scope and `&page=` a page in it, `&v=` shows what one version
+// changed, `?q=` searches (`&in=` in one scope) and `?view=changes` opens What changed.
+const memoryRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="home" />,
+  path: "memory",
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({
+      view: searchParam(Schema.Literal("changes")),
+      scope: searchParam(MemoryScopeKey),
+      page: searchParam(Schema.String),
+      v: searchParam(Schema.String),
+      kind: searchParam(MemoryKind),
+      q: searchParam(SearchText),
+      in: searchParam(MemoryScopeKey),
+      show: searchParam(ChangeFilter),
+    }),
+  ),
+  component: function Memory() {
+    return <MemoryPage search={memoryRoute.useSearch()} />;
+  },
+});
 // Settings opens on its overview; each section has its own address, such as `/settings/devices`.
 const settingsRoute = createRoute({
   getParentRoute: () => shellRoute,
@@ -484,6 +508,7 @@ const routeTree = rootRoute.addChildren([
     summonRoute,
     arrivedRoute,
     inboxRoute,
+    memoryRoute,
     usageRoute,
     settingsRoute,
     settingsSectionRoute,

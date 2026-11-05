@@ -305,6 +305,45 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       120_000,
     );
 
+    // covers ADR 028 (Browse), #958
+    it("[TC-GEN-230] answers what each version changed against the one it replaced, and nothing for a page it forgot", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const path = MemoryPath.make("howtos/preview.md");
+          const first = yield* store.write(
+            asPip,
+            pipsOwn,
+            draft("howtos/preview.md", "# Preview\n\nAsk Ada.\n"),
+            fresh,
+          );
+          const second = yield* store.write(
+            asPip,
+            pipsOwn,
+            draft("howtos/preview.md", "# Preview\n\nAsk Ada.\n\nLinks last 7 days.\n"),
+            { _tag: "Version", version: first },
+          );
+          // The first version adds all of itself.
+          const added = yield* store.versionChanges(you, pipsOwn, path, first);
+          expect(added).toMatchObject({ first: true, cut: false });
+          expect(added?.lines.filter((line) => line.text !== "")).toEqual([
+            { op: "add", text: "# Preview" },
+            { op: "add", text: "Ask Ada." },
+          ]);
+          // A later one adds and removes only what it changed; the rest is kept.
+          const changed = yield* store.versionChanges(you, pipsOwn, path, second);
+          expect(changed).toMatchObject({ first: false, cut: false });
+          expect(changed?.lines).toContainEqual({ op: "add", text: "Links last 7 days." });
+          expect(changed?.lines).toContainEqual({ op: "same", text: "Ask Ada." });
+          expect(changed?.lines.some((line) => line.op === "remove")).toBe(false);
+          // A version of another page, or of a page that is gone, has nothing to show.
+          expect(yield* store.versionChanges(you, pipsOwn, MemoryPath.make("howtos/other.md"), first)).toBeNull();
+          yield* store.forget(you, pipsOwn, path, any);
+          expect(yield* store.versionChanges(you, pipsOwn, path, first)).toBeNull();
+          // A hob never reads another hob's versions.
+          expect(yield* died(store.versionChanges(asQuill, pipsOwn, path, first))).toBe(true);
+        }),
+      ));
+
     // covers ADR 028 (The MemoryStore service, Capture and summaries)
     it("[TC-GEN-307] keeps a thread's capture in its hob's own memory, refusing any other scope", () =>
       run(({ store }) =>
