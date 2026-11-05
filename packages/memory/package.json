@@ -1,0 +1,21 @@
+{
+  "name": "@hobbots/memory",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hobbots/agents": "workspace:*",
+    "@hobbots/domain": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "vitest": "5.0.5"
+  }
+}

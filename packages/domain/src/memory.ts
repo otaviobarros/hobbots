@@ -1,0 +1,178 @@
+import { Schema } from "effect";
+import { AgentId } from "./ids.ts";
+
+/**
+ * Memory in Hobbots' own words (ADR 028). The engine behind it, ai-memory today, never shows in
+ * these types: no workspaces, projects, keys or routes.
+ */
+
+/**
+ * Who a project is across clones: its normalized Git `origin` remote, or the folder's name when it
+ * has no remote.
+ */
+export const MemoryProjectIdentity = Schema.String.check(Schema.isNonEmpty()).pipe(
+  Schema.brand("MemoryProjectIdentity"),
+);
+export type MemoryProjectIdentity = typeof MemoryProjectIdentity.Type;
+
+/** Whose memory a page is in: one hob's own, a project's, or everyone's. A thread is not a scope. */
+export const MemoryScope = Schema.Union([
+  Schema.TaggedStruct("Hob", { agentId: AgentId }),
+  Schema.TaggedStruct("Project", { identity: MemoryProjectIdentity }),
+  Schema.TaggedStruct("Everyone", {}),
+]);
+export type MemoryScope = typeof MemoryScope.Type;
+
+/** Who wrote a version of a page: a hob, or you. */
+export const MemoryAuthor = Schema.Union([
+  Schema.TaggedStruct("Hob", { agentId: AgentId }),
+  Schema.TaggedStruct("You", {}),
+]);
+export type MemoryAuthor = typeof MemoryAuthor.Type;
+
+/**
+ * Who a memory call is made for, and so what it may reach. The hub builds it from what it knows, never
+ * from a tool's input: a hob's id and the project identities of the folders it works in.
+ */
+export type MemoryActor =
+  | {
+      readonly _tag: "Hob";
+      readonly agentId: AgentId;
+      readonly projects: ReadonlyArray<MemoryProjectIdentity>;
+    }
+  | { readonly _tag: "You" };
+
+/** The author a call's actor writes as. */
+export const memoryAuthorOf = (actor: MemoryActor): MemoryAuthor =>
+  actor._tag === "You" ? { _tag: "You" } : { _tag: "Hob", agentId: actor.agentId };
+
+/**
+ * A page's place inside its scope: a relative markdown path such as `notes/tests.md`, of lower-case
+ * letters, digits, `-`, `_` and `.`, in folders, with no empty, `.` or `..` part.
+ */
+export const MemoryPath = Schema.String.check(
+  Schema.isPattern(/^(?:[a-z0-9_][a-z0-9._-]*\/)*[a-z0-9_][a-z0-9._-]*\.md$/, {
+    message: "A memory path is a relative .md path of lower-case letters, digits, '-', '_' and '.'.",
+  }),
+  Schema.isMaxLength(200),
+).pipe(Schema.brand("MemoryPath"));
+export type MemoryPath = typeof MemoryPath.Type;
+
+/** One version of a page, opaque. Every write makes a new one. */
+export const MemoryVersion = Schema.String.pipe(Schema.brand("MemoryVersion"));
+export type MemoryVersion = typeof MemoryVersion.Type;
+
+/** A page as it is now. */
+export const MemoryPage = Schema.Struct({
+  scope: MemoryScope,
+  path: MemoryPath,
+  markdown: Schema.String,
+  tags: Schema.Array(Schema.String),
+  pinned: Schema.Boolean,
+  version: MemoryVersion,
+  /** Who wrote this version, or null when the engine has no record of it. */
+  author: Schema.NullOr(MemoryAuthor),
+  updatedAt: Schema.String,
+});
+export type MemoryPage = typeof MemoryPage.Type;
+
+/** A page in a list, without its markdown. */
+export const MemoryPageSummary = Schema.Struct({
+  scope: MemoryScope,
+  path: MemoryPath,
+  title: Schema.String,
+  pinned: Schema.Boolean,
+  updatedAt: Schema.String,
+});
+export type MemoryPageSummary = typeof MemoryPageSummary.Type;
+
+/** A page that matched a search, with the words around the match. */
+export const MemoryHit = Schema.Struct({
+  scope: MemoryScope,
+  path: MemoryPath,
+  title: Schema.String,
+  snippet: Schema.String,
+});
+export type MemoryHit = typeof MemoryHit.Type;
+
+/** One version in a page's history, newest first. */
+export const MemoryPageVersion = Schema.Struct({
+  version: MemoryVersion,
+  author: Schema.NullOr(MemoryAuthor),
+  writtenAt: Schema.String,
+  latest: Schema.Boolean,
+});
+export type MemoryPageVersion = typeof MemoryPageVersion.Type;
+
+/** What a write or a forget expects to find, so a change made meanwhile is never overwritten unseen. */
+export type MemoryExpected =
+  /** Whatever is there. */
+  | { readonly _tag: "Any" }
+  /** No page at that path yet. */
+  | { readonly _tag: "New" }
+  /** This version is still the latest. */
+  | { readonly _tag: "Version"; readonly version: MemoryVersion };
+
+/** A page to write. Its title is its first `# ` heading. */
+export interface MemoryDraft {
+  readonly path: MemoryPath;
+  readonly markdown: string;
+  readonly tags: ReadonlyArray<string>;
+  readonly pinned: boolean;
+}
+
+/** The memory engine did not answer. Callers treat it as an outage, never as an empty memory. */
+export class MemoryUnavailable extends Schema.TaggedError<MemoryUnavailable>()("MemoryUnavailable", {
+  message: Schema.String,
+}) {}
+
+/** A write or a forget lost to a newer version, or found no page where it expected one. */
+export class MemoryConflict extends Schema.TaggedError<MemoryConflict>()("MemoryConflict", {
+  path: MemoryPath,
+  /** The latest version now, or null when there is no page. */
+  current: Schema.NullOr(MemoryVersion),
+}) {}
+
+/**
+ * Whether `actor` may touch `scope`. You may touch every scope. A hob may touch its own memory, the
+ * projects it works in and everyone's, never another hob's or a project it does not work in. Whether
+ * a share needs your review is decided by the caller before it gets here.
+ */
+export const memoryScopeAllowed = (actor: MemoryActor, scope: MemoryScope): boolean => {
+  if (actor._tag === "You") return true;
+  switch (scope._tag) {
+    case "Hob":
+      return scope.agentId === actor.agentId;
+    case "Project":
+      return actor.projects.includes(scope.identity);
+    case "Everyone":
+      return true;
+  }
+};
+
+/**
+ * A project's identity from its folder's Git `origin` remote and the folder's name, so two clones of
+ * one repository share it: the host and path, lower case, without scheme, user, port or `.git`.
+ * `git@github.com:Me/App.git`, `https://github.com/me/app` and `ssh://git@github.com:22/me/app.git`
+ * all give `github.com/me/app`. A folder with no remote uses its own name.
+ */
+export const memoryProjectIdentity = (origin: string | null, folderName: string): MemoryProjectIdentity => {
+  const remote = origin === null ? null : remoteIdentity(origin);
+  return MemoryProjectIdentity.make(remote ?? (folderName.trim().toLowerCase() || "folder"));
+};
+
+const remoteIdentity = (origin: string): string | null => {
+  const trimmed = origin.trim();
+  // `user@host:path`, Git's scp-like form, has no scheme and no slash before the colon.
+  const scp = /^(?:[^@/]+@)?([^/:]+):(?!\/)(.+)$/.exec(trimmed);
+  const url = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i.exec(trimmed);
+  const parts = url ?? scp;
+  if (!parts) return null;
+  const path = (parts[2] as string)
+    .replace(/[?#].*$/, "")
+    .replace(/\/+$/, "")
+    .replace(/\.git$/i, "")
+    .replace(/^\/+/, "");
+  if (path === "") return null;
+  return `${(parts[1] as string).toLowerCase()}/${path.toLowerCase()}`;
+};
