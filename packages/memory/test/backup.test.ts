@@ -21,7 +21,11 @@ afterEach(() => {
   for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true });
 });
 
-const keys: MemoryKeys = { root: Redacted.make("1".repeat(64)), proxy: Redacted.make("2".repeat(64)) };
+const keys: MemoryKeys = {
+  root: Redacted.make("1".repeat(64)),
+  proxy: Redacted.make("2".repeat(64)),
+  model: Redacted.make("3".repeat(64)),
+};
 
 /** An engine's data folder as a stopped engine leaves it: a wiki with Git, a database, logs and the hub's config. */
 const memoryFolder = (files: Record<string, string> = {}) => {
@@ -34,7 +38,7 @@ const memoryFolder = (files: Record<string, string> = {}) => {
   write("wiki/.git/HEAD", "ref: refs/heads/master\n");
   write("db/memory.sqlite", "SQLite format 3\u0000");
   write("logs/ai-memory.log", "started");
-  write("config.toml", renderEngineConfig(NO_MODEL));
+  write("config.toml", renderEngineConfig(NO_MODEL, null));
   for (const [path, text] of Object.entries(files)) write(path, text);
   return memory;
 };

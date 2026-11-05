@@ -15,24 +15,32 @@ const codexEfforts = (model: Model): ReadonlyArray<Effort> =>
     .filter((effort) => effort !== "ultra")
     .filter(isEffort);
 
+/**
+ * Codex's small model, for light work such as memory's: the first it lists as a `mini`, the name
+ * OpenAI gives its small models. Codex's list says nothing of size, so none is named without one.
+ */
+const smallOf = (models: ReadonlyArray<Model>) => models.find((model) => /-mini$/.test(model.model))?.model;
+
 /** Codex's model list in Hobbots' shape: the models it does not hide, in its order. */
-export const toCodexModels = (models: ReadonlyArray<Model>): RuntimeModels =>
-  new RuntimeModels({
+export const toCodexModels = (models: ReadonlyArray<Model>): RuntimeModels => {
+  const visible = models.filter((model) => !model.hidden);
+  const small = smallOf(visible);
+  return new RuntimeModels({
     runtime: "codex",
     source: "runtime",
-    models: models
-      .filter((model) => !model.hidden)
-      .map(
-        (model) =>
-          new RuntimeModel({
-            id: model.model,
-            displayName: model.displayName,
-            description: model.description,
-            efforts: codexEfforts(model),
-            main: true,
-          }),
-      ),
+    ...(small === undefined ? {} : { small }),
+    models: visible.map(
+      (model) =>
+        new RuntimeModel({
+          id: model.model,
+          displayName: model.displayName,
+          description: model.description,
+          efforts: codexEfforts(model),
+          main: true,
+        }),
+    ),
   });
+};
 
 /** Offered while Codex cannot list its models, such as before it is installed: none. */
 export const codexFallbackModels = new RuntimeModels({ runtime: "codex", source: "fallback", models: [] });

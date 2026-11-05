@@ -1,12 +1,14 @@
-import { DEFAULT_MEMORY_SETTINGS, type MemoryEngineHealth } from "@hobbots/domain";
+import { DEFAULT_MEMORY_SETTINGS, type MemoryEngineHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
+  effortOptions,
   engineTag,
   fallbackOptions,
   keptLine,
   modelHint,
   modelOptions,
   shareAnswer,
+  shownModel,
   stateNote,
   taskOptions,
   usageLine,
@@ -23,39 +25,89 @@ const engine = (fields: Partial<MemoryEngineHealth> = {}): MemoryEngineHealth =>
   ...fields,
 });
 
+const model = (id: string, displayName: string, main = true, efforts: RuntimeModel["efforts"] = ["low", "high"]) =>
+  new RuntimeModel({ id, displayName, description: "", efforts, main });
+
+/** What a runtime reports, as the brain picker reads it: its default row, main models and one more. */
+const claude = new RuntimeModels({
+  runtime: "claude-code",
+  source: "runtime",
+  small: "quick",
+  models: [
+    model("default", "Default"),
+    model("careful", "Careful"),
+    model("quick", "Quick", true, []),
+    model("pinned-1", "Pinned", false),
+  ],
+});
+const codex = new RuntimeModels({
+  runtime: "codex",
+  source: "runtime",
+  models: [model("big", "Big"), model("small", "Small")],
+});
+
 describe("the memory model's choices", () => {
-  it("offers each provider's models, and none for No AI", () => {
-    expect(modelOptions("claude").map((option) => option.label)).toEqual(["Haiku", "Sonnet", "Opus"]);
-    expect(modelOptions("chatgpt").map((option) => option.label)).toEqual(["GPT-5.4 mini", "GPT-5.5"]);
-    expect(modelOptions("none")).toEqual([]);
+  it("offers the runtime's own models as the brain picker does, and the efforts the shown model takes", () => {
+    expect(modelOptions(claude, null).map((option) => option.label)).toEqual(["Careful", "Quick"]);
+    expect(modelOptions(claude, "pinned-1").map((option) => option.label)).toEqual(["Careful", "Quick", "Pinned"]);
+    expect(modelOptions(undefined, null)).toEqual([]);
+    // No model chosen: the runtime's smallest, the one it names, else its last main model.
+    expect(shownModel(DEFAULT_MEMORY_SETTINGS, claude)).toBe("quick");
+    expect(shownModel({ ...DEFAULT_MEMORY_SETTINGS, provider: "chatgpt" }, codex)).toBe("small");
+    expect(effortOptions(claude, "careful").map((option) => option.label)).toEqual(["Low", "High"]);
+    expect(effortOptions(claude, "quick")).toEqual([]);
   });
 
-  it("moves to the new provider's first model, and keeps the model under No AI", () => {
-    const sonnet = { ...DEFAULT_MEMORY_SETTINGS, model: "sonnet" as const };
-    expect(withProvider(sonnet, "chatgpt")).toMatchObject({ provider: "chatgpt", model: "mini" });
-    expect(withProvider(sonnet, "none")).toMatchObject({ provider: "none", model: "sonnet" });
-    expect(withProvider({ ...sonnet, provider: "none" }, "claude")).toMatchObject({ model: "sonnet" });
+  it("moves to the new provider's smallest model with tasks on the same, and keeps everything under No AI", () => {
+    const careful = {
+      ...DEFAULT_MEMORY_SETTINGS,
+      model: "careful",
+      tasks: { summaries: "none", check: "careful", answers: "same" },
+    };
+    expect(withProvider(careful, "chatgpt")).toMatchObject({
+      provider: "chatgpt",
+      model: null,
+      tasks: { summaries: "none", check: "same", answers: "same" },
+    });
+    expect(withProvider(careful, "none")).toMatchObject({ provider: "none", model: "careful" });
+    expect(withProvider({ ...careful, provider: "none" }, "claude")).toMatchObject({ model: "careful" });
   });
 
-  it("names the other provider's small model as the fallback, and the stronger model per task", () => {
-    expect(fallbackOptions("claude").map((option) => option.label)).toEqual([
+  it("names the other provider's smallest model as the fallback, and the runtime's models per task", () => {
+    expect(fallbackOptions("claude", codex).map((option) => option.label)).toEqual([
       "Write simple summaries",
-      "Use ChatGPT GPT-5.4 mini",
+      "Use ChatGPT Small",
     ]);
-    expect(fallbackOptions("chatgpt")[1]?.label).toBe("Use Claude Haiku");
-    expect(taskOptions("claude", true).map((option) => option.label)).toEqual(["Same", "Sonnet", "No AI"]);
-    expect(taskOptions("chatgpt", false).map((option) => option.label)).toEqual(["Same", "GPT-5.5"]);
-    expect(taskOptions("none", false)[1]?.unavailable).toBe("Pick a provider first.");
+    expect(fallbackOptions("chatgpt", claude)[1]?.label).toBe("Use Claude Quick");
+    expect(fallbackOptions("chatgpt", undefined)[1]?.label).toBe("Use Claude");
+    expect(taskOptions(claude, "same", true).map((option) => option.label)).toEqual([
+      "Same",
+      "Careful",
+      "Quick",
+      "No AI",
+    ]);
+    expect(taskOptions(codex, "same", false).map((option) => option.label)).toEqual(["Same", "Big", "Small"]);
   });
 
-  it("warns about high effort, and says what No AI and a missing key mean", () => {
-    expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, effort: "high" }).warn).toBe(true);
-    expect(modelHint(DEFAULT_MEMORY_SETTINGS).text).toBe(
-      "Uses an Anthropic API key. A small, fast model is enough for summaries.",
+  it("says which sign-in it uses, warns about high effort, and says what memory runs with instead", () => {
+    expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, effort: "high" }, claude).warn).toBe(true);
+    expect(modelHint(DEFAULT_MEMORY_SETTINGS, claude).text).toBe(
+      "Uses your Claude Code sign-in. A small, fast model is enough for summaries.",
     );
-    expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, provider: "none" }).text).toContain("no AI");
-    expect(stateNote({ _tag: "NeedsKey", provider: "chatgpt" })).toContain("can't hand ChatGPT a key yet");
-    expect(stateNote({ _tag: "Model" })).toBeNull();
+    expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, provider: "chatgpt", model: "big" }, codex).text).toBe(
+      "Uses your ChatGPT sign-in through Codex. A bigger model is more careful, and uses more of your plan.",
+    );
+    expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, provider: "none" }, undefined).text).toContain("no AI");
+    expect(stateNote({ _tag: "Model", model: "quick", replaced: null }, claude)).toBeNull();
+    expect(stateNote({ _tag: "Model", model: "quick", replaced: "gone-1" }, claude)).toBe(
+      "gone-1 is no longer offered, so memory uses Quick instead.",
+    );
+    expect(stateNote({ _tag: "Unavailable", provider: "chatgpt", state: "limited", resetsAt: null }, codex)).toContain(
+      "Your ChatGPT plan reached its limit",
+    );
+    expect(stateNote({ _tag: "Unavailable", provider: "claude", state: "signedOut", resetsAt: null }, claude)).toBe(
+      "Until it is back, summaries follow your choice below.",
+    );
   });
 });
 
@@ -93,11 +145,19 @@ describe("how shares follow the preset", () => {
 describe("Usage's Memory line", () => {
   it("counts calls and tokens, or says why memory makes none", () => {
     const usage = { calls: 40, inputTokens: 90_000, outputTokens: 10_000, since: null };
-    expect(usageLine({ state: { _tag: "Model" }, usage }, "en-US")).toBe(
+    expect(usageLine({ state: { _tag: "Model", model: "quick", replaced: null }, usage }, "en-US")).toBe(
       "40 calls · 100K tokens since memory last started",
     );
     expect(usageLine({ state: { _tag: "NoAi" }, usage: null })).toBe("No AI: memory makes no model calls.");
-    expect(usageLine({ state: { _tag: "NeedsKey", provider: "claude" }, usage: null })).toContain("no AI");
+    expect(
+      usageLine({
+        state: { _tag: "Unavailable", provider: "claude", state: "signedOut", resetsAt: null },
+        usage: null,
+      }),
+    ).toBe("Claude is signed out, so summaries follow your fallback for now.");
+    expect(
+      usageLine({ state: { _tag: "Unavailable", provider: "chatgpt", state: "limited", resetsAt: null }, usage: null }),
+    ).toBe("ChatGPT is at its plan's limit, so summaries follow your fallback for now.");
     expect(usageLine(undefined)).toBeNull();
   });
 });

@@ -478,6 +478,12 @@ export const brainOptions = (request: Pick<PromptRequest, "model" | "effort">): 
 });
 
 /**
+ * Claude Code's alias for its fastest model, documented as "Fastest for quick answers"
+ * (https://code.claude.com/docs/en/model-config): what light work, such as memory's, runs on.
+ */
+const SMALL_ALIAS = "haiku";
+
+/**
  * Claude Code's model list in Hobbots' shape. A model without effort support takes no effort level.
  * Its aliases, such as "opus", are the main models; pinned ids such as "claude-opus-4-8" are older
  * versions kept for hobs that need them.
@@ -486,6 +492,7 @@ export const toRuntimeModels = (infos: ReadonlyArray<ModelInfo>): RuntimeModels 
   new RuntimeModels({
     runtime: "claude-code",
     source: "runtime",
+    ...(infos.some((info) => info.value === SMALL_ALIAS) ? { small: SMALL_ALIAS } : {}),
     models: infos.map(
       (info) =>
         new RuntimeModel({
@@ -508,6 +515,7 @@ const allEfforts = ["low", "medium", "high", "xhigh", "max"] as const;
 export const fallbackModels = new RuntimeModels({
   runtime: "claude-code",
   source: "fallback",
+  small: SMALL_ALIAS,
   models: [
     { id: "default", displayName: "Default", description: "Claude Code's recommended model for your account" },
     { id: "opus", displayName: "Opus", description: "Best for everyday, complex tasks" },
@@ -1131,6 +1139,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                       append: instructions,
                     },
                     ...(request.sessionId ? { resume: request.sessionId } : {}),
+                    // A turn of no hob's keeps no session on disk.
+                    ...(request.ephemeral ? { persistSession: false } : {}),
                     // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
                     ...(signingAgent ? { sandbox: { network: { allowUnixSockets: [signingAgent] } } } : {}),
                     ...brainOptions(request),

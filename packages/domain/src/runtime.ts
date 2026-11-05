@@ -77,4 +77,9 @@ export class RuntimeModels extends Schema.Class<RuntimeModels>("RuntimeModels")(
   /** "runtime" when the installed runtime listed them; "fallback" for the documented list. */
   source: Schema.Literals(["runtime", "fallback"]),
   models: Schema.Array(RuntimeModel),
+  /**
+   * The id of the model the runtime offers for quick, light work, such as memory's (ADR 028), when
+   * the adapter can tell which it is.
+   */
+  small: Schema.optionalKey(Schema.String),
 }) {}

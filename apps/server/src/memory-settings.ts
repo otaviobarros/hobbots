@@ -1,9 +1,16 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { type RuntimeAdapters, runtimeAdapters } from "@hobbots/agents";
 import { HobbotsApi, type MemoryOverview } from "@hobbots/api";
-import { DEFAULT_MEMORY_SETTINGS, type MemoryModelVendor, MemorySettings } from "@hobbots/domain";
-import { engineSettingsFor, MemoryEngine } from "@hobbots/memory";
+import {
+  DEFAULT_MEMORY_SETTINGS,
+  MEMORY_RUNTIMES,
+  type MemoryModelState,
+  MemorySettings,
+  memoryModelOn,
+} from "@hobbots/domain";
+import { engineSettingsFor, MemoryEngine, MemoryModelEndpoint, type MemoryModelEndpointShape } from "@hobbots/memory";
 import { Context, Effect, Layer, Option, Ref, Schema, Semaphore } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 
@@ -35,11 +42,30 @@ const writeMemorySettings = (dataDir: string, settings: MemorySettings): void =>
 };
 
 /**
- * The providers the hub can hand the memory engine a credential for. None yet: the engine refuses
- * to start with a provider it has no credential for, and the hub gives it no credential but its
- * own bearers (ADR 028), so memory runs with no AI until a provider's key can reach it (#972).
+ * What memory runs with now (ADR 028): the provider's runtime as its own health and models report
+ * it, through the same adapter the brain picker reads, and whether its plan refused the last memory
+ * task for its limit.
  */
-export const memoryModelCanRun = (_provider: MemoryModelVendor): boolean => false;
+const memoryModelState = (
+  settings: MemorySettings,
+  adapters: RuntimeAdapters,
+  endpoint: MemoryModelEndpointShape | undefined,
+): Effect.Effect<MemoryModelState> =>
+  Effect.gen(function* () {
+    const provider = settings.provider;
+    if (provider === "none") return { _tag: "NoAi" } as const;
+    const runtime = MEMORY_RUNTIMES[provider];
+    const adapter = adapters(runtime);
+    if (adapter === undefined) return { _tag: "Unavailable", provider, state: "unavailable", resetsAt: null } as const;
+    const health = yield* adapter.health;
+    if (health.availability !== "ready")
+      return { _tag: "Unavailable", provider, state: health.availability, resetsAt: null } as const;
+    const limit = endpoint === undefined ? Option.none() : yield* endpoint.limited(runtime);
+    if (Option.isSome(limit))
+      return { _tag: "Unavailable", provider, state: "limited", resetsAt: limit.value.resetsAt } as const;
+    const { model, replaced } = memoryModelOn(yield* adapter.models, settings.model);
+    return { _tag: "Model", model: model?.id ?? null, replaced } as const;
+  });
 
 interface MemorySettingsStoreShape {
   readonly get: Effect.Effect<MemorySettings>;
@@ -119,13 +145,15 @@ export const MemoryHandlers = HttpApiBuilder.group(HobbotsApi, "memory", (handle
       bytes: Effect.succeed(null),
     }));
     const engine = Option.getOrUndefined(yield* Effect.serviceOption(MemoryEngine));
+    const endpoint = Option.getOrUndefined(yield* Effect.serviceOption(MemoryModelEndpoint));
+    const adapters = yield* runtimeAdapters;
 
     const overview = Effect.gen(function* () {
       const settings = yield* store.get;
       const status = engine === undefined ? null : yield* engine.status;
       return {
         settings,
-        state: engineSettingsFor(settings, memoryModelCanRun).state,
+        state: yield* memoryModelState(settings, adapters, endpoint),
         engine: engine === undefined ? null : yield* engine.health,
         pages: status?.pages ?? null,
         bytes: yield* store.bytes,
@@ -138,7 +166,7 @@ export const MemoryHandlers = HttpApiBuilder.group(HobbotsApi, "memory", (handle
       settings: ({ payload }) =>
         Effect.gen(function* () {
           yield* store.set(payload);
-          if (engine !== undefined) yield* engine.reconfigure(engineSettingsFor(payload, memoryModelCanRun).engine);
+          if (engine !== undefined) yield* engine.reconfigure(engineSettingsFor(payload));
           return yield* overview;
         }),
     });
