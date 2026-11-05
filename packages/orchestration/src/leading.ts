@@ -27,6 +27,7 @@ import {
   newId,
   outcomesShown,
   ownTask,
+  questionChoices,
   refuse,
 } from "./call-scope.ts";
 
@@ -61,10 +62,12 @@ const waitingOn = (task: Task, tree: TaskTree): ReadonlyArray<string> => {
 const describeQuestion = (question: Question, caller: string) => ({
   question_id: question.id as string,
   question: question.text,
+  ...questionChoices(question),
   state: question.state,
   ...(question.state === "open" && { waits_for: nameFor(question.recipientId, caller) }),
   ...(question.state === "answered" && {
     answer: question.answer,
+    ...(question.options.length > 0 && { picked_a_choice: question.picked !== null }),
     answered_by: nameFor(question.answeredBy?._tag === "Lead" ? question.answeredBy.agentId : null, caller),
   }),
 });
