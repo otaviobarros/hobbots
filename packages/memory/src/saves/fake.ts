@@ -8,10 +8,11 @@ import { Effect, Layer, Option } from "effect";
  */
 export const makeMemorySavesFake = () => {
   const saves: Array<MemorySave> = [];
+  const journaled: Array<EventEnvelope> = [];
   let sequence = 0;
   const journal = (payload: JournaledEvent & { readonly save: MemorySave }) => {
     sequence += 1;
-    return new EventEnvelope({
+    const envelope = new EventEnvelope({
       id: `memory-save-${sequence}`,
       sequence,
       schemaVersion: EVENT_SCHEMA_VERSIONS[payload._tag],
@@ -25,6 +26,8 @@ export const makeMemorySavesFake = () => {
       causationId: null,
       payload,
     });
+    journaled.push(envelope);
+    return envelope;
   };
   const service = MemorySaves.of({
     begin: (save, also) =>
@@ -50,7 +53,7 @@ export const makeMemorySavesFake = () => {
       }),
     unsent: Effect.sync(() => saves.filter((save) => save.state === "sending" || save.state === "queued")),
   });
-  return { service, saves: () => [...saves] };
+  return { service, saves: () => [...saves], journaled: () => [...journaled] };
 };
 
 export const MemorySavesFake = Layer.sync(MemorySaves, () => makeMemorySavesFake().service);

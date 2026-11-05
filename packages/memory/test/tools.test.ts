@@ -36,6 +36,7 @@ import { Effect, Layer } from "effect";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { MemoryToolsLive } from "../src/index.ts";
 import { makeMemorySavesFake, makeMemoryStoreFake } from "../src/testing.ts";
+import { engineDataDir, engineEnabled, startEngineStore } from "./engine-store.ts";
 
 // #955: the memory tools on the hub (ADR 028), over the in-memory store, with the hub's policy engine
 // and each folder's origin remote as given.
@@ -105,21 +106,22 @@ const userApprovals = (
 });
 
 /** One hub's memory: its tools, its store and save records, every call that reached the store, and its shares. */
-const makeHub = (options: { readonly shares?: boolean } = {}) => {
+const makeHub = (options: { readonly shares?: boolean; readonly store?: MemoryStoreShape } = {}) => {
   const memory = makeMemoryStoreFake();
+  const backing = options.store ?? memory.store;
   const saves = makeMemorySavesFake();
   const reached: Array<string> = [];
   const store: MemoryStoreShape = {
-    ...memory.store,
+    ...backing,
     search: (...args) =>
       Effect.suspend(() => {
         reached.push("search");
-        return memory.store.search(...args);
+        return backing.search(...args);
       }),
     write: (...args) =>
       Effect.suspend(() => {
         reached.push("write");
-        return memory.store.write(...args);
+        return backing.write(...args);
       }),
   };
   const shared: Array<MemoryShareRequest> = [];
@@ -221,16 +223,22 @@ describe("the memory tools", () => {
   // covers ADR 028 (The memory tools)
   it("[TC-GEN-244] records and journals a save before it is sent, redacted, as the hob that made it", async () => {
     const hub = makeHub();
-    await callOn(hub, MEMORY_SAVE_TOOL, page("tests", { markdown: `# Tests\n\nThe token is ${SECRET}.` }));
+    const secretly = { markdown: `# Tests\n\nThe token is ${SECRET}.`, tags: [`token-${SECRET}`] };
+    await callOn(hub, MEMORY_SAVE_TOOL, page(`tests-${SECRET}`, secretly));
+    // Nowhere in the record or its journal events: not the page, its tags, the kept input or the key.
+    expect(JSON.stringify(hub.saves.saves())).not.toContain(SECRET);
+    expect(JSON.stringify(hub.saves.journaled())).not.toContain(SECRET);
+    expect(hub.saves.journaled().map((event) => event.type)).toEqual(["MemorySaveRecorded", "MemorySaveChanged"]);
+    // The same call again still finds its first save, because redaction is the same each time.
+    await callOn(hub, MEMORY_SAVE_TOOL, page(`tests-${SECRET}`, secretly));
+    expect(hub.reached.filter((call) => call === "write")).toHaveLength(1);
     const [save] = hub.saves.saves();
     expect(save).toMatchObject({
       agentId: pip,
       work: "reply:m1",
-      key: "tests",
       scope: { _tag: "Hob", agentId: pip },
       state: "saved",
     });
-    expect(save?.markdown).not.toContain(SECRET);
     const stored = await Effect.runPromise(
       hub.memory.store.page({ _tag: "You" }, { _tag: "Hob", agentId: pip }, MemoryPath.make("notes/tests.md")),
     );
@@ -423,4 +431,28 @@ describe("the memory tools", () => {
     // A share is never written by the tools themselves.
     expect(hub.reached).toEqual([]);
   });
+});
+
+// #955 on the bundled ai-memory, the store the hub gives a real runtime's hobs: the same tools, scopes
+// and answers as on the in-memory store.
+describe.runIf(engineEnabled)("the memory tools on the bundled ai-memory", () => {
+  // covers ADR 028 (The memory tools)
+  it("[TC-GEN-255] save to the hob's own memory, find it in its next thread, write once for a retried key, and keep it from another hob", async () => {
+    const { dataDir, keys } = engineDataDir();
+    const { store } = await Effect.runPromise(startEngineStore(dataDir, keys));
+    const hub = makeHub({ store });
+    const saved = await callOn(hub, MEMORY_SAVE_TOOL, page("tests"));
+    expect(saved.answer).toEqual({
+      text: "Saved notes/tests.md to your memory. A later thread can find it with memory_search.",
+      refused: false,
+    });
+    const again = await callOn(hub, MEMORY_SAVE_TOOL, page("tests"));
+    expect(again.answer).toEqual(saved.answer);
+    expect(hub.reached.filter((call) => call === "write")).toHaveLength(1);
+    const found = await callOn(hub, MEMORY_SEARCH_TOOL, { query: "pnpm test" }, { work: "reply:m2" });
+    expect(found.answer?.text).toContain("Tests (notes/tests.md, in your memory)");
+    const theirs = await callOn(hub, MEMORY_SEARCH_TOOL, { query: "pnpm test" }, { as: quill, work: "reply:m3" });
+    expect(theirs.answer?.text).not.toBe(MEMORY_UNAVAILABLE_TEXT);
+    expect(theirs.answer?.text).not.toContain("notes/tests.md");
+  }, 120_000);
 });

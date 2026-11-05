@@ -45,6 +45,7 @@ import {
   loadOrCreateMemoryKeys,
   MemoryEngine,
   type MemoryKeys,
+  MemoryStoreAiMemory,
   MemoryToolsLive,
 } from "@hobbots/memory";
 import { MemoryStoreFake } from "@hobbots/memory/testing";
@@ -120,22 +121,18 @@ import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
 
 /**
- * The memory tools (ADR 028), beside the Task tools on every runtime. On the fake runtime they keep
- * memory in the hub's process, to try memory without the engine; with a real runtime, they come with
- * the ai-memory store.
+ * The memory tools (ADR 028), beside the Task tools on every runtime while memory is on. A real
+ * runtime's hobs reach the bundled ai-memory through the engine the hub runs; the fake runtime keeps
+ * memory in the hub's process, to try memory without the engine. With memory off there are none.
  */
-const memoryToolsLayer = (config: { readonly runtime: string }) =>
-  config.runtime === "fake"
-    ? MemoryToolsLive.pipe(
-        Layer.provide(
-          Layer.mergeAll(
-            MemoryStoreFake,
-            MemoryProjectsLive.pipe(Layer.provide(NodeServices.layer)),
-            PolicyEngine.node,
-          ),
-        ),
-      )
-    : Layer.empty;
+const memoryToolsLayer = (config: { readonly runtime: string; readonly memory: "on" | "off" }) => {
+  if (config.memory === "off") return Layer.empty;
+  const store =
+    config.runtime === "fake" ? MemoryStoreFake : MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer));
+  return MemoryToolsLive.pipe(
+    Layer.provide(Layer.mergeAll(store, MemoryProjectsLive.pipe(Layer.provide(NodeServices.layer)), PolicyEngine.node)),
+  );
+};
 
 /** The memory engine as the hub's settings choose it: turned off, missing, or the bundled binary. */
 const memoryEngineLayer = (

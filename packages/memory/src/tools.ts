@@ -124,6 +124,16 @@ const earlierAnswer = (save: MemorySave, input: string): HubToolAnswer => {
   }
 };
 
+/**
+ * The call as the record keeps it: its key and input redacted, as everything the journal holds is, so
+ * no secret the hob wrote lands in the database. Redaction is the same for the same call, so a retried
+ * key still finds its first save.
+ */
+const keptOf = (turn: CharmTurn, input: MemorySaveInput) => {
+  const { key, ...rest } = input;
+  return { key: turn.redactor.text(key), ...turn.redactor.value(rest) };
+};
+
 /** The page a save writes, redacted before it is recorded, as everything the journal holds is. */
 const draftOf = (turn: CharmTurn, input: MemorySaveInput): MemoryDraft => ({
   path: input.path,
@@ -239,7 +249,7 @@ export const MemoryToolsLive = Layer.effect(
     /** A save to the hob's own memory: recorded, journaled, then sent, once per key. */
     const saveOwn = (turn: CharmTurn, access: ToolAccess, input: MemorySaveInput) =>
       Effect.gen(function* () {
-        const { key, ...rest } = input;
+        const { key, ...rest } = keptOf(turn, input);
         const actor = actorOf(turn, yield* projectsOf(access.folders));
         const at = DateTime.formatIso(yield* DateTime.now);
         const draft = draftOf(turn, input);
@@ -301,7 +311,7 @@ export const MemoryToolsLive = Layer.effect(
       Effect.gen(function* () {
         if (Option.isNone(shares)) return yield* new Refused({ message: NO_SHARES });
         const actor = actorOf(turn, yield* projectsOf(access.folders));
-        return yield* shares.value.share({ actor, scope, draft: draftOf(turn, input), key: input.key, turn });
+        return yield* shares.value.share({ actor, scope, draft: draftOf(turn, input), key: keptOf(turn, input).key, turn });
       });
 
     const save = (turn: CharmTurn, access: ToolAccess, input: MemorySaveInput, step: HubCallStep | undefined) =>
