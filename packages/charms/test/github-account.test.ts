@@ -826,3 +826,70 @@ describe("Edge cases of the hub's sign-in", () => {
     expect(unsaved.refreshes).toEqual(["refresh ghr_ghu_a"]);
   });
 });
+
+describe("Starting over with GitHub connected", () => {
+  // covers #948
+  it("[TC-OP-102] keeps the account and says so when the keychain never answers the delete, and forgets it once it does", async () => {
+    const stalled = { value: true };
+    const keychain = Layer.effect(
+      Keychain,
+      Effect.map(Keychain, (memory) =>
+        Keychain.of({
+          ...memory,
+          remove: Effect.suspend(() =>
+            stalled.value
+              ? Effect.fail(
+                  new KeychainError({ reason: "unavailable", message: "The keychain did not answer in time." }),
+                )
+              : memory.remove,
+          ),
+        }),
+      ),
+    ).pipe(Layer.provide(KeychainMemory));
+    const script: Script = { polls: [{ _tag: "Granted", tokens: tokens("ghu_first") }], refreshes: [], asked: [] };
+    const outcome = await run(
+      Effect.gen(function* () {
+        const { row, layer } = yield* setup(script, { keychain });
+        return yield* Effect.gen(function* () {
+          const connection = yield* GitHubConnection;
+          yield* connection.connect;
+          yield* wait(5);
+          const first = yield* connection.erase;
+          const kept = yield* Ref.get(row);
+          stalled.value = false;
+          const answered = yield* connection.erase;
+          return { first, kept, answered, row: yield* Ref.get(row), item: yield* (yield* Keychain).read };
+        }).pipe(Effect.provide(layer), Effect.scoped);
+      }),
+    );
+    expect(outcome.first).toBe(
+      "The hub could not tell whether the keychain deleted the GitHub sign-in: The keychain did not answer in time.",
+    );
+    expect(outcome.kept).not.toBeNull();
+    expect(outcome.answered).toBeNull();
+    expect(outcome.row).toBeNull();
+    expect(Option.isNone(outcome.item)).toBe(true);
+  });
+
+  // covers #948
+  it("[TC-OP-103] counts a sign-in the hub never stored as gone, even when the keychain cannot be reached", async () => {
+    const unreachable = Layer.succeed(
+      Keychain,
+      Keychain.of({
+        read: Effect.fail(new KeychainError({ reason: "unavailable", message: "No keychain here." })),
+        write: () => Effect.fail(new KeychainError({ reason: "unavailable", message: "No keychain here." })),
+        remove: Effect.fail(new KeychainError({ reason: "unavailable", message: "No keychain here." })),
+      }),
+    );
+    const outcome = await run(
+      Effect.gen(function* () {
+        const { layer } = yield* setup({ polls: [], refreshes: [], asked: [] }, { keychain: unreachable });
+        return yield* Effect.flatMap(GitHubConnection, (connection) => connection.erase).pipe(
+          Effect.provide(layer),
+          Effect.scoped,
+        );
+      }),
+    );
+    expect(outcome).toBeNull();
+  });
+});

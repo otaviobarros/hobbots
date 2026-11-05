@@ -1,8 +1,8 @@
 import { lstat, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { HobbotsRepository, RetiredHobGitHubApp } from "@hobbots/agents";
+import { GitHubAccounts, HobbotsRepository, HobGitHubApps, RetiredHobGitHubApp } from "@hobbots/agents";
 import { ResetRefused } from "@hobbots/api";
-import { GitHubConnection, HobAppKeys, Keychain, type KeychainError } from "@hobbots/charms";
+import { deleteOutcome, GitHubConnection, HobAppKeys, Keychain } from "@hobbots/charms";
 import type { Agent } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { HUB_ENTRIES } from "./backup-files.ts";
@@ -56,34 +56,39 @@ export const finishReset = async (dataDir: string) => {
   return true;
 };
 
-/** Why a keychain item is still there, or null when it is gone. A keychain tool that cannot run means there is no keychain. */
-const keptBy = (what: string) => (error: KeychainError) =>
-  Effect.succeed(error.reason === "unavailable" ? null : `The keychain did not delete ${what}: ${error.message}`);
-
 /**
  * Deletes the keychain items of a hub with no hub running (#948), for the `reset` command: every
- * hob's GitHub App key and the GitHub sign-in. Answers what the keychain kept. The apps stay on
- * GitHub with their installations: only a running hub can ask GitHub to remove those.
+ * hob's GitHub App key and the GitHub sign-in. Answers what may still be in the keychain: an item the
+ * keychain refused to delete, or one the hub's records say it stored whose delete had no answer.
+ * The apps stay on GitHub with their installations: only a running hub can ask GitHub to remove those.
  */
 export const eraseKeychain = (hobs: ReadonlyArray<Pick<Agent, "id" | "name">>) =>
   Effect.gen(function* () {
     const keys = yield* HobAppKeys;
     const signIn = yield* Keychain;
+    const apps = yield* HobGitHubApps;
+    const accounts = yield* GitHubAccounts;
     const kept: Array<string> = [];
     for (const hob of hobs) {
-      const problem = yield* keys
-        .remove(hob.id)
-        .pipe(Effect.as(null), Effect.catch(keptBy(`${hob.name}'s GitHub app key`)));
+      const recorded = (yield* apps.get(hob.id)) !== null || (yield* apps.leftOver(hob.id)) !== null;
+      const problem = yield* keys.remove(hob.id).pipe(
+        Effect.as(null),
+        Effect.catch((error) => Effect.succeed(deleteOutcome(error, recorded, `${hob.name}'s GitHub app key`))),
+      );
       if (problem !== null) kept.push(problem);
     }
-    const problem = yield* signIn.remove.pipe(Effect.as(null), Effect.catch(keptBy("the GitHub sign-in")));
+    const recorded = (yield* accounts.get) !== null;
+    const problem = yield* signIn.remove.pipe(
+      Effect.as(null),
+      Effect.catch((error) => Effect.succeed(deleteOutcome(error, recorded, "the GitHub sign-in"))),
+    );
     if (problem !== null) kept.push(problem);
     return kept;
   });
 
 /** The words of a reset that stopped because the keychain kept items. */
 export const keptReason = (kept: ReadonlyArray<string>) =>
-  `Nothing was deleted, because the keychain kept sign-ins it was asked to delete. ${kept.join(" ")} Unlock the keychain and try again.`;
+  `Nothing was deleted, because sign-ins may still be in the keychain. ${kept.join(" ")} Unlock the keychain, check that it answers, and try again.`;
 
 /**
  * Settings › Your data › Start over (#948): forgets the sign-ins the hub keeps in the OS keychain,

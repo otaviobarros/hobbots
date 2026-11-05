@@ -584,6 +584,51 @@ describe("A hob's own GitHub App", () => {
     });
   });
 
+  // covers #948
+  it("[TC-OP-101] counts a key delete the keychain never answered as kept while the hob's app is recorded, until it is gone", async () => {
+    const w = world();
+    const stalled = { value: false };
+    // The keychain tool times out, which the hub cannot tell from one that is not there.
+    const keys = Layer.effect(
+      HobAppKeys,
+      Effect.map(HobAppKeys, (memory) =>
+        HobAppKeys.of({
+          ...memory,
+          remove: (agentId) =>
+            stalled.value
+              ? Effect.fail(
+                  new KeychainError({ reason: "unavailable", message: "The keychain did not answer in time." }),
+                )
+              : memory.remove(agentId),
+        }),
+      ),
+    ).pipe(Layer.provide(HobAppKeysMemory));
+    const outcome = await Effect.runPromise(
+      Effect.gen(function* () {
+        const service = yield* HobGitHubAppService;
+        const retired = yield* RetiredHobGitHubApp;
+        const flow = yield* throughGitHub(FRODO);
+        yield* service.complete(flow.state, flow.code);
+        stalled.value = true;
+        const first = yield* retired.erase(FRODO);
+        // Asked again, the app is still recorded as left over, so the outcome is still unknown.
+        const again = yield* retired.erase(FRODO);
+        // Sam never had an app, so the hub stored no key of Sam's.
+        const sam = yield* retired.erase(SAM);
+        stalled.value = false;
+        const answered = yield* retired.erase(FRODO);
+        return { first, again, sam, answered, key: yield* (yield* HobAppKeys).read(FRODO) };
+      }).pipe(Effect.provide(layer(w, keys))),
+    );
+    const unknown =
+      "The hub could not tell whether the keychain deleted the app's key: The keychain did not answer in time.";
+    expect(outcome.first).toBe(unknown);
+    expect(outcome.again).toBe(unknown);
+    expect(outcome.sam).toBeNull();
+    expect(outcome.answered).toBeNull();
+    expect(Option.isNone(outcome.key)).toBe(true);
+  });
+
   // covers ADR 022
   it("[TC-PE-257] counts a platform without a keychain Hobbots can use as having none", async () => {
     const windows = HobAppKeysLive("win32", {}).pipe(Layer.provide(NodeServices.layer));

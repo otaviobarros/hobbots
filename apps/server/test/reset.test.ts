@@ -1,7 +1,7 @@
 import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HobbotsRepository, RetiredHobGitHubApp } from "@hobbots/agents";
+import { GitHubAccounts, HobbotsRepository, HobGitHubApps, RetiredHobGitHubApp } from "@hobbots/agents";
 import {
   GitHubConnection,
   HobAppKeys,
@@ -123,6 +123,26 @@ const startOver = async (kept: Partial<Record<string, string>> = {}) => {
   return { calls, exit };
 };
 
+/** The hub's records: the hobs with a GitHub app of their own, and whether GitHub is connected. */
+const records = (withApp: ReadonlyArray<string>, connected: boolean) =>
+  Layer.mergeAll(
+    Layer.succeed(HobGitHubApps, {
+      get: (id: AgentId) => Effect.succeed(withApp.includes(id) ? ({ slug: `${id}-app` } as never) : null),
+      leftOver: () => Effect.succeed(null),
+    } as unknown as HobGitHubApps["Service"]),
+    Layer.succeed(GitHubAccounts, {
+      get: Effect.succeed(connected ? ({ login: "otaviobarros" } as never) : null),
+    } as unknown as GitHubAccounts["Service"]),
+  );
+
+/** A GitHub sign-in item whose delete fails with `error`. */
+const failingSignIn = (error: KeychainError) =>
+  Layer.succeed(Keychain, {
+    read: Effect.succeed(Option.none()),
+    write: () => Effect.void,
+    remove: Effect.fail(error),
+  });
+
 describe("start over", () => {
   // covers #948
   it("[TC-OP-094] deletes everything the hub keeps and leaves the desktop app's own files", async () => {
@@ -190,23 +210,44 @@ describe("start over", () => {
         keys: yield* Effect.forEach(hobs, (hob) => keys.read(hob.id)),
         signIn: yield* signIn.read,
       };
-    }).pipe(Effect.provide(Layer.mergeAll(HobAppKeysMemory, KeychainMemory)), Effect.runPromise);
+    }).pipe(
+      Effect.provide(Layer.mergeAll(HobAppKeysMemory, KeychainMemory, records(["frodo"], true))),
+      Effect.runPromise,
+    );
     expect(erased).toEqual({ kept: [], keys: [Option.none(), Option.none()], signIn: Option.none() });
 
     const locked = new KeychainError({ reason: "failed", message: "The keychain is locked." });
     const kept = await eraseKeychain(hobs).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          HobAppKeysMemory,
-          Layer.succeed(Keychain, {
-            read: Effect.succeed(Option.none()),
-            write: () => Effect.void,
-            remove: Effect.fail(locked),
-          }),
-        ),
-      ),
+      Effect.provide(Layer.mergeAll(HobAppKeysMemory, failingSignIn(locked), records([], false))),
       Effect.runPromise,
     );
     expect(kept).toEqual(["The keychain did not delete the GitHub sign-in: The keychain is locked."]);
+  });
+
+  // covers #948
+  it("[TC-OP-104] the reset command counts a delete the keychain never answered as kept when the hub recorded the item", async () => {
+    const timedOut = new KeychainError({ reason: "unavailable", message: "The keychain did not answer in time." });
+    const stalledKeys = Layer.succeed(HobAppKeys, {
+      usable: Effect.succeed(true),
+      read: () => Effect.succeed(Option.none()),
+      write: () => Effect.void,
+      remove: () => Effect.fail(timedOut),
+    });
+    const keychainsTimingOut = Layer.mergeAll(stalledKeys, failingSignIn(timedOut));
+    // Frodo has an app and the account is connected, so the hub stored their items: unknown is kept.
+    const recorded = await eraseKeychain(hobs).pipe(
+      Effect.provide(Layer.mergeAll(keychainsTimingOut, records(["frodo"], true))),
+      Effect.runPromise,
+    );
+    expect(recorded).toEqual([
+      "The hub could not tell whether the keychain deleted frodo's GitHub app key: The keychain did not answer in time.",
+      "The hub could not tell whether the keychain deleted the GitHub sign-in: The keychain did not answer in time.",
+    ]);
+    // With no record of either, the hub never stored them, so there is nothing it could have left.
+    const unrecorded = await eraseKeychain(hobs).pipe(
+      Effect.provide(Layer.mergeAll(keychainsTimingOut, records([], false))),
+      Effect.runPromise,
+    );
+    expect(unrecorded).toEqual([]);
   });
 });
