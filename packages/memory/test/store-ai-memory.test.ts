@@ -106,7 +106,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
   });
 
   // covers ADR 028 (Writes), #961
-  it("[TC-GEN-348] refuses a restore when ai-memory changes the page after the restore checked it, and puts that change back", async () => {
+  it("[TC-GEN-348] refuses a restore at a version when ai-memory writes the page after the restore read it, and keeps that write", async () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const pip: MemoryScope = { _tag: "Hob", agentId: AgentId.make("0d6e2f0a-0000-4000-8000-000000000031") };
     const you = { _tag: "You" } as const;
@@ -114,7 +114,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
     const draft = (markdown: string) => ({ path, markdown, tags: [], pinned: false });
     const first = await Effect.runPromise(store.write(you, pip, draft("# Session\n\nMonday."), { _tag: "New" }));
     const second = await Effect.runPromise(store.write(you, pip, draft("# Session\n\nTuesday."), { _tag: "Any" }));
-    // ai-memory writes the page itself, as a session's summary does, once the restore has checked it.
+    // ai-memory writes the page itself, as a session's summary does, once the restore has read it.
     const where = engineProjectOf(pip);
     const engineWrite = () =>
       realFetch(`${endpoint.url}/mcp`, {
@@ -136,7 +136,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
       });
     let wrote = false;
     beforeFetch = async (url) => {
-      if (wrote || !url.includes("/admin/restore-page")) return;
+      if (wrote || !url.includes("/history/") || !url.includes("from=")) return;
       wrote = true;
       expect((await engineWrite()).status).toBe(200);
     };
