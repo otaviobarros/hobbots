@@ -13,7 +13,7 @@ import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import { retryUnlessRefused } from "../../api/live.ts";
-import { applyMemoryChanged, memoryKeys, memoryScopesQuery, withChanges } from "../../api/memory-pages.ts";
+import { applyMemoryChanged, memoryKeys, refreshMemory, withChanges } from "../../api/memory-pages.ts";
 import {
   changesByDay,
   filterChanges,
@@ -279,8 +279,30 @@ describe("what changed", () => {
   });
 
   // covers ADR 028 (Browse), #958
-  it("[TC-UX-956] reads the scopes again while the page shows them, so memory stopping later says so", () => {
-    expect(memoryScopesQuery.refetchInterval).toBe(30_000);
+  it("[TC-UX-957] keeps a save made while the stream was away when it reconnects before the first read answers", async () => {
+    const queryClient = new QueryClient();
+    const before = [change(at(5, 9), byPip)];
+    const missed = change(at(5, 11), byYou, "rules/new.md");
+    let served: ReadonlyArray<MemoryChange> = before;
+    const answers: Array<(changes: ReadonlyArray<MemoryChange>) => void> = [];
+    const observer = new QueryObserver(queryClient, {
+      queryKey: memoryKeys.changes,
+      queryFn: () => Promise.resolve(served),
+    });
+    const stop = observer.subscribe(() => {});
+    void queryClient
+      .fetchQuery({
+        queryKey: memoryKeys.changes,
+        queryFn: () => new Promise<ReadonlyArray<MemoryChange>>((resolve) => answers.push(resolve)),
+      })
+      .catch(() => undefined);
+    // The save lands while the stream is down, so no event brings it; the stream is ready again
+    // before the first read answers, which answers from before the save.
+    served = [missed, ...before];
+    await refreshMemory(queryClient);
+    for (const answer of answers) answer(before);
+    await vi.waitFor(() => expect(queryClient.getQueryData(memoryKeys.changes)).toEqual([missed, ...before]));
+    stop();
   });
 });
 

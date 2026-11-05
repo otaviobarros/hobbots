@@ -119,6 +119,10 @@ export const applyMemoryChanged = async (queryClient: QueryClient, event: Memory
 
 /**
  * Reads memory again when the event stream is ready, a resumed one included: a save the hub found
- * while this client was away is never streamed again.
+ * while this client was away is never streamed again. A read still in flight is cancelled first,
+ * since it may answer from before that save (STD-REACT-012).
  */
-export const refreshMemory = (queryClient: QueryClient) => queryClient.invalidateQueries(live);
+export const refreshMemory = async (queryClient: QueryClient) => {
+  await queryClient.cancelQueries(live);
+  await queryClient.invalidateQueries(live);
+};

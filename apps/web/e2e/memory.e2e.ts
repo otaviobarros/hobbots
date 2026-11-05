@@ -11,10 +11,10 @@ test.afterEach(async () => {
   removeDataDir(dataDir);
 });
 
-/** A hub past setup whose memory is the fake in `memory`, looked at every second. */
-const hubWithMemory = async (memory: "empty" | "seeded" | "down") => {
+/** A hub past setup whose memory is the fake in `memory`, looked at every `lookSeconds`. */
+const hubWithMemory = async (memory: "empty" | "seeded" | "down", lookSeconds = 1) => {
   dataDir = emptyDataDir();
-  hub = await startHub(dataDir, { HOBBOTS_FAKE_MEMORY: memory, HOBBOTS_MEMORY_LOOK_SECONDS: "1" });
+  hub = await startHub(dataDir, { HOBBOTS_FAKE_MEMORY: memory, HOBBOTS_MEMORY_LOOK_SECONDS: String(lookSeconds) });
   const started = hub;
   const api = async (method: string, path: string, body: unknown) => {
     const response = await fetch(`${started.url}/api${path}`, {
@@ -121,4 +121,41 @@ test("[TC-UX-954] while memory is not answering, Memory says so and offers to tr
   await expect(page.getByText("Not answering · trying again every 30 seconds")).toBeVisible();
   await main.getByRole("button", { name: "Try again" }).click();
   await expect(main.getByText("Memory is not answering")).toBeVisible();
+});
+
+// covers ADR 028 (Browse), #958
+test("[TC-UX-958] memory stopping after the page loaded shows the banner over what loaded, and clears when it answers again", async ({
+  page,
+}) => {
+  // The hub never looks for changes during the test, so only the page's own reads find the outage.
+  const { url, summon } = await hubWithMemory("seeded", 3600);
+  await summon("Pip", 1201);
+  await page.clock.install();
+  await page.goto(`${url}/#/memory`);
+  const main = page.getByRole("main", { name: "Memory" });
+  await expect(page.getByText("1 hob · 8 pages · 2 shared places")).toBeVisible();
+  await expect(main).toContainText("Ask before sending anything outside the hub");
+  await expect(main.getByText("Memory is not answering")).toBeHidden();
+
+  // Memory stops answering: the next look at the scopes, 30 seconds on, finds it down.
+  const scopes = `${url}/api/memory/scopes`;
+  await page.route(scopes, (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ _tag: "MemoryNotAnswering" }),
+    }),
+  );
+  await page.clock.runFor(31_000);
+  await expect(main.getByText("Memory is not answering")).toBeVisible();
+  await expect(page.getByText("Not answering · trying again every 30 seconds")).toBeVisible();
+  // What loaded stays on the page under the banner.
+  await expect(main).toContainText("Ask before sending anything outside the hub");
+
+  // Memory answers again: the next look clears the banner.
+  await page.unroute(scopes);
+  await page.clock.runFor(31_000);
+  await expect(main.getByText("Memory is not answering")).toBeHidden();
+  await expect(page.getByText("1 hob · 8 pages · 2 shared places")).toBeVisible();
+  await expect(main).toContainText("Ask before sending anything outside the hub");
 });
