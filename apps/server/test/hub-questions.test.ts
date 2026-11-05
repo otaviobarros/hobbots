@@ -217,7 +217,11 @@ describe("a question the hub asks you itself", () => {
     let tries = 0;
     const failing = current.handle({
       kind: SUBJECT.kind,
-      apply: () => Effect.suspend(() => (tries++, Effect.fail("unreachable"))),
+      apply: () =>
+        Effect.suspend(() => {
+          tries++;
+          return Effect.fail("unreachable");
+        }),
     });
     const raised = await current.run(HubQuestions.use(raise));
     const answered = await current.request("POST", `/api/hub-questions/${raised.id}/answer`, { answer: TYPED.label });
