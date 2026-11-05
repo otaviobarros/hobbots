@@ -6,6 +6,7 @@ import {
   type MemoryChangedLine,
   MemoryConflict,
   type MemoryExpected,
+  type MemoryFinding,
   type MemoryForgetDay,
   type MemoryHit,
   type MemoryPage,
@@ -56,6 +57,8 @@ export interface MemoryStoreFakeControls {
   readonly setDown: (down: boolean) => void;
   /** What a thread's session holds in `scope`, in the order it arrived, replays skipped. */
   readonly captured: (scope: MemoryScope, threadId: ThreadId) => ReadonlyArray<MemoryCaptureItem>;
+  /** Has Check now find `finding`, while every page it names is still there. */
+  readonly flag: (finding: MemoryFinding) => void;
 }
 
 /** A thread's session: what arrived, and every key seen, the ends' included. */
@@ -110,6 +113,7 @@ export const makeMemoryStoreFake = (): {
     { readonly scope: MemoryScope; readonly pages: Map<MemoryPath, Array<StoredVersion>> }
   >();
   const sessions = new Map<string, Session>();
+  const flagged: Array<MemoryFinding> = [];
   let down = false;
   let versions = 0;
   const sessionOf = (scope: MemoryScope, threadId: ThreadId) => {
@@ -138,6 +142,14 @@ export const makeMemoryStoreFake = (): {
   const currentOf = (scope: MemoryScope, path: MemoryPath) => {
     const latest = latestOf(scope, path);
     return latest === undefined || latest.forgotten ? undefined : latest;
+  };
+  /**
+   * The versions the page's history shows, oldest first: as the engine does, a forget takes the
+   * history with it, so a page started again after a forget shows only what came after.
+   */
+  const shownOf = (scope: MemoryScope, path: MemoryPath) => {
+    const stored = pagesOf(scope).get(path) ?? [];
+    return stored.slice(stored.findLastIndex((entry) => entry.forgotten) + 1);
   };
   const conflict = (scope: MemoryScope, path: MemoryPath) =>
     new MemoryConflict({ path, current: currentOf(scope, path)?.version ?? null });
@@ -208,6 +220,12 @@ export const makeMemoryStoreFake = (): {
         const before = at === 0 ? null : (versions[at - 1]?.markdown ?? null);
         return { first: before === null, lines: changedLines(before ?? "", found.markdown), cut: false };
       }),
+    versionText: (_actor, scope, path, version, known) =>
+      Effect.map(up, () => {
+        const versions = currentOf(scope, path) === undefined ? [] : shownOf(scope, path);
+        if (!versions.some((entry) => entry.version === known.version)) return null;
+        return versions.find((entry) => entry.version === version)?.markdown ?? null;
+      }),
     list: (_actor, scope, limit) =>
       Effect.map(up, () =>
         summaries(scope)
@@ -234,10 +252,12 @@ export const makeMemoryStoreFake = (): {
         const latest = currentOf(scope, path);
         // A forgotten page has no history to show; its versions stay only for restore.
         if (latest === undefined) return [];
-        const history = (pagesOf(scope).get(path) ?? []).filter((entry) => !entry.forgotten);
-        return history
-          .map((entry) => ({
+        // Each version names the one it replaced: a page started again after a forget replaces nothing.
+        const shown = shownOf(scope, path);
+        return shown
+          .map((entry, at) => ({
             version: entry.version,
+            supersedes: shown[at - 1]?.version ?? null,
             author: entry.author,
             writtenAt: entry.writtenAt,
             latest: entry === latest,
@@ -304,6 +324,14 @@ export const makeMemoryStoreFake = (): {
           forgotten: false,
         }).pipe(Effect.as(true));
       }),
+    check: (_actor, scope) =>
+      Effect.map(up, () =>
+        flagged.filter(
+          (finding) =>
+            scopeKey(finding.scope) === scopeKey(scope) &&
+            finding.paths.every((path) => currentOf(scope, path) !== undefined),
+        ),
+      ),
     health: up,
   };
 
@@ -314,6 +342,9 @@ export const makeMemoryStoreFake = (): {
         down = value;
       },
       captured: (scope, threadId) => [...sessionOf(scope, threadId).items],
+      flag: (finding) => {
+        flagged.push(finding);
+      },
     },
   };
 };

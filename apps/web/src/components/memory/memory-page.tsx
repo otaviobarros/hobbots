@@ -1,6 +1,7 @@
 import type { MemoryChange } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SearchField } from "@hobbots/ui/components/search-field";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useShowMemoryFiles } from "../../lib/show-memory-files.ts";
@@ -17,8 +18,10 @@ import {
 } from "./memory-model.ts";
 import { MemoryNav } from "./memory-nav.tsx";
 import { FlashLine, MemoryIcon } from "./memory-parts.tsx";
-import { ViewBody } from "./memory-view-body.tsx";
+import { CheckNow } from "./memory-review.tsx";
+import { useReview, ViewBody } from "./memory-view-body.tsx";
 import { messages } from "./messages.ts";
+import { reviewItems } from "./review-model.ts";
 import { useMemory } from "./use-memory.ts";
 import { type MemoryFlash, useMemoryWrites } from "./use-memory-writes.ts";
 
@@ -124,8 +127,8 @@ const useFlash = (view: MemoryView) => {
 /**
  * The Memory page: what every hob remembers, About you and each project, read through the hub, and
  * changed through it (#959). Its views live in the address (STD-REACT-002): the overview, What
- * changed, a scope, a page with its history, the editor, and a search. While memory does not answer
- * it shows the pages it last loaded under a notice, and tries again every 30 seconds.
+ * changed, To review, a scope, a page with its history, the editor, and a search. While memory does
+ * not answer it shows the pages it last loaded under a notice, and tries again every 30 seconds.
  */
 export function MemoryPage({ search }: { search: MemorySearch }) {
   const view = memoryViewOf(search);
@@ -135,6 +138,7 @@ export function MemoryPage({ search }: { search: MemorySearch }) {
   const now = new Date();
   const nav = scopeNav(reads.overview.data, reads.active, reads.hobs);
   const newChanges = useNewChanges(view, reads.changes.data);
+  const review = useReview();
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <PageHeader
@@ -145,17 +149,24 @@ export function MemoryPage({ search }: { search: MemorySearch }) {
         introClassName={reads.offline ? "text-rose" : undefined}
         actions={
           <span className="flex items-center gap-2">
+            <CheckNow />
             <OpenFolder say={say} />
             <MemorySearchForm view={view} />
           </span>
         }
       />
       <div className="flex min-h-0 min-w-0 flex-1">
-        <MemoryNav nav={nav} view={view} loading={reads.overview.isPending} newChanges={newChanges} />
+        <MemoryNav
+          nav={nav}
+          view={view}
+          loading={reads.overview.isPending}
+          newChanges={newChanges}
+          toReview={review.count}
+        />
         <main aria-label={copy.title} className="min-w-0 flex-1 overflow-y-auto px-8 pt-6 pb-8 max-[1180px]:px-6">
           {reads.offline && <NotAnswering reads={reads} />}
           {flash !== null && <FlashLine message={flash.message} tone={flash.tone} onUndo={flash.undo} />}
-          <ViewBody view={view} reads={reads} now={now} act={{ writes, say }} />
+          <ViewBody view={view} reads={reads} review={review} now={now} act={{ writes, say }} />
         </main>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { sep } from "node:path";
 import {
+  announcer,
   approvalNote,
   askOnStep,
   type CharmTurn,
@@ -19,7 +20,6 @@ import {
   type ToolAccess,
 } from "@hobbots/agents";
 import {
-  type EventEnvelope,
   isMemoryToolName,
   MEMORY_SAVE_DESCRIPTION,
   MEMORY_SAVE_LABEL,
@@ -163,12 +163,7 @@ export const MemoryToolsLive = Layer.effect(
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
 
-    const announce = (entries: ReadonlyArray<EventEnvelope>) =>
-      Option.isNone(publisher) || entries.length === 0
-        ? Effect.void
-        : publisher.value
-            .publish(entries)
-            .pipe(Effect.catchCause((cause) => Effect.logWarning("Could not announce a memory save", cause)));
+    const announce = announcer(publisher, "a memory save");
 
     /** The project of each of the hob's folders, once each, in the order of its folders. */
     const projectsOf = (folders: ReadonlyArray<string>) =>
@@ -320,11 +315,14 @@ export const MemoryToolsLive = Layer.effect(
       Effect.gen(function* () {
         if (Option.isNone(shares)) return yield* new Refused({ message: NO_SHARES });
         const actor = actorOf(turn, yield* projectsOf(access.folders));
+        const identity = identityOf(input);
         return yield* shares.value.share({
           actor,
           scope,
           draft: draftOf(turn, input),
-          key: identityOf(input).key,
+          key: identity.key,
+          input: identity.input,
+          preset: access.policy.preset,
           turn,
         });
       });

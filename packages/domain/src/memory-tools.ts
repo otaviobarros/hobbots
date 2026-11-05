@@ -95,12 +95,9 @@ export const memoryToolJsonSchema = (name: MemoryToolName): Record<string, unkno
 export const MemorySaveState = Schema.Literals(["sending", "queued", "saved", "refused"]);
 export type MemorySaveState = typeof MemorySaveState.Type;
 
-/**
- * A `memory_save` to a hob's own memory, recorded and journaled before it is sent, so a retried key
- * returns the first answer and a save made while memory is down is kept until it is back.
- */
-export class MemorySave extends Schema.Class<MemorySave>("MemorySave")({
-  /** This save, which settles it wherever its work moved to since (#660). */
+/** What a hob's saves and shares record alike: the call, keyed by hob, work and key, and its page. */
+export const MEMORY_CALL_FIELDS = {
+  /** This call, which settles it wherever its work moved to since (#660). */
   id: Schema.String,
   agentId: AgentId,
   /** The work the key belongs to, such as `task:<Task id>`: a key is unique within it (#660). */
@@ -109,19 +106,32 @@ export class MemorySave extends Schema.Class<MemorySave>("MemorySave")({
   key: Schema.String,
   /** The SHA-256 of the call's input as stable JSON without its key, so a key sent again with another call is told apart. */
   input: Schema.String,
-  scope: MemoryScope,
   path: MemoryPath,
-  /** The page, redacted before it was recorded. */
+  /** The page, redacted before it was recorded (or, for a share, as you edited it before you shared it). */
   markdown: Schema.String,
   tags: Schema.Array(Schema.String),
-  state: MemorySaveState,
-  /** The version memory answered, once saved. */
-  version: Schema.NullOr(MemoryVersion),
+};
+
+/** Where a hob's save or share came from, and when it was made and last changed. */
+export const MEMORY_CALL_ORIGIN = {
   /** The reply the call was made from, when it came from a chat turn. */
   threadId: Schema.NullOr(ThreadId),
   messageId: Schema.NullOr(MessageId),
   createdAt: Schema.String,
   updatedAt: Schema.String,
+};
+
+/**
+ * A `memory_save` to a hob's own memory, recorded and journaled before it is sent, so a retried key
+ * returns the first answer and a save made while memory is down is kept until it is back.
+ */
+export class MemorySave extends Schema.Class<MemorySave>("MemorySave")({
+  ...MEMORY_CALL_FIELDS,
+  scope: MemoryScope,
+  state: MemorySaveState,
+  /** The version memory answered, once saved. */
+  version: Schema.NullOr(MemoryVersion),
+  ...MEMORY_CALL_ORIGIN,
   /**
    * When you undid it from its reply, which put back the version it replaced or, for a new page,
    * removed it. Absent while it stands.

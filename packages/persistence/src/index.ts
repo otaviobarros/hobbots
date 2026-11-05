@@ -12,6 +12,7 @@ export * from "./hub-questions.ts";
 export * from "./journal.ts";
 export * from "./memory-capture.ts";
 export * from "./memory-saves.ts";
+export * from "./memory-shares.ts";
 export * from "./migrations/index.ts";
 export * from "./postgres.ts";
 export * from "./repositories.ts";

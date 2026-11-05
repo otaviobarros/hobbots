@@ -9,7 +9,7 @@ import type {
   ThreadId,
   TransientEvent,
 } from "@hobbots/domain";
-import { Context, type Effect, type Option, Schema } from "effect";
+import { Context, Effect, Option, Schema } from "effect";
 
 /** Announces what the use cases did to every client: journal entries once committed, and transient reply events. */
 export class EventPublisher extends Context.Service<
@@ -20,6 +20,18 @@ export class EventPublisher extends Context.Service<
     readonly publishTransient: (event: TransientEvent) => Effect.Effect<void>;
   }
 >()("@hobbots/agents/EventPublisher") {}
+
+/**
+ * Announces committed entries through the publisher when there is one. A failed announcement is
+ * logged as `what` and never fails the write, which the journal already holds.
+ */
+export const announcer =
+  (publisher: Option.Option<EventPublisher["Service"]>, what: string) => (entries: ReadonlyArray<EventEnvelope>) =>
+    Option.isNone(publisher) || entries.length === 0
+      ? Effect.void
+      : publisher.value
+          .publish(entries)
+          .pipe(Effect.catchCause((cause) => Effect.logWarning(`Could not announce ${what}`, cause)));
 
 /** The installation's setup as the user last saved it: its safety preset and the folders shared with every hob. */
 export class InstallationSettings extends Context.Service<

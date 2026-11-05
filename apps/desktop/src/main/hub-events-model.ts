@@ -22,6 +22,8 @@ export type HubChange =
   | { readonly _tag: "Questions" }
   /** A Task changed state, so the failed Tasks that wait on you may have changed (ADR 027). */
   | { readonly _tag: "Tasks" }
+  /** A hob asked to share what it learned, or a share was decided (ADR 028). */
+  | { readonly _tag: "Shares" }
   /** A top Quest finished (ADR 027). */
   | { readonly _tag: "QuestFinished"; readonly quest: FinishedQuest }
   | ({
@@ -63,7 +65,7 @@ export interface HubConnected {
 }
 
 /** The kinds of journal entry that make one of the main process's reads stale. */
-const STALE: Readonly<Record<string, "Approvals" | "Questions" | "Tasks" | "Pairing" | undefined>> = {
+const STALE: Readonly<Record<string, "Approvals" | "Questions" | "Tasks" | "Pairing" | "Shares" | undefined>> = {
   ApprovalRequested: "Approvals",
   ApprovalResolved: "Approvals",
   QuestionAsked: "Questions",
@@ -75,6 +77,9 @@ const STALE: Readonly<Record<string, "Approvals" | "Questions" | "Tasks" | "Pair
   // A device asked to pair, or its request changed (ADR 021).
   PairingRequested: "Pairing",
   PairingChanged: "Pairing",
+  // A hob asked to share what it learned, or the share moved (ADR 028).
+  MemoryShareRequested: "Shares",
+  MemoryShareChanged: "Shares",
 };
 
 /** What a journal entry means for the main process: a finished Quest, a read it makes stale, or nothing. */

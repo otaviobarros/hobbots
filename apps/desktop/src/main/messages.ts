@@ -7,6 +7,11 @@ export const messages = {
   questionNotice: {
     title: ({ name }: { name: string }) => `${name} asks you`,
   },
+  shareNotice: {
+    title: ({ name }: { name: string }) => `${name} wants to share what it learned`,
+    project: ({ name }: { name: string }) => `With the ${name} project`,
+    everyone: "With every hob, in About you",
+  },
   failedNotice: {
     title: ({ name }: { name: string }) => `${name}'s task failed`,
   },

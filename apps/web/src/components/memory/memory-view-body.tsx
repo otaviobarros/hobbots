@@ -1,5 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { memoryPageGone } from "../../api/memory-pages.ts";
+import { memoryCheckQuery, memorySharesQuery } from "../../api/memory-shares.ts";
 import type { Say } from "./memory-actions.tsx";
 import { MemoryChangesView } from "./memory-changes.tsx";
 import { MemoryEditor } from "./memory-editor.tsx";
@@ -9,8 +11,10 @@ import { MemoryNothingYet, MemoryOverviewSkeleton, MemoryOverviewView } from "./
 import { ReadFailed } from "./memory-parts.tsx";
 import { MemoryRead } from "./memory-read.tsx";
 import { MemoryResults } from "./memory-results.tsx";
+import { MemoryReviewView } from "./memory-review.tsx";
 import { MemoryScopeView } from "./memory-scope.tsx";
 import { messages } from "./messages.ts";
+import { reviewItems } from "./review-model.ts";
 import type { useMemory } from "./use-memory.ts";
 import type { MemoryWrites } from "./use-memory-writes.ts";
 
@@ -23,6 +27,14 @@ interface Changes {
   readonly writes: MemoryWrites;
   readonly say: Say;
 }
+
+/** What hobs ask to share and what Check now found, which To review lists. */
+export const useReview = () => {
+  const shares = useQuery(memorySharesQuery);
+  const check = useQuery(memoryCheckQuery);
+  return { shares, check, count: reviewItems(shares.data ?? [], check.data).length };
+};
+type Review = ReturnType<typeof useReview>;
 
 /** A read that failed while memory still answers, which the view says in place of its content. */
 const failedAlone = (read: { readonly isError: boolean; readonly data: unknown }, offline: boolean) =>
@@ -70,14 +82,47 @@ function PageBody({
 }
 
 /** The open view, from what its reads hold so far. */
-export function ViewBody({ view, reads, now, act }: { view: MemoryView; reads: Reads; now: Date; act: Changes }) {
+export function ViewBody({
+  view,
+  reads,
+  review,
+  now,
+  act,
+}: {
+  view: MemoryView;
+  reads: Reads;
+  review: Review;
+  now: Date;
+  act: Changes;
+}) {
   const { overview, changes, pages, search, hobs, offline } = reads;
   switch (view._tag) {
+    case "Review":
+      if (review.shares.isError) {
+        return <ReadFailed message={copy.review.loadFailed} onRetry={() => void review.shares.refetch()} />;
+      }
+      return (
+        <MemoryReviewView
+          item={view.item}
+          shares={review.shares.data}
+          check={review.check.data}
+          hobs={hobs}
+          now={now}
+        />
+      );
     case "Overview":
       return <OverviewBody reads={reads} now={now} />;
     case "Changes":
       if (failedAlone(changes, offline)) return <ReadFailed message={copy.changes.loadFailed} onRetry={reads.retry} />;
-      return <MemoryChangesView changes={changes.data} show={view.show} hobs={hobs} now={now} />;
+      return (
+        <MemoryChangesView
+          changes={changes.data}
+          shares={review.shares.data ?? []}
+          show={view.show}
+          hobs={hobs}
+          now={now}
+        />
+      );
     case "Scope":
       if (failedAlone(pages, offline)) return <ReadFailed message={copy.scope.loadFailed} onRetry={reads.retry} />;
       return (

@@ -14,6 +14,9 @@ export const messages = {
     `${formatCount(count)} waiting on you · ${expiry} for ${name}`,
   from: ({ name }: { name: string }) => `${name} → you`,
   devices: "Devices",
+  /** The group of shares: "Memory · Things hobs want to share". */
+  memory: "Memory",
+  memoryDetail: "Things hobs want to share",
   /** A group heading in full, for its tooltip: "Aldric's quest · Plan the spring launch". */
   groupTitle: ({ label, detail }: { label: string; detail: string }) => `${label} · ${detail}`,
   hub: "This hub",
@@ -31,6 +34,7 @@ export const messages = {
     stuck: "Stuck",
     failed: "Failed",
     device: "New device",
+    share: "Share",
   },
   /** One row of the list: who asked, as a chain, and when. */
   row: {
@@ -47,6 +51,7 @@ export const messages = {
     retired: ({ name }: { name: string }) => `${name} retired`,
     failed: ({ name }: { name: string }) => `${name}'s task failed`,
     deviceAsks: "A new device asks to join",
+    noRush: "No rush",
   },
   status: {
     pending: ({ expiry }: { expiry: string }) => `Waiting on you · ${expiry}`,
@@ -98,6 +103,8 @@ export const messages = {
     expiredFoot: "Expired requests can never be approved late. The hob asks again with what is true now.",
     pendingFoot: ({ name }: { name: string }) => `If it expires, nothing runs and ${name} asks again.`,
     onceOnlyFoot: "Allow once covers this one action only.",
+    shareLabel: ({ name }: { name: string }) => `Share from ${name}`,
+    shareDiff: "What would be shared",
   },
   history: {
     heading: "Decision history",

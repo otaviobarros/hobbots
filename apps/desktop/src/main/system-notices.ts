@@ -10,6 +10,7 @@ import {
   questionNotices,
   type RequestNoticesOptions,
   requestNotices,
+  shareNotices,
 } from "./request-notices.ts";
 import type { TaskLink } from "./request-notices-model.ts";
 import type { SettingsStore } from "./settings.ts";
@@ -17,7 +18,8 @@ import { onSecondLaunch } from "./single-instance.ts";
 
 /**
  * Sends a system notification for each new request, question that reached you and failed Task of a
- * party member, each Quest that finished (ADR 027), and each device asking to pair (ADR 021), while
+ * party member, each Quest that finished (ADR 027), each hob asking to share what it learned (ADR
+ * 028), and each device asking to pair (ADR 021), while
  * no Hobbots window is focused, from the main process so it works with every window closed. `fetch`
  * reads a hub route as this app: with the window key on the hub, with the device token on a
  * connected desktop (PE-006).
@@ -60,6 +62,8 @@ export const systemNotices = (options: {
   // A question or a failed Task needs you as a request does, under the same switch (ADR 027).
   const questions = questionNotices(notices);
   const failed = failedTaskNotices(notices);
+  // A share request is a Memory kind in the Inbox, under the same switch (ADR 028).
+  const shares = shareNotices(notices);
   const finishes = finishedNotices({ ...notices, notify: notifyWhenOn("finishes", choices, show) });
   // A device's prompt shows over the window, so its notification only needs to bring the window forward.
   const devices = deviceNotices({
@@ -73,6 +77,7 @@ export const systemNotices = (options: {
       void requests.check();
       void questions.check();
       void failed.check();
+      void shares.check();
       void devices.check();
     },
     /** Reads again the list a change makes stale, or announces a finished Quest. */
@@ -81,6 +86,7 @@ export const systemNotices = (options: {
       else if (change._tag === "Questions") void questions.check();
       else if (change._tag === "Tasks") void failed.check();
       else if (change._tag === "Pairing") void devices.check();
+      else if (change._tag === "Shares") void shares.check();
       else if (change._tag === "QuestFinished") void finishes.finished(change.quest);
     },
   };

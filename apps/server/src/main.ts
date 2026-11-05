@@ -16,6 +16,7 @@ import {
   HubQuestions,
   MemoryBriefReceipts,
   MemoryCapture,
+  MemorySharesLive,
   type MemoryStore,
   PermissionSummary,
   RecoveryLog,
@@ -71,6 +72,7 @@ import {
   HubQuestionRepositoryLive,
   MemoryCaptureLive,
   MemorySavesLive,
+  MemoryShareLogLive,
   RestoreRepository,
   SearchIndex,
   SetupRepository,
@@ -133,9 +135,9 @@ import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
 
 /**
- * What the Memory page reads, and the watch behind What changed (ADR 028): the fake memory when a
- * run asks for it, otherwise the bundled ai-memory, which answers that memory is unavailable while
- * its engine is off, missing or down.
+ * The memory the hub reads and writes for you (ADR 028): the fake memory when a run asks for it,
+ * otherwise the bundled ai-memory, which answers that memory is unavailable while its engine is off,
+ * missing or down. One layer, so the Memory page and the shares you approve reach the same memory.
  */
 const memoryPageStore = (config: {
   readonly fakeMemory: "off" | "empty" | "seeded" | "down";
@@ -144,13 +146,15 @@ const memoryPageStore = (config: {
     ? MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))
     : FakeMemoryLive(config.fakeMemory);
 
+/** What the Memory page reads, and the watch behind What changed (ADR 028). */
 const memoryPageLayer = (
   config: { readonly memoryLookSeconds: number },
   store: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine>,
 ) => MemoryChanges.layer(Duration.seconds(config.memoryLookSeconds)).pipe(Layer.provideMerge(store));
 
 /**
- * The memory tools (ADR 028), beside the Task tools on every runtime while memory is on. A real
+ * The memory tools (ADR 028), beside the Task tools on every runtime while memory is on, and the
+ * shares hobs ask for with them, which wait for you or go through under the preset. A real
  * runtime's hobs reach the bundled ai-memory through the engine the hub runs; the fake runtime keeps
  * memory in the hub's process, to try memory without the engine: the fake memory the Memory page
  * reads when a run asks for one, so a page a hob saves shows there and its Undo reaches it. With
@@ -161,13 +165,11 @@ const memoryToolsLayer = (
   pageStore: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine>,
 ) => {
   if (config.memory === "off") return Layer.empty;
-  const store =
-    config.runtime !== "fake"
-      ? MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))
-      : config.fakeMemory === "off"
-        ? MemoryStoreFake
-        : pageStore;
-  return MemoryToolsLive.pipe(Layer.provide(Layer.mergeAll(store, MemoryProjectsLive, PolicyEngine.node)));
+  const store = config.runtime === "fake" && config.fakeMemory === "off" ? MemoryStoreFake : pageStore;
+  return MemoryToolsLive.pipe(
+    Layer.provideMerge(MemorySharesLive),
+    Layer.provide(Layer.mergeAll(store, MemoryProjectsLive, PolicyEngine.node)),
+  );
 };
 
 /** The memory engine as the hub's settings choose it: turned off, missing, or the bundled binary. */
@@ -265,6 +267,7 @@ const ServerLive = Layer.unwrap(
       TaskToolCallsLive,
       CharmCallsLive,
       MemorySavesLive,
+      MemoryShareLogLive,
       MemoryCaptureLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,

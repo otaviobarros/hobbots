@@ -7,6 +7,7 @@ import {
   type MemoryConflict,
   type MemoryDraft,
   type MemoryExpected,
+  type MemoryFinding,
   type MemoryHit,
   type MemoryPage,
   type MemoryPageSummary,
@@ -21,6 +22,7 @@ import {
   type MemoryVersionChanges,
   memoryProjectIdentity,
   memoryScopeAllowed,
+  type SafetyPreset,
   type ThreadId,
 } from "@hobbots/domain";
 import { Context, Effect, Option } from "effect";
@@ -56,6 +58,18 @@ export interface MemoryStoreShape {
     path: MemoryPath,
     version: MemoryVersion,
   ) => Memory<MemoryVersionChanges | null>;
+  /**
+   * The exact text of `version` of the page at `path`, rebuilt from `known`, a version of it whose
+   * text the caller holds; null when the page has no such version, or memory cannot answer it whole,
+   * as when its diff between the two is cut short.
+   */
+  readonly versionText: (
+    actor: MemoryActor,
+    scope: MemoryScope,
+    path: MemoryPath,
+    version: MemoryVersion,
+    known: { readonly version: MemoryVersion; readonly markdown: string },
+  ) => Memory<string | null>;
   /** The first `limit` pages in `scope`: pinned first, then the most recently changed. */
   readonly list: (actor: MemoryActor, scope: MemoryScope, limit: number) => Memory<ReadonlyArray<MemoryPageSummary>>;
   /** Every scope that holds a page now, among those `actor` may reach. */
@@ -115,14 +129,19 @@ export interface MemoryStoreShape {
    * nothing, while you have that page pinned: the end waits, and is sent again until it is taken.
    */
   readonly endSession: (actor: MemoryActor, scope: MemoryScope, threadId: ThreadId, key: string) => Memory<boolean>;
+  /**
+   * Checks `scope` for pages that disagree and pages that look out of date (ADR 028, Check now), and
+   * answers what it found, changing nothing. Only you check.
+   */
+  readonly check: (actor: MemoryActor, scope: MemoryScope) => Memory<ReadonlyArray<MemoryFinding>>;
   /** Succeeds while the engine answers. */
   readonly health: Memory<void>;
 }
 
 export class MemoryStore extends Context.Service<MemoryStore, MemoryStoreShape>()("@hobbots/agents/MemoryStore") {}
 
-/** Calls only you may make: a hob has no delete tool and never restores (ADR 028). */
-const YOURS_ONLY: ReadonlySet<string> = new Set(["forget", "restore"]);
+/** Calls only you may make: a hob has no delete tool, never restores and never runs Check now (ADR 028). */
+const YOURS_ONLY: ReadonlySet<string> = new Set(["forget", "restore", "check"]);
 /** Calls that reach only a hob's own memory: what happened in its threads is kept there (ADR 028). */
 const OWN_ONLY: ReadonlySet<string> = new Set(["capture"]);
 
@@ -160,6 +179,7 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   search: guarded("search", store.search, ([scopes]) => scopes),
   page: guarded("read", store.page, one),
   versionChanges: guarded("read", store.versionChanges, one),
+  versionText: guarded("read", store.versionText, one),
   list: guarded("list", store.list, one),
   // Nothing to refuse: what the engine answers is narrowed to what the actor may reach.
   scopes: (actor) =>
@@ -171,6 +191,7 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   restore: guarded("restore", store.restore, one),
   capture: guarded("capture", store.capture, one),
   endSession: guarded("capture", store.endSession, one),
+  check: guarded("check", store.check, one),
   health: store.health,
 });
 
@@ -256,6 +277,10 @@ export interface MemoryShareRequest {
   readonly draft: MemoryDraft;
   /** The SHA-256 of the call's key, never its text. */
   readonly key: string;
+  /** The SHA-256 of the call's input without its key, so a key sent again with another call is told apart. */
+  readonly input: string;
+  /** The safety preset the turn runs under, which decides whether the share waits for you (ADR 028). */
+  readonly preset: SafetyPreset;
   readonly turn: CharmTurn;
 }
 
