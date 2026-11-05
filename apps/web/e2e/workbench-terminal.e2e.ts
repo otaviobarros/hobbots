@@ -302,12 +302,20 @@ test("[TC-UX-185] the terminal stays dark, with its own palette, in the light th
   await expect(bench).toBeVisible();
 });
 
-/** How far each box the Terminal sits in, from its dock's panel up to the window, is scrolled. */
+/**
+ * How far the Terminal's dock panel is scrolled, and how far each box around the panel is, up to
+ * the window.
+ */
 const scrolledAround = (panel: Locator) =>
   panel.evaluate((element) => {
-    const offsets: Array<number> = [];
-    for (let box = element.parentElement; box !== null; box = box.parentElement) offsets.push(box.scrollTop);
-    return { boxes: Math.max(...offsets), window: document.scrollingElement?.scrollTop ?? 0 };
+    const scroller = element.parentElement;
+    const offsets: Array<number> = [0];
+    for (let box = scroller?.parentElement ?? null; box !== null; box = box.parentElement) offsets.push(box.scrollTop);
+    return {
+      panel: scroller?.scrollTop ?? 0,
+      boxes: Math.max(...offsets),
+      window: document.scrollingElement?.scrollTop ?? 0,
+    };
   });
 
 /** How far the terminal's rows run past the bottom of the box they are fitted to, in pixels. */
@@ -355,12 +363,23 @@ test("[TC-UX-998] the Terminal fits the docked Workbench at any height, and read
   await terminal.locator(".xterm-accessibility-tree > div").last().focus();
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("End");
-  await expect.poll(() => scrolledAround(panel)).toEqual({ boxes: 0, window: 0 });
+  await expect.poll(() => scrolledAround(panel)).toEqual({ panel: 0, boxes: 0, window: 0 });
+  await expect(page.getByRole("button", { name: "Close room" })).toBeInViewport();
+
+  // In the shortest dock the terminal keeps its tabs and a couple of rows, which fit their box. Only the
+  // dock's panel scrolls to show them, as it does for a list; nothing around it moves.
+  await bench.getByRole("separator", { name: "Resize the Workbench" }).press("Home");
+  await expect.poll(shownRows).toBeLessThan(docked);
+  await expect.poll(() => rowsPast(terminal)).toBeLessThanOrEqual(0);
+  await terminal.locator(".xterm-accessibility-tree > div").last().focus();
+  await page.keyboard.press("End");
+  await expect.poll(async () => (await scrolledAround(panel)).boxes).toBe(0);
+  await expect.poll(async () => (await scrolledAround(panel)).window).toBe(0);
   await expect(page.getByRole("button", { name: "Close room" })).toBeInViewport();
 
   // Expanded, the terminal grows to the taller dock and still fits.
   await bench.getByRole("button", { name: "Make the Workbench as tall as it goes" }).click();
   await expect.poll(shownRows).toBeGreaterThan(docked);
   await fits();
-  await expect.poll(() => scrolledAround(panel)).toEqual({ boxes: 0, window: 0 });
+  await expect.poll(() => scrolledAround(panel)).toEqual({ panel: 0, boxes: 0, window: 0 });
 });

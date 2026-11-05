@@ -44,6 +44,17 @@ export function DockPanel({
   labels: boolean;
   onRetry: () => void;
 }) {
+  // What a tab with records shows: each hob's label and notice, then its records.
+  const contents = (listTab: ListTab) => (
+    <>
+      {labels && <HobLabels tab={listTab} sources={props.sources} hobs={props.hobs} />}
+      <HobNotices tab={listTab} sources={props.sources} hobs={props.hobs} />
+      <Panel
+        tab={listTab}
+        props={{ ...props, state, focus: on ? file : undefined, from: on ? from : undefined, shown: on }}
+      />
+    </>
+  );
   return (
     <div inert={!on} className={cn("@container absolute inset-0 overflow-y-auto", !on && "invisible")}>
       {/*
@@ -59,24 +70,14 @@ export function DockPanel({
           <Notices>
             <Notice text={messages.dock.readFailed} onRetry={onRetry} />
           </Notices>
+        ) : tab === "terminal" ? (
+          <div className="flex h-full flex-col">{contents(tab)}</div>
         ) : (
-          <Fill on={tab === "terminal"}>
-            {labels && <HobLabels tab={tab} sources={props.sources} hobs={props.hobs} />}
-            <HobNotices tab={tab} sources={props.sources} hobs={props.hobs} />
-            <Panel
-              tab={tab}
-              props={{ ...props, state, focus: on ? file : undefined, from: on ? from : undefined, shown: on }}
-            />
-          </Fill>
+          contents(tab)
         )}
       </TabsContent>
     </div>
   );
-}
-
-/** The Terminal's column, which fills the panel; a list's content is left as it is. */
-function Fill({ on, children }: { on: boolean; children: ReactNode }) {
-  return on ? <div className="flex h-full flex-col">{children}</div> : children;
 }
 
 /**
