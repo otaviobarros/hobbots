@@ -84,13 +84,13 @@ Every size in `size` is a `--spacing-*` token in `styles.css`, so Tailwind reads
 | `room-chat` | 360px | The chat column beside the Quest room at 1280 and wider |
 | `room-chat-narrow` | 300px | The chat column beside the Quest room at 1024 |
 | `room-rail` | 52px | The folded chat's rail in the Quest room |
-| `lane-min` | 220px | The narrowest a lane in the Quest room gets |
+| `lane-min` | 320px | The narrowest a lane in the Quest room gets |
 | `dock` | 340px | The Workbench docked under the lanes, while open |
 | `chat-min` | 360px | The narrowest the chat gets |
 | `measure` | 70ch | The longest line of reply prose, the tray and the composer |
 | `bubble-max` | 460px | Your own message bubble and what waits beside it; the hob profile dialog |
 | `work-max` | 604px | Task and question cards in the transcript |
-| `lane` | 220px | The narrowest a Quest room lane gets before the lanes scroll sideways |
+| `lane` | 320px | The narrowest a Quest room lane gets before the lanes scroll sideways |
 | `column-max` | 560px | Dialogs, centered notices and empty states, the approval card |
 | `form-max` | 760px | Long single-column content, such as a hob's charms and permissions |
 | `home-max` | 880px | Home and Usage |
