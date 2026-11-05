@@ -1,0 +1,19 @@
+name: Install the Playwright browser
+description: Installs Chromium's headless shell for the web client's browser tests, from a cache keyed by the Playwright version. Run it after ./.github/actions/setup.
+runs:
+  using: composite
+  steps:
+    - id: playwright
+      name: Read the Playwright version
+      run: echo "version=$(pnpm --filter @hobbots/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      shell: bash
+    # The tests run headless, so the headless shell is the only browser they need. The runner
+    # image already has the system libraries it uses.
+    - id: browsers
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
+    - if: steps.browsers.outputs.cache-hit != 'true'
+      run: pnpm --filter @hobbots/web exec playwright install --only-shell chromium
+      shell: bash

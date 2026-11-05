@@ -1,0 +1,76 @@
+name: Refresh browser test times
+
+# Once a week, writes the browser test times from main's latest green CI run to
+# apps/web/e2e/durations.json and opens a pull request with them, so the shards stay balanced
+# without anyone having to remember (apps/web/e2e/shards.ts, #985).
+on:
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh the recorded test times
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BRANCH: chore/refresh-browser-test-times
+    steps:
+      # A pull request opened with GITHUB_TOKEN starts no workflows, so CI would never run on it.
+      # An App token does start them.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Download each shard's report from main's latest green run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          run=$(gh run list --workflow ci.yml --branch main --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          echo "Reading the reports of run $run"
+          gh run download "$run" --pattern 'browser-times-*' --dir reports || true
+      - name: Write the times
+        run: |
+          shopt -s nullglob
+          files=(reports/*/report.json)
+          if (( ${#files[@]} == 0 )); then
+            echo "The run has no browser-times artifacts, so the times stay as they are." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node apps/web/e2e/record-durations.ts "${files[@]/#/$PWD/}"
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if git diff --quiet -- apps/web/e2e/durations.json; then
+            echo "The recorded times are up to date." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --create "$BRANCH"
+          git commit --message "test(web): refresh the recorded browser test times" -- apps/web/e2e/durations.json
+          git push --force origin "$BRANCH"
+          if [[ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')" ]]; then
+            gh pr create --head "$BRANCH" --title "test(web): refresh the recorded browser test times" \
+              --body "The browser test times from main's latest green CI run, which balance the CI shards (\`apps/web/e2e/shards.ts\`). Opened by \`.github/workflows/test-times.yml\`."
+          fi

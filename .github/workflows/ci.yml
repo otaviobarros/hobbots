@@ -40,6 +40,10 @@ jobs:
       - run: pnpm check
         env:
           HOBBOTS_MEMORY_CONTRACT: 1
+          # Turbo runs four tasks at once, and Vitest would give each one a worker for every CPU
+          # but one. Two each keeps the test workers, lint and typecheck from crowding the four
+          # CPUs, so a test that waits on the hub is not starved (#985).
+          VITEST_MAX_WORKERS: 2
 
   postgres:
     name: Persistence and server tests (PostgreSQL)
@@ -61,6 +65,8 @@ jobs:
     env:
       HOBBOTS_TEST_DB: postgres
       HOBBOTS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      # The two suites run at once, beside the database: two workers each fill the four CPUs.
+      VITEST_MAX_WORKERS: 2
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
@@ -71,19 +77,20 @@ jobs:
           restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
       - run: pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server
 
-  # The browser tests run in four shards side by side, balanced by recorded test times
-  # (apps/web/e2e/shards.ts). Each shard is a Turbo task with its own cache, so a change that
-  # touches neither the web client nor the server and its packages replays the last result.
+  # The browser tests run in eight shards side by side, balanced by recorded test times
+  # (apps/web/e2e/shards.ts), with two workers to a runner so each hub and browser gets a CPU
+  # (#985). Each shard is a Turbo task with its own cache, so a change that touches neither the web
+  # client nor the server and its packages replays the last result.
   browser-tests:
-    name: Browser tests (${{ matrix.shard }}/4)
+    name: Browser tests (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
-      HOBBOTS_E2E_SHARD: ${{ matrix.shard }}/4
+      HOBBOTS_E2E_SHARD: ${{ matrix.shard }}/8
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
@@ -100,41 +107,91 @@ jobs:
             jq -r '.tasks[] | select(.taskId == "@hobbots/web#test:e2e") | .cache.status')
           echo "Cache: $status"
           echo "hit=$([[ "$status" == "HIT" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - id: playwright
-        if: steps.turbo.outputs.hit != 'true'
-        name: Read the Playwright version
-        run: echo "version=$(pnpm --filter @hobbots/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      # The tests run headless, so the headless shell is the only browser they need. The runner
-      # image already has the system libraries it uses.
-      - id: browsers
-        if: steps.turbo.outputs.hit != 'true'
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
-      - if: steps.turbo.outputs.hit != 'true' && steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm --filter @hobbots/web exec playwright install --only-shell chromium
-      # Builds the web client and the server, then runs this shard's tests.
+      - if: steps.turbo.outputs.hit != 'true'
+        uses: ./.github/actions/playwright
+      # Builds the web client and the server, then runs this shard's tests. A failed test runs once
+      # more; one that then passes leaves the job green and is listed by the next step.
       - run: pnpm turbo run test:e2e --filter=@hobbots/web
-      - if: failure()
+      - id: flaky
+        if: always() && steps.turbo.outputs.hit != 'true'
+        name: List flaky and failed tests in the job summary
+        run: |
+          summary=$(node scripts/flaky-tests.mjs apps/web/test-results/report.json)
+          if [[ -n "$summary" ]]; then
+            printf '%s\n\nEach trace is in the `browser-report-%s` artifact of this run.\n' "$summary" "${{ matrix.shard }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: failure() || steps.flaky.outputs.found == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: first-launch-report-${{ matrix.shard }}
+          name: browser-report-${{ matrix.shard }}
           path: |
             apps/web/playwright-report/
             apps/web/test-results/
           retention-days: 7
+      # Each shard's test times on main, which the weekly refresh writes to e2e/durations.json
+      # (.github/workflows/test-times.yml).
+      - if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-times-${{ matrix.shard }}
+          path: apps/web/test-results/report.json
+          if-no-files-found: ignore
+          retention-days: 14
 
-  # One result for the whole browser suite under its usual name: green only when every shard is.
-  first-launch:
-    name: First launch in a browser
-    needs: browser-tests
-    if: always()
+  # Runs each browser test a pull request adds or changes, and each test whose spec file imports a
+  # changed helper, five times, and fails on one that passes only on a retry. A new flaky test then
+  # fails its own pull request instead of main (STD-TEST-009). A change that reaches more tests than
+  # MAX_TESTS, such as one to e2e/hub.ts, is left to the nightly flake hunt (flake-hunt.yml), so this
+  # job finishes in about the time the shards take.
+  burn-in:
+    name: Burn in changed browser tests
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
+    env:
+      BASE_REF: ${{ github.base_ref }}
+      MAX_TESTS: 16
     steps:
-      - if: needs.browser-tests.result != 'success'
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # The checkout is the pull request merged into its base, so its difference from the base's
+      # tip is exactly the pull request's change.
+      - run: git fetch --no-tags --depth=1 origin "$BASE_REF"
+      - id: changed
+        name: Count the changed tests
+        working-directory: apps/web
         run: |
-          echo "A browser test shard ended ${{ needs.browser-tests.result }}."
-          exit 1
-      - run: echo "Every browser test shard passed."
+          list=$(pnpm exec playwright test --list --reporter=list --only-changed="origin/$BASE_REF" || true)
+          count=$(sed -n 's/^Total: \([0-9]*\) tests\{0,1\} in .*/\1/p' <<< "$list")
+          count=${count:-0}
+          echo "Changed tests: $count"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if (( count > MAX_TESTS )); then
+            echo "This change reaches $count browser tests, more than the $MAX_TESTS this job burns in. The nightly flake hunt runs them all." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.changed.outputs.count > 0 && steps.changed.outputs.count <= fromJSON(env.MAX_TESTS)
+        id: run
+        run: pnpm turbo run build --filter=@hobbots/web
+      - if: steps.run.outcome == 'success'
+        uses: ./.github/actions/playwright
+      - if: steps.run.outcome == 'success'
+        working-directory: apps/web
+        run: pnpm exec playwright test --only-changed="origin/$BASE_REF" --repeat-each=5 --fail-on-flaky-tests
+      - id: flaky
+        if: always() && steps.run.outcome == 'success'
+        name: List flaky and failed tests in the job summary
+        run: |
+          summary=$(node scripts/flaky-tests.mjs apps/web/test-results/report.json)
+          if [[ -n "$summary" ]]; then
+            printf '%s\n\nEach trace is in the `burn-in-report` artifact of this run.\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.flaky.outputs.found == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: burn-in-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7
