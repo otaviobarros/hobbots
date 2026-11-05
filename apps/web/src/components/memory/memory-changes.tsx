@@ -1,7 +1,8 @@
-import { type MemoryChange, memoryKindOf, memoryScopeKey } from "@hobbots/domain";
+import { type MemoryChange, type MemoryShare, memoryKindOf, memoryScopeKey } from "@hobbots/domain";
 import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { shareOfChange } from "../../api/memory-shares.ts";
 import { formatCount, formatDay, formatTime } from "../../lib/format.ts";
 import {
   type ChangeFilter,
@@ -14,12 +15,25 @@ import {
 import { RowList } from "./memory-overview.tsx";
 import { ScopeMark } from "./memory-parts.tsx";
 import { messages } from "./messages.ts";
+import { ShareDecision } from "./share-card.tsx";
 
 const copy = messages;
 
 const FILTERS = ["all", "hobs", "you"] as const satisfies ReadonlyArray<ChangeFilter>;
 
-function ChangeRow({ change, hobs }: { change: MemoryChange; hobs: HobDirectory }) {
+/**
+ * One save. A save a share made carries who let it through, and Undo while it is still the
+ * page's latest version (ADR 028, Sharing).
+ */
+function ChangeRow({
+  change,
+  hobs,
+  share,
+}: {
+  change: MemoryChange;
+  hobs: HobDirectory;
+  share: MemoryShare | undefined;
+}) {
   const hob = change.author?._tag === "Hob" ? hobs.get(change.author.agentId) : undefined;
   const byYou = change.author?._tag === "You";
   const who = hob?.name ?? copy.nav.formerHob;
@@ -41,7 +55,16 @@ function ChangeRow({ change, hobs }: { change: MemoryChange; hobs: HobDirectory 
             ? copy.changes.youSaved({ title: change.title })
             : copy.changes.saved({ who, kind, title: change.title })}
         </span>
-        <span className="truncate text-detail text-text-secondary">{scopeWhere(change.scope, hobs)}</span>
+        <span className="truncate text-detail text-text-secondary">
+          {scopeWhere(change.scope, hobs)}
+          {share !== undefined &&
+            ` · ${share.through === "preset" ? copy.review.sharedByPreset : copy.review.approvedByYou}`}
+        </span>
+        {share !== undefined && share.state !== "waiting" && (
+          <span className="pt-1">
+            <ShareDecision share={share} hobs={hobs} edit="in-memory" />
+          </span>
+        )}
       </span>
       <Link
         to="/memory"
@@ -60,9 +83,12 @@ export function MemoryChangesView({
   show,
   hobs,
   now,
+  shares,
 }: {
   /** Undefined while they are read. */
   changes: ReadonlyArray<MemoryChange> | undefined;
+  /** The shares, to find the saves they made. */
+  shares: ReadonlyArray<MemoryShare>;
   show: ChangeFilter;
   hobs: HobDirectory;
   now: Date;
@@ -114,6 +140,7 @@ export function MemoryChangesView({
                     key={`${memoryScopeKey(change.scope)}/${change.path}/${change.version}`}
                     change={change}
                     hobs={hobs}
+                    share={shareOfChange(shares, change)}
                   />
                 ))}
               </RowList>

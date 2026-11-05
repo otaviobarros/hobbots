@@ -9,8 +9,12 @@ import {
   stuckEntry,
 } from "../inbox/inbox-entries.ts";
 
-/** One thing the tray asks about: a request to approve, work that is stuck, or a question for you, a hob's or the hub's. */
-export type TrayEntry = Exclude<InboxEntry, { kind: "device" } | { kind: "failed" }>;
+/**
+ * One thing the tray asks about: a request to approve, work that is stuck, or a question for you, a
+ * hob's or the hub's. A hob asking to share what it learned waits in the Inbox and Memory, never in
+ * the way of a chat.
+ */
+export type TrayEntry = Exclude<InboxEntry, { kind: "device" } | { kind: "failed" } | { kind: "memory" }>;
 
 /**
  * What the tray holds, in the order it asks: pending approvals, then stuck work, then questions,
@@ -35,7 +39,7 @@ export const trayEntries = ({
     ...blockers.filter((item) => openBlocker(item) !== undefined).map(stuckEntry),
     ...questions.filter(({ question }) => question.state === "open").map(questionEntry),
     ...hubQuestions.filter((question) => question.state === "open").map(hubQuestionEntry),
-  ].filter((entry): entry is TrayEntry => entry.kind !== "device");
+  ].filter((entry): entry is TrayEntry => entry.kind !== "device" && entry.kind !== "memory");
   return threadId === undefined ? entries : entries.filter((entry) => entryThread(entry) === threadId);
 };
 

@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { followHub } from "../src/main/hub-events.ts";
+import { frameChange } from "../src/main/hub-events-model.ts";
 import {
   deviceNotices,
   failedTaskNotices,
   finishedNotices,
   questionNotices,
   requestNotices,
+  shareNotices,
 } from "../src/main/request-notices.ts";
 import {
   deviceNoticeText,
@@ -431,5 +433,44 @@ describe("Quest notifications", () => {
     expect(failedNoticeText({ id: "x", ownerId: "ada", brief: "Build", link: null }, undefined).title).toBe(
       "A hob's task failed",
     );
+  });
+});
+
+const sharing = (id: string, state: string, scope: unknown = { _tag: "Project", identity: "github.com/me/site" }) => ({
+  id,
+  agentId: "ada",
+  scope,
+  state,
+});
+
+describe("memory share notifications", () => {
+  // covers ADR 028 (Sharing), #960
+  it("[TC-IN-560] announces a hob asking to share what it learned, opens it in the Inbox, and closes once decided", async () => {
+    const { hub, notices, options } = questSetup();
+    const opened: Array<string> = [];
+    const { check } = shareNotices({ ...options, open: (id) => void opened.push(id) });
+    hub.lists["/api/memory/shares"] = { shares: [] };
+    await check();
+    hub.lists["/api/memory/shares"] = {
+      shares: [sharing("s1", "waiting"), sharing("s2", "waiting", { _tag: "Everyone" }), sharing("s3", "shared")],
+    };
+    await check();
+    expect(notices).toEqual([
+      expect.objectContaining({ title: "Ada wants to share what it learned", body: "With the site project" }),
+      expect.objectContaining({ title: "Ada wants to share what it learned", body: "With every hob, in About you" }),
+    ]);
+    notices[1]?.click();
+    expect(opened).toEqual(["memory:s2"]);
+    hub.lists["/api/memory/shares"] = {
+      shares: [sharing("s1", "kept"), sharing("s2", "waiting", { _tag: "Everyone" })],
+    };
+    await check();
+    expect(notices.map((notice) => notice.closed)).toEqual([true, false]);
+  });
+
+  it("reads again on a share's journal entries", () => {
+    for (const type of ["MemoryShareRequested", "MemoryShareChanged"]) {
+      expect(frameChange({ event: "message", data: JSON.stringify({ type }) })).toEqual({ _tag: "Shares" });
+    }
   });
 });

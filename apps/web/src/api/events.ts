@@ -29,6 +29,7 @@ import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { applyMemoryChanged, refreshMemory } from "./memory-pages.ts";
 import { applyMemorySave, refreshMemorySaves } from "./memory-saves.ts";
+import { memorySharesChanged } from "./memory-shares.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
@@ -163,6 +164,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     return;
   }
   if (isUnapplied(event)) return;
+  if (isMemoryEvent(event)) {
+    applyMemoryEvent(queryClient, event);
+    return;
+  }
   switch (event._tag) {
     case "AgentUpserted":
       applyAgent(queryClient, event.agent);
@@ -196,14 +201,32 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "MessageDelta":
       applyDelta(queryClient, event);
       return;
-    // A hob's save to its memory, under the reply it was made from (ADR 028).
-    case "MemorySaveRecorded":
-    case "MemorySaveChanged":
-      void applyMemorySave(queryClient, event.save);
-      return;
     default:
       applyWorkEvent(queryClient, event);
       return;
+  }
+};
+
+type MemoryEvent = Extract<
+  HobbotsEvent,
+  { readonly _tag: "MemorySaveRecorded" | "MemorySaveChanged" | "MemoryShareRequested" | "MemoryShareChanged" }
+>;
+const MEMORY_EVENTS = new Set<HobbotsEvent["_tag"]>([
+  "MemorySaveRecorded",
+  "MemorySaveChanged",
+  "MemoryShareRequested",
+  "MemoryShareChanged",
+]);
+const isMemoryEvent = (event: HobbotsEvent): event is MemoryEvent => MEMORY_EVENTS.has(event._tag);
+
+/** A hob's save or share, as memory's lists show it (ADR 028). */
+const applyMemoryEvent = (queryClient: QueryClient, event: MemoryEvent) => {
+  // A save shows under the reply it was made from; a share, or a share that moved, has the Inbox,
+  // To review and memory read it again.
+  if (event._tag === "MemorySaveRecorded" || event._tag === "MemorySaveChanged") {
+    void applyMemorySave(queryClient, event.save);
+  } else {
+    void memorySharesChanged(queryClient);
   }
 };
 

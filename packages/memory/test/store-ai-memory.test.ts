@@ -72,6 +72,67 @@ describe("ai-memory scopes", () => {
   });
 });
 
+describe.runIf(engineEnabled)("Check now on ai-memory", () => {
+  // covers ADR 028 (Sharing), #960
+  it("[TC-GEN-373] finds a page flagged as out of date, as Check now shows it", async () => {
+    const { store, endpoint, keys } = await Effect.runPromise(open());
+    const site: MemoryScope = {
+      _tag: "Project",
+      identity: memoryProjectIdentity("git@github.com:me/site.git", "site"),
+    };
+    const you = { _tag: "You" } as const;
+    const path = MemoryPath.make("howtos/deploy.md");
+    const markdown = "# Deploy\n\nRun `pnpm deploy`.";
+    await Effect.runPromise(store.write(you, site, { path, markdown, tags: [], pinned: false }, { _tag: "New" }));
+    expect(await Effect.runPromise(store.check(you, site))).toEqual([]);
+    // A hob that found it out of date said so: ai-memory flags it for the next check.
+    const response = await fetch(`${endpoint.url}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${Redacted.value(keys.root)}`,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "memory_feedback",
+          arguments: { ...engineProjectOf(site), path, signal: "stale", reason: "We deploy with Vercel now." },
+        },
+      }),
+    });
+    expect(response.status).toBe(200);
+    const found = await Effect.runPromise(store.check(you, site));
+    expect(found).toEqual([{ kind: "stale", scope: site, paths: [path], message: expect.any(String) }]);
+    // A dry run: the page is as it was.
+    expect((await Effect.runPromise(store.page(you, site, path)))?.markdown).toContain("Run `pnpm deploy`.");
+  });
+});
+
+describe.runIf(engineEnabled)("a version's text on ai-memory", () => {
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-384] answers no text for a version whose diff ai-memory cuts short, never a part of it", async () => {
+    const { store } = await Effect.runPromise(open());
+    const site: MemoryScope = {
+      _tag: "Project",
+      identity: memoryProjectIdentity("git@github.com:me/site.git", "site"),
+    };
+    const you = { _tag: "You" } as const;
+    const path = MemoryPath.make("notes/long.md");
+    const lines = (word: string) => Array.from({ length: 1_200 }, (_, at) => `${word} ${at}`).join("\n");
+    const draft = (markdown: string) => ({ path, markdown, tags: [], pinned: false });
+    const first = await Effect.runPromise(store.write(you, site, draft(lines("old")), { _tag: "New" }));
+    const second = await Effect.runPromise(
+      store.write(you, site, draft(lines("new")), { _tag: "Version", version: first }),
+    );
+    // Every line changed: more than ai-memory diffs, so the text cannot be rebuilt whole.
+    const known = { version: second, markdown: lines("new") };
+    expect(await Effect.runPromise(store.versionText(you, site, path, first, known))).toBeNull();
+  });
+});
+
 describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
   // covers ADR 028 (Backups), OP-002
   it("[TC-OP-102] says memory did not answer in full rather than leave a project it cannot name out", async () => {

@@ -311,14 +311,27 @@ describe("a page", () => {
   it("[TC-UX-948] tells each version's story, newest first: who learned it, then who changed it", () => {
     const rows = historyRows(
       [
-        { version: version("v3"), author: byYou, writtenAt: "2026-11-05T10:00:00.000Z", latest: true },
+        {
+          version: version("v3"),
+          supersedes: version("v2"),
+          author: byYou,
+          writtenAt: "2026-11-05T10:00:00.000Z",
+          latest: true,
+        },
         {
           version: version("v2"),
+          supersedes: version("v1"),
           author: { _tag: "Hob", agentId: ada.id },
           writtenAt: "2026-11-04T10:00:00.000Z",
           latest: false,
         },
-        { version: version("v1"), author: byPip, writtenAt: "2026-11-03T10:00:00.000Z", latest: false },
+        {
+          version: version("v1"),
+          supersedes: null,
+          author: byPip,
+          writtenAt: "2026-11-03T10:00:00.000Z",
+          latest: false,
+        },
       ],
       hobs,
     );
@@ -327,7 +340,10 @@ describe("a page", () => {
       [copy.page.changedThis({ who: "Ada" }), false],
       [copy.page.learnedThis({ who: "Pip" }), false],
     ]);
-    const yours = historyRows([{ version: version("v1"), author: byYou, writtenAt: "x", latest: true }], hobs);
+    const yours = historyRows(
+      [{ version: version("v1"), supersedes: null, author: byYou, writtenAt: "x", latest: true }],
+      hobs,
+    );
     expect(yours[0]?.what).toBe(copy.page.wroteThis);
   });
 

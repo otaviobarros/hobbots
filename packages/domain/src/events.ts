@@ -7,6 +7,7 @@ import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
 import { HubQuestion } from "./hub-question.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { MemoryShare } from "./memory-shares.ts";
 import { MemorySave } from "./memory-tools.ts";
 import { Message, ReplyStep } from "./message.ts";
 import {
@@ -144,6 +145,13 @@ const ToolCallRefused = Schema.TaggedStruct("ToolCallRefused", { refusal: Refuse
 const MemorySaveRecorded = Schema.TaggedStruct("MemorySaveRecorded", { save: MemorySave });
 /** A recorded save was sent: memory took it, kept it for later, or refused it. */
 const MemorySaveChanged = Schema.TaggedStruct("MemorySaveChanged", { save: MemorySave });
+/**
+ * A hob asked to share a page with a project or every hob (ADR 028, Sharing), recorded before
+ * anything is written: it waits for your review, or the preset lets it through.
+ */
+const MemoryShareRequested = Schema.TaggedStruct("MemoryShareRequested", { share: MemoryShare });
+/** A share moved: it went through, you shared it or kept it private, or you took it back. */
+const MemoryShareChanged = Schema.TaggedStruct("MemoryShareChanged", { share: MemoryShare });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
 const FolderScanned = Schema.TaggedStruct("FolderScanned", { scan: FolderScan });
 /**
@@ -229,6 +237,8 @@ export const JournaledEvent = Schema.Union([
   AttemptStepsRecorded,
   MemorySaveRecorded,
   MemorySaveChanged,
+  MemoryShareRequested,
+  MemoryShareChanged,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -293,6 +303,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   AttemptStepsRecorded: 1,
   MemorySaveRecorded: 1,
   MemorySaveChanged: 1,
+  MemoryShareRequested: 1,
+  MemoryShareChanged: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

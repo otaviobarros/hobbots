@@ -104,9 +104,10 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             tags: ["repo"],
           });
           const history = yield* again.history(asPip, pipsOwn, path);
-          expect(history.map(({ version, latest }) => ({ version, latest }))).toEqual([
-            { version: second, latest: true },
-            { version: first, latest: false },
+          // Each version names the one it replaced, the first none.
+          expect(history.map(({ version, supersedes, latest }) => ({ version, supersedes, latest }))).toEqual([
+            { version: second, supersedes: first, latest: true },
+            { version: first, supersedes: null, latest: false },
           ]);
           expect(history[0]?.author).toEqual({ _tag: "You" });
           // An engine may know who wrote only the latest version.
@@ -174,6 +175,40 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
         }),
       ));
 
+    // covers ADR 028 (Sharing), STD-DATA-001, #960
+    it("[TC-GEN-383] answers an earlier version's exact text from one whose text is held, lines in their order", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const path = MemoryPath.make("howtos/order.md");
+          const first = yield* store.write(
+            asPip,
+            pipsOwn,
+            draft("howtos/order.md", "# Steps\n\nBuild.\nTest.\n"),
+            fresh,
+          );
+          // The same lines, in another order, then a later change on top.
+          const second = yield* store.write(asPip, pipsOwn, draft("howtos/order.md", "# Steps\n\nTest.\nBuild.\n"), {
+            _tag: "Version",
+            version: first,
+          });
+          const third = yield* store.write(
+            asPip,
+            pipsOwn,
+            draft("howtos/order.md", "# Steps\n\nTest.\nBuild.\nShip.\n"),
+            { _tag: "Version", version: second },
+          );
+          const latest = { version: third, markdown: "# Steps\n\nTest.\nBuild.\nShip.\n" };
+          expect(yield* store.versionText(you, pipsOwn, path, first, latest)).toBe("# Steps\n\nBuild.\nTest.\n");
+          expect(yield* store.versionText(you, pipsOwn, path, second, latest)).toBe("# Steps\n\nTest.\nBuild.\n");
+          const firstText = { version: first, markdown: "# Steps\n\nBuild.\nTest.\n" };
+          expect(yield* store.versionText(you, pipsOwn, path, second, firstText)).toBe("# Steps\n\nTest.\nBuild.\n");
+          // A version of another page has no text here.
+          expect(yield* store.versionText(you, pipsOwn, MemoryPath.make("howtos/other.md"), first, latest)).toBeNull();
+          // A hob never reads another hob's versions.
+          expect(yield* died(store.versionText(asQuill, pipsOwn, path, first, latest))).toBe(true);
+        }),
+      ));
+
     // covers ADR 028 (forget, restore)
     it("[TC-GEN-175] restores an earlier version only while the page is as expected, and brings back a page it forgot", () =>
       run(({ store }) =>
@@ -193,7 +228,10 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             version: restored,
             markdown: "# Style\n\nTabs.",
           });
-          expect((yield* store.history(you, pipsOwn, path))[0]).toMatchObject({ version: restored, latest: true });
+          const afterRestore = yield* store.history(you, pipsOwn, path);
+          expect(afterRestore[0]).toMatchObject({ version: restored, latest: true });
+          // A restore replaces the version that was the latest, as any write does.
+          expect(afterRestore.find((each) => each.supersedes === second)).toBeDefined();
 
           const stale = yield* Effect.flip(store.forget(you, pipsOwn, path, { _tag: "Version", version: second }));
           expect(stale).toMatchObject({ _tag: "MemoryConflict", current: restored });
@@ -209,6 +247,28 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             version: back,
             markdown: "# Style\n\nTabs.",
           });
+          // A page written anew after a forget replaces none of the forgotten versions.
+          const forgotten = new Set<MemoryVersion | null>([first, second, restored]);
+          expect((yield* store.history(you, pipsOwn, path)).some((each) => forgotten.has(each.supersedes))).toBe(false);
+        }),
+      ));
+
+    // covers ADR 028 (forget, restore), #961
+    it("[TC-GEN-349] restores an earlier version line for line, with its blank and last lines", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const path = MemoryPath.make("notes/launch.md");
+          const before = "# Launch\n\n- Monday\n\n  - 9 AM\n- Emails\n\nDecided with you.\n";
+          const lines = Array.from({ length: 40 }, (_, i) => `Line ${i}`).join("\n");
+          const first = yield* store.write(you, pipsOwn, draft("notes/launch.md", `${before}\n${lines}`), fresh);
+          const second = yield* store.write(
+            asPip,
+            pipsOwn,
+            draft("notes/launch.md", `# Launch\n\n- Tuesday\n\n${lines.replace("Line 20", "Twenty")}\nThe end.`),
+            any,
+          );
+          yield* store.restore(you, pipsOwn, path, first, { _tag: "Version", version: second });
+          expect((yield* store.page(you, pipsOwn, path))?.markdown).toBe(`${before}\n${lines}`);
         }),
       ));
 
@@ -491,6 +551,22 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             expect(yield* died(store.capture(asPip, scope, thread, items))).toBe(true);
             expect(yield* died(store.endSession(asPip, scope, thread, "end:m1"))).toBe(true);
           }
+        }),
+      ));
+
+    // covers ADR 028 (Sharing), #960
+    it("[TC-GEN-372] checks a scope for pages that disagree or look out of date, changing nothing, for you alone", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          yield* store.write(you, theSite, draft("howtos/deploy.md", "# Deploy\n\nRun `pnpm deploy`."), fresh);
+          yield* store.write(you, theSite, draft("facts/stack.md", "# Stack\n\nThe site is built with Astro."), fresh);
+          const before = yield* store.list(you, theSite, 50);
+          expect(yield* store.check(you, theSite)).toEqual([]);
+          expect(yield* store.check(you, everyone)).toEqual([]);
+          // Nothing new among your pages, such as a report of its own.
+          expect(yield* store.list(you, theSite, 50)).toEqual(before);
+          // Check now is yours: a hob never runs it.
+          expect(yield* died(store.check(asQuill, theSite))).toBe(true);
         }),
       ));
   });
