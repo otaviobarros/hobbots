@@ -13,6 +13,7 @@ import {
   HobAdmission,
   HobLifecycle,
   HobService,
+  MemoryCapture,
   PermissionSummary,
   RecoveryLog,
   SecretRedaction,
@@ -45,6 +46,7 @@ import {
   loadOrCreateMemoryKeys,
   MemoryEngine,
   type MemoryKeys,
+  MemoryStoreAiMemory,
   MemoryToolsLive,
 } from "@hobbots/memory";
 import { MemoryStoreFake } from "@hobbots/memory/testing";
@@ -61,6 +63,7 @@ import {
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   HobGitHubAppRepository,
+  MemoryCaptureLive,
   MemorySavesLive,
   RestoreRepository,
   SearchIndex,
@@ -151,6 +154,20 @@ const memoryEngineLayer = (
   );
 };
 
+/**
+ * Memory capture (ADR 028): with memory on, the worker sends what happens in each thread to the
+ * engine, and the journal keeps every entry it has still to send. With memory turned off, or no
+ * engine in this copy of Hobbots, nothing is captured and compaction keeps nothing for it.
+ */
+const memoryCaptureLayer = (config: {
+  readonly memory: "on" | "off";
+  readonly memoryEngineDir: Option.Option<string>;
+}) => {
+  const engine = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
+  if (config.memory === "off" || engine === "") return MemoryCapture.off;
+  return MemoryCapture.layer.pipe(Layer.provide(MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))));
+};
+
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig;
@@ -201,6 +218,7 @@ const ServerLive = Layer.unwrap(
       TaskToolCallsLive,
       CharmCallsLive,
       MemorySavesLive,
+      MemoryCaptureLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
@@ -318,6 +336,8 @@ const ServerLive = Layer.unwrap(
             HobService.layer,
             PermissionSummary.layer,
             JournalCompaction,
+            // What happens in each thread goes to its hob's memory (ADR 028).
+            memoryCaptureLayer(config),
             // The Workbench's heavy details are cleared past their retention window (ADR 023).
             ActivityRetention,
             // Two Tasks of one Quest changing the same file is a finding for their lead (#570).

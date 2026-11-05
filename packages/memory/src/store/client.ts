@@ -113,6 +113,21 @@ export const makeEngineClient = Effect.gen(function* () {
         ),
         (response) => answer(response, schema),
       ),
+    /** Posts lifecycle events to `/hook/batch` as `caller`, and decodes its acknowledgement. */
+    hookBatch: <S extends Schema.ConstraintDecoder<unknown>>(
+      caller: EngineCaller,
+      items: ReadonlyArray<{ readonly url: string; readonly body: Record<string, unknown> }>,
+      schema: S,
+    ) =>
+      Effect.flatMap(
+        send(caller, (url) =>
+          HttpClientRequest.post(`${url}/hook/batch`).pipe(
+            HttpClientRequest.acceptJson,
+            HttpClientRequest.bodyJsonUnsafe(items),
+          ),
+        ),
+        (response) => answer(response, schema),
+      ),
     /** Calls an MCP tool as `caller`, with the stateless transport, and decodes the JSON it answers. */
     tool: <S extends Schema.ConstraintDecoder<unknown>>(
       caller: EngineCaller,
