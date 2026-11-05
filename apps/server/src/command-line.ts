@@ -1,3 +1,4 @@
+import { mkdirSync, realpathSync } from "node:fs";
 import { Console, Effect } from "effect";
 import { hubPresenceFile, processAlive, readHubPresence } from "./hub-presence.ts";
 import { parseServerIdentity, readInstallationId } from "./installation.ts";
@@ -35,6 +36,19 @@ export const hubUsing = (dataDir: string) =>
     } catch (error) {
       return refused(error) ? undefined : `Port ${port} did not answer, so a hub may be using ${dataDir}.`;
     }
+  });
+
+/**
+ * The data folder by its canonical path, made if it is missing, for a command that changes it. Fails
+ * with why, ending in `advice` on what to do instead, while a hub may be using it.
+ */
+export const freeDataFolder = (folder: string, advice: string) =>
+  Effect.gen(function* () {
+    mkdirSync(folder, { recursive: true });
+    const dataDir = realpathSync(folder);
+    const using = yield* hubUsing(dataDir);
+    if (using !== undefined) return yield* Effect.fail(`${using} Stop it first, or ${advice}. Nothing changed.`);
+    return dataDir;
   });
 
 /**

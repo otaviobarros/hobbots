@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { GitHubAccounts, HobbotsRepository, HobGitHubApps } from "@hobbots/agents";
@@ -10,7 +10,7 @@ import {
   SqliteLive,
 } from "@hobbots/persistence";
 import { Console, Effect, Layer } from "effect";
-import { exitOnFailure, hubUsing } from "./command-line.ts";
+import { exitOnFailure, freeDataFolder } from "./command-line.ts";
 import { ServerConfig } from "./config.ts";
 import { eraseKeychain, keptReason, wipeHubData } from "./resets.ts";
 
@@ -45,11 +45,7 @@ const recordsOf = (dataDir: string) =>
 const reset = Effect.gen(function* () {
   const config = yield* ServerConfig;
   const confirmed = process.argv.slice(2).includes("--yes");
-  mkdirSync(config.dataDir, { recursive: true });
-  const dataDir = realpathSync(config.dataDir);
-  const using = yield* hubUsing(dataDir);
-  if (using !== undefined)
-    return yield* Effect.fail(`${using} Stop it first, or start over from its Settings. Nothing changed.`);
+  const dataDir = yield* freeDataFolder(config.dataDir, "start over from its Settings");
   const keychains = Layer.mergeAll(
     KeychainLive(process.platform, process.env),
     HobAppKeysLive(process.platform, process.env),
