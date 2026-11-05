@@ -2,6 +2,7 @@
 
 - **Date:** 2026-11-05
 - **Issue:** [#960](https://github.com/otaviobarros/hobbots/issues/960)
+- **Pull request:** [#984](https://github.com/otaviobarros/hobbots/pull/984)
 - **Commit:** the head of `claude/project-thread-8bt55z`, the branch of the pull request, after merging `main` at `2938f51`; not yet on `main`.
 - **Setup:** Linux x86_64 container (Ubuntu 24.04.5, Node 22.23.4) with ai-memory 3.4.2 for `linux-x64`, fetched and checked by `pnpm --filter @hobbots/memory fetch-engine`. Hub-level cases run the whole API over a SQLite test database, the fake runtime and the in-memory `MemoryStore`, calling `memory_save` through the hob's memory tools and deciding over HTTP with this computer's window key.
 - **Result:** Passed with gaps: memory 110 tests (the ai-memory contract included), domain 156, agents 17, persistence 161 of 162, web 837, desktop 152, and the server's memory cases 32. The persistence failure is the migration ids check, which waits for `0058` from [#981](https://github.com/otaviobarros/hobbots/pull/981); this branch's migration is `0059`. The whole server suite passes but for `[TC-DP-008]`, which needs IPv6, which this container lacks, and fails on `main` too.
