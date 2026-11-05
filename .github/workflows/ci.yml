@@ -112,12 +112,19 @@ jobs:
       # Builds the web client and the server, then runs this shard's tests. A failed test runs once
       # more; one that then passes leaves the job green and is listed by the next step.
       - run: pnpm turbo run test:e2e --filter=@hobbots/web
+      # A cached result replays the report and traces of the run that recorded it, flaky tests
+      # included, so they are listed again, marked as cached.
       - id: flaky
-        if: always() && steps.turbo.outputs.hit != 'true'
+        if: always()
         name: List flaky and failed tests in the job summary
+        env:
+          HIT: ${{ steps.turbo.outputs.hit }}
         run: |
           summary=$(node scripts/flaky-tests.mjs apps/web/test-results/report.json)
           if [[ -n "$summary" ]]; then
+            if [[ "$HIT" == true ]]; then
+              summary=$(printf '%s\n\n%s' "This shard replayed a cached result: these tests come from the run that recorded it." "$summary")
+            fi
             printf '%s\n\nEach trace is in the `browser-report-%s` artifact of this run.\n' "$summary" "${{ matrix.shard }}" >> "$GITHUB_STEP_SUMMARY"
             echo "found=true" >> "$GITHUB_OUTPUT"
           fi
