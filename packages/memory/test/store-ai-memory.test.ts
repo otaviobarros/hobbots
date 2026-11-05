@@ -18,6 +18,15 @@ import { memoryStoreContract } from "./store-contract.ts";
 
 vi.setConfig({ testTimeout: 60_000 });
 
+// Effect's fetch client takes `globalThis.fetch` once, so a test that steps in between a store's
+// requests and the engine sets `beforeFetch` instead of replacing it.
+const realFetch = globalThis.fetch;
+let beforeFetch: ((url: string) => Promise<void>) | undefined;
+globalThis.fetch = async (input, init) => {
+  await beforeFetch?.(input instanceof Request ? input.url : String(input));
+  return realFetch(input, init);
+};
+
 const open = () =>
   Effect.gen(function* () {
     const { dataDir, keys } = engineDataDir();
@@ -133,6 +142,55 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
     const refused = await Effect.runPromise(Effect.flip(store.scopes(you)));
     expect(refused).toBeInstanceOf(MemoryUnavailable);
     expect(refused.message).toMatch(/repo-foreign-0123456789/);
+  });
+
+  // covers ADR 028 (Writes), #961
+  it("[TC-GEN-348] refuses a restore when ai-memory changes the page after the restore checked it, and puts that change back", async () => {
+    const { store, endpoint, keys } = await Effect.runPromise(open());
+    const pip: MemoryScope = { _tag: "Hob", agentId: AgentId.make("0d6e2f0a-0000-4000-8000-000000000031") };
+    const you = { _tag: "You" } as const;
+    const path = MemoryPath.make("sessions/thread-1.md");
+    const draft = (markdown: string) => ({ path, markdown, tags: [], pinned: false });
+    const first = await Effect.runPromise(store.write(you, pip, draft("# Session\n\nMonday."), { _tag: "New" }));
+    const second = await Effect.runPromise(store.write(you, pip, draft("# Session\n\nTuesday."), { _tag: "Any" }));
+    // ai-memory writes the page itself, as a session's summary does, once the restore has checked it.
+    const where = engineProjectOf(pip);
+    const engineWrite = () =>
+      realFetch(`${endpoint.url}/mcp`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${Redacted.value(keys.root)}`,
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: {
+            name: "memory_write_page",
+            arguments: { ...where, path, body: "# Session\n\nThe summary." },
+          },
+        }),
+      });
+    let wrote = false;
+    beforeFetch = async (url) => {
+      if (wrote || !url.includes("/admin/restore-page")) return;
+      wrote = true;
+      expect((await engineWrite()).status).toBe(200);
+    };
+    try {
+      const refused = await Effect.runPromise(
+        Effect.flip(store.restore(you, pip, path, first, { _tag: "Version", version: second })),
+      );
+      expect(wrote).toBe(true);
+      expect(refused).toMatchObject({ _tag: "MemoryConflict" });
+    } finally {
+      beforeFetch = undefined;
+    }
+    expect(await Effect.runPromise(store.page(you, pip, path))).toMatchObject({
+      markdown: "# Session\n\nThe summary.",
+    });
   });
 });
 

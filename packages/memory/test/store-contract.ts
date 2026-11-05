@@ -219,6 +219,25 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
         }),
       ));
 
+    // covers ADR 028 (forget, restore), #961
+    it("[TC-GEN-349] restores an earlier version line for line, with its blank and last lines", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const path = MemoryPath.make("notes/launch.md");
+          const before = "# Launch\n\n- Monday\n\n  - 9 AM\n- Emails\n\nDecided with you.\n";
+          const lines = Array.from({ length: 40 }, (_, i) => `Line ${i}`).join("\n");
+          const first = yield* store.write(you, pipsOwn, draft("notes/launch.md", `${before}\n${lines}`), fresh);
+          const second = yield* store.write(
+            asPip,
+            pipsOwn,
+            draft("notes/launch.md", `# Launch\n\n- Tuesday\n\n${lines.replace("Line 20", "Twenty")}\nThe end.`),
+            any,
+          );
+          yield* store.restore(you, pipsOwn, path, first, { _tag: "Version", version: second });
+          expect((yield* store.page(you, pipsOwn, path))?.markdown).toBe(`${before}\n${lines}`);
+        }),
+      ));
+
     // covers ADR 028 (Browse)
     it("[TC-GEN-176] lists pinned pages first, then the newest, up to a limit, and the pages changed since a time", () =>
       run(({ store }) =>

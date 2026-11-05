@@ -3,6 +3,7 @@ import {
   type MemoryActor,
   type MemoryChangedLine,
   MemoryConflict,
+  type MemoryDraft,
   type MemoryExpected,
   type MemoryFinding,
   MemoryForgetDay,
@@ -67,7 +68,7 @@ const HistoryJson = Schema.Struct({
   versions: Schema.Array(
     Schema.Struct({
       id: Schema.String,
-      supersedes: Schema.NullOr(Schema.String),
+      supersedes: Schema.optionalKey(Schema.NullOr(Schema.String)),
       is_latest: Schema.Boolean,
       created_at: Schema.String,
     }),
@@ -211,9 +212,8 @@ const refusalIsOutage = <A, E, R>(
 
 const makeStore = (client: EngineClient): MemoryStoreShape => {
   /**
-   * The engine's restore takes no precondition, so the hub's changes to pages run one at a time: a
-   * restore checks that the page is as expected and writes the version back before any other change
-   * of the hub's lands. Writes and forgets keep their own preconditions in the engine as well.
+   * The hub's changes to memory run one at a time, so none lands between a restore's check of the
+   * page and the engine's restore, which takes no precondition of its own.
    */
   const changing = Semaphore.makeUnsafe(1);
   /**
@@ -350,6 +350,45 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       return Effect.fail(new MemoryConflict({ path, current: current === null ? null : MemoryVersion.make(current) }));
     };
 
+  /** Writes `draft` when the page is as `expected`; `write` and `restore` hold `changing` around it. */
+  const writePage = (actor: MemoryActor, scope: MemoryScope, draft: MemoryDraft, expected: MemoryExpected) =>
+    indexProject(scope)
+      .pipe(
+        Effect.andThen(
+          client.tool(
+            callerOf(actor),
+            "memory_write_page",
+            {
+              ...target(scope, engineProjectOf(scope)),
+              path: draft.path,
+              body: draft.markdown,
+              tags: draft.tags,
+              pinned: draft.pinned,
+              ...(draft.forgetOn ? { expires_at: draft.forgetOn } : {}),
+              ...preconditionOf(expected),
+            },
+            WrittenJson,
+          ),
+        ),
+      )
+      .pipe(
+        Effect.map((json) => MemoryVersion.make(json.page_id)),
+        Effect.catchTag("EngineRefused", conflictOf(draft.path)),
+        refusalIsOutage,
+      );
+
+  /** The version that `version` of the page replaced, or null when it replaced none or has gone. */
+  const replacedBy = (scope: MemoryScope, path: MemoryPath, version: MemoryVersion) =>
+    Effect.map(
+      client
+        .get(`${pagesRoute(engineProjectOf(scope))}/history/${path}`, HistoryJson, { limit: "5" })
+        .pipe(orEmpty({ total: 0, versions: [] } as typeof HistoryJson.Type)),
+      (json) => {
+        const found = json.versions.find((each) => each.id === version)?.supersedes ?? null;
+        return found === null ? null : MemoryVersion.make(found);
+      },
+    );
+
   const currentConflict = (scope: MemoryScope, path: MemoryPath) =>
     Effect.flatMap(pageOf(scope, path), (page) =>
       Effect.fail(new MemoryConflict({ path, current: page?.version ?? null })),
@@ -460,38 +499,13 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         const latest = yield* pageOf(scope, path);
         return versions.map((version) => ({
           version: MemoryVersion.make(version.id),
-          supersedes: version.supersedes === null ? null : MemoryVersion.make(version.supersedes),
+          supersedes: version.supersedes == null ? null : MemoryVersion.make(version.supersedes),
           author: version.is_latest ? (latest?.author ?? null) : null,
           writtenAt: version.created_at,
           latest: version.is_latest,
         }));
       }).pipe(refusalIsOutage),
-    write: (actor, scope, draft, expected) =>
-      indexProject(scope)
-        .pipe(
-          Effect.andThen(
-            client.tool(
-              callerOf(actor),
-              "memory_write_page",
-              {
-                ...target(scope, engineProjectOf(scope)),
-                path: draft.path,
-                body: draft.markdown,
-                tags: draft.tags,
-                pinned: draft.pinned,
-                ...(draft.forgetOn ? { expires_at: draft.forgetOn } : {}),
-                ...preconditionOf(expected),
-              },
-              WrittenJson,
-            ),
-          ),
-        )
-        .pipe(
-          Effect.map((json) => MemoryVersion.make(json.page_id)),
-          Effect.catchTag("EngineRefused", conflictOf(draft.path)),
-          refusalIsOutage,
-          changing.withPermit,
-        ),
+    write: (actor, scope, draft, expected) => changing.withPermit(writePage(actor, scope, draft, expected)),
     scopes: () =>
       Effect.gen(function* () {
         const projects = yield* client.get("projects", ProjectsJson);
@@ -542,24 +556,32 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         changing.withPermit,
       );
     },
-    restore: (actor, scope, path, version, expected) => {
-      const source = version.startsWith(REVISION) ? { rev: version.slice(REVISION.length) } : { page_id: version };
-      return Effect.gen(function* () {
+    restore: (actor, scope, path, version, expected) =>
+      Effect.gen(function* () {
         const current = yield* pageOf(scope, path);
-        if (!pageMeets(current?.version ?? null, expected)) {
-          return yield* new MemoryConflict({ path, current: current?.version ?? null });
+        const was = current?.version ?? null;
+        if (!pageMeets(was, expected)) return yield* new MemoryConflict({ path, current: was });
+        const source = version.startsWith(REVISION) ? { rev: version.slice(REVISION.length) } : { page_id: version };
+        const restored = MemoryVersion.make(
+          (yield* client
+            .admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson)
+            // A version the page never had, or one gone with a forget, leaves the page as it is.
+            .pipe(Effect.catchTag("EngineRefused", () => currentConflict(scope, path)))).page_id,
+        );
+        // The engine's restore takes no precondition. The hub's own changes wait for it, but the
+        // engine may write the page itself, as a session's summary, between the check and the
+        // restore: then the restore replaced a version it never saw, which is put back as the latest.
+        const replaced = yield* replacedBy(scope, path, restored);
+        if (replaced !== null && replaced !== was) {
+          const back = yield* client.admin(
+            "restore-page",
+            { ...engineProjectOf(scope), path, page_id: replaced },
+            WrittenJson,
+          );
+          return yield* new MemoryConflict({ path, current: MemoryVersion.make(back.page_id) });
         }
-        const json = yield* client.admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson);
-        return MemoryVersion.make(json.page_id);
-      }).pipe(
-        // A version the page never had, or one gone with a forget, leaves the page as it is.
-        Effect.catchTag("EngineRefused", () => currentConflict(scope, path)),
-        changing.withPermit,
-        // Outside the permit: the stamp is a write of its own, which takes it again.
-        Effect.flatMap((restored) => stampedYours(actor, scope, path, restored)),
-        refusalIsOutage,
-      );
-    },
+        return yield* stampedYours(actor, scope, path, restored);
+      }).pipe(refusalIsOutage, changing.withPermit),
     capture: (actor, scope, threadId, items) =>
       Effect.gen(function* () {
         const where = engineProjectOf(scope);
@@ -584,7 +606,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         // session whose chat note you pinned is not sent: the note stays as it is, and the capture
         // worker keeps the end and sends it again once you unpin it.
         note?.pinned === true ? Effect.succeed(false) : Effect.as(endOf(actor, scope, threadId, key), true),
-      ).pipe(refusalIsOutage),
+      ).pipe(refusalIsOutage, changing.withPermit),
     check: (_actor, scope) =>
       client
         // A dry run, so the engine keeps no report page of its own among your pages.
@@ -620,7 +642,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
     Effect.flatMap(pageOf(scope, path), (page) =>
       page === null || page.version !== restored || page.author?._tag === "You"
         ? Effect.succeed(restored)
-        : store.write(
+        : writePage(
             actor,
             scope,
             { path, markdown: page.markdown, tags: page.tags, pinned: page.pinned, forgetOn: page.forgetOn },
@@ -634,10 +656,6 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
 const unnamed = (project: string) =>
   new MemoryUnavailable({ message: `Memory holds a project Hobbots cannot name: ${project}` });
 
-/** The day a page's `expires_at` names, or null for none, or for a time Hobbots did not write. */
-const forgetDayOf = (expiresAt: string | undefined): MemoryForgetDay | null =>
-  Option.getOrNull(Schema.decodeUnknownOption(MemoryForgetDay)(expiresAt?.slice(0, 10)));
-
 /** Whether a page whose latest version is `current`, or null when there is none, is as `expected`. */
 const pageMeets = (current: MemoryVersion | null, expected: MemoryExpected) => {
   switch (expected._tag) {
@@ -649,6 +667,10 @@ const pageMeets = (current: MemoryVersion | null, expected: MemoryExpected) => {
       return current === expected.version;
   }
 };
+
+/** The day a page's `expires_at` names, or null for none, or for a time Hobbots did not write. */
+const forgetDayOf = (expiresAt: string | undefined): MemoryForgetDay | null =>
+  Option.getOrNull(Schema.decodeUnknownOption(MemoryForgetDay)(expiresAt?.slice(0, 10)));
 
 const preconditionOf = (expected: MemoryExpected): Record<string, unknown> => {
   switch (expected._tag) {

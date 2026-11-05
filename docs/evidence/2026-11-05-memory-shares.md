@@ -3,7 +3,7 @@
 - **Date:** 2026-11-05
 - **Issue:** [#960](https://github.com/otaviobarros/hobbots/issues/960)
 - **Pull request:** [#984](https://github.com/otaviobarros/hobbots/pull/984)
-- **Commit:** the head of `claude/project-thread-8bt55z`, the branch of the pull request, after merging `main` at `b0a4ab3`; not yet on `main`. It carries the conditional restore of [#981](https://github.com/otaviobarros/hobbots/pull/981) (`MemoryStore.restore` with the version the page must still be at), taken from that pull request as it stands.
+- **Commit:** the head of `claude/project-thread-8bt55z`, the branch of the pull request, after merging `main` at `b0a4ab3`; not yet on `main`. It carries the conditional restore of [#981](https://github.com/otaviobarros/hobbots/pull/981) (`MemoryStore.restore` with the version the page must still be at), taken from that pull request at `f92b102`.
 - **Setup:** Linux x86_64 container (Ubuntu 24.04.5, Node 22.23.4) with ai-memory 3.4.2 for `linux-x64`, fetched and checked by `pnpm --filter @hobbots/memory fetch-engine`. Hub-level cases run the whole API over a SQLite test database, the fake runtime and the in-memory `MemoryStore`, calling `memory_save` through the hob's memory tools and deciding over HTTP with this computer's window key. Browser cases run the built web client in headless Chromium 1243 (Playwright) against a hub started with the fake runtime, memory on and `HOBBOTS_FAKE_MEMORY=empty` (`seeded` for Check now, which flags one page out of date); the hob asks to share with a scripted `fake:hub memory_save` call in a chat of its own.
 - **Result:** Passed with gaps: memory 127 tests (the store contract on the fake, and on ai-memory 3.4.2 with `HOBBOTS_MEMORY_ENGINE_DIR` set), domain 156, agents 17, persistence 161 of 162, web 843, desktop 152, the server 576 of 577, and in a browser the six share and Check now cases with the other Memory cases beside them (18). The persistence failure is the migration ids check, which waits for `0058` from [#981](https://github.com/otaviobarros/hobbots/pull/981); this branch's migration is `0059`. The server's one failure is `[TC-DP-008]`, which needs IPv6, which this container lacks, and fails on `main` too.
 
@@ -53,7 +53,7 @@
 ## Gaps
 
 - No screen is checked against the design in each theme.
-- ai-memory's restore takes no precondition, so the adapter checks the page and restores while none of the hub's other changes to pages can run; the engine's own background passes are not held back by that.
+- ai-memory's restore takes no precondition. As in [#981](https://github.com/otaviobarros/hobbots/pull/981), the adapter checks the page and restores while none of the hub's changes can run, then reads which version the restore replaced: when ai-memory wrote the page itself in between, it puts that version back and refuses (`[TC-GEN-348]`). For that moment the page holds the restored version.
 - Recovery's check of what a version changed compares lines as tallies: a page whose change only moves a line past an equal one would read as not its own, and wait for you again.
 - Check now's findings are kept in the hub's memory, so a restart clears the last check.
 - Not run on macOS, nor in the packaged app, nor with a real Claude Code or Codex turn calling `memory_save` ([#964](https://github.com/otaviobarros/hobbots/issues/964)).
