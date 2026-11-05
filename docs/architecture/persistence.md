@@ -17,7 +17,7 @@ The journal keeps 7 days and at least the latest 10,000 entries; an older cursor
 
 ## Memory
 
-Memory is a second data store beside the database ([ADR 028](../decisions/028-memory.md)). The hub runs the bundled ai-memory as a child process on loopback, with its pages, their history and their index in `<data folder>/memory`, and reaches it only through the `MemoryStore` service. A capture worker sends journal entries after its cursor to ai-memory, keyed by entry id, and a hob's `memory_save` is journaled first and sent the same way, so an outage loses nothing and a resend is a no-op. The database never shares a transaction with memory.
+Memory is a second data store beside the database ([ADR 028](../decisions/028-memory.md)). The hub runs the bundled ai-memory as a child process on loopback, with its pages, their history and their index in `<data folder>/memory`, and reaches it only through the `MemoryStore` service. A capture worker sends journal entries after its cursor to ai-memory, keyed by entry id, and a hob's `memory_save` is journaled first and sent the same way, so an outage loses nothing. ai-memory skips a resent key for 30 days, which bounds the deduplication: the cursor is saved as each batch is acknowledged, so in practice only a crash in between resends, and only that batch. The database never shares a transaction with memory.
 
 ## Workbench records
 
