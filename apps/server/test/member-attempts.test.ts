@@ -91,6 +91,43 @@ describe("a member's Attempts", () => {
     expect(attemptsOf(done, NETTLE)).toEqual([[1, "completed"]]);
   }, 30_000);
 
+  // regression: a turn stopped on a defect left its Attempt live, which held the Task from any other turn
+  // covers EX-001, OR-004
+  it("[TC-OR-593] a member's turn that breaks on a bug ends its Attempt, and its next turn goes on", async () => {
+    // Pip's turn after your answer breaks once, then goes on.
+    let broken = false;
+    const party = partyHub({
+      announcesTwice: (prompt) => {
+        // Your own script names the answer too: only Pip's turn has it and no `fake:` line.
+        if (broken || !prompt.includes("Main, please") || prompt.includes("fake:")) return false;
+        broken = true;
+        return true;
+      },
+    });
+    dispose = party.dispose;
+    const { run, gates } = party;
+    const open = gated(gates, ["main"]);
+    await run(
+      send([
+        "Review the project",
+        hub("delegate_task", {
+          key: "review",
+          hob: "Pip",
+          brief: ["Review the project", hub("ask", { key: "which", question: "Which branch?" })].join("\n"),
+        }),
+        hub("wait_for", { key: "wait", tasks: ["$review.task_id"] }),
+        `fake:then ${hub("answer", { key: "main", question_id: "$which.question_id", answer: "Main, please" })}`,
+      ]),
+    );
+    await run(treeWhen((tree) => ownedBy(tree, PIP)?.state === "waiting" && idle(tree, PIP)));
+    open("main");
+    const done = await run(treeWhen((tree) => ownedBy(tree, PIP)?.state === "completed" && idle(tree, PIP)));
+    expect(attemptsOf(done, PIP)).toEqual([
+      [1, "failed"],
+      [2, "completed"],
+    ]);
+  }, 30_000);
+
   // covers EX-001, OR-006
   it("[TC-OR-451] a member's failed turn still ends its Attempt, and its next turn starts Attempt 2", async () => {
     const party = partyHub();
