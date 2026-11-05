@@ -26,6 +26,16 @@ describe("memory project identity", () => {
     );
   });
 
+  it("keeps IPv6 hosts whole, so two hosts never share a project", () => {
+    const one = memoryProjectIdentity("ssh://git@[2001:db8::1]/org/app.git", "app");
+    expect(one).toBe("[2001:db8::1]/org/app");
+    expect(memoryProjectIdentity("ssh://git@[2001:db8::2]/org/app.git", "app")).not.toBe(one);
+    // The same repository read through another form of remote.
+    expect(memoryProjectIdentity("ssh://git@[2001:DB8::1]:22/org/app", "app")).toBe(one);
+    expect(memoryProjectIdentity("git@[2001:db8::1]:org/app.git", "app")).toBe(one);
+    expect(memoryProjectIdentity("git@[2001:db8::2]:org/app.git", "app")).not.toBe(one);
+  });
+
   it("reads a remote of any length in one pass", () => {
     const long = `https://github.com/me/app${"/".repeat(100_000)}`;
     expect(memoryProjectIdentity(long, "app")).toBe("github.com/me/app");

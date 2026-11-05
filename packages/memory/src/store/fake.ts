@@ -168,8 +168,10 @@ export const makeMemoryStoreFake = (): {
       ),
     history: (_actor, scope, path) =>
       Effect.map(up, () => {
-        const history = (pagesOf(scope).get(path) ?? []).filter((entry) => !entry.forgotten);
         const latest = currentOf(scope, path);
+        // A forgotten page has no history to show; its versions stay only for restore.
+        if (latest === undefined) return [];
+        const history = (pagesOf(scope).get(path) ?? []).filter((entry) => !entry.forgotten);
         return history
           .map((entry) => ({
             version: entry.version,

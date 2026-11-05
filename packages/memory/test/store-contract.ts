@@ -193,6 +193,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           expect(point).not.toBeNull();
           expect(yield* store.page(asPip, pipsOwn, path)).toBeNull();
           expect(yield* store.list(asPip, pipsOwn, 50)).toEqual([]);
+          expect(yield* store.history(you, pipsOwn, path)).toEqual([]);
           // Forgetting what is already gone does nothing.
           expect(yield* store.forget(you, pipsOwn, path, any)).toBeNull();
           const back = yield* store.restore(you, pipsOwn, path, point as MemoryVersion);

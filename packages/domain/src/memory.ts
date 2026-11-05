@@ -172,6 +172,14 @@ const trimChar = (text: string, char: string) => {
   return text.slice(start, end);
 };
 
+/** The host of `user@host:port`, without user or port; an IPv6 host keeps its brackets and colons. */
+const hostOf = (authority: string): string => {
+  const hostAndPort = authority.slice(authority.lastIndexOf("@") + 1);
+  if (!hostAndPort.startsWith("[")) return hostAndPort.split(":")[0] as string;
+  const close = hostAndPort.indexOf("]");
+  return close === -1 ? "" : hostAndPort.slice(0, close + 1);
+};
+
 // Split with indexOf rather than one regular expression, so no remote, however long, backtracks.
 const remoteIdentity = (origin: string): string | null => {
   const trimmed = origin.trim();
@@ -185,14 +193,15 @@ const remoteIdentity = (origin: string): string | null => {
     authority = after.slice(0, slash);
     rest = after.slice(slash + 1);
   } else {
-    // `user@host:path`, Git's scp-like form, has no slash before its colon.
-    const colon = trimmed.indexOf(":");
+    // `user@host:path`, Git's scp-like form, has no slash before its colon. An IPv6 host is bracketed.
+    const close = /^(?:[^/@[]*@)?\[/.test(trimmed) ? trimmed.indexOf("]") : -1;
+    const colon = trimmed.indexOf(":", close + 1);
     const slash = trimmed.indexOf("/");
     if (colon <= 0 || (slash !== -1 && slash < colon)) return null;
     authority = trimmed.slice(0, colon);
     rest = trimmed.slice(colon + 1);
   }
-  const host = authority.slice(authority.lastIndexOf("@") + 1).split(":")[0] as string;
+  const host = hostOf(authority);
   const end = [rest.indexOf("?"), rest.indexOf("#")].filter((at) => at !== -1);
   let path = trimChar(end.length === 0 ? rest : rest.slice(0, Math.min(...end)), "/");
   if (path.toLowerCase().endsWith(".git")) path = trimChar(path.slice(0, -4), "/");
