@@ -307,22 +307,20 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Browse), #958
-    it("[TC-GEN-231] lists the hobs' and About you's scopes that hold pages, and only those a hob may touch", () =>
+    it("[TC-GEN-231] lists the scopes that hold pages, projects included, and only those a hob may touch", () =>
       run(({ store }) =>
         Effect.gen(function* () {
-          const keys = (scopes: ReadonlyArray<MemoryScope>) =>
-            scopes
-              .filter((scope) => scope._tag !== "Project")
-              .map((scope) => JSON.stringify(scope))
-              .sort();
+          const keys = (scopes: ReadonlyArray<MemoryScope>) => scopes.map((scope) => JSON.stringify(scope)).sort();
           yield* store.write(asPip, pipsOwn, draft("notes/a.md", "# A"), fresh);
           yield* store.write(asQuill, quillsOwn, draft("notes/b.md", "# B"), fresh);
+          yield* store.write(asQuill, theSite, draft("facts/c.md", "# C"), fresh);
           yield* store.write(you, everyone, draft("rules/d.md", "# D"), fresh);
-          expect(keys(yield* store.scopes(you))).toEqual(keys([pipsOwn, quillsOwn, everyone]));
+          // theApp holds nothing, so it is not listed.
+          expect(keys(yield* store.scopes(you))).toEqual(keys([pipsOwn, quillsOwn, theSite, everyone]));
           expect(keys(yield* store.scopes(asPip))).toEqual(keys([pipsOwn, everyone]));
           // A scope whose last page is forgotten holds nothing.
           yield* store.forget(you, pipsOwn, MemoryPath.make("notes/a.md"), any);
-          expect(keys(yield* store.scopes(you))).toEqual(keys([quillsOwn, everyone]));
+          expect(keys(yield* store.scopes(you))).toEqual(keys([quillsOwn, theSite, everyone]));
         }),
       ));
   });

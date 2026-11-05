@@ -6,7 +6,7 @@ import {
   type MemoryVersion,
   memoryScopeKey,
 } from "@hobbots/domain";
-import { keepPreviousData, type QueryClient, queryOptions } from "@tanstack/react-query";
+import { keepPreviousData, type Query, type QueryClient, queryOptions } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
 
 /**
@@ -44,11 +44,14 @@ const retryWhileDown = {
   refetchInterval: (query: { state: { status: string } }) => (query.state.status === "error" ? MEMORY_RETRY_MS : false),
 };
 
-/** Every scope that holds a page, with its count. */
+/**
+ * Every scope that holds a page, with its count. Read every 30 seconds while the page shows it,
+ * failed or not: memory stopping after the pages loaded says so within one read, over what loaded.
+ */
 export const memoryScopesQuery = queryOptions({
   queryKey: memoryKeys.scopes,
   queryFn: () => call((c) => c.memoryPages.scopes()),
-  ...retryWhileDown,
+  refetchInterval: MEMORY_RETRY_MS,
 });
 
 /** What memory saved lately, newest first; the stream adds what the hub finds after. */
@@ -97,20 +100,25 @@ export const withChanges = (known: ReadonlyArray<MemoryChange>, changes: Readonl
   return [...all.values()].sort((a, b) => b.at.localeCompare(a.at));
 };
 
+/** Every memory read but a version's changes, which a later save never alters. */
+const live = { queryKey: memoryKeys.all, predicate: (query: Query) => query.queryKey[1] !== "version" };
+
 /**
- * What the hub found memory saved: What changed gains it now, and every other memory read is read
- * again, so a count, a scope's list or an open page shows the save (STD-REACT-012).
+ * What the hub found memory saved: a read still in flight is cancelled, since it may answer from
+ * before the save; What changed gains the save now; and every memory read is read again, so a count,
+ * a scope's list or an open page shows it (STD-REACT-012). The hub keeps what it found, so a read
+ * made after the event always holds it.
  */
-export const applyMemoryChanged = (queryClient: QueryClient, event: MemoryChanged) => {
+export const applyMemoryChanged = async (queryClient: QueryClient, event: MemoryChanged) => {
+  await queryClient.cancelQueries(live);
   queryClient.setQueryData<ReadonlyArray<MemoryChange>>(memoryKeys.changes, (old) =>
     old === undefined ? old : withChanges(old, event.changes),
   );
-  void queryClient
-    .cancelQueries({ queryKey: memoryKeys.all, predicate: (query) => query.queryKey[1] !== "changes" })
-    .then(() =>
-      queryClient.invalidateQueries({
-        queryKey: memoryKeys.all,
-        predicate: (query) => query.queryKey[1] !== "changes",
-      }),
-    );
+  await queryClient.invalidateQueries(live);
 };
+
+/**
+ * Reads memory again when the event stream is ready, a resumed one included: a save the hub found
+ * while this client was away is never streamed again.
+ */
+export const refreshMemory = (queryClient: QueryClient) => queryClient.invalidateQueries(live);

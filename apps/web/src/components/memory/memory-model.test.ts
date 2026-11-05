@@ -9,11 +9,11 @@ import {
   type MemoryScope,
   MemoryVersion,
 } from "@hobbots/domain";
-import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import { retryUnlessRefused } from "../../api/live.ts";
-import { withChanges } from "../../api/memory-pages.ts";
+import { applyMemoryChanged, memoryKeys, memoryScopesQuery, withChanges } from "../../api/memory-pages.ts";
 import {
   changesByDay,
   filterChanges,
@@ -188,19 +188,22 @@ describe("a scope's pages", () => {
       summary("howtos/c.md"),
       summary("sessions/d.md"),
       summary("loose.md"),
+      // Folders named like an object's own properties are no kind of their own.
+      summary("constructor/e.md"),
+      summary("__proto__/f.md"),
     ];
     expect(kindGroups(pages).map((group) => [group.kind, group.pages.map((page) => page.path)])).toEqual([
       ["rule", ["rules/b.md"]],
       ["howto", ["howtos/a.md", "howtos/c.md"]],
       ["chat", ["sessions/d.md"]],
-      ["note", ["loose.md"]],
+      ["note", ["loose.md", "constructor/e.md", "__proto__/f.md"]],
     ]);
     expect(kindChips(pages).map((chip) => [chip.kind, chip.count])).toEqual([
-      ["all", 5],
+      ["all", 7],
       ["rule", 1],
       ["howto", 2],
       ["chat", 1],
-      ["note", 1],
+      ["note", 3],
     ]);
     expect(kindChips([])).toEqual([{ kind: "all", label: copy.all, count: 0 }]);
   });
@@ -246,6 +249,38 @@ describe("what changed", () => {
     const fresh = change(at(5, 11), byYou, "rules/new.md");
     const merged = withChanges(known, [fresh, known[0] as MemoryChange]);
     expect(merged).toEqual([fresh, known[0]]);
+  });
+
+  // covers ADR 028 (What changed), STD-REACT-012, #958
+  it("[TC-UX-955] keeps a save the stream brings while What changed is still being read", async () => {
+    const queryClient = new QueryClient();
+    const before = [change(at(5, 9), byPip)];
+    const fresh = change(at(5, 11), byYou, "rules/new.md");
+    // The hub keeps what it found, so a read made after the event holds the save.
+    let served: ReadonlyArray<MemoryChange> = before;
+    const answers: Array<(changes: ReadonlyArray<MemoryChange>) => void> = [];
+    const read = () =>
+      queryClient.fetchQuery({
+        queryKey: memoryKeys.changes,
+        queryFn: () => new Promise<ReadonlyArray<MemoryChange>>((resolve) => answers.push(resolve)),
+      });
+    const observer = new QueryObserver(queryClient, {
+      queryKey: memoryKeys.changes,
+      queryFn: () => Promise.resolve(served),
+    });
+    const stop = observer.subscribe(() => {});
+    void read().catch(() => undefined);
+    served = [fresh, ...before];
+    // The event lands before the first read answers, which answers from before the save.
+    await applyMemoryChanged(queryClient, { _tag: "MemoryChanged", changes: [fresh] });
+    for (const answer of answers) answer(before);
+    await vi.waitFor(() => expect(queryClient.getQueryData(memoryKeys.changes)).toEqual([fresh, ...before]));
+    stop();
+  });
+
+  // covers ADR 028 (Browse), #958
+  it("[TC-UX-956] reads the scopes again while the page shows them, so memory stopping later says so", () => {
+    expect(memoryScopesQuery.refetchInterval).toBe(30_000);
   });
 });
 

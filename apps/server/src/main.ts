@@ -47,7 +47,7 @@ import {
   MemoryEngine,
   type MemoryKeys,
   MemoryProjectsLive,
-  MemoryStoreOff,
+  MemoryStoreAiMemory,
 } from "@hobbots/memory";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -124,7 +124,8 @@ import { WorkbenchStreamRoute } from "./workbench-stream.ts";
 
 /**
  * What the Memory page reads, and the watch behind What changed (ADR 028): the fake memory when a
- * run asks for it, otherwise a store that says memory is not connected yet.
+ * run asks for it, otherwise the bundled ai-memory, which answers that memory is unavailable while
+ * its engine is off, missing or down.
  */
 const memoryPageLayer = (config: {
   readonly fakeMemory: "off" | "empty" | "seeded" | "down";
@@ -133,7 +134,7 @@ const memoryPageLayer = (config: {
   MemoryChanges.layer(Duration.seconds(config.memoryLookSeconds)).pipe(
     Layer.provideMerge(
       config.fakeMemory === "off"
-        ? MemoryStoreOff("Memory is not connected to this hub yet.")
+        ? MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))
         : FakeMemoryLive(config.fakeMemory),
     ),
   );

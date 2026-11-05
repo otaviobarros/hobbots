@@ -1,4 +1,4 @@
-import { MemoryPath, type MemoryScope, memoryProjectIdentity } from "@hobbots/domain";
+import { MemoryPath } from "@hobbots/domain";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { makeMemoryStoreFake } from "../src/store/fake.ts";
@@ -24,24 +24,5 @@ describe("the fake memory", () => {
       ).toMatchObject({ _tag: "MemoryUnavailable" });
       controls.setDown(false);
       yield* store.health;
-    }).pipe(Effect.runPromise));
-
-  // covers ADR 028 (Browse), #958
-  it("[TC-GEN-239] lists a project that holds pages, and not one that holds none", () =>
-    Effect.gen(function* () {
-      const { store } = makeMemoryStoreFake();
-      const site: MemoryScope = { _tag: "Project", identity: memoryProjectIdentity(null, "site") };
-      const app: MemoryScope = { _tag: "Project", identity: memoryProjectIdentity(null, "app") };
-      const you = { _tag: "You" } as const;
-      yield* store.write(
-        you,
-        site,
-        { path: MemoryPath.make("facts/a.md"), markdown: "# A", tags: [], pinned: false },
-        {
-          _tag: "New",
-        },
-      );
-      expect(yield* store.scopes(you)).toEqual([site]);
-      expect(yield* store.scopes(you)).not.toContainEqual(app);
     }).pipe(Effect.runPromise));
 });

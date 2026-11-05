@@ -8,6 +8,7 @@ import {
   type MemoryPage,
   type MemoryPageSummary,
   MemoryPath,
+  MemoryProjectIdentity,
   type MemoryScope,
   MemoryUnavailable,
   MemoryVersion,
@@ -16,7 +17,6 @@ import {
   searchTerms,
 } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
-import { MEMORY_WORKSPACE } from "../engine/engine.ts";
 import {
   type EngineCaller,
   type EngineClient,
@@ -30,6 +30,7 @@ import {
   type EngineProject,
   engineActorOf,
   engineProjectOf,
+  INDEX_PROJECT,
   scopeOfEngineProject,
 } from "./scopes.ts";
 
@@ -81,7 +82,9 @@ const DiffJson = Schema.Struct({
     ),
   }),
 });
-const ProjectsJson = Schema.Array(Schema.Struct({ project_name: Schema.String, page_count: Schema.Number }));
+const ProjectsJson = Schema.Array(
+  Schema.Struct({ workspace_name: Schema.String, project_name: Schema.String, page_count: Schema.Number }),
+);
 const WrittenJson = Schema.Struct({ page_id: Schema.String });
 const DeletedJson = Schema.Struct({
   deleted: Schema.Boolean,
@@ -169,6 +172,45 @@ const refusalIsOutage = <A, E, R>(
   ) as Effect.Effect<A, Exclude<E, EngineRefused> | MemoryUnavailable, R>;
 
 const makeStore = (client: EngineClient): MemoryStoreShape => {
+  /**
+   * A project's engine name is hashed, so the identity it holds is kept in the index project, one
+   * page per project, written before the project's first page: `scopes` reads it back.
+   */
+  const indexed = new Set<string>();
+  const indexProject = (scope: MemoryScope) => {
+    if (scope._tag !== "Project") return Effect.void;
+    const { project } = engineProjectOf(scope);
+    if (indexed.has(project)) return Effect.void;
+    return client
+      .tool(
+        ROOT,
+        "memory_write_page",
+        { ...INDEX_PROJECT, path: `${project}.md`, body: scope.identity, tags: [], pinned: false, create_only: true },
+        WrittenJson,
+      )
+      .pipe(
+        Effect.asVoid,
+        // Already indexed by an earlier run.
+        Effect.catchTag("EngineRefused", (refused) =>
+          Schema.decodeUnknownOption(PreconditionJson)(refused.data)._tag === "Some"
+            ? Effect.void
+            : Effect.fail(refused),
+        ),
+        Effect.tap(() => Effect.sync(() => indexed.add(project))),
+      );
+  };
+  const identityOf = (project: string) =>
+    client.get(`${pagesRoute(INDEX_PROJECT)}/pages/${project}.md`, PageJson).pipe(
+      Effect.map((json) => {
+        const text = json.body_markdown.trim();
+        if (text.length === 0) return null;
+        const identity = MemoryProjectIdentity.make(text);
+        // The page names the project only when the identity hashes to it again.
+        return engineProjectOf({ _tag: "Project", identity }).project === project ? identity : null;
+      }),
+      orEmpty(null),
+    );
+
   const pageOf = (scope: MemoryScope, path: MemoryPath) =>
     Effect.gen(function* () {
       const where = engineProjectOf(scope);
@@ -356,15 +398,31 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       ),
     scopes: () =>
       Effect.gen(function* () {
-        const ours = yield* client.get("projects", ProjectsJson, { workspace: MEMORY_WORKSPACE });
-        const shared = yield* client.get("projects", ProjectsJson, { workspace: "default" });
-        const held = [...ours, ...shared.filter((row) => row.project_name === "_global")].filter(
-          (row) => row.page_count > 0,
+        const projects = yield* client.get("projects", ProjectsJson);
+        const held = projects.filter((each) => each.page_count > 0);
+        const found = yield* Effect.forEach(
+          held,
+          (each): Effect.Effect<MemoryScope | null, MemoryUnavailable | EngineRefused> => {
+            const known = scopeOfEngineProject({ workspace: each.workspace_name, project: each.project_name });
+            if (known !== "Project") return Effect.succeed(known);
+            return Effect.flatMap(identityOf(each.project_name), (identity) =>
+              identity === null
+                ? Effect.fail(unnamed(each.project_name))
+                : Effect.succeed({ _tag: "Project" as const, identity }),
+            );
+          },
+          { concurrency: READ_CONCURRENCY },
         );
-        return held.flatMap((row) => {
-          const scope = scopeOfEngineProject(row.project_name);
-          return scope === null ? [] : [scope];
-        });
+        // A scope whose pages were all forgotten holds nothing to name.
+        const named = found.filter((scope): scope is MemoryScope => scope !== null);
+        return yield* Effect.filter(named, (scope) =>
+          Effect.map(
+            client
+              .get(`${pagesRoute(engineProjectOf(scope))}/recent`, Schema.Array(SummaryJson), { limit: "1" })
+              .pipe(orEmpty([] as ReadonlyArray<typeof SummaryJson.Type>)),
+            (recent) => recent.length > 0,
+          ),
+        );
       }).pipe(refusalIsOutage),
     history: (_actor, scope, path) =>
       Effect.gen(function* () {
@@ -391,19 +449,23 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         }));
       }).pipe(refusalIsOutage),
     write: (actor, scope, draft, expected) =>
-      client
-        .tool(
-          callerOf(actor),
-          "memory_write_page",
-          {
-            ...target(scope, engineProjectOf(scope)),
-            path: draft.path,
-            body: draft.markdown,
-            tags: draft.tags,
-            pinned: draft.pinned,
-            ...preconditionOf(expected),
-          },
-          WrittenJson,
+      indexProject(scope)
+        .pipe(
+          Effect.andThen(
+            client.tool(
+              callerOf(actor),
+              "memory_write_page",
+              {
+                ...target(scope, engineProjectOf(scope)),
+                path: draft.path,
+                body: draft.markdown,
+                tags: draft.tags,
+                pinned: draft.pinned,
+                ...preconditionOf(expected),
+              },
+              WrittenJson,
+            ),
+          ),
         )
         .pipe(
           Effect.map((json) => MemoryVersion.make(json.page_id)),
@@ -444,6 +506,10 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
   };
   return store;
 };
+
+/** Never silently left out: a list that cannot name a project says memory did not answer in full. */
+const unnamed = (project: string) =>
+  new MemoryUnavailable({ message: `Memory holds a project Hobbots cannot name: ${project}` });
 
 const preconditionOf = (expected: MemoryExpected): Record<string, unknown> => {
   switch (expected._tag) {

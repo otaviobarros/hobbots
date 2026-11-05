@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { MemoryStore, type MemoryStoreShape } from "@hobbots/agents";
-import { memoryProjectIdentity } from "@hobbots/domain";
+import { AgentId, memoryProjectIdentity } from "@hobbots/domain";
 import { Context, Effect, Exit, Layer, Option, Schedule, Scope } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -11,7 +11,7 @@ import { defaultEngineFolder, ENGINE_BINARY } from "../src/engine/binary.ts";
 import { MemoryEngine } from "../src/engine/engine.ts";
 import { loadOrCreateMemoryKeys, type MemoryKeys } from "../src/engine/keys.ts";
 import { MemoryStoreAiMemory } from "../src/store/ai-memory.ts";
-import { engineProjectOf } from "../src/store/scopes.ts";
+import { engineProjectOf, INDEX_PROJECT, scopeOfEngineProject } from "../src/store/scopes.ts";
 import { memoryStoreContract } from "./store-contract.ts";
 
 // The shared MemoryStore tests on the bundled ai-memory (ADR 028), run as the engine's contract tests
@@ -82,5 +82,17 @@ describe("ai-memory scopes", () => {
     expect(engineProjectOf({ _tag: "Project", identity: lookalike }).project).not.toBe(
       engineProjectOf({ _tag: "Project", identity: memoryProjectIdentity("git@github.com:me/app-x.git", "x") }).project,
     );
+  });
+
+  // covers ADR 028 (Browse), #958
+  it("[TC-GEN-239] reads each engine project back as the scope it holds, a project's through the index", () => {
+    const app = memoryProjectIdentity("git@github.com:me/app.git", "app");
+    const pip = AgentId.make("0d6e2f0a-0000-4000-8000-000000000011");
+    for (const scope of [{ _tag: "Everyone" }, { _tag: "Hob", agentId: pip }] as const) {
+      expect(scopeOfEngineProject(engineProjectOf(scope))).toEqual(scope);
+    }
+    expect(scopeOfEngineProject(engineProjectOf({ _tag: "Project", identity: app }))).toBe("Project");
+    expect(scopeOfEngineProject(INDEX_PROJECT)).toBe(null);
+    expect(scopeOfEngineProject({ workspace: "hobbots", project: "scratch" })).toBe(null);
   });
 });

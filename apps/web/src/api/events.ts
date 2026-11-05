@@ -26,7 +26,7 @@ import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
-import { applyMemoryChanged } from "./memory-pages.ts";
+import { applyMemoryChanged, refreshMemory } from "./memory-pages.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
@@ -297,6 +297,7 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         const ready = decodeReady(frame.data);
         sync.cursor = ready.cursor;
         if (!ready.resumed) startGeneration(queryClient);
+        void refreshMemory(queryClient);
         setDeviceAccess(queryClient, "approved");
         report("live");
       } catch (error) {
@@ -339,7 +340,7 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
     });
     source.addEventListener(STREAM_FRAME.memory, (frame) => {
       try {
-        applyMemoryChanged(queryClient, decodeMemoryChanged(frame.data));
+        void applyMemoryChanged(queryClient, decodeMemoryChanged(frame.data));
       } catch (error) {
         console.warn("Ignoring malformed event", error);
       }

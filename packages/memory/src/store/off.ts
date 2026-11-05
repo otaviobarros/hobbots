@@ -1,9 +1,9 @@
-import { guardMemoryStore, MemoryStore, type MemoryStoreShape } from "@hobbots/agents";
+import { guardMemoryStore, type MemoryStoreShape } from "@hobbots/agents";
 import { MemoryUnavailable } from "@hobbots/domain";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 
 /**
- * A `MemoryStore` with no engine behind it, for a hub whose memory is off or not connected yet
+ * A `MemoryStore` with no engine behind it, for a hub built without memory, as most tests build it
  * (ADR 028): every call answers that memory is unavailable, so callers treat it as an outage and
  * keep working.
  */
@@ -23,6 +23,3 @@ export const makeMemoryStoreOff = (message: string): MemoryStoreShape => {
     health: off,
   });
 };
-
-/** `MemoryStore` with no engine: every call answers that memory is unavailable. */
-export const MemoryStoreOff = (message: string) => Layer.succeed(MemoryStore, makeMemoryStoreOff(message));

@@ -62,19 +62,20 @@ export const MemoryScopeKey = Schema.String.check(
 export const MemoryKind = Schema.Literals(["rule", "howto", "gotcha", "decision", "fact", "chat", "note"]);
 export type MemoryKind = typeof MemoryKind.Type;
 
-const KIND_FOLDERS: Readonly<Record<string, MemoryKind>> = {
-  rules: "rule",
-  howtos: "howto",
-  gotchas: "gotcha",
-  decisions: "decision",
-  facts: "fact",
-  sessions: "chat",
-};
+// A Map, so a folder named like an object's own property (`constructor`, `__proto__`) is no kind.
+const KIND_FOLDERS: ReadonlyMap<string, MemoryKind> = new Map([
+  ["rules", "rule"],
+  ["howtos", "howto"],
+  ["gotchas", "gotcha"],
+  ["decisions", "decision"],
+  ["facts", "fact"],
+  ["sessions", "chat"],
+]);
 
 /** The kind of the page at `path`, from its first folder. */
 export const memoryKindOf = (path: MemoryPathType): MemoryKind => {
   const slash = path.indexOf("/");
-  return (slash === -1 ? undefined : KIND_FOLDERS[path.slice(0, slash)]) ?? "note";
+  return (slash === -1 ? undefined : KIND_FOLDERS.get(path.slice(0, slash))) ?? "note";
 };
 
 /** The kinds in the order the Memory page groups them. */
