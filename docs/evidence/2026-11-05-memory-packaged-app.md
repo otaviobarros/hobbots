@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-05
 - **Issue:** [#953](https://github.com/otaviobarros/hobbots/issues/953)
-- **Pull request:** [#PRNUM](https://github.com/otaviobarros/hobbots/pull/PRNUM)
+- **Pull request:** [#998](https://github.com/otaviobarros/hobbots/pull/998)
 - **Commit:** the pull request's head, on `main` at `5f18030`
 - **Setup:** Apple M1 Pro, macOS 27.0.1, arm64, an ad hoc signed `pnpm package:mac` build, Node 24.15.0, ai-memory 3.4.2, Claude Code 2.1.316 on a signed-in subscription with the `haiku` model. Every run used a new data folder (`--user-data-dir`), never the Mac's Hobbots data, and turned opening at login off.
 - **Result:** Passed with gaps. The app starts, restarts and stops the engine, a mismatched checksum turns memory off and not the app, and a real hob's save reaches the Memory page, an export and its next thread. The next thread's brief failed at first: `main` never gave chat turns the memory store, which this pull request fixes.
