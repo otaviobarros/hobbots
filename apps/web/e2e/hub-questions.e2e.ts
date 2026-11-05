@@ -37,6 +37,7 @@ const detail = (page: Page) => page.getByRole("article", { name: "Question from 
 // covers UX-001
 test("[TC-UX-911] the hub asks you itself in the Inbox: a choice's key answers, typed words answer, a failed send keeps them, and the hub applies each", async ({
   page,
+  scan,
 }) => {
   const list = await hubThatAsks(page);
   await expect(row(list, /How often should the hub back up/)).toBeVisible({ timeout: 15_000 });
@@ -51,6 +52,7 @@ test("[TC-UX-911] the hub asks you itself in the Inbox: a choice's key answers, 
   const choices = backups.getByRole("list", { name: "your hub's choices" });
   await expect(choices.getByRole("button", { name: /^Every night/ })).toContainText("Recommended");
   await expect(choices.getByRole("button", { name: /^Every week/ })).toBeVisible();
+  await scan();
 
   // Words typed for one question stay with it: the next question opens with an empty box.
   const box = (scope: ReturnType<typeof detail>) => scope.getByRole("textbox", { name: "Your answer to your hub" });
@@ -80,6 +82,7 @@ test("[TC-UX-911] the hub asks you itself in the Inbox: a choice's key answers, 
   await box(name).fill("Kitchen Mac");
   await box(name).press("Enter");
   await expect(name.getByRole("alert")).toContainText("Your answer could not be sent. Try again.");
+  await scan(name);
   await expect(box(name)).toHaveValue("Kitchen Mac");
   await page.unroute("**/api/hub-questions/*/answer");
   await name.getByRole("button", { name: "Send answer" }).click();
@@ -90,12 +93,14 @@ test("[TC-UX-911] the hub asks you itself in the Inbox: a choice's key answers, 
 // covers UX-001
 test("[TC-UX-912] Home's Needs you shows the hub's question with its choices, and picking one there answers it", async ({
   page,
+  scan,
 }) => {
   await hubThatAsks(page);
   await page.getByRole("link", { name: "Home", exact: true }).click();
   const needsYou = page.getByRole("region", { name: "Needs you", exact: true });
   const tray = needsYou.getByRole("region", { name: /^Needs you, \d of 2$/ });
   await expect(tray).toContainText("How often should the hub back up your data?", { timeout: 15_000 });
+  await scan();
   await tray.getByRole("button", { name: /^Every week/ }).click();
   await expect(tray).toContainText("What should this hub be called on your other devices?");
   await expect(needsYou).not.toContainText("How often should the hub back up your data?");
