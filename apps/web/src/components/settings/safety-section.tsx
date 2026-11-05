@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useId } from "react";
 import { PRESETS, presetInfo, type RuleAnswer } from "../../api/safety.ts";
 import { setupQuery, useUpdateSetup } from "../../api/setup.ts";
+import { MemoryShares } from "../memory-settings/memory-shares.tsx";
 import { FolderPicker, LockedSwitch } from "../safety/safety-and-folders.tsx";
 import { StandingRuleSettings } from "../standing-rules/standing-rules.tsx";
 import { messages } from "./messages.ts";
@@ -21,7 +22,7 @@ const ANSWER_MARKS: Readonly<Record<RuleAnswer, { readonly glyph: string; readon
 };
 
 /**
- * Settings › Safety: how careful hobs are, the folders every hob can open, and what they are always
+ * Settings › Safety: how careful hobs are, how what they learn is shared, the folders every hob can open, and what they are always
  * allowed to do. Every choice is stored on the hub at once. Until the hub answers, the three presets
  * show with none picked and still blocks hold the rules and the folders.
  */
@@ -34,6 +35,7 @@ export function SafetySection() {
       <SettingsGroup label={copy.howCareful}>
         <PresetChoice value={data?.safetyPreset} />
       </SettingsGroup>
+      <MemoryShares preset={data?.safetyPreset} />
       <SettingsGroup label={copy.folders}>
         <p className="m-0 text-ui text-text-secondary">{copy.foldersIntro}</p>
         {data === undefined ? (

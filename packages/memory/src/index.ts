@@ -2,4 +2,6 @@ export * from "./engine/binary.ts";
 export * from "./engine/config.ts";
 export * from "./engine/engine.ts";
 export * from "./engine/keys.ts";
+export * from "./engine/model.ts";
 export * from "./engine/release.ts";
+export * from "./engine/status.ts";

@@ -39,7 +39,13 @@ import {
 } from "@hobbots/charms";
 import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
-import { defaultEngineFolder, loadOrCreateMemoryKeys, MemoryEngine, type MemoryKeys } from "@hobbots/memory";
+import {
+  defaultEngineFolder,
+  engineSettingsFor,
+  loadOrCreateMemoryKeys,
+  MemoryEngine,
+  type MemoryKeys,
+} from "@hobbots/memory";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -89,6 +95,7 @@ import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
+import { MemorySettingsStore, memoryModelCanRun, readMemorySettings } from "./memory-settings.ts";
 import { backupBeforeMigrations } from "./migration-backup.ts";
 import { readNetworkSettings } from "./network-settings.ts";
 import {
@@ -118,7 +125,9 @@ const memoryEngineLayer = (
   if (config.memory === "off") return MemoryEngine.off("disabled");
   const folder = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
   if (folder === "") return MemoryEngine.off("missing");
-  return MemoryEngine.layer({ folder, dataDir, keys }).pipe(
+  // The memory model you chose, as the engine can run it now (ADR 028).
+  const settings = engineSettingsFor(readMemorySettings(dataDir), memoryModelCanRun).engine;
+  return MemoryEngine.layer({ folder, dataDir, keys, settings }).pipe(
     Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
   );
 };
@@ -385,6 +394,8 @@ const ServerLive = Layer.unwrap(
             // What the startup recovery could not do, for Settings › Diagnostics (ADR 026).
             RecoveryLog.layer,
             Memory,
+            // The memory model you chose, kept beside the engine's folder (ADR 028).
+            MemorySettingsStore.layer(dataDir),
             // The hub's credentials, provider keys and memory keys included, are redacted by value
             // from what tools report.
             SecretRedaction.layer([
