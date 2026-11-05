@@ -30,8 +30,11 @@ test("[TC-IN-544] a member's failed Task waits in the Inbox and on the lead's ti
   await expect(detail.getByRole("heading", { name: "Quill's task failed" })).toBeVisible();
   await expect(detail).toContainText("The rest of Aldric's quest goes on without it.");
   await detail.getByRole("button", { name: "Retry" }).click();
-  await expect(detail.getByRole("status")).toHaveText("Sent back to Quill for another try.");
+  // Retry takes the Task out of Needs you. The hub's event can land before the Retry answer does,
+  // and then the next entry takes the detail's place before "Sent back to Quill" ever shows, so the
+  // test waits on the entry leaving, which happens either way.
   await expect(banner).toBeHidden({ timeout: 15_000 });
+  await expect(detail).toBeHidden();
   await expect(page.getByRole("banner").getByText("1 waiting on you")).toBeVisible();
 
   // The other opens in the Quest room beside Aldric's chat, where it can go to another hob.

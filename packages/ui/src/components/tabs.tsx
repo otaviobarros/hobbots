@@ -16,12 +16,15 @@ function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive
 // `line` draws the line the selected tab's bar sits on; `plain` leaves it out, for tabs in a header
 // that already has a rule under it; `chip` is for chip tabs (see the trigger's `chip` variant), such
 // as the docked Workbench's strip, and scrolls without a scrollbar.
-const tabsListVariants = cva("flex shrink-0 gap-1 overflow-x-auto border-0 border-solid border-line", {
+//
+// `line` and `plain` never scroll: the selected tab's bar hangs over the line under the list, so a
+// list that scrolled would scroll by the bar's height and show a scrollbar beside the tabs.
+const tabsListVariants = cva("flex shrink-0 gap-1 border-0 border-solid border-line", {
   variants: {
     variant: {
       line: "border-b-[length:var(--edge)]",
       plain: "",
-      chip: "[scrollbar-width:none]",
+      chip: "overflow-x-auto [scrollbar-width:none]",
     },
   },
   defaultVariants: { variant: "line" },

@@ -53,6 +53,7 @@ import { ThreadQuestButton, useWorkMoments } from "../quest/thread-work.tsx";
 import type { Pins } from "../quest/use-work.ts";
 import { ReconnectingCard } from "../shell/reconnecting.tsx";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
+import { BackIcon } from "./chat-icons.tsx";
 import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
 import { EmptyThread } from "./empty-thread.tsx";
@@ -232,8 +233,19 @@ export function ChatView({
       aria-label={copy.landmark}
       className="@container/chat flex min-w-chat-min flex-1 flex-col group-data-[room=open]/room:min-w-0"
     >
-      {/* The tile, then the chat's title over who leads it and what they are doing (A2-02). */}
+      {/* Back to the hob's chats, the tile, then the chat's title over who leads it and what they are doing (A2-02). */}
       <header className="@container/header flex items-center gap-3 border-b-(length:--edge) border-line px-6 pt-3.5 pb-3">
+        {/* The way back to the chat list: the hob's page, which opens on its Chats tab. */}
+        <Button asChild variant="quiet" size="icon" className="-ms-2 -me-1">
+          <Link
+            to="/hobs/$hobId"
+            params={{ hobId }}
+            aria-label={copy.backToChats({ name: current.name })}
+            title={copy.backToChats({ name: current.name })}
+          >
+            <BackIcon />
+          </Link>
+        </Button>
         {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
         <Link
           to="/hobs/$hobId"
