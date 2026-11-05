@@ -215,7 +215,8 @@ export const messages = {
     cancelEdit: "Back",
     footProject: ({ name }: { name: string }) =>
       `Share it and hobs working in the ${name} project read it there. You can edit or remove it in Memory.`,
-    footEveryone: "Share it and every hob follows it from its next chat. You can edit or remove it in Memory › About you.",
+    footEveryone:
+      "Share it and every hob follows it from its next chat. You can edit or remove it in Memory › About you.",
     sharedProject: ({ name }: { name: string }) => `Shared with the ${name} project.`,
     sharedEveryone: "Shared. Every hob follows it from its next chat.",
     kept: ({ who }: { who: string }) => `Kept private. ${who} keeps it in its own memory.`,

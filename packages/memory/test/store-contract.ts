@@ -363,5 +363,21 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           }
         }),
       ));
+
+    // covers ADR 028 (Sharing), #960
+    it("[TC-GEN-372] checks a scope for pages that disagree or look out of date, changing nothing, for you alone", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          yield* store.write(you, theSite, draft("howtos/deploy.md", "# Deploy\n\nRun `pnpm deploy`."), fresh);
+          yield* store.write(you, theSite, draft("facts/stack.md", "# Stack\n\nThe site is built with Astro."), fresh);
+          const before = yield* store.list(you, theSite, 50);
+          expect(yield* store.check(you, theSite)).toEqual([]);
+          expect(yield* store.check(you, everyone)).toEqual([]);
+          // Nothing new among your pages, such as a report of its own.
+          expect(yield* store.list(you, theSite, 50)).toEqual(before);
+          // Check now is yours: a hob never runs it.
+          expect(yield* died(store.check(asQuill, theSite))).toBe(true);
+        }),
+      ));
   });
 };

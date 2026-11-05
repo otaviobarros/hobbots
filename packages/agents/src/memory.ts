@@ -21,8 +21,8 @@ import {
   type MemoryVersion,
   type MemoryVersionChanges,
   memoryProjectIdentity,
-  type SafetyPreset,
   memoryScopeAllowed,
+  type SafetyPreset,
   type ThreadId,
 } from "@hobbots/domain";
 import { Context, Effect, Option } from "effect";

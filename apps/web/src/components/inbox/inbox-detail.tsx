@@ -27,10 +27,10 @@ import { ApprovalDecision } from "../approvals/approval-card.tsx";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
-import { ShareDecision, ShareDiff } from "../memory/share-card.tsx";
 import { scopeName } from "../memory/memory-model.ts";
 import { messages as memoryCopy } from "../memory/messages.ts";
 import { shareDestination } from "../memory/review-model.ts";
+import { ShareDecision, ShareDiff } from "../memory/share-card.tsx";
 import { messages as appCopy } from "../messages.ts";
 import { DeviceFacts, MatchingCode, PairingActions } from "../pairing/device-request.tsx";
 import { messages as pairingCopy } from "../pairing/messages.ts";
@@ -418,11 +418,7 @@ function ShareDetail({
     >
       <h3 className="lbl m-0 text-label">{copy.detail.shareDiff}</h3>
       <ShareDiff share={share} hobs={hobs} />
-      <Facts
-        rows={[
-          [memoryCopy.review.facts.suggestedBy, `${who} · ${formatWhen(share.createdAt, now)}`],
-        ]}
-      />
+      <Facts rows={[[memoryCopy.review.facts.suggestedBy, `${who} · ${formatWhen(share.createdAt, now)}`]]} />
       <ShareDecision share={share} hobs={hobs} edit="in-memory" />
     </DetailFrame>
   );

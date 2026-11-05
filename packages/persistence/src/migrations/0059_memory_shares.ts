@@ -6,7 +6,8 @@ import { SqlClient } from "effect/sql";
 // (migration 0055): by hob, work and the SHA-256 of its key, with the SHA-256 of its input beside it.
 // `memory_scope` is the shared memory it is for, as JSON. `through` says whether your review or the
 // preset let it through, `version` and `previous` the version it wrote and the one it replaced, which
-// Undo brings back, and `edited` (0 or 1) whether you changed the page before you shared it. The markdown and tags are redacted before they are recorded, or are as you edited them.
+// Undo brings back, and `edited` (0 or 1) whether you changed the page before you shared it. The
+// markdown and tags are redacted before they are recorded, or are as you edited them.
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`

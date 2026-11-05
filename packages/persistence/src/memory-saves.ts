@@ -1,66 +1,18 @@
 import { MemorySaves } from "@hobbots/agents";
 import { MemorySave } from "@hobbots/domain";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { lockJournal, makeJournaled } from "./journal.ts";
+import { makeJournaled } from "./journal.ts";
+import { beginMemoryCall, type MemoryCallRow, memoryCallColumns, memoryCallFields } from "./memory-calls.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
-interface Row {
-  readonly id: string;
-  readonly agentId: string;
-  readonly scope: string;
-  readonly callKey: string;
-  readonly input: string;
-  readonly memoryScope: string;
-  readonly path: string;
-  readonly markdown: string;
-  readonly tags: string;
-  readonly state: string;
-  readonly version: string | null;
-  readonly threadId: string | null;
-  readonly messageId: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
+type Row = MemoryCallRow;
 
 const decodeSave = Schema.decodeUnknownEffect(MemorySave);
 
-const fromRow = (row: Row) =>
-  decodeSave({
-    id: row.id,
-    agentId: row.agentId,
-    work: row.scope,
-    key: row.callKey,
-    input: row.input,
-    scope: JSON.parse(row.memoryScope),
-    path: row.path,
-    markdown: row.markdown,
-    tags: JSON.parse(row.tags),
-    state: row.state,
-    version: row.version,
-    threadId: row.threadId,
-    messageId: row.messageId,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  }).pipe(Effect.orDie);
+const fromRow = (row: Row) => decodeSave(memoryCallFields(row)).pipe(Effect.orDie);
 
-const toRow = (save: MemorySave) => ({
-  id: save.id,
-  agent_id: save.agentId,
-  scope: save.work,
-  call_key: save.key,
-  input: save.input,
-  memory_scope: JSON.stringify(save.scope),
-  path: save.path,
-  markdown: save.markdown,
-  tags: JSON.stringify(save.tags),
-  state: save.state,
-  version: save.version,
-  thread_id: save.threadId,
-  message_id: save.messageId,
-  created_at: save.createdAt,
-  updated_at: save.updatedAt,
-});
+const toRow = memoryCallColumns;
 
 /**
  * The SQL record of memory saves (migration 0055), keyed by hob, work and key. A save is recorded
@@ -72,26 +24,20 @@ export const MemorySavesLive = Layer.effect(
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const journaled = makeJournaled(sql);
-    const find = (save: MemorySave, also: string | undefined) =>
-      sql<Row>`SELECT * FROM memory_saves
-        WHERE agent_id = ${save.agentId} AND ${sql.in("scope", [save.work, also ?? save.work])}
-          AND call_key = ${save.key}
-        ORDER BY created_at LIMIT 1`;
 
     return MemorySaves.of({
       begin: (save, also) =>
-        Effect.gen(function* () {
-          yield* lockJournal(sql);
-          const [stored] = yield* find(save, also);
-          if (stored !== undefined) return { _tag: "Existing", save: yield* fromRow(stored) } as const;
-          const committed = yield* journaled(1, () =>
-            sql`INSERT INTO memory_saves ${sql.insert(toRow(save))}`.pipe(
-              Effect.as({ value: save, events: [{ _tag: "MemorySaveRecorded", save }] as const }),
-            ),
-          );
-          const entries = Option.isSome(committed) ? committed.value.entries : [];
-          return { _tag: "Started", entries } as const;
-        }).pipe(sql.withTransaction, sqlOrDie),
+        Effect.map(
+          beginMemoryCall<Row, MemorySave>(
+            sql,
+            "memory_saves",
+            save,
+            also,
+            { columns: toRow(save), recorded: { _tag: "MemorySaveRecorded", save } },
+            fromRow,
+          ),
+          (started) => (started._tag === "Existing" ? { _tag: "Existing", save: started.call } : started),
+        ),
       // One conditional update, so of two outcomes racing for the same save only the first lands. By its
       // id, not its work, so a save still settles after its reply's calls moved to the Task it started.
       settle: (save, state, version, at) =>

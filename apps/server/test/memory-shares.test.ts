@@ -36,8 +36,9 @@ import {
   memoryProjectIdentity,
   type SafetyPreset,
 } from "@hobbots/domain";
-import { type MemoryStoreFakeControls, makeMemorySavesFake, makeMemoryStoreFake } from "@hobbots/memory/testing";
 import { MemoryToolsLive } from "@hobbots/memory";
+import { type MemoryStoreFakeControls, makeMemorySavesFake, makeMemoryStoreFake } from "@hobbots/memory/testing";
+import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -50,7 +51,6 @@ import {
   TaskRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { PolicyEngine } from "@hobbots/permissions";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Exit, Layer, ManagedRuntime } from "effect";
 import { HttpRouter } from "effect/http";
@@ -237,7 +237,7 @@ const journal = async () =>
 
 describe("what hobs want to share", () => {
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-330] waits for you under Careful and Balanced, and writes nothing until you decide", async () => {
+  it("[TC-GEN-360] waits for you under Careful and Balanced, and writes nothing until you decide", async () => {
     for (const preset of ["careful", "balanced"] as const) {
       const answer = await save(preset, "project", { key: `deploy-${preset}`, work: `reply:${preset}` });
       expect(answer).toEqual({
@@ -255,7 +255,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-331] lets a share to a project through under Trusting, written as the hob, with Undo", async () => {
+  it("[TC-GEN-361] lets a share to a project through under Trusting, written as the hob, with Undo", async () => {
     const answer = await save("trusting", "project");
     expect(answer).toEqual({
       text: `Shared ${PAGE} with the project ${site}. The user can see it in Memory and undo it.`,
@@ -275,7 +275,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-332] asks you before a share with every hob under every preset, Trusting included", async () => {
+  it("[TC-GEN-362] asks you before a share with every hob under every preset, Trusting included", async () => {
     for (const preset of ["careful", "balanced", "trusting"] as const) {
       const answer = await save(preset, "everyone", { key: `about-${preset}`, work: `reply:${preset}` });
       expect(answer.text).toBe(
@@ -291,7 +291,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-333] records a retried key once, and answers it as the share now stands", async () => {
+  it("[TC-GEN-363] records a retried key once, and answers it as the share now stands", async () => {
     await save("balanced", "project");
     const again = await save("balanced", "project");
     expect(again.text).toContain("It waits for their review");
@@ -304,7 +304,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-334] leaves a share to you under Trusting while memory does not answer", async () => {
+  it("[TC-GEN-364] leaves a share to you under Trusting while memory does not answer", async () => {
     controls.setDown(true);
     const answer = await save("trusting", "project");
     controls.setDown(false);
@@ -313,7 +313,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-335] shares it as the hob wrote it, written as the hob, and you as the one who approved it", async () => {
+  it("[TC-GEN-365] shares it as the hob wrote it, written as the hob, and you as the one who approved it", async () => {
     await save("balanced", "project");
     const [waiting] = await shares();
     const shared = await request<MemoryShare>("POST", `/api/memory/shares/${waiting?.id}/share`, {});
@@ -326,7 +326,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-336] shares your edit, still as the hob, and marks it edited", async () => {
+  it("[TC-GEN-366] shares your edit, still as the hob, and marks it edited", async () => {
     await save("careful", "everyone");
     const [waiting] = await shares();
     const edited = "# Deploy\n\nRun `pnpm deploy:prod` from the repository root.";
@@ -338,7 +338,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-337] keeps it private in the hob's own memory, and never in the shared one", async () => {
+  it("[TC-GEN-367] keeps it private in the hob's own memory, and never in the shared one", async () => {
     await save("balanced", "project");
     const [waiting] = await shares();
     const kept = await request<MemoryShare>("POST", `/api/memory/shares/${waiting?.id}/keep`);
@@ -348,11 +348,16 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-338] undoes an approved share back to the page it replaced, and never over a later change", async () => {
+  it("[TC-GEN-368] undoes an approved share back to the page it replaced, and never over a later change", async () => {
     await Effect.runPromise(
-      store.write(you, theSite, { path: PAGE, markdown: "# Deploy\n\nAsk Bram.", tags: [], pinned: false }, {
-        _tag: "New",
-      }),
+      store.write(
+        you,
+        theSite,
+        { path: PAGE, markdown: "# Deploy\n\nAsk Bram.", tags: [], pinned: false },
+        {
+          _tag: "New",
+        },
+      ),
     );
     await save("balanced", "project");
     const [waiting] = await shares();
@@ -366,10 +371,15 @@ describe("what hobs want to share", () => {
     const later = (await shares()).find((share) => share.state === "shared");
     const current = await page(theSite);
     await Effect.runPromise(
-      store.write(you, theSite, { path: PAGE, markdown: "# Deploy\n\nYours.", tags: [], pinned: false }, {
-        _tag: "Version",
-        version: current?.version ?? ("" as never),
-      }),
+      store.write(
+        you,
+        theSite,
+        { path: PAGE, markdown: "# Deploy\n\nYours.", tags: [], pinned: false },
+        {
+          _tag: "Version",
+          version: current?.version ?? ("" as never),
+        },
+      ),
     );
     const refused = await request<{ _tag: string }>("POST", `/api/memory/shares/${later?.id}/undo`);
     expect(refused).toMatchObject({ status: 409, body: { _tag: "MemoryShareChangedMeanwhile" } });
@@ -377,7 +387,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), PE-006, #960
-  it("[TC-GEN-339] takes a decision only from you, never from a hob's turn", async () => {
+  it("[TC-GEN-369] takes a decision only from you, never from a hob's turn", async () => {
     await save("balanced", "project");
     const [waiting] = await shares();
     // Without a user session, as from a hob, Charm or runtime tool, the decision does not run.
@@ -403,7 +413,7 @@ describe("what hobs want to share", () => {
 
 describe("Check now", () => {
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-340] finds pages that disagree or look out of date in every scope, and keeps the last check", async () => {
+  it("[TC-GEN-370] finds pages that disagree or look out of date in every scope, and keeps the last check", async () => {
     expect((await request("GET", "/api/memory/check")).body).toEqual({ checkedAt: null, findings: [] });
     await Effect.runPromise(
       store.write(you, theSite, { path: PAGE, markdown: MARKDOWN, tags: [], pinned: false }, { _tag: "New" }),
@@ -419,7 +429,7 @@ describe("Check now", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-341] answers 503 while memory does not answer, and changes nothing", async () => {
+  it("[TC-GEN-371] answers 503 while memory does not answer, and changes nothing", async () => {
     controls.setDown(true);
     const checked = await request<{ _tag: string }>("POST", "/api/memory/check");
     controls.setDown(false);

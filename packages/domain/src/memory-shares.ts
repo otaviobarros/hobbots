@@ -1,6 +1,6 @@
 import { Schema } from "effect";
-import { AgentId, MessageId, ThreadId } from "./ids.ts";
-import { MemoryPath, MemoryScope, MemoryVersion } from "./memory.ts";
+import { MemoryScope, MemoryVersion } from "./memory.ts";
+import { MEMORY_CALL_FIELDS, MEMORY_CALL_ORIGIN } from "./memory-tools.ts";
 
 /**
  * Shares (ADR 028, Sharing): a `memory_save` that asks to put a page beyond the hob's own memory,
@@ -24,20 +24,9 @@ export type MemoryShareThrough = typeof MemoryShareThrough.Type;
 
 /** A share a hob asked for, recorded and journaled before anything is written. */
 export class MemoryShare extends Schema.Class<MemoryShare>("MemoryShare")({
-  id: Schema.String,
-  agentId: AgentId,
-  /** The work the key belongs to, such as `task:<Task id>`: a key is unique within it (#660). */
-  work: Schema.String,
-  /** The SHA-256 of the key the hob sent, never its text. */
-  key: Schema.String,
-  /** The SHA-256 of the call's input as stable JSON without its key. */
-  input: Schema.String,
+  ...MEMORY_CALL_FIELDS,
   /** The shared memory it is for: a project's or everyone's, never a hob's. */
   scope: MemoryScope,
-  path: MemoryPath,
-  /** The page, redacted before it was recorded, or as you edited it before you shared it. */
-  markdown: Schema.String,
-  tags: Schema.Array(Schema.String),
   state: MemoryShareState,
   through: MemoryShareThrough,
   /** Whether you changed the page before you shared it. */
@@ -46,11 +35,7 @@ export class MemoryShare extends Schema.Class<MemoryShare>("MemoryShare")({
   version: Schema.NullOr(MemoryVersion),
   /** The version it replaced there, or null when the page was new: what Undo brings back. */
   previous: Schema.NullOr(MemoryVersion),
-  /** The reply the call was made from, when it came from a chat turn. */
-  threadId: Schema.NullOr(ThreadId),
-  messageId: Schema.NullOr(MessageId),
-  createdAt: Schema.String,
-  updatedAt: Schema.String,
+  ...MEMORY_CALL_ORIGIN,
   /** When it was shared, kept private or undone. */
   decidedAt: Schema.NullOr(Schema.String),
 }) {}
@@ -71,8 +56,7 @@ export const memoryShareSharedText = (path: string, scope: MemoryScope) =>
   `Shared ${path} with ${whereOf(scope)}. The user can see it in Memory and undo it.`;
 
 /** What a hob is told about a share the user kept private. */
-export const memoryShareKeptText = (path: string) =>
-  `The user kept ${path} private, so it is in your own memory only.`;
+export const memoryShareKeptText = (path: string) => `The user kept ${path} private, so it is in your own memory only.`;
 
 /** What a hob is told about a share the user took back. */
 export const memoryShareUndoneText = (path: string) =>

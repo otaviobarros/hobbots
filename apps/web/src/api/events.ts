@@ -172,6 +172,11 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     return;
   }
   if (isUnapplied(event)) return;
+  // A hob asked to share a page, or a share moved: the Inbox, To review and memory read it again (ADR 028).
+  if (event._tag === "MemoryShareRequested" || event._tag === "MemoryShareChanged") {
+    void memorySharesChanged(queryClient);
+    return;
+  }
   switch (event._tag) {
     case "AgentUpserted":
       applyAgent(queryClient, event.agent);
@@ -231,9 +236,7 @@ const applyWorkEvent = (
             | "DeviceRevoked"
             | "HubQuestionRaised"
             | "HubQuestionAnswered"
-            | "HubQuestionWithdrawn"
-            | "MemoryShareRequested"
-            | "MemoryShareChanged";
+            | "HubQuestionWithdrawn";
         }
       >,
 ) => {
@@ -263,11 +266,6 @@ const applyWorkEvent = (
     // Any list of devices is read again. This device's own removal shows when the hub refuses it.
     case "DeviceRevoked":
       void devicesChanged(queryClient);
-      return;
-    // A hob asked to share a page, or a share moved: the Inbox, To review and memory read it again (ADR 028).
-    case "MemoryShareRequested":
-    case "MemoryShareChanged":
-      void memorySharesChanged(queryClient);
       return;
     case "TaskStateChanged":
     case "TaskCompleted":

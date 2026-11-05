@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { sep } from "node:path";
 import {
+  announcer,
   approvalNote,
   askOnStep,
   type CharmTurn,
@@ -163,12 +164,7 @@ export const MemoryToolsLive = Layer.effect(
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
 
-    const announce = (entries: ReadonlyArray<EventEnvelope>) =>
-      Option.isNone(publisher) || entries.length === 0
-        ? Effect.void
-        : publisher.value
-            .publish(entries)
-            .pipe(Effect.catchCause((cause) => Effect.logWarning("Could not announce a memory save", cause)));
+    const announce = announcer(publisher, "a memory save");
 
     /** The project of each of the hob's folders, once each, in the order of its folders. */
     const projectsOf = (folders: ReadonlyArray<string>) =>

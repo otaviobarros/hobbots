@@ -11,9 +11,9 @@ import {
   type MemoryActor,
   MemoryConflict,
   type MemoryDraft,
+  type MemoryScope,
   MemoryShare,
   type MemoryShareState,
-  type MemoryScope,
   type MemoryUnavailable,
   type MemoryVersion,
   memoryShareKeptText,
@@ -23,7 +23,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { type MemoryShareRequest, MemoryShares, MemoryStore, type MemoryStoreShape } from "./memory.ts";
-import { EventPublisher } from "./ports.ts";
+import { announcer, EventPublisher } from "./ports.ts";
 import type { HubToolAnswer } from "./runtime.ts";
 
 /**
@@ -158,12 +158,7 @@ export const MemorySharesLive = Layer.effectContext(
     const log = yield* MemoryShareLog;
     const publisher = yield* Effect.serviceOption(EventPublisher);
 
-    const announce = (entries: ReadonlyArray<EventEnvelope>) =>
-      Option.isNone(publisher) || entries.length === 0
-        ? Effect.void
-        : publisher.value
-            .publish(entries)
-            .pipe(Effect.catchCause((cause) => Effect.logWarning("Could not announce a memory share", cause)));
+    const announce = announcer(publisher, "a memory share");
 
     /** Moves `share` to its new state from one of `from`, announced, or None when it moved on meanwhile. */
     const move = (share: MemoryShare, from: ReadonlyArray<MemoryShareState>) =>
@@ -225,7 +220,10 @@ export const MemorySharesLive = Layer.effectContext(
           ? yield* changed(recorded, { state: "shared", ...written.value, decidedAt: yield* now })
           : yield* changed(recorded, { state: "waiting", through: "review" });
         const moved = yield* move(settled, ["sending"]);
-        return earlierAnswer(Option.getOrElse(moved, () => settled), request.input);
+        return earlierAnswer(
+          Option.getOrElse(moved, () => settled),
+          request.input,
+        );
       });
 
     /** The share `id`, when it is in `state`. */

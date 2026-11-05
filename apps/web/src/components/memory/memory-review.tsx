@@ -9,7 +9,15 @@ import { formatWhen } from "../../lib/time.ts";
 import { type HobDirectory, memorySearchOf, scopeName, scopeWhere } from "./memory-model.ts";
 import { ScopeMark } from "./memory-parts.tsx";
 import { messages } from "./messages.ts";
-import { findingWhat, openItem, type ReviewItem, reviewItems, shareDestination, shareFrom, shareWhat } from "./review-model.ts";
+import {
+  findingWhat,
+  openItem,
+  type ReviewItem,
+  reviewItems,
+  shareDestination,
+  shareFrom,
+  shareWhat,
+} from "./review-model.ts";
 import { ShareDecision, ShareDiff } from "./share-card.tsx";
 
 const copy = messages.review;
@@ -96,14 +104,11 @@ function Facts({ rows }: { rows: ReadonlyArray<readonly [string, string]> }) {
 }
 
 /** A share in full: where it goes, the page it adds, and your decision, edited here if you like. */
-export function ShareReview({ share, hobs, now }: { share: MemoryShare; hobs: HobDirectory; now: Date }) {
+function ShareReview({ share, hobs, now }: { share: MemoryShare; hobs: HobDirectory; now: Date }) {
   const who = shareFrom(share, hobs);
   const destination = shareDestination(share, hobs);
   return (
-    <article
-      aria-label={shareWhat(share, who)}
-      className="flex max-w-165 min-w-0 flex-1 animate-hb-in flex-col gap-4"
-    >
+    <article aria-label={shareWhat(share, who)} className="flex max-w-165 min-w-0 flex-1 animate-hb-in flex-col gap-4">
       <header className="flex flex-col gap-2.5">
         <span className="flex flex-wrap items-center gap-2 text-detail text-text-secondary">
           <Badge variant={share.state === "waiting" ? "needs-you" : "muted"}>{copy.share}</Badge>

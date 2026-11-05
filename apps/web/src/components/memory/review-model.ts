@@ -1,11 +1,5 @@
 import type { MemoryCheck } from "@hobbots/api";
-import {
-  type MemoryFinding,
-  type MemoryKind,
-  type MemoryShare,
-  memoryKindOf,
-  memoryShareWaits,
-} from "@hobbots/domain";
+import { type MemoryFinding, type MemoryKind, type MemoryShare, memoryKindOf, memoryShareWaits } from "@hobbots/domain";
 import { type HobDirectory, pageBody, pageTitle, scopeName } from "./memory-model.ts";
 import { messages } from "./messages.ts";
 
@@ -20,7 +14,7 @@ export type ReviewItem =
   | { readonly _tag: "Finding"; readonly key: string; readonly finding: MemoryFinding };
 
 /** The key a finding has in the address: its place in the last check. */
-export const findingKey = (index: number) => `check:${index}`;
+const findingKey = (index: number) => `check:${index}`;
 
 export const reviewItems = (
   shares: ReadonlyArray<MemoryShare>,

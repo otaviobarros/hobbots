@@ -1,9 +1,9 @@
 import type { MemoryChange } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SearchField } from "@hobbots/ui/components/search-field";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { memoryPageGone } from "../../api/memory-pages.ts";
 import { memoryCheckQuery, memorySharesQuery } from "../../api/memory-shares.ts";
 import { PageHeader } from "../shell/pages.tsx";
@@ -135,7 +135,13 @@ function ViewBody({ view, reads, review, now }: { view: MemoryView; reads: Reads
         return <ReadFailed message={copy.review.loadFailed} onRetry={() => void review.shares.refetch()} />;
       }
       return (
-        <MemoryReviewView item={view.item} shares={review.shares.data} check={review.check.data} hobs={hobs} now={now} />
+        <MemoryReviewView
+          item={view.item}
+          shares={review.shares.data}
+          check={review.check.data}
+          hobs={hobs}
+          now={now}
+        />
       );
     case "Overview":
       return <OverviewBody reads={reads} now={now} />;
