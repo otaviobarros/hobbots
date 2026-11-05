@@ -111,6 +111,28 @@ describe.runIf(engineEnabled)("Check now on ai-memory", () => {
   });
 });
 
+describe.runIf(engineEnabled)("a version's text on ai-memory", () => {
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-384] answers no text for a version whose diff ai-memory cuts short, never a part of it", async () => {
+    const { store } = await Effect.runPromise(open());
+    const site: MemoryScope = {
+      _tag: "Project",
+      identity: memoryProjectIdentity("git@github.com:me/site.git", "site"),
+    };
+    const you = { _tag: "You" } as const;
+    const path = MemoryPath.make("notes/long.md");
+    const lines = (word: string) => Array.from({ length: 1_200 }, (_, at) => `${word} ${at}`).join("\n");
+    const draft = (markdown: string) => ({ path, markdown, tags: [], pinned: false });
+    const first = await Effect.runPromise(store.write(you, site, draft(lines("old")), { _tag: "New" }));
+    const second = await Effect.runPromise(
+      store.write(you, site, draft(lines("new")), { _tag: "Version", version: first }),
+    );
+    // Every line changed: more than ai-memory diffs, so the text cannot be rebuilt whole.
+    const known = { version: second, markdown: lines("new") };
+    expect(await Effect.runPromise(store.versionText(you, site, path, first, known))).toBeNull();
+  });
+});
+
 describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
   // covers ADR 028 (Backups), OP-002
   it("[TC-OP-102] says memory did not answer in full rather than leave a project it cannot name out", async () => {
@@ -145,7 +167,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
   });
 
   // covers ADR 028 (Writes), #961
-  it("[TC-GEN-348] refuses a restore when ai-memory changes the page after the restore checked it, and puts that change back", async () => {
+  it("[TC-GEN-348] refuses a restore at a version when ai-memory writes the page after the restore read it, and keeps that write", async () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const pip: MemoryScope = { _tag: "Hob", agentId: AgentId.make("0d6e2f0a-0000-4000-8000-000000000031") };
     const you = { _tag: "You" } as const;
@@ -153,7 +175,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
     const draft = (markdown: string) => ({ path, markdown, tags: [], pinned: false });
     const first = await Effect.runPromise(store.write(you, pip, draft("# Session\n\nMonday."), { _tag: "New" }));
     const second = await Effect.runPromise(store.write(you, pip, draft("# Session\n\nTuesday."), { _tag: "Any" }));
-    // ai-memory writes the page itself, as a session's summary does, once the restore has checked it.
+    // ai-memory writes the page itself, as a session's summary does, once the restore has read it.
     const where = engineProjectOf(pip);
     const engineWrite = () =>
       realFetch(`${endpoint.url}/mcp`, {
@@ -175,7 +197,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
       });
     let wrote = false;
     beforeFetch = async (url) => {
-      if (wrote || !url.includes("/admin/restore-page")) return;
+      if (wrote || !url.includes("/history/") || !url.includes("from=")) return;
       wrote = true;
       expect((await engineWrite()).status).toBe(200);
     };

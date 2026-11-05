@@ -58,6 +58,18 @@ export interface MemoryStoreShape {
     path: MemoryPath,
     version: MemoryVersion,
   ) => Memory<MemoryVersionChanges | null>;
+  /**
+   * The exact text of `version` of the page at `path`, rebuilt from `known`, a version of it whose
+   * text the caller holds; null when the page has no such version, or memory cannot answer it whole,
+   * as when its diff between the two is cut short.
+   */
+  readonly versionText: (
+    actor: MemoryActor,
+    scope: MemoryScope,
+    path: MemoryPath,
+    version: MemoryVersion,
+    known: { readonly version: MemoryVersion; readonly markdown: string },
+  ) => Memory<string | null>;
   /** The first `limit` pages in `scope`: pinned first, then the most recently changed. */
   readonly list: (actor: MemoryActor, scope: MemoryScope, limit: number) => Memory<ReadonlyArray<MemoryPageSummary>>;
   /** Every scope that holds a page now, among those `actor` may reach. */
@@ -167,6 +179,7 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   search: guarded("search", store.search, ([scopes]) => scopes),
   page: guarded("read", store.page, one),
   versionChanges: guarded("read", store.versionChanges, one),
+  versionText: guarded("read", store.versionText, one),
   list: guarded("list", store.list, one),
   // Nothing to refuse: what the engine answers is narrowed to what the actor may reach.
   scopes: (actor) =>

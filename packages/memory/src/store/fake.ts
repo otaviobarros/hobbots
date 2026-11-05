@@ -143,6 +143,14 @@ export const makeMemoryStoreFake = (): {
     const latest = latestOf(scope, path);
     return latest === undefined || latest.forgotten ? undefined : latest;
   };
+  /**
+   * The versions the page's history shows, oldest first: as the engine does, a forget takes the
+   * history with it, so a page started again after a forget shows only what came after.
+   */
+  const shownOf = (scope: MemoryScope, path: MemoryPath) => {
+    const stored = pagesOf(scope).get(path) ?? [];
+    return stored.slice(stored.findLastIndex((entry) => entry.forgotten) + 1);
+  };
   const conflict = (scope: MemoryScope, path: MemoryPath) =>
     new MemoryConflict({ path, current: currentOf(scope, path)?.version ?? null });
 
@@ -212,6 +220,12 @@ export const makeMemoryStoreFake = (): {
         const before = at === 0 ? null : (versions[at - 1]?.markdown ?? null);
         return { first: before === null, lines: changedLines(before ?? "", found.markdown), cut: false };
       }),
+    versionText: (_actor, scope, path, version, known) =>
+      Effect.map(up, () => {
+        const versions = currentOf(scope, path) === undefined ? [] : shownOf(scope, path);
+        if (!versions.some((entry) => entry.version === known.version)) return null;
+        return versions.find((entry) => entry.version === version)?.markdown ?? null;
+      }),
     list: (_actor, scope, limit) =>
       Effect.map(up, () =>
         summaries(scope)
@@ -238,10 +252,8 @@ export const makeMemoryStoreFake = (): {
         const latest = currentOf(scope, path);
         // A forgotten page has no history to show; its versions stay only for restore.
         if (latest === undefined) return [];
-        // As the engine does, a forget takes the history with it, and each version names the one it
-        // replaced: a page started again after a forget replaces nothing.
-        const stored = pagesOf(scope).get(path) ?? [];
-        const shown = stored.slice(stored.findLastIndex((entry) => entry.forgotten) + 1);
+        // Each version names the one it replaced: a page started again after a forget replaces nothing.
+        const shown = shownOf(scope, path);
         return shown
           .map((entry, at) => ({
             version: entry.version,

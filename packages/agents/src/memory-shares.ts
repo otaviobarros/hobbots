@@ -17,9 +17,8 @@ import {
   MemoryShare,
   type MemorySharePending,
   type MemoryShareState,
-  type MemoryUnavailable,
+  MemoryUnavailable,
   type MemoryVersion,
-  type MemoryVersionChanges,
   memoryShareKeptText,
   memoryShareSendingText,
   memoryShareSharedText,
@@ -149,44 +148,6 @@ const now = Effect.map(DateTime.now, DateTime.formatIso);
 const expectedAt = (version: MemoryVersion | null): MemoryExpected =>
   version === null ? { _tag: "New" } : { _tag: "Version", version };
 
-/** A page's lines, as a tally of how often each one appears; blank lines are left out. */
-type Tally = Map<string, number>;
-
-const tallyOf = (lines: Iterable<string>): Tally => {
-  const tally: Tally = new Map();
-  for (const line of lines) if (line.trim() !== "") tally.set(line, (tally.get(line) ?? 0) + 1);
-  return tally;
-};
-
-/** The lines `a` holds more often than `b`, with how many more times. */
-const beyond = (a: Tally, b: Tally): Tally =>
-  new Map([...a].flatMap(([line, count]) => (count > (b.get(line) ?? 0) ? [[line, count - (b.get(line) ?? 0)]] : [])));
-
-/**
- * What going from `from` to `to` adds and removes, line by line, leaving out a line that only moves:
- * what any line diff of the two finds, whichever way it lines them up.
- */
-const lineChanges = (from: Tally, to: Tally) => ({ add: beyond(to, from), remove: beyond(from, to) });
-
-/** Whether two tallies hold the same lines as often, or `part` no line more often than `whole` when not `exact`. */
-const fits = (part: Tally, whole: Tally, exact: boolean) =>
-  (!exact || part.size === whole.size) &&
-  [...part].every(([line, count]) => (exact ? whole.get(line) === count : count <= (whole.get(line) ?? 0)));
-
-/**
- * Whether `changes`, what one version changed against the version it replaced, is the change from
- * `from` (null for a new page) to `to`. A diff cut short is checked as far as it goes.
- */
-const changedFromTo = (changes: MemoryVersionChanges | null, from: string | null, to: string) => {
-  if (changes === null || changes.first !== (from === null)) return false;
-  const expected = lineChanges(tallyOf(from === null ? [] : from.split("\n")), tallyOf(to.split("\n")));
-  const lines = (op: "add" | "remove") =>
-    tallyOf(changes.lines.filter((line) => line.op === op).map((line) => line.text));
-  // A diff may show a moved line as removed and added again; it changes nothing.
-  const seen = lineChanges(lines("remove"), lines("add"));
-  return fits(seen.add, expected.add, !changes.cut) && fits(seen.remove, expected.remove, !changes.cut);
-};
-
 /** Moves a share that is `sending` on to its next step, recorded before the step runs. */
 type Step = (sending: MemoryShare, pending: MemorySharePending) => Effect.Effect<MemoryShare>;
 
@@ -208,27 +169,29 @@ const shareEffects = (store: MemoryStoreShape, step: Step) => {
 
   /**
    * The version that replaced `after` (null for none: the page's first version) in the shared page,
-   * when it is the change from `from` to `to`; undefined when another change replaced it, or none did.
+   * when it holds exactly `to`; undefined when another change replaced it, or none did. What that
+   * version holds is read whole, never guessed from part of a diff: memory that cannot answer it
+   * whole leaves the share as it is, for recovery to look again.
    */
   const replacedBy = (
     share: MemoryShare,
     current: MemoryPage | null,
-    after: MemoryVersion | null,
-    change: { readonly from: string | null; readonly to: string },
+    after: { readonly version: MemoryVersion; readonly markdown: string } | null,
+    to: string,
   ) =>
     Effect.gen(function* () {
       const history = yield* store.history(YOU, share.scope, share.path);
-      const next = history.find((each) => each.supersedes === after);
-      if (next === undefined) return undefined;
-      const ours =
+      const next = history.find((each) => each.supersedes === (after?.version ?? null));
+      const known = after ?? current;
+      if (next === undefined || known === null) return undefined;
+      const text =
         next.latest && current !== null
-          ? current.markdown === change.to
-          : changedFromTo(
-              yield* store.versionChanges(YOU, share.scope, share.path, next.version),
-              change.from,
-              change.to,
-            );
-      return ours ? next.version : undefined;
+          ? current.markdown
+          : yield* store.versionText(YOU, share.scope, share.path, next.version, known);
+      if (text === null) {
+        return yield* new MemoryUnavailable({ message: "Memory did not answer a version of the page whole." });
+      }
+      return text === to ? next.version : undefined;
     });
 
   /**
@@ -248,10 +211,14 @@ const shareEffects = (store: MemoryStoreShape, step: Step) => {
         );
         return { state: "shared" as const, version };
       }
-      const landed = yield* replacedBy(sending, current, sending.previous, {
-        from: sending.replaced,
-        to: sending.markdown,
-      });
+      const before =
+        sending.previous === null || sending.replaced === null
+          ? null
+          : { version: sending.previous, markdown: sending.replaced };
+      const landed =
+        sending.previous !== null && before === null
+          ? undefined
+          : yield* replacedBy(sending, current, before, sending.markdown);
       if (landed === undefined) {
         return yield* new MemoryConflict({ path: sending.path, current: current?.version ?? null });
       }
@@ -267,10 +234,13 @@ const shareEffects = (store: MemoryStoreShape, step: Step) => {
         const history = yield* store.history(YOU, sending.scope, sending.path);
         return !history.some((each) => each.supersedes === sending.version);
       }
-      const back = yield* replacedBy(sending, current, sending.version, {
-        from: sending.markdown,
-        to: sending.replaced ?? "",
-      });
+      if (sending.version === null) return false;
+      const back = yield* replacedBy(
+        sending,
+        current,
+        { version: sending.version, markdown: sending.markdown },
+        sending.replaced ?? "",
+      );
       return back !== undefined;
     });
 
@@ -361,19 +331,25 @@ export const MemorySharesLive = Layer.effectContext(
       );
 
     /**
+     * Sends the share `id` back after a conflict, by the step it is at now: a step the write recorded
+     * meanwhile counts. Past Undo's first step the shared memory is back as it was, so only the hob's
+     * own copy is left: a conflict there stays `sending`, for recovery to write it again.
+     */
+    const sendBack = (id: string) =>
+      Effect.flatMap(log.get(id), (found) =>
+        Option.isSome(found) && found.value.state === "sending" && found.value.pending !== "restored"
+          ? Effect.flatMap(back(found.value), (it) => move(it, ["sending"]))
+          : Effect.void,
+      );
+
+    /**
      * Writes what `sending` records and saves the outcome. A conflict sends it back; memory that does
      * not answer leaves it `sending` for recovery. Either way the error is answered.
      */
     const settle = (sending: MemoryShare) =>
       Effect.gen(function* () {
         const fields = yield* write(sending).pipe(
-          // Past Undo's first step the shared memory is back as it was, so only the hob's own copy is
-          // left: a conflict there stays `sending`, for recovery to write it again.
-          Effect.tapError((error) =>
-            error._tag === "MemoryConflict" && sending.pending !== "restored"
-              ? Effect.flatMap(back(sending), (it) => move(it, ["sending"]))
-              : Effect.void,
-          ),
+          Effect.tapError((error) => (error._tag === "MemoryConflict" ? sendBack(sending.id) : Effect.void)),
         );
         const decided = yield* changed(sending, { ...fields, pending: null, decidedAt: yield* now });
         return yield* move(decided, ["sending"]);

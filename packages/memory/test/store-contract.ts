@@ -175,6 +175,40 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
         }),
       ));
 
+    // covers ADR 028 (Sharing), STD-DATA-001, #960
+    it("[TC-GEN-383] answers an earlier version's exact text from one whose text is held, lines in their order", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const path = MemoryPath.make("howtos/order.md");
+          const first = yield* store.write(
+            asPip,
+            pipsOwn,
+            draft("howtos/order.md", "# Steps\n\nBuild.\nTest.\n"),
+            fresh,
+          );
+          // The same lines, in another order, then a later change on top.
+          const second = yield* store.write(asPip, pipsOwn, draft("howtos/order.md", "# Steps\n\nTest.\nBuild.\n"), {
+            _tag: "Version",
+            version: first,
+          });
+          const third = yield* store.write(
+            asPip,
+            pipsOwn,
+            draft("howtos/order.md", "# Steps\n\nTest.\nBuild.\nShip.\n"),
+            { _tag: "Version", version: second },
+          );
+          const latest = { version: third, markdown: "# Steps\n\nTest.\nBuild.\nShip.\n" };
+          expect(yield* store.versionText(you, pipsOwn, path, first, latest)).toBe("# Steps\n\nBuild.\nTest.\n");
+          expect(yield* store.versionText(you, pipsOwn, path, second, latest)).toBe("# Steps\n\nTest.\nBuild.\n");
+          const firstText = { version: first, markdown: "# Steps\n\nBuild.\nTest.\n" };
+          expect(yield* store.versionText(you, pipsOwn, path, second, firstText)).toBe("# Steps\n\nTest.\nBuild.\n");
+          // A version of another page has no text here.
+          expect(yield* store.versionText(you, pipsOwn, MemoryPath.make("howtos/other.md"), first, latest)).toBeNull();
+          // A hob never reads another hob's versions.
+          expect(yield* died(store.versionText(asQuill, pipsOwn, path, first, latest))).toBe(true);
+        }),
+      ));
+
     // covers ADR 028 (forget, restore)
     it("[TC-GEN-175] restores an earlier version only while the page is as expected, and brings back a page it forgot", () =>
       run(({ store }) =>

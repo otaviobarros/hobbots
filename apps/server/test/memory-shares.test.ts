@@ -145,6 +145,8 @@ let controls: MemoryStoreFakeControls;
  * just before the call reaches memory, as a change landing meanwhile would.
  */
 let cut: Map<"write" | "forget" | "restore", "before" | "after" | Effect.Effect<unknown, unknown>>;
+/** How many more times memory answers no version's text whole, as when its diff is cut short. */
+let textCut = 0;
 
 /**
  * The fake memory, with the calls named in `cut` cut short, and a history that names an author only
@@ -161,6 +163,12 @@ const cutting = (inner: MemoryStoreShape): MemoryStoreShape => {
   };
   return {
     ...inner,
+    versionText: (actor, scope, at, version, known) =>
+      Effect.suspend(() => {
+        if (textCut === 0) return inner.versionText(actor, scope, at, version, known);
+        textCut -= 1;
+        return Effect.succeed(null);
+      }),
     history: (actor, scope, at) =>
       Effect.map(inner.history(actor, scope, at), (versions) =>
         versions.map((each) => (each.latest ? each : { ...each, author: null })),
@@ -177,6 +185,7 @@ const cutting = (inner: MemoryStoreShape): MemoryStoreShape => {
 beforeEach(async () => {
   const fake = makeMemoryStoreFake();
   cut = new Map();
+  textCut = 0;
   store = cutting(fake.store);
   controls = fake.controls;
   runtime = ManagedRuntime.make(App(store));
@@ -579,6 +588,63 @@ describe("a share cut short, then changed meanwhile", () => {
     await recover();
     expect((await shares())[0]).toMatchObject({ state: "undone", pending: null });
     expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nAsk Bram, or Kit." });
+    expect(await page(adasOwn)).toMatchObject({ markdown: MARKDOWN });
+  });
+
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-385] never takes the same lines in another order for its own write, and waits for you again", async () => {
+    await save("balanced", "project");
+    const [first] = await shares();
+    cut.set("write", "before");
+    expect((await request("POST", `/api/memory/shares/${first?.id}/share`, {})).status).toBe(503);
+    // Ada's other share holds every line of this one, in another order; your edit lands on top.
+    const reordered = "Run `pnpm deploy` from the repository root.\n\n# Deploy";
+    await save("trusting", "project", { key: "deploy-2", work: "reply:m2", markdown: reordered });
+    await Effect.runPromise(yourEdit(`${reordered}\n\nThen tell Bram.`));
+    await recover();
+    expect((await shares()).find((each) => each.id === first?.id)).toMatchObject({ state: "waiting", version: null });
+    expect(await page(theSite)).toMatchObject({ markdown: `${reordered}\n\nThen tell Bram.` });
+  });
+
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-386] leaves a share under way while memory cannot answer what a version holds whole, then finishes it", async () => {
+    await save("balanced", "project");
+    const [waiting] = await shares();
+    cut.set("write", "after");
+    expect((await request("POST", `/api/memory/shares/${waiting?.id}/share`, {})).status).toBe(503);
+    const written = await page(theSite);
+    await Effect.runPromise(yourEdit("# Deploy\n\nRun `pnpm deploy`, then tell Bram."));
+    // A diff cut short, or none at all, proves nothing either way: the share is neither shared nor sent back.
+    textCut = 1;
+    await recover();
+    expect((await shares())[0]).toMatchObject({ state: "sending", pending: "share" });
+    await recover();
+    expect((await shares())[0]).toMatchObject({ state: "shared", version: written?.version });
+    expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nRun `pnpm deploy`, then tell Bram." });
+  });
+
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-382] keeps an Undo past its restore when the hob's own page changes meanwhile, and finishes it", async () => {
+    await Effect.runPromise(yourEdit("# Deploy\n\nAsk Bram."));
+    await save("trusting", "project");
+    const [shared] = await shares();
+    // The restore lands; just before the hob's own copy is written, a page lands there first.
+    cut.set(
+      "write",
+      store.write(
+        { _tag: "Hob", agentId: ada, projects: [] },
+        adasOwn,
+        { path: PAGE, markdown: "# Deploy\n\nAda's own note.", tags: [], pinned: false },
+        { _tag: "New" },
+      ),
+    );
+    expect((await request("POST", `/api/memory/shares/${shared?.id}/undo`)).status).toBe(409);
+    // The shared page is back as it was, so the share never goes back to shared: it stays past the restore.
+    expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nAsk Bram." });
+    expect((await shares())[0]).toMatchObject({ state: "sending", pending: "restored" });
+    await recover();
+    expect((await shares())[0]).toMatchObject({ state: "undone", pending: null });
+    expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nAsk Bram." });
     expect(await page(adasOwn)).toMatchObject({ markdown: MARKDOWN });
   });
 
