@@ -39,7 +39,12 @@ The [status page](docs/STATUS.md) lists what has been proven end to end, on whic
 
 ## Install the Mac app
 
-Requirements: macOS 13 Ventura or later, on Apple silicon or Intel, and [Claude Code](https://code.claude.com/docs/en/setup) 2.1.301 or later, installed and signed in. The app runs the Claude Code installed on your Mac; it does not ship its own. Workshop tells you when Claude Code is missing, outdated or signed out.
+Requirements: macOS 13 Ventura or later, on Apple silicon or Intel, and at least one of these runtimes, installed and signed in:
+
+- [Claude Code](https://code.claude.com/docs/en/setup) 2.1.301 or later, with your Claude plan.
+- [Codex](https://developers.openai.com/codex/cli) 0.166.0 or later, with your ChatGPT plan.
+
+The app runs the runtimes installed on your Mac; it does not ship its own. Each hob runs on one of them, and setup tells you when one is missing, outdated or signed out.
 
 1. Download the `.dmg` for your Mac from the [latest release](https://github.com/otaviobarros/hobbots/releases/latest): `arm64` for Apple silicon, `x64` for Intel. Apple menu › About This Mac shows which one you have.
 2. Open the `.dmg` and drag Hobbots onto the Applications shortcut beside it, then eject the disk image.
@@ -54,7 +59,7 @@ Hobbots keeps its data, including every thread, in `~/Library/Application Suppor
 
 ## Run from source
 
-Requirements: Node.js 26.13 (the current LTS) or later (CI runs the version in `.node-version`), pnpm, and [Claude Code](https://code.claude.com/docs/en/setup) 2.1.301 or later, installed and signed in. Hobbots runs the host's `claude`; it does not ship its own.
+Requirements: Node.js 26.13 (the current LTS) or later (CI runs the version in `.node-version`), pnpm, and [Claude Code](https://code.claude.com/docs/en/setup) 2.1.301 or later or [Codex](https://developers.openai.com/codex/cli) 0.166.0 or later, installed and signed in. Hobbots runs the host's `claude` and `codex`; it does not ship its own.
 
 ```sh
 pnpm install
@@ -70,7 +75,7 @@ Settings › Backup & export makes a backup of the hub and restores one. With no
 
 The web dev server listens on loopback only. Other devices, such as a phone on your tailnet, get the built client from the server's own port. `pnpm dev` and `pnpm dev:desktop` build it before they start, so restart them, or run `pnpm --filter @hobbots/web build`, for those devices to see later web changes.
 
-Set `HOBBOTS_RUNTIME=fake` to run the server with a deterministic fake runtime instead of Claude Code.
+Set `HOBBOTS_RUNTIME=fake` to run the server with a deterministic fake runtime instead of Claude Code or Codex.
 
 The server logs writes and failures. Set `HOBBOTS_LOG_LEVEL=Debug` to log every request, reads included, or pick another of Effect's levels (`All`, `Trace`, `Debug`, `Info`, `Warn`, `Error`, `Fatal`, `None`). The default is `Info`.
 
