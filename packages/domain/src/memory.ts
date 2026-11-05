@@ -218,3 +218,19 @@ const remoteIdentity = (origin: string): string | null => {
   if (host === "" || path === "") return null;
   return `${host.toLowerCase()}/${path.toLowerCase()}`;
 };
+
+/**
+ * One thing that happened in a thread, as capture sends it to memory (ADR 028, Capture and
+ * summaries): its start, a message of yours, a reply, a tool step, or a Quest it took part in.
+ * Memory keeps a thread's items as one session in the hob's own memory, whichever brain wrote them.
+ */
+export interface MemoryCaptureItem {
+  /**
+   * What the item stands for, the same every time it is sent, such as the journal entry it came from.
+   * Memory skips an item whose key it has seen, for 30 days.
+   */
+  readonly key: string;
+  readonly kind: "start" | "message" | "reply" | "tool" | "quest";
+  /** Already redacted. */
+  readonly text: string;
+}
