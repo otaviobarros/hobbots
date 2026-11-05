@@ -21,6 +21,7 @@ export * from "./memory.ts";
 export * from "./memory-engine.ts";
 export * from "./memory-settings.ts";
 export * from "./memory-tools.ts";
+export * from "./memory-views.ts";
 export * from "./message.ts";
 export * from "./policy.ts";
 export * from "./quest.ts";

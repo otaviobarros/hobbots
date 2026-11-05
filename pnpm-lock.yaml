@@ -544,6 +544,9 @@ importers:
       '@hobbots/permissions':
         specifier: workspace:*
         version: link:../permissions
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
       effect:
         specifier: 'catalog:'
         version: 4.1.0

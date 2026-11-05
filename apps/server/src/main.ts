@@ -15,6 +15,7 @@ import {
   HobService,
   MemoryBriefReceipts,
   MemoryCapture,
+  type MemoryStore,
   PermissionSummary,
   RecoveryLog,
   SecretRedaction,
@@ -83,7 +84,7 @@ import {
   ProcessSandbox,
 } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
-import { Deferred, Effect, Layer, Option, Redacted, References } from "effect";
+import { Deferred, Duration, Effect, Layer, Option, Redacted, References } from "effect";
 import { FetchHttpClient, HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
 import { BackupHolds, HeldActivityStore, HeldRuntimes } from "./backup-holds.ts";
@@ -96,6 +97,7 @@ import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { ExportFoldersLive } from "./exports.ts";
+import { FakeMemoryLive } from "./fake-memory.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
@@ -103,6 +105,7 @@ import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
+import { MemoryChanges } from "./memory.ts";
 import { MemorySettingsStore, memoryModelCanRun, readMemorySettings } from "./memory-settings.ts";
 import { backupBeforeMigrations } from "./migration-backup.ts";
 import { readNetworkSettings } from "./network-settings.ts";
@@ -124,6 +127,22 @@ import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
 import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
+
+/**
+ * What the Memory page reads, and the watch behind What changed (ADR 028): the fake memory when a
+ * run asks for it, otherwise the bundled ai-memory, which answers that memory is unavailable while
+ * its engine is off, missing or down.
+ */
+const memoryPageLayer = (config: {
+  readonly fakeMemory: "off" | "empty" | "seeded" | "down";
+  readonly memoryLookSeconds: number;
+}) => {
+  const store: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine> =
+    config.fakeMemory === "off"
+      ? MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))
+      : FakeMemoryLive(config.fakeMemory);
+  return MemoryChanges.layer(Duration.seconds(config.memoryLookSeconds)).pipe(Layer.provideMerge(store));
+};
 
 /**
  * The memory tools (ADR 028), beside the Task tools on every runtime while memory is on. A real
@@ -353,6 +372,7 @@ const ServerLive = Layer.unwrap(
             config.runtime === "fake" && config.fakeQuest === "black-friday"
               ? FakeQuestLive(FAKE_QUEST_STEP)
               : Layer.empty,
+            memoryPageLayer(config),
           ),
         ),
       )

@@ -15,6 +15,7 @@
     "@hobbots/agents": "workspace:*",
     "@hobbots/domain": "workspace:*",
     "@hobbots/permissions": "workspace:*",
+    "diff": "9.0.0",
     "effect": "catalog:",
     "tar": "7.5.22"
   },
