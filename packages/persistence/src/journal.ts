@@ -154,6 +154,15 @@ const restCorrelationOf = (
     case "MemorySaveRecorded":
     case "MemorySaveChanged":
       return { ...NONE, agentId: event.save.agentId, threadId: event.save.threadId, messageId: event.save.messageId };
+    // A share names its hob, and the reply it was asked from when it came from a chat turn.
+    case "MemoryShareRequested":
+    case "MemoryShareChanged":
+      return {
+        ...NONE,
+        agentId: event.share.agentId,
+        threadId: event.share.threadId,
+        messageId: event.share.messageId,
+      };
     default:
       return { ...NONE, threadId: event.threadId, messageId: event.messageId };
   }

@@ -28,6 +28,7 @@ export function PinnedTag() {
 const ICONS = {
   overview: "M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z",
   changes: "M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 4.5V8l2.5 1.5",
+  review: "M2.5 8.5 6 12l7.5-8",
   about: "M8 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM3 13.5c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5",
   project: "M2 4.5V12.5h12V6H8L6.5 4.5z",
   notice: "M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 5v3.5M8 11v.1",

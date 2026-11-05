@@ -3,7 +3,9 @@ import { Button } from "@hobbots/ui/components/button";
 import { SearchField } from "@hobbots/ui/components/search-field";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { memoryPageGone } from "../../api/memory-pages.ts";
+import { memoryCheckQuery, memorySharesQuery } from "../../api/memory-shares.ts";
 import { PageHeader } from "../shell/pages.tsx";
 import { MemoryChangesView } from "./memory-changes.tsx";
 import {
@@ -21,8 +23,10 @@ import { MemoryNothingYet, MemoryOverviewSkeleton, MemoryOverviewView } from "./
 import { MemoryIcon, ReadFailed } from "./memory-parts.tsx";
 import { MemoryRead } from "./memory-read.tsx";
 import { MemoryResults } from "./memory-results.tsx";
+import { CheckNow, MemoryReviewView } from "./memory-review.tsx";
 import { MemoryScopeView } from "./memory-scope.tsx";
 import { messages } from "./messages.ts";
+import { reviewItems } from "./review-model.ts";
 import { useMemory } from "./use-memory.ts";
 
 const copy = messages;
@@ -114,15 +118,38 @@ function PageBody({ view, reads, now }: { view: Extract<MemoryView, { _tag: "Pag
   return offline ? null : <MemoryOverviewSkeleton />;
 }
 
+/** What hobs ask to share and what Check now found, which To review lists. */
+const useReview = () => {
+  const shares = useQuery(memorySharesQuery);
+  const check = useQuery(memoryCheckQuery);
+  return { shares, check, count: reviewItems(shares.data ?? [], check.data).length };
+};
+type Review = ReturnType<typeof useReview>;
+
 /** The open view, from what its reads hold so far. */
-function ViewBody({ view, reads, now }: { view: MemoryView; reads: Reads; now: Date }) {
+function ViewBody({ view, reads, review, now }: { view: MemoryView; reads: Reads; review: Review; now: Date }) {
   const { overview, changes, pages, search, hobs, offline } = reads;
   switch (view._tag) {
+    case "Review":
+      if (review.shares.isError) {
+        return <ReadFailed message={copy.review.loadFailed} onRetry={() => void review.shares.refetch()} />;
+      }
+      return (
+        <MemoryReviewView item={view.item} shares={review.shares.data} check={review.check.data} hobs={hobs} now={now} />
+      );
     case "Overview":
       return <OverviewBody reads={reads} now={now} />;
     case "Changes":
       if (failedAlone(changes, offline)) return <ReadFailed message={copy.changes.loadFailed} onRetry={reads.retry} />;
-      return <MemoryChangesView changes={changes.data} show={view.show} hobs={hobs} now={now} />;
+      return (
+        <MemoryChangesView
+          changes={changes.data}
+          shares={review.shares.data ?? []}
+          show={view.show}
+          hobs={hobs}
+          now={now}
+        />
+      );
     case "Scope":
       if (failedAlone(pages, offline)) return <ReadFailed message={copy.scope.loadFailed} onRetry={reads.retry} />;
       return <MemoryScopeView scope={view.scope} kind={view.kind} pages={pages.data} hobs={hobs} />;
@@ -169,8 +196,8 @@ const useNewChanges = (view: MemoryView, changes: ReadonlyArray<MemoryChange> | 
 
 /**
  * The Memory page: what every hob remembers, About you and each project, read through the hub.
- * Its views live in the address (STD-REACT-002): the overview, What changed, a scope, a page with
- * its history, and a search. While memory does not answer it shows the pages it last loaded under
+ * Its views live in the address (STD-REACT-002): the overview, What changed, To review, a scope, a
+ * page with its history, and a search. While memory does not answer it shows the pages it last loaded under
  * a notice, and tries again every 30 seconds.
  */
 export function MemoryPage({ search }: { search: MemorySearch }) {
@@ -179,6 +206,7 @@ export function MemoryPage({ search }: { search: MemorySearch }) {
   const now = new Date();
   const nav = scopeNav(reads.overview.data, reads.active, reads.hobs);
   const newChanges = useNewChanges(view, reads.changes.data);
+  const review = useReview();
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <PageHeader
@@ -187,13 +215,24 @@ export function MemoryPage({ search }: { search: MemorySearch }) {
         title={copy.title}
         intro={headLine(reads.active.length, reads.overview.data, { offline: reads.offline })}
         introClassName={reads.offline ? "text-rose" : undefined}
-        actions={<MemorySearchForm view={view} />}
+        actions={
+          <div className="flex items-center gap-3">
+            <CheckNow />
+            <MemorySearchForm view={view} />
+          </div>
+        }
       />
       <div className="flex min-h-0 min-w-0 flex-1">
-        <MemoryNav nav={nav} view={view} loading={reads.overview.isPending} newChanges={newChanges} />
+        <MemoryNav
+          nav={nav}
+          view={view}
+          loading={reads.overview.isPending}
+          newChanges={newChanges}
+          toReview={review.count}
+        />
         <main aria-label={copy.title} className="min-w-0 flex-1 overflow-y-auto px-8 pt-6 pb-8 max-[1180px]:px-6">
           {reads.offline && <NotAnswering reads={reads} />}
-          <ViewBody view={view} reads={reads} now={now} />
+          <ViewBody view={view} reads={reads} review={review} now={now} />
         </main>
       </div>
     </div>

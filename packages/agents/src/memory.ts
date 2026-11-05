@@ -7,6 +7,7 @@ import {
   type MemoryConflict,
   type MemoryDraft,
   type MemoryExpected,
+  type MemoryFinding,
   type MemoryHit,
   type MemoryPage,
   type MemoryPageSummary,
@@ -20,6 +21,7 @@ import {
   type MemoryVersion,
   type MemoryVersionChanges,
   memoryProjectIdentity,
+  type SafetyPreset,
   memoryScopeAllowed,
   type ThreadId,
 } from "@hobbots/domain";
@@ -113,14 +115,19 @@ export interface MemoryStoreShape {
    * continue the same session, and the next end writes its page again.
    */
   readonly endSession: (actor: MemoryActor, scope: MemoryScope, threadId: ThreadId, key: string) => Memory<void>;
+  /**
+   * Checks `scope` for pages that disagree and pages that look out of date (ADR 028, Check now), and
+   * answers what it found, changing nothing. Only you check.
+   */
+  readonly check: (actor: MemoryActor, scope: MemoryScope) => Memory<ReadonlyArray<MemoryFinding>>;
   /** Succeeds while the engine answers. */
   readonly health: Memory<void>;
 }
 
 export class MemoryStore extends Context.Service<MemoryStore, MemoryStoreShape>()("@hobbots/agents/MemoryStore") {}
 
-/** Calls only you may make: a hob has no delete tool and never restores (ADR 028). */
-const YOURS_ONLY: ReadonlySet<string> = new Set(["forget", "restore"]);
+/** Calls only you may make: a hob has no delete tool, never restores and never runs Check now (ADR 028). */
+const YOURS_ONLY: ReadonlySet<string> = new Set(["forget", "restore", "check"]);
 /** Calls that reach only a hob's own memory: what happened in its threads is kept there (ADR 028). */
 const OWN_ONLY: ReadonlySet<string> = new Set(["capture"]);
 
@@ -169,6 +176,7 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   restore: guarded("restore", store.restore, one),
   capture: guarded("capture", store.capture, one),
   endSession: guarded("capture", store.endSession, one),
+  check: guarded("check", store.check, one),
   health: store.health,
 });
 
@@ -245,6 +253,10 @@ export interface MemoryShareRequest {
   readonly draft: MemoryDraft;
   /** The SHA-256 of the call's key, never its text. */
   readonly key: string;
+  /** The SHA-256 of the call's input without its key, so a key sent again with another call is told apart. */
+  readonly input: string;
+  /** The safety preset the turn runs under, which decides whether the share waits for you (ADR 028). */
+  readonly preset: SafetyPreset;
   readonly turn: CharmTurn;
 }
 

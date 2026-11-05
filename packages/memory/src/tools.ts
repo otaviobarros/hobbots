@@ -320,11 +320,14 @@ export const MemoryToolsLive = Layer.effect(
       Effect.gen(function* () {
         if (Option.isNone(shares)) return yield* new Refused({ message: NO_SHARES });
         const actor = actorOf(turn, yield* projectsOf(access.folders));
+        const identity = identityOf(input);
         return yield* shares.value.share({
           actor,
           scope,
           draft: draftOf(turn, input),
-          key: identityOf(input).key,
+          key: identity.key,
+          input: identity.input,
+          preset: access.policy.preset,
           turn,
         });
       });

@@ -343,14 +343,16 @@ const usageRoute = createRoute({
   },
 });
 // Memory (ADR 028): `?scope=` opens a scope and `&page=` a page in it, `&v=` shows what one version
-// changed, `?q=` searches (`&in=` in one scope) and `?view=changes` opens What changed.
+// changed, `?q=` searches (`&in=` in one scope), `?view=changes` opens What changed and `?view=review`
+// To review, with `&item=` the share or finding open there.
 const memoryRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="home" />,
   path: "memory",
   validateSearch: Schema.toStandardSchemaV1(
     Schema.Struct({
-      view: searchParam(Schema.Literal("changes")),
+      view: searchParam(Schema.Literals(["changes", "review"])),
+      item: searchParam(Schema.String),
       scope: searchParam(MemoryScopeKey),
       page: searchParam(Schema.String),
       v: searchParam(Schema.String),

@@ -11,6 +11,7 @@ const copy = messages.requestNotice;
 const deviceCopy = messages.deviceNotice;
 const questionCopy = messages.questionNotice;
 const failedCopy = messages.failedNotice;
+const shareCopy = messages.shareNotice;
 const finishedCopy = messages.finishedNotice;
 
 /** A request waiting for the user, as the notification needs it. */
@@ -180,6 +181,38 @@ export const failedTasks = (body: unknown): ReadonlyArray<FailedTask> | null => 
 /** The notification for a failed Task: whose it is, or "A hob", and the first line of its brief, cut to fit. */
 export const failedNoticeText = (task: FailedTask, name: string | undefined) =>
   fitted(failedCopy.title({ name: name ?? copy.unknownHob }), task.brief);
+
+/** A hob asking to share what it learned (ADR 028), as its notification needs it. */
+export interface WaitingShare {
+  /** The Inbox key it opens at: `memory:` and the share's id. */
+  readonly id: string;
+  readonly agentId: string;
+  /** The project it would go to, by its short name, or null for About you. */
+  readonly project: string | null;
+}
+
+/** The shares that wait for you in the hub's answer, or null when it is not one. */
+export const waitingShares = (body: unknown): ReadonlyArray<WaitingShare> | null => {
+  const items = record(body)?.shares;
+  if (!Array.isArray(items)) return null;
+  return items.flatMap((item: unknown) => {
+    const share = record(item);
+    const id = text(share?.id);
+    const agentId = text(share?.agentId);
+    const scope = record(share?.scope);
+    if (share?.state !== "waiting" || id === null || agentId === null || scope === null) return [];
+    const identity = scope._tag === "Project" ? text(scope.identity) : null;
+    const project = identity === null ? null : (identity.split("/").filter(Boolean).at(-1) ?? identity);
+    return [{ id: `memory:${id}`, agentId, project }];
+  });
+};
+
+/** The notification for a share: who asks, or "A hob", and where it would go. */
+export const shareNoticeText = (share: WaitingShare, name: string | undefined) =>
+  fitted(
+    shareCopy.title({ name: name ?? copy.unknownHob }),
+    share.project === null ? shareCopy.everyone : shareCopy.project({ name: share.project }),
+  );
 
 /** A top Quest that finished, as its notification needs it. */
 export interface FinishedQuest {

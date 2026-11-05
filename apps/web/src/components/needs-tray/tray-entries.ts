@@ -2,8 +2,11 @@ import type { WaitingQuestion } from "@hobbots/api";
 import { type ApprovalRequest, type BackpackItem, openBlocker, type ThreadId } from "@hobbots/domain";
 import { approvalEntry, entryThread, type InboxEntry, questionEntry, stuckEntry } from "../inbox/inbox-entries.ts";
 
-/** One thing the tray asks about: a request to approve, work that is stuck, or a question for you. */
-export type TrayEntry = Exclude<InboxEntry, { kind: "device" } | { kind: "failed" }>;
+/**
+ * One thing the tray asks about: a request to approve, work that is stuck, or a question for you.
+ * A hob asking to share what it learned waits in the Inbox and Memory, never in the way of a chat.
+ */
+export type TrayEntry = Exclude<InboxEntry, { kind: "device" } | { kind: "failed" } | { kind: "memory" }>;
 
 /**
  * What the tray holds, in the order it asks: pending approvals, then stuck work, then questions,
@@ -24,7 +27,7 @@ export const trayEntries = ({
     ...requests.filter((request) => request.state === "pending").map(approvalEntry),
     ...blockers.filter((item) => openBlocker(item) !== undefined).map(stuckEntry),
     ...questions.filter(({ question }) => question.state === "open").map(questionEntry),
-  ].filter((entry): entry is TrayEntry => entry.kind !== "device");
+  ].filter((entry): entry is TrayEntry => entry.kind !== "device" && entry.kind !== "memory");
   return threadId === undefined ? entries : entries.filter((entry) => entryThread(entry) === threadId);
 };
 

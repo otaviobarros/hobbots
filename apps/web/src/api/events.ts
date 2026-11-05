@@ -27,6 +27,7 @@ import { applyHistory } from "./history.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { applyMemoryChanged, refreshMemory } from "./memory-pages.ts";
+import { memorySharesChanged } from "./memory-shares.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
@@ -226,7 +227,9 @@ const applyWorkEvent = (
             | "BackpackItemChanged"
             | "PairingRequested"
             | "PairingChanged"
-            | "DeviceRevoked";
+            | "DeviceRevoked"
+            | "MemoryShareRequested"
+            | "MemoryShareChanged";
         }
       >,
 ) => {
@@ -256,6 +259,11 @@ const applyWorkEvent = (
     // Any list of devices is read again. This device's own removal shows when the hub refuses it.
     case "DeviceRevoked":
       void devicesChanged(queryClient);
+      return;
+    // A hob asked to share a page, or a share moved: the Inbox, To review and memory read it again (ADR 028).
+    case "MemoryShareRequested":
+    case "MemoryShareChanged":
+      void memorySharesChanged(queryClient);
       return;
     case "TaskStateChanged":
     case "TaskCompleted":

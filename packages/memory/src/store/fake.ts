@@ -6,6 +6,7 @@ import {
   type MemoryChangedLine,
   MemoryConflict,
   type MemoryExpected,
+  type MemoryFinding,
   type MemoryHit,
   type MemoryPage,
   type MemoryPageSummary,
@@ -53,6 +54,8 @@ export interface MemoryStoreFakeControls {
   readonly setDown: (down: boolean) => void;
   /** What a thread's session holds in `scope`, in the order it arrived, replays skipped. */
   readonly captured: (scope: MemoryScope, threadId: ThreadId) => ReadonlyArray<MemoryCaptureItem>;
+  /** Has Check now find `finding`, while every page it names is still there. */
+  readonly flag: (finding: MemoryFinding) => void;
 }
 
 /** A thread's session: what arrived, and every key seen, the ends' included. */
@@ -107,6 +110,7 @@ export const makeMemoryStoreFake = (): {
     { readonly scope: MemoryScope; readonly pages: Map<MemoryPath, Array<StoredVersion>> }
   >();
   const sessions = new Map<string, Session>();
+  const flagged: Array<MemoryFinding> = [];
   let down = false;
   let versions = 0;
   const sessionOf = (scope: MemoryScope, threadId: ThreadId) => {
@@ -294,6 +298,14 @@ export const makeMemoryStoreFake = (): {
           forgotten: false,
         }).pipe(Effect.asVoid);
       }),
+    check: (_actor, scope) =>
+      Effect.map(up, () =>
+        flagged.filter(
+          (finding) =>
+            scopeKey(finding.scope) === scopeKey(scope) &&
+            finding.paths.every((path) => currentOf(scope, path) !== undefined),
+        ),
+      ),
     health: up,
   };
 
@@ -304,6 +316,9 @@ export const makeMemoryStoreFake = (): {
         down = value;
       },
       captured: (scope, threadId) => [...sessionOf(scope, threadId).items],
+      flag: (finding) => {
+        flagged.push(finding);
+      },
     },
   };
 };

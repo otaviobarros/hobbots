@@ -22,6 +22,7 @@ export const makeMemoryStoreOff = (message: string): MemoryStoreShape => {
     restore: () => off,
     capture: () => off,
     endSession: () => off,
+    check: () => off,
     health: off,
   });
 };

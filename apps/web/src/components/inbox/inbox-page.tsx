@@ -1,5 +1,5 @@
 import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
-import type { ApprovalRequest, BackpackItem, FailedTask, Quest, TaskId } from "@hobbots/domain";
+import type { ApprovalRequest, BackpackItem, FailedTask, MemoryShare, Quest, TaskId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import {
   Empty,
@@ -16,6 +16,7 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockersQuery } from "../../api/blockers.ts";
 import { useFailedTasksQuery } from "../../api/failed-tasks.ts";
+import { memorySharesQuery, waitingShares } from "../../api/memory-shares.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
 import { agentsQuery } from "../../api/queries.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
@@ -56,6 +57,7 @@ const ALL_CLEAR = { title: copy.allClear, hint: copy.allClearHint };
 const NO_ITEMS: ReadonlyArray<BackpackItem> = [];
 const NO_QUESTIONS: ReadonlyArray<WaitingQuestion> = [];
 const NO_FAILED: ReadonlyArray<FailedTask> = [];
+const NO_SHARES: ReadonlyArray<MemoryShare> = [];
 
 type BlockersRead = ReturnType<typeof useBlockersQuery>;
 type QuestionsRead = ReturnType<typeof useWaitingQuestionsQuery>;
@@ -106,7 +108,8 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
   const failed = useFailedTasksQuery();
   const reads: WaitReads = { blockers, questions, failed };
   const devices = usePromptedDevices();
-  const entries = tabEntries(tab, requests, devices, reads);
+  const shares = useQuery(memorySharesQuery).data ?? NO_SHARES;
+  const entries = tabEntries(tab, requests, devices, reads, shares, requestId);
   const questOf = useEntryQuests(entries);
   return {
     questOf,
@@ -117,7 +120,7 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
     reads,
     entries,
     selected: tab === "history" || shown.hold !== undefined ? undefined : selectedEntry(entries, requestId),
-    waiting: waitingCount(approvals, reads) + devices.length,
+    waiting: waitingCount(approvals, reads) + devices.length + waitingShares(shares).length,
     empty: emptyState(tab, inbox.isSuccess, entries, reads),
   };
 };
@@ -303,6 +306,8 @@ const tabEntries = (
   requests: ReadonlyArray<ApprovalRequest>,
   devices: ReadonlyArray<WaitingDevice>,
   { questions, blockers, failed }: WaitReads,
+  shares: ReadonlyArray<MemoryShare>,
+  selected: string | undefined,
 ): ReadonlyArray<InboxEntry> =>
   tab === "needs"
     ? needsEntries({
@@ -311,6 +316,8 @@ const tabEntries = (
         blockers: blockers.data ?? NO_ITEMS,
         failed: failed.data ?? NO_FAILED,
         requests,
+        shares,
+        selected,
       })
     : [];
 

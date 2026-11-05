@@ -30,8 +30,10 @@ export type ChangeFilter = typeof ChangeFilter.Type;
 
 /** What the Memory page's address holds (STD-REACT-002). */
 export interface MemorySearch {
-  /** `changes` opens What changed. */
-  readonly view?: "changes" | undefined;
+  /** `changes` opens What changed, and `review` To review. */
+  readonly view?: "changes" | "review" | undefined;
+  /** In To review, what is open: a share by its id, or `check:<n>` for Check now's nth finding. */
+  readonly item?: string | undefined;
   /** The scope open, by its key. */
   readonly scope?: string | undefined;
   /** The page open in that scope. */
@@ -51,6 +53,7 @@ export interface MemorySearch {
 export type MemoryView =
   | { readonly _tag: "Overview" }
   | { readonly _tag: "Changes"; readonly show: ChangeFilter }
+  | { readonly _tag: "Review"; readonly item: string | null }
   | { readonly _tag: "Scope"; readonly scope: MemoryScope; readonly kind: MemoryKind | null }
   | {
       readonly _tag: "Page";
@@ -67,6 +70,7 @@ export const memoryViewOf = (search: MemorySearch): MemoryView => {
   const q = search.q?.trim() ?? "";
   if (q !== "") return { _tag: "Search", q, within: search.in === undefined ? null : memoryScopeOfKey(search.in) };
   if (search.view === "changes") return { _tag: "Changes", show: search.show ?? "all" };
+  if (search.view === "review") return { _tag: "Review", item: search.item ?? null };
   const scope = search.scope === undefined ? null : memoryScopeOfKey(search.scope);
   if (scope === null) return { _tag: "Overview" };
   if (search.page !== undefined && PATH.test(search.page)) {
@@ -87,6 +91,8 @@ export const memorySearchOf = (view: MemoryView): MemorySearch => {
       return {};
     case "Changes":
       return { view: "changes", show: view.show === "all" ? undefined : view.show };
+    case "Review":
+      return { view: "review", item: view.item ?? undefined };
     case "Scope":
       return { scope: memoryScopeKey(view.scope), kind: view.kind ?? undefined };
     case "Page":

@@ -77,7 +77,7 @@ function NavLabel({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * The scopes beside the page: the overview and What changed, then About you and the projects,
+ * The scopes beside the page: the overview, What changed and To review, then About you and the projects,
  * then every hob. While memory is read, the projects hold two skeleton rows.
  */
 export function MemoryNav({
@@ -85,12 +85,15 @@ export function MemoryNav({
   view,
   loading,
   newChanges,
+  toReview,
 }: {
   nav: ScopeNav;
   view: MemoryView;
   loading: boolean;
   /** Changes the stream brought since the page opened; none shows nothing. */
   newChanges: number;
+  /** Shares that wait for you and what Check now found; none shows no count. */
+  toReview: number;
 }) {
   return (
     <nav
@@ -108,6 +111,13 @@ export function MemoryNav({
             <span className="text-meta text-label tabular-nums">{copy.nav.newChanges({ count: newChanges })}</span>
           ) : undefined
         }
+      />
+      <Section
+        to={{ _tag: "Review", item: null }}
+        icon="review"
+        label={copy.review.nav}
+        current={view._tag === "Review"}
+        extra={toReview > 0 ? <Count pages={toReview} /> : undefined}
       />
       <NavLabel>{copy.nav.shared}</NavLabel>
       <ScopeLink entry={nav.about} view={view} />

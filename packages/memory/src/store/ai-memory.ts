@@ -4,6 +4,7 @@ import {
   type MemoryChangedLine,
   MemoryConflict,
   type MemoryExpected,
+  type MemoryFinding,
   type MemoryHit,
   type MemoryPage,
   type MemoryPageSummary,
@@ -92,6 +93,11 @@ const DiffJson = Schema.Struct({
 const ProjectsJson = Schema.Array(
   Schema.Struct({ workspace_name: Schema.String, project_name: Schema.String, page_count: Schema.Number }),
 );
+const LintJson = Schema.Struct({
+  findings: Schema.Array(
+    Schema.Struct({ kind: Schema.String, message: Schema.String, pages: Schema.Array(Schema.String) }),
+  ),
+});
 const PreconditionJson = Schema.Struct({
   reason: Schema.Literal("precondition_failed"),
   current_page_id: Schema.NullOr(Schema.String),
@@ -126,6 +132,27 @@ const changesOf = (json: typeof DiffJson.Type): MemoryVersionChanges => ({
   // A diff too large to answer has no lines; one cut short says so.
   cut: json.diff.status === "too_large" || json.diff.truncated === true,
 });
+
+/**
+ * What Check now shows of each `memory_lint` finding kind: declared contradictions as pages that
+ * disagree, and aged pages or pages a hob or you flagged `stale` or `wrong` as out of date. The rest
+ * (broken links, duplicates, rule suggestions, similar pages) is not shown.
+ */
+const FINDING_KINDS: ReadonlyMap<string, MemoryFinding["kind"]> = new Map([
+  ["contradiction", "disagree"],
+  ["stale", "stale"],
+  ["feedback_flagged", "stale"],
+]);
+
+const isPath = Schema.is(MemoryPath);
+
+/** The findings Check now shows, from what `memory_lint` answered for `scope`. */
+const findingsOf = (scope: MemoryScope, json: typeof LintJson.Type): ReadonlyArray<MemoryFinding> =>
+  json.findings.flatMap((finding) => {
+    const kind = FINDING_KINDS.get(finding.kind);
+    const paths = finding.pages.filter(isPath);
+    return kind === undefined || paths.length === 0 ? [] : [{ kind, scope, paths, message: finding.message }];
+  });
 
 const callerOf = (actor: MemoryActor): EngineCaller =>
   actor._tag === "You" ? ROOT : { as: "hob", name: engineActorOf(actor.agentId) };
@@ -534,6 +561,15 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
               ? Effect.void
               : Effect.fail(new MemoryUnavailable({ message: "Memory did not take the end of a session." })),
           ),
+          refusalIsOutage,
+        ),
+    check: (_actor, scope) =>
+      client
+        // A dry run, so the engine keeps no report page of its own among your pages.
+        .tool(ROOT, "memory_lint", { ...target(scope, engineProjectOf(scope)), dry_run: true }, LintJson)
+        .pipe(
+          Effect.map((json) => findingsOf(scope, json)),
+          orEmpty([] as ReadonlyArray<MemoryFinding>),
           refusalIsOutage,
         ),
     health: client.health,
