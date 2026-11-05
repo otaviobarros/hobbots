@@ -265,6 +265,25 @@ describe("the memory tools", () => {
     expect(next.answer?.refused).toBe(false);
   });
 
+  // covers ADR 028 (The memory tools): a key is the hob's, whatever redaction makes of it.
+  it("[TC-GEN-256] keeps two keys apart that redact alike, and names a refused key redacted", async () => {
+    const hub = makeHub();
+    const secret = `k-${SECRET}`;
+    // The secret key's redacted spelling, sent as a key of its own.
+    const spelled = makeRedactor([{ value: SECRET, kind: "TEST_TOKEN" }]).text(secret);
+    expect(spelled).not.toBe(secret);
+    const first = await callOn(hub, MEMORY_SAVE_TOOL, page(secret, { path: "notes/a.md" }));
+    const second = await callOn(hub, MEMORY_SAVE_TOOL, page(spelled, { path: "notes/b.md" }));
+    expect([first.answer?.refused, second.answer?.refused]).toEqual([false, false]);
+    expect(hub.reached.filter((call) => call === "write")).toHaveLength(2);
+    expect(new Set(hub.saves.saves().map((save) => save.key)).size).toBe(2);
+    const reused = await callOn(hub, MEMORY_SAVE_TOOL, page(secret, { path: "notes/c.md" }));
+    expect(reused.answer).toEqual({
+      text: `You already used the key ${spelled} for another save. Choose a new key for a new save.`,
+      refused: true,
+    });
+  });
+
   // covers ADR 028 (When memory is down)
   it("[TC-GEN-246] keeps a save while memory is down for the capture worker, and searches answer that memory is unavailable", async () => {
     const hub = makeHub();
@@ -424,10 +443,15 @@ describe("the memory tools", () => {
     );
     expect(named.answer).toEqual({ text: "The user reviews this share first.", refused: false });
     await callOn(hub, MEMORY_SAVE_TOOL, page("about", { scope: "everyone" }));
-    expect(hub.shared.map((share) => [share.scope, share.key, share.actor.agentId])).toEqual([
-      [{ _tag: "Project", identity: "github.com/me/site" }, "share", pip],
-      [{ _tag: "Everyone" }, "about", pip],
+    expect(hub.shared.map((share) => [share.scope, share.actor.agentId])).toEqual([
+      [{ _tag: "Project", identity: "github.com/me/site" }, pip],
+      [{ _tag: "Everyone" }, pip],
     ]);
+    // Each share carries its key's digest, never the key's text.
+    const [project, everyone] = hub.shared.map((share) => share.key);
+    expect(project).toMatch(/^[0-9a-f]{64}$/);
+    expect(everyone).toMatch(/^[0-9a-f]{64}$/);
+    expect(project).not.toBe(everyone);
     // A share is never written by the tools themselves.
     expect(hub.reached).toEqual([]);
   });

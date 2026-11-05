@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sep } from "node:path";
 import {
   approvalNote,
@@ -106,10 +107,10 @@ export const searchText = (query: string, hits: ReadonlyArray<MemoryHit>): strin
 const NO_SHARES = `Hobbots cannot share memory pages on this hub yet, so nothing was saved. Save it to your own memory with the scope "mine" instead.`;
 
 /** What a hob is told when it used a key before, by where that save stands. */
-const earlierAnswer = (save: MemorySave, input: string): HubToolAnswer => {
+const earlierAnswer = (save: MemorySave, input: string, shownKey: string): HubToolAnswer => {
   if (save.input !== input) {
     return {
-      text: `You already used the key ${save.key} for another save. Choose a new key for a new save.`,
+      text: `You already used the key ${shownKey} for another save. Choose a new key for a new save.`,
       refused: true,
     };
   }
@@ -124,14 +125,18 @@ const earlierAnswer = (save: MemorySave, input: string): HubToolAnswer => {
   }
 };
 
+/** The SHA-256 of `value` for one `purpose`, in hex. */
+const digestOf = (purpose: string, value: string) =>
+  createHash("sha256").update(`hobbots-memory-save-${purpose}\0${value}`).digest("hex");
+
 /**
- * The call as the record keeps it: its key and input redacted, as everything the journal holds is, so
- * no secret the hob wrote lands in the database. Redaction is the same for the same call, so a retried
- * key still finds its first save.
+ * The call as the record keeps it: the SHA-256 of its key and of its input, never their text, so no
+ * secret the hob wrote lands in the database or the journal, and two keys or inputs that redact
+ * alike are still told apart. The page and tags are kept redacted beside them (`draftOf`).
  */
-const keptOf = (turn: CharmTurn, input: MemorySaveInput) => {
+const identityOf = (input: MemorySaveInput) => {
   const { key, ...rest } = input;
-  return { key: turn.redactor.text(key), ...turn.redactor.value(rest) };
+  return { key: digestOf("key", key), input: digestOf("input", stableJson(rest)) };
 };
 
 /** The page a save writes, redacted before it is recorded, as everything the journal holds is. */
@@ -231,7 +236,7 @@ export const MemoryToolsLive = Layer.effect(
       });
 
     /** Writes a recorded save to the hob's own memory, and settles it with what memory answered. */
-    const send = (actor: MemoryActor, save: MemorySave, draft: MemoryDraft) =>
+    const send = (actor: MemoryActor, save: MemorySave, draft: MemoryDraft, shownKey: string) =>
       Effect.gen(function* () {
         const at = () => Effect.map(DateTime.now, DateTime.formatIso);
         const settled = yield* store.write(actor, save.scope, draft, { _tag: "Any" }).pipe(
@@ -243,13 +248,19 @@ export const MemoryToolsLive = Layer.effect(
         );
         const committed = yield* saves.settle(save, settled.state, settled.version, yield* at());
         if (Option.isSome(committed)) yield* announce(committed.value.entries);
-        return earlierAnswer(new MemorySave({ ...save, state: settled.state, version: settled.version }), save.input);
+        return earlierAnswer(
+          new MemorySave({ ...save, state: settled.state, version: settled.version }),
+          save.input,
+          shownKey,
+        );
       });
 
     /** A save to the hob's own memory: recorded, journaled, then sent, once per key. */
     const saveOwn = (turn: CharmTurn, access: ToolAccess, input: MemorySaveInput) =>
       Effect.gen(function* () {
-        const { key, ...rest } = keptOf(turn, input);
+        const identity = identityOf(input);
+        // The key as the hob is told it, should it be refused: redacted, as every answer is.
+        const shownKey = turn.redactor.text(input.key);
         const actor = actorOf(turn, yield* projectsOf(access.folders));
         const at = DateTime.formatIso(yield* DateTime.now);
         const draft = draftOf(turn, input);
@@ -257,8 +268,8 @@ export const MemoryToolsLive = Layer.effect(
           id: crypto.randomUUID(),
           agentId: turn.agentId,
           work: turn.scope(),
-          key,
-          input: stableJson(rest),
+          key: identity.key,
+          input: identity.input,
           scope: { _tag: "Hob", agentId: turn.agentId },
           path: draft.path,
           markdown: draft.markdown,
@@ -271,9 +282,9 @@ export const MemoryToolsLive = Layer.effect(
           updatedAt: at,
         });
         const started = yield* saves.begin(save, turn.also);
-        if (started._tag === "Existing") return earlierAnswer(started.save, save.input);
+        if (started._tag === "Existing") return earlierAnswer(started.save, save.input, shownKey);
         yield* announce(started.entries);
-        return yield* send(actor, save, draft);
+        return yield* send(actor, save, draft, shownKey);
       });
 
     /** The project a share is for: the one of the folder it names, or the hob's only one. */
@@ -315,7 +326,7 @@ export const MemoryToolsLive = Layer.effect(
           actor,
           scope,
           draft: draftOf(turn, input),
-          key: keptOf(turn, input).key,
+          key: identityOf(input).key,
           turn,
         });
       });
