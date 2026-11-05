@@ -19,7 +19,7 @@ import { ArchivePage } from "./components/archive-page/archive-page.tsx";
 import { ArchivedChatPage, RetiredChatPage, RetiredHobPage } from "./components/archive-page/archive-read.tsx";
 import { HobPage } from "./components/hob-page/hob-page.tsx";
 import { HobPageTab } from "./components/hob-page/hob-page-model.ts";
-import { HobProfile } from "./components/hob-profile/hob-profile.tsx";
+import { HobProfile, ProfileTabName } from "./components/hob-profile/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-page/hobs-layout.tsx";
 import { HobsPage } from "./components/hobs-page/hobs-page.tsx";
 import { HobFilter } from "./components/hobs-page/hobs-page-model.ts";
@@ -273,9 +273,12 @@ const profileRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "hobs/$hobId/profile",
+  // `?tab=` opens Charms or Permissions, as a hob's Memory tab links to what it may remember.
+  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ tab: searchParam(ProfileTabName) })),
   component: function ProfilePage() {
     const params = profileRoute.useParams();
-    return <HobProfile key={params.hobId} hobId={AgentId.make(params.hobId)} />;
+    const { tab } = profileRoute.useSearch();
+    return <HobProfile key={params.hobId} hobId={AgentId.make(params.hobId)} tab={tab ?? "profile"} />;
   },
 });
 

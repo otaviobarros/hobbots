@@ -961,7 +961,13 @@ export const messages = {
             other: `${count} rules are more careful than ${preset}`,
           }),
     changeSafety: "Change safety level",
-    groups: { files: "Files", commands: "Commands", internet: "Internet", outside: "Outside its folders" },
+    groups: {
+      files: "Files",
+      memory: "Memory",
+      commands: "Commands",
+      internet: "Internet",
+      outside: "Outside its folders",
+    },
     checked: "Checked",
     checkedHint: "Hobbots decides this rule, but a command the hob may run could still do it another way.",
     moreCareful: "More careful",
@@ -977,7 +983,7 @@ export const messages = {
     sandbox: "Sandbox",
     details: "Details: how these rules are kept",
     detailsNote: ({ name }: { name: string }) =>
-      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way.`,
+      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way. Memory rules are decided by Hobbots each time ${name} searches or saves: on Never, it cannot recall or save at all.`,
   },
   signing: {
     label: "Sign commits with my 1Password key",

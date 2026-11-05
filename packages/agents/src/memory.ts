@@ -235,6 +235,15 @@ export class MemorySaves extends Context.Service<
      * while sending. For the capture worker, which sends them with the same key.
      */
     readonly unsent: Effect.Effect<ReadonlyArray<MemorySave>>;
+    /** The save named `id`, or null when there is none. */
+    readonly find: (id: string) => Effect.Effect<MemorySave | null>;
+    /** The saves made from the replies of a thread, oldest first, so its chat shows each under its reply. */
+    readonly inThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<MemorySave>>;
+    /**
+     * Marks a `saved` save undone at `at`, once memory has its earlier version back, and journals it.
+     * None when it is not `saved` or was undone already, so two Undos never both land.
+     */
+    readonly markUndone: (id: string, at: string) => Effect.Effect<Option.Option<Committed<MemorySave>>>;
   }
 >()("@hobbots/agents/MemorySaves") {}
 

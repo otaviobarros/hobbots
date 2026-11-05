@@ -71,6 +71,7 @@ export function LoadFailed({ name, retry }: { name: string; retry: () => void })
 const RULE_GROUPS: ReadonlyArray<readonly [keyof typeof messages.permissions.groups, ReadonlyArray<PolicyOperation>]> =
   [
     ["files", ["read-files", "edit-files", "delete-files"]],
+    ["memory", ["search-memory", "save-memory"]],
     ["commands", ["run-commands", "local-git"]],
     ["internet", ["use-web"]],
     ["outside", ["outside-folders"]],

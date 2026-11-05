@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { Schema } from "effect";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { useActivity } from "../../api/activity.ts";
 import { ApiError } from "../../api/client.ts";
@@ -50,7 +51,9 @@ import { NameAndLook } from "./hob-name-look.tsx";
 import { PermissionsTab } from "./hob-permissions.tsx";
 import { TonePicker } from "./tone-picker.tsx";
 
-type Tab = "profile" | "charms" | "permissions";
+/** The profile's tabs; a link may open one other than Profile with `?tab=`. */
+export const ProfileTabName = Schema.Literals(["profile", "charms", "permissions"]);
+type Tab = typeof ProfileTabName.Type;
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ["profile", "Profile"],
   ["charms", "Charms"],
@@ -62,7 +65,7 @@ const TABS: ReadonlyArray<readonly [Tab, string]> = [
  * tone, instructions and brain are edited together and saved as the hob's next configuration version; Charms lists its
  * tools; Permissions saves each change to its folders and rules at once. Pause / Wake and Retire act at once.
  */
-export function HobProfile({ hobId }: { hobId: AgentId }) {
+export function HobProfile({ hobId, tab = "profile" }: { hobId: AgentId; tab?: Tab }) {
   const hob = useQuery({ ...agentsQuery, select: (agents) => agents.find((a) => a.id === hobId) });
   // A retired hob leaves the hob list, often before the retire request itself answers, so the
   // profile keeps the hob from the moment Retire is pressed to say goodbye.
@@ -91,7 +94,7 @@ export function HobProfile({ hobId }: { hobId: AgentId }) {
       </main>
     );
   }
-  return <Profile hob={current} retired={retired} onRetiring={setLeaving} onRetired={setRetired} />;
+  return <Profile hob={current} opened={tab} retired={retired} onRetiring={setLeaving} onRetired={setRetired} />;
 }
 
 /**
@@ -152,11 +155,14 @@ interface Retired {
 
 function Profile({
   hob,
+  opened,
   retired,
   onRetiring,
   onRetired,
 }: {
   hob: Agent;
+  /** The tab it opens on. */
+  opened: Tab;
   retired: Retired | null;
   onRetiring: (hob: Agent) => void;
   onRetired: (retired: Retired) => void;
@@ -165,7 +171,7 @@ function Profile({
   const activity = useActivity();
   const state = hobState(hob, threads.data, activity);
   const running = (threads.data ?? []).filter((t) => activity[t.id] !== undefined);
-  const [tab, setTab] = useState<Tab>("profile");
+  const [tab, setTab] = useState<Tab>(opened);
   const [retireOpen, setRetireOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [hops, setHops] = useState(0);

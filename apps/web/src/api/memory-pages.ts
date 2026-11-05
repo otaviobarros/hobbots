@@ -15,7 +15,7 @@ import { ApiError, call } from "./client.ts";
  */
 
 /** How often a read tries again while memory does not answer. */
-const MEMORY_RETRY_MS = 30_000;
+export const MEMORY_RETRY_MS = 30_000;
 
 /** Whether `error` says memory did not answer, rather than that the hub could not be reached. */
 export const memoryNotAnswering = (error: unknown): boolean =>

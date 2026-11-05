@@ -115,4 +115,28 @@ describe("memory save records", () => {
         expect(failed._tag).toBe("Failure");
       }),
     ));
+
+  // covers ADR 028 (In the chat), #961
+  it("[TC-GEN-336] finds a save, lists a thread's saves, and marks a saved one undone once", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const saves = yield* MemorySaves;
+        yield* saves.begin(save("first"));
+        yield* saves.begin(save("second", { id: "second-id", createdAt: later, updatedAt: later }));
+        yield* saves.begin(save("elsewhere", { id: "elsewhere-id", threadId: ThreadId.make("t2") }));
+        expect((yield* saves.inThread(ThreadId.make("t1"))).map((s) => s.id)).toEqual(["first-id", "second-id"]);
+        expect(yield* saves.find("nothing")).toBeNull();
+
+        // Only a saved save can be undone, and only once.
+        expect(Option.isNone(yield* saves.markUndone("first-id", later))).toBe(true);
+        yield* saves.settle(save("first"), "saved", MemoryVersion.make("v1"), later);
+        const undone = Option.getOrThrow(yield* saves.markUndone("first-id", later));
+        expect(undone.value).toMatchObject({ state: "saved", undoneAt: later });
+        expect(undone.entries.map((entry) => entry.type)).toEqual(["MemorySaveChanged"]);
+        expect(Option.isNone(yield* saves.markUndone("first-id", later))).toBe(true);
+        expect(yield* saves.find("first-id")).toMatchObject({ undoneAt: later });
+        expect((yield* saves.find("second-id"))?.undoneAt).toBeUndefined();
+      }),
+    ));
 });

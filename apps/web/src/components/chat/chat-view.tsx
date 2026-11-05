@@ -17,6 +17,7 @@ import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { useActivity } from "../../api/activity.ts";
 import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../../api/drafts.ts";
 import { useConnection } from "../../api/live.ts";
+import { threadMemorySavesQuery } from "../../api/memory-saves.ts";
 import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../../api/outbox.ts";
 import {
   agentsQuery,
@@ -44,6 +45,8 @@ import { ThreadHeaderMenu } from "../archive/thread-menu.tsx";
 import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
 import { ChatSearch, ChatSearchButton } from "../chat-search/chat-search.tsx";
 import { HobSprite, stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
+import { replySaves } from "../memory-line/memory-line-model.ts";
+import { MemorySavedLines } from "../memory-line/memory-saved-line.tsx";
 import { messages } from "../messages.ts";
 import { NeedsTray } from "../needs-tray/needs-tray.tsx";
 import { useThreadNeeds } from "../needs-tray/use-thread-needs.ts";
@@ -487,6 +490,8 @@ function Transcript({
   const work = useWorkMoments(hob.id, threadId, transcript);
   // Under a message you sent while work ran, where it went next (ADR 027).
   const receipts = useSteerReceipts(hob.id, threadId, transcript);
+  // Under a reply, what it saved to the hob's memory (ADR 028).
+  const saves = useQuery({ ...threadMemorySavesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
   return (
     <>
       {work.before}
@@ -497,7 +502,13 @@ function Transcript({
           )}
           {/* A lead that acted on arrived work and wrote nothing leaves no row; its work still shows. */}
           {!isQuietReply(message, transcript[index - 1]) && (
-            <MessageRow message={message} hob={hob} focused={message.id === focusMessageId} resume={resume(message)}>
+            <MessageRow
+              message={message}
+              hob={hob}
+              focused={message.id === focusMessageId}
+              resume={resume(message)}
+              after={<MemorySavedLines saves={replySaves(saves.data, message.id)} hob={hob} />}
+            >
               <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
             </MessageRow>
           )}

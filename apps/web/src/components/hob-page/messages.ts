@@ -38,9 +38,33 @@ export const messages = {
   newChatWith: ({ name }: { name: string }) => `New chat with ${name}`,
   profile: "Profile",
   tabs: {
-    label: ({ name }: { name: string }) => `${name}'s chats and history`,
+    label: ({ name }: { name: string }) => `${name}'s chats, history and memory`,
     chats: "Chats",
     history: "History",
+    memory: "Memory",
+  },
+  memory: {
+    intro: ({ name, count }: { name: string; count: number }) =>
+      count === 0
+        ? `${name} has not saved anything yet. Before each chat it reads About you, and as it works it saves what it learns here.`
+        : `${name} remembers ${formatCount(count)} ${plural(count, { one: "page", other: "pages" })}. Before each chat it reads About you and its own pages, pinned first, and it searches the rest when it needs them.`,
+    lately: "Learned lately",
+    nothingLately: "Nothing yet. A line under a reply says each time it saves something.",
+    reads: ({ name }: { name: string }) => `What ${name} can read`,
+    own: "Its own memory",
+    ownHint: ({ name }: { name: string }) => `Only ${name} reads and writes it`,
+    about: "About you",
+    aboutHint: ({ name }: { name: string }) => `Every hob reads it. ${name} cannot change it.`,
+    project: ({ project }: { project: string }) => `${project} project`,
+    projectHint: ({ name }: { name: string }) => `${name} works in its folder, so it reads these`,
+    pages: ({ count }: { count: number }) => `${formatCount(count)} ${plural(count, { one: "page", other: "pages" })}`,
+    openInMemory: "Open in Memory",
+    mayRemember: ({ name }: { name: string }) => `What ${name} may remember`,
+    offline: ({ name }: { name: string }) =>
+      `Memory is not answering. ${name} keeps working, and what it learns is saved when memory is back.`,
+    failed: "Memory could not be read.",
+    retry: "Try again",
+    loading: "Reading memory…",
   },
   chats: {
     open: ({ title }: { title: string }) => `Open ${title}`,

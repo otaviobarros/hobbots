@@ -28,6 +28,7 @@ import { hubQuestionChanged } from "./hub-questions.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { applyMemoryChanged, refreshMemory } from "./memory-pages.ts";
+import { applyMemorySave, refreshMemorySaves } from "./memory-saves.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
@@ -139,20 +140,11 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
-  // Nothing on screen shows a hob's saves to memory yet.
-  "MemorySaveRecorded",
-  "MemorySaveChanged",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
   {
-    readonly _tag:
-      | "TurnStopRequested"
-      | "TurnStopped"
-      | "TurnStarted"
-      | "TurnEnded"
-      | "MemorySaveRecorded"
-      | "MemorySaveChanged";
+    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -203,6 +195,11 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       return;
     case "MessageDelta":
       applyDelta(queryClient, event);
+      return;
+    // A hob's save to its memory, under the reply it was made from (ADR 028).
+    case "MemorySaveRecorded":
+    case "MemorySaveChanged":
+      applyMemorySave(queryClient, event.save);
       return;
     default:
       applyWorkEvent(queryClient, event);
@@ -325,6 +322,7 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         sync.cursor = ready.cursor;
         if (!ready.resumed) startGeneration(queryClient);
         void refreshMemory(queryClient);
+        void refreshMemorySaves(queryClient);
         setDeviceAccess(queryClient, "approved");
         report("live");
       } catch (error) {
