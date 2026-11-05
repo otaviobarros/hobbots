@@ -25,6 +25,7 @@ import {
   Thread,
   ThreadId,
 } from "@hobbots/domain";
+import { waitFor, waitUntil } from "@hobbots/domain/testing";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -37,7 +38,7 @@ import {
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive } from "@hobbots/workbench";
-import { Deferred, Effect, Layer, ManagedRuntime, Schedule, Stream } from "effect";
+import { Deferred, Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { afterAll, afterEach } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
@@ -186,19 +187,13 @@ export const setUp = (
   /** Waits until `count` turns holding `HOLD` have taken their baselines. */
   const holding = (count: number) =>
     run(
-      retry(
-        Effect.suspend(() =>
-          prompts.filter((prompt) => prompt.split("\n").some((line) => line.trim() === HOLD)).length >= count
-            ? Effect.void
-            : Effect.fail("not yet" as const),
-        ),
+      waitFor(
+        `${count} held turns`,
+        () => prompts.filter((prompt) => prompt.split("\n").some((line) => line.trim() === HOLD)).length >= count,
       ),
     );
   return { run, folder: project, others, holding, release: () => run(Deferred.succeed(gate, undefined)) };
 };
-
-const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 1_000 }));
 
 /** A prompt line that makes the fake call a hub tool. */
 export const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
@@ -210,32 +205,29 @@ export const say = (prompt: string) =>
   Effect.gen(function* () {
     const before = (yield* HobbotsRepository.use((repo) => repo.listMessages(threadId))).length;
     yield* ChatService.use((chat) => chat.sendPrompt(threadId, prompt));
-    return yield* retry(
-      Effect.gen(function* () {
-        const all: ReadonlyArray<Message> = yield* HobbotsRepository.use((repo) => repo.listMessages(threadId));
-        const ended = all.every((m) => m.status !== "streaming" && m.status !== "stopping");
-        return ended && all.length >= before + 2 ? all : yield* Effect.fail("not yet" as const);
-      }),
+    return yield* waitUntil(
+      HobbotsRepository.use((repo) => repo.listMessages(threadId)),
+      (all: ReadonlyArray<Message>) =>
+        all.every((m) => m.status !== "streaming" && m.status !== "stopping") && all.length >= before + 2,
+      { what: "every reply to end" },
     );
   });
 
 /** The thread's Task tree, once it is as `ready` wants it. */
 export const treeWhen = (ready: (tree: TaskTree) => boolean) =>
-  retry(
-    Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
-      return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
-    }),
+  waitUntil(
+    Effect.map(
+      TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+      ([tree]) => tree,
+    ),
+    (tree): tree is TaskTree => tree !== undefined && ready(tree),
+    { what: "the Task tree" },
   );
 
 /** The Attempt's activity once its turns' end-of-turn compares, which land just after their replies end, are in. */
 export const endedActivity = (attemptId: AttemptId, turns = 1) =>
-  retry(
-    Effect.flatMap(
-      ActivityRepository.use((repo) => readAttemptActivity(repo, attemptId)),
-      (activity) =>
-        activity.scans.filter((scan) => scan.phase === "end").length >= turns
-          ? Effect.succeed(activity)
-          : Effect.fail("not yet" as const),
-    ),
+  waitUntil(
+    ActivityRepository.use((repo) => readAttemptActivity(repo, attemptId)),
+    (activity) => activity.scans.filter((scan) => scan.phase === "end").length >= turns,
+    { what: `the end-of-turn scans of ${turns} turns` },
   );

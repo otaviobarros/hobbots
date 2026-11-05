@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { durationsOf } from "./record-durations.ts";
-import { parseShard, planShards, shardFilter, tagOf } from "./shards.ts";
+import { parseShard, planShards, shardFilter, tagOf, tagsInSource } from "./shards.ts";
 
 const durations = { "[TC-A-001]": 90, "[TC-A-002]": 60, "[TC-A-003]": 50, "[TC-A-004]": 40, "[#12]": 30, plain: 10 };
 
@@ -24,6 +24,34 @@ describe("planShards", () => {
     const shards = planShards(durations, 4);
     expect(shards.flat().sort()).toEqual(Object.keys(durations).sort());
   });
+
+  it("spreads the tests with no recorded time over every shard, not only the last", () => {
+    const unrecorded = Array.from({ length: 40 }, (_, index) => `[TC-NEW-${String(index).padStart(3, "0")}]`);
+    const shards = planShards(durations, 4, [...Object.keys(durations), ...unrecorded]);
+    expect(shards.flat().sort()).toEqual([...Object.keys(durations), ...unrecorded].sort());
+    for (const shard of shards) expect(shard.some((tag) => tag.startsWith("[TC-NEW-"))).toBe(true);
+  });
+
+  it("keeps a test with no recorded time in its shard when other tests are added", () => {
+    const shardOf = (tags: ReadonlyArray<string>, tag: string) =>
+      planShards(durations, 4, tags).findIndex((shard) => shard.includes(tag));
+    const before = shardOf(["[TC-NEW-001]"], "[TC-NEW-001]");
+    expect(shardOf(["[TC-NEW-000]", "[TC-NEW-001]", "[TC-NEW-002]"], "[TC-NEW-001]")).toBe(before);
+  });
+});
+
+describe("tagsInSource", () => {
+  it("reads the tag of each test with a literal title, across lines and modifiers", () => {
+    const source = [
+      'test("[TC-A-001] one", async () => {});',
+      "test(\n  '[TC-A-002] two',\n  async () => {},\n);",
+      "test.skip(`[#12] three`, async () => {});",
+      'test.describe("[TC-A-009] a group", () => {});',
+      "test(`[TC-A-$" + "{id}] built from a template`, async () => {});",
+      'test("no tag", async () => {});',
+    ].join("\n");
+    expect(tagsInSource(source)).toEqual(["[TC-A-001]", "[TC-A-002]", "[#12]"]);
+  });
 });
 
 describe("shardFilter", () => {
@@ -42,6 +70,17 @@ describe("shardFilter", () => {
 
   it("matches a tag literally, not as a pattern or a prefix", () => {
     expect(run(1, 2, ["[TC-A-0010] longer id", "TC-A-001 without brackets"])).toEqual([]);
+  });
+
+  it("runs a test with no recorded time in the shard its tag hashes to, and in no other", () => {
+    const all = [...titles, "[TC-A-999] new, with no recorded time"];
+    const tags = all.map(tagOf);
+    const shards = [1, 2, 3].map((current) => {
+      const { grep, grepInvert } = shardFilter(durations, current, 3, tags);
+      return all.filter((title) => (grep?.test(title) ?? true) && !(grepInvert?.test(title) ?? false));
+    });
+    expect(shards.flat().sort()).toEqual([...all].sort());
+    expect(shards.filter((shard) => shard.includes("[TC-A-999] new, with no recorded time"))).toHaveLength(1);
   });
 
   it("runs no test in a shard that got none", () => {

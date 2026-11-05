@@ -154,6 +154,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-TEST-006 | Database tests run on SQLite and PostgreSQL | Active |
 | STD-TEST-007 | Every end-to-end screen passes an accessibility scan | Active |
 | STD-TEST-008 | Each main flow works by keyboard alone | Active |
+| STD-TEST-009 | Tests wait on state, and a flaky test is a bug | Active |
 | STD-DOCS-001 | Decided choices change only through an ADR | Active |
 | STD-DOCS-002 | Read the contract before changing its area | Active |
 | STD-DOCS-003 | Public text links only public sources | Active |

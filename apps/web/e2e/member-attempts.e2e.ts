@@ -57,7 +57,7 @@ const tellFrodo = async (page: Page, lines: ReadonlyArray<string>) => {
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 45_000 });
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill(lines.join("\n"));
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
 };
 
