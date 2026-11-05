@@ -79,6 +79,11 @@ declare global {
        */
       readonly showFile?: (attemptId: string, fileId: string) => Promise<boolean>;
       /**
+       * Opens the memory engine's pages in Finder (ADR 028), on the desktop app on the hub's own
+       * computer; resolves false when there are none yet.
+       */
+      readonly showMemoryFiles?: () => Promise<boolean>;
+      /**
        * Calls `listener` with each request the desktop app asks to show in the Inbox, as when its
        * notification is clicked; answers a function that stops listening.
        */

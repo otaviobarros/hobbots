@@ -8,6 +8,7 @@ import { notificationChannels } from "../main/notification-choices.ts";
 import { openRequestChannel, openTaskChannel } from "../main/open-request.ts";
 import { setupChannels } from "../main/setup-ipc.ts";
 import { showFileChannel } from "../main/show-file.ts";
+import { showMemoryChannel } from "../main/show-memory.ts";
 import { windowBackgroundChannel } from "../main/window-background.ts";
 import { followTheme, type ThemedPage } from "./follow-theme.ts";
 
@@ -148,6 +149,8 @@ const bridge = () => {
       ipcRenderer.invoke(purpose === "restore" ? backupDialogChannels.restore : backupDialogChannels.save),
     // Shows a Task's file in Finder: the page names it only by ids, and the hub says where it is.
     showFile: (attemptId: string, fileId: string) => ipcRenderer.invoke(showFileChannel, attemptId, fileId),
+    // Opens the memory engine's pages in Finder; it takes nothing from the page.
+    showMemoryFiles: () => ipcRenderer.invoke(showMemoryChannel),
   };
 };
 
