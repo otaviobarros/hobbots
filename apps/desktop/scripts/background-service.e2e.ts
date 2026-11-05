@@ -14,7 +14,7 @@
  */
 import assert from "node:assert/strict";
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -58,8 +58,16 @@ const waitFor = async <A>(what: string, read: () => Promise<A | undefined>, time
   }
 };
 
+/**
+ * The hub's window key, once the server has written it to its data folder. The API answers only an
+ * approved device or the hub's own window (ADR 021), so the checks call it as the window does.
+ */
+let windowKey: string | undefined;
+
 const getJson = async <A>(url: string, init?: RequestInit): Promise<A> => {
-  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(2000) });
+  const headers = new Headers(init?.headers);
+  if (windowKey !== undefined) headers.set("authorization", `Bearer ${windowKey}`);
+  const response = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(2000) });
   if (!response.ok) throw new Error(`${init?.method ?? "GET"} ${url} answered ${response.status}`);
   return (await response.json()) as A;
 };
@@ -131,6 +139,7 @@ describe("Hobbots.app as the hub's background service", { concurrency: false }, 
     assert.equal(await isAnswering(), false, `A server already answers on port ${port}; stop it or set HOBBOTS_PORT.`);
     first = launch(`--remote-debugging-port=${cdpPort}`);
     identity = await waitFor("the server's health check", health, 60_000);
+    windowKey = readFileSync(join(identity.dataDir, "window-key"), "utf8").trim();
     // Loaded, so closing it later is a user's close rather than an aborted load.
     await waitFor("the window", async () => {
       const [window] = await windows();
@@ -152,16 +161,34 @@ describe("Hobbots.app as the hub's background service", { concurrency: false }, 
     assert.equal(identity.app, "hobbots");
     assert.equal(identity.dataDir, dataDir);
 
-    const [hob] = await getJson<Array<{ id: string }>>(`${api}/agents`);
-    assert.ok(hob, "the installation has a hob");
+    // A new installation has no hob until setup makes one, so the check finishes setup as Onboarding does.
+    const json = (method: string, body: unknown): RequestInit => ({
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    await getJson(`${api}/setup`, json("PATCH", { completed: true, connectedProviders: ["claude-code"] }));
+    const hob = await getJson<{ id: string }>(
+      `${api}/agents`,
+      json("POST", {
+        name: "Moss",
+        role: "writer",
+        roleTitle: "Writer",
+        sigil: "writer",
+        hat: "pointed",
+        tool: "quill",
+        lookSeed: 1234,
+        lookColor: "violet",
+        runtime: "claude-code",
+        model: "fake-thinker",
+        effort: "medium",
+        instructions: "",
+      }),
+    );
     const thread = await getJson<{ id: string }>(`${api}/agents/${hob.id}/threads`, { method: "POST" });
     // The fake runtime streams one word every 40ms, so this reply takes about 8 seconds.
     const prompt = Array.from({ length: 200 }, (_, i) => `word${i}`).join(" ");
-    await getJson(`${api}/threads/${thread.id}/messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content: prompt }),
-    });
+    await getJson(`${api}/threads/${thread.id}/messages`, json("POST", { content: prompt }));
     const messages = () => getJson<Message[]>(`${api}/threads/${thread.id}/messages`);
     const reply = async () => (await messages()).find((message) => message.role === "assistant");
     assert.equal((await reply())?.status, "streaming", "the reply is still streaming when the window closes");
