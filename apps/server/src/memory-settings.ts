@@ -71,7 +71,7 @@ export class MemorySettingsStore extends Context.Service<MemorySettingsStore, Me
 }
 
 /** How long a measured folder size stands before the next request measures it again. */
-export const FOLDER_SIZE_TTL = "30 seconds";
+const FOLDER_SIZE_TTL = "30 seconds";
 
 /** How many folder entries are read at once while the folder is measured. */
 const FOLDER_CONCURRENCY = 8;

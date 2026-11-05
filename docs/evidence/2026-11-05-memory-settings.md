@@ -22,6 +22,9 @@
 | `[TC-GEN-220]` | A changed model is stored in `memory-settings.json` and the engine is reconfigured | ✅ |
 | `[TC-GEN-221]` | A model its provider does not offer is refused; a damaged file reads as the default | ✅ |
 | `[TC-GEN-210]`, `[TC-GEN-211]` | Show the files opens only the memory pages folder, never one the page names, and nothing before memory has pages | ✅ |
+| `[TC-GEN-223]` | The memory folder's size is measured off the request path, through every subfolder, and requests that come together share one measurement | ✅ |
+| `[TC-GEN-224]` | In a browser: a choice the hub refuses stays shown with Try again, which sends it again, and Keep the one before, which goes back | ✅ |
+| `[TC-GEN-225]` | In a browser: Show the files says when the folder could not open, and Try again opens it | ✅ |
 | `[TC-GEN-222]` | In a browser: the model is chosen in Your data and kept after a reload, Safety shows shares following the preset with About you always asking, and Usage shows memory's line | ✅ |
 
 ## Findings
@@ -34,7 +37,7 @@
 
 ## Gaps
 
-- No real model call is made: a provider credential cannot reach the engine yet ([#972](https://github.com/otaviobarros/hobbots/issues/972)).
+- No real model call is made: a provider credential cannot reach the engine yet, so the issue's "the next summary uses the selected provider" is not met here and is deferred to [#972](https://github.com/otaviobarros/hobbots/issues/972).
 - The design's Lessons from repeated work and Overnight tidy tasks, and its Wait and try later fallback, are not offered: the first two are the Curator's, and ai-memory has no setting that waits.
 - `memory-settings.json` is not yet in a backup; the memory backup is [#963](https://github.com/otaviobarros/hobbots/issues/963).
 - Not run on macOS or in the packaged app.
