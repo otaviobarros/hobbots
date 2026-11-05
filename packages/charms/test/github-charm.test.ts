@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { CharmTools, makeRedactor, type ToolAccess } from "@hobbots/agents";
+import { CharmTools, MemoryProjects, makeRedactor, type ToolAccess } from "@hobbots/agents";
 import { AgentId, EMPTY_HOB_POLICY, type GitHubRepository, type PolicyDecision } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Redacted } from "effect";
@@ -18,6 +18,7 @@ import {
   GitHubError,
   GitPushLive,
   GitRemotes,
+  MemoryProjectsLive,
 } from "../src/index.ts";
 import { directSandbox, memoryCharmCalls } from "./support.ts";
 
@@ -459,5 +460,30 @@ describe("Git remotes", () => {
     // Another host names no repository.
     git(repo, "remote", "set-url", "origin", "https://gitlab.com/otaviobarros/hobbots.git");
     expect(await repositoryOf(repo)).toBeNull();
+  });
+
+  const projectOf = (folder: string) =>
+    Effect.gen(function* () {
+      return yield* (yield* MemoryProjects).identityOf(folder);
+    }).pipe(Effect.provide(MemoryProjectsLive.pipe(Layer.provide(NodeServices.layer))), Effect.runPromise);
+
+  // covers ADR 028 (The ai-memory adapter): a project is its origin remote, shared across clones.
+  it("[TC-GEN-253] puts two clones of one repository in one memory project, and a folder with no remote in its own", async () => {
+    const first = path.join(root, "memory-app");
+    const second = path.join(root, "memory-app-copy");
+    const plain = path.join(root, "Notes");
+    for (const folder of [first, second, plain]) await fs.mkdir(folder);
+    git(first, "init", "-q");
+    git(first, "remote", "add", "origin", "git@github.com:me/app.git");
+    git(second, "init", "-q");
+    git(second, "remote", "add", "origin", "https://github.com/Me/App.git");
+    expect(await projectOf(first)).toBe("github.com/me/app");
+    expect(await projectOf(second)).toBe("github.com/me/app");
+    // Any host works, and a folder with no remote, or one inside a repository, is its folder's name.
+    git(second, "remote", "set-url", "origin", "https://gitlab.com/me/app.git");
+    expect(await projectOf(second)).toBe("gitlab.com/me/app");
+    expect(await projectOf(plain)).toBe("notes");
+    await fs.mkdir(path.join(first, "docs"));
+    expect(await projectOf(path.join(first, "docs"))).toBe("docs");
   });
 });

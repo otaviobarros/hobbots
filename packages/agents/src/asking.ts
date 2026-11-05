@@ -1,7 +1,7 @@
 import type { ApprovalLifetime, GrantId, GrantRule, PolicyDecision, PolicyOperation } from "@hobbots/domain";
 import { Effect } from "effect";
 import { actionDigest } from "./approvals.ts";
-import type { RuntimeEvent, ToolAccess, TurnApprovals } from "./runtime.ts";
+import type { HubCallStep, RuntimeEvent, ToolAccess, TurnApprovals } from "./runtime.ts";
 
 /**
  * Asking the user before a call runs (PE-003, PE-008), for every kind of call: a runtime's own
@@ -184,4 +184,38 @@ export const askUntilDecided = <V extends AskableVerdict>(options: AskOptions<V>
     }
     if (verdict.decision !== "allow") return { _tag: "Refuse", verdict, reason: refusal(verdict) } as const;
     return yield* allowed(approvals, verdict, approved);
+  });
+
+/** Shows a hub tool call's step as started, once it may run, as `verdict` decided it. */
+export const showStarted = (
+  step: HubCallStep | undefined,
+  tool: string,
+  label: string,
+  verdict: Pick<AskableVerdict, "operation" | "targets">,
+): void =>
+  step?.report({
+    _tag: "ToolStarted",
+    id: step.id,
+    tool,
+    operation: verdict.operation,
+    targets: verdict.targets,
+    label,
+  });
+
+/**
+ * Decides a hub tool call on its step, as `askUntilDecided` does, asking on the step's card. A call
+ * without a step has no card to show, so it cannot ask.
+ */
+export const askOnStep = <V extends AskableVerdict>(options: {
+  readonly call: AskedCall;
+  readonly step: HubCallStep | undefined;
+  readonly approvals: TurnApprovals | null;
+  readonly decide: AskOptions<V>["decide"];
+}): Effect.Effect<AskedDecision<V>> =>
+  askUntilDecided({
+    call: options.call,
+    approvals: options.step === undefined ? null : options.approvals,
+    decide: options.decide,
+    report: options.step?.report ?? (() => {}),
+    unknown: "Hobbots cannot decide this call.",
   });

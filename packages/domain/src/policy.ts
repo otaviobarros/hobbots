@@ -20,10 +20,16 @@ export const PolicyOperation = Schema.Literals([
   "open-pull-request",
   "comment-github",
   "outside-folders",
+  "search-memory",
+  "save-memory",
 ]);
 export type PolicyOperation = typeof PolicyOperation.Type;
 
 export const POLICY_OPERATIONS: ReadonlyArray<PolicyOperation> = PolicyOperation.literals;
+
+/** The Memory group (ADR 028): `memory_search` and `memory_save` to the hob's own memory. */
+export const MemoryOperation = Schema.Literals(["search-memory", "save-memory"]);
+export type MemoryOperation = typeof MemoryOperation.Type;
 
 /** Allow proceeds, Ask pauses the turn for an approval, Deny refuses (the UI says Never). */
 export const PolicyDecision = Schema.Literals(["allow", "ask", "deny"]);
@@ -53,6 +59,8 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "open-pull-request": "ask",
     "comment-github": "ask",
     "outside-folders": "deny",
+    "search-memory": "allow",
+    "save-memory": "allow",
   },
   balanced: {
     "read-files": "allow",
@@ -66,6 +74,8 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "open-pull-request": "ask",
     "comment-github": "ask",
     "outside-folders": "deny",
+    "search-memory": "allow",
+    "save-memory": "allow",
   },
   trusting: {
     "read-files": "allow",
@@ -79,6 +89,8 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "open-pull-request": "allow",
     "comment-github": "allow",
     "outside-folders": "deny",
+    "search-memory": "allow",
+    "save-memory": "allow",
   },
 };
 
@@ -130,6 +142,8 @@ export const PolicyOverrides = Schema.Struct({
   "open-pull-request": Schema.optionalKey(PolicyDecision),
   "comment-github": Schema.optionalKey(PolicyDecision),
   "outside-folders": Schema.optionalKey(PolicyDecision),
+  "search-memory": Schema.optionalKey(PolicyDecision),
+  "save-memory": Schema.optionalKey(PolicyDecision),
 });
 export type PolicyOverrides = typeof PolicyOverrides.Type;
 

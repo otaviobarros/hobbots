@@ -4,3 +4,4 @@ export * from "./engine/engine.ts";
 export * from "./engine/keys.ts";
 export * from "./engine/release.ts";
 export * from "./store/ai-memory.ts";
+export * from "./tools.ts";

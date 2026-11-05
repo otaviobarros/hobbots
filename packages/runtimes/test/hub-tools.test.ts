@@ -3,12 +3,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput, Options } from "@anthropic-ai/claude-agent-sdk";
 import type { HubTools, RuntimeEvent } from "@hobbots/agents";
-import { EMPTY_HOB_POLICY, TASK_TOOLS, taskToolJsonSchema } from "@hobbots/domain";
+import {
+  EMPTY_HOB_POLICY,
+  MEMORY_SAVE_TOOL,
+  MEMORY_SEARCH_TOOL,
+  MemoryToolName,
+  memoryToolJsonSchema,
+  TASK_TOOLS,
+  taskToolJsonSchema,
+} from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { policyHooks, toolOptions, toolTurn } from "../src/claude-code.ts";
+import { dynamicToolsOf } from "../src/codex/hub-tools.ts";
 import { AnnouncedCalls, HUB_SERVER, hubToolOf, inputShape, withHubTools } from "../src/hub-tools.ts";
 
 const calls: Array<{ readonly name: string; readonly input: unknown }> = [];
@@ -35,6 +44,36 @@ describe("hub tools on Claude Code's control channel", () => {
     const plan = z.object(inputShape(taskToolJsonSchema("plan_steps")));
     expect(plan.safeParse({ key: "k", steps: [{ brief: "Research" }] }).success).toBe(true);
     expect(plan.safeParse({ key: "k" }).success).toBe(false);
+  });
+
+  // covers ADR 028 (The memory tools): both runtimes serve memory as any hub tools, with no change.
+  it("[TC-GEN-252] advertises the memory tools on Claude Code's and Codex's channels as the hub describes them", () => {
+    for (const name of MemoryToolName.literals) {
+      const wanted = memoryToolJsonSchema(name) as { required?: ReadonlyArray<string> };
+      const advertised = z.toJSONSchema(z.object(inputShape(memoryToolJsonSchema(name)))) as {
+        required?: ReadonlyArray<string>;
+      };
+      expect(advertised.required ?? [], name).toEqual(wanted.required ?? []);
+    }
+    const save = z.object(inputShape(memoryToolJsonSchema(MEMORY_SAVE_TOOL)));
+    const page = { key: "k", scope: "mine", path: "notes/tests.md", markdown: "# Tests" };
+    expect(save.safeParse(page).success).toBe(true);
+    expect(save.safeParse({ ...page, scope: "quill" }).success).toBe(false);
+    expect(z.object(inputShape(memoryToolJsonSchema(MEMORY_SEARCH_TOOL))).safeParse({ query: "tests" }).success).toBe(
+      true,
+    );
+    const memory: HubTools = {
+      tools: MemoryToolName.literals.map((name) => ({
+        name,
+        description: name,
+        label: name,
+        inputSchema: memoryToolJsonSchema(name),
+      })),
+      call: () => Effect.succeed({ text: "", refused: false }),
+    };
+    expect(dynamicToolsOf(memory).map((tool) => [tool.name, tool.inputSchema])).toEqual(
+      MemoryToolName.literals.map((name) => [name, memoryToolJsonSchema(name)]),
+    );
   });
 
   // covers PE-003

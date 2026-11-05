@@ -1,9 +1,10 @@
 import {
   type AskableVerdict,
   approvalNote,
-  askUntilDecided,
+  askOnStep,
   type CharmTurn,
   type HubCallStep,
+  showStarted,
   type ToolAccess,
 } from "@hobbots/agents";
 import {
@@ -21,7 +22,7 @@ import {
   repositorySlug,
   stripCommentMarkers,
 } from "@hobbots/domain";
-import { type PolicyContext, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
+import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
 import { Data, Effect, Option } from "effect";
 import { type CharmCallRunner, type ReadBack, scopesOf, type WriteOutcome } from "./charm-calls.ts";
 import { GitPush } from "./git-push.ts";
@@ -45,12 +46,7 @@ class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> 
 export const decideCharmWrite =
   (engine: PolicyEngine["Service"], turn: CharmTurn, base: ToolAccess, request: PolicyRequest) =>
   (fresh: ToolAccess | null): Effect.Effect<AskableVerdict> =>
-    Effect.gen(function* () {
-      const access = fresh ?? base;
-      const grants = turn.approvals ? yield* turn.approvals.grants : [];
-      const context: PolicyContext = { ...access.policy, sandbox: "on", modelHosts: [], grants };
-      return yield* engine.decide(context, request);
-    });
+    decideHubCall(engine, turn.approvals, base, request)(fresh);
 
 /** Fails with the reason when Git would not take `name` as a branch name (ADR 020). */
 export const branchNameCheck = (git: GitPush["Service"], name: string): Effect.Effect<void, string> =>
@@ -203,28 +199,19 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
       planned: Planned<P>,
     ) =>
       Effect.gen(function* () {
-        // A call without a step has no card to show, so it cannot ask.
-        const decision = yield* askUntilDecided({
+        const decision = yield* askOnStep({
           call: {
             id: step?.id ?? planned.key,
             tool: planned.tool,
             arguments: { ...planned.plan, summary: planned.summary },
             label: planned.label,
           },
-          approvals: step === undefined ? null : turn.approvals,
+          step,
+          approvals: turn.approvals,
           decide: decideCharmWrite(engine, turn, access, planned.request),
-          report: step?.report ?? (() => {}),
-          unknown: "Hobbots cannot decide this call.",
         });
         if (decision._tag === "Refuse") return yield* new Refused({ message: decision.reason });
-        step?.report({
-          _tag: "ToolStarted",
-          id: step.id,
-          tool: planned.tool,
-          operation: decision.verdict.operation,
-          targets: decision.verdict.targets,
-          label: planned.label,
-        });
+        showStarted(step, planned.tool, planned.label, decision.verdict);
         const outcome = yield* runner.run(
           {
             agentId: turn.agentId,
