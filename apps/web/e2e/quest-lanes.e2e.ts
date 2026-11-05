@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { lane, laneHead, openRoom, ticket } from "./quest-room.ts";
+import { dock, lane, laneHead, openRoom, ticket } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -194,7 +194,12 @@ test("[TC-UX-284] a finished Quest says so under the header and folds each lane 
   const finished = room.getByRole("region", { name: /^(Quest|Task) finished$/ });
   await expect(finished).toContainText("Spec wrapped up", { timeout: 20_000 });
   await expect(finished).toContainText(/took /);
-  await expect(finished.getByRole("button", { name: "See what changed" })).toBeVisible();
+
+  // See what changed opens the whole Quest's changes, filtered to no one.
+  await finished.getByRole("button", { name: "See what changed" }).click();
+  await expect(dock(page).getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
+  await expect(dock(page)).toContainText("SPEC.md");
+  await expect(dock(page).getByRole("button", { name: /only$/ })).toHaveCount(0);
 
   // Aldric's lane keeps its result and folds the rest, which opens in everyday words.
   const did = lane(page, "Aldric").getByRole("list", { name: "What Aldric did" });
@@ -203,4 +208,10 @@ test("[TC-UX-284] a finished Quest says so under the header and folds each lane 
     .getByRole("button", { name: /^Show the \d+ steps?$/ })
     .click();
   await expect(did).toContainText(/(Created|Updated) SPEC\.md/);
+
+  // In a narrow window the switch for the technical steps sits in the quest's menu.
+  await page.setViewportSize({ width: 960, height: 800 });
+  await room.getByRole("button", { name: "Wrap up the spec menu" }).click();
+  await page.getByRole("menuitem", { name: "Show technical steps" }).click();
+  await expect(did).toContainText("docs/SPEC.md");
 });

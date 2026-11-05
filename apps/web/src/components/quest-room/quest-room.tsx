@@ -148,11 +148,7 @@ function OpenRoom({
         onClose={onClose}
         technical={technical}
       />
-      <RoomFinished
-        tree={tree}
-        onChanges={() => moves.show(top.id, "changes")}
-        onFiles={() => moves.show(top.id, "files")}
-      />
+      <RoomFinished tree={tree} onChanges={() => moves.everyone("changes")} onFiles={() => moves.everyone("files")} />
       <QuestLanes
         room={room}
         hobs={hobs}

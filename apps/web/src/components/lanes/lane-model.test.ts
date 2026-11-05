@@ -270,13 +270,17 @@ describe("the Quest room's lanes", () => {
       startedAt: AT(second),
     });
     const records = activity(BUILD, {
-      steps: [denied("d1", 2), denied("d2", 3)],
+      steps: [denied("d1", 2), denied("d2", 3), denied("d3", 6)],
       commands: [command(BUILD, "ls -la", 1), command(BUILD, "bash check.sh; echo done", 4)],
+      changes: [change(BUILD, "src/index.ts", "edited", 7), change(BUILD, "test/index.ts", "edited", 8)],
     });
     const lane = laneOf(laneRoom(handedOn(), [records]), ADA);
+    // The same stopped step tried again later still shows once; two files with one name keep a line each.
     expect(lane.plain.map(line)).toEqual([
       "step blocked Stopped a step that could reach outside its folders",
       "step done Ran check.sh",
+      "step done Updated index.ts",
+      "step done Updated index.ts",
       `in Landing copy ← ${QUILL}`,
       "beat Page scaffolded",
       "now -",

@@ -45,6 +45,9 @@ describe("actionPhrase", () => {
     expect(changeLine("added", "docs/copy.md")).toBe("Created copy.md");
     expect(changeLine("edited", "copy.md")).toBe("Updated copy.md");
     expect(changeLine("deleted", "/a/scratch.txt")).toBe("Deleted scratch.txt");
+    expect(changeLine("edited", "docs/plan.md///")).toBe("Updated plan.md");
+    // A long run of slashes costs one pass, not one per slash (STD-SEC-005).
+    expect(changeLine("edited", `${"/".repeat(100_000)}x`)).toBe("Updated x");
   });
 });
 

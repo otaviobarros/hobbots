@@ -19,7 +19,10 @@ export type StepOutcome = "done" | "failed" | "running" | "blocked" | "unknown";
 
 /** A file's own name, without its folders: `docs/copy.md` reads `copy.md`. */
 const fileName = (path: string): string => {
-  const trimmed = path.replace(/\/+$/, "");
+  // A scan rather than a pattern, so a long run of slashes costs one pass (STD-SEC-005).
+  let end = path.length;
+  while (end > 0 && path[end - 1] === "/") end -= 1;
+  const trimmed = path.slice(0, end);
   return trimmed.slice(trimmed.lastIndexOf("/") + 1) || path;
 };
 

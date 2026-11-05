@@ -109,6 +109,7 @@ export function RoomHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <TechnicalItem shown={width === "narrow"} technical={technical} />
             <DropdownMenuItem onSelect={() => pins.toggle(top.id)}>
               {pins.pinned.includes(top.id) ? messages.unpin : messages.pin}
             </DropdownMenuItem>
@@ -136,6 +137,22 @@ export function RoomHeader({
         )}
       </div>
     </>
+  );
+}
+
+/** In a narrow window, where the header has no room for it, the switch for the technical steps. */
+function TechnicalItem({
+  shown,
+  technical,
+}: {
+  shown: boolean;
+  technical: { readonly on: boolean; readonly toggle: () => void };
+}) {
+  if (!shown) return null;
+  return (
+    <DropdownMenuItem onSelect={technical.toggle}>
+      {technical.on ? messages.technical.hide : messages.technical.show}
+    </DropdownMenuItem>
   );
 }
 

@@ -420,18 +420,25 @@ const plainItem = (item: LaneItem): LaneItem | null => {
 
 /**
  * A lane in everyday words (ADR 027): what the hob did without commands or the files it only read,
- * and each refusal that matters once, however often the hob tried again.
+ * and each stopped step once for each of the hob's Tasks, however often the hob tried it again. A
+ * stopped step's words name who stopped it and what it wanted to do, so the same words are the same
+ * step; every file change and command keeps its own line.
  */
-const plainItems = (items: ReadonlyArray<LaneItem>): ReadonlyArray<LaneItem> =>
-  items.reduce<Array<LaneItem>>((kept, each) => {
+const plainItems = (items: ReadonlyArray<LaneItem>): ReadonlyArray<LaneItem> => {
+  const kept: Array<LaneItem> = [];
+  let stopped = new Set<string>();
+  for (const each of items) {
+    if (each.kind === "task") stopped = new Set();
     const item = plainItem(each);
-    if (item === null) return kept;
-    const last = kept[kept.length - 1];
-    if (item.kind === "step" && last?.kind === "step" && last.text === item.text && last.outcome === item.outcome)
-      return kept;
+    if (item === null) continue;
+    if (item.kind === "step" && item.outcome === "blocked") {
+      if (stopped.has(item.text)) continue;
+      stopped.add(item.text);
+    }
     kept.push(item);
-    return kept;
-  }, []);
+  }
+  return kept;
+};
 
 /** Who a Task that has not ended waits on, or null when it waits on nobody. */
 const waitItem = (task: Task, rows: ReturnType<typeof roomRows>): LaneItem | null => {
