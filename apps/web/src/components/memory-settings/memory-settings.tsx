@@ -1,15 +1,14 @@
 import type { MemorySettings } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
-import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { memoryOverviewQuery, useUpdateMemorySettings } from "../../api/memory.ts";
+import { Choice } from "./choice.tsx";
 import { messages } from "./messages.ts";
 import {
-  type ChoiceOption,
   engineTag,
   fallbackOptions,
   keptLine,
@@ -89,36 +88,6 @@ function InAChat() {
         <span className="text-detail text-text-secondary">{copy.chat.note}</span>
       </span>
     </div>
-  );
-}
-
-/** A segmented choice whose unavailable segments say why on hover. */
-function Choice<Value extends string>({
-  label,
-  value,
-  options,
-  disabled,
-  onPick,
-}: {
-  label: string;
-  value: Value;
-  options: ReadonlyArray<ChoiceOption<Value>>;
-  disabled: boolean;
-  onPick: (value: Value) => void;
-}) {
-  return (
-    <SegmentedControl size="sm" aria-label={label} value={value} onValueChange={onPick}>
-      {options.map((option) => (
-        <SegmentedControlItem
-          key={option.value}
-          value={option.value}
-          disabled={disabled || option.unavailable !== undefined}
-          title={option.unavailable ?? option.label}
-        >
-          {option.label}
-        </SegmentedControlItem>
-      ))}
-    </SegmentedControl>
   );
 }
 
