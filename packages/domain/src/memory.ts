@@ -111,6 +111,11 @@ export type MemoryHit = typeof MemoryHit.Type;
 /** One version in a page's history, newest first. */
 export const MemoryPageVersion = Schema.Struct({
   version: MemoryVersion,
+  /**
+   * The version it replaced, or null for a page's first version, a page started again after a forget
+   * included. Memory names an author only for the latest version, so this is how a write is known.
+   */
+  supersedes: Schema.NullOr(MemoryVersion),
   author: Schema.NullOr(MemoryAuthor),
   writtenAt: Schema.String,
   latest: Schema.Boolean,

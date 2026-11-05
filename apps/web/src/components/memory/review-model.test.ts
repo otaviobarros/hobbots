@@ -55,6 +55,7 @@ const share = (id: string, overrides: Partial<MemoryShare> = {}) =>
     edited: false,
     version: null,
     previous: null,
+    replaced: null,
     threadId: null,
     messageId: null,
     createdAt: `2026-11-05T09:0${id.length}:00.000Z`,

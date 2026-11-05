@@ -104,9 +104,10 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             tags: ["repo"],
           });
           const history = yield* again.history(asPip, pipsOwn, path);
-          expect(history.map(({ version, latest }) => ({ version, latest }))).toEqual([
-            { version: second, latest: true },
-            { version: first, latest: false },
+          // Each version names the one it replaced, the first none.
+          expect(history.map(({ version, supersedes, latest }) => ({ version, supersedes, latest }))).toEqual([
+            { version: second, supersedes: first, latest: true },
+            { version: first, supersedes: null, latest: false },
           ]);
           expect(history[0]?.author).toEqual({ _tag: "You" });
           // An engine may know who wrote only the latest version.
@@ -162,7 +163,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           expect(yield* died(store.search(asPip, [pipsOwn, quillsOwn], "own", 10))).toBe(true);
           expect(yield* died(store.write(asPip, quillsOwn, draft("notes/secret.md", "# Pip's now"), any))).toBe(true);
           expect(yield* died(store.forget(asQuill, quillsOwn, path, any))).toBe(true);
-          expect(yield* died(store.restore(asQuill, quillsOwn, path, version))).toBe(true);
+          expect(yield* died(store.restore(asQuill, quillsOwn, path, version, any))).toBe(true);
           expect(yield* store.page(you, quillsOwn, path)).toMatchObject({ version, markdown: "# Quill's own" });
           // A hob reaches the projects it works in and everyone's memory, and no other project.
           yield* store.write(asPip, theApp, draft("facts/app.md", "# App"), fresh);
@@ -175,19 +176,28 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (forget, restore)
-    it("[TC-GEN-175] restores an earlier version, and brings back a page it forgot", () =>
+    it("[TC-GEN-175] restores an earlier version only while the page is as expected, and brings back a page it forgot", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/style.md");
           const first = yield* store.write(asPip, pipsOwn, draft("notes/style.md", "# Style\n\nTabs."), fresh);
           const second = yield* store.write(asPip, pipsOwn, draft("notes/style.md", "# Style\n\nSpaces."), any);
-          const restored = yield* store.restore(you, pipsOwn, path, first);
+          // A restore against a version that is no longer the latest writes nothing.
+          const late = yield* Effect.flip(
+            store.restore(you, pipsOwn, path, first, { _tag: "Version", version: first }),
+          );
+          expect(late).toMatchObject({ _tag: "MemoryConflict", current: second });
+          expect(yield* store.page(asPip, pipsOwn, path)).toMatchObject({ version: second });
+          const restored = yield* store.restore(you, pipsOwn, path, first, { _tag: "Version", version: second });
           expect(restored).not.toEqual(first);
           expect(yield* store.page(asPip, pipsOwn, path)).toMatchObject({
             version: restored,
             markdown: "# Style\n\nTabs.",
           });
-          expect((yield* store.history(you, pipsOwn, path))[0]).toMatchObject({ version: restored, latest: true });
+          const afterRestore = yield* store.history(you, pipsOwn, path);
+          expect(afterRestore[0]).toMatchObject({ version: restored, latest: true });
+          // A restore replaces the version that was the latest, as any write does.
+          expect(afterRestore.find((each) => each.supersedes === second)).toBeDefined();
 
           const stale = yield* Effect.flip(store.forget(you, pipsOwn, path, { _tag: "Version", version: second }));
           expect(stale).toMatchObject({ _tag: "MemoryConflict", current: restored });
@@ -198,11 +208,14 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           expect(yield* store.history(you, pipsOwn, path)).toEqual([]);
           // Forgetting what is already gone does nothing.
           expect(yield* store.forget(you, pipsOwn, path, any)).toBeNull();
-          const back = yield* store.restore(you, pipsOwn, path, point as MemoryVersion);
+          const back = yield* store.restore(you, pipsOwn, path, point as MemoryVersion, { _tag: "New" });
           expect(yield* store.page(asPip, pipsOwn, path)).toMatchObject({
             version: back,
             markdown: "# Style\n\nTabs.",
           });
+          // A page written anew after a forget replaces none of the forgotten versions.
+          const forgotten = new Set<MemoryVersion | null>([first, second, restored]);
+          expect((yield* store.history(you, pipsOwn, path)).some((each) => forgotten.has(each.supersedes))).toBe(false);
         }),
       ));
 
@@ -396,7 +409,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             fresh,
           );
           yield* store.write(asPip, pipsOwn, draft("howtos/deploy.md", "# Deploy\n\nBy hand."), any);
-          const restored = yield* store.restore(you, pipsOwn, path, first);
+          const restored = yield* store.restore(you, pipsOwn, path, first, any);
           expect(yield* store.page(you, pipsOwn, path)).toMatchObject({
             version: restored,
             markdown: "# Deploy\n\nWith fly.",
@@ -408,7 +421,13 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           expect(history[0]).toMatchObject({ version: restored, latest: true, author: you });
           // The version it replaced is still in History, and can be restored in turn.
           expect(history.map((entry) => entry.version)).toContain(first);
-          const back = yield* store.restore(you, pipsOwn, path, history[history.length - 2]?.version as MemoryVersion);
+          const back = yield* store.restore(
+            you,
+            pipsOwn,
+            path,
+            history[history.length - 2]?.version as MemoryVersion,
+            any,
+          );
           expect(yield* store.page(you, pipsOwn, path)).toMatchObject({ version: back, author: you });
         }),
       ));

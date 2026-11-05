@@ -141,27 +141,36 @@ let store: MemoryStoreShape;
 let controls: MemoryStoreFakeControls;
 /**
  * Calls whose next try fails as if memory were down: `before` memory takes it, or `after`, when the
- * answer is lost although the call landed, as when the hub stops or the link drops.
+ * answer is lost although the call landed, as when the hub stops or the link drops. An effect runs
+ * just before the call reaches memory, as a change landing meanwhile would.
  */
-let cut: Map<"write" | "forget" | "restore", "before" | "after">;
+let cut: Map<"write" | "forget" | "restore", "before" | "after" | Effect.Effect<unknown, unknown>>;
 
-/** The fake memory, but with the calls named in `cut` cut short. */
+/**
+ * The fake memory, with the calls named in `cut` cut short, and a history that names an author only
+ * for the latest version, as ai-memory's does.
+ */
 const cutting = (inner: MemoryStoreShape): MemoryStoreShape => {
   const down = () => Effect.fail(new MemoryUnavailable({ message: "Memory went away." }));
   const call = <A, E>(name: "write" | "forget" | "restore", effect: Effect.Effect<A, E>) => {
     const when = cut.get(name);
     cut.delete(name);
     if (when === "before") return down();
-    return when === "after" ? Effect.flatMap(effect, down) : effect;
+    if (when === "after") return Effect.flatMap(effect, down);
+    return when === undefined ? effect : Effect.andThen(Effect.orDie(when), effect);
   };
   return {
     ...inner,
+    history: (actor, scope, at) =>
+      Effect.map(inner.history(actor, scope, at), (versions) =>
+        versions.map((each) => (each.latest ? each : { ...each, author: null })),
+      ),
     write: (actor, scope, draft, expected) =>
       Effect.suspend(() => call("write", inner.write(actor, scope, draft, expected))),
     forget: (actor, scope, at, expected) =>
       Effect.suspend(() => call("forget", inner.forget(actor, scope, at, expected))),
-    restore: (actor, scope, at, version) =>
-      Effect.suspend(() => call("restore", inner.restore(actor, scope, at, version))),
+    restore: (actor, scope, at, version, expected) =>
+      Effect.suspend(() => call("restore", inner.restore(actor, scope, at, version, expected))),
   };
 };
 
@@ -231,7 +240,11 @@ const accessFor = (preset: SafetyPreset): ToolAccess => ({
 });
 
 /** Ada saves the deploy how-to to `scope` under `preset`, in a turn of its own. */
-const save = (preset: SafetyPreset, scope: "project" | "everyone", options: { key?: string; work?: string } = {}) =>
+const save = (
+  preset: SafetyPreset,
+  scope: "project" | "everyone",
+  options: { key?: string; work?: string; markdown?: string } = {},
+) =>
   runtime.runPromise(
     Effect.gen(function* () {
       const turn: CharmTurn = {
@@ -248,7 +261,7 @@ const save = (preset: SafetyPreset, scope: "project" | "everyone", options: { ke
       if (tools === null) throw new Error("No memory tools");
       return yield* tools.call(
         MEMORY_SAVE_TOOL,
-        { key: options.key ?? "deploy", scope, path: PAGE, markdown: MARKDOWN, tags: ["deploy"] },
+        { key: options.key ?? "deploy", scope, path: PAGE, markdown: options.markdown ?? MARKDOWN, tags: ["deploy"] },
         { id: "step-1", report: () => undefined },
       );
     }),
@@ -494,6 +507,91 @@ describe("a share cut short", () => {
     expect((await shares())[0]).toMatchObject({ state: "undone", pending: null });
     expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nAsk Bram." });
     expect(await page(adasOwn)).toMatchObject({ markdown: MARKDOWN });
+  });
+});
+
+describe("a share cut short, then changed meanwhile", () => {
+  const recover = () => runtime.runPromise(MemoryReviews.use((reviews) => reviews.recover));
+  /** You change the deploy page in the shared memory, over whatever it holds now. */
+  const yourEdit = (markdown: string) =>
+    Effect.flatMap(store.page(you, theSite, PAGE), (current) =>
+      store.write(
+        you,
+        theSite,
+        { path: PAGE, markdown, tags: [], pinned: false },
+        current === null ? { _tag: "New" } : { _tag: "Version", version: current.version },
+      ),
+    );
+
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-377] knows its own write after a later edit by what it changed, though memory names no author for it", async () => {
+    await save("balanced", "project");
+    const [waiting] = await shares();
+    cut.set("write", "after");
+    expect((await request("POST", `/api/memory/shares/${waiting?.id}/share`, {})).status).toBe(503);
+    const written = await page(theSite);
+    await Effect.runPromise(yourEdit("# Deploy\n\nRun `pnpm deploy`, then tell Bram."));
+    await recover();
+    // Shared, with the version it wrote, and your edit stays on top of it.
+    expect((await shares())[0]).toMatchObject({ state: "shared", version: written?.version });
+    expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nRun `pnpm deploy`, then tell Bram." });
+  });
+
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-378] never takes another share by the same hob for its own, and waits for you again", async () => {
+    await save("balanced", "project");
+    const [first] = await shares();
+    cut.set("write", "before");
+    expect((await request("POST", `/api/memory/shares/${first?.id}/share`, {})).status).toBe(503);
+    // Meanwhile Ada's other share of the same page goes through, over the same page it found.
+    const other = "# Deploy\n\nDeploy from the release branch.";
+    await save("trusting", "project", { key: "deploy-2", work: "reply:m2", markdown: other });
+    await recover();
+    const after = await shares();
+    expect(after.find((each) => each.id === first?.id)).toMatchObject({ state: "waiting", version: null });
+    expect(await page(theSite)).toMatchObject({ markdown: other });
+  });
+
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-379] knows its own restore after a later edit, and finishes the Undo", async () => {
+    await Effect.runPromise(yourEdit("# Deploy\n\nAsk Bram."));
+    await save("trusting", "project");
+    const [shared] = await shares();
+    cut.set("restore", "after");
+    expect((await request("POST", `/api/memory/shares/${shared?.id}/undo`)).status).toBe(503);
+    await Effect.runPromise(yourEdit("# Deploy\n\nAsk Bram, or Kit."));
+    await recover();
+    expect((await shares())[0]).toMatchObject({ state: "undone", pending: null });
+    expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nAsk Bram, or Kit." });
+    expect(await page(adasOwn)).toMatchObject({ markdown: MARKDOWN });
+  });
+
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-380] records an Undo's restore before the hob's own copy, so a later edit cannot strand it", async () => {
+    await Effect.runPromise(yourEdit("# Deploy\n\nAsk Bram."));
+    await save("trusting", "project");
+    const [shared] = await shares();
+    // The restore lands; writing Ada's own copy does not.
+    cut.set("write", "before");
+    expect((await request("POST", `/api/memory/shares/${shared?.id}/undo`)).status).toBe(503);
+    expect((await shares())[0]).toMatchObject({ state: "sending", pending: "restored" });
+    await Effect.runPromise(yourEdit("# Deploy\n\nAsk Bram, or Kit."));
+    await recover();
+    expect((await shares())[0]).toMatchObject({ state: "undone", pending: null });
+    expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nAsk Bram, or Kit." });
+    expect(await page(adasOwn)).toMatchObject({ markdown: MARKDOWN });
+  });
+
+  // covers ADR 028 (Sharing), #960
+  it("[TC-GEN-381] never restores over a change that lands between Undo's read and its restore", async () => {
+    await Effect.runPromise(yourEdit("# Deploy\n\nAsk Bram."));
+    await save("trusting", "project");
+    const [shared] = await shares();
+    cut.set("restore", yourEdit("# Deploy\n\nYours, just now."));
+    const refused = await request<{ _tag: string }>("POST", `/api/memory/shares/${shared?.id}/undo`);
+    expect(refused).toMatchObject({ status: 409, body: { _tag: "MemoryShareChangedMeanwhile" } });
+    expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nYours, just now." });
+    expect((await shares())[0]).toMatchObject({ state: "shared", pending: null });
   });
 });
 

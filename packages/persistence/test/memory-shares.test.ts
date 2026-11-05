@@ -64,6 +64,7 @@ const share = (key: string, overrides: Partial<MemoryShare> = {}) =>
     edited: false,
     version: null,
     previous: null,
+    replaced: null,
     threadId: ThreadId.make("t1"),
     messageId: MessageId.make("m1"),
     createdAt: now,
@@ -117,6 +118,7 @@ describe("memory share records", () => {
           markdown: "# Deploy\n\nRun `pnpm deploy:prod`.",
           version: MemoryVersion.make("v2"),
           previous: MemoryVersion.make("v1"),
+          replaced: "# Deploy\n\nAsk Bram.",
           updatedAt: later,
           decidedAt: later,
         });

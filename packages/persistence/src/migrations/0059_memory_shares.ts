@@ -5,11 +5,13 @@ import { SqlClient } from "effect/sql";
 // with every hob is recorded and journaled before anything is written, keyed as a hob's own saves are
 // (migration 0055): by hob, work and the SHA-256 of its key, with the SHA-256 of its input beside it.
 // `memory_scope` is the shared memory it is for, as JSON. `pending` says what is being written while
-// the share is `sending` (sharing it, keeping it private or undoing it), recorded before memory is
-// touched so the hub can find out afterwards what landed. `through` says whether your review or the
-// preset let it through, `version` and `previous` the version it wrote and the one it replaced, which
-// Undo brings back, and `edited` (0 or 1) whether you changed the page before you shared it. The
-// markdown and tags are redacted before they are recorded, or are as you edited them.
+// the share is `sending` (sharing it, keeping it private, undoing it, or an Undo whose shared page is
+// back and whose private copy is left), recorded before memory is touched so the hub can find out
+// afterwards what landed. `through` says whether your review or the preset let it through, `version`
+// and `previous` the version it wrote and the one it replaced, which Undo brings back, and `replaced`
+// the page `previous` holds, by which the hub knows its own write and its own Undo in the page's
+// history. `edited` (0 or 1) says whether you changed the page before you shared it. The markdown and
+// tags are redacted before they are recorded, or are as you edited them.
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
@@ -24,11 +26,12 @@ export default Effect.gen(function* () {
         markdown TEXT NOT NULL,
         tags TEXT NOT NULL,
         state TEXT NOT NULL CONSTRAINT memory_shares_state_known CHECK (state IN ('sending', 'waiting', 'shared', 'kept', 'undone')),
-        pending TEXT CONSTRAINT memory_shares_pending_known CHECK (pending IN ('share', 'keep', 'undo')),
+        pending TEXT CONSTRAINT memory_shares_pending_known CHECK (pending IN ('share', 'keep', 'undo', 'restored')),
         through TEXT NOT NULL CONSTRAINT memory_shares_through_known CHECK (through IN ('review', 'preset')),
         edited INTEGER NOT NULL CONSTRAINT memory_shares_edited_flag CHECK (edited IN (0, 1)),
         version TEXT,
         previous TEXT,
+        replaced TEXT,
         thread_id TEXT,
         message_id TEXT,
         created_at TEXT NOT NULL,

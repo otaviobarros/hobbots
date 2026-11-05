@@ -3,9 +3,9 @@
 - **Date:** 2026-11-05
 - **Issue:** [#960](https://github.com/otaviobarros/hobbots/issues/960)
 - **Pull request:** [#984](https://github.com/otaviobarros/hobbots/pull/984)
-- **Commit:** the head of `claude/project-thread-8bt55z`, the branch of the pull request, after merging `main` at `2938f51`; not yet on `main`.
-- **Setup:** Linux x86_64 container (Ubuntu 24.04.5, Node 22.23.4) with ai-memory 3.4.2 for `linux-x64`, fetched and checked by `pnpm --filter @hobbots/memory fetch-engine`. Hub-level cases run the whole API over a SQLite test database, the fake runtime and the in-memory `MemoryStore`, calling `memory_save` through the hob's memory tools and deciding over HTTP with this computer's window key. Browser cases run the built web client in headless Chromium 1243 (Playwright) against a hub started with the fake runtime, memory on and `HOBBOTS_FAKE_MEMORY=empty`; the hob asks to share with a scripted `fake:hub memory_save` call in a chat of its own.
-- **Result:** Passed with gaps: memory 110 tests (the ai-memory contract included), domain 156, agents 17, persistence 161 of 162, web 838, desktop 152, the server 565 of 566, and in a browser the four share cases with the Memory, Memory settings and Inbox cases beside them (16). The persistence failure is the migration ids check, which waits for `0058` from [#981](https://github.com/otaviobarros/hobbots/pull/981); this branch's migration is `0059`. The server's one failure is `[TC-DP-008]`, which needs IPv6, which this container lacks, and fails on `main` too.
+- **Commit:** the head of `claude/project-thread-8bt55z`, the branch of the pull request, after merging `main` at `b0a4ab3`; not yet on `main`. It carries the conditional restore of [#981](https://github.com/otaviobarros/hobbots/pull/981) (`MemoryStore.restore` with the version the page must still be at), taken from that pull request as it stands.
+- **Setup:** Linux x86_64 container (Ubuntu 24.04.5, Node 22.23.4) with ai-memory 3.4.2 for `linux-x64`, fetched and checked by `pnpm --filter @hobbots/memory fetch-engine`. Hub-level cases run the whole API over a SQLite test database, the fake runtime and the in-memory `MemoryStore`, calling `memory_save` through the hob's memory tools and deciding over HTTP with this computer's window key. Browser cases run the built web client in headless Chromium 1243 (Playwright) against a hub started with the fake runtime, memory on and `HOBBOTS_FAKE_MEMORY=empty` (`seeded` for Check now, which flags one page out of date); the hob asks to share with a scripted `fake:hub memory_save` call in a chat of its own.
+- **Result:** Passed with gaps: memory 127 tests (the store contract on the fake, and on ai-memory 3.4.2 with `HOBBOTS_MEMORY_ENGINE_DIR` set), domain 156, agents 17, persistence 161 of 162, web 843, desktop 152, the server 576 of 577, and in a browser the six share and Check now cases with the other Memory cases beside them (18). The persistence failure is the migration ids check, which waits for `0058` from [#981](https://github.com/otaviobarros/hobbots/pull/981); this branch's migration is `0059`. The server's one failure is `[TC-DP-008]`, which needs IPv6, which this container lacks, and fails on `main` too.
 
 ## Checks
 
@@ -28,6 +28,12 @@
 | `[TC-GEN-374]` | A share memory took while its answer was lost stays under way, cannot be kept private meanwhile, and is recorded as shared once memory answers, written once | ✅ hub, fake memory |
 | `[TC-GEN-375]` | A share memory never took is written as the hob once memory answers | ✅ hub, fake memory |
 | `[TC-GEN-376]` | An Undo cut short after the restore resumes, back to the page it replaced and into the hob's own memory | ✅ hub, fake memory |
+| `[TC-GEN-377]` | A share whose answer was lost is known by what its version changed after you edit the page, with history naming no author for older versions, as ai-memory's does | ✅ hub, fake memory |
+| `[TC-GEN-378]` | A share that never landed is not taken for another share by the same hob that did, and waits for you again | ✅ hub, fake memory |
+| `[TC-GEN-379]` | An Undo whose restore answer was lost knows its own restore after a later edit, and finishes | ✅ hub, fake memory |
+| `[TC-GEN-380]` | An Undo records its restore before the hob's own copy, so a later edit does not strand it | ✅ hub, fake memory |
+| `[TC-GEN-381]` | A change that lands between Undo's read and its restore is kept, and the Undo is refused | ✅ hub, fake memory |
+| `[TC-GEN-171]`, `[TC-GEN-175]` | Each version names the version it replaced, restores conditional on the latest version, and a page written after a forget replaces none | ✅ fake and ai-memory 3.4.2 |
 | `[TC-DP-270]` to `[TC-DP-272]` | The share record keeps one share per key in the same work or the reply's, lets only the first of two decisions land, lists what waits then the latest decided, and refuses an unknown state | ✅ SQLite |
 | `[TC-UX-980]` to `[TC-UX-983]` | A share's title, lines and outcome; To review's list and the decided share kept open; the Inbox's Memory kind with No rush, grouped apart; the version a share wrote, for Undo in What changed | ✅ unit |
 | `[TC-UX-984]` | A request to share that arrives while a first read of To review is still out shows | ✅ unit |
@@ -35,6 +41,8 @@
 | `[TC-UX-986]` | Edit in Memory opens the share in To review, which passes axe, where an edit is shared, still as the hob, and another share is kept private | ✅ Chromium |
 | `[TC-UX-987]` | Under Trusting a project share goes through without asking, shows in What changed, which passes axe, and Undo there takes it out | ✅ Chromium |
 | `[TC-UX-988]` | A decision memory does not take says so and leaves the share waiting; one made in another window shows how it was decided | ✅ Chromium |
+| `[TC-UX-989]` | Check now lists what it found only in To review, passes axe, adds nothing to the Inbox, and opens the page it is about | ✅ Chromium |
+| `[TC-UX-997]` | Check now says nothing was checked while memory does not answer, and keeps the last check | ✅ Chromium |
 | `[TC-IN-560]` | The desktop app announces a share, opens it in the Inbox, closes it once decided, and reads again on a share's journal entries | ✅ unit |
 
 ## Findings
@@ -44,7 +52,8 @@
 
 ## Gaps
 
-- Check now is not run in a browser, and no screen is checked against the design in each theme.
-- Undo restores a replaced page without checking it is still the shared version at the moment of the restore; it checks just before. [#981](https://github.com/otaviobarros/hobbots/pull/981) adds the conditional restore this will use.
+- No screen is checked against the design in each theme.
+- ai-memory's restore takes no precondition, so the adapter checks the page and restores while none of the hub's other changes to pages can run; the engine's own background passes are not held back by that.
+- Recovery's check of what a version changed compares lines as tallies: a page whose change only moves a line past an equal one would read as not its own, and wait for you again.
 - Check now's findings are kept in the hub's memory, so a restart clears the last check.
 - Not run on macOS, nor in the packaged app, nor with a real Claude Code or Codex turn calling `memory_save` ([#964](https://github.com/otaviobarros/hobbots/issues/964)).

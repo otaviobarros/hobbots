@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { expectAccessible } from "./accessibility.ts";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
@@ -371,4 +372,59 @@ test("[TC-UX-996] a page deleted in one window leaves another window's list, and
   // The hub never looks for changes during the test: only the streamed delete reaches the others.
   await expect(listMain.getByRole("link", { name: /Publishing a preview link/ })).toBeHidden();
   await expect(openMain.getByRole("heading", { name: "This page is not in memory any more." })).toBeVisible();
+});
+
+// covers ADR 028 (Sharing, Check now), #960
+test("[TC-UX-989] Check now lists what it found only in To review, and opens the page it is about", async ({
+  page,
+}) => {
+  const { url, summon } = await hubWithMemory("seeded");
+  await summon("Pip", 1201);
+  await page.goto(`${url}/#/memory`);
+  const main = page.getByRole("main", { name: "Memory" });
+  await expect(main).toContainText("Ask before sending anything outside the hub");
+  await page.getByRole("button", { name: "Check now" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Checked every page" })).toHaveText(
+    "Checked every page: 1 thing to review.",
+  );
+  // It opens To review with the finding, beside the list.
+  await expect(page).toHaveURL(/view=review/);
+  const list = main.getByRole("navigation", { name: "Things to review" });
+  await expect(list.getByRole("link")).toHaveCount(1);
+  await list.getByRole("link", { name: /A page looks out of date/ }).click();
+  const finding = main.getByRole("article", { name: "A page looks out of date" });
+  await expect(finding).toContainText("The pricing page changed since this was saved.");
+  await expect(finding).toContainText("facts/annual-plan.md");
+  await expectAccessible(page, main);
+  // Nothing waits in the Inbox for it.
+  await expect(page.getByRole("link", { name: "Hobbots inbox, something needs you" })).toHaveCount(0);
+  await finding.getByRole("link", { name: "Open" }).click();
+  await expect(main.getByRole("heading", { name: "The annual plan costs $10 a month", level: 2 })).toBeVisible();
+});
+
+// covers ADR 028 (Sharing, Check now), #960
+test("[TC-UX-997] Check now says so while memory is not answering, and keeps the last check", async ({ page }) => {
+  const { url } = await hubWithMemory("seeded");
+  await page.goto(`${url}/#/memory?view=review`);
+  const main = page.getByRole("main", { name: "Memory" });
+  await page.getByRole("button", { name: "Check now" }).click();
+  const list = main.getByRole("navigation", { name: "Things to review" });
+  await expect(list.getByRole("link", { name: /A page looks out of date/ })).toBeVisible();
+
+  // Memory stops answering: the check says nothing was checked, and what the last one found stays.
+  await page.route("**/api/memory/check", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ _tag: "MemoryNotAnswering" }),
+        })
+      : route.continue(),
+  );
+  await page.getByRole("button", { name: "Check now" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "nothing was checked" })).toHaveText(
+    "Memory is not answering, so nothing was checked.",
+  );
+  await expect(list.getByRole("link", { name: /A page looks out of date/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check now" })).toBeEnabled();
 });

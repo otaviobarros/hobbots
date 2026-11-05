@@ -11,6 +11,7 @@ interface Row extends MemoryCallRow {
   readonly through: string;
   readonly edited: number | boolean;
   readonly previous: string | null;
+  readonly replaced: string | null;
   readonly decidedAt: string | null;
 }
 
@@ -23,6 +24,7 @@ const fromRow = (row: Row) =>
     through: row.through,
     edited: Boolean(row.edited),
     previous: row.previous,
+    replaced: row.replaced,
     decidedAt: row.decidedAt,
   }).pipe(Effect.orDie);
 
@@ -32,6 +34,7 @@ const toRow = (share: MemoryShare) => ({
   through: share.through,
   edited: share.edited ? 1 : 0,
   previous: share.previous,
+  replaced: share.replaced,
   decided_at: share.decidedAt,
 });
 
@@ -71,6 +74,7 @@ export const MemoryShareLogLive = Layer.effect(
               UPDATE memory_shares SET
                 markdown = ${row.markdown}, state = ${row.state}, pending = ${row.pending}, through = ${row.through},
                 edited = ${row.edited}, version = ${row.version}, previous = ${row.previous},
+                replaced = ${row.replaced},
                 updated_at = ${row.updated_at}, decided_at = ${row.decided_at}
               WHERE id = ${share.id} AND ${sql.in("state", [...from])}
               RETURNING *`;

@@ -238,10 +238,14 @@ export const makeMemoryStoreFake = (): {
         const latest = currentOf(scope, path);
         // A forgotten page has no history to show; its versions stay only for restore.
         if (latest === undefined) return [];
-        const history = (pagesOf(scope).get(path) ?? []).filter((entry) => !entry.forgotten);
-        return history
-          .map((entry) => ({
+        // As the engine does, a forget takes the history with it, and each version names the one it
+        // replaced: a page started again after a forget replaces nothing.
+        const stored = pagesOf(scope).get(path) ?? [];
+        const shown = stored.slice(stored.findLastIndex((entry) => entry.forgotten) + 1);
+        return shown
+          .map((entry, at) => ({
             version: entry.version,
+            supersedes: shown[at - 1]?.version ?? null,
             author: entry.author,
             writtenAt: entry.writtenAt,
             latest: entry === latest,
@@ -271,8 +275,9 @@ export const makeMemoryStoreFake = (): {
           current.version,
         );
       }),
-    restore: (actor, scope, path, version) =>
+    restore: (actor, scope, path, version, expected) =>
       Effect.flatMap(up, () => {
+        if (!meets(latestOf(scope, path), expected)) return Effect.fail(conflict(scope, path));
         const old = pagesOf(scope)
           .get(path)
           ?.find((entry) => entry.version === version && !entry.forgotten);

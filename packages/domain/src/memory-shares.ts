@@ -22,9 +22,10 @@ export type MemoryShareState = typeof MemoryShareState.Type;
 /**
  * What the hub is writing for a share while it is `sending`, recorded before memory is touched so a
  * hub that stopped, or memory that stopped answering, finds out afterwards what landed: sharing it,
- * keeping it private, or undoing it.
+ * keeping it private, or undoing it. `restored` is an Undo past its first step: the shared memory is
+ * back as it was, and only the hob's own copy is left to write.
  */
-export const MemorySharePending = Schema.Literals(["share", "keep", "undo"]);
+export const MemorySharePending = Schema.Literals(["share", "keep", "undo", "restored"]);
 export type MemorySharePending = typeof MemorySharePending.Type;
 
 /** How a share was let through: by your review, or by the preset (Trusting, to a project). */
@@ -49,6 +50,11 @@ export class MemoryShare extends Schema.Class<MemoryShare>("MemoryShare")({
    * before the share is written, so a write that landed unrecorded is found after it.
    */
   previous: Schema.NullOr(MemoryVersion),
+  /**
+   * The page `previous` holds, as it was, recorded with it. Memory names no author for an older
+   * version, so the hub knows its own write, or its own Undo, by what that version changed.
+   */
+  replaced: Schema.NullOr(Schema.String),
   ...MEMORY_CALL_ORIGIN,
   /** When it was shared, kept private or undone. */
   decidedAt: Schema.NullOr(Schema.String),

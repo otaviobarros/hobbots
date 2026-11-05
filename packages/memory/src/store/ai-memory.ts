@@ -19,7 +19,7 @@ import {
   searchTerms,
   type ThreadId,
 } from "@hobbots/domain";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Schema, Semaphore } from "effect";
 import { acknowledgedPrefix, HOOK_BATCH_MAX, HookBatchJson, hookEventOf } from "./capture.ts";
 import {
   type EngineCaller,
@@ -64,7 +64,14 @@ const SummaryJson = Schema.Struct({ path: Schema.String, title: Schema.String, u
 const ChangesJson = Schema.Struct({ pages: Schema.Array(SummaryJson), next_cursor: Schema.NullOr(Schema.String) });
 const HistoryJson = Schema.Struct({
   total: Schema.Number,
-  versions: Schema.Array(Schema.Struct({ id: Schema.String, is_latest: Schema.Boolean, created_at: Schema.String })),
+  versions: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      supersedes: Schema.NullOr(Schema.String),
+      is_latest: Schema.Boolean,
+      created_at: Schema.String,
+    }),
+  ),
 });
 const HitsJson = Schema.Struct({
   hits: Schema.Array(
@@ -203,6 +210,12 @@ const refusalIsOutage = <A, E, R>(
   ) as Effect.Effect<A, Exclude<E, EngineRefused> | MemoryUnavailable, R>;
 
 const makeStore = (client: EngineClient): MemoryStoreShape => {
+  /**
+   * The engine's restore takes no precondition, so the hub's changes to pages run one at a time: a
+   * restore checks that the page is as expected and writes the version back before any other change
+   * of the hub's lands. Writes and forgets keep their own preconditions in the engine as well.
+   */
+  const changing = Semaphore.makeUnsafe(1);
   /**
    * A project's engine name is hashed, so the identity it holds is kept in the index project, one
    * page per project, written before the project's first page: `scopes` reads it back.
@@ -447,6 +460,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         const latest = yield* pageOf(scope, path);
         return versions.map((version) => ({
           version: MemoryVersion.make(version.id),
+          supersedes: version.supersedes === null ? null : MemoryVersion.make(version.supersedes),
           author: version.is_latest ? (latest?.author ?? null) : null,
           writtenAt: version.created_at,
           latest: version.is_latest,
@@ -476,6 +490,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
           Effect.map((json) => MemoryVersion.make(json.page_id)),
           Effect.catchTag("EngineRefused", conflictOf(draft.path)),
           refusalIsOutage,
+          changing.withPermit,
         ),
     scopes: () =>
       Effect.gen(function* () {
@@ -524,14 +539,23 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         Effect.catchTag("EngineRefused", conflictOf(path)),
         orEmpty(null),
         refusalIsOutage,
+        changing.withPermit,
       );
     },
-    restore: (actor, scope, path, version) => {
+    restore: (actor, scope, path, version, expected) => {
       const source = version.startsWith(REVISION) ? { rev: version.slice(REVISION.length) } : { page_id: version };
-      return client.admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson).pipe(
-        Effect.map((json) => MemoryVersion.make(json.page_id)),
+      return Effect.gen(function* () {
+        const current = yield* pageOf(scope, path);
+        if (!pageMeets(current?.version ?? null, expected)) {
+          return yield* new MemoryConflict({ path, current: current?.version ?? null });
+        }
+        const json = yield* client.admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson);
+        return MemoryVersion.make(json.page_id);
+      }).pipe(
         // A version the page never had, or one gone with a forget, leaves the page as it is.
         Effect.catchTag("EngineRefused", () => currentConflict(scope, path)),
+        changing.withPermit,
+        // Outside the permit: the stamp is a write of its own, which takes it again.
         Effect.flatMap((restored) => stampedYours(actor, scope, path, restored)),
         refusalIsOutage,
       );
@@ -613,6 +637,18 @@ const unnamed = (project: string) =>
 /** The day a page's `expires_at` names, or null for none, or for a time Hobbots did not write. */
 const forgetDayOf = (expiresAt: string | undefined): MemoryForgetDay | null =>
   Option.getOrNull(Schema.decodeUnknownOption(MemoryForgetDay)(expiresAt?.slice(0, 10)));
+
+/** Whether a page whose latest version is `current`, or null when there is none, is as `expected`. */
+const pageMeets = (current: MemoryVersion | null, expected: MemoryExpected) => {
+  switch (expected._tag) {
+    case "Any":
+      return true;
+    case "New":
+      return current === null;
+    case "Version":
+      return current === expected.version;
+  }
+};
 
 const preconditionOf = (expected: MemoryExpected): Record<string, unknown> => {
   switch (expected._tag) {
