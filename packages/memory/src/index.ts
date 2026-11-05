@@ -1,3 +1,4 @@
+export * from "./engine/backup.ts";
 export * from "./engine/binary.ts";
 export * from "./engine/config.ts";
 export * from "./engine/engine.ts";
@@ -7,3 +8,4 @@ export * from "./engine/release.ts";
 export * from "./engine/status.ts";
 export * from "./store/ai-memory.ts";
 export { MemoryProjectsLive } from "./store/projects.ts";
+export * from "./tools.ts";

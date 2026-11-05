@@ -41,4 +41,23 @@ describe("MemoryProjectsLive", () => {
     expect(await identityOf(worktree)).toBe("github.com/me/app");
     expect(await identityOf(plain)).toBe("notes");
   });
+
+  // covers ADR 028 (The ai-memory adapter): a project is its origin remote, shared across clones.
+  it("[TC-GEN-253] puts two clones of one repository in one memory project, and a folder with no remote in its own", async () => {
+    root = mkdtempSync(join(tmpdir(), "hobbots-projects-"));
+    const first = join(root, "memory-app");
+    const second = join(root, "memory-app-copy");
+    for (const folder of [first, second]) mkdirSync(folder);
+    git(first, "init", "-q");
+    git(first, "remote", "add", "origin", "git@github.com:me/app.git");
+    git(second, "init", "-q");
+    git(second, "remote", "add", "origin", "https://github.com/Me/App.git");
+    expect(await identityOf(first)).toBe("github.com/me/app");
+    expect(await identityOf(second)).toBe("github.com/me/app");
+    // Any host works, and a folder inside a repository is its folder's name.
+    git(second, "remote", "set-url", "origin", "https://gitlab.com/me/app.git");
+    expect(await identityOf(second)).toBe("gitlab.com/me/app");
+    mkdirSync(join(first, "docs"));
+    expect(await identityOf(join(first, "docs"))).toBe("docs");
+  });
 });

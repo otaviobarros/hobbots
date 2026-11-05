@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { loadOrCreateMemoryKeys, memoryFolder, memoryKeysFile, packStoppedMemory } from "@hobbots/memory";
 import { copyLiveDatabase, knownSchemaVersion, onDatabaseFile, schemaVersion } from "@hobbots/persistence";
 import { Effect } from "effect";
 import { backupFolderName } from "./backup-files.ts";
@@ -13,7 +14,8 @@ export const migrationBackupsFolder = (dataDir: string) => join(dataDir, "backup
 /**
  * Before the migrator applies a new migration on an update, makes the same backup as Back up now into
  * `backups/` in the data folder and keeps only the latest one (ADR 026). Runs before the hub starts,
- * so nothing else uses the database. A new data folder, or one already up to date, makes none.
+ * so nothing else uses the database, and memory's engine is not running: its files are packed as they
+ * are (ADR 028). A new data folder, or one already up to date, makes none.
  */
 export const backupBeforeMigrations = (dataDir: string, version: string) =>
   Effect.gen(function* () {
@@ -32,6 +34,15 @@ export const backupBeforeMigrations = (dataDir: string, version: string) =>
       version,
       installationId: readInstallationId(dataDir) ?? "",
       copyDatabase: (target) => onDatabaseFile(database, copyLiveDatabase(target)),
+      // With no keys yet, no bearer can be in memory either.
+      backupMemory: (target) =>
+        Effect.suspend(() =>
+          packStoppedMemory(
+            memoryFolder(dataDir),
+            target,
+            existsSync(memoryKeysFile(dataDir)) ? loadOrCreateMemoryKeys(dataDir) : undefined,
+          ),
+        ),
     });
     // Only the latest is kept.
     for (const other of yield* Effect.promise(() => readdir(folder))) {

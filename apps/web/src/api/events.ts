@@ -128,6 +128,32 @@ const WORKBENCH_RECORDS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
 ]);
 const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent => WORKBENCH_RECORDS.has(event._tag);
 
+/** Events the cache takes nothing from. */
+const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  // The reply's own upsert, sent just before, already carries its stopping or stopped status.
+  "TurnStopRequested",
+  "TurnStopped",
+  // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
+  "TurnStarted",
+  "TurnEnded",
+  // Nothing on screen shows a hob's saves to memory yet.
+  "MemorySaveRecorded",
+  "MemorySaveChanged",
+]);
+type UnappliedEvent = Extract<
+  HobbotsEvent,
+  {
+    readonly _tag:
+      | "TurnStopRequested"
+      | "TurnStopped"
+      | "TurnStarted"
+      | "TurnEnded"
+      | "MemorySaveRecorded"
+      | "MemorySaveChanged";
+  }
+>;
+const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
+
 /**
  * Applies an event to the Query cache and records what it changed in the sync generation's overlay.
  * Lists are only patched once loaded; creating a partial list here would hide the rest of it.
@@ -141,6 +167,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     if (event._tag === "CommandOutput") applyCommandOutput(queryClient, event);
     return;
   }
+  if (isUnapplied(event)) return;
   switch (event._tag) {
     case "AgentUpserted":
       applyAgent(queryClient, event.agent);
@@ -173,14 +200,6 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       return;
     case "MessageDelta":
       applyDelta(queryClient, event);
-      return;
-    // The reply's own upsert, sent just before, already carries its stopping or stopped status.
-    case "TurnStopRequested":
-    case "TurnStopped":
-      return;
-    // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
-    case "TurnStarted":
-    case "TurnEnded":
       return;
     default:
       applyWorkEvent(queryClient, event);

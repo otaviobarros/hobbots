@@ -7,6 +7,7 @@ import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
 import { HubQuestion } from "./hub-question.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { MemorySave } from "./memory-tools.ts";
 import { Message, ReplyStep } from "./message.ts";
 import {
   ArtifactRef,
@@ -136,6 +137,13 @@ const AttemptStepsRecorded = Schema.TaggedStruct("AttemptStepsRecorded", {
 });
 /** The hub refused a Task tool call, or refused a retried one again (ADR 018). */
 const ToolCallRefused = Schema.TaggedStruct("ToolCallRefused", { refusal: RefusedCall });
+/**
+ * A hob's `memory_save` was recorded before it was sent (ADR 028): the journal is the outbox, so the
+ * capture worker sends a save memory did not take at once.
+ */
+const MemorySaveRecorded = Schema.TaggedStruct("MemorySaveRecorded", { save: MemorySave });
+/** A recorded save was sent: memory took it, kept it for later, or refused it. */
+const MemorySaveChanged = Schema.TaggedStruct("MemorySaveChanged", { save: MemorySave });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
 const FolderScanned = Schema.TaggedStruct("FolderScanned", { scan: FolderScan });
 /**
@@ -219,6 +227,8 @@ export const JournaledEvent = Schema.Union([
   FolderScanned,
   ToolCallRefused,
   AttemptStepsRecorded,
+  MemorySaveRecorded,
+  MemorySaveChanged,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -281,6 +291,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   FolderScanned: 1,
   ToolCallRefused: 1,
   AttemptStepsRecorded: 1,
+  MemorySaveRecorded: 1,
+  MemorySaveChanged: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

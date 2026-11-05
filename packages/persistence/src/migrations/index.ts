@@ -54,6 +54,7 @@ import steerReceipts from "./0051_steer_receipts.ts";
 import checkpointDetail from "./0052_checkpoint_detail.ts";
 import threadReads from "./0053_thread_reads.ts";
 import questionOptions from "./0054_question_options.ts";
+import memorySaves from "./0055_memory_saves.ts";
 import hubQuestions from "./0057_hub_questions.ts";
 
 /**
@@ -116,5 +117,6 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0052_checkpoint_detail": checkpointDetail,
   "0053_thread_reads": threadReads,
   "0054_question_options": questionOptions,
+  "0055_memory_saves": memorySaves,
   "0057_hub_questions": hubQuestions,
 };
