@@ -54,6 +54,9 @@ function PageBody({
   act: Changes;
 }) {
   const { page, hobs, offline } = reads;
+  // A page found gone, deleted here or elsewhere, says so over what was read of it before. The
+  // editor keeps your text: saving it writes the page anew.
+  if (view._tag === "Page" && memoryPageGone(page.error)) return <PageGone view={view} />;
   if (page.data !== undefined) {
     return view._tag === "Edit" ? (
       <MemoryEditor key={view.path} scope={view.scope} read={page.data} kind={null} hobs={hobs} {...act} />

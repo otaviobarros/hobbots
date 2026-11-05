@@ -116,9 +116,17 @@ export const MemoryChange = Schema.Struct({
 });
 export type MemoryChange = typeof MemoryChange.Type;
 
+/** A page by where it is kept and its path. */
+export const MemoryPageRef = Schema.Struct({ scope: MemoryScope, path: MemoryPath });
+export type MemoryPageRef = typeof MemoryPageRef.Type;
+
 /**
  * Pages memory saved since the hub last asked. ai-memory sends no events of its own, so the hub asks
- * about once a minute and streams what it finds (ADR 028).
+ * about once a minute and streams what it finds (ADR 028). A delete through the hub streams at once
+ * as `deleted`, since a look only finds pages that are there.
  */
-export const MemoryChanged = Schema.TaggedStruct("MemoryChanged", { changes: Schema.Array(MemoryChange) });
+export const MemoryChanged = Schema.TaggedStruct("MemoryChanged", {
+  changes: Schema.Array(MemoryChange),
+  deleted: Schema.optionalKey(Schema.Array(MemoryPageRef)),
+});
 export type MemoryChanged = typeof MemoryChanged.Type;

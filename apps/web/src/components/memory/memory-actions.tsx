@@ -2,8 +2,10 @@ import type { MemoryPageRead } from "@hobbots/api";
 import { MemoryForgetDay, type MemoryVersion } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Input } from "@hobbots/ui/components/input";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
+import { dropDeletedPage } from "../../api/memory-pages.ts";
 import { changedPage, forgetDayLabel, localDay, suggestedForgetDay, versionRef } from "./memory-edit-model.ts";
 import { type MemoryView, memorySearchOf, pageTitle } from "./memory-model.ts";
 import { MemoryCard } from "./memory-parts.tsx";
@@ -40,6 +42,7 @@ export const useRestore = (writes: MemoryWrites, say: Say) => {
 export function MemoryActions({ read, writes, say }: { read: MemoryPageRead; writes: MemoryWrites; say: Say }) {
   const { page } = read;
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const restore = useRestore(writes, say);
   const [open, setOpen] = useState<"none" | "forget" | "delete">("none");
   const [day, setDay] = useState(() => page.forgetOn ?? suggestedForgetDay(new Date()));
@@ -72,7 +75,10 @@ export function MemoryActions({ read, writes, say }: { read: MemoryPageRead; wri
           { tone: "done", message: copy.actions.deleted({ title: pageTitle(page.markdown, page.path) }), undo },
           scopeView,
         );
-        void navigate({ to: "/memory", search: memorySearchOf(scopeView) });
+        // Once the page has left the screen, what was read of it goes, so Back finds it gone.
+        void navigate({ to: "/memory", search: memorySearchOf(scopeView) }).then(() =>
+          dropDeletedPage(queryClient, versionRef(page.scope, page.path, page.version)),
+        );
       },
       onError: (error) => {
         setOpen("none");

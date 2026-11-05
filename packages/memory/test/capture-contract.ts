@@ -321,6 +321,47 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
         }),
       ));
 
+    // covers ADR 028 (Capture and summaries), #959
+    it("[TC-GEN-339] keeps a session's end while you have its chat note pinned, and sends it once you unpin the note", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          const path = sessionPage(threadId);
+          exchange(journal, threadId, "Where are the docs?", "In docs/.");
+          archive(journal, threadId);
+          yield* capture.runOnce;
+          const note = yield* memory.store.page(you, pipsOwn, path);
+          if (note === null) return expect.fail("the session wrote no page");
+          const pinnedAt = yield* memory.store.write(
+            you,
+            pipsOwn,
+            { path, markdown: note.markdown, tags: note.tags, pinned: true },
+            { _tag: "Version", version: note.version },
+          );
+
+          // The thread goes on and is archived again, then goes quiet: its end waits, kept in the journal.
+          exchange(journal, threadId, "And the decisions?", "In docs/decisions.");
+          archive(journal, threadId);
+          yield* capture.runOnce;
+          yield* quietPassed;
+          yield* capture.runOnce;
+          expect(yield* memory.store.page(you, pipsOwn, path)).toMatchObject({ version: pinnedAt, pinned: true });
+          expect(journal.sessions().map((session) => session.threadId)).toEqual([threadId]);
+
+          // Unpinned, the next round ends the session, and the note takes what was said meanwhile.
+          yield* memory.store.write(
+            you,
+            pipsOwn,
+            { path, markdown: note.markdown, tags: note.tags, pinned: false },
+            { _tag: "Version", version: pinnedAt },
+          );
+          yield* capture.runOnce;
+          const page = yield* memory.store.page(you, pipsOwn, path);
+          expect(page?.markdown).toContain("And the decisions?");
+          expect(journal.sessions()).toEqual([]);
+        }),
+      ));
+
     // covers ADR 028 (Capture and summaries)
     it("[TC-GEN-303] sends a page again once after a crash between memory's acknowledgement and the cursor's save, with no duplicate", () =>
       run(({ memory, journal, capture }) =>

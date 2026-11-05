@@ -219,11 +219,11 @@ test("[TC-UX-981] Pin, a forget day with Keep it, and Delete with Undo each chan
   await actions.getByRole("button", { name: "Forget on a date…" }).click();
   await actions.getByLabel("Forget it on").fill("2099-01-31");
   await actions.getByRole("button", { name: "Set the day" }).click();
-  await expect(main.getByRole("status")).toContainText("It will be forgotten on");
-  await expect(main.getByText(/^Forgotten on/)).toBeVisible();
+  await expect(main.getByRole("status")).toContainText("It will be forgotten after");
+  await expect(main.getByText(/^Forgotten after/)).toBeVisible();
   await main.getByRole("button", { name: "Keep it" }).click();
   await expect(main.getByRole("status")).toContainText("Kept. It will not be forgotten.");
-  await expect(main.getByText(/^Forgotten on/)).toBeHidden();
+  await expect(main.getByText(/^Forgotten after/)).toBeHidden();
 
   // Delete asks first, leaves for the hob's memory, and Undo brings the page back.
   await actions.getByRole("button", { name: "Delete", exact: true }).click();
@@ -319,4 +319,56 @@ test("[TC-UX-984] Open folder shows memory's pages in the desktop app, and says 
   await expect(main.getByRole("alert")).toContainText("Hobbots could not open the folder.");
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByRole("button", { name: "Open folder" })).toBeVisible();
+});
+
+// covers ADR 028 (Delete), #959
+test("[TC-UX-985] a deleted page reads as gone when Back opens it again, not as it was", async ({ page }) => {
+  const { url, summon } = await hubWithMemory("seeded");
+  await summon("Pip", 1201);
+  await page.goto(`${url}/#/memory`);
+  const main = page.getByRole("main", { name: "Memory" });
+  await main
+    .getByRole("link", { name: /Publishing a preview link/ })
+    .first()
+    .click();
+  await expect(main.getByRole("heading", { name: "Publishing a preview link", level: 2 })).toBeVisible();
+  const actions = main.getByRole("region", { name: "Actions" });
+  await actions.getByRole("button", { name: "Delete", exact: true }).click();
+  await actions.getByRole("button", { name: "Delete it" }).click();
+  await expect(main.getByRole("status")).toContainText("Deleted “Publishing a preview link”.");
+
+  await page.goBack();
+  await expect(main.getByRole("heading", { name: "This page is not in memory any more." })).toBeVisible();
+  await expect(main.getByRole("heading", { name: "Publishing a preview link", level: 2 })).toBeHidden();
+  await expect(main.getByRole("region", { name: "Actions" })).toBeHidden();
+});
+
+// covers ADR 028 (Delete), #959, STD-ARCH-011
+test("[TC-UX-986] a page deleted in one window leaves another window's list, and its open page reads as gone", async ({
+  page,
+}) => {
+  const { url, summon } = await hubWithMemory("seeded", 3600);
+  const pip = await summon("Pip", 1201);
+  const pageAddress = `${url}/#/memory?scope=hob:${pip.id}&page=howtos/preview-link.md`;
+  await page.goto(pageAddress);
+  const main = page.getByRole("main", { name: "Memory" });
+
+  // Two more windows: one on Pip's list, one on the page itself.
+  const list = await page.context().newPage();
+  await list.goto(`${url}/#/memory?scope=hob:${pip.id}`);
+  const listMain = list.getByRole("main", { name: "Memory" });
+  await expect(listMain.getByRole("link", { name: /Publishing a preview link/ })).toBeVisible();
+  const open = await page.context().newPage();
+  await open.goto(pageAddress);
+  const openMain = open.getByRole("main", { name: "Memory" });
+  await expect(openMain.getByRole("heading", { name: "Publishing a preview link", level: 2 })).toBeVisible();
+
+  const actions = main.getByRole("region", { name: "Actions" });
+  await actions.getByRole("button", { name: "Delete", exact: true }).click();
+  await actions.getByRole("button", { name: "Delete it" }).click();
+  await expect(main.getByRole("status")).toContainText("Deleted");
+
+  // The hub never looks for changes during the test: only the streamed delete reaches the others.
+  await expect(listMain.getByRole("link", { name: /Publishing a preview link/ })).toBeHidden();
+  await expect(openMain.getByRole("heading", { name: "This page is not in memory any more." })).toBeVisible();
 });

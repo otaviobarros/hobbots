@@ -289,11 +289,11 @@ export const makeMemoryStoreFake = (): {
     endSession: (actor, scope, threadId, key) =>
       Effect.flatMap(up, () => {
         const session = sessionOf(scope, threadId);
-        if (session.seen.has(key)) return Effect.void;
-        session.seen.add(key);
         const path = MemoryPath.make(`sessions/${threadId.toLowerCase()}.md`);
-        // A pinned chat note is never rewritten.
-        if (currentOf(scope, path)?.pinned === true) return Effect.void;
+        // A pinned chat note is never rewritten: the end waits, its key unused, until you unpin it.
+        if (currentOf(scope, path)?.pinned === true) return Effect.succeed(false);
+        if (session.seen.has(key)) return Effect.succeed(true);
+        session.seen.add(key);
         return append(scope, path, {
           markdown: summaryOf(threadId, session.items),
           tags: [],
@@ -301,7 +301,7 @@ export const makeMemoryStoreFake = (): {
           forgetOn: null,
           author: memoryAuthorOf(actor),
           forgotten: false,
-        }).pipe(Effect.asVoid);
+        }).pipe(Effect.as(true));
       }),
     health: up,
   };

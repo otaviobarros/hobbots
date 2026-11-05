@@ -338,7 +338,7 @@ describe("changing memory from the Memory page", () => {
   });
 
   // covers ADR 028 (Writes), #959
-  it("[TC-GEN-336] deletes a page with its history, and Undo brings it back as a version by you", async () => {
+  it("[TC-GEN-336] deletes a page with its history, streams the delete to every client, and Undo brings it back as a version by you", async () => {
     const learned = await Effect.runPromise(
       store.write(asPip, pipsOwn, draft("gotchas/link.md", "# Link first"), fresh),
     );
@@ -350,6 +350,13 @@ describe("changing memory from the Memory page", () => {
     expect(deleted.status).toBe(200);
     expect(deleted.body.restoreFrom).not.toBeNull();
     expect((await readPage(pipsOwn, "gotchas/link.md")).status).toBe(404);
+    // Every client hears of the delete at once, though no look at memory can find a page that is gone.
+    await eventually(() =>
+      streamed.some((event) => event.deleted?.some((page) => page.path === "gotchas/link.md") === true),
+    );
+    expect(streamed.find((event) => event.deleted !== undefined)?.deleted).toEqual([
+      { scope: pipsOwn, path: "gotchas/link.md" },
+    ]);
     const undone = await post("/api/memory/page/restore", {
       scope: memoryScopeKey(pipsOwn),
       path: "gotchas/link.md",

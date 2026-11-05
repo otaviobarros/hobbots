@@ -9,6 +9,7 @@ import { HobbotsApi, MemoryNotAnswering, MemoryPageChanged, MemoryPageNotFound }
 import {
   type MemoryActor,
   type MemoryConflict,
+  type MemoryPageRef,
   type MemoryPath,
   type MemoryScope,
   type MemoryUnavailable,
@@ -44,6 +45,8 @@ export class MemoryChanges extends Context.Service<
   MemoryChangeWatch & {
     /** Looks now and streams what is new, as each timed look does; a look that fails finds nothing. */
     readonly lookNow: Effect.Effect<void>;
+    /** Streams that a page was deleted, which no look can find, so every client drops it. */
+    readonly deleted: (page: MemoryPageRef) => Effect.Effect<void>;
   }
 >()("@hobbots/server/MemoryChanges") {
   /**
@@ -63,7 +66,11 @@ export class MemoryChanges extends Context.Service<
           Effect.catchTag("MemoryUnavailable", () => Effect.void),
         );
         yield* Effect.forkScoped(Effect.repeat(lookOnce, Schedule.spaced(every)));
-        return MemoryChanges.of({ ...watch, lookNow: lookOnce });
+        return MemoryChanges.of({
+          ...watch,
+          lookNow: lookOnce,
+          deleted: (page) => bus.publishTransient({ _tag: "MemoryChanged", changes: [], deleted: [page] }),
+        });
       }),
     );
 }
@@ -85,6 +92,7 @@ export const MemoryPagesHandlers = HttpApiBuilder.group(HobbotsApi, "memoryPages
     const watch = changes ?? (yield* makeMemoryChangeWatch(store));
     // What changed lists your change at once, for every client, rather than at the next timed look.
     const lookNow = changes?.lookNow ?? watch.look.pipe(Effect.ignore);
+    const deleted = changes?.deleted ?? (() => Effect.void);
     /** A page as it is now, with its History, or null when there is none. */
     const readOf = (scope: MemoryScope, path: MemoryPath) =>
       Effect.gen(function* () {
@@ -140,6 +148,7 @@ export const MemoryPagesHandlers = HttpApiBuilder.group(HobbotsApi, "memoryPages
       delete: ({ payload }) =>
         store.forget(YOU, scopeOf(payload.scope), payload.path, { _tag: "Version", version: payload.version }).pipe(
           Effect.map((restoreFrom) => ({ restoreFrom })),
+          Effect.tap(() => deleted({ scope: scopeOf(payload.scope), path: payload.path })),
           Effect.tap(() => lookNow),
           Effect.catchTags({ MemoryUnavailable: notAnswering, MemoryConflict: changed }),
         ),

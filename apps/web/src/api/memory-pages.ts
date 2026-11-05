@@ -149,6 +149,16 @@ export const deleteMemoryPage = (payload: MemoryPageVersionRef) => call((c) => c
 export const restoreMemoryPage = (payload: MemoryPageVersionRef) => call((c) => c.memoryPages.restore({ payload }));
 
 /**
+ * Drops what was read of a page you deleted, once nothing shows it, so going Back to it reads it
+ * again and finds it gone rather than showing it as it was.
+ */
+export const dropDeletedPage = (queryClient: QueryClient, deleted: MemoryPageVersionRef) => {
+  for (const kind of ["page", "version"]) {
+    queryClient.removeQueries({ queryKey: [...memoryKeys.all, kind, deleted.scope, deleted.path], type: "inactive" });
+  }
+};
+
+/**
  * What a change you made did to memory: the page it wrote shows as the hub answered at once, and
  * every memory read, a count, a list or What changed, is read again (STD-REACT-012).
  */

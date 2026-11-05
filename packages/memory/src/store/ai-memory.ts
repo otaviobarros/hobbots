@@ -530,9 +530,9 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
     endSession: (actor, scope, threadId, key) =>
       Effect.flatMap(pageOf(scope, MemoryPath.make(`sessions/${threadId}.md`)), (note) =>
         // The engine writes a session's page again at every end, pinned or not, so the end of a
-        // session whose chat note you pinned is not sent: the note stays as it is, and the items
-        // captured since wait in the open session until you unpin it.
-        note?.pinned === true ? Effect.void : endOf(actor, scope, threadId, key),
+        // session whose chat note you pinned is not sent: the note stays as it is, and the capture
+        // worker keeps the end and sends it again once you unpin it.
+        note?.pinned === true ? Effect.succeed(false) : Effect.as(endOf(actor, scope, threadId, key), true),
       ).pipe(refusalIsOutage),
     health: client.health,
   };

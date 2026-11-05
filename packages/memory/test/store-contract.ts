@@ -422,7 +422,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           yield* store.capture(asPip, pipsOwn, thread, [
             { key: "message:m1", kind: "message", text: "How do the tests run?" },
           ]);
-          yield* store.endSession(asPip, pipsOwn, thread, "end:m1");
+          expect(yield* store.endSession(asPip, pipsOwn, thread, "end:m1")).toBe(true);
           const note = yield* store.page(you, pipsOwn, path);
           expect(note).not.toBeNull();
           const pinned = yield* store.write(
@@ -435,7 +435,8 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           yield* store.capture(asPip, pipsOwn, thread, [
             { key: "message:m2", kind: "message", text: "And the linter?" },
           ]);
-          yield* store.endSession(asPip, pipsOwn, thread, "end:m2");
+          // The end is put off, not taken: memory answers that it waits.
+          expect(yield* store.endSession(asPip, pipsOwn, thread, "end:m2")).toBe(false);
           const after = yield* store.page(you, pipsOwn, path);
           expect(after).toMatchObject({ version: pinned, pinned: true, author: you });
           expect(after?.markdown).not.toContain("And the linter?");

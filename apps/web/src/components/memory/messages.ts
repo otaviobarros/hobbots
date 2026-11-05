@@ -180,7 +180,8 @@ export const messages = {
     unpin: "Unpin",
     forgetOnDate: "Forget on a date…",
     forgetOn: "Forget it on",
-    forgetHint: "On that day it is deleted for good, with its history.",
+    forgetHint:
+      "Once that day ends (UTC), hobs stop finding it, and memory's next tidy-up deletes it and its history for good.",
     setForget: "Set the day",
     cancel: "Cancel",
     delete: "Delete",
@@ -192,7 +193,7 @@ export const messages = {
     undo: "Undo",
     pinned: "Pinned. Automatic tidying will never change or fade this page.",
     unpinned: "Unpinned. Automatic tidying can change it again.",
-    forgetSet: ({ day }: { day: string }) => `It will be forgotten on ${day}. Until then you can keep it from here.`,
+    forgetSet: ({ day }: { day: string }) => `It will be forgotten after ${day}. Until then you can keep it from here.`,
     kept: "Kept. It will not be forgotten.",
     deleted: ({ title }: { title: string }) => `Deleted “${title}”.`,
     restored: "Restored this version. The newer one stays in the history.",
@@ -203,8 +204,8 @@ export const messages = {
   },
   /** The forget day a page shows under its title. */
   forget: {
-    notice: ({ day }: { day: string }) => `Forgotten on ${day}`,
-    hint: "On that day it is deleted for good. Pinning does not keep it.",
+    notice: ({ day }: { day: string }) => `Forgotten after ${day}`,
+    hint: "Once that day ends (UTC), hobs stop finding it, and memory's next tidy-up deletes it and its history for good. Pinning does not keep it.",
     keep: "Keep it",
   },
   editor: {
@@ -227,7 +228,8 @@ export const messages = {
     pinIt: "Pin it",
     pinHint: "Tidying never changes or fades a pinned page.",
     forgetOn: "Forget it on",
-    forgetHint: "Leave empty to keep it. On that day it is deleted for good.",
+    forgetHint:
+      "Leave empty to keep it. Once that day ends (UTC), hobs stop finding it, and memory's next tidy-up deletes it and its history for good.",
     titleMissing: "Give the page a title.",
     tooLong: "This page is too long to keep. Make it shorter.",
     dayPast: "Choose a day after today.",

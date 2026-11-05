@@ -307,14 +307,20 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
               return yield* new MemoryUnavailable({ message: "Memory took only part of a thread's capture." });
             }
           }
-          for (const session of round.ended) yield* endSession(session);
-          const active = [...round.touched].map((threadId) => round.sessions.get(threadId) as MemoryCaptureSession);
+          // An end memory put off, under a chat note you pinned, keeps its session open to send again.
+          const waiting: Array<MemoryCaptureSession> = [];
+          for (const session of round.ended) if (!(yield* endSession(session))) waiting.push(session);
+          for (const session of waiting) round.sessions.set(session.threadId, session);
+          const active = [
+            ...[...round.touched].map((threadId) => round.sessions.get(threadId) as MemoryCaptureSession),
+            ...waiting,
+          ];
           // Saved as soon as memory acknowledged the page: a crash before this sends it once more, and
           // memory skips what it has seen.
           yield* log.save(
             round.sequence,
             active,
-            round.ended.map((session) => session.threadId),
+            round.ended.filter((session) => !waiting.includes(session)).map((session) => session.threadId),
           );
           state = { sequence: round.sequence, sessions: [...round.sessions.values()] };
           return entries.length < PAGE;
@@ -326,8 +332,10 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
           const quietBefore = yield* before(MEMORY_SESSION_QUIET);
           const quiet = current.sessions.filter((session) => session.lastAt < quietBefore);
           if (quiet.length === 0) return;
-          for (const session of quiet) yield* endSession(session);
-          const ended = new Set(quiet.map((session) => session.threadId));
+          // An end memory put off stays open, and is sent again at the next round.
+          const ended = new Set<ThreadId>();
+          for (const session of quiet) if (yield* endSession(session)) ended.add(session.threadId);
+          if (ended.size === 0) return;
           yield* log.save(current.sequence, [], [...ended]);
           state = { ...current, sessions: current.sessions.filter((session) => !ended.has(session.threadId)) };
         });
