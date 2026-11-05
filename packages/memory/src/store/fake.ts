@@ -2,13 +2,14 @@ import { guardMemoryStore, MemoryStore, type MemoryStoreShape } from "@hobbots/a
 import {
   foldWord,
   type MemoryAuthor,
+  type MemoryCaptureItem,
   type MemoryChangedLine,
   MemoryConflict,
   type MemoryExpected,
   type MemoryHit,
   type MemoryPage,
   type MemoryPageSummary,
-  type MemoryPath,
+  MemoryPath,
   type MemoryScope,
   MemoryUnavailable,
   MemoryVersion,
@@ -16,6 +17,7 @@ import {
   memoryTitleOf,
   searchTerms,
   snippetOf,
+  type ThreadId,
 } from "@hobbots/domain";
 import { diffLines } from "diff";
 import { DateTime, Effect, Layer } from "effect";
@@ -49,7 +51,26 @@ interface StoredVersion {
 export interface MemoryStoreFakeControls {
   /** While down, every call fails with `MemoryUnavailable`. */
   readonly setDown: (down: boolean) => void;
+  /** What a thread's session holds in `scope`, in the order it arrived, replays skipped. */
+  readonly captured: (scope: MemoryScope, threadId: ThreadId) => ReadonlyArray<MemoryCaptureItem>;
 }
+
+/** A thread's session: what arrived, and every key seen, the ends' included. */
+interface Session {
+  readonly items: Array<MemoryCaptureItem>;
+  readonly seen: Set<string>;
+}
+
+/** The fake's summary of a session: its first message as the title, then each item, as a model-free summary lists them. */
+const summaryOf = (threadId: ThreadId, items: ReadonlyArray<MemoryCaptureItem>) => {
+  const first = items.find((item) => item.kind === "message")?.text.split("\n", 1)[0] ?? `Thread ${threadId}`;
+  return [
+    `# ${first}`,
+    "",
+    ...items.map((item) => `- ${item.kind}: ${item.text.replace(/\s+/g, " ").trim()}`),
+    "",
+  ].join("\n");
+};
 
 const WORD = /[\p{L}\p{N}]+/gu;
 
@@ -85,8 +106,17 @@ export const makeMemoryStoreFake = (): {
     string,
     { readonly scope: MemoryScope; readonly pages: Map<MemoryPath, Array<StoredVersion>> }
   >();
+  const sessions = new Map<string, Session>();
   let down = false;
   let versions = 0;
+  const sessionOf = (scope: MemoryScope, threadId: ThreadId) => {
+    const key = `${scopeKey(scope)} ${threadId}`;
+    const existing = sessions.get(key);
+    if (existing) return existing;
+    const session: Session = { items: [], seen: new Set() };
+    sessions.set(key, session);
+    return session;
+  };
 
   const up = Effect.suspend(() =>
     down ? Effect.fail(new MemoryUnavailable({ message: "The fake memory is down." })) : Effect.void,
@@ -241,6 +271,29 @@ export const makeMemoryStoreFake = (): {
           ? Effect.fail(conflict(scope, path))
           : append(scope, path, { ...old, author: memoryAuthorOf(actor), forgotten: false });
       }),
+    capture: (_actor, scope, threadId, items) =>
+      Effect.map(up, () => {
+        const session = sessionOf(scope, threadId);
+        for (const item of items) {
+          if (session.seen.has(item.key)) continue;
+          session.seen.add(item.key);
+          session.items.push(item);
+        }
+        return items.length;
+      }),
+    endSession: (actor, scope, threadId, key) =>
+      Effect.flatMap(up, () => {
+        const session = sessionOf(scope, threadId);
+        if (session.seen.has(key)) return Effect.void;
+        session.seen.add(key);
+        return append(scope, MemoryPath.make(`sessions/${threadId.toLowerCase()}.md`), {
+          markdown: summaryOf(threadId, session.items),
+          tags: [],
+          pinned: false,
+          author: memoryAuthorOf(actor),
+          forgotten: false,
+        }).pipe(Effect.asVoid);
+      }),
     health: up,
   };
 
@@ -250,6 +303,7 @@ export const makeMemoryStoreFake = (): {
       setDown: (value) => {
         down = value;
       },
+      captured: (scope, threadId) => [...sessionOf(scope, threadId).items],
     },
   };
 };

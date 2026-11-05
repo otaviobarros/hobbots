@@ -20,6 +20,8 @@ export const makeMemoryStoreOff = (message: string): MemoryStoreShape => {
     write: () => off,
     forget: () => off,
     restore: () => off,
+    capture: () => off,
+    endSession: () => off,
     health: off,
   });
 };

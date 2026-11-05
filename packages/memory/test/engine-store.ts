@@ -25,7 +25,10 @@ afterAll(async () => {
   for (const dir of dataDirs) rmSync(dir, { recursive: true, force: true });
 }, 60_000);
 
-/** Starts the engine on `dataDir`, as the hub does, and answers its MemoryStore and the scope it runs in. */
+/**
+ * Starts the engine on `dataDir`, as the hub does, and answers its MemoryStore, the scope it runs in
+ * (closing it stops the engine) and its endpoint.
+ */
 export const startEngineStore = (dataDir: string, keys: MemoryKeys) =>
   Effect.gen(function* () {
     if (!fetched) return yield* Effect.die(new Error(`No ai-memory engine in ${folder}; run fetch-engine`));
