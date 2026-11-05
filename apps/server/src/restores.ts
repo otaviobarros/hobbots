@@ -17,12 +17,13 @@ import {
 import { Installation } from "./installation.ts";
 
 /**
- * Stops this hub and starts it again on restored data (ADR 026): the server's main loop provides it.
- * Absent, as in tests, the hub cannot restore while it runs.
+ * Stops this hub and starts it again on restored data (ADR 026), or with no data after Start over
+ * (#948): the server's main loop provides it. Absent, as in tests, the hub cannot restore or reset
+ * while it runs.
  */
 export class HubRestart extends Context.Service<
   HubRestart,
-  { readonly restore: (backup: string) => Effect.Effect<void> }
+  { readonly restore: (backup: string) => Effect.Effect<void>; readonly reset: Effect.Effect<void> }
 >()("@hobbots/server/HubRestart") {}
 
 /** Why the restore asked for before this start did not happen; the hub kept its data. */

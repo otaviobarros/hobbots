@@ -12,6 +12,7 @@ import {
   MemoryUnavailable,
   MemoryVersion,
   memoryAuthorOf,
+  memoryTitleOf,
   searchTerms,
   snippetOf,
 } from "@hobbots/domain";
@@ -51,9 +52,6 @@ const scopeKey = (scope: MemoryScope) => {
       return "everyone";
   }
 };
-
-const titleOf = (path: MemoryPath, markdown: string) =>
-  /^#\s+(.+)$/m.exec(markdown)?.[1]?.trim() ?? path.replace(/^.*\//, "").replace(/\.md$/, "");
 
 const meets = (latest: StoredVersion | undefined, expected: MemoryExpected) => {
   const current = latest === undefined || latest.forgotten ? null : latest.version;
@@ -114,7 +112,13 @@ export const makeMemoryStoreFake = (): {
       const latest = history.at(-1);
       if (latest === undefined || latest.forgotten) return [];
       return [
-        { scope, path, title: titleOf(path, latest.markdown), pinned: latest.pinned, updatedAt: latest.writtenAt },
+        {
+          scope,
+          path,
+          title: memoryTitleOf(path, latest.markdown),
+          pinned: latest.pinned,
+          updatedAt: latest.writtenAt,
+        },
       ];
     });
 

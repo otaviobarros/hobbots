@@ -65,14 +65,17 @@ export const waitForRestoredHub = async (
   health: () => Promise<Health> = () => call((c) => c.health.health()),
   wait: { readonly timeoutMs: number; readonly everyMs: number } = RESTART_WAIT,
   sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
+  onStopped: () => void = () => undefined,
 ) => {
   const deadline = Date.now() + wait.timeoutMs;
   let stopped = false;
   while (Date.now() < deadline) {
     await sleep(wait.everyMs);
     const found = await health().catch(() => null);
-    if (found === null) stopped = true;
-    else if (before === null ? stopped : installationOf(found) !== before) return;
+    if (found === null) {
+      if (!stopped) onStopped();
+      stopped = true;
+    } else if (before === null ? stopped : installationOf(found) !== before) return;
   }
   throw new Error("The hub did not start again after the restore.");
 };
@@ -106,3 +109,25 @@ export const useDeleteSetAside = () => {
     onSuccess: (status) => queryClient.setQueryData(restoreKey, status),
   });
 };
+
+/**
+ * Where Start over is (#948): forgetting the keychain sign-ins, the hub stopping, the hub deleting
+ * its data while it is down, and done once a hub with a new installation answers.
+ */
+export type StartOverStep = "signIns" | "stopping" | "deleting" | "done";
+
+/**
+ * Start over: the hub forgets its sign-ins, stops, deletes all of its data and starts again empty.
+ * `onStep` follows it; the page loads again only when the person picks Start fresh.
+ */
+export const useStartOver = (onStep: (step: StartOverStep) => void) =>
+  useMutation({
+    mutationFn: async () => {
+      onStep("signIns");
+      const before = installationOf(await call((c) => c.health.health()));
+      await call((c) => c.backup.reset());
+      onStep("stopping");
+      await waitForRestoredHub(before, undefined, undefined, undefined, () => onStep("deleting"));
+      onStep("done");
+    },
+  });

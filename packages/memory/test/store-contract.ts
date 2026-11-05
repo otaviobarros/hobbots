@@ -227,6 +227,24 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Backups), OP-002
+    it(
+      "[TC-OP-103] names every page a scope holds as changed since the epoch, past the engine's longest answer",
+      () =>
+        run(({ store }) =>
+          Effect.gen(function* () {
+            const paths = Array.from({ length: 101 }, (_, at) => `notes/n${String(at).padStart(3, "0")}.md`);
+            const [first = "", ...rest] = paths;
+            const version = yield* store.write(you, theApp, draft(first, "# Note"), fresh);
+            for (const path of rest) yield* store.write(you, theApp, draft(path, "# Note"), fresh);
+            yield* store.forget(you, theApp, MemoryPath.make(first), { _tag: "Version", version });
+            const everything = yield* store.changes(you, theApp, "1970-01-01T00:00:00.000Z");
+            expect(everything.map((page) => page.path).sort()).toEqual(rest);
+          }),
+        ),
+      120_000,
+    );
+
+    // covers ADR 028 (Backups), OP-002
     it("[TC-OP-094] names the scopes that hold pages, within what the actor may reach", () =>
       run(({ store }) =>
         Effect.gen(function* () {
@@ -242,5 +260,46 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           expect((yield* store.scopes(asPip)).map(key).sort()).toEqual([pipsOwn, everyone].map(key).sort());
         }),
       ));
+
+    // covers ADR 028 (Browse)
+    it("[TC-GEN-192] lists every pinned page first, also more than a search answers and older than the newest", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const pins = Array.from({ length: 11 }, (_, at) => `pins/p${String(at).padStart(2, "0")}.md`);
+          for (const path of pins) yield* store.write(you, theApp, draft(path, "# Pin", { pinned: true }), fresh);
+          const before = new Date(Date.now() - 1000).toISOString();
+          for (const at of [1, 2, 3, 4, 5]) yield* store.write(you, theApp, draft(`notes/n${at}.md`, "# Note"), fresh);
+          const listed = yield* store.list(asPip, theApp, 13);
+          expect(listed).toHaveLength(13);
+          expect(
+            listed
+              .slice(0, 11)
+              .map((page) => page.path)
+              .sort(),
+          ).toEqual(pins);
+          expect(listed.slice(0, 11).every((page) => page.pinned)).toBe(true);
+          expect(listed.slice(11).every((page) => !page.pinned)).toBe(true);
+          const changed = yield* store.changes(asPip, theApp, before);
+          expect(changed.filter((page) => page.path.startsWith("pins/")).every((page) => page.pinned)).toBe(true);
+        }),
+      ));
+
+    // covers ADR 028 (Browse)
+    it(
+      "[TC-GEN-193] keeps every version in a page's history, past the engine's longest answer",
+      () =>
+        run(({ store }) =>
+          Effect.gen(function* () {
+            const path = MemoryPath.make("notes/busy.md");
+            for (let at = 0; at < 201; at += 1) yield* store.write(you, pipsOwn, draft(path, `# Busy\n\n${at}`), any);
+            const versions = yield* store.history(you, pipsOwn, path);
+            expect(versions).toHaveLength(201);
+            expect(new Set(versions.map((each) => each.version)).size).toBe(201);
+            expect(versions.filter((each) => each.latest)).toHaveLength(1);
+            expect(versions[0]?.latest).toBe(true);
+          }),
+        ),
+      120_000,
+    );
   });
 };

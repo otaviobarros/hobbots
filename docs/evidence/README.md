@@ -66,3 +66,5 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-03 The Workbench shows a Task's work end to end](2026-11-03-workbench-end-to-end.md)
 - [2026-11-03 A hob's turn runs on Codex: answers, stops and resumes, with a stand-in model](2026-11-03-codex-turns.md)
 - [2026-11-03 Codex's tool calls are decided by the hob's policy, and Codex starts inside the sandbox](2026-11-03-codex-tool-policy.md)
+- [2026-11-05 Start over deletes everything the hub keeps and brings it back empty at Welcome](2026-11-05-start-over.md)
+- [2026-11-05 Memory goes into backups and exports, with no memory bearer in either](2026-11-05-memory-backups.md)

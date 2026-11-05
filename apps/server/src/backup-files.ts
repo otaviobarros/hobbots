@@ -55,10 +55,11 @@ export const BACKUP_PARTS = {
 export const MEMORY_PART = `memory/${MEMORY_ARCHIVE}`;
 
 /**
- * The entries of the data folder that are the hub's own, which a restore moves aside. The desktop
- * app keeps its window's own files in the same folder, and they stay where they are.
+ * The entries of the data folder that are the hub's own, which a restore moves aside and Start over
+ * deletes. The desktop app keeps its window's own files in the same folder, and they stay where they
+ * are.
  */
-const HUB_ENTRIES = [
+export const HUB_ENTRIES = [
   "hobbots.sqlite",
   "hobbots.sqlite-wal",
   "hobbots.sqlite-shm",

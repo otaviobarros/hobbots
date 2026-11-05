@@ -57,5 +57,4 @@ const CREDENTIAL_KEYS =
  */
 export const configHoldsCredential = (config: string, keys?: MemoryKeys): boolean =>
   CREDENTIAL_KEYS.test(config) ||
-  (keys !== undefined &&
-    (config.includes(Redacted.value(keys.root)) || config.includes(Redacted.value(keys.proxy))));
+  (keys !== undefined && (config.includes(Redacted.value(keys.root)) || config.includes(Redacted.value(keys.proxy))));

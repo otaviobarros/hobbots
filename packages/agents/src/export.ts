@@ -182,8 +182,8 @@ interface FileSource {
   readonly value: string;
 }
 
-/** The most pages an export takes from one memory scope. */
-const MEMORY_PAGES_PER_SCOPE = 10_000;
+/** Before any page was written: the pages changed since then are every page a scope holds. */
+const MEMORY_EPOCH = "1970-01-01T00:00:00.000Z";
 
 /** Memory as an export reads it: each page's record and, at the same index, its Markdown. */
 interface GatheredMemory {
@@ -402,7 +402,11 @@ export class DataExport extends Context.Service<
             for (const { scope: each, folder } of wanted) {
               // Two hobs of one name, or two projects that read alike, each keep a folder of their own.
               const unique = uniqueName(taken, folder);
-              for (const summary of yield* store.list(you, each, MEMORY_PAGES_PER_SCOPE)) {
+              // Every page, read through to the end: an export never stops at a count.
+              const summaries = [...(yield* store.changes(you, each, MEMORY_EPOCH))].sort((a, b) =>
+                a.path.localeCompare(b.path),
+              );
+              for (const summary of summaries) {
                 const page = yield* store.page(you, each, summary.path);
                 if (page === null) continue;
                 pages.push({
