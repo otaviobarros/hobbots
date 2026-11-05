@@ -28,6 +28,11 @@ export const RuntimeSession = Schema.Struct({
   sessionId: Schema.String,
   /** The last message the session has seen, so switching back sends only what came after it. */
   seenThrough: Schema.NullOr(MessageId),
+  /**
+   * The fingerprint of the memory brief the session last received (ADR 028), so an unchanged brief
+   * is not sent again. Absent or null when it is not known, and the next turn sends it.
+   */
+  memoryBrief: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 export type RuntimeSession = typeof RuntimeSession.Type;
 

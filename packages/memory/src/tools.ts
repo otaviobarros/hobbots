@@ -172,9 +172,7 @@ export const MemoryToolsLive = Layer.effect(
 
     /** The project of each of the hob's folders, once each, in the order of its folders. */
     const projectsOf = (folders: ReadonlyArray<string>) =>
-      Effect.forEach(folders, (folder) =>
-        Effect.map(projects.identityOf(folder), (identity) => ({ folder, identity })),
-      );
+      Effect.forEach(folders, (folder) => Effect.map(projects.of(folder), (identity) => ({ folder, identity })));
 
     const actorOf = (turn: CharmTurn, of: ReadonlyArray<{ readonly identity: MemoryProjectIdentity }>) =>
       ({
@@ -295,7 +293,7 @@ export const MemoryToolsLive = Layer.effect(
           if (holder === undefined) {
             return yield* new Refused({ message: `${folder} is not one of your folders, so nothing was shared.` });
           }
-          return yield* projects.identityOf(holder);
+          return yield* projects.of(holder);
         }
         const identities = [...new Set((yield* projectsOf(access.folders)).map((project) => project.identity))];
         if (identities.length === 1) return identities[0] as MemoryProjectIdentity;

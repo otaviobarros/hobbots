@@ -141,8 +141,7 @@ const makeHub = (options: { readonly shares?: boolean; readonly store?: MemorySt
         Layer.succeed(
           MemoryProjects,
           MemoryProjects.of({
-            identityOf: (folder) =>
-              Effect.succeed(memoryProjectIdentity(ORIGINS.get(folder) ?? null, path.basename(folder))),
+            of: (folder) => Effect.succeed(memoryProjectIdentity(ORIGINS.get(folder) ?? null, path.basename(folder))),
           }),
         ),
         PolicyEngine.node,
