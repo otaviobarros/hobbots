@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
@@ -11,6 +12,7 @@
     "fetch-engine": "node scripts/fetch-engine.ts"
   },
   "dependencies": {
+    "@hobbots/agents": "workspace:*",
     "@hobbots/domain": "workspace:*",
     "effect": "catalog:"
   },

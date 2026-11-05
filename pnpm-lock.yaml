@@ -535,6 +535,9 @@ importers:
 
   packages/memory:
     dependencies:
+      '@hobbots/agents':
+        specifier: workspace:*
+        version: link:../agents
       '@hobbots/domain':
         specifier: workspace:*
         version: link:../domain
