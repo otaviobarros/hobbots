@@ -37,7 +37,7 @@ test("[TC-UX-908] a member asks with choices, the question climbs to you, you pi
   await expect(choices).toHaveCount(0);
 
   // In the fake Quest, Ada then says which choice she goes on with. That the answer reaches a member's
-  // own turn through the tools is checked at hub level, in [TC-OR-561].
+  // own turn through the tools is checked at hub level, in [TC-OR-580].
   await openRoom(page, "Plan the Black Friday campaign");
   await expect(lane(page, "Ada")).toContainText("Going with Dec 12 for international", { timeout: 30_000 });
 });
