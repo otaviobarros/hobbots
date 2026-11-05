@@ -2,7 +2,7 @@
 
 ## Scope
 
-The code is the first validation slice of [ADR 009](docs/decisions/009-toolchain-and-validation-slice.md): one Claude Code hob, persistent threads and streaming chat in the browser and Electron. Work from the requested scope (STD-DOCS-008). The docs describe the system and do not authorize you to build it.
+The code grew from the first validation slice of [ADR 009](docs/decisions/009-toolchain-and-validation-slice.md). Today it runs hobs on Claude Code and Codex, with persistent threads, Tasks and Quests, in the browser and Electron. Work from the requested scope (STD-DOCS-008). The docs describe the system and do not authorize you to build it.
 
 ## Commands
 
