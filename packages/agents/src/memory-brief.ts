@@ -1,5 +1,5 @@
 import type { MemoryActor, MemoryPage, MemoryScope } from "@hobbots/domain";
-import { Effect, Option } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
 import { clip, oneLine, quote } from "./briefing.ts";
 import {
   MemoryProjects,
@@ -190,18 +190,59 @@ export const startedMemoryBrief = (
  */
 export const deliveredMemoryBrief = (brief: TurnMemoryBrief): string | null => (brief.sent ? brief.digest : null);
 
+/** How many sessions outside chats the hub remembers the brief of; the oldest are forgotten first. */
+const RECEIPTS_KEPT = 10_000;
+
 /**
- * The memory brief a fresh session outside any chat starts with, a Task step's or a party member's,
- * from the services in the current context: null without memory, or when memory holds nothing the
- * hob may read. A resumed session is not briefed again, since no receipt is kept for it.
+ * The fingerprint of the brief each session outside any chat, a Task step's or a party member's,
+ * last received (ADR 028), kept while the hub runs. Their sessions live on Attempts, which one session
+ * outlives, so the receipt is kept by session. After a restart none is known, and each session's
+ * next turn sends the brief once more.
  */
-export const freshSessionMemoryBrief = (
+export class MemoryBriefReceipts extends Context.Service<
+  MemoryBriefReceipts,
+  {
+    readonly get: (sessionId: string) => Effect.Effect<string | null>;
+    /** Records what the session received; null when it is not known. */
+    readonly set: (sessionId: string, digest: string | null) => Effect.Effect<void>;
+  }
+>()("@hobbots/agents/MemoryBriefReceipts") {
+  static readonly layer = Layer.sync(MemoryBriefReceipts, () => {
+    const receipts = new Map<string, string>();
+    return MemoryBriefReceipts.of({
+      get: (sessionId) => Effect.sync(() => receipts.get(sessionId) ?? null),
+      set: (sessionId, digest) =>
+        Effect.sync(() => {
+          receipts.delete(sessionId);
+          if (digest === null) return;
+          receipts.set(sessionId, digest);
+          const oldest = receipts.keys().next();
+          if (receipts.size > RECEIPTS_KEPT && !oldest.done) receipts.delete(oldest.value);
+        }),
+    });
+  });
+}
+
+/**
+ * The memory brief for a turn of a session outside any chat, from the services in the current
+ * context, or null without memory. It is sent when the session is new or did not last receive this
+ * brief, as a chat turn's is; without `MemoryBriefReceipts` no receipt is known, and every turn sends it.
+ */
+export const sessionMemoryBrief = (
   agentId: Extract<MemoryActor, { _tag: "Hob" }>["agentId"],
   folders: ReadonlyArray<string>,
-): Effect.Effect<string | null> =>
+  sessionId: string | null,
+): Effect.Effect<TurnMemoryBrief | null> =>
   Effect.gen(function* () {
     const store = yield* Effect.serviceOption(MemoryStore);
     if (Option.isNone(store)) return null;
-    const actor = yield* memoryActorFor(yield* Effect.serviceOption(MemoryProjects), agentId, folders);
-    return yield* buildMemoryBrief(store.value, actor);
+    const receipts = yield* Effect.serviceOption(MemoryBriefReceipts);
+    const received = sessionId === null || Option.isNone(receipts) ? undefined : yield* receipts.value.get(sessionId);
+    return yield* turnMemoryBrief(store.value, yield* Effect.serviceOption(MemoryProjects), agentId, folders, received);
   });
+
+/** Records what a session outside any chat now holds of the brief, when the hub keeps receipts. */
+export const recordMemoryBrief = (sessionId: string, digest: string | null): Effect.Effect<void> =>
+  Effect.flatMap(Effect.serviceOption(MemoryBriefReceipts), (receipts) =>
+    Option.isNone(receipts) ? Effect.void : receipts.value.set(sessionId, digest),
+  );

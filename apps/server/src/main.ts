@@ -13,6 +13,7 @@ import {
   HobAdmission,
   HobLifecycle,
   HobService,
+  MemoryBriefReceipts,
   PermissionSummary,
   RecoveryLog,
   SecretRedaction,
@@ -315,8 +316,6 @@ const ServerLive = Layer.unwrap(
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))
-      // Before the chat service: a hob's memory reaches the projects of its folders (ADR 028).
-      .pipe(Layer.provideMerge(MemoryProjectsLive))
       // Before the chat service: every turn you did not start with Send starts from the backpack, and
       // at start the dispatcher expires the claims an earlier process held (ADR 019).
       .pipe(Layer.provideMerge(ContinuationsLive))
@@ -396,6 +395,10 @@ const ServerLive = Layer.unwrap(
             // What the startup recovery could not do, for Settings › Diagnostics (ADR 026).
             RecoveryLog.layer,
             Memory,
+            // Before every session, a chat's, a step's and a party member's: a hob's memory reaches the
+            // projects of its folders, and what each session was briefed from it (ADR 028).
+            MemoryProjectsLive,
+            MemoryBriefReceipts.layer,
             // The hub's credentials, provider keys and memory keys included, are redacted by value
             // from what tools report.
             SecretRedaction.layer([

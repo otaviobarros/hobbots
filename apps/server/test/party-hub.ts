@@ -9,6 +9,7 @@ import {
   HobbotsRepository,
   HobLifecycle,
   HobTools,
+  MemoryBriefReceipts,
   MemoryStore,
   type MemoryStoreShape,
   type PromptRequest,
@@ -208,7 +209,9 @@ export const partyHub = (options: { readonly memory?: MemoryStoreShape } = {}) =
         tools,
         HobAdmission.layer,
         recording,
-        options.memory === undefined ? Layer.empty : Layer.succeed(MemoryStore, options.memory),
+        options.memory === undefined
+          ? Layer.empty
+          : Layer.mergeAll(Layer.succeed(MemoryStore, options.memory), MemoryBriefReceipts.layer),
         Layer.succeed(UserSession, {
           deviceId: WINDOW_DEVICE_ID,
           name: "This computer's Hobbots window",
