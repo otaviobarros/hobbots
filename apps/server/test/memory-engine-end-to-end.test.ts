@@ -231,7 +231,8 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
 
     // Undo of Tuesday's save puts Monday back, as a version by you, once.
     const tuesday = saves[1]?.id ?? "";
-    expect((await undo(tuesday)).status).toBe(200);
+    const undone = await undo(tuesday);
+    expect(undone.status, await undone.clone().text()).toBe(200);
     const back = await readPage(scope, LAUNCH);
     expect(back?.page.markdown).toBe("# Launch\n\nMonday.");
     expect(back?.page.author).toEqual({ _tag: "You" });
