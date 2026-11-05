@@ -48,7 +48,7 @@ const TEXT_MAX = 8_000;
 const ENDED_REPLY: ReadonlySet<MessageStatus> = new Set(["complete", "failed", "stopped", "interrupted", "limited"]);
 const ENDED_STEP: ReadonlySet<ReplyStepState> = new Set(["done", "failed", "denied", "uncertain"]);
 
-/** A save a newer write to its page replaced before it reached memory: refused, as a conflict is. */
+/** A save a newer write or save of its page replaced before it reached memory: refused, as a conflict is. */
 const SUPERSEDED = { state: "refused", version: null } as const;
 
 const sameTags = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
@@ -264,10 +264,21 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
             save.scope._tag === "Hob" &&
             (save.state === "queued" || (save.state === "sending" && save.updatedAt < staleSending)),
         );
+        // A page's newest save replaces its older ones, which are never written: sending them first
+        // would stamp the page later than the newest was made.
+        const byPage = new Map<string, Array<MemorySave>>();
         for (const save of unsent) {
-          const outcome = yield* resend(save);
-          const committed = yield* saves.value.settle(save, outcome.state, outcome.version, yield* now);
-          if (Option.isSome(committed)) yield* announce(committed.value.entries);
+          const page = `${save.agentId}\0${save.path}`;
+          byPage.set(page, [...(byPage.get(page) ?? []), save]);
+        }
+        for (const pageSaves of byPage.values()) {
+          const newest = pageSaves[pageSaves.length - 1] as MemorySave;
+          const outcome = yield* resend(newest);
+          for (const save of [newest, ...pageSaves.slice(0, -1)]) {
+            const settled = save === newest ? outcome : SUPERSEDED;
+            const committed = yield* saves.value.settle(save, settled.state, settled.version, yield* now);
+            if (Option.isSome(committed)) yield* announce(committed.value.entries);
+          }
         }
       });
 

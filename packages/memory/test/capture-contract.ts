@@ -482,5 +482,34 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           expect(yield* memory.observations(pip, threadId)).toBeGreaterThan(0);
         }),
       ));
+
+    // covers ADR 028 (When memory is down)
+    it("[TC-GEN-312] keeps the newest of several saves of one page kept through an outage", () =>
+      run(
+        ({ memory, saves, capture }) =>
+          Effect.gen(function* () {
+            const path = MemoryPath.make("notes/release.md");
+            const first = recordedSave(
+              path,
+              "# Release\n\nTag from a branch.",
+              "queued",
+              DateTime.formatIso(yield* DateTime.now),
+            );
+            yield* saves.service.begin(first);
+            yield* TestClock.adjust(Duration.seconds(1));
+            const second = recordedSave(
+              path,
+              "# Release\n\nTag from main.",
+              "queued",
+              DateTime.formatIso(yield* DateTime.now),
+            );
+            yield* saves.service.begin(second);
+            yield* capture.runOnce;
+            expect((yield* memory.store.page(you, pipsOwn, path))?.markdown).toBe(second.markdown);
+            expect(saves.saves().map((settled) => settled.state)).toEqual(["refused", "saved"]);
+            expect(yield* memory.store.history(you, pipsOwn, path)).toHaveLength(1);
+          }),
+        "now",
+      ));
   });
 };
