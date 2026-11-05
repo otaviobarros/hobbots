@@ -3,9 +3,9 @@
 - **Date:** 2026-11-05
 - **Issue:** [#963](https://github.com/otaviobarros/hobbots/issues/963)
 - **Pull request:** [#971](https://github.com/otaviobarros/hobbots/pull/971)
-- **Commit:** the pull request's head; not yet on `main`
-- **Setup:** Linux x86_64 container (Ubuntu 24.04, Node 22.23.4) with ai-memory 3.4.2 for `linux-x64`, fetched and checked by `pnpm --filter @hobbots/memory fetch-engine`. Run with `HOBBOTS_MEMORY_CONTRACT=1 pnpm --filter @hobbots/memory test`, and `pnpm --filter @hobbots/server test` for the hub's backup and export.
-- **Result:** Passed with gaps. A backup holds `memory/ai-memory.tar.gz`, made by ai-memory's own `/admin/backup` while it runs or packed from its folder while it is off, and listed in the manifest. Each archive is read through before a backup keeps it or a restore unpacks it, and is refused for a link, an entry outside the wiki, the database and the config, a credential setting in a config, with or without the bearers known, or either bearer anywhere. A restore unpacks it owner-only and writes new bearers, so the old ones stop working. An export holds every page of each scope it covers as Markdown, read through to the end.
+- **Commit:** `3717bc167ac6d09f89505d2d0754463160ce1e0c` on `claude/project-thread-hj41nm`, the branch of the pull request; not yet on `main`. This record was added in the commit after it, which changes only documentation.
+- **Setup:** Linux x86_64 container (Ubuntu 24.04.5, Node 22.23.4) with ai-memory 3.4.2 for `linux-x64`, fetched and checked by `pnpm --filter @hobbots/memory fetch-engine`. Run with `HOBBOTS_MEMORY_CONTRACT=1 pnpm --filter @hobbots/memory test`, and `pnpm --filter @hobbots/server test` for the hub's backup and export.
+- **Result:** Passed with gaps: memory 60 tests, domain 153, agents 17, web 818 and server 536 of 537 (the one failure, `[TC-DP-008]`, needs IPv6, which this container lacks, and fails on `main` too). A backup holds `memory/ai-memory.tar.gz`, made by ai-memory's own `/admin/backup` while it runs or packed from its folder while it is off, and listed in the manifest. Each archive is read through before a backup keeps it or a restore unpacks it, and is refused for a link, an entry outside the wiki, the database and the config, a credential setting in a config, with or without the bearers known, or either bearer anywhere. A restore unpacks it owner-only and writes new bearers, so the old ones stop working. An export holds every page of each scope it covers as Markdown, read through to the end.
 
 ## Checks
 
@@ -16,11 +16,11 @@
 | `[TC-OP-096]` | An archive with either bearer, a credential setting in its config (also with no keys known, as a migration backup without `memory-keys` and every restore check it), a link or an entry outside the roots is refused, and a refused archive is never unpacked | ✅ |
 | `[TC-OP-097]` | `MemoryEngine.backup` asks the engine with the root bearer, refuses and deletes an archive holding a bearer, and packs the folder while the engine is off | ✅ (stand-in binary) |
 | `[TC-OP-098]` | ai-memory 3.4.2's backup restored into a new folder with new bearers brings back the page, its history and search, and both old bearers get 401 | ✅ |
-| `[TC-OP-099]` | A hub backup lists `memory/ai-memory.tar.gz` in its manifest and holds no bearer; a restore unpacks it and writes new bearers | ✅ server test |
+| `[TC-OP-099]` | A hub backup lists `memory/ai-memory.tar.gz` and `settings/memory-settings.json` in its manifest and holds no bearer; a restore unpacks memory, brings the memory model back and writes new bearers | ✅ server test |
 | `[TC-OP-100]` | An export of everything holds Everyone's, each hob's and each project's pages under `memory/`, redacted; a hob's export holds its own; memory that does not answer is said so in the README | ✅ server test with the fake store |
 | `[TC-OP-101]` | Each ai-memory project reads back as the scope it holds, and a project that is no scope's reads as none | ✅ |
 | `[TC-OP-102]` | A project the adapter cannot name makes `scopes` fail as an outage, so an export says memory did not answer instead of leaving it out | ✅ ai-memory 3.4.2 |
-| `[TC-OP-103]` | The pages changed since the epoch are every page a scope holds, past ai-memory's 100-page answer, and none that was forgotten | ✅ fake and ai-memory 3.4.2 |
+| `[TC-OP-103]` | With 101 pages left after one is forgotten, the pages changed since the epoch are all 101, past ai-memory's 100-page answer, and not the forgotten one; with the adapter's cursor loop cut to one answer, the case fails at 100 | ✅ fake and ai-memory 3.4.2 |
 
 ## Findings
 
