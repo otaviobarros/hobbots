@@ -122,6 +122,11 @@ export class MemorySave extends Schema.Class<MemorySave>("MemorySave")({
   messageId: Schema.NullOr(MessageId),
   createdAt: Schema.String,
   updatedAt: Schema.String,
+  /**
+   * When you undid it from its reply, which put back the version it replaced or, for a new page,
+   * removed it. Absent while it stands.
+   */
+  undoneAt: Schema.optionalKey(Schema.String),
 }) {}
 
 /** What a hob is told once a page is in its own memory. */

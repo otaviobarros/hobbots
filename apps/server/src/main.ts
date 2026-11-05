@@ -137,26 +137,36 @@ import { WorkbenchStreamRoute } from "./workbench-stream.ts";
  * run asks for it, otherwise the bundled ai-memory, which answers that memory is unavailable while
  * its engine is off, missing or down.
  */
-const memoryPageLayer = (config: {
+const memoryPageStore = (config: {
   readonly fakeMemory: "off" | "empty" | "seeded" | "down";
-  readonly memoryLookSeconds: number;
-}) => {
-  const store: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine> =
-    config.fakeMemory === "off"
-      ? MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))
-      : FakeMemoryLive(config.fakeMemory);
-  return MemoryChanges.layer(Duration.seconds(config.memoryLookSeconds)).pipe(Layer.provideMerge(store));
-};
+}): Layer.Layer<MemoryStore, never, EventBus | MemoryEngine> =>
+  config.fakeMemory === "off"
+    ? MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))
+    : FakeMemoryLive(config.fakeMemory);
+
+const memoryPageLayer = (
+  config: { readonly memoryLookSeconds: number },
+  store: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine>,
+) => MemoryChanges.layer(Duration.seconds(config.memoryLookSeconds)).pipe(Layer.provideMerge(store));
 
 /**
  * The memory tools (ADR 028), beside the Task tools on every runtime while memory is on. A real
  * runtime's hobs reach the bundled ai-memory through the engine the hub runs; the fake runtime keeps
- * memory in the hub's process, to try memory without the engine. With memory off there are none.
+ * memory in the hub's process, to try memory without the engine: the fake memory the Memory page
+ * reads when a run asks for one, so a page a hob saves shows there and its Undo reaches it. With
+ * memory off there are none.
  */
-const memoryToolsLayer = (config: { readonly runtime: string; readonly memory: "on" | "off" }) => {
+const memoryToolsLayer = (
+  config: { readonly runtime: string; readonly memory: "on" | "off"; readonly fakeMemory: string },
+  pageStore: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine>,
+) => {
   if (config.memory === "off") return Layer.empty;
   const store =
-    config.runtime === "fake" ? MemoryStoreFake : MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer));
+    config.runtime !== "fake"
+      ? MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))
+      : config.fakeMemory === "off"
+        ? MemoryStoreFake
+        : pageStore;
   return MemoryToolsLive.pipe(Layer.provide(Layer.mergeAll(store, MemoryProjectsLive, PolicyEngine.node)));
 };
 
@@ -358,7 +368,9 @@ const ServerLive = Layer.unwrap(
     const LocalGit = LocalGitToolsLive({ stagingFolder: join(dataDir, "charms", "local-git") }).pipe(
       Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)),
     );
-    const MemoryTooling = memoryToolsLayer(config);
+    // One layer, so the fake runtime's memory tools and the Memory page share one fake memory.
+    const PageStore = memoryPageStore(config);
+    const MemoryTooling = memoryToolsLayer(config, PageStore);
     // The memory engine (ADR 028): the bundled ai-memory, run beside the hub and stopped with it. Its
     // two keys stay in the data folder and reach only the engine's environment. Without an engine,
     // or one that fails its checksum, memory is off and everything else works.
@@ -390,7 +402,7 @@ const ServerLive = Layer.unwrap(
             // Settings › Your data › Start over (#948).
             HubReset.layer,
             fakePlays(config),
-            memoryPageLayer(config),
+            memoryPageLayer(config, PageStore),
           ),
         ),
       )

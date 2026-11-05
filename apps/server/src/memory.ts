@@ -155,7 +155,7 @@ export const MemoryPagesHandlers = HttpApiBuilder.group(HobbotsApi, "memoryPages
       restore: ({ payload }) =>
         Effect.gen(function* () {
           const scope = scopeOf(payload.scope);
-          yield* store.restore(YOU, scope, payload.path, payload.version);
+          yield* store.restore(YOU, scope, payload.path, payload.version, { _tag: "Any" });
           yield* lookNow;
           return yield* pageRead(scope, payload.path);
         }).pipe(Effect.catchTags({ MemoryUnavailable: notAnswering, MemoryConflict: changed })),

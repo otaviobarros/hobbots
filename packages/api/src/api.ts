@@ -43,6 +43,7 @@ import {
 import { ExportsGroup } from "./export.ts";
 import { GitHubGroup } from "./github.ts";
 import { HobGitHubAppGroup } from "./hob-github-app.ts";
+import { HobMemoryGroup } from "./hob-memory.ts";
 import { MemoryGroup } from "./memory.ts";
 import { MemoryPagesGroup } from "./memory-pages.ts";
 import { PermissionsGroup } from "./permissions.ts";
@@ -400,4 +401,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(ExportsGroup)
   .add(UsageGroup)
   .add(MemoryGroup)
-  .add(MemoryPagesGroup) {}
+  .add(MemoryPagesGroup)
+  .add(HobMemoryGroup) {}
