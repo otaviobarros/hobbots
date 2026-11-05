@@ -1,7 +1,6 @@
 import type { BackupState } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@hobbots/ui/components/dialog";
-import { Progress } from "@hobbots/ui/components/progress";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useActivity } from "../../api/activity.ts";
@@ -11,11 +10,9 @@ import { agentsQuery, archivedAgentsQuery, threadsQuery } from "../../api/querie
 import { formatAgo, formatList } from "../../lib/format.ts";
 import { hobState } from "../../lib/hob-state.ts";
 import { messages } from "./messages.ts";
+import { AllClear, Deleting, Failed } from "./start-over-steps.tsx";
 
 const copy = messages.startOver;
-
-/** The steps the deleting dialog lists, in the order the hub takes them. */
-const STEPS = ["signIns", "stopping", "deleting"] as const satisfies ReadonlyArray<StartOverStep>;
 
 /** The words of a refusal: the hub's reason when it gave one. */
 const reasonOf = (error: Error | null) =>
@@ -92,7 +89,8 @@ function StartOverDialog({ onClose }: { onClose: () => void }) {
         aria-busy={busy}
         onEscapeKeyDown={(event) => busy && event.preventDefault()}
         onPointerDownOutside={(event) => busy && event.preventDefault()}
-        className="max-h-[calc(100vh-32px)] max-w-[520px] animate-hb-in gap-3.5 overflow-y-auto rounded-card border-0 bg-ground p-5 shadow-sheet"
+        variant="sheet"
+        className="max-h-[calc(100vh-32px)] max-w-[520px]"
       >
         {startOver.isError ? (
           <Failed reason={reasonOf(startOver.error)} onClose={onClose} />
@@ -115,8 +113,8 @@ function Confirm({ onClose, onDelete }: { onClose: () => void; onDelete: () => v
   const running = backupRunning(backup.data?.state);
   return (
     <>
-      <DialogTitle className="m-0 font-heading text-heading font-bold">{copy.title}</DialogTitle>
-      <DialogDescription id="start-over-lead" className="m-0 text-ui text-text-secondary">
+      <DialogTitle variant="heading">{copy.title}</DialogTitle>
+      <DialogDescription id="start-over-lead" variant="lead">
         {copy.lead}
       </DialogDescription>
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -244,61 +242,3 @@ const backupLine = (state: BackupState | undefined, running: boolean, destinatio
   if (state?._tag === "Done") return copy.backupDone({ when: formatAgo(state.finishedAt) });
   return destination === "" ? copy.backupNoFolder : copy.backupNone;
 };
-
-/** Each step with its mark: done, under way, or still to come. */
-function Deleting({ step }: { step: StartOverStep }) {
-  const at = STEPS.indexOf(step as (typeof STEPS)[number]);
-  return (
-    <>
-      <DialogTitle className="m-0 font-heading text-heading font-bold">{copy.deletingTitle}</DialogTitle>
-      <DialogDescription id="start-over-lead" className="m-0 text-ui text-text-secondary">
-        {copy.deletingNote}
-      </DialogDescription>
-      <Progress value={at} max={STEPS.length} aria-label={copy.deletingTitle} />
-      <ul role="status" className="m-0 flex list-none flex-col gap-1.5 p-0 text-ui">
-        {STEPS.map((each, index) => (
-          <li key={each} className={index <= at ? "flex gap-2 text-text" : "flex gap-2 text-label"}>
-            <span aria-hidden className={index < at ? "w-4 text-mint" : "w-4 text-label"}>
-              {index < at ? "✓" : index === at ? "·" : "○"}
-            </span>
-            {index === at ? `${copy.steps[each]}…` : copy.steps[each]}
-          </li>
-        ))}
-      </ul>
-    </>
-  );
-}
-
-/** The hub answers again, empty: Start fresh opens the app at its root, which is Welcome on a new hub. */
-function AllClear() {
-  return (
-    <>
-      <span aria-hidden className="grid size-9 place-items-center rounded-full bg-mint/18 text-[18px] text-mint">
-        ✓
-      </span>
-      <DialogTitle className="m-0 font-heading text-heading font-bold">{copy.doneTitle}</DialogTitle>
-      <DialogDescription id="start-over-lead" className="m-0 text-ui text-text-secondary">
-        {copy.doneBody}
-      </DialogDescription>
-      <div className="flex justify-end">
-        <Button onClick={() => globalThis.location.assign(`${globalThis.location.origin}/`)}>{copy.startFresh}</Button>
-      </div>
-    </>
-  );
-}
-
-function Failed({ reason, onClose }: { reason: string; onClose: () => void }) {
-  return (
-    <>
-      <DialogTitle className="m-0 font-heading text-heading font-bold">{copy.title}</DialogTitle>
-      <DialogDescription id="start-over-lead" role="alert" className="m-0 text-ui text-rose">
-        {copy.failed({ reason })}
-      </DialogDescription>
-      <div className="flex justify-end">
-        <Button variant="outline" onClick={onClose}>
-          {copy.close}
-        </Button>
-      </div>
-    </>
-  );
-}
