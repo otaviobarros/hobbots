@@ -1,6 +1,6 @@
 # packages/memory
 
-Memory for hobs, as [ADR 028](../../docs/decisions/028-memory.md) decides it. This package is the only code that knows [ai-memory](https://github.com/akitaonrails/ai-memory), the engine Hobbots bundles. Today it holds the engine's process; the `MemoryStore` adapter joins it.
+Memory for hobs, as [ADR 028](../../docs/decisions/028-memory.md) decides it. This package is the only code that knows [ai-memory](https://github.com/akitaonrails/ai-memory), the engine Hobbots bundles. It holds the engine's process and `MemoryStore` on top of it, plus an in-memory `MemoryStore` for tests.
 
 ## The engine
 
@@ -13,7 +13,17 @@ Memory for hobs, as [ADR 028](../../docs/decisions/028-memory.md) decides it. Th
 
 A hob never reaches the engine: it has no address or key for it, and the OS sandbox keeps its commands from reading the engine's environment.
 
+## The store
+
+- `MemoryStoreAiMemory` provides `MemoryStore` (from `@hobbots/agents`) on the running engine, through `MemoryEngine`'s endpoint. While the engine is not running, every call fails with `MemoryUnavailable`.
+- `src/store/scopes.ts` maps scopes to ai-memory projects in the installation's one workspace: `hob-<hob id>` for a hob's own memory and `repo-<identity>-<hash>` for a project. `Everyone` maps to ai-memory's reserved `_global`. A scope with no project yet is empty.
+- A hob's searches and writes go over `/mcp` with the trusted-proxy bearer and `X-Memory-Actor-User: hob-<hob id>`, so ai-memory stamps the hob in each page's `last_modified_by`. Your edits and every read use the root bearer. ai-memory records the author only in a page's frontmatter, so `history` names the author of the latest version alone.
+- Writes take ai-memory's preconditions (`create_only`, `expected_page_id`), and a lost one is a `MemoryConflict`. ai-memory removes a page's versions when it deletes it, so `forget` answers the Git revision from before the delete, and `restore` takes either that or a version id.
+- Every request is decoded with `Schema`. A refusal that is not a conflict or a missing scope reads as an outage, never as data.
+- `@hobbots/memory/testing` exports `MemoryStoreFake`, which keeps pages in memory and can be taken down.
+
 ## Tests
 
 - `test/engine.test.ts` runs the supervisor against a stand-in binary: the environment it gets, restarts after a crash and a hang, a settings change, a failed checksum.
 - `test/engine-contract.test.ts` runs every route and setting Hobbots relies on against the real binary: both bearers from the environment, the hob a proxy call asserts, `/mcp`, `/hook/batch` and its ingest keys, `/api/v1`, `/admin` and a backup with no credential inside. It needs `fetch-engine` first; with `HOBBOTS_MEMORY_CONTRACT=1`, as in CI, it fails without the engine instead of skipping.
+- `test/store-contract.ts` holds the `MemoryStore` tests every engine passes. `test/store-fake.test.ts` runs them on the fake, and `test/store-ai-memory.test.ts` runs them on the real engine, each case on fresh data, with a second run that restarts the engine on the same data.
