@@ -67,6 +67,12 @@ export interface MemoryEngineOptions {
 /** Why one run of the engine ended. */
 class EngineRunEnded extends Data.TaggedError("EngineRunEnded")<{ readonly stable: boolean }> {}
 
+/** A start that never got the engine running: its config, its port or its process could not be had. */
+class EngineLaunchFailed extends Data.TaggedError("EngineLaunchFailed")<{ readonly cause: unknown }> {}
+
+/** The binary failed its check before a start, so memory stays off until the hub starts again. */
+class EngineTurnedOff extends Data.TaggedError("EngineTurnedOff")<{ readonly reason: MemoryEngineOffReason }> {}
+
 /** Missed health checks in a row after which a running engine counts as hung and is restarted. */
 const MISSED_CHECKS = 3;
 
@@ -117,6 +123,7 @@ export const engineArguments = (port: number, memoryDir: string, configFile: str
 
 interface Status {
   readonly state: MemoryEngineHealth["state"];
+  readonly offReason: MemoryEngineOffReason | null;
   readonly restarts: number;
   readonly lastExit: MemoryEngineExit | null;
   readonly runningSince: string | null;
@@ -161,18 +168,17 @@ export class MemoryEngine extends Context.Service<MemoryEngine, MemoryEngineShap
           yield* Effect.logWarning(`Memory is off: ${binary.detail}`);
           return offEngine(binary._tag === "Missing" ? "missing" : "checksum");
         }
-        return yield* run(binary.path, options);
+        return yield* run(options);
       }),
     );
 }
 
-const run = (binary: string, options: MemoryEngineOptions) =>
+const run = (options: MemoryEngineOptions) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const http = yield* HttpClient.HttpClient;
     const memoryDir = join(options.dataDir, "memory");
     const configFile = join(memoryDir, "config.toml");
-    mkdirSync(memoryDir, { recursive: true });
 
     const startTimeout = Duration.fromInputUnsafe(options.startTimeout ?? "30 seconds");
     const stableAfter = Duration.toMillis(Duration.fromInputUnsafe(options.stableAfter ?? "1 minute"));
@@ -180,6 +186,7 @@ const run = (binary: string, options: MemoryEngineOptions) =>
     const settings = yield* Ref.make(options.settings ?? NO_MODEL);
     const status = yield* Ref.make<Status>({
       state: "starting",
+      offReason: null,
       restarts: 0,
       lastExit: null,
       runningSince: null,
@@ -200,7 +207,32 @@ const run = (binary: string, options: MemoryEngineOptions) =>
       // The rendered config never holds one; this guards against a future setting that would.
       if (configHoldsCredential(text, options.keys))
         return yield* Effect.die("The memory engine's config held a credential");
-      writeFileSync(configFile, text, { mode: 0o600 });
+      yield* Effect.try({
+        try: () => {
+          mkdirSync(memoryDir, { recursive: true });
+          writeFileSync(configFile, text, { mode: 0o600 });
+        },
+        catch: (cause) => new EngineLaunchFailed({ cause }),
+      });
+    });
+
+    /**
+     * The binary is checked again before every start, not only the first: one replaced or damaged
+     * while the hub runs must never be started with the bearers. A failed check turns memory off.
+     */
+    const checkBinary = Effect.gen(function* () {
+      const checked = yield* verifyEngine(options.folder);
+      if (checked._tag === "Verified") return checked.path;
+      const reason: MemoryEngineOffReason = checked._tag === "Missing" ? "missing" : "checksum";
+      yield* Ref.update(status, (current) => ({
+        ...current,
+        state: "off" as const,
+        offReason: reason,
+        runningSince: null,
+        endpoint: Option.none(),
+      }));
+      yield* Effect.logWarning(`Memory is off: ${checked.detail}`);
+      return yield* new EngineTurnedOff({ reason });
     });
 
     /** One start of the engine, until it exits, stops answering or is asked to restart. */
@@ -208,8 +240,9 @@ const run = (binary: string, options: MemoryEngineOptions) =>
       Effect.gen(function* () {
         // A restart asked for before this start is answered by it: it reads the settings anew.
         restartNow = Deferred.makeUnsafe<void>();
+        const binary = yield* checkBinary;
         yield* writeConfig;
-        const port = yield* freePort.pipe(Effect.orDie);
+        const port = yield* freePort.pipe(Effect.mapError((cause) => new EngineLaunchFailed({ cause })));
         const url = `http://127.0.0.1:${port}`;
         const handle = yield* spawner
           .spawn(
@@ -221,7 +254,7 @@ const run = (binary: string, options: MemoryEngineOptions) =>
               forceKillAfter: "5 seconds",
             }),
           )
-          .pipe(Effect.orDie);
+          .pipe(Effect.mapError((cause) => new EngineLaunchFailed({ cause })));
         // The engine logs to its data folder too; the last lines name why a start failed.
         const lastLines: Array<string> = [];
         yield* handle.all.pipe(
@@ -310,17 +343,33 @@ const run = (binary: string, options: MemoryEngineOptions) =>
     ]);
     // A failed or short run restarts with the growing backoff; a stable one, or a requested
     // restart, starts again at once with the backoff reset.
+    // A start that could not launch counts as a short run, so it is tried again with the backoff.
+    const launchFailed = (failed: EngineLaunchFailed) =>
+      Effect.gen(function* () {
+        const at = yield* now;
+        yield* Ref.update(status, (current) => ({
+          ...current,
+          state: "restarting" as const,
+          restarts: current.restarts + 1,
+          lastExit: { code: null, at },
+        }));
+        yield* Effect.logWarning(`Memory engine could not start; trying again. ${String(failed.cause)}`);
+        return yield* new EngineRunEnded({ stable: false });
+      });
+    // A binary that fails its check ends supervision: memory stays off until the hub starts again.
     const supervise = runOnce.pipe(
+      Effect.catchTag("EngineLaunchFailed", launchFailed),
       Effect.catchTag("EngineRunEnded", (ended) => (ended.stable ? Effect.void : Effect.fail(ended))),
-      Effect.retry(backoff),
+      Effect.retry({ schedule: backoff, while: (error) => error._tag === "EngineRunEnded" }),
       Effect.forever,
+      Effect.catchTag("EngineTurnedOff", () => Effect.void),
     );
     yield* Effect.forkScoped(supervise);
 
     return MemoryEngine.of({
       health: Effect.map(Ref.get(status), (current) => ({
         state: current.state,
-        offReason: null,
+        offReason: current.offReason,
         version: AI_MEMORY_VERSION,
         restarts: current.restarts,
         lastExit: current.lastExit,

@@ -114,7 +114,7 @@ const project = (name: string) => `/api/v1/workspaces/${MEMORY_WORKSPACE}/projec
 
 describe.runIf(enabled)(`the bundled ai-memory ${AI_MEMORY_VERSION}`, () => {
   // covers ADR 028
-  it("[TC-GEN-163] serves the hub's data folder from the hub's config, which holds no credential", async () => {
+  it("[TC-GEN-183] serves the hub's data folder from the hub's config, which holds no credential", async () => {
     const health = await fetch(`${endpoint.url}/healthz`);
     expect(await health.json()).toEqual({ status: "ok" });
     const memory = join(dataDir, "memory");
@@ -126,7 +126,7 @@ describe.runIf(enabled)(`the bundled ai-memory ${AI_MEMORY_VERSION}`, () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-164] takes the root bearer from AI_MEMORY_AUTH_TOKEN and attributes it to you", async () => {
+  it("[TC-GEN-184] takes the root bearer from AI_MEMORY_AUTH_TOKEN and attributes it to you", async () => {
     expect(await json({ as: "root" }, "/identity")).toMatchObject({
       version: AI_MEMORY_VERSION,
       level: "root",
@@ -141,7 +141,7 @@ describe.runIf(enabled)(`the bundled ai-memory ${AI_MEMORY_VERSION}`, () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-165] takes the proxy bearer from AI_MEMORY_AUTH__ACTOR_PROXY_BEARER_TOKEN and acts as the asserted hob", async () => {
+  it("[TC-GEN-185] takes the proxy bearer from AI_MEMORY_AUTH__ACTOR_PROXY_BEARER_TOKEN and acts as the asserted hob", async () => {
     expect(await json({ as: "hob", hob: "h1" }, "/identity")).toMatchObject({ level: "user", operator: "user:hob-h1" });
     // The proxy bearer without an asserted actor is refused, never treated as root.
     const anonymous = await call({ as: "bearer", bearer: Redacted.value(keys.proxy) }, "/identity");
@@ -149,7 +149,7 @@ describe.runIf(enabled)(`the bundled ai-memory ${AI_MEMORY_VERSION}`, () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-166] writes and searches pages over /mcp as the hob that the proxy asserts", async () => {
+  it("[TC-GEN-186] writes and searches pages over /mcp as the hob that the proxy asserts", async () => {
     await mcp("h1", "initialize", {
       protocolVersion: "2025-06-18",
       capabilities: {},
@@ -180,7 +180,7 @@ describe.runIf(enabled)(`the bundled ai-memory ${AI_MEMORY_VERSION}`, () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-167] captures events through /hook/batch and skips a replayed ingest key", async () => {
+  it("[TC-GEN-187] captures events through /hook/batch and skips a replayed ingest key", async () => {
     const event = (name: string, key: string, body: Record<string, unknown>) => ({
       url: `/hook?event=${name}&agent=hobbots&workspace=${MEMORY_WORKSPACE}&project=hob-h2&extension=hobbots&source_event=${name}&ingest_key=${key}`,
       body: { session_id: "thread-1", cwd: dataDir, ...body },
@@ -216,7 +216,7 @@ describe.runIf(enabled)(`the bundled ai-memory ${AI_MEMORY_VERSION}`, () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-168] reads pages, history and search over /api/v1", async () => {
+  it("[TC-GEN-188] reads pages, history and search over /api/v1", async () => {
     const pages = await json({ as: "root" }, `${project("hob-h1")}/pages`);
     expect(pages).toEqual(expect.arrayContaining([expect.objectContaining({ path: "notes/tests.md" })]));
     const page = await json({ as: "root" }, `${project("hob-h1")}/pages/notes/tests.md`);
@@ -229,7 +229,7 @@ describe.runIf(enabled)(`the bundled ai-memory ${AI_MEMORY_VERSION}`, () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-169] edits pages over /admin as you, and backs up with no credential inside", async () => {
+  it("[TC-GEN-189] edits pages over /admin as you, and backs up with no credential inside", async () => {
     const write = { workspace: MEMORY_WORKSPACE, project: "hob-h1", path: "notes/tests.md" };
     await json({ as: "root" }, "/admin/write-page", {
       body: { ...write, body: "# Tests\n\nRun pnpm check, then pnpm test:pg." },

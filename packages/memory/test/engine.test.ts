@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
@@ -153,7 +153,7 @@ describe("the engine's config file", () => {
 
 describe("the supervised engine", () => {
   // covers ADR 028
-  it("[TC-GEN-158] starts the engine with only its bearers and basics in its environment, and stops it with the hub", async () => {
+  it("[TC-GEN-178] starts the engine with only its bearers and basics in its environment, and stops it with the hub", async () => {
     const before = { ...process.env };
     process.env.HOBBOTS_TEST_SECRET = "hub-only";
     let pid = 0;
@@ -195,7 +195,7 @@ describe("the supervised engine", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-159] starts a crashed engine again with a growing, capped backoff and reports it", async () => {
+  it("[TC-GEN-179] starts a crashed engine again with a growing, capped backoff and reports it", async () => {
     await withEngine({}, (engine, data) =>
       Effect.gen(function* () {
         yield* until(engine, (each) => each.state === "running");
@@ -218,7 +218,7 @@ describe("the supervised engine", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-160] starts an engine that stopped answering again", async () => {
+  it("[TC-GEN-180] starts an engine that stopped answering again", async () => {
     await withEngine({}, (engine, data) =>
       Effect.gen(function* () {
         yield* until(engine, (each) => each.state === "running");
@@ -235,7 +235,7 @@ describe("the supervised engine", () => {
   }, 20_000);
 
   // covers ADR 028
-  it("[TC-GEN-161] restarts only the engine's process when its settings change", async () => {
+  it("[TC-GEN-181] restarts only the engine's process when its settings change", async () => {
     await withEngine({}, (engine, data) =>
       Effect.gen(function* () {
         yield* until(engine, (each) => each.state === "running");
@@ -256,7 +256,7 @@ describe("the supervised engine", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-162] turns memory off, not the hub, when the binary fails its checksum or is missing", async () => {
+  it("[TC-GEN-182] turns memory off, not the hub, when the binary fails its checksum or is missing", async () => {
     const folder = await standInEngine();
     folders.push(folder);
     writeFileSync(join(folder, ENGINE_CHECKSUM), `${"0".repeat(64)}  ai-memory\n`);
@@ -270,6 +270,51 @@ describe("the supervised engine", () => {
     );
     await withEngine({ folder: tempFolder("hobbots-no-engine-") }, (engine) =>
       Effect.map(engine.health, (health) => expect(health).toMatchObject({ state: "off", offReason: "missing" })),
+    );
+  });
+
+  // covers ADR 028
+  it("[TC-GEN-190] checks the binary again before a restart and turns memory off when it was replaced", async () => {
+    const folder = await standInEngine();
+    folders.push(folder);
+    await withEngine({ folder }, (engine, data) =>
+      Effect.gen(function* () {
+        yield* until(engine, (each) => each.state === "running");
+        const [first] = startsOf(data);
+        // The binary changes under a running hub, then the engine exits.
+        writeFileSync(join(folder, ENGINE_BINARY), "#!/bin/sh\necho replaced\n");
+        process.kill(first?.pid ?? 0, "SIGKILL");
+        const off = yield* until(engine, (each) => each.state === "off");
+        expect(off.offReason).toBe("checksum");
+        expect(Option.isNone(yield* engine.endpoint)).toBe(true);
+        yield* Effect.sleep("300 millis");
+        // The replaced binary was never started.
+        expect(startsOf(data)).toHaveLength(1);
+      }),
+    );
+  });
+
+  // covers ADR 028, STD-EFFECT-002
+  it("[TC-GEN-191] tries a start that could not launch again with the backoff, and recovers", async () => {
+    await withEngine({}, (engine, data) =>
+      Effect.gen(function* () {
+        yield* until(engine, (each) => each.state === "running");
+        const [first] = startsOf(data);
+        // The config file cannot be written, so the next starts fail before the process launches.
+        const config = join(data, "memory", "config.toml");
+        rmSync(config);
+        mkdirSync(config);
+        process.kill(first?.pid ?? 0, "SIGKILL");
+        const failing = yield* until(engine, (each) => each.restarts >= 3);
+        expect(failing.state).toBe("restarting");
+        expect(failing.lastExit?.code).toBeNull();
+        expect(startsOf(data)).toHaveLength(1);
+
+        rmSync(config, { recursive: true });
+        const back = yield* until(engine, (each) => each.state === "running");
+        expect(back.restarts).toBeGreaterThanOrEqual(3);
+        expect(startsOf(data)).toHaveLength(2);
+      }),
     );
   });
 });
