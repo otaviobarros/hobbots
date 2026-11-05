@@ -47,19 +47,22 @@ export type ContinueReply = {
 
 /**
  * One message; `focused` marks the one a search result opened. A reply shows `children` under its
- * steps, such as the approval cards its tool calls are waiting on.
+ * steps, such as the approval cards its tool calls are waiting on, and `after` under its text, such
+ * as what it saved to memory.
  */
 export function MessageRow({
   message,
   hob,
   focused = false,
   resume,
+  after,
   children,
 }: {
   message: Message;
   hob: Agent;
   focused?: boolean;
   resume?: ContinueReply | undefined;
+  after?: ReactNode;
   children?: ReactNode;
 }) {
   const id = messageElementId(message.id);
@@ -73,7 +76,7 @@ export function MessageRow({
   }
 
   return (
-    <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume}>
+    <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume} after={after}>
       {children}
     </ReplyRow>
   );
@@ -85,6 +88,7 @@ function ReplyRow({
   id,
   focused,
   resume,
+  after,
   children,
 }: {
   message: Message;
@@ -92,6 +96,7 @@ function ReplyRow({
   id: string;
   focused: boolean;
   resume: ContinueReply | undefined;
+  after: ReactNode;
   children: ReactNode;
 }) {
   const streaming = isInProgress(message.status);
@@ -124,6 +129,7 @@ function ReplyRow({
         ) : (
           <ReplyMarkdown content={message.content} streaming={streaming} caret={writing} />
         )}
+        {after}
         {message.status === "stopping" && (
           <span role="status" className="flex items-center gap-2 text-detail text-lantern">
             <span aria-hidden className="size-[5px] animate-hb-blink rounded-dot bg-lantern" />

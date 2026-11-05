@@ -132,6 +132,11 @@ export class MemorySave extends Schema.Class<MemorySave>("MemorySave")({
   /** The version memory answered, once saved. */
   version: Schema.NullOr(MemoryVersion),
   ...MEMORY_CALL_ORIGIN,
+  /**
+   * When you undid it from its reply, which put back the version it replaced or, for a new page,
+   * removed it. Absent while it stands.
+   */
+  undoneAt: Schema.optionalKey(Schema.String),
 }) {}
 
 /** What a hob is told once a page is in its own memory. */

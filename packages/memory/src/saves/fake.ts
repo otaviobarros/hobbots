@@ -52,6 +52,17 @@ export const makeMemorySavesFake = () => {
         return Option.some({ value: settled, entries: [journal({ _tag: "MemorySaveChanged", save: settled })] });
       }),
     unsent: Effect.sync(() => saves.filter((save) => save.state === "sending" || save.state === "queued")),
+    find: (id) => Effect.sync(() => saves.find((save) => save.id === id) ?? null),
+    inThread: (threadId) => Effect.sync(() => saves.filter((save) => save.threadId === threadId)),
+    markUndone: (id, at) =>
+      Effect.sync(() => {
+        const index = saves.findIndex((stored) => stored.id === id);
+        const stored = saves[index];
+        if (stored === undefined || stored.state !== "saved" || stored.undoneAt !== undefined) return Option.none();
+        const undone = new MemorySave({ ...stored, undoneAt: at, updatedAt: at });
+        saves[index] = undone;
+        return Option.some({ value: undone, entries: [journal({ _tag: "MemorySaveChanged", save: undone })] });
+      }),
   });
   return { service, saves: () => [...saves], journaled: () => [...journaled] };
 };

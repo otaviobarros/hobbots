@@ -6,16 +6,22 @@ import { makeJournaled } from "./journal.ts";
 import { beginMemoryCall, type MemoryCallRow, memoryCallColumns, memoryCallFields } from "./memory-calls.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
-type Row = MemoryCallRow;
+interface Row extends MemoryCallRow {
+  readonly undoneAt: string | null;
+}
 
 const decodeSave = Schema.decodeUnknownEffect(MemorySave);
 
-const fromRow = (row: Row) => decodeSave(memoryCallFields(row)).pipe(Effect.orDie);
+const fromRow = (row: Row) =>
+  decodeSave({
+    ...memoryCallFields(row),
+    ...(row.undoneAt === null ? {} : { undoneAt: row.undoneAt }),
+  }).pipe(Effect.orDie);
 
-const toRow = memoryCallColumns;
+const toRow = (save: MemorySave) => ({ ...memoryCallColumns(save), undone_at: save.undoneAt ?? null });
 
 /**
- * The SQL record of memory saves (migration 0055), keyed by hob, work and key. A save is recorded
+ * The SQL record of memory saves (migrations 0055 and 0058), keyed by hob, work and key. A save is recorded
  * and journaled in one transaction (ADR 028: the journal is the outbox), with the journal's head
  * taken first, so two calls with one key take turns on PostgreSQL and only the first is recorded.
  */
@@ -57,6 +63,31 @@ export const MemorySavesLive = Layer.effect(
           Effect.flatMap((rows) => Effect.forEach(rows, fromRow)),
         ),
       ),
+      find: (id) =>
+        sqlOrDie(
+          sql<Row>`SELECT * FROM memory_saves WHERE id = ${id}`.pipe(
+            Effect.flatMap(([row]) => (row === undefined ? Effect.succeed(null) : fromRow(row))),
+          ),
+        ),
+      inThread: (threadId) =>
+        sqlOrDie(
+          sql<Row>`SELECT * FROM memory_saves WHERE thread_id = ${threadId} ORDER BY created_at, id`.pipe(
+            Effect.flatMap((rows) => Effect.forEach(rows, fromRow)),
+          ),
+        ),
+      // One conditional update, so of two Undos racing for the same save only the first lands.
+      markUndone: (id, at) =>
+        journaled(1, () =>
+          Effect.gen(function* () {
+            const [row] = yield* sql<Row>`
+              UPDATE memory_saves SET undone_at = ${at}, updated_at = ${at}
+              WHERE id = ${id} AND state = 'saved' AND undone_at IS NULL
+              RETURNING *`;
+            if (row === undefined) return null;
+            const undone = yield* fromRow(row);
+            return { value: undone, events: [{ _tag: "MemorySaveChanged", save: undone }] as const };
+          }),
+        ),
     });
   }),
 );

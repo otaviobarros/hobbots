@@ -28,6 +28,7 @@ import { hubQuestionChanged } from "./hub-questions.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { applyMemoryChanged, refreshMemory } from "./memory-pages.ts";
+import { applyMemorySave, refreshMemorySaves } from "./memory-saves.ts";
 import { memorySharesChanged } from "./memory-shares.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
@@ -140,20 +141,11 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
-  // Nothing on screen shows a hob's saves to memory yet.
-  "MemorySaveRecorded",
-  "MemorySaveChanged",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
   {
-    readonly _tag:
-      | "TurnStopRequested"
-      | "TurnStopped"
-      | "TurnStarted"
-      | "TurnEnded"
-      | "MemorySaveRecorded"
-      | "MemorySaveChanged";
+    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -172,9 +164,8 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     return;
   }
   if (isUnapplied(event)) return;
-  // A hob asked to share a page, or a share moved: the Inbox, To review and memory read it again (ADR 028).
-  if (event._tag === "MemoryShareRequested" || event._tag === "MemoryShareChanged") {
-    void memorySharesChanged(queryClient);
+  if (isMemoryEvent(event)) {
+    applyMemoryEvent(queryClient, event);
     return;
   }
   switch (event._tag) {
@@ -213,6 +204,29 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     default:
       applyWorkEvent(queryClient, event);
       return;
+  }
+};
+
+type MemoryEvent = Extract<
+  HobbotsEvent,
+  { readonly _tag: "MemorySaveRecorded" | "MemorySaveChanged" | "MemoryShareRequested" | "MemoryShareChanged" }
+>;
+const MEMORY_EVENTS = new Set<HobbotsEvent["_tag"]>([
+  "MemorySaveRecorded",
+  "MemorySaveChanged",
+  "MemoryShareRequested",
+  "MemoryShareChanged",
+]);
+const isMemoryEvent = (event: HobbotsEvent): event is MemoryEvent => MEMORY_EVENTS.has(event._tag);
+
+/** A hob's save or share, as memory's lists show it (ADR 028). */
+const applyMemoryEvent = (queryClient: QueryClient, event: MemoryEvent) => {
+  // A save shows under the reply it was made from; a share, or a share that moved, has the Inbox,
+  // To review and memory read it again.
+  if (event._tag === "MemorySaveRecorded" || event._tag === "MemorySaveChanged") {
+    void applyMemorySave(queryClient, event.save);
+  } else {
+    void memorySharesChanged(queryClient);
   }
 };
 
@@ -331,6 +345,7 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         sync.cursor = ready.cursor;
         if (!ready.resumed) startGeneration(queryClient);
         void refreshMemory(queryClient);
+        void refreshMemorySaves(queryClient);
         setDeviceAccess(queryClient, "approved");
         report("live");
       } catch (error) {

@@ -30,6 +30,7 @@ import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobGitHubAppHandlers } from "./hob-github-app.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
+import { HobMemoryHandlers } from "./hob-memory.ts";
 import { Installation } from "./installation.ts";
 import { MemoryPagesHandlers } from "./memory.ts";
 import { MemoryHandlers } from "./memory-settings.ts";
@@ -229,6 +230,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     MemoryHandlers,
     MemoryPagesHandlers,
     MemorySharesHandlers,
+    HobMemoryHandlers,
   ]),
   Layer.provide(DeviceSessionLive),
 );

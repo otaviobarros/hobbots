@@ -32,6 +32,7 @@ const ICONS = {
   about: "M8 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM3 13.5c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5",
   project: "M2 4.5V12.5h12V6H8L6.5 4.5z",
   notice: "M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 5v3.5M8 11v.1",
+  book: "M3 2.5h8.5a1.5 1.5 0 0 1 1.5 1.5v9.5H4.5A1.5 1.5 0 0 1 3 12zM3 12a1.5 1.5 0 0 1 1.5-1.5H13M6 5.5h4M6 8h2.5",
 } as const;
 
 export type MemoryIconName = keyof typeof ICONS;
