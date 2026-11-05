@@ -10,6 +10,7 @@ import {
   Checkpoint,
   CheckpointId,
   type CheckpointKind,
+  collidingLabel,
   Delegation,
   descendantsOf,
   HandOff,
@@ -788,6 +789,9 @@ export const TaskRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const task = yield* workingTask(input.taskId);
           if (task.ownerId !== input.askerId) return yield* refuse("not-asker", "Only a Task's owner asks about it");
+          // An answer names its choice by label, so each must read differently (#740).
+          const same = collidingLabel(input.options ?? []);
+          if (same !== undefined) return yield* refuse("options-collide", `Two options are both "${same}"`);
           const [lead] = leadsAbove(task, yield* read.treeOf(task.rootId));
           const question = new Question({
             ...input,

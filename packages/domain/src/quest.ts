@@ -309,6 +309,20 @@ export const answerHow = (question: Question): string =>
       : ` (choice ${question.picked + 1} of ${question.options.length})`;
 
 /**
+ * A label two of `options` share once case is ignored, or undefined when each is its own (#740):
+ * an answer names its choice by label, so two that read the same could not be told apart.
+ */
+export const collidingLabel = (options: ReadonlyArray<{ readonly label: string }>): string | undefined => {
+  const seen = new Set<string>();
+  for (const option of options) {
+    const key = option.label.trim().toLowerCase();
+    if (seen.has(key)) return option.label;
+    seen.add(key);
+  }
+  return undefined;
+};
+
+/**
  * The index of the choice `answer` names, ignoring case and surrounding spaces, or null when it
  * names none: a lead that answers in words with a choice's label picked that choice.
  */
@@ -425,6 +439,7 @@ export const TaskRefusal = Schema.Literals([
   "not-delegated",
   "same-owner",
   "lineage-owner",
+  "options-collide",
 ]);
 export type TaskRefusal = typeof TaskRefusal.Type;
 

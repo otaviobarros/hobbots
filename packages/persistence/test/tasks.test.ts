@@ -638,12 +638,26 @@ describe("Task records", () => {
         yield* tasks.escalateQuestion(QuestionId.make("q-typed"), ALDRIC);
         yield* tasks.answerQuestion(QuestionId.make("q-typed"), { _tag: "User" }, "Light, with a dark hero", later);
         yield* tasks.answerQuestion(QuestionId.make("q-plain"), { _tag: "Lead", agentId: ALDRIC }, "Light", now);
+        // Two choices that read the same could not be told apart by their label, so the hub refuses them.
+        const colliding = yield* tasks
+          .askQuestion({
+            id: QuestionId.make("q-same"),
+            taskId: TaskId.make("build"),
+            askerId: ADA,
+            text: "Which theme?",
+            createdAt: now,
+            options: [options[0], { label: "LIGHT", consequence: "Brighter still." }].filter(
+              (each) => each !== undefined,
+            ),
+          })
+          .pipe(Effect.flip);
         const tree = Option.getOrThrow(yield* tasks.readTree(TaskId.make("campaign")));
-        return { asked, questions: tree.questions };
+        return { asked, colliding, questions: tree.questions };
       }),
     );
 
     expect(result.asked.value).toMatchObject({ options, recommended: 0, picked: null });
+    expect(result.colliding).toMatchObject({ _tag: "TaskRefused", reason: "options-collide" });
     expect(
       result.questions
         .toSorted((a, b) => a.id.localeCompare(b.id))

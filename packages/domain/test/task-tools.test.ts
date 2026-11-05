@@ -8,6 +8,7 @@ import {
   Checkpoint,
   CheckpointId,
   choicesText,
+  collidingLabel,
   DEFAULT_QUEST_LIMITS,
   FINISH_RULE,
   isTaskToolName,
@@ -143,6 +144,14 @@ describe("hob tools for Tasks and Quests", () => {
       "recommended needs options to recommend one of.",
     );
     expect(() => decode({ key: "k", question: "Which?", options: [choice(""), choice("B")] })).toThrow();
+    // An answer names its choice by label, so two labels that read the same are refused, case and all.
+    expect(() => decode({ key: "k", question: "Which?", options: [choice("Light"), choice("Light")] })).toThrow(
+      'Two options are both "Light". Give each option its own label.',
+    );
+    expect(() => decode({ key: "k", question: "Which?", options: [choice("Light"), choice("light")] })).toThrow(
+      'Two options are both "light".',
+    );
+    expect(collidingLabel([{ label: "Light" }, { label: "Dark" }])).toBeUndefined();
   });
 
   it("[TC-GEN-159] reads a question's choices and how it was answered, and an old question as one without (#740)", () => {
