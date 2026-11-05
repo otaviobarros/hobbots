@@ -127,6 +127,7 @@ const LINES: { [K in LaneItem["kind"]]: (item: Extract<LaneItem, { kind: K }>) =
   delete: (item) => `delete ${item.path}`,
   edit: (item) => `edit ${item.path}`,
   run: (item) => `run ${item.command.command}`,
+  step: (item) => `step ${item.outcome} ${item.text}`,
   beat: (item) => `beat ${item.text}`,
   refused: (item) => `refused ${item.what}: ${item.reason}`,
   folded: (item) => `folded ${item.marks.length}`,
@@ -244,6 +245,42 @@ describe("the Quest room's lanes", () => {
       "beat Page scaffolded",
       "now Running pnpm build",
     ]);
+    // In everyday words: no commands, the file it only read left out, and how each step went.
+    expect(lane.plain.map(line)).toEqual([
+      "step done Created page.astro",
+      "step done Deleted old.md",
+      "step done Built the project",
+      "step blocked Not allowed to delete dist",
+      "step failed Ran the tests",
+      `in Landing copy ← ${QUILL}`,
+      "beat Page scaffolded",
+      "now Building the project",
+    ]);
+  });
+
+  it("says a step that was stopped once, however often the hob tried it again", () => {
+    const denied = (id: string, second: number): ReplyStep => ({
+      id,
+      kind: "tool",
+      label: "Running rm -- scratch.txt && cat > check.sh <<'EOF'",
+      state: "denied",
+      call: { tool: "Bash", operation: "outside-folders", targets: ["/work/site"] },
+      reason: "Hobbots could not resolve the folder, so it stays closed.",
+      decidedBy: "policy",
+      startedAt: AT(second),
+    });
+    const records = activity(BUILD, {
+      steps: [denied("d1", 2), denied("d2", 3)],
+      commands: [command(BUILD, "ls -la", 1), command(BUILD, "bash check.sh; echo done", 4)],
+    });
+    const lane = laneOf(laneRoom(handedOn(), [records]), ADA);
+    expect(lane.plain.map(line)).toEqual([
+      "step blocked Stopped a step that could reach outside its folders",
+      "step done Ran check.sh",
+      `in Landing copy ← ${QUILL}`,
+      "beat Page scaffolded",
+      "now -",
+    ]);
   });
 
   it("shows the Task tool calls the hub refused in plain words, never the message meant for the hob", () => {
@@ -262,6 +299,8 @@ describe("the Quest room's lanes", () => {
     });
     const lane = laneOf(laneRoom(tree({ ...blackFriday(), refusals: [refused] }), []), QUILL);
     expect(lines(lane)).toEqual(["refused Completing the Task: work under it was still open"]);
+    // The hub keeping order is not news in everyday words: the hob goes on after it.
+    expect(lane.plain).toEqual([]);
     const odd = new RefusedCall({ ...refused, id: RefusedCallId.make("r2"), reason: "claim-stale" });
     const quiet = laneOf(laneRoom(tree({ ...blackFriday(), refusals: [odd] }), []), QUILL);
     expect(lines(quiet)).toEqual(["refused Completing the Task: "]);

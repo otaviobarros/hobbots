@@ -62,6 +62,9 @@ export const messages = {
   folded: ({ count }: { count: number }) => `+${formatCount(count)} more`,
   foldedLabel: ({ count }: { count: number }) =>
     plural(count, { one: "Show 1 earlier step", other: `Show ${formatCount(count)} earlier steps` }),
+  /** A finished Quest's lane folds to its results; this opens the rest. */
+  showSteps: ({ count }: { count: number }) =>
+    plural(count, { one: "Show the 1 step", other: `Show the ${formatCount(count)} steps` }),
   handOut: ({ label, name }: { label: string; name: string }) => `${label} → ${name}`,
   handIn: ({ label, name }: { label: string; name: string }) => `← ${label} from ${name}`,
   briefed: ({ names }: { names: string }) => `Briefed ${names}`,

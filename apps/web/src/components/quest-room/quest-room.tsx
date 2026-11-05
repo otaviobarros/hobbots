@@ -17,10 +17,12 @@ import { LaneNotes } from "../steer-receipt/lane-notes.tsx";
 import { WorkbenchDock } from "../workbench/workbench-dock.tsx";
 import { TaskCards } from "./lane-task.tsx";
 import { messages } from "./messages.ts";
+import { RoomFinished } from "./room-finished.tsx";
 import { RoomHeader } from "./room-header.tsx";
 import { litTask } from "./room-model.ts";
 import { type RoomMoves, type RoomView, useRoomMoves } from "./room-search.ts";
 import type { RoomWidth } from "./use-chat-fold.ts";
+import { useTechnicalSteps } from "./use-technical-steps.ts";
 
 /**
  * The Quest room beside the chat (ADR 027): a header with Close room, the Quest's title, its
@@ -130,6 +132,7 @@ function OpenRoom({
   const lanes = useLaneJump(pick);
   const actOn = useLaneSlots({ hobs, pins, view, moves });
   const rows = roomRows(tree);
+  const technical = useTechnicalSteps();
   return (
     <section
       aria-label={messages.label({ title: taskTitle(top) })}
@@ -143,6 +146,12 @@ function OpenRoom({
         width={width}
         headingRef={headingRef}
         onClose={onClose}
+        technical={technical}
+      />
+      <RoomFinished
+        tree={tree}
+        onChanges={() => moves.show(top.id, "changes")}
+        onFiles={() => moves.show(top.id, "files")}
       />
       <QuestLanes
         room={room}
@@ -152,6 +161,8 @@ function OpenRoom({
         flashing={lanes.flashing}
         onFlashed={lanes.flashed}
         reads={reads}
+        technical={technical.on}
+        finished={top.state === "completed"}
         slots={(lane) => {
           // A failed step waits on you in its owner's lane too, so acting covers the hob's steps.
           const owned = rows.filter((row) => row.task.ownerId === lane.hobId).map((row) => row.task);

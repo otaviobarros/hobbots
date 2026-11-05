@@ -124,13 +124,13 @@
   --spacing-room-chat: 360px;
   --spacing-room-chat-narrow: 300px;
   --spacing-room-rail: 52px;
-  --spacing-lane-min: 220px;
+  --spacing-lane-min: 320px;
   --spacing-dock: 340px;
   --spacing-chat-min: 360px;
   --spacing-measure: 70ch;
   --spacing-bubble-max: 460px;
   --spacing-work-max: 604px;
-  --spacing-lane: 220px;
+  --spacing-lane: 320px;
   --spacing-column-max: 560px;
   --spacing-form-max: 760px;
   --spacing-home-max: 880px;

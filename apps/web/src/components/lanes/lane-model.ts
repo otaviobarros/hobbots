@@ -14,6 +14,7 @@ import {
   type TaskId,
   type TaskTree,
 } from "@hobbots/domain";
+import { blockedLine, changeLine, commandLine, type StepOutcome, stepDoing } from "../plain-words/plain-words.ts";
 import { type RoomStatus, roomRows, roomStatus } from "../quest/control-room.ts";
 import { questionForYou, taskTitle } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
@@ -51,15 +52,36 @@ export type LaneMark =
   | { readonly kind: "delete"; readonly key: string; readonly path: string }
   | { readonly kind: "run"; readonly key: string; readonly command: CommandRecord };
 
+/** Something the hob did, in everyday words in place of a mark (ADR 027), with how it went. */
+export interface LaneStep {
+  readonly kind: "step";
+  readonly key: string;
+  readonly text: string;
+  readonly outcome: StepOutcome;
+}
+
+/** What folds into a count: marks, or the steps that stand for them in everyday words. */
+export type LaneFoldable = LaneMark | LaneStep;
+
 /** What a lane shows, in its order. */
 export type LaneItem =
   | LaneMark
+  | LaneStep
   /** A milestone, finding or report the hob made, or a finding the hub made about its Task. */
   | { readonly kind: "beat"; readonly key: string; readonly text: string }
-  /** A tool call that was refused, with what the hob was told. */
-  | { readonly kind: "refused"; readonly key: string; readonly what: string; readonly reason: string }
+  /**
+   * A tool call that was refused, with what the hob was told. `plain` says it in everyday words, or
+   * is null for a refusal that is only the hub keeping order, which the hob goes on after.
+   */
+  | {
+      readonly kind: "refused";
+      readonly key: string;
+      readonly what: string;
+      readonly reason: string;
+      readonly plain: string | null;
+    }
   /** Older marks, folded into a count so a long lane stays readable. */
-  | { readonly kind: "folded"; readonly key: string; readonly marks: ReadonlyArray<LaneMark> }
+  | { readonly kind: "folded"; readonly key: string; readonly marks: ReadonlyArray<LaneFoldable> }
   | { readonly kind: "hand-out"; readonly key: string; readonly label: string; readonly to: AgentId }
   | { readonly kind: "hand-in"; readonly key: string; readonly label: string; readonly from: AgentId }
   | { readonly kind: "briefed"; readonly key: string; readonly members: ReadonlyArray<AgentId> }
@@ -67,7 +89,7 @@ export type LaneItem =
   | { readonly kind: "task"; readonly key: string; readonly title: string }
   | { readonly kind: "wait"; readonly key: string; readonly on: ReadonlyArray<LaneWaited> }
   /** A turn runs now: the step it is on, or null before it reported one. */
-  | { readonly kind: "now"; readonly key: string; readonly label: string | null }
+  | { readonly kind: "now"; readonly key: string; readonly label: string | null; readonly plain: string | null }
   | {
       readonly kind: "result";
       readonly key: string;
@@ -85,7 +107,10 @@ export interface Lane {
   readonly tasks: ReadonlyArray<Task>;
   readonly title: string;
   readonly status: RoomStatus;
+  /** What the hob did, with its exact marks: the technical steps. */
   readonly items: ReadonlyArray<LaneItem>;
+  /** The same in everyday words: no commands, reads left out, each refusal that matters once. */
+  readonly plain: ReadonlyArray<LaneItem>;
 }
 
 /** A lane, with the lanes of the party its hob leads when it leads a Quest of its own. */
@@ -195,7 +220,13 @@ const activityItems = (activity: AttemptActivity): ReadonlyArray<Timed> => {
   const steps = activity.steps.flatMap((step): ReadonlyArray<Timed> => {
     const at = step.startedAt ?? fallback;
     if (step.state === "denied") {
-      const item = { kind: "refused", key: `step-${step.id}`, what: step.label, reason: step.reason ?? "" } as const;
+      const item = {
+        kind: "refused",
+        key: `step-${step.id}`,
+        what: step.label,
+        reason: step.reason ?? "",
+        plain: blockedLine(step),
+      } as const;
       return [{ at, item }];
     }
     if (step.call?.operation !== "read-files") return [];
@@ -237,6 +268,7 @@ const refusalItems = (tree: TaskTree, task: Task): ReadonlyArray<Timed> =>
         key: `refusal-${each.id}`,
         what: TASK_TOOLS.find((tool) => tool.name === each.tool)?.label ?? each.tool,
         reason: refusalReason(each.reason),
+        plain: null,
       },
     }));
 
@@ -279,13 +311,17 @@ const briefedItems = (tree: TaskTree, unit: ReadonlyArray<Task>): ReadonlyArray<
  * moves into another Task's part of the lane.
  */
 export const foldMarks = (items: ReadonlyArray<LaneItem>, shown: number = SHOWN_MARKS): ReadonlyArray<LaneItem> => {
-  const isMark = (item: LaneItem): item is LaneMark =>
-    item.kind === "read" || item.kind === "edit" || item.kind === "delete" || item.kind === "run";
+  const isMark = (item: LaneItem): item is LaneFoldable =>
+    item.kind === "read" ||
+    item.kind === "edit" ||
+    item.kind === "delete" ||
+    item.kind === "run" ||
+    item.kind === "step";
   const marks = items.filter(isMark);
   const hidden = new Set<LaneItem>(marks.slice(0, Math.max(0, marks.length - shown)));
   if (hidden.size === 0) return items;
   const folded: Array<LaneItem> = [];
-  let fold: { kind: "folded"; key: string; marks: Array<LaneMark> } | null = null;
+  let fold: { kind: "folded"; key: string; marks: Array<LaneFoldable> } | null = null;
   for (const item of items) {
     if (item.kind === "task") fold = null;
     if (!isMark(item) || !hidden.has(item)) {
@@ -339,7 +375,12 @@ const nowItem = (tree: TaskTree, unit: ReadonlyArray<Task>, read: Reads): LaneIt
   if (running === undefined) return null;
   const activity = running.currentAttemptId === null ? undefined : read.of(running.currentAttemptId);
   const step = activity?.steps.findLast((each) => each.state === "running");
-  return { kind: "now", key: `now-${running.id}`, label: step?.label ?? null };
+  return {
+    kind: "now",
+    key: `now-${running.id}`,
+    label: step?.label ?? null,
+    plain: step === undefined ? null : stepDoing(step),
+  };
 };
 
 /**
@@ -353,6 +394,44 @@ const laneStatus = (tree: TaskTree, unit: ReadonlyArray<Task>, task: Task): Room
   if (status !== "needs-you") return status;
   return task.state === "waiting" ? "waiting" : "running";
 };
+
+/** One lane item in everyday words, or null for one a lane leaves out then. */
+const plainItem = (item: LaneItem): LaneItem | null => {
+  const step = (text: string, outcome: StepOutcome): LaneStep => ({ kind: "step", key: item.key, text, outcome });
+  switch (item.kind) {
+    case "read":
+      return null;
+    case "edit":
+      return step(changeLine(item.change.kind, item.path), "done");
+    case "delete":
+      return step(changeLine("deleted", item.path), "done");
+    case "run": {
+      const line = commandLine(item.command);
+      return line === null ? null : step(line.text, line.outcome);
+    }
+    case "refused":
+      return item.plain === null ? null : step(item.plain, "blocked");
+    case "now":
+      return { ...item, label: item.plain };
+    default:
+      return item;
+  }
+};
+
+/**
+ * A lane in everyday words (ADR 027): what the hob did without commands or the files it only read,
+ * and each refusal that matters once, however often the hob tried again.
+ */
+const plainItems = (items: ReadonlyArray<LaneItem>): ReadonlyArray<LaneItem> =>
+  items.reduce<Array<LaneItem>>((kept, each) => {
+    const item = plainItem(each);
+    if (item === null) return kept;
+    const last = kept[kept.length - 1];
+    if (item.kind === "step" && last?.kind === "step" && last.text === item.text && last.outcome === item.outcome)
+      return kept;
+    kept.push(item);
+    return kept;
+  }, []);
 
 /** Who a Task that has not ended waits on, or null when it waits on nobody. */
 const waitItem = (task: Task, rows: ReturnType<typeof roomRows>): LaneItem | null => {
@@ -389,6 +468,7 @@ const laneOf = (tree: TaskTree, hobId: AgentId, tasks: Owned, role: LaneRole, re
     title: taskTitle(task),
     status: laneStatus(tree, owned, task),
     items: now === null ? foldMarks(items) : [...foldMarks(items), now],
+    plain: foldMarks(plainItems(now === null ? items : [...items, now])),
   };
 };
 

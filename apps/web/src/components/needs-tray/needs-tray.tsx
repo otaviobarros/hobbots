@@ -4,7 +4,6 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { useDecideApproval } from "../../api/approvals.ts";
-import { operationLabel } from "../../lib/reply-steps.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { ApprovalActions } from "../approvals/approval-actions.tsx";
 import { decisionErrorText, expiryText } from "../approvals/approval-text.ts";
@@ -13,6 +12,7 @@ import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages as appCopy } from "../messages.ts";
+import { approvalAction } from "../plain-words/plain-words.ts";
 import { messages as questMessages } from "../quest/messages.ts";
 import { AnswerForm } from "../quest/question-card.tsx";
 import { type HobLookup, useHobLookup } from "../quest/use-work.ts";
@@ -117,8 +117,6 @@ const askerOf = (entry: TrayEntry) =>
       ? entry.item.recipientId
       : entry.waiting.question.askerId;
 
-const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
-
 /** What the item is called, the same as its card elsewhere. */
 const itemLabel = (entry: TrayEntry, asker: Hob): string => {
   if (entry.kind === "approval") return approvalCopy.asks({ name: asker.name });
@@ -127,8 +125,7 @@ const itemLabel = (entry: TrayEntry, asker: Hob): string => {
 };
 
 const titleOf = (entry: TrayEntry, asker: Hob): string => {
-  if (entry.kind === "approval")
-    return copy.approvalTitle({ name: asker.name, action: lowerFirst(operationLabel(entry.request.operation)) });
+  if (entry.kind === "approval") return copy.approvalTitle({ name: asker.name, action: approvalAction(entry.request) });
   return entry.kind === "stuck" ? copy.stuckTitle({ name: asker.name }) : copy.questionTitle({ name: asker.name });
 };
 

@@ -59,15 +59,18 @@ test("[TC-UX-209] a lane marks the files its hob changed and deleted, by their p
   const { url, aldric } = await questHub();
   await startRoom(page, url, aldric, "Make the shop badge in our green", "Make the shop badge");
 
-  // Aldric cleared the old badge before he delegated; Quill then made it again.
+  // Aldric cleared the old badge before he delegated; Quill then made it again. In everyday words a
+  // lane names the file and what happened to it.
   const aldricDid = lane(page, "Aldric").getByRole("list", { name: "What Aldric did" });
-  await expect(aldricDid.getByRole("listitem").filter({ hasText: "Deleted" })).toContainText("web/badge.png", {
-    timeout: 20_000,
-  });
+  await expect(aldricDid).toContainText("Deleted badge.png", { timeout: 20_000 });
   const quillDid = lane(page, "Quill").getByRole("list", { name: "What Quill did" });
-  await expect(quillDid.getByRole("listitem").filter({ hasText: "Edited" })).toContainText("web/badge.png", {
-    timeout: 20_000,
-  });
+  await expect(quillDid).toContainText(/(Created|Updated) badge\.png/, { timeout: 20_000 });
+  await expect(quillDid).not.toContainText("web/badge.png");
+
+  // The technical steps show each mark by its path in the hob's folder, never the whole path.
+  await page.getByRole("button", { name: "Show technical steps" }).click();
+  await expect(aldricDid.getByRole("listitem").filter({ hasText: "Deleted" })).toContainText("web/badge.png");
+  await expect(quillDid.getByRole("listitem").filter({ hasText: "Edited" })).toContainText("web/badge.png");
   await expect(quillDid).not.toContainText("/fake/shop");
 });
 
@@ -177,8 +180,27 @@ test("[TC-UX-214] a lane whose records could not be read says so and reads them 
   // Once the hub answers again, Try again brings the marks in and the alert goes.
   await page.unroute(activity);
   await alert.getByRole("button", { name: "Try again" }).click();
-  await expect(quill.getByRole("list", { name: "What Quill did" })).toContainText("web/badge.png", {
+  await expect(quill.getByRole("list", { name: "What Quill did" })).toContainText("badge.png", {
     timeout: 20_000,
   });
   await expect(alert).toBeHidden();
+});
+
+// covers UX-002
+test("[TC-UX-284] a finished Quest says so under the header and folds each lane to its result", async ({ page }) => {
+  const { url, aldric } = await questHub();
+  const room = await startRoom(page, url, aldric, "Wrap up the spec for the shop", "Wrap up the spec");
+
+  const finished = room.getByRole("region", { name: /^(Quest|Task) finished$/ });
+  await expect(finished).toContainText("Spec wrapped up", { timeout: 20_000 });
+  await expect(finished).toContainText(/took /);
+  await expect(finished.getByRole("button", { name: "See what changed" })).toBeVisible();
+
+  // Aldric's lane keeps its result and folds the rest, which opens in everyday words.
+  const did = lane(page, "Aldric").getByRole("list", { name: "What Aldric did" });
+  await expect(did).not.toContainText("SPEC.md");
+  await lane(page, "Aldric")
+    .getByRole("button", { name: /^Show the \d+ steps?$/ })
+    .click();
+  await expect(did).toContainText(/(Created|Updated) SPEC\.md/);
 });
