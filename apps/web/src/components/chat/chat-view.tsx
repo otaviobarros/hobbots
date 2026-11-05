@@ -384,7 +384,8 @@ export function ChatView({
         </div>
       </div>
 
-      <ArchiveToastViewport />
+      {/* Folded away beside the room, the chat leaves its toasts to the room's own place. */}
+      {inView && <ArchiveToastViewport />}
       <div className="flex-none px-6 pt-2 pb-5 @max-[480px]/chat:px-3 @max-[480px]/chat:pb-3">
         <div className="mx-auto flex w-full max-w-measure flex-col gap-2.5">
           {brainProblem !== null && (

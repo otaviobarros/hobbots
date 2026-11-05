@@ -29,13 +29,30 @@ test("[TC-IN-544] a member's failed Task waits in the Inbox and on the lead's ti
   const detail = page.getByRole("article", { name: "Failed task from Quill: Write the sale banner" });
   await expect(detail.getByRole("heading", { name: "Quill's task failed" })).toBeVisible();
   await expect(detail).toContainText("The rest of Aldric's quest goes on without it.");
-  await detail.getByRole("button", { name: "Retry" }).click();
-  // Retry takes the Task out of Needs you. The hub's event can land before the Retry answer does,
-  // and then the next entry takes the detail's place before "Sent back to Quill" ever shows, so the
-  // test waits on the entry leaving, which happens either way.
+  // The hub's answer to Retry is held until its event has taken the Task out of Needs you, so the
+  // event lands first. The toast still says it went back, and focus moves to the entry that takes
+  // its place rather than to the page (#988).
+  const retried = /\/api\/tasks\/[^/]+\/retry$/;
+  const held: Array<() => Promise<void>> = [];
+  await page.route(retried, async (route) => {
+    // The hub records the retry and sends its event; only its answer waits.
+    const response = await route.fetch();
+    held.push(() => route.fulfill({ response }));
+  });
+  await detail.getByRole("button", { name: "Retry" }).focus();
+  await page.keyboard.press("Enter");
   await expect(banner).toBeHidden({ timeout: 15_000 });
   await expect(detail).toBeHidden();
   await expect(page.getByRole("banner").getByText("1 waiting on you")).toBeVisible();
+  const next = list.getByRole("link", { name: /Schedule the sale email/ });
+  await expect(next).toBeFocused();
+  await expect.poll(() => held.length).toBe(1);
+  for (const answer of held.splice(0)) await answer();
+  await page.unroute(retried);
+  await expect(
+    page.getByRole("region", { name: /^Notifications/ }).getByText("Sent back to Quill for another try."),
+  ).toBeVisible();
+  await expect(next).toBeFocused();
 
   // The other opens in the Quest room beside Aldric's chat, where it can go to another hob.
   await list.getByRole("link", { name: /Schedule the sale email/ }).click();

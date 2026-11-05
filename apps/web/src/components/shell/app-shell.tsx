@@ -5,6 +5,7 @@ import { useHobbotsEvents } from "../../api/events.ts";
 import { useDeviceAccess } from "../../api/live.ts";
 import { ArchiveProvider } from "../archive/archive-context.tsx";
 import { useOpenRequests } from "../inbox/use-open-requests.ts";
+import { MoveOnProvider } from "../move-on/move-on.tsx";
 import { DevicePrompt } from "../pairing/device-prompt.tsx";
 import { Sidebar } from "../sidebar/sidebar.tsx";
 import { ConnectionBanner } from "./connection-banner.tsx";
@@ -77,7 +78,7 @@ export function AppShell() {
   );
 }
 
-/** Archiving for every page, aware of the hob and chat the address names. */
+/** Archiving and its toasts for every page, aware of the hob and chat the address names. */
 function ShellArchive({ children }: { children: React.ReactNode }) {
   const params = useParams({ strict: false }) as { hobId?: string; threadId?: string };
   return (
@@ -85,7 +86,7 @@ function ShellArchive({ children }: { children: React.ReactNode }) {
       hobId={params.hobId === undefined ? undefined : AgentId.make(params.hobId)}
       threadId={params.threadId === undefined ? undefined : ThreadId.make(params.threadId)}
     >
-      {children}
+      <MoveOnProvider>{children}</MoveOnProvider>
     </ArchiveProvider>
   );
 }
