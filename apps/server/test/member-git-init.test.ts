@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { CharmTools, type PromptRequest } from "@hobbots/agents";
 import { GIT_INIT_TOOL, GITHUB_PUSH_TOOL, type Task, type TaskTree } from "@hobbots/domain";
+import { waitToFind } from "@hobbots/domain/testing";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import {
@@ -11,7 +12,6 @@ import {
   project,
   promptsTo,
   ROOK,
-  retry,
   send,
   sharedDatabase,
   startHub,
@@ -32,12 +32,7 @@ const offered = (request: PromptRequest) => request.hubTools?.tools.map((tool) =
 
 /** The first prompt sent to `task`'s session: its member's brief, or its step's. */
 const firstPrompt = (requests: ReadonlyArray<PromptRequest>, task: Task) =>
-  retry(
-    Effect.suspend(() => {
-      const [found] = promptsTo(requests, task);
-      return found === undefined ? Effect.fail("not yet" as const) : Effect.succeed(found);
-    }),
-  );
+  waitToFind("the first prompt to the Task's session", () => promptsTo(requests, task)[0]);
 
 /** The step planned under `parent`. */
 const stepUnder = (tree: TaskTree, parent: Task) => tree.tasks.find((task) => task.parentId === parent.id);

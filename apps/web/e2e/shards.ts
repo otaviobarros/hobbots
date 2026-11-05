@@ -13,10 +13,35 @@ export type Durations = Readonly<Record<string, number>>;
 export const tagOf = (title: string): string => /^\[[^\]]+\]/.exec(title)?.[0] ?? title;
 
 /**
- * Deals the recorded tests out to `total` shards, longest first, each to the shard with the least
- * time so far. The same durations always give the same shards.
+ * The tags of the tests a spec file declares with a literal title, such as
+ * `test("[TC-CH-001] streams a turn", …)`. A title built from a template, such as
+ * `` `[TC-UX-${id}] …` ``, is left out: its test still runs, in the last shard.
  */
-export const planShards = (durations: Durations, total: number): ReadonlyArray<ReadonlyArray<string>> => {
+export const tagsInSource = (source: string): ReadonlyArray<string> =>
+  [...source.matchAll(/\btest(?:\.(?:only|skip|fixme|fail|slow))?\(\s*["'`](\[[^\]$`"']+\])/g)].map(
+    (match) => match[1] ?? "",
+  );
+
+// FNV-1a: a tag lands in the same shard on every machine and every run.
+const hashOf = (text: string): number => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193) >>> 0;
+  }
+  return hash;
+};
+
+/**
+ * Deals the recorded tests out to `total` shards, longest first, each to the shard with the least
+ * time so far. Each of `tags` with no recorded time yet goes to a shard picked by a hash of the
+ * tag, so new tests spread over every shard and a new test never moves another. The same
+ * durations and tags always give the same shards.
+ */
+export const planShards = (
+  durations: Durations,
+  total: number,
+  tags: ReadonlyArray<string> = [],
+): ReadonlyArray<ReadonlyArray<string>> => {
   const shards = Array.from({ length: total }, () => ({ load: 0, tags: [] as string[] }));
   const longestFirst = Object.entries(durations).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : 1));
   for (const [tag, duration] of longestFirst) {
@@ -24,6 +49,8 @@ export const planShards = (durations: Durations, total: number): ReadonlyArray<R
     lightest.load += duration;
     lightest.tags.push(tag);
   }
+  const unrecorded = [...new Set(tags)].filter((tag) => !Object.hasOwn(durations, tag)).sort();
+  for (const tag of unrecorded) shards[hashOf(tag) % total]?.tags.push(tag);
   return shards.map((shard) => shard.tags);
 };
 
@@ -39,16 +66,22 @@ export interface ShardFilter {
 }
 
 /**
- * Runs the tests planned for shard `current`. The last shard runs every test the others do not,
- * so a test with no recorded duration yet still runs once. With no recorded times at all, it
- * falls back to Playwright's own sharding by test count.
+ * Runs the tests planned for shard `current`, from the recorded `durations` and the `tags` found
+ * in the spec files. The last shard also runs every test the others do not, so a test whose tag
+ * could not be read from its source still runs once. With no recorded times at all, it falls back
+ * to Playwright's own sharding by test count.
  */
-export const shardFilter = (durations: Durations | undefined, current: number, total: number): ShardFilter => {
+export const shardFilter = (
+  durations: Durations | undefined,
+  current: number,
+  total: number,
+  tags: ReadonlyArray<string> = [],
+): ShardFilter => {
   if (!Number.isInteger(total) || total < 1 || !Number.isInteger(current) || current < 1 || current > total) {
     throw new Error(`A shard is current/total with 1 <= current <= total, not ${current}/${total}.`);
   }
   if (durations === undefined || Object.keys(durations).length === 0) return { shard: { current, total } };
-  const shards = planShards(durations, total);
+  const shards = planShards(durations, total, tags);
   if (current < total) return { grep: anyOf(shards[current - 1] ?? []) };
   const others = shards.slice(0, -1).flat();
   return others.length === 0 ? {} : { grepInvert: anyOf(others) };

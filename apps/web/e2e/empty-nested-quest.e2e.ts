@@ -82,7 +82,7 @@ test("[TC-OR-247] the quest sheet says a member's own Quest has no one brought i
       hubCall("wait_for", { key: "wait", tasks: ["$review.task_id"] }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
 

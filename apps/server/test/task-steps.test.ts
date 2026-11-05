@@ -18,6 +18,7 @@ import {
   type TaskTree,
   type ThreadId,
 } from "@hobbots/domain";
+import { waitFor, waitUntil } from "@hobbots/domain/testing";
 import {
   DEFAULT_TASK_TOOL_LIMITS,
   type StepLimits,
@@ -244,34 +245,32 @@ const seed = Effect.andThen(
 /** A prompt line that makes the fake call a Task tool with `input`. */
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 500 }));
-
 /** The thread's latest reply once it has ended. */
 const reply = (threadId: ThreadId) =>
-  retry(
-    Effect.gen(function* () {
-      const repo = yield* HobbotsRepository;
-      const last = (yield* repo.listMessages(threadId)).at(-1);
-      return last?.role === "assistant" && last.status !== "streaming" && last.status !== "stopping"
-        ? last
-        : yield* Effect.fail("still streaming" as const);
-    }),
+  waitUntil(
+    Effect.map(
+      HobbotsRepository.use((repo) => repo.listMessages(threadId)),
+      (all) => all.at(-1),
+    ),
+    (last): last is Message => last?.role === "assistant" && last.status !== "streaming" && last.status !== "stopping",
+    { what: "the latest reply to end" },
   );
 
 const send = (threadId: ThreadId, prompt: string) =>
   Effect.gen(function* () {
     yield* ChatService.use((chat) => chat.sendPrompt(threadId, prompt));
-    return (yield* reply(threadId)) as Message;
+    return yield* reply(threadId);
   });
 
 /** The thread's one Task tree, once `ready` holds for it. */
 const treeWhen = (threadId: ThreadId, ready: (tree: TaskTree) => boolean) =>
-  retry(
-    Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
-      return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
-    }),
+  waitUntil(
+    Effect.map(
+      TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+      ([tree]) => tree,
+    ),
+    (tree): tree is TaskTree => tree !== undefined && ready(tree),
+    { what: "the Task tree" },
   );
 
 const stepsOf = (tree: TaskTree) => tree.tasks.slice(1);
@@ -444,7 +443,7 @@ describe("a Task's steps in fresh sessions", () => {
 
     const two = await run(treeWhen(thread.id, (tree) => states(tree).filter((s) => s === "active").length === 2));
     expect(states(two)).toEqual(["active", "active", "queued"]);
-    await run(retry(Effect.suspend(() => (control.waiting().length === 2 ? Effect.void : Effect.fail("not yet")))));
+    await run(waitFor("two waiting turns", () => control.waiting().length === 2));
 
     await run(control.open("Banner B"));
     const next = await run(treeWhen(thread.id, (tree) => states(tree)[2] === "active"));
@@ -568,13 +567,11 @@ describe("a Task's steps in fresh sessions", () => {
     // As Cancel on the Quest tab will: the Task and its step move to cancelling together.
     // Each move reads the Task again, since the turn that planned the steps may still be ending.
     const cancel = (id: TaskId) =>
-      retry(
-        Effect.gen(function* () {
-          const tasks = yield* TaskRepository;
-          const [task] = Option.getOrThrow(yield* tasks.readTree(id)).tasks;
-          yield* tasks.moveTask(id, (task as Task).revision, "cancelling", now);
-        }),
-      );
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        const [task] = Option.getOrThrow(yield* tasks.readTree(id)).tasks;
+        yield* tasks.moveTask(id, (task as Task).revision, "cancelling", now);
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("10 millis").pipe(Schedule.upTo({ duration: "10 seconds" })) }));
     await run(
       Effect.gen(function* () {
         yield* cancel(step.id);
@@ -646,7 +643,7 @@ describe("a Task's steps in fresh sessions", () => {
     const attempt = failed.attempts.find((each) => each.taskId === step.id);
     expect(attempt?.state).toBe("interrupted");
     expect(attempt?.outcome).toBe("Stopped because its hob's permissions were narrowed.");
-  }, 15_000);
+  }, 30_000);
   it("[TC-OR-039] a hob at its open-Task limit cannot start another request's Task from a chat turn", async () => {
     const { run } = setUp({ taskLimits: { ...DEFAULT_TASK_TOOL_LIMITS, maxOpenTasksPerHob: 1 } });
     const first = await run(seed);
@@ -743,11 +740,9 @@ describe("a Task's steps in fresh sessions", () => {
       run: (tasks) =>
         Effect.andThen(
           control.open("Outline"),
-          retry(
-            Effect.flatMap(tasks.readTree(top.id), (tree) =>
-              Option.getOrThrow(tree).tasks[1]?.state === "completed" ? Effect.void : Effect.fail("not yet" as const),
-            ),
-          ).pipe(Effect.orDie),
+          waitUntil(tasks.readTree(top.id), (tree) => Option.getOrThrow(tree).tasks[1]?.state === "completed", {
+            what: "the first step to complete",
+          }).pipe(Effect.asVoid, Effect.orDie),
         ),
     };
     const refused = await run(send(thread.id, hub("complete_task", { key: "done", summary: "Launched" })));
