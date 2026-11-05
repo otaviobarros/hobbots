@@ -21,6 +21,7 @@ import { usePromptedDevices } from "../../api/pairing.ts";
 import { agentsQuery } from "../../api/queries.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
 import { readStored, writeStored } from "../../lib/storage.ts";
+import { PageToastViewport } from "../archive/archive-toast.tsx";
 import { messages as blockerCopy } from "../blockers/messages.ts";
 import { ChiefMark } from "../chief/chief-mark.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
@@ -36,6 +37,7 @@ import {
   selectedEntry,
   soonestExpiry,
 } from "./inbox-entries.ts";
+import { inboxTargets } from "./inbox-focus.ts";
 import { InboxHistory } from "./inbox-history.tsx";
 import { expiryText, type InboxTab, type InboxView, isInboxView, pendingCount, tabRequests } from "./inbox-items.ts";
 import { InboxKeyHints } from "./inbox-key-hints.tsx";
@@ -149,6 +151,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
   // decided here or elsewhere, and a click never lands on an entry that took its place.
   const shownKey = selected?.key;
   const listRef = useRef<HTMLUListElement>(null);
+  const clearRef = useRef<HTMLDivElement>(null);
   useListKeys(shownOrder(entries, view, questOf), shownKey, listRef);
   useEffect(() => {
     if (shownKey !== undefined && shownKey !== requestId) {
@@ -188,10 +191,11 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
           {needs ? (
             empty !== undefined ? (
-              <AllClear />
+              <AllClear ref={clearRef} />
             ) : (
               <Selected
                 entry={selected}
+                landing={{ list: listRef, clear: clearRef }}
                 hold={shown.hold}
                 onRetry={shown.retry}
                 directory={directory}
@@ -209,6 +213,8 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
               onRetry={() => void inbox.refetch()}
             />
           )}
+          {/* Says what a decision here sent once its entry leaves Needs you (#988). */}
+          <PageToastViewport />
         </main>
       </InboxPanel>
     </InboxTabs>
@@ -329,6 +335,7 @@ const tabEntries = (
 
 function Selected({
   entry,
+  landing,
   hold,
   onRetry,
   directory,
@@ -337,6 +344,8 @@ function Selected({
   now,
 }: {
   entry: InboxEntry | undefined;
+  /** The list and the all-clear, where focus goes once a decided entry leaves. */
+  landing: { list: RefObject<HTMLElement | null>; clear: RefObject<HTMLElement | null> };
   questOf: (taskId: TaskId) => Quest | undefined;
   hold: ShownHold | undefined;
   onRetry: () => void;
@@ -359,7 +368,16 @@ function Selected({
   const hob = asker === undefined ? undefined : directory.hob(asker);
   // A request shows once the hob that asked is read, retired hobs included.
   if (entry.kind === "approval" && hob === undefined) return <DetailSkeleton />;
-  return <EntryDetail entry={entry} hob={hob} directory={directory} questOf={questOf} now={now} />;
+  return (
+    <EntryDetail
+      entry={entry}
+      hob={hob}
+      directory={directory}
+      questOf={questOf}
+      now={now}
+      targets={inboxTargets(landing.list, landing.clear, entry.key)}
+    />
+  );
 }
 
 /**
@@ -374,10 +392,10 @@ function ReadState({ read, failed }: { read: BlockersRead | QuestionsRead | Fail
  * Needs you with nothing waiting, across the whole page: a hob resting on its ground with a word
  * bubble, then the title and the way to History and Home. The chief stands in before any hob exists.
  */
-function AllClear() {
+function AllClear({ ref }: { ref: RefObject<HTMLDivElement | null> }) {
   const hob = useQuery(agentsQuery).data?.[0];
   return (
-    <Empty size="page" className="animate-hb-in">
+    <Empty ref={ref} size="page" className="animate-hb-in">
       <EmptyMedia>
         <div
           aria-hidden

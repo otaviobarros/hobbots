@@ -14,6 +14,7 @@ import { splitScene } from "../../lib/crew.ts";
 import { sceneOrder, withRequests } from "../../lib/hob-state.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
 import { greeting } from "../../lib/time.ts";
+import { PageToastViewport } from "../archive/archive-toast.tsx";
 import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
 import { HobSprite, hobState } from "../hob-sprite/hob-sprite.tsx";
 import type { HobFilter } from "../hobs-page/hobs-page-model.ts";
@@ -96,6 +97,8 @@ export function Home() {
         <PickUp chats={recent} quests={quests} hobs={byId} activity={activity} />
         <PlanLine />
       </div>
+      {/* Says what a decision in Needs you sent once its card leaves (#995). */}
+      <PageToastViewport />
     </main>
   );
 }

@@ -31,6 +31,8 @@ export const messages = {
     send: "Send answer",
     sending: "Sending…",
     youAnswered: ({ answer }: { answer: string }) => `You answered: ${answer}`,
+    /** The toast once an answer is sent (#995), wherever it was given. */
+    sent: ({ name, answer }: { name: string; answer: string }) => `Sent your answer to ${name}: ${answer}`,
     /** Your answer and where you gave it, seen from where it shows (#671): `here` when that is the same place. */
     youAnsweredIn: {
       here: ({ answer }: { answer: string }) => `You answered here: ${answer}`,

@@ -8,7 +8,7 @@ import { useIsNewHob } from "../../api/history.ts";
 import { hobMemoryScopesQuery } from "../../api/memory-saves.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
-import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
+import { PageToastViewport } from "../archive/archive-toast.tsx";
 import type { WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
 import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { MemoryIcon } from "../memory/memory-parts.tsx";
@@ -53,9 +53,7 @@ export function HobPage({
         </p>
       )}
       {/* The archive toast with Undo stays in sight at the bottom while the page scrolls. */}
-      <div className="sticky bottom-6 z-10 mx-auto mt-auto w-full max-w-[520px] empty:hidden">
-        <ArchiveToastViewport />
-      </div>
+      <PageToastViewport />
     </main>
   );
 }

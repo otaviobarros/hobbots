@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
 import { threadsQuery } from "../../api/queries.ts";
+import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
 import { ThreadMain, type WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
 import { usePins } from "../quest/use-work.ts";
 import { ChatColumn, FoldButton } from "../quest-room/chat-column.tsx";
@@ -67,6 +68,12 @@ export function HobsLayout({
             room: open,
           })}
         </ChatColumn>
+        {/* With the chat folded away, a toast shows over the room, such as after you answer in a lane. */}
+        {open && fold.folded && (
+          <div className="absolute inset-x-0 bottom-6 z-10 mx-auto w-full max-w-[520px] empty:hidden">
+            <ArchiveToastViewport />
+          </div>
+        )}
       </div>
       {aside}
     </div>

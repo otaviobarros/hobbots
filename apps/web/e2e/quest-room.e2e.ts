@@ -218,18 +218,39 @@ test("[TC-UX-215] a backpack row that has focus when its item is handled hands f
 });
 
 // covers UX-006
-test("[TC-UX-216] a card whose backpack row had focus earlier leaves focus alone once focus has moved on", async ({
+test("[TC-UX-216] answering in a lane by a choice's key moves focus to the lane's header, not to a card the focus left", async ({
   page,
 }) => {
   const { asks, build, backpack } = await roomOnAdasQuestion(page);
   // Focus visits the row, then moves to Ada's choice, which answers. The row and the choice both go,
-  // and the card does not take focus back: it had already left the card.
+  // and the card does not take focus back: it had already left the card. With nothing else waiting
+  // in Ada's lane, focus moves to its header (#995), and a toast says what was sent.
   await backpack.getByRole("button").focus();
   const choice = asks.getByRole("button", { name: /^Dec 12 for international/ });
   await choice.focus();
   await page.keyboard.press("1");
   await expect(backpack).toHaveCount(0);
+  await expect(laneHead(page, "Ada")).toBeFocused();
   await expect(build.getByText("Everything in this task")).not.toBeFocused();
+  await expect(
+    page.getByRole("region", { name: /^Notifications/ }).getByText("Sent your answer to Ada: Dec 12 for international"),
+  ).toBeVisible();
+});
+
+// covers UX-006
+test("[TC-UX-217] answering in a lane by a choice chip moves focus to the lane's header once nothing else waits there", async ({
+  page,
+}) => {
+  const { asks } = await roomOnAdasQuestion(page);
+  // A chip pressed from the keyboard answers like its number key, and focus never drops to the page.
+  await asks.getByRole("button", { name: /^Dec 12 for international/ }).focus();
+  await page.keyboard.press("Enter");
+  await expect(asks).toHaveCount(0);
+  await expect(laneHead(page, "Ada")).toBeFocused();
+  expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+  await expect(
+    page.getByRole("region", { name: /^Notifications/ }).getByText("Sent your answer to Ada: Dec 12 for international"),
+  ).toBeVisible();
 });
 
 // covers UX-002, OR-001
