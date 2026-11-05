@@ -311,7 +311,13 @@ export const MemoryToolsLive = Layer.effect(
       Effect.gen(function* () {
         if (Option.isNone(shares)) return yield* new Refused({ message: NO_SHARES });
         const actor = actorOf(turn, yield* projectsOf(access.folders));
-        return yield* shares.value.share({ actor, scope, draft: draftOf(turn, input), key: keptOf(turn, input).key, turn });
+        return yield* shares.value.share({
+          actor,
+          scope,
+          draft: draftOf(turn, input),
+          key: keptOf(turn, input).key,
+          turn,
+        });
       });
 
     const save = (turn: CharmTurn, access: ToolAccess, input: MemorySaveInput, step: HubCallStep | undefined) =>
