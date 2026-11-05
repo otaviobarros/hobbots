@@ -133,6 +133,16 @@ describe("hob tools for Tasks and Quests", () => {
     ).toThrow();
   });
 
+  it("takes a step's milestones as titles and refuses the id of an existing one", () => {
+    const decode = Schema.decodeUnknownSync(TaskToolInputs.plan_steps);
+    expect(decode({ key: "k", steps: [{ brief: "Styles", milestones: ["Page renders"] }] })).toMatchObject({
+      steps: [{ milestones: ["Page renders"] }],
+    });
+    expect(() =>
+      decode({ key: "k", steps: [{ brief: "Styles", milestones: ["db8065be-d145-4ff1-8b6e-f822c8d67643"] }] }),
+    ).toThrow(/never the id of an existing milestone/);
+  });
+
   it("reads back a result or a refusal as text the hob can act on", () => {
     expect(taskToolText({ message: "Done.", details: {} })).toBe("Done.");
     expect(taskToolText({ message: "Asked.", details: { question_id: "q" } })).toBe('Asked.\n{"question_id":"q"}');

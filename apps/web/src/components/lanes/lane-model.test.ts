@@ -246,7 +246,7 @@ describe("the Quest room's lanes", () => {
     ]);
   });
 
-  it("shows the Task tool calls the hub refused, with what it told the hob", () => {
+  it("shows the Task tool calls the hub refused in plain words, never the message meant for the hob", () => {
     const refused = new RefusedCall({
       id: RefusedCallId.make("r1"),
       agentId: QUILL,
@@ -261,7 +261,10 @@ describe("the Quest room's lanes", () => {
       refusedAt: AT(4),
     });
     const lane = laneOf(laneRoom(tree({ ...blackFriday(), refusals: [refused] }), []), QUILL);
-    expect(lines(lane)).toEqual(["refused complete_task: Finish the steps under this Task first."]);
+    expect(lines(lane)).toEqual(["refused Completing the Task: work under it was still open"]);
+    const odd = new RefusedCall({ ...refused, id: RefusedCallId.make("r2"), reason: "claim-stale" });
+    const quiet = laneOf(laneRoom(tree({ ...blackFriday(), refusals: [odd] }), []), QUILL);
+    expect(lines(quiet)).toEqual(["refused Completing the Task: "]);
   });
 
   it("leaves out the hub's routine checkpoints and keeps its findings", () => {

@@ -36,9 +36,18 @@ const key = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(200)).an
 
 const taskId = Schema.optionalKey(id("The Task to act on. Leave it out to act on the Task you are working on."));
 
+/** A milestone's title: a few words, since a milestone's id is the hub's and never names a new one. */
+const milestoneTitle = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.isPattern(/^(?![0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$)/i, {
+    message: 'A milestone is a short title, such as "Page renders", never the id of an existing milestone.',
+  }),
+).annotate({ description: 'A short title for a point to report when it is reached, such as "Page renders".' });
+
 const milestones = Schema.optionalKey(
-  Schema.Array(text("A point to report when it is reached")).annotate({
-    description: "Milestones the Task's owner reports as it reaches them, in order.",
+  Schema.Array(milestoneTitle).annotate({
+    description:
+      "Titles of new milestones the Task's owner reports as it reaches them, in order. A milestone that already exists on another Task is reported there, not named again here.",
   }),
 );
 

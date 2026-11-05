@@ -201,7 +201,8 @@ function LaneStatusRow({
       return (
         <li
           className={cn(
-            "rounded-control px-2 py-1.5 text-detail text-text",
+            // A result can quote a long folder path, which wraps rather than widening the lane.
+            "rounded-control px-2 py-1.5 text-detail text-text wrap-anywhere",
             item.outcome === "completed"
               ? "bg-[color-mix(in_srgb,var(--color-mint)_12%,var(--color-card))]"
               : "bg-[color-mix(in_srgb,var(--color-rose)_12%,var(--color-card))]",
