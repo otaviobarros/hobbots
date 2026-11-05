@@ -91,6 +91,8 @@ export const shareOutcome = (share: MemoryShare, hobs: HobDirectory): string => 
       return copy.kept({ who });
     case "undone":
       return copy.undone({ who });
+    case "sending":
+      return copy.sending;
     default:
       return "";
   }

@@ -2,7 +2,7 @@ import type { MemoryCheck } from "@hobbots/api";
 import { type MemoryChange, type MemoryShare, memoryScopeKey, memoryShareWaits } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
-import { memoryKeys } from "./memory-pages.ts";
+import { refreshMemory } from "./memory-pages.ts";
 import { followsEvents } from "./queries.ts";
 
 /**
@@ -37,10 +37,15 @@ export const waitingShares = (shares: ReadonlyArray<MemoryShare>): ReadonlyArray
 export const useWaitingShares = (): ReadonlyArray<MemoryShare> =>
   useQuery({ ...memorySharesQuery, select: (answer) => waitingShares(answer.shares) }).data ?? NONE;
 
-/** A share was asked for or moved: the list is read again, and so is memory, which a share may have changed. */
+/**
+ * A share was asked for or moved: the list is read again, and so is memory, which a share may have
+ * changed. A read still in flight is cancelled first, since it may answer from before the change
+ * (STD-REACT-012).
+ */
 export const memorySharesChanged = async (queryClient: QueryClient) => {
+  await queryClient.cancelQueries({ queryKey: sharesKey, exact: true });
   await queryClient.invalidateQueries({ queryKey: sharesKey, exact: true });
-  await queryClient.invalidateQueries({ queryKey: memoryKeys.all });
+  await refreshMemory(queryClient);
 };
 
 /** Whether `error` says the share was decided elsewhere, or changed under it. */

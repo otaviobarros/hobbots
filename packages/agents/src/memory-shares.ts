@@ -11,17 +11,20 @@ import {
   type MemoryActor,
   MemoryConflict,
   type MemoryDraft,
+  type MemoryExpected,
+  type MemoryPageVersion,
   type MemoryScope,
   MemoryShare,
   type MemoryShareState,
   type MemoryUnavailable,
   type MemoryVersion,
   memoryShareKeptText,
+  memoryShareSendingText,
   memoryShareSharedText,
   memoryShareUndoneText,
   memoryShareWaitingText,
 } from "@hobbots/domain";
-import { Context, DateTime, Effect, Layer, Option } from "effect";
+import { Context, DateTime, Effect, Layer, Option, Schedule } from "effect";
 import { type MemoryShareRequest, MemoryShares, MemoryStore, type MemoryStoreShape } from "./memory.ts";
 import { announcer, EventPublisher } from "./ports.ts";
 import type { HubToolAnswer } from "./runtime.ts";
@@ -78,6 +81,12 @@ export class MemoryReviews extends Context.Service<
   MemoryReviews,
   {
     readonly list: Effect.Effect<ReadonlyArray<MemoryShare>>;
+    /**
+     * Finishes every write for a share that a stopped hub or an outage cut short, as far as memory
+     * answers: what landed is recorded, and what did not is written or sent back. The hub runs it at
+     * start and every 30 seconds.
+     */
+    readonly recover: Effect.Effect<void>;
     /** Shares the page, as the hob wrote it or as you edited it (`markdown`). */
     readonly share: (
       id: string,
@@ -111,23 +120,6 @@ const draftOf = (share: MemoryShare, markdown: string = share.markdown): MemoryD
   pinned: false,
 });
 
-/**
- * Writes the share's page into its shared memory as the hob, over the version read just before, and
- * answers the version written and the one it replaced. A page changed between the two is a conflict.
- */
-const writeShared = (store: MemoryStoreShape, share: MemoryShare, draft: MemoryDraft) =>
-  Effect.gen(function* () {
-    const actor = hobOf(share);
-    const before = yield* store.page(actor, share.scope, share.path);
-    const version = yield* store.write(
-      actor,
-      share.scope,
-      draft,
-      before === null ? { _tag: "New" } : { _tag: "Version", version: before.version },
-    );
-    return { version, previous: before?.version ?? null };
-  });
-
 /** What a hob is told about a share it asked for before, by where that share stands. */
 const earlierAnswer = (share: MemoryShare, input: string): HubToolAnswer => {
   if (share.input !== input) {
@@ -135,6 +127,9 @@ const earlierAnswer = (share: MemoryShare, input: string): HubToolAnswer => {
   }
   switch (share.state) {
     case "sending":
+      return share.through === "preset"
+        ? { text: memoryShareSendingText(share.path, share.scope), refused: false }
+        : { text: memoryShareWaitingText(share.path, share.scope), refused: false };
     case "waiting":
       return { text: memoryShareWaitingText(share.path, share.scope), refused: false };
     case "shared":
@@ -148,17 +143,103 @@ const earlierAnswer = (share: MemoryShare, input: string): HubToolAnswer => {
 
 const now = Effect.map(DateTime.now, DateTime.formatIso);
 
+/** The expected state of a page whose current version is `version`, or that is not there (null). */
+const expectedAt = (version: MemoryVersion | null): MemoryExpected =>
+  version === null ? { _tag: "New" } : { _tag: "Version", version };
+
+/** The versions written after `after`, oldest first; every version when `after` is null. */
+const versionsAfter = (history: ReadonlyArray<MemoryPageVersion>, after: MemoryVersion | null) => {
+  const at = after === null ? -1 : history.findIndex((each) => each.version === after);
+  // History is newest first: what comes before `after` was written after it.
+  return (at === -1 ? history : history.slice(0, at)).toReversed();
+};
+
 /**
- * `MemoryShares` for the hob's tools and `MemoryReviews` for you, over one store and one log. At
- * start, a share a stopped hub left being written waits for you again, so none is lost.
+ * What one write for a share left in memory, as the store answers. Each step reads what memory holds
+ * first, so it can run again after a hub that stopped or memory that stopped answering, and finish
+ * what landed without doing it twice.
+ */
+const shareEffects = (store: MemoryStoreShape) => {
+  /** The page in the hob's own memory, written only when it is not already there as shared. */
+  const keepOwn = (share: MemoryShare) =>
+    Effect.gen(function* () {
+      const own = yield* store.page(YOU, ownScopeOf(share), share.path);
+      if (own !== null && own.markdown === share.markdown) return;
+      yield* store.write(hobOf(share), ownScopeOf(share), draftOf(share), expectedAt(own?.version ?? null));
+    });
+
+  /** The version this share wrote as the hob after the one it recorded it replaces, if one landed. */
+  const landed = (share: MemoryShare) =>
+    Effect.map(store.history(YOU, share.scope, share.path), (history) =>
+      versionsAfter(history, share.previous).find(
+        (each) => each.author?._tag === "Hob" && each.author.agentId === share.agentId,
+      ),
+    );
+
+  /**
+   * Writes the page into the shared memory as the hob, over the version recorded before. When it
+   * did not land, it waits for you again; a page changed since is a conflict.
+   */
+  const share = (sending: MemoryShare) =>
+    Effect.gen(function* () {
+      const found = yield* landed(sending);
+      if (found !== undefined) return { state: "shared" as const, version: found.version };
+      const version = yield* store.write(hobOf(sending), sending.scope, draftOf(sending), expectedAt(sending.previous));
+      return { state: "shared" as const, version };
+    });
+
+  /**
+   * Takes the share back: the page it replaced is written back, or a page it added is forgotten, as
+   * you, only while the page is still the version the share wrote. Then the hob keeps the page in its
+   * own memory. Run again, it finds what already landed: a page no longer at the share's version
+   * that you changed or forgot since was taken back; any other change is a conflict, never undone over.
+   */
+  const undo = (sending: MemoryShare) =>
+    Effect.gen(function* () {
+      const current = yield* store.page(YOU, sending.scope, sending.path);
+      if (current !== null && current.version === sending.version) {
+        yield* sending.previous === null
+          ? store.forget(YOU, sending.scope, sending.path, expectedAt(current.version))
+          : store.restore(YOU, sending.scope, sending.path, sending.previous);
+      } else if (current !== null) {
+        const after = versionsAfter(yield* store.history(YOU, sending.scope, sending.path), sending.version);
+        if (after.length === 0 || after[0]?.author?._tag !== "You") {
+          return yield* new MemoryConflict({ path: sending.path, current: current.version });
+        }
+      }
+      yield* keepOwn(sending);
+      return { state: "undone" as const };
+    });
+
+  const keep = (sending: MemoryShare) => Effect.as(keepOwn(sending), { state: "kept" as const });
+
+  /** Runs what `sending` records it is writing, and answers the share's fields once it landed. */
+  return (sending: MemoryShare): Effect.Effect<Partial<MemoryShare>, MemoryUnavailable | MemoryConflict> => {
+    switch (sending.pending) {
+      case "keep":
+        return keep(sending);
+      case "undo":
+        return undo(sending);
+      default:
+        return share(sending);
+    }
+  };
+};
+
+/**
+ * `MemoryShares` for the hob's tools and `MemoryReviews` for you, over one store and one log. Before
+ * the hub writes anything for a share, it records what it is about to write (`pending`) and the
+ * version it replaces, so a write that a stopped hub or an outage cut short is finished, or undone,
+ * once memory answers: at start, then every 30 seconds while any is left.
  */
 export const MemorySharesLive = Layer.effectContext(
   Effect.gen(function* () {
     const store = yield* MemoryStore;
     const log = yield* MemoryShareLog;
-    const publisher = yield* Effect.serviceOption(EventPublisher);
-
-    const announce = announcer(publisher, "a memory share");
+    const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a memory share");
+    const write = shareEffects(store);
+    /** Shares being written in this process, which recovery leaves to the call writing them. */
+    const writing = new Set<string>();
 
     /** Moves `share` to its new state from one of `from`, announced, or None when it moved on meanwhile. */
     const move = (share: MemoryShare, from: ReadonlyArray<MemoryShareState>) =>
@@ -172,16 +253,57 @@ export const MemorySharesLive = Layer.effectContext(
     const changed = (share: MemoryShare, fields: Partial<MemoryShare>) =>
       Effect.map(now, (at) => new MemoryShare({ ...share, ...fields, updatedAt: at }));
 
-    // A share left being written by a hub that stopped waits for you again.
-    for (const share of yield* log.list(0)) {
-      if (share.state !== "sending") continue;
-      yield* move(yield* changed(share, { state: "waiting", through: "review" }), ["sending"]);
-    }
+    /** Where a share that did not finish goes back to: a share or keep waits for you, an undo stays shared. */
+    const back = (sending: MemoryShare) =>
+      changed(
+        sending,
+        sending.pending === "undo"
+          ? { state: "shared", pending: null }
+          : { state: "waiting", pending: null, through: "review", version: null, previous: null },
+      );
+
+    /**
+     * Writes what `sending` records and saves the outcome. A conflict sends it back; memory that does
+     * not answer leaves it `sending` for recovery. Either way the error is answered.
+     */
+    const settle = (sending: MemoryShare) =>
+      Effect.gen(function* () {
+        const fields = yield* write(sending).pipe(
+          Effect.tapError((error) =>
+            error._tag === "MemoryConflict"
+              ? Effect.flatMap(back(sending), (it) => move(it, ["sending"]))
+              : Effect.void,
+          ),
+        );
+        const decided = yield* changed(sending, { ...fields, pending: null, decidedAt: yield* now });
+        return yield* move(decided, ["sending"]);
+      }).pipe(Effect.ensuring(Effect.sync(() => writing.delete(sending.id))));
+
+    /** Finishes every share left `sending` that no call is writing; one memory does not take stays. */
+    const recover = Effect.gen(function* () {
+      for (const share of yield* log.list(0)) {
+        if (share.state !== "sending" || writing.has(share.id)) continue;
+        writing.add(share.id);
+        yield* settle(share).pipe(
+          Effect.catchTag("MemoryUnavailable", () => Effect.void),
+          Effect.catchTag("MemoryConflict", () => Effect.void),
+        );
+      }
+    });
+    yield* recover.pipe(Effect.repeat(Schedule.spaced("30 seconds")), Effect.forkScoped);
 
     const share = (request: MemoryShareRequest) =>
       Effect.gen(function* () {
         const { turn, scope, draft } = request;
-        const through = request.preset === "trusting" && scope._tag === "Project" ? "preset" : "review";
+        // Trusting lets a share to a project through, over the page as it is now. Memory that does
+        // not answer leaves it to you.
+        const before =
+          request.preset === "trusting" && scope._tag === "Project"
+            ? yield* store.page(YOU, scope, draft.path).pipe(
+                Effect.map((page) => Option.some(page?.version ?? null)),
+                Effect.catchTag("MemoryUnavailable", () => Effect.succeed(Option.none())),
+              )
+            : Option.none();
         const at = yield* now;
         const recorded = new MemoryShare({
           id: crypto.randomUUID(),
@@ -193,11 +315,12 @@ export const MemorySharesLive = Layer.effectContext(
           path: draft.path,
           markdown: draft.markdown,
           tags: draft.tags,
-          state: through === "preset" ? "sending" : "waiting",
-          through,
+          state: Option.isSome(before) ? "sending" : "waiting",
+          pending: Option.isSome(before) ? "share" : null,
+          through: Option.isSome(before) ? "preset" : "review",
           edited: false,
           version: null,
-          previous: null,
+          previous: Option.getOrNull(before),
           threadId: turn.threadId,
           messageId: turn.messageId,
           createdAt: at,
@@ -207,21 +330,15 @@ export const MemorySharesLive = Layer.effectContext(
         const started = yield* log.begin(recorded, turn.also);
         if (started._tag === "Existing") return earlierAnswer(started.share, request.input);
         yield* announce(started.entries);
-        if (through === "review") return earlierAnswer(recorded, request.input);
-        // Trusting lets a share to a project through. Memory that does not take it leaves it to you.
-        const written = yield* writeShared(store, recorded, draft).pipe(
-          Effect.map(Option.some),
-          Effect.catchTags({
-            MemoryUnavailable: () => Effect.succeed(Option.none()),
-            MemoryConflict: () => Effect.succeed(Option.none()),
-          }),
+        if (recorded.state === "waiting") return earlierAnswer(recorded, request.input);
+        writing.add(recorded.id);
+        const settled = yield* settle(recorded).pipe(
+          Effect.catchTag("MemoryConflict", () => Effect.succeedNone),
+          // Left for recovery, which shares it once memory answers: the hob is told it is under way.
+          Effect.catchTag("MemoryUnavailable", () => Effect.succeedNone),
         );
-        const settled = Option.isSome(written)
-          ? yield* changed(recorded, { state: "shared", ...written.value, decidedAt: yield* now })
-          : yield* changed(recorded, { state: "waiting", through: "review" });
-        const moved = yield* move(settled, ["sending"]);
         return earlierAnswer(
-          Option.getOrElse(moved, () => settled),
+          Option.getOrElse(settled, () => recorded),
           request.input,
         );
       });
@@ -250,7 +367,7 @@ export const MemorySharesLive = Layer.effectContext(
     /** Memory's own errors, as a decision answers them. */
     const answered =
       (id: string) =>
-      <A, R>(effect: Effect.Effect<A, MemoryUnavailable | MemoryConflict, R>) =>
+      <A, R>(effect: Effect.Effect<A, MemoryUnavailable | MemoryConflict | MemoryShareDecisionError, R>) =>
         effect.pipe(
           Effect.catchTags({
             MemoryUnavailable: () => Effect.fail(new MemoryNotAnswering()),
@@ -259,77 +376,56 @@ export const MemorySharesLive = Layer.effectContext(
         );
 
     /**
-     * Claims a waiting share for a decision, by moving it to `sending`, so a second decision on it
-     * is refused, then runs `write` and saves what it answered. A write that fails leaves the share
-     * waiting again.
+     * Your decision on the share `id` while it is `from`: claims it by recording what is about to be
+     * written (`sending`), so a second decision is refused and the write can be recovered, then writes
+     * it. `prepare` reads what the claim must record first.
      */
     const decide = (
       id: string,
-      write: (share: MemoryShare) => Effect.Effect<Partial<MemoryShare>, MemoryUnavailable | MemoryConflict>,
+      from: MemoryShareState,
+      prepare: (share: MemoryShare) => Effect.Effect<Partial<MemoryShare>, MemoryUnavailable | MemoryConflict>,
     ) =>
-      Effect.gen(function* () {
-        const waiting = yield* open(id, "waiting");
-        const claimed = yield* move(yield* changed(waiting, { state: "sending" }), ["waiting"]);
-        if (Option.isNone(claimed)) return yield* closedNow(id);
-        const fields = yield* answered(id)(write(claimed.value)).pipe(
-          Effect.tapError(() =>
-            Effect.flatMap(changed(claimed.value, { state: "waiting" }), (back) => move(back, ["sending"])),
-          ),
-        );
-        const decided = yield* changed(claimed.value, { ...fields, decidedAt: yield* now });
-        const moved = yield* move(decided, ["sending"]);
-        if (Option.isNone(moved)) return yield* closedNow(id);
-        return moved.value;
-      });
-
-    const keepOwn = (share: MemoryShare) =>
-      store.write(hobOf(share), ownScopeOf(share), draftOf(share), { _tag: "Any" });
+      answered(id)(
+        Effect.gen(function* () {
+          yield* UserSession;
+          const current = yield* open(id, from);
+          const fields = yield* prepare(current);
+          // Marked before the claim lands, and until the write ends, so recovery never runs it too.
+          writing.add(id);
+          return yield* Effect.gen(function* () {
+            const claimed = yield* move(yield* changed(current, { ...fields, state: "sending" }), [from]);
+            if (Option.isNone(claimed)) return yield* closedNow(id);
+            const settled = yield* settle(claimed.value);
+            return Option.isSome(settled) ? settled.value : yield* closedNow(id);
+          }).pipe(Effect.ensuring(Effect.sync(() => writing.delete(id))));
+        }),
+      );
 
     return Context.make(MemoryShares, MemoryShares.of({ share })).pipe(
       Context.add(
         MemoryReviews,
         MemoryReviews.of({
           list: log.list(DECIDED_SHOWN),
+          recover,
           share: (id, markdown) =>
-            Effect.gen(function* () {
-              yield* UserSession;
-              return yield* decide(id, (waiting) => {
-                const edited = markdown !== undefined && markdown !== waiting.markdown;
-                return Effect.map(writeShared(store, waiting, draftOf(waiting, markdown)), (written) => ({
-                  state: "shared" as const,
-                  markdown: markdown ?? waiting.markdown,
-                  edited,
-                  ...written,
-                }));
-              });
-            }),
-          keep: (id) =>
-            Effect.gen(function* () {
-              yield* UserSession;
-              return yield* decide(id, (waiting) => Effect.as(keepOwn(waiting), { state: "kept" as const }));
-            }),
+            decide(id, "waiting", (waiting) =>
+              Effect.map(store.page(YOU, waiting.scope, waiting.path), (page) => ({
+                pending: "share" as const,
+                markdown: markdown ?? waiting.markdown,
+                edited: markdown !== undefined && markdown !== waiting.markdown,
+                previous: page?.version ?? null,
+              })),
+            ),
+          keep: (id) => decide(id, "waiting", () => Effect.succeed({ pending: "keep" as const })),
           undo: (id) =>
-            Effect.gen(function* () {
-              yield* UserSession;
-              const shared = yield* open(id, "shared");
-              yield* answered(id)(
-                Effect.gen(function* () {
-                  const current = yield* store.page(YOU, shared.scope, shared.path);
-                  // A page changed since it was shared is yours to sort out on the page, never undone over.
-                  if (current === null || current.version !== shared.version) {
-                    return yield* new MemoryConflict({ path: shared.path, current: current?.version ?? null });
-                  }
-                  yield* shared.previous === null
-                    ? store.forget(YOU, shared.scope, shared.path, { _tag: "Version", version: current.version })
-                    : store.restore(YOU, shared.scope, shared.path, shared.previous as MemoryVersion);
-                  yield* keepOwn(shared);
-                }),
-              );
-              const undone = yield* changed(shared, { state: "undone", decidedAt: yield* now });
-              const moved = yield* move(undone, ["shared"]);
-              if (Option.isNone(moved)) return yield* closedNow(id);
-              return moved.value;
-            }),
+            decide(id, "shared", (shared) =>
+              Effect.flatMap(store.page(YOU, shared.scope, shared.path), (current) =>
+                // A page changed since it was shared is yours to sort out on the page, never undone over.
+                current === null || current.version !== shared.version
+                  ? Effect.fail(new MemoryConflict({ path: shared.path, current: current?.version ?? null }))
+                  : Effect.succeed({ pending: "undo" as const }),
+              ),
+            ),
         }),
       ),
     );

@@ -11,12 +11,21 @@ import { MEMORY_CALL_FIELDS, MEMORY_CALL_ORIGIN } from "./memory-tools.ts";
  */
 
 /**
- * Where a share stands. `sending` while the hub writes it, `waiting` for your review, `shared` once
- * it is in the shared memory, `kept` when you kept it private (it is in the hob's own memory), and
- * `undone` when you took a share back (it is in the hob's own memory too).
+ * Where a share stands. `sending` while the hub writes what was decided (`pending` says what),
+ * `waiting` for your review, `shared` once it is in the shared memory, `kept` when you kept it
+ * private (it is in the hob's own memory), and `undone` when you took a share back (it is in the
+ * hob's own memory too).
  */
 export const MemoryShareState = Schema.Literals(["sending", "waiting", "shared", "kept", "undone"]);
 export type MemoryShareState = typeof MemoryShareState.Type;
+
+/**
+ * What the hub is writing for a share while it is `sending`, recorded before memory is touched so a
+ * hub that stopped, or memory that stopped answering, finds out afterwards what landed: sharing it,
+ * keeping it private, or undoing it.
+ */
+export const MemorySharePending = Schema.Literals(["share", "keep", "undo"]);
+export type MemorySharePending = typeof MemorySharePending.Type;
 
 /** How a share was let through: by your review, or by the preset (Trusting, to a project). */
 export const MemoryShareThrough = Schema.Literals(["review", "preset"]);
@@ -28,12 +37,17 @@ export class MemoryShare extends Schema.Class<MemoryShare>("MemoryShare")({
   /** The shared memory it is for: a project's or everyone's, never a hob's. */
   scope: MemoryScope,
   state: MemoryShareState,
+  /** What is being written while the share is `sending`, otherwise null. */
+  pending: Schema.NullOr(MemorySharePending),
   through: MemoryShareThrough,
   /** Whether you changed the page before you shared it. */
   edited: Schema.Boolean,
   /** The version the share wrote in the shared memory, once shared. */
   version: Schema.NullOr(MemoryVersion),
-  /** The version it replaced there, or null when the page was new: what Undo brings back. */
+  /**
+   * The version it replaced there, or null when the page was new: what Undo brings back. Recorded
+   * before the share is written, so a write that landed unrecorded is found after it.
+   */
   previous: Schema.NullOr(MemoryVersion),
   ...MEMORY_CALL_ORIGIN,
   /** When it was shared, kept private or undone. */
@@ -50,6 +64,10 @@ const whereOf = (scope: MemoryScope): string =>
 /** What a hob is told when its share waits for the user's review. */
 export const memoryShareWaitingText = (path: string, scope: MemoryScope) =>
   `Asked the user to share ${path} with ${whereOf(scope)}. It waits for their review in the Inbox, so it is not shared yet. Do not save it again.`;
+
+/** What a hob is told when its share goes through under the user's safety settings once memory answers. */
+export const memoryShareSendingText = (path: string, scope: MemoryScope) =>
+  `Memory is not answering right now, so Hobbots shares ${path} with ${whereOf(scope)} once it is back. Do not save it again.`;
 
 /** What a hob is told when its share went through under the user's safety settings. */
 export const memoryShareSharedText = (path: string, scope: MemoryScope) =>

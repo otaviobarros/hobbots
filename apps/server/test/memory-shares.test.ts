@@ -33,6 +33,7 @@ import {
   MemoryPath,
   type MemoryScope,
   type MemoryShare,
+  MemoryUnavailable,
   memoryProjectIdentity,
   type SafetyPreset,
 } from "@hobbots/domain";
@@ -138,10 +139,36 @@ let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 let store: MemoryStoreShape;
 let controls: MemoryStoreFakeControls;
+/**
+ * Calls whose next try fails as if memory were down: `before` memory takes it, or `after`, when the
+ * answer is lost although the call landed, as when the hub stops or the link drops.
+ */
+let cut: Map<"write" | "forget" | "restore", "before" | "after">;
+
+/** The fake memory, but with the calls named in `cut` cut short. */
+const cutting = (inner: MemoryStoreShape): MemoryStoreShape => {
+  const down = () => Effect.fail(new MemoryUnavailable({ message: "Memory went away." }));
+  const call = <A, E>(name: "write" | "forget" | "restore", effect: Effect.Effect<A, E>) => {
+    const when = cut.get(name);
+    cut.delete(name);
+    if (when === "before") return down();
+    return when === "after" ? Effect.flatMap(effect, down) : effect;
+  };
+  return {
+    ...inner,
+    write: (actor, scope, draft, expected) =>
+      Effect.suspend(() => call("write", inner.write(actor, scope, draft, expected))),
+    forget: (actor, scope, at, expected) =>
+      Effect.suspend(() => call("forget", inner.forget(actor, scope, at, expected))),
+    restore: (actor, scope, at, version) =>
+      Effect.suspend(() => call("restore", inner.restore(actor, scope, at, version))),
+  };
+};
 
 beforeEach(async () => {
   const fake = makeMemoryStoreFake();
-  store = fake.store;
+  cut = new Map();
+  store = cutting(fake.store);
   controls = fake.controls;
   runtime = ManagedRuntime.make(App(store));
   await runtime.runPromise(
@@ -408,6 +435,65 @@ describe("what hobs want to share", () => {
       }),
     );
     expect(response.status).toBe(401);
+  });
+});
+
+describe("a share cut short", () => {
+  const recover = () => runtime.runPromise(MemoryReviews.use((reviews) => reviews.recover));
+
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-374] finishes a share memory took while its answer was lost, and never offers it back to keep private", async () => {
+    await save("balanced", "project");
+    const [waiting] = await shares();
+    cut.set("write", "after");
+    const answer = await request<{ _tag: string }>("POST", `/api/memory/shares/${waiting?.id}/share`, {});
+    expect(answer).toMatchObject({ status: 503, body: { _tag: "MemoryNotAnswering" } });
+    // The page landed, so the share stays under way, not back in review where Keep private would strand it.
+    expect((await shares())[0]).toMatchObject({ state: "sending", pending: "share" });
+    const kept = await request<{ _tag: string }>("POST", `/api/memory/shares/${waiting?.id}/keep`);
+    expect(kept).toMatchObject({ status: 409, body: { _tag: "MemoryShareClosed", state: "sending" } });
+    await recover();
+    const written = await page(theSite);
+    expect((await shares())[0]).toMatchObject({ state: "shared", pending: null, version: written?.version });
+    // Finished from what landed: the hob's page was written once.
+    expect(await Effect.runPromise(store.history(you, theSite, PAGE))).toHaveLength(1);
+  });
+
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-375] writes a share memory never took once memory answers again", async () => {
+    await save("balanced", "project");
+    const [waiting] = await shares();
+    // Memory goes away between the claim and the write: the page is never written.
+    cut.set("write", "before");
+    expect((await request("POST", `/api/memory/shares/${waiting?.id}/share`, {})).status).toBe(503);
+    expect(await page(theSite)).toBeNull();
+    await recover();
+    expect((await shares())[0]).toMatchObject({ state: "shared" });
+    expect(await page(theSite)).toMatchObject({ markdown: MARKDOWN, author: { _tag: "Hob", agentId: ada } });
+  });
+
+  // covers ADR 028 (Sharing), STD-DATA-001, #960
+  it("[TC-GEN-376] resumes an Undo cut short, back to the page it replaced and into the hob's own memory", async () => {
+    await Effect.runPromise(
+      store.write(
+        you,
+        theSite,
+        { path: PAGE, markdown: "# Deploy\n\nAsk Bram.", tags: [], pinned: false },
+        { _tag: "New" },
+      ),
+    );
+    await save("trusting", "project");
+    const [shared] = await shares();
+    cut.set("restore", "after");
+    expect((await request("POST", `/api/memory/shares/${shared?.id}/undo`)).status).toBe(503);
+    // Restored, but not yet in Ada's own memory, nor recorded.
+    expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nAsk Bram." });
+    expect(await page(adasOwn)).toBeNull();
+    expect((await shares())[0]).toMatchObject({ state: "sending", pending: "undo" });
+    await recover();
+    expect((await shares())[0]).toMatchObject({ state: "undone", pending: null });
+    expect(await page(theSite)).toMatchObject({ markdown: "# Deploy\n\nAsk Bram." });
+    expect(await page(adasOwn)).toMatchObject({ markdown: MARKDOWN });
   });
 });
 

@@ -221,6 +221,7 @@ export const messages = {
     sharedEveryone: "Shared. Every hob follows it from its next chat.",
     kept: ({ who }: { who: string }) => `Kept private. ${who} keeps it in its own memory.`,
     undone: ({ who }: { who: string }) => `Undone. The page is back in ${who}'s memory only.`,
+    sending: "Hobbots is writing this, and finishes once memory answers.",
     approvedByYou: "Shared after you approved it",
     sharedByPreset: "Shared under Trusting",
     closed: "This was already decided somewhere else.",

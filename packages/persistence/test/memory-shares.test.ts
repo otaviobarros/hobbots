@@ -59,6 +59,7 @@ const share = (key: string, overrides: Partial<MemoryShare> = {}) =>
     markdown: "# Deploy\n\nRun `pnpm deploy`.",
     tags: ["deploy"],
     state: "waiting",
+    pending: null,
     through: "review",
     edited: false,
     version: null,
@@ -103,7 +104,7 @@ describe("memory share records", () => {
         yield* seed;
         const log = yield* MemoryShareLog;
         yield* log.begin(share("deploy"));
-        const sending = share("deploy", { state: "sending", updatedAt: later });
+        const sending = share("deploy", { state: "sending", pending: "share", updatedAt: later });
         const claimed = yield* log.move(sending, ["waiting"]);
         expect(Option.map(claimed, (moved) => moved.entries.map((entry) => entry.type))).toEqual(
           Option.some(["MemoryShareChanged"]),

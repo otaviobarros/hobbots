@@ -50,6 +50,7 @@ const share = (id: string, overrides: Partial<MemoryShare> = {}) =>
     markdown: "# Deploy the site\n\nRun `pnpm deploy`.\n\nThen check the preview.",
     tags: ["deploy"],
     state: "waiting",
+    pending: null,
     through: "review",
     edited: false,
     version: null,
