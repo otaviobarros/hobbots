@@ -1,4 +1,5 @@
 import { lstat } from "node:fs/promises";
+import { join } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
 import { hubPort } from "@hobbots/server/network-settings";
 import { app, BrowserWindow, dialog, ipcMain, session, shell, utilityProcess } from "electron";
@@ -15,6 +16,7 @@ import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server
 import type { SettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
 import { handleShowFileIpc } from "./show-file.ts";
+import { handleShowMemoryIpc } from "./show-memory.ts";
 import { type SystemNotices, showOnLaunch, systemNotices } from "./system-notices.ts";
 import { windowBackground } from "./window-background.ts";
 import { fetchAsWindow, makeWindowKey, WINDOW_COOKIE } from "./window-key.ts";
@@ -219,6 +221,14 @@ export const startHub = async (
     },
     isFile: async (path) => (await lstat(path)).isFile(),
     showItemInFolder: (path) => shell.showItemInFolder(path),
+  });
+  handleShowMemoryIpc({
+    ipcMain,
+    isTrusted,
+    // The engine's pages (ADR 028), in the data folder this app starts the hub with.
+    folder: join(app.getPath("userData"), "memory", "wiki"),
+    isFolder: async (path) => (await lstat(path)).isDirectory(),
+    openPath: (path) => shell.openPath(path),
   });
   const menuBar = startMenuBar({ supervisor, settings, hub, fetchHub, createWindow });
   try {

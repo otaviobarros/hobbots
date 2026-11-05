@@ -10,6 +10,7 @@ export * from "./errors.ts";
 export * from "./export.ts";
 export * from "./github.ts";
 export * from "./hob-github-app.ts";
+export * from "./memory.ts";
 export * from "./permissions.ts";
 export * from "./remote-access.ts";
 export * from "./search.ts";

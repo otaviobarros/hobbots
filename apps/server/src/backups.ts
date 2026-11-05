@@ -21,6 +21,7 @@ import {
 import { BackupHolds } from "./backup-holds.ts";
 import { defaultSaveFolder } from "./destination.ts";
 import { Installation } from "./installation.ts";
+import { readMemorySettings } from "./memory-settings.ts";
 import { readNetworkSettings } from "./network-settings.ts";
 
 /** Why a backup stopped, in words for Settings. */
@@ -220,6 +221,19 @@ export const writeBackup = (options: WriteBackupOptions) =>
       });
     });
     files.push({ path: "settings/network.json", ...(yield* attempt("read the port", () => hashFile(network))) });
+
+    // The memory model you chose, in Hobbots' own words; it never holds a credential.
+    const memorySettings = join(folder, BACKUP_PARTS.memorySettings.backup);
+    yield* attempt("save the memory model", () =>
+      writeFile(memorySettings, `${JSON.stringify(readMemorySettings(dataDir), null, 2)}\n`, {
+        flag: "wx",
+        mode: 0o600,
+      }),
+    );
+    files.push({
+      path: "settings/memory-settings.json",
+      ...(yield* attempt("read the memory model", () => hashFile(memorySettings))),
+    });
 
     const manifest: BackupManifest = {
       format: BACKUP_FORMAT,

@@ -7,6 +7,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
 import { agentsQuery, archivedAgentsQuery, plansQuery, runtimesQuery, usageQuery } from "../../api/queries.ts";
 import { dailyUsage, type HobShare, hobShares, localDay, questShares, type UsageSplit } from "../../lib/usage.ts";
+import { MemoryUsage } from "../memory-settings/memory-usage.tsx";
+import { messages as memoryMessages } from "../memory-settings/messages.ts";
 import { Page } from "../shell/pages.tsx";
 import { DailyChart, HobBreakdown, QuestBreakdown } from "./hob-breakdown.tsx";
 import { messages } from "./messages.ts";
@@ -221,6 +223,9 @@ export function UsagePage({ days, by }: { days: UsagePeriod; by: UsageSplit }) {
       ) : (
         <>
           <YourAi onSave={showTips} />
+          <Section label={memoryMessages.usage.label}>
+            <MemoryUsage />
+          </Section>
           <DayByDay report={report.data} days={shown} />
           <WhoUsedWhat days={days} counted={shown} by={by} hobs={hobs} quests={report.data?.quests} looks={looks} />
           <Section label={messages.tips.label} icon="tips" headingRef={tips}>

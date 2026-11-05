@@ -46,6 +46,7 @@ export const BACKUP_PARTS = {
   activity: { backup: "activity", data: "activity" },
   toolLogs: { backup: "tool-logs", data: "tool-logs" },
   network: { backup: join("settings", "network.json"), data: "network.json" },
+  memorySettings: { backup: join("settings", "memory-settings.json"), data: "memory-settings.json" },
 } as const;
 
 /**
@@ -67,6 +68,7 @@ export const HUB_ENTRIES = [
   "tool-logs",
   "workspaces",
   "network.json",
+  "memory-settings.json",
   "memory",
   "memory-keys",
   "installation-id",

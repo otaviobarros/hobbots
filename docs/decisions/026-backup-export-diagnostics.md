@@ -32,6 +32,7 @@ A backup is a folder named `Hobbots backup <date> <time>.hobbots-backup`. It hol
 | `memory/` | Memory pages, their history and their index, made with ai-memory's own backup ([ADR 028](028-memory.md)). |
 | `workspace/` | The default workspace from `workspaces/default`, where a hob without folders of its own works. |
 | `settings/network.json` | The port. Remote access is always off in a backup. |
+| `settings/memory-settings.json` | The memory model you chose ([ADR 028](028-memory.md)). It holds no credential. |
 
 The schema version is the highest migration the database has applied, such as `36`.
 

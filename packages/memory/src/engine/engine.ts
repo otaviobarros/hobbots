@@ -24,6 +24,7 @@ import { verifyEngine } from "./binary.ts";
 import { configHoldsCredential, type EngineSettings, NO_MODEL, renderEngineConfig } from "./config.ts";
 import type { MemoryKeys } from "./keys.ts";
 import { AI_MEMORY_VERSION } from "./release.ts";
+import { type EngineStatus, readEngineStatus } from "./status.ts";
 
 /** The one ai-memory workspace of an installation (ADR 028). */
 export const MEMORY_WORKSPACE = "hobbots";
@@ -53,6 +54,8 @@ export interface MemoryEngineShape {
    * save. Fails while the engine is starting or restarting, so a backup never leaves memory out unsaid.
    */
   readonly backup: (target: string) => Effect.Effect<boolean, MemoryArchiveRefused>;
+  /** How many pages the engine keeps and how much its model was used; null while it does not answer. */
+  readonly status: Effect.Effect<EngineStatus | null>;
 }
 
 export interface MemoryEngineOptions {
@@ -157,6 +160,7 @@ const offEngine = (reason: MemoryEngineOffReason, dataDir?: string, keys?: Memor
   reconfigure: () => Effect.void,
   backup: (target) =>
     dataDir === undefined ? Effect.succeed(false) : packStoppedMemory(memoryFolder(dataDir), target, keys),
+  status: Effect.succeed(null),
 });
 
 const now = Effect.map(Clock.currentTimeMillis, (millis) => new Date(millis).toISOString());
@@ -422,6 +426,12 @@ const run = (options: MemoryEngineOptions) =>
           yield* Deferred.succeed(restartNow, undefined);
         }),
       backup,
+      status: Effect.flatMap(Ref.get(status), (current) =>
+        Option.match(current.endpoint, {
+          onNone: () => Effect.succeed(null),
+          onSome: (endpoint) => readEngineStatus(http, endpoint),
+        }),
+      ),
     });
   });
 

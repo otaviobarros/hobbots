@@ -32,6 +32,7 @@ import {
   newId,
   outcomesShown,
   ownTask,
+  questionChoices,
   questLimitsFor,
   refuse,
   type TaskToolLimits,
@@ -85,6 +86,7 @@ const openOnAwaited = (scope: CallScope, awaited: ReadonlyArray<Task>) => {
       task_id: question.taskId as string,
       asker: question.askerId as string,
       question: question.text,
+      ...questionChoices(question),
       waits_for: nameFor(question.recipientId, scope.caller.agentId),
     }));
   // A Task is blocked, the last thing its hob reported about it is a blocker, or it cannot start

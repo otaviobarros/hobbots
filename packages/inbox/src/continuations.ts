@@ -1,7 +1,9 @@
 import {
+  answerHow,
   type BackpackItem,
   CONTINUATION_HEADER,
   checkpointText,
+  choicesText,
   type Question,
   type Task,
   type ThreadId,
@@ -70,7 +72,7 @@ const describeApproval = (approval: { readonly label: string; readonly state: st
  * above it, or the user, can decide (ADR 018).
  */
 const describeQuestion = (question: Question) =>
-  `Hob ${question.askerId} asks, as question ${question.id} about Task ${question.taskId}: "${question.text}" Answer it with answer if you can; if only someone above you can decide, pass it up with escalate.`;
+  `Hob ${question.askerId} asks, as question ${question.id} about Task ${question.taskId}: "${question.text}"${choicesText(question)} Answer it with answer if you can${question.options.length === 0 ? "" : ", giving a choice's label to pick it"}; if only someone above you can decide, pass it up with escalate.`;
 
 /** A message: your note on a Task, or a hob's, with the Task it is about. */
 const describeMessage = (
@@ -103,7 +105,7 @@ const describeArrival = (item: BackpackItem): string => {
     case "question":
       return describeQuestion(payload.question);
     case "answer":
-      return `Your question ${payload.question.id} was answered${answeredBy(payload.question)}: "${payload.question.answer ?? ""}"`;
+      return `Your question ${payload.question.id} was answered${answeredBy(payload.question)}: "${payload.question.answer ?? ""}"${answerHow(payload.question)}`;
     case "hand-off":
       return `"${payload.artifact.label}" was handed to Task ${payload.handOff.toTaskId}: ${payload.artifact.value}`;
     case "message":

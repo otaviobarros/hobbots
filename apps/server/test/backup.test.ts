@@ -17,6 +17,7 @@ import {
   AttemptId,
   ContentId,
   carriedFrom,
+  DEFAULT_MEMORY_SETTINGS,
   DEFAULT_QUEST_LIMITS,
   Message,
   MessageId,
@@ -52,6 +53,7 @@ import { BackupHolds, HeldActivityStore } from "../src/backup-holds.ts";
 import { HubBackups, writeBackup } from "../src/backups.ts";
 import { checkDestination } from "../src/destination.ts";
 import { Installation } from "../src/installation.ts";
+import { readMemorySettings } from "../src/memory-settings.ts";
 import { backupBeforeMigrations, migrationBackupsFolder } from "../src/migration-backup.ts";
 import { performRestore, RestoreRulesLive, WorkHoldLive } from "../src/restores.ts";
 
@@ -621,6 +623,8 @@ describe("backup and restore", () => {
     await onHub(dataDir, seed);
     await seedFiles(dataDir);
     await seedMemory(dataDir);
+    const chosen = { ...DEFAULT_MEMORY_SETTINGS, fallback: "other" as const };
+    await writeFile(join(dataDir, "memory-settings.json"), JSON.stringify(chosen));
     const old = loadOrCreateMemoryKeys(dataDir);
     const folder = join(destination, "memory.hobbots-backup");
     await onHub(
@@ -638,6 +642,8 @@ describe("backup and restore", () => {
     );
     const manifest = await readBackup(folder, knownSchemaVersion());
     expect(manifest.files.map((file) => file.path)).toContain(MEMORY_PART);
+    // The memory model you chose goes beside the port.
+    expect(manifest.files.map((file) => file.path)).toContain("settings/memory-settings.json");
     // Neither bearer is in the backup, in the archive or anywhere else.
     await Effect.runPromise(checkMemoryArchive(join(folder, MEMORY_PART), old));
     const text = await everyFileText(folder);
@@ -647,6 +653,7 @@ describe("backup and restore", () => {
 
     const setAside = (await Effect.runPromise(performRestore(dataDir, folder))) as string;
     expect(await readFile(join(memoryFolder(dataDir), MEMORY_PAGE), "utf8")).toBe("# Route\n\nThrough Moria.");
+    expect(readMemorySettings(dataDir)).toEqual(chosen);
     const fresh = loadOrCreateMemoryKeys(dataDir);
     expect(Redacted.value(fresh.root)).not.toBe(Redacted.value(old.root));
     expect(Redacted.value(fresh.proxy)).not.toBe(Redacted.value(old.proxy));

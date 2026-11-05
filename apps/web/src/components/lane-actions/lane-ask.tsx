@@ -7,8 +7,8 @@ import { messages } from "./messages.ts";
 /**
  * A question for you, lit in lantern in the lane of the hob that asked (ADR 027). It is the same
  * question as in the chat, the Needs-you tray and the Inbox, so answering here answers it there.
- * Your answer goes back down the leads that passed it up. Until questions carry options (#740), it
- * takes an answer in words.
+ * Your answer goes back down the leads that passed it up. A lane is narrow, so a question's choices
+ * show as chips (#740), above the box for an answer in words.
  */
 export function LaneAsk({ question, hobs }: { question: Question; hobs: HobLookup }) {
   const asker = hobs(question.askerId).name;
@@ -24,7 +24,7 @@ export function LaneAsk({ question, hobs }: { question: Question; hobs: HobLooku
       </span>
       <p className="m-0 text-ui whitespace-pre-wrap text-text-strong">{question.text}</p>
       <p className="m-0 text-meta text-label">{messages.passedUp({ chain, when: formatWhen(question.createdAt) })}</p>
-      <AnswerForm question={question} askerName={asker} via="task" route={answerRoute(question, hobs)} />
+      <AnswerForm question={question} askerName={asker} via="task" route={answerRoute(question, hobs)} look="chips" />
     </section>
   );
 }
