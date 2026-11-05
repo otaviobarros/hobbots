@@ -2,10 +2,13 @@ import type { HubQuestion, Question, QuestionSurface } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { cn } from "@hobbots/ui/lib/utils";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useRef, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { useAnswerHubQuestion } from "../../api/hub-questions.ts";
 import { useAnswerQuestion } from "../../api/questions.ts";
+import { firstLine } from "../../lib/format.ts";
+import { type FocusTargets, NO_TARGETS } from "../move-on/follow-focus.ts";
+import { useMoveOn } from "../move-on/move-on.tsx";
 import { enterSends } from "./enter-sends.ts";
 import { messages } from "./messages.ts";
 import { type ChoicesLook, QuestionChoices } from "./question-choices.tsx";
@@ -19,11 +22,14 @@ interface FormPlace {
   hint?: string;
   route?: string;
   look?: ChoicesLook;
+  /** Where focus goes once the answer is sent and the question leaves (#995). */
+  targets?: FocusTargets;
 }
 
 /** How an answer box sends its answer, whoever asked: whether it is on its way, and why it failed. */
 interface AnswerSend {
-  readonly answer: (words: string) => void;
+  /** Sends the answer; it resolves once the hub took it. */
+  readonly answer: (words: string) => Promise<unknown>;
   readonly pending: boolean;
   readonly error: string | null;
 }
@@ -31,14 +37,14 @@ interface AnswerSend {
 /** An answer mutation as the box sends with it; `closedTag` is the error that says it was already answered. */
 const sendOf = <Id,>(
   mutation: {
-    readonly mutate: (input: { questionId: Id; answer: string }) => void;
+    readonly mutateAsync: (input: { questionId: Id; answer: string }) => Promise<unknown>;
     readonly isPending: boolean;
     readonly error: unknown;
   },
   questionId: Id,
   closedTag: string,
 ): AnswerSend => ({
-  answer: (words) => mutation.mutate({ questionId, answer: words }),
+  answer: (words) => mutation.mutateAsync({ questionId, answer: words }),
   pending: mutation.isPending,
   error:
     mutation.error === null || mutation.error === undefined
@@ -53,7 +59,8 @@ const sendOf = <Id,>(
  * records (#671). `route` says where the answer goes, beside Send answer. With `hint`, it is one
  * composer card: the box, then the hint beside Send answer, as in the Inbox. A question with
  * choices (#740) shows them first, as `look` says; a click, or its number key while the form has
- * focus outside the box, answers with that choice, and the box stays for anything else.
+ * focus outside the box, answers with that choice, and the box stays for anything else. Once an
+ * answer is sent, focus moves to `targets` as the question leaves, and a toast says what was sent.
  */
 export function AnswerForm({ question, ...place }: { question: Question } & FormPlace) {
   const send = useAnswerQuestion(place.via);
@@ -73,12 +80,20 @@ function ChoicesForm({
   hint,
   route,
   look = "rows",
+  targets = NO_TARGETS,
 }: { question: Pick<Question, "options" | "recommended">; send: AnswerSend } & FormPlace) {
   const [answer, setAnswer] = useState("");
+  const form = useRef<HTMLFormElement>(null);
+  const moveOn = useMoveOn();
   const text = answer.trim();
   const answerWith = (words: string) => {
     if (words === "" || send.pending) return;
-    send.answer(words);
+    moveOn({
+      from: form.current,
+      targets,
+      sent: send.answer(words),
+      say: copy.sent({ name: askerName, answer: firstLine(words) }),
+    });
   };
   const submit = () => answerWith(text);
   const choices = question.options.length > 0;
@@ -86,6 +101,7 @@ function ChoicesForm({
   const line = hint ?? route;
   return (
     <form
+      ref={form}
       className={cn(
         "flex flex-col",
         composer ? "gap-2.5 rounded-card border-(length:--edge) border-control bg-card p-3" : "gap-2",

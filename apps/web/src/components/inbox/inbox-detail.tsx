@@ -18,7 +18,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { useTaskControl } from "../../api/task-controls.ts";
 import { firstLine } from "../../lib/format.ts";
 import { formatWhen } from "../../lib/time.ts";
@@ -32,6 +32,8 @@ import { messages as memoryCopy } from "../memory/messages.ts";
 import { shareDestination } from "../memory/review-model.ts";
 import { ShareDecision, ShareDiff } from "../memory/share-card.tsx";
 import { messages as appCopy } from "../messages.ts";
+import type { FocusTargets } from "../move-on/follow-focus.ts";
+import { useMoveOn } from "../move-on/move-on.tsx";
 import { DeviceFacts, MatchingCode, PairingActions } from "../pairing/device-request.tsx";
 import { messages as pairingCopy } from "../pairing/messages.ts";
 import { AnswerForm, HubAnswerForm } from "../quest/answer-form.tsx";
@@ -48,11 +50,15 @@ import type { InboxDirectory } from "./use-inbox-directory.ts";
 
 const copy = messages;
 
-/** What the detail pane needs besides the entry: names for hobs and threads, and each Task's quest. */
+/**
+ * What the detail pane needs besides the entry: names for hobs and threads, each Task's quest, and
+ * where focus goes once an entry decided here leaves Needs you (#988).
+ */
 interface DetailContext {
   readonly directory: InboxDirectory;
   readonly questOf: (taskId: TaskId) => Quest | undefined;
   readonly now: Date;
+  readonly targets: FocusTargets;
 }
 
 /**
@@ -70,12 +76,13 @@ export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob
     case "approval":
       return hob === undefined ? null : <ApprovalDetail request={entry.request} hob={hob} row={row} {...context} />;
     case "question":
-      return <QuestionDetail waiting={entry.waiting} hob={hob} row={row} {...context} />;
+      // Keyed by the entry, as each kind decided here: its form leaves with it, and focus moves on.
+      return <QuestionDetail key={entry.key} waiting={entry.waiting} hob={hob} row={row} {...context} />;
     case "hub-question":
       // Keyed by the entry, so a draft or a failed send for one question never shows on the next.
       return <HubQuestionDetail key={entry.key} question={entry.question} row={row} {...context} />;
     case "stuck":
-      return <StuckDetail item={entry.item} hob={hob} row={row} {...context} />;
+      return <StuckDetail key={entry.key} item={entry.item} hob={hob} row={row} {...context} />;
     case "failed":
       // Keyed by the entry, so a Retry sent from one failed Task never shows on the next.
       return <FailedDetail key={entry.key} failed={entry.failed} hob={hob} row={row} lead={lead} {...context} />;
@@ -171,6 +178,7 @@ function QuestionDetail({
   directory,
   questOf,
   now,
+  targets,
 }: { waiting: WaitingQuestion; hob: Agent | undefined; row: InboxRow } & DetailContext) {
   const { question, task } = waiting;
   const asker = directory.hobName(question.askerId);
@@ -208,6 +216,7 @@ function QuestionDetail({
         question={question}
         askerName={asker}
         via="inbox"
+        targets={targets}
         hint={
           lead === undefined
             ? copy.question.goesStraight({ name: asker })
@@ -227,6 +236,7 @@ function HubQuestionDetail({
   row,
   directory,
   now,
+  targets,
 }: { question: HubQuestion; row: InboxRow } & DetailContext) {
   const hub = copy.row.hub;
   return (
@@ -255,6 +265,7 @@ function HubQuestionDetail({
         askerName={copy.row.hubInSentence}
         via="inbox"
         hint={copy.question.goesToHub}
+        targets={targets}
       />
     </DetailFrame>
   );
@@ -265,6 +276,7 @@ function StuckDetail({
   row,
   directory,
   questOf,
+  targets,
 }: { item: BackpackItem; hob: Agent | undefined; row: InboxRow } & DetailContext) {
   const hobs = useHobLookup();
   const hob = hobs(item.recipientId);
@@ -298,7 +310,7 @@ function StuckDetail({
       />
       <p className="m-0 text-ui font-bold text-lantern">{blockerCopy.next[choice.next]}</p>
       <div className="flex flex-col gap-2">
-        <BlockerChoices item={item} hob={hob} />
+        <BlockerChoices item={item} hob={hob} targets={targets} />
       </div>
     </DetailFrame>
   );
@@ -307,7 +319,8 @@ function StuckDetail({
 /**
  * A party member's Task that failed while its Quest goes on: Retry sends it back to its hob from
  * here, and Open the task opens the Quest room beside its lead's chat on that Task's lane, where it
- * can go to another hob or be cancelled. A retry the hub recorded takes the entry out of the list with its event.
+ * can go to another hob or be cancelled. A retry the hub recorded takes the entry out of the list with its event,
+ * which can land before the hub's answer does, so the toast says it went back and focus moves on (#988).
  */
 function FailedDetail({
   failed,
@@ -317,11 +330,21 @@ function FailedDetail({
   directory,
   questOf,
   now,
+  targets,
 }: { failed: FailedTask; hob: Agent | undefined; row: InboxRow; lead: AgentId | undefined } & DetailContext) {
   const { task } = failed;
   const owner = directory.hobName(task.ownerId);
   const leadId = failed.leadId ?? lead ?? task.ownerId;
   const retry = useTaskControl();
+  const controls = useRef<HTMLDivElement>(null);
+  const moveOn = useMoveOn();
+  const send = () =>
+    moveOn({
+      from: controls.current,
+      targets,
+      sent: retry.mutateAsync({ kind: "retry", taskId: task.id }),
+      say: copy.failedTask.retried({ name: owner }),
+    });
   return (
     <DetailFrame
       label={copy.failedTask.label({ name: owner, what: row.what })}
@@ -338,12 +361,8 @@ function FailedDetail({
           [copy.detail.when, formatWhen(task.updatedAt, now)],
         ]}
       />
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="default"
-          disabled={retry.isPending || retry.isSuccess}
-          onClick={() => retry.mutate({ kind: "retry", taskId: task.id })}
-        >
+      <div ref={controls} className="flex flex-wrap items-center gap-2">
+        <Button variant="default" disabled={retry.isPending || retry.isSuccess} onClick={send}>
           {retry.isPending ? copy.failedTask.retrying : copy.failedTask.retry}
         </Button>
         {task.threadId !== null && (
@@ -359,9 +378,6 @@ function FailedDetail({
           </Button>
         )}
       </div>
-      <p role="status" className="m-0 text-meta text-text-secondary empty:hidden">
-        {retry.isSuccess ? copy.failedTask.retried({ name: owner }) : null}
-      </p>
       {retry.isError && (
         <p role="alert" className="m-0 text-meta text-rose">
           {controlError(retry.error, { owner, target: owner })}
