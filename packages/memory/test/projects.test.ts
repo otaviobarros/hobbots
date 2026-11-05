@@ -25,7 +25,7 @@ const identityOf = (folder: string) =>
 
 describe("MemoryProjectsLive", () => {
   // covers ADR 028
-  it("[TC-GEN-192] gives a clone and its linked worktree the identity of their origin, and a plain folder its name", async () => {
+  it("[TC-GEN-194] gives a clone and its linked worktree the identity of their origin, and a plain folder its name", async () => {
     root = mkdtempSync(join(tmpdir(), "hobbots-projects-"));
     const clone = join(root, "App");
     mkdirSync(clone);

@@ -16,6 +16,17 @@ export class KeychainError extends Schema.TaggedError<KeychainError>()("Keychain
   message: Schema.String,
 }) {}
 
+/**
+ * What a failed delete of a keychain item leaves to say, or null when nothing of it can be left
+ * (#948). A refusal means the item is still there. A tool that could not run or answer in time says
+ * nothing about the item, so the outcome is unknown, and counts as kept when the hub's records say
+ * it stored the item (`recorded`). Without such a record, the hub never stored one it knows of.
+ */
+export const deleteOutcome = (error: KeychainError, recorded: boolean, what: string): string | null => {
+  if (error.reason === "failed") return `The keychain did not delete ${what}: ${error.message}`;
+  return recorded ? `The hub could not tell whether the keychain deleted ${what}: ${error.message}` : null;
+};
+
 export class Keychain extends Context.Service<
   Keychain,
   {
