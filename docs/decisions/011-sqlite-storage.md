@@ -19,6 +19,8 @@ The [hub model](010-desktop-hub.md) has one server writing one database, which S
 
 Search matches every word of the query as a prefix. SQLite ignores accents and PostgreSQL's `simple` configuration keeps them, so "Café" finds "Café" on both but "cafe" finds it only on SQLite. A separate search engine was not needed at hub scale.
 
+Memory is the one exception to a single database: [ADR 028](028-memory.md) keeps memory pages, their history and their index in ai-memory's own data folder, `<data folder>/memory`, written only by its process. Everything Hobbots decides and journals stays in this database.
+
 Backups use the SQLite online backup API plus the artifact folder. Moving data between installations is an export and import, not replication. [ADR 026](026-backup-export-diagnostics.md) decides what a backup holds, how a restore works and what an export is.
 
 ## Validation

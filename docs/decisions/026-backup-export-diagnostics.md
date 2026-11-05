@@ -19,7 +19,7 @@ Some data in the database is private but not a credential. The [redaction rules]
 
 ### A backup is the whole hub, minus every managed credential
 
-A **managed credential** is a value the hub keeps so that someone or something can authenticate: the keychain items, device token hashes, pairing secret hashes, the window key, runtime sign-ins, and the credentials in the hub's environment. The hub knows each one and where it keeps it. Text you wrote, and the replies hobs wrote, are content, not managed credentials, even when they contain a token.
+A **managed credential** is a value the hub keeps so that someone or something can authenticate: the keychain items, device token hashes, pairing secret hashes, the window key, runtime sign-ins, memory's two bearers (ADR 028), and the credentials in the hub's environment. The hub knows each one and where it keeps it. Text you wrote, and the replies hobs wrote, are content, not managed credentials, even when they contain a token.
 
 A backup is a folder named `Hobbots backup <date> <time>.hobbots-backup`. It holds:
 
@@ -29,6 +29,7 @@ A backup is a folder named `Hobbots backup <date> <time>.hobbots-backup`. It hol
 | `database.sqlite` | The database, copied with the SQLite online backup API and then scrubbed (below). |
 | `activity/` | The Workbench contents: redacted text, images and folded command logs, stored once per hash. |
 | `tool-logs/` | The full logs of tool steps, already redacted when the hub wrote them. |
+| `memory/` | Memory pages, their history and their index, made with ai-memory's own backup ([ADR 028](028-memory.md)). |
 | `workspace/` | The default workspace from `workspaces/default`, where a hob without folders of its own works. |
 | `settings/network.json` | The port. Remote access is always off in a backup. |
 
@@ -84,6 +85,7 @@ On its first start after a restore the hub applies these rules in one transactio
 - **The GitHub account** is connected again only if this computer's keychain still has its item. Otherwise Settings › GitHub says to connect, as after a disconnect (ADR 020).
 - **A hob's own GitHub App** whose key is not in this computer's keychain needs a reconnect, with the reason "The app's key is not on this computer" (ADR 022). Its GitHub actions fail with that reason and never run as you.
 - **Runtime sessions.** A thread keeps its runtime session IDs. A session the runtime no longer has starts fresh, with the briefing a thread gets on a new runtime ([ADR 017](017-switching-brains.md)).
+- **Memory** gets new bearers, so the old ones no longer work ([ADR 028](028-memory.md)).
 - **Backup holds.** A cleanup or workspace hold recorded in the database is cleared.
 - **Hob folders.** The restore summary lists each hob folder that is not on this computer, so you can set that hob's folders again.
 

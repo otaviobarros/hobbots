@@ -20,6 +20,8 @@ The issue leaves four questions to this ADR: how much history to send verbatim a
 
 A turn carries a briefing when its runtime's session missed replies from another brain: the session is new to a thread another brain has answered in, or it resumes after another brain replied. Continuing a reply on another brain also carries one. A thread that has only ever used one runtime never gets a briefing. The briefing travels as its own field of the prompt request, and the adapter places it after the hob's instructions and before the user's prompt, so the prompt itself is stored and passed as the user wrote it. Claude Code receives the three in one message, so a slash command typed on a briefed turn is read as text, as it already is on a turn that repeats changed instructions. The hob's identity and instructions are delivered as on any other turn.
 
+The same field also carries the hob's memory brief ([ADR 028](028-memory.md)) as its own labeled section, at the start of a runtime session and again when it changed, so adapters deliver both the same way. A turn can carry a memory brief without a briefing.
+
 - **New session** (the runtime has not been used in this thread): the latest turns verbatim, and a summary of the older ones.
 - **Resumed session** (the runtime is used again after another brain replied): only what happened since that session last replied, verbatim, with a summary if it does not fit.
 - **Verbatim window:** the newest messages, newest first, until 24,000 characters. A single message longer than 6,000 characters is cut to its first and last 3,000.
