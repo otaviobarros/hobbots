@@ -13,7 +13,8 @@ interface BriefEntry {
   readonly lines: ReadonlyArray<string>;
   /**
    * What this turn shows in place of `lines`, as a result told longer when it arrived with the turn
-   * (#1040). The mark keeps the fingerprint of `lines`, so a later turn compares with those.
+   * (#1040). It is shown even when `lines` were told before, since they hold less. The mark keeps the
+   * fingerprint of `lines`, so a later turn compares with those.
    */
   readonly shown?: ReadonlyArray<string>;
 }
@@ -68,7 +69,10 @@ export const renderBrief = (taskId: TaskId, parts: ReadonlyArray<BriefPart>, tol
       const key = markKey(part.group, entry.key);
       const digest = memoryBriefDigest(entry.lines.join("\n"));
       entries[key] = digest;
-      return since?.[key] !== digest;
+      // Shown longer than the mark's lines, as a result that arrived with the turn after its summary
+      // was briefed: the session holds only the summary, so it is told the rest (#1040).
+      const longer = entry.shown !== undefined && entry.shown.join("\n") !== entry.lines.join("\n");
+      return longer || since?.[key] !== digest;
     });
     return changed.length === 0 ? [] : [...part.heading, ...changed.flatMap((entry) => entry.shown ?? entry.lines)];
   });

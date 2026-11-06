@@ -240,5 +240,15 @@ describe("a result that arrives with a lead's turn", () => {
     // briefing later tells the summary.
     expect(woken.told).toEqual(plain.told);
     expect(renderBrief(lead(tree).id, parts(tree), woken.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+
+    // Rook finished before the earlier wake read the tree, so it briefed his summary; the wake that
+    // then carries his result still tells the rest of it, once.
+    const summarised = renderBrief(lead(tree).id, parts(tree), told);
+    expect(result.length).toBeGreaterThan(600);
+    expect(summarised.text).not.toContain(result);
+    const late = renderBrief(lead(tree).id, carrying, summarised.told);
+    expect(late.text).toContain(result);
+    expect(late.told).toEqual(summarised.told);
+    expect(renderBrief(lead(tree).id, parts(tree), late.told).text).not.toContain(`${MEMBERS[1]} finished.`);
   });
 });
