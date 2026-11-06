@@ -119,6 +119,10 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
           at: turn.at,
           ...(turn.sessionId == null ? {} : { sessionId: turn.sessionId }),
           ...(turn.policyVersion == null ? {} : { policyVersion: turn.policyVersion }),
+          // A step's or a member's reply is in no chat, so its end carries it to memory (ADR 028).
+          ...(turn.runner !== "root" && turn.ending._tag === "Replied" && turn.ending.text.trim() !== ""
+            ? { reply: turn.ending.text }
+            : {}),
         }),
         "end a turn's Attempt",
       );

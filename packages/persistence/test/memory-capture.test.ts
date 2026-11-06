@@ -56,7 +56,7 @@ describe("MemoryCaptureLog", () => {
       // A cursor that was not holding starts again at the head, so take it back to before the seed.
       yield* sql`UPDATE memory_capture SET sequence = 0`;
       const kept = yield* journal.compact;
-      const session = { threadId, agentId, lastAt: now, lastKey: "message:m1" };
+      const session = { sessionId: threadId, agentId, lastAt: now, lastKey: "message:m1" };
       yield* log.save(1, [session], []);
       const afterOne = yield* journal.compact;
       const held = yield* log.hold;
@@ -71,7 +71,10 @@ describe("MemoryCaptureLog", () => {
     expect(result.first).toEqual({ sequence: 10_002, sessions: [] });
     expect(result.kept).toBe(0);
     expect(result.afterOne).toBe(1);
-    expect(result.held).toEqual({ sequence: 1, sessions: [{ threadId, agentId, lastAt: now, lastKey: "message:m1" }] });
+    expect(result.held).toEqual({
+      sequence: 1,
+      sessions: [{ sessionId: threadId, agentId, lastAt: now, lastKey: "message:m1" }],
+    });
     expect(result.ended).toEqual({ sequence: 2, sessions: [] });
     // Released, compaction goes on as before, and the next hold starts at the head.
     expect(result.released).toBe(1);

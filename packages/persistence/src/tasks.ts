@@ -1,4 +1,11 @@
-import { type AttemptResume, type NewNote, type NewTask, type TaskCompletion, TaskRepository } from "@hobbots/agents";
+import {
+  type AttemptChange,
+  type AttemptResume,
+  type NewNote,
+  type NewTask,
+  type TaskCompletion,
+  TaskRepository,
+} from "@hobbots/agents";
 import {
   type AgentId,
   type Answerer,
@@ -427,6 +434,10 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
+    /** The reply of the turn that ended an Attempt, journaled with its end for memory (ADR 028) and kept nowhere else. */
+    const replyOf = (update: AttemptChange) =>
+      update._tag === "Ended" && update.reply !== undefined ? { reply: update.reply } : {};
+
     const updateAttempt: TaskRepository["Service"]["updateAttempt"] = (attemptId, update) =>
       change((revision) =>
         Effect.gen(function* () {
@@ -456,7 +467,7 @@ export const TaskRepositoryLive = Layer.effect(
           yield* saveTask(task);
           return {
             value: { task, attempt },
-            events: [{ _tag: "TaskStateChanged", task, attempt, quest: null, wait: null } as const],
+            events: [{ _tag: "TaskStateChanged", task, attempt, quest: null, wait: null, ...replyOf(update) } as const],
           };
         }),
       );
