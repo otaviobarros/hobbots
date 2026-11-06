@@ -1,0 +1,44 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Effect, Stream } from "effect";
+import { afterAll, describe, expect, it } from "vitest";
+import { fakeSkillsPrompt, makeFakeRuntime } from "../src/fake.ts";
+import { AGENTS_SKILL, ASKED_SKILL, cleanRuntimeFixture, LIBRARY_SKILL } from "./clean-runtime.ts";
+
+// The clean-runtime contract test on the fake runtime (ADR 029): it loads exactly the skills the turn
+// mounts, whatever the home folder and the repository hold. The real runtimes run the same fixture in
+// clean-runtime-claude-code.test.ts and clean-runtime-codex.test.ts.
+
+describe("a clean fake runtime (ADR 029)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hobbots-clean-fake-"));
+  const fixture = cleanRuntimeFixture(root);
+  const savedHome = process.env.HOME;
+  process.env.HOME = fixture.home;
+  afterAll(() => {
+    process.env.HOME = savedHome;
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const skillsOf = (skills: typeof fixture.mounts | null) =>
+    makeFakeRuntime()
+      .sendPrompt({
+        prompt: fakeSkillsPrompt,
+        sessionId: null,
+        instructions: "",
+        instructionsChanged: false,
+        model: null,
+        effort: null,
+        skills,
+      })
+      .pipe(Stream.runCollect, Effect.runPromise)
+      .then((events) => Array.from(events).flatMap((event) => (event._tag === "Completed" ? [event.text] : [])));
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-519] loads only the skills the turn mounts, Only when asked marked, and none without mounts", async () => {
+    expect(await skillsOf(fixture.mounts)).toEqual([
+      [LIBRARY_SKILL, `${ASKED_SKILL} (only when asked)`, AGENTS_SKILL].join("\n"),
+    ]);
+    expect(await skillsOf(null)).toEqual(["No skills."]);
+  });
+});

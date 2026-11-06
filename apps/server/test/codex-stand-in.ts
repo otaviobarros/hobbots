@@ -98,6 +98,9 @@ const results = {
     return { turn: { id, status: "inProgress", error: null } };
   },
   "turn/interrupt": () => ({}),
+  // Hobbots sets the turn's skill root and checks what Codex would load (ADR 029): nothing here.
+  "skills/extraRoots/set": () => ({}),
+  "skills/list": (params) => ({ data: (params.cwds || []).map((cwd) => ({ cwd, skills: [], errors: [] })) }),
 };
 let buffered = "";
 process.stdin.on("data", (chunk) => {

@@ -156,6 +156,18 @@ export const fakeCutOffError = "Claude stopped responding";
 export const fakeInstructionsPrompt = "/instructions";
 
 /**
+ * The prompt the fake answers with the skills the turn mounted (ADR 029), one name a line, each
+ * marked when it is Only when asked. Like every runtime, it loads no skill from anywhere else.
+ */
+export const fakeSkillsPrompt = "/skills";
+
+/** The fake's answer to `fakeSkillsPrompt`. */
+export const fakeSkillsReply = (skills: PromptRequest["skills"]) =>
+  (skills ?? []).length === 0
+    ? "No skills."
+    : (skills ?? []).map((skill) => (skill.implicit ? skill.name : `${skill.name} (only when asked)`)).join("\n");
+
+/**
  * A prompt line `fake:tool <Tool> <argument>` asks the fake runtime to make that tool call. A
  * `Bash sleep …` call keeps running until its turn ends, as a long command does.
  */
@@ -629,6 +641,13 @@ const fakeFailure = (
  * Deterministic adapter for tests and UI work without model usage. Like Claude Code, a resumed session
  * keeps the instructions it started with unless the turn carries changed ones.
  */
+/** What the fake says back: the session's instructions, the turn's skills, or the prompt. */
+const fakeEcho = (request: PromptRequest, followed: string, told: string) => {
+  if (request.prompt === fakeInstructionsPrompt) return followed;
+  if (request.prompt === fakeSkillsPrompt) return fakeSkillsReply(request.skills);
+  return `Echo: ${told}`;
+};
+
 export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   const runtime = options.runtime ?? "claude-code";
   const availability = options.availability ?? "ready";
@@ -655,7 +674,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     sessions.set(sessionId, { instructions: followed, later: keptForNext(scripted) });
     // A briefing is echoed ahead of the prompt, so a test can see what the session was told.
     const told = request.briefing ? `${request.briefing}\n\n${request.prompt}` : request.prompt;
-    const echo = request.prompt === fakeInstructionsPrompt ? followed : `Echo: ${told}`;
+    const echo = fakeEcho(request, followed, told);
     const quiet = options.quietContinuations === true && request.prompt.startsWith(CONTINUATION_HEADER);
     // The turn's own prompt decides first, so a line kept from before never hides its directive.
     const own = fakeEnding(request.prompt);

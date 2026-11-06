@@ -68,6 +68,7 @@ import {
   isExecutable,
   runnableBinary,
 } from "./binary.ts";
+import { SKILL_TOOL, withSkills } from "./claude-code-skills.ts";
 import { COMMAND_ENV_FILE_VARIABLE, commandColorFile, plainBashResponse } from "./command-color.ts";
 import { toolFinished } from "./command-exit.ts";
 import { turnCommits } from "./git-config.ts";
@@ -80,6 +81,7 @@ import {
   TEMP_NOTE,
   withCommitIdentity,
 } from "./sandbox.ts";
+import { holdSkillFolder, skillFolderScope } from "./skills.ts";
 import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
 import { fullToolOutput } from "./tool-output.ts";
 
@@ -387,8 +389,19 @@ export const isSignedOut = (account: AccountInfo): boolean =>
  * Settings every turn gets in place of the user's own, which are not loaded: no Claude attribution
  * on a hob's commits or pull requests. A hob's commits are its own or the user's, and Claude Code's
  * default `Co-Authored-By` trailer would name Claude on every one.
+ *
+ * Nothing a claude.ai sign-in brings reaches a hob either (ADR 029): no claude.ai connectors and no
+ * skills or plugins synced from claude.ai. Claude Code's bundled skills are off, and a skill's text
+ * never runs shell commands as it loads, which would bypass the policy hook.
  */
-export const RUNTIME_SETTINGS = { attribution: false } as const;
+export const RUNTIME_SETTINGS = {
+  attribution: false,
+  disableClaudeAiConnectors: true,
+  syncClaudeAiSkills: false,
+  syncClaudeAiPlugins: false,
+  disableBundledSkills: true,
+  disableSkillShellExecution: true,
+} as const;
 
 // Chat-only unless the turn has tools (see `toolOptions`): no built-in tools, nothing auto-approved,
 // no user/project settings or MCP servers loaded from disk.
@@ -405,6 +418,10 @@ export const baseOptions = (config: ClaudeCodeConfig, executable: string): Optio
   disallowedTools: ["*"],
   permissionMode: "dontAsk",
   settingSources: [],
+  // Only the MCP servers Hobbots passes, on every turn, chat-only turns included (ADR 029).
+  strictMcpConfig: true,
+  // The turn's skills, if any, are added with `withSkills`; none is listed until then.
+  skills: [],
   settings: RUNTIME_SETTINGS,
 });
 
@@ -906,6 +923,8 @@ export const policyHooks = (
     const tool = input.tool_name;
     // The hub decides its own tools' calls (ADR 018); the turn allows them by name.
     if (hubToolOf(tool) !== null) return {};
+    // A mounted skill's instructions are the hob's to read; the skills hook decides those (ADR 029).
+    if (tool === SKILL_TOOL) return {};
     const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
@@ -1048,6 +1067,9 @@ export const toolOptions = (
   canUseTool: policy.canUseTool,
 });
 
+/** Where a turn's skill folders go: the hob's runtime folder, or the hub's own folder for a chat. */
+const skillsBase = (tools: ToolTurn | null, config: ClaudeCodeConfig) => tools?.runtimeFolder ?? config.workspaceDir;
+
 /** Hands a turn's background commands each task end Claude Code reports (#1018). */
 const taskEnds = (background: BackgroundCommands) => (message: unknown) =>
   isTaskEnd(message) ? Effect.promise(() => background.ended(message)) : Effect.void;
@@ -1141,6 +1163,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const signingAgent = turnSigningAgent(sandboxed ? tools : null);
           // A hob's commands print in color (#902).
           const colorScript = yield* commandColorFile(tools);
+          // The turn's skills, in a folder of their own for as long as it runs (ADR 029).
+          const skills = yield* holdSkillFolder(skillsBase(tools, config), request.skills);
           const prepared = sandboxed
             ? yield* Effect.acquireRelease(
                 sandbox.prepare({
@@ -1151,6 +1175,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   runtimeFolder: tools.runtimeFolder,
                   ...(signingAgent ? { signingAgent } : {}),
                   ...(commitAs ? { commitAs } : {}),
+                  ...skillFolderScope(skills),
                   allowedHosts: CLAUDE_CODE_MODEL_HOSTS,
                   // The hob's own grants as they are now can answer the preset's Ask for a host (ADR 015).
                   decideHost: grantedHosts(engine, tools.context, request.approvals),
@@ -1188,39 +1213,44 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               query({
                 prompt: start.prompt,
                 options: withHubTools(
-                  {
-                    ...base,
-                    ...(tools
-                      ? toolOptions(
-                          tools,
-                          policyHooks(
-                            engine,
+                  withSkills(
+                    {
+                      ...base,
+                      ...(tools
+                        ? toolOptions(
                             tools,
-                            report,
-                            request.approvals,
-                            request.redaction,
-                            request.recordToolStart,
-                            background,
-                          ),
-                          // Only Hobbots' script: one the hub was started with never reaches the commands.
-                          { ...base.env, [COMMAND_ENV_FILE_VARIABLE]: colorScript },
-                        )
-                      : {}),
-                    abortController,
-                    spawnClaudeCodeProcess,
-                    includePartialMessages: true,
-                    systemPrompt: {
-                      type: "preset",
-                      preset: "claude_code",
-                      append: start.instructions,
+                            policyHooks(
+                              engine,
+                              tools,
+                              report,
+                              request.approvals,
+                              request.redaction,
+                              request.recordToolStart,
+                              background,
+                            ),
+                            // Only Hobbots' script: one the hub was started with never reaches the commands.
+                            { ...base.env, [COMMAND_ENV_FILE_VARIABLE]: colorScript },
+                          )
+                        : {}),
+                      abortController,
+                      spawnClaudeCodeProcess,
+                      includePartialMessages: true,
+                      systemPrompt: {
+                        type: "preset",
+                        preset: "claude_code",
+                        append: start.instructions,
+                      },
+                      ...(request.sessionId ? { resume: request.sessionId } : {}),
+                      // A turn of no hob's keeps no session on disk.
+                      ...(request.ephemeral ? { persistSession: false } : {}),
+                      // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
+                      ...(signingAgent ? { sandbox: { network: { allowUnixSockets: [signingAgent] } } } : {}),
+                      ...brainOptions(request),
                     },
-                    ...(request.sessionId ? { resume: request.sessionId } : {}),
-                    // A turn of no hob's keeps no session on disk.
-                    ...(request.ephemeral ? { persistSession: false } : {}),
-                    // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
-                    ...(signingAgent ? { sandbox: { network: { allowUnixSockets: [signingAgent] } } } : {}),
-                    ...brainOptions(request),
-                  },
+                    skills,
+                    request.skills,
+                    report,
+                  ),
                   request.hubTools,
                   report,
                 ),
