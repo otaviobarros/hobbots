@@ -139,6 +139,45 @@ test("[TC-UX-046] while a turn runs the Terminal is Live: a running command coun
   await expect(colored(hobTerminal(panel, "Aldric"), "yellow", "Cut off")).toBeVisible();
 });
 
+// Issue #1018: a command run in the background stays Running after its call returns, until it
+// really ends, and one still running when the turn ends is Cut off rather than Succeeded.
+// covers UX-002, UX-006
+test("[TC-UX-1018-01] a background command stays Running after its call returns, then ends with its own outcome", async ({
+  page,
+}) => {
+  const { url, aldric } = await aldricHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await send(page, ["Start the dev server", script("start_quest", { key: "quest", goal: "Start the dev server" })]);
+  await expect(ticket(page, "Start the dev server")).toBeVisible({ timeout: 20_000 });
+  await settled(page);
+
+  // The server starts in the background; the turn checks something else, then waits for it.
+  await send(page, [
+    "Start it",
+    run({ command: "pnpm dev", background: true, runsFor: "8 seconds", output: "ready on :5173\n", exitCode: 0 }),
+    "fake:tool Bash echo checked",
+  ]);
+  const { panel } = await openTerminal(page, "Start the dev server");
+  const screen = rows(hobTerminal(panel, "Aldric"));
+  await expect(panel).toContainText("2 commands · 1 running", { timeout: 20_000 });
+  await expect(screen).toContainText("$ pnpm dev");
+  await expect(screen).toContainText(/Running · \d+ sec · Its output shows when it ends\./);
+  await expect(screen).toContainText(/checked\s*✓ ran in/);
+  await expect(screen).not.toContainText("ready on :5173");
+
+  // It ends with what it printed and its exit code, and then the turn completes.
+  await expect(screen).toContainText(/ready on :5173\s*✓ ran in/, { timeout: 30_000 });
+  await expect(panel).not.toContainText("running");
+  await settled(page);
+
+  // One that never ends before its turn does is not known to have finished.
+  await send(page, ["Watch it", run({ command: "pnpm preview", background: true })]);
+  await settled(page);
+  await openTerminal(page, "Start the dev server");
+  await expect(screen).toContainText("$ pnpm preview", { timeout: 20_000 });
+  await expect(screen).toContainText("? Cut off · The turn ended while this ran, so whether it finished is not known.");
+});
+
 // covers UX-002, UX-006
 test("[TC-UX-183] a command whose runtime reports output as it comes shows it live in the terminal while it runs", async ({
   page,
