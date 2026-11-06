@@ -1,7 +1,8 @@
 import { ApprovalService, ChatService, HobLifecycle, TaskControls } from "@hobbots/agents";
 import { isResumable, type Message, type MessageId, steerReceipt, type TaskNote, type TaskTree } from "@hobbots/domain";
+import { waitUntil } from "@hobbots/domain/testing";
 import { EventJournal } from "@hobbots/persistence";
-import { Effect, Schedule } from "effect";
+import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   FRODO,
@@ -60,10 +61,17 @@ const answeredTo = (text: string) =>
     return message !== undefined && all.some((each) => each.role === "assistant" && each.promptId === message.id);
   });
 
-/** Continue on the reply, once its turn has let go of the thread. */
+/**
+ * Continue on the reply, once its turn has let go of the thread: until then Continue refuses it as
+ * not resumable. Waits on that state with a time limit; any other failure ends the wait at once.
+ */
 const resume = (replyId: MessageId) =>
-  ChatService.use((chat) => chat.continueReply(threadId, replyId)).pipe(
-    Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }),
+  waitUntil(
+    ChatService.use((chat) => chat.continueReply(threadId, replyId)).pipe(
+      Effect.catchTag("ReplyNotResumable", () => Effect.succeed(null)),
+    ),
+    (continued) => continued !== null,
+    { what: "the cut-off reply to be continued" },
   );
 
 const picked = (note: TaskNote) => note.pickedUpBy !== null;
