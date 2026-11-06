@@ -4,6 +4,7 @@ import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
 import { type BrowserContext, test as base, type Locator, type Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
+import { expectWindowStill, watchWindow } from "./window-still.ts";
 
 const web = resolve(import.meta.dirname, "..");
 const server = resolve(web, "../server");
@@ -150,15 +151,25 @@ let activeContext: BrowserContext | undefined;
 /**
  * Playwright's `test`, whose browser context gets a device on each hub the test starts. `scan` checks
  * what its page shows now, or one part of it, for serious and critical accessibility violations
- * (STD-TEST-007).
+ * (STD-TEST-007). Every test also fails when the window scrolled or grew taller than the viewport on
+ * any screen it visited (STD-TEST-010).
  */
 export const test = base.extend<{
   readonly hubDevice: undefined;
+  readonly windowStill: undefined;
   readonly scan: (within?: Locator) => Promise<void>;
 }>({
   scan: async ({ page }, use) => {
     await use((within) => expectAccessible(page, within));
   },
+  windowStill: [
+    async ({ context }, use) => {
+      await watchWindow(context);
+      await use(undefined);
+      await expectWindowStill(context);
+    },
+    { auto: true },
+  ],
   hubDevice: [
     async ({ context }, use) => {
       activeContext = context;

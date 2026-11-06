@@ -838,6 +838,16 @@ body,
 }
 
 /*
+ * The window never scrolls: each panel scrolls inside it (#1026). The desktop window is never
+ * shorter than the frame, so it hides the window's own overflow outright. A browser tab can be
+ * shorter than the frame's least height, so there the window still scrolls to show the rest, and the
+ * scroll panels below keep what they hold out of the window's height.
+ */
+:root[data-window="desktop"] {
+  overflow: hidden;
+}
+
+/*
  * Larger text (Settings › This app): the whole app scales up by an eighth, spacing with the type, so
  * every screen keeps its proportions. Under zoom 100vh measures an eighth more than the window, so
  * a frame sized to the screen is divided back.
@@ -905,6 +915,17 @@ body {
 
 /* Base layer, so utility classes on a link still win. */
 @layer base {
+  /*
+   * A scroll panel holds what is placed in it (#1026). An absolutely placed element, such as an
+   * sr-only label, is placed in its nearest positioned box. Inside a panel with no position of its
+   * own that box lies outside the panel, so the label escapes the panel's scrolling and stretches
+   * the window to the height of everything the panel holds: a long chat made the window scroll.
+   * A `fixed`, `sticky` or `absolute` utility on the panel itself still wins.
+   */
+  :where(.overflow-auto, .overflow-y-auto, .overflow-x-auto, .overflow-scroll, .overflow-y-scroll, .overflow-x-scroll) {
+    position: relative;
+  }
+
   /* Links read in `link`, underlined; the underline turns lantern on hover (docs/design/themes.md). */
   a {
     color: var(--color-link);

@@ -76,3 +76,13 @@ A test waits for the state it needs, with a time limit, never for a fixed time o
 - **Why:** a fixed wait passes on a quiet laptop and fails on a busy runner, and a flaky test on `main` turns every pull request rebased on it red (#985).
 - **Enforced by:** review, the retry and flaky list in each CI job, the burn-in of changed browser tests on pull requests, and the nightly flake hunt.
 - **Applies to:** every test.
+
+### STD-TEST-010 The window never scrolls
+
+Each panel scrolls inside the window; the window itself never does. A shared fixture fails every end-to-end test in which, on any screen, the window was scrolled, the window grew taller than the viewport, a box that clips its overflow was scrolled to show what it hides, or an absolutely placed element sits outside the panel it scrolls in. A window shorter than the frame's least height, 610px, may scroll and is not checked.
+
+- ✅ A scroll panel is the box its absolutely placed contents, such as an `sr-only` label, are placed in, so they scroll with it.
+- ❌ An `sr-only` label inside a transcript whose panel has no position of its own: the label escapes the panel and stretches the window to the transcript's height (#1026).
+- **Why:** a window that scrolls moves the whole frame, sidebar and composer included, and leaves an empty screen under them.
+- **Enforced by:** the shared Playwright fixture, `[TC-UX-1026-01]`, which tries to scroll the window on every screen, and the end-to-end CI job.
+- **Applies to:** `apps/web`.
