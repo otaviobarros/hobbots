@@ -154,6 +154,8 @@ export const codexTurnEvents = (threadId: string) => {
       const rest = item.text.startsWith(streamed) ? item.text.slice(streamed.length) : "";
       return { events: rest.length > 0 ? [...before, { _tag: "TextDelta", text: rest }] : before };
     }
+    // Codex compacted the thread: it now holds a summary of what came before (#1027).
+    if (item.type === "contextCompaction") return { events: [{ _tag: "SessionCompacted" }] };
     return "status" in item ? toolFinished(item) : NOTHING;
   };
 

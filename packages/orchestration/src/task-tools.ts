@@ -323,7 +323,7 @@ export class TaskTools extends Context.Service<
             // The Attempt this turn started on its Task, known once the call that started it commits.
             let attemptId: AttemptId | null = null;
             // The committed Task the turn works on: the one it was briefed on, then one a call of its committed.
-            const briefing = yield* chat.briefing;
+            const briefed = yield* chat.briefing;
             let known: TaskId | null = yield* chat.workingOn;
             const source: CallSource = {
               scope: () => (known === null ? callScope.reply(turn.messageId) : callScope.task(known)),
@@ -390,7 +390,8 @@ export class TaskTools extends Context.Service<
             };
             return {
               hubTools,
-              briefing,
+              briefing: briefed?.text ?? null,
+              told: briefed?.told ?? null,
               end,
               workingOn: chat.workingOn,
               scope: source.scope,

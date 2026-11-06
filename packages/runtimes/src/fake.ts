@@ -131,6 +131,12 @@ export const FAKE_FAIL_DIRECTIVE = "fake:fail";
  */
 export const FAKE_ONCE_DIRECTIVE = "fake:once";
 
+/**
+ * A prompt line `fake:compact`, anywhere in it, makes the fake report that it compacted the session
+ * once the turn starts, as Claude Code and Codex do when a session grows long (#1027).
+ */
+const FAKE_COMPACT_DIRECTIVE = "fake:compact";
+
 /** The prompt with each `fake:once` line run the first time and dropped after, remembering it in `seen`. */
 const onceOnly = (prompt: string, seen: Set<string>) =>
   prompt
@@ -679,6 +685,9 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
         billing: "fake",
         ...sessionPolicy(toolTurn(request.tools, sandbox, request.hubTools)),
       },
+      ...(scripted.split("\n").some((line) => line.trim() === FAKE_COMPACT_DIRECTIVE)
+        ? [{ _tag: "SessionCompacted" } as const]
+        : []),
       // Every reply thinks first, so the step display can be seen and tested.
       { _tag: "StepStarted", id: "thinking-1", kind: "thinking", label: "Thinking" },
       { _tag: "StepEnded", id: "thinking-1" },

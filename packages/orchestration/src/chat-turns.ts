@@ -15,7 +15,8 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import { BRIEF_LIMIT, briefingShows, cut, ownerBriefing } from "./briefs.ts";
+import { renderBrief } from "./brief-parts.ts";
+import { BRIEF_LIMIT, briefingShows, cut, ownerBriefingParts } from "./briefs.ts";
 import { fromRecords, journalOf, newId, refuse, type TaskToolCaller } from "./call-scope.ts";
 import { reportingRules } from "./reporting.ts";
 
@@ -95,7 +96,9 @@ export const makeChatResolver = (
      * questions its hob asked about it, so the turn carries those results, failures and answers in
      * its hob's backpack: they settle when the turn completes the Task. The ledger is read after the
      * tree, so only items the briefing shows at their recorded version are carried; one that
-     * arrived in between stays open for a later turn.
+     * arrived in between stays open for a later turn. A session told of the same Task before, woken
+     * by work that arrived, is told only what changed since (#1027). It still carries every item the
+     * whole briefing shows, since it holds them from then.
      */
     briefing: Effect.gen(function* () {
       const open = openThreadTask(yield* tasks.readThreadTrees(turn.threadId), turn.agentId);
@@ -108,7 +111,12 @@ export const makeChatResolver = (
         taskId: open.top.id,
         carried: Option.match(ledger, { onNone: () => [], onSome: (read) => carriedFrom(read, shown) }),
       };
-      return [ownerBriefing(open.top, open.tree), ...reportingRules(open.top, open.tree)].join("\n");
+      return renderBrief(
+        open.top.id,
+        [...ownerBriefingParts(open.top, open.tree), ...reportingRules(open.top, open.tree)],
+        // Only a turn on work that arrived is told what changed: one that answers your message is told it all.
+        turn.promptId == null ? (turn.told ?? null) : null,
+      );
     }),
 
     /**

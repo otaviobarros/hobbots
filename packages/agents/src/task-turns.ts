@@ -4,6 +4,7 @@ import type {
   CarriedItem,
   MessageId,
   RuntimeKind,
+  TaskBriefMark,
   TaskId,
   ThreadId,
   TurnEnding,
@@ -33,6 +34,11 @@ export interface ChatTurn {
    * its `complete_task` consumes them with the items its briefing shows.
    */
   readonly holding?: ReadonlyArray<CarriedItem>;
+  /**
+   * What the session the turn resumes was last told of the Task it works on (#1027), so its
+   * briefing says only what changed since. Absent or null for a session that needs the whole.
+   */
+  readonly told?: TaskBriefMark | null;
 }
 
 /** What a chat turn gets for the Task its hob works on in the thread. */
@@ -44,6 +50,8 @@ export interface ChatTaskTurn {
    * the Tasks under it, never their sessions. Null when the hob works on no open Task here.
    */
   readonly briefing: string | null;
+  /** What the session will have been told of the Task once it receives the briefing; null without one. */
+  readonly told: TaskBriefMark | null;
   /**
    * The top Task the turn works on now, which This Task binds a grant to (ADR 018): null while it
    * works on none. A call that starts a Task changes it partway through the turn.

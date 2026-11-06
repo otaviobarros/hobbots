@@ -558,6 +558,17 @@ describe("reading a Claude Code turn", () => {
     expect(read(stream({ type: "message_stop" }))).toEqual([{ _tag: "StepEnded", id: "thinking-2" }]);
   });
 
+  // regression for #1027
+  it("[TC-RT-1019] reports a compacted session, so the hub tells it again what it relied on it holding", () => {
+    const boundary = {
+      type: "system",
+      subtype: "compact_boundary",
+      compact_metadata: { trigger: "auto", pre_tokens: 160_000 },
+      session_id: "s-1",
+    } as unknown as SDKMessage;
+    expect(turnEvents()(boundary)).toEqual([{ _tag: "SessionCompacted" }]);
+  });
+
   // regression for #398
   it("[TC-RT-051] completes a turn with its timings and its main loop's token usage, null where Claude Code omits one", () => {
     const result = (timings: Record<string, number>) =>
