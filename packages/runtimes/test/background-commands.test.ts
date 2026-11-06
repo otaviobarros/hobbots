@@ -130,11 +130,30 @@ describe("a background command on Claude Code", () => {
       failed: false,
       exitCode: 0,
     });
+    // A description that holds a whole misleading ending, note and all, does not hide the real one.
+    const misleading = `Background command "echo '" completed (exit code 7: '" completed (exit code 0)`;
+    expect(backgroundFinished("t1", { status: "completed", summary: misleading }, undefined)).toEqual({
+      _tag: "ToolFinished",
+      id: "t1",
+      failed: false,
+      exitCode: 0,
+    });
+    const failed = 'Background command "echo \'" failed with exit code 3\'" failed with exit code 1';
+    expect(backgroundFinished("t1", { status: "failed", summary: failed }, undefined)).toMatchObject({ exitCode: 1 });
     expect(backgroundFinished("t1", { status: "completed", summary: "done" }, "x")).toEqual({
       _tag: "ToolFinished",
       id: "t1",
       failed: false,
       output: "x",
+    });
+  });
+
+  it("keeps a completed command's non-zero code out, as Claude Code read it as no error", () => {
+    const summary = 'Background command "grep zzz notes.md" completed (exit code 1: No matches found)';
+    expect(backgroundFinished("t1", { status: "completed", summary }, undefined)).toEqual({
+      _tag: "ToolFinished",
+      id: "t1",
+      failed: false,
     });
   });
 
@@ -191,6 +210,20 @@ describe("a background command on the fake runtime", () => {
       output: "ready\n",
       exitCode: 2,
     });
+  });
+
+  it("runs a background `sleep` command in the background too, not until the turn ends", async () => {
+    const events = await fakeTurn(
+      [
+        `fake:run ${JSON.stringify({ command: "sleep 1", background: true, runsFor: "50 millis" })}`,
+        "fake:tool Bash echo checked",
+      ].join("\n"),
+    );
+    expect(events.filter((event) => event._tag === "ToolFinished").map((event) => event.id)).toEqual([
+      "fake-tool-2",
+      "fake-tool-1",
+    ]);
+    expect(events.at(-1)?._tag).toBe("Completed");
   });
 
   // covers UX-006

@@ -32,18 +32,27 @@ const backgroundTaskOf = (end: HookEnd): string | undefined => {
 
 /**
  * The exit code a task's summary states, or undefined. Claude Code ends it with ` completed (exit
- * code N)`, with an optional note inside the parentheses, or ` failed with exit code N`; the
- * command's own description comes first, so only the summary's end is read.
+ * code N)`, with a note from its own reading of the code inside the parentheses (grep's "No matches
+ * found"), or ` failed with exit code N`. The command's description comes first and may hold the
+ * same words, so only the last such ending counts, and only when nothing but the code and a note
+ * without parentheses follows it.
  */
 const summaryExit = (end: Pick<TaskEnd, "status" | "summary">): number | undefined => {
-  const pattern =
+  const [marker, rest] =
     end.status === "completed"
-      ? /" completed \(exit code (\d+)(?:: [^)]*)?\)$/
+      ? ['" completed (exit code ', /^(\d+)(: [^()]*)?\)$/]
       : end.status === "failed"
-        ? /" failed with exit code (\d+)$/
-        : null;
-  const code = pattern?.exec(end.summary.trim())?.[1];
-  return code === undefined ? undefined : Number(code);
+        ? ['" failed with exit code ', /^(\d+)$/]
+        : [null, null];
+  if (marker === null) return undefined;
+  const summary = end.summary.trim();
+  const at = summary.lastIndexOf(marker);
+  const match = at === -1 ? null : rest.exec(summary.slice(at + marker.length));
+  if (match === null) return undefined;
+  const code = Number(match[1]);
+  // A completed command whose code is not 0 is one Claude Code read as no error, as a foreground
+  // call's `returnCodeInterpretation` says: the code alone would make it read as failed.
+  return end.status === "completed" && code !== 0 ? undefined : code;
 };
 
 /**

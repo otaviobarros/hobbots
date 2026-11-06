@@ -338,9 +338,9 @@ const scriptedCommand = (
 ) => commandOf(call.tool, call.input, targets[0] ?? call.cwd, sandbox === "on", call.effect?.live === true);
 
 /**
- * What a scripted call that ran does. A `sleep` command prints what it has so far as it comes and
- * keeps running; a background one returns at once, its end due before the turn completes, if at all;
- * any other ends now.
+ * What a scripted call that ran does. A background one returns at once, its end due before the turn
+ * completes, if at all, whatever its command; a `sleep` command prints what it has so far as it
+ * comes and keeps running; any other ends now.
  */
 const ranScripted = (
   call: ScriptedCall & { readonly id: string },
@@ -349,10 +349,6 @@ const ranScripted = (
   queue: Queue.Queue<RuntimeEvent, Cause.Done>,
 ) =>
   Effect.gen(function* () {
-    if (call.tool === "Bash" && String(call.input.command).startsWith("sleep ")) {
-      yield* Effect.forEach(liveScripted(call), (event) => Queue.offer(queue, event), { discard: true });
-      return yield* Effect.never;
-    }
     if (call.effect?.background === true) {
       const now = yield* Clock.currentTimeMillis;
       const runsFor = call.effect.runsFor;
@@ -362,6 +358,10 @@ const ranScripted = (
         endsAt: runsFor === undefined ? null : now + Duration.toMillis(Duration.fromInputUnsafe(runsFor)),
       });
       return;
+    }
+    if (call.tool === "Bash" && String(call.input.command).startsWith("sleep ")) {
+      yield* Effect.forEach(liveScripted(call), (event) => Queue.offer(queue, event), { discard: true });
+      return yield* Effect.never;
     }
     yield* Effect.forEach(finishScripted(call, folders), (event) => Queue.offer(queue, event), { discard: true });
   });
