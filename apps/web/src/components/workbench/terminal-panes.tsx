@@ -86,8 +86,7 @@ export function TerminalPanes({
         setSplit(false);
       }}
       activationMode={splitOn ? "manual" : "automatic"}
-      // Its tabs and a couple of rows stay whole in the shortest dock, which scrolls to them.
-      className="min-h-24 flex-1"
+      className="min-h-0 flex-1"
     >
       <TerminalBar>
         <TerminalTabsList aria-label={copy.terminals}>
