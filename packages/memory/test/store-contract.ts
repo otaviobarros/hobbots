@@ -152,7 +152,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (memory_search), #1047
-    it("[TC-GEN-1047-01] finds a page by a question in plain words, a word start or a hyphenated name, the page holding more of the words first", () =>
+    it("[TC-GEN-1047-01] finds a page by a question in plain words, a word start, a hyphenated name or a short common word", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.write(
@@ -170,6 +170,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             draft("facts/deploy.md", "# Deploy\n\nThe project deploys on merge."),
             fresh,
           );
+          yield* store.write(asPip, theApp, draft("facts/team.md", "# Team\n\nIT owns the laptops."), fresh);
           const found = (query: string) =>
             Effect.map(store.search(asPip, [theApp], query, 10), (hits) => hits.map((hit) => hit.path));
           for (const query of [
@@ -193,6 +194,8 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           expect(yield* found("how")).toEqual(["facts/tests.md"]);
           expect((yield* found("deploys")).sort()).toEqual(["facts/deploy.md"]);
           expect((yield* found("project")).sort()).toEqual(["facts/deploy.md", "facts/tests.md"]);
+          // A short common word is looked for too, when the page holds no other word of the query.
+          expect(yield* found("IT onboarding")).toEqual(["facts/team.md"]);
         }),
       ));
 
@@ -214,7 +217,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             theApp,
             draft(
               "fatos/recados.md",
-              "# Como falar com o time\n\nComo este time prefere: os recados curtos, como sempre, de manhã.",
+              "# Como falar com o time\n\nComo este time prefere: os recados curtos, como sempre, do jeito de manhã.",
             ),
             fresh,
           );
@@ -238,6 +241,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           // A word of one or two letters matches only as a whole word.
           expect(yield* found("ma")).toEqual([]);
           expect((yield* found("o")).sort()).toEqual(["fatos/deploy.md", "fatos/recados.md"]);
+          expect(yield* found("do jeitão")).toEqual(["fatos/recados.md"]);
         }),
       ));
 

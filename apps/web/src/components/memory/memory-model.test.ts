@@ -374,5 +374,16 @@ describe("search", () => {
       { text: " link", match: false },
     ]);
     expect(hitParts("Nothing to mark", "   ")).toEqual([{ text: "Nothing to mark", match: false }]);
+    // As the search matches them (#1047): a short word only whole, a hyphenated name by its parts.
+    expect(hitParts("os ossos", "os")).toEqual([
+      { text: "os", match: true },
+      { text: " ossos", match: false },
+    ]);
+    expect(hitParts("run make tide-check", "tide-check")).toEqual([
+      { text: "run make ", match: false },
+      { text: "tide", match: true },
+      { text: "-", match: false },
+      { text: "check", match: true },
+    ]);
   });
 });

@@ -103,6 +103,26 @@ test("[TC-UX-952] search finds pages across scopes, and What changed shows a new
   await expect(main).not.toContainText("Saved by Ada");
 });
 
+// covers ADR 028 (Search), #1047
+test("[TC-UX-1047-01] search finds a page by a question in plain words or a word start, and marks the words it matched", async ({
+  page,
+}) => {
+  const { url, summon } = await hubWithMemory("seeded");
+  await summon("Pip", 1201);
+  await page.goto(`${url}/#/memory`);
+  const main = page.getByRole("main", { name: "Memory" });
+  const search = page.getByRole("searchbox", { name: "Search memory" });
+  // Not one page holds "how", "do" or "we": the question still finds the page that answers it.
+  await search.fill("how do we publish the site?");
+  await search.press("Enter");
+  await expect(main.getByRole("link", { name: /Publishing the site/ }).first()).toBeVisible();
+  await expect(main.locator("mark", { hasText: /^publish/i }).first()).toBeVisible();
+  await search.fill("publ");
+  await search.press("Enter");
+  await expect(main.getByRole("link", { name: /Publishing the site/ }).first()).toBeVisible();
+  await expect(main.getByRole("link", { name: /Publishing a preview link/ }).first()).toBeVisible();
+});
+
 // covers ADR 028 (Browse), #958
 test("[TC-UX-953] with nothing remembered yet, Memory says how it fills", async ({ page }) => {
   const { url, summon } = await hubWithMemory("empty");
