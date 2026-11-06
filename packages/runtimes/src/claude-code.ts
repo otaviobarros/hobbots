@@ -69,7 +69,7 @@ import {
 } from "./binary.ts";
 import { COMMAND_ENV_FILE_VARIABLE, commandColorFile, plainBashResponse } from "./command-color.ts";
 import { toolFinished } from "./command-exit.ts";
-import { type CommitsAs, userCommits } from "./git-config.ts";
+import { type CommitsAs, committingTurn } from "./git-config.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import {
   CLAUDE_CODE_MODEL_HOSTS,
@@ -814,16 +814,6 @@ export const toolTurn = (
     ...(access.commitAs ? { commitAs: access.commitAs, commitsAs: { _tag: "Bot", identity: access.commitAs } } : {}),
     ...(access.userIdentity ? { userIdentity: access.userIdentity } : {}),
   };
-};
-
-/**
- * The turn's tools with who their commits are made as, and how its commands commit: a hob without
- * its own app commits as the user, never as an identity Git makes up (#586), and with the identity
- * the user gave Hobbots when their Git config sets none (#741).
- */
-const committingTurn = (offered: ToolTurn | null) => {
-  const commits = userCommits(offered);
-  return { commits, tools: offered === null ? null : { ...offered, commitsAs: commits.as } };
 };
 
 /**

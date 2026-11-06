@@ -370,3 +370,18 @@ export const userCommits = (
   const effective = { name: identity.name ?? given.name, email: given.email };
   return { note: givenIdentityNote(effective), env, as: { _tag: "UserGiven", identity: effective } };
 };
+
+/**
+ * A turn's tools with who their commits are made as, and how its commands commit, on every runtime:
+ * a hob without its own app commits as the user, never as an identity Git makes up (#586), and with
+ * the identity the user gave Hobbots when their Git config sets none (#741).
+ */
+export const committingTurn = <
+  T extends { readonly commitAs?: CommitIdentity; readonly userIdentity?: CommitIdentity },
+>(
+  offered: T | null,
+  home: string = homedir(),
+): { readonly tools: (T & { readonly commitsAs: CommitsAs }) | null; readonly commits: UserCommits } => {
+  const commits = userCommits(offered, home);
+  return { commits, tools: offered === null ? null : { ...offered, commitsAs: commits.as } };
+};

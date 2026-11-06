@@ -11,6 +11,7 @@ import type { AppServerNotification } from "../src/codex/app-server.ts";
 import { codexTurnEvents } from "../src/codex/events.ts";
 import { type PolicyRequest, policyGate, STDIN_REFUSED, shellScript, UNKNOWN_PATCH } from "../src/codex/policy.ts";
 import { CODEX_MODEL_HOSTS } from "../src/codex/turn.ts";
+import type { CommitsAs } from "../src/git-config.ts";
 import { approvalsAnswering as answering, approve } from "./codex-fixture.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-codex-policy-")));
@@ -166,6 +167,32 @@ describe("Codex's tool calls under the hob's policy", () => {
     const stdin = await decide(command("c3", "/bin/bash -lc 'cat'", { kind: "writeStdin" }));
     expect(stdin.answer).toEqual({ decision: "decline" });
     expect(stdin.events).toEqual([expect.objectContaining({ _tag: "ToolDenied", reason: STDIN_REFUSED })]);
+  });
+
+  // covers OR-004
+  it("[TC-RT-1020] refuses a command that sets its own commit identity, saying none is set yet when there is none (#741)", async () => {
+    const offered = toolTurn(access(), "on", null, CODEX_MODEL_HOSTS);
+    if (offered === null) throw new Error("expected a tool turn");
+    const asked = command("c1", "/bin/bash -lc 'git -c user.email=me@example.com commit -m x'");
+    const refusedWith = async (commitsAs: CommitsAs) => {
+      const events: Array<RuntimeEvent> = [];
+      const gate = policyGate(
+        engine,
+        { ...offered, commitsAs },
+        { prompt: "", sessionId: null, instructions: "", instructionsChanged: false, model: null, effort: null },
+        true,
+        "50 millis",
+      );
+      const answer = await Effect.runPromise(
+        gate(asked, { events: codexTurnEvents(THREAD), report: (event) => events.push(event) }),
+      );
+      expect(answer).toEqual({ decision: "decline" });
+      return events.find((event) => event._tag === "ToolDenied")?.reason ?? "";
+    };
+    expect(await refusedWith({ _tag: "Missing" })).toContain("none is set yet");
+    expect(await refusedWith({ _tag: "UserGiven", identity: { name: "Ada", email: "ada@example.com" } })).toContain(
+      "made as Ada <ada@example.com>, the identity the user gave Hobbots",
+    );
   });
 
   // covers PE-001, PE-003, ADR 024

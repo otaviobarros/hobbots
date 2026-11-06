@@ -14,6 +14,7 @@ import {
   turnPrompt,
   turnSigningAgent,
 } from "../claude-code.ts";
+import { committingTurn } from "../git-config.ts";
 import {
   folderAccessFor,
   type PreparedSandbox,
@@ -445,14 +446,18 @@ const withoutClaude = (env: NodeJS.ProcessEnv): Record<string, string> =>
     ),
   );
 
-/** The command that starts Codex in the turn's sandbox, or as it is, committing as the hob's bot if it has one. */
+/**
+ * The command that starts Codex in the turn's sandbox, or as it is, committing as the hob's bot if it
+ * has one, and otherwise as the user (`userEnv`, #586, #741): Codex hands its environment to its commands.
+ */
 export const sandboxedCommand = (
   command: AppServerCommand,
   prepared: PreparedSandbox | null,
   commitAs: ToolTurn["commitAs"],
+  userEnv: (env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv = (env) => env,
 ): AppServerCommand => {
   if (prepared === null) {
-    return { ...command, env: withCommitIdentity(command.env, commitAs) as Record<string, string> };
+    return { ...command, env: userEnv(withCommitIdentity(command.env, commitAs)) as Record<string, string> };
   }
   const wrapped = prepared.spawnArgs(command.command, command.args, command.env);
   return {
@@ -461,7 +466,7 @@ export const sandboxedCommand = (
     // Codex's home and CA bundle are not variables the sandbox passes on by itself. What the wrap adds
     // for Claude Code stays out, and with it any Claude credential it brings back.
     env: {
-      ...withoutClaude(wrapped.env),
+      ...withoutClaude(userEnv(wrapped.env)),
       CODEX_HOME: command.env.CODEX_HOME as string,
       ...(command.env.CODEX_CA_CERTIFICATE ? { CODEX_CA_CERTIFICATE: command.env.CODEX_CA_CERTIFICATE } : {}),
     },
@@ -489,13 +494,19 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
         session: {},
       };
     }
-    const { tools, sandbox, policy } = governed;
+    const { tools, sandbox, policy, commits } = governed;
     const prepared = yield* sandboxFor(config, governed, request, command, runtimeFolder);
     return {
-      command: sandboxedCommand(command, prepared, tools.commitAs),
+      command: sandboxedCommand(command, prepared, tools.commitAs, commits.env),
       cwd: tools.folders[0] as string,
       instructions: codexInstructions(
-        turnInstructions(request.instructions, sandbox !== null, Boolean(request.approvals), tools.commitAs),
+        turnInstructions(
+          request.instructions,
+          sandbox !== null,
+          Boolean(request.approvals),
+          tools.commitAs,
+          commits.note,
+        ),
       ),
       gate: withPolicy(policyGate(policy.engine, tools, request, sandbox !== null)),
       session: sessionPolicy(tools),
@@ -536,9 +547,12 @@ const sandboxFor = (
  */
 const governedTurn = (config: CodexTurnConfig, request: PromptRequest) => {
   const policy = config.policy;
-  const tools = policy ? toolTurn(request.tools, policy.sandboxState, request.hubTools, CODEX_MODEL_HOSTS) : null;
+  // Who its commits are made as, as on Claude Code (#586, #741).
+  const { tools, commits } = committingTurn(
+    policy ? toolTurn(request.tools, policy.sandboxState, request.hubTools, CODEX_MODEL_HOSTS) : null,
+  );
   if (!policy || tools === null) return null;
-  return { policy, tools, sandbox: policy.sandbox.state === "on" ? policy.sandbox : null };
+  return { policy, tools, commits, sandbox: policy.sandbox.state === "on" ? policy.sandbox : null };
 };
 
 /** Codex's CA bundle, which wins over `SSL_CERT_FILE` and adds to the roots Codex loads itself. */

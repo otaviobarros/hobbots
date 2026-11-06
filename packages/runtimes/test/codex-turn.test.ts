@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,6 +29,7 @@ import {
   sandboxedCommand,
   TOOLS_CLOSED,
 } from "../src/codex/turn.ts";
+import { NO_GIT_IDENTITY_NOTE } from "../src/git-config.ts";
 import { ProcessSandbox, type ProcessSandboxShape, type SandboxScope, sandboxFilesystem } from "../src/sandbox.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-codex-"));
@@ -674,6 +675,85 @@ describe("a Codex turn with tools", () => {
     // Without a verified sandbox the policy decides commands as if it were missing, so Codex offers none.
     await run({ ...turnConfig, policy: { engine, sandboxState: "unavailable", sandbox } }, prompt({ tools }));
     expect(readFileSync(join(home, "config.toml"), "utf8")).toContain("shell_tool = false");
+  });
+});
+
+describe("who a Codex hob's commits are made as", () => {
+  // covers OR-004
+  it("[TC-RT-1019] commits as the identity the user gave Hobbots when their Git config sets none, and is told so (#741)", async () => {
+    const root = realpathSync(mkdtempSync(join(temp, "identity-")));
+    const project = join(root, "project");
+    const home = join(root, "home");
+    for (const folder of [project, home]) mkdirSync(folder);
+    const sandbox: ProcessSandboxShape = {
+      state: "on",
+      evidence: "a stand-in sandbox",
+      prepare: () =>
+        Effect.succeed({
+          spawnArgs: (command, args, env) => ({ command: "/sandbox", args: [command, ...args], env }),
+          release: () => undefined,
+        }),
+    };
+    const engine = await Effect.runPromise(Effect.service(PolicyEngine).pipe(Effect.provide(PolicyEngine.node)));
+    const binary = join(root, "codex");
+    writeFileSync(binary, "");
+    const given = { name: "otaviobarros", email: "35647586+otaviobarros@users.noreply.github.com" };
+    const tools = (userIdentity?: typeof given) => ({
+      policy: {
+        preset: "balanced" as const,
+        sharedFolders: [project],
+        hob: EMPTY_HOB_POLICY,
+        dataFolder: join(root, "data"),
+        restrictions: [],
+      },
+      folders: [project],
+      runtimeFolder: join(root, "runtimes", "hob-1"),
+      ...(userIdentity ? { userIdentity } : {}),
+    });
+    /** Starts a turn as the hub would, with the user's home holding no Git config, and returns what Codex got. */
+    const launch = async (userIdentity?: typeof given) => {
+      const server = fakeServer({ script: [completed("completed")] });
+      const turnConfig: CodexTurnConfig = {
+        ...config(server.start),
+        binary: Effect.succeed(binary),
+        policy: { engine, sandboxState: "on", sandbox },
+      };
+      const before = process.env.HOME;
+      process.env.HOME = home;
+      try {
+        await run(turnConfig, prompt({ tools: tools(userIdentity) }));
+      } finally {
+        process.env.HOME = before;
+      }
+      const started = server.requests.find((request) => request.method === "thread/start");
+      return {
+        env: server.commands.at(-1)?.env ?? {},
+        instructions: ((started?.params ?? {}) as { developerInstructions?: string }).developerInstructions ?? "",
+      };
+    };
+    /** Commits as a command Codex runs would, with Codex's environment, and returns the author or Git's error. */
+    const commit = (env: Record<string, string | undefined>) => {
+      const repo = mkdtempSync(join(root, "repo-"));
+      const run = { ...env, HOME: home, GIT_CONFIG_NOSYSTEM: "1" };
+      execFileSync("git", ["init", "-q"], { cwd: repo, env: run });
+      try {
+        execFileSync("git", ["commit", "-q", "--allow-empty", "-m", "one"], { cwd: repo, env: run, stdio: "pipe" });
+        return execFileSync("git", ["log", "-1", "--format=%an <%ae>"], { cwd: repo, env: run }).toString().trim();
+      } catch (error) {
+        return `failed: ${String((error as { stderr?: Buffer }).stderr ?? error)}`;
+      }
+    };
+
+    // No identity anywhere: Codex's commands cannot commit, and the hob is told not to and not to ask.
+    const none = await launch();
+    expect(none.instructions).toContain(NO_GIT_IDENTITY_NOTE);
+    expect(commit(none.env)).toMatch(/^failed: .*no email was given/s);
+
+    // The user gave Hobbots one: Codex's commands commit as it, and the hob is told so.
+    const asGiven = await launch(given);
+    expect(asGiven.instructions).toContain(`made as ${given.name} <${given.email}>`);
+    expect(asGiven.instructions).not.toContain(NO_GIT_IDENTITY_NOTE);
+    expect(commit(asGiven.env)).toBe(`${given.name} <${given.email}>`);
   });
 });
 
