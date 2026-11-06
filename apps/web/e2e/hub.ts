@@ -1,5 +1,15 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
 import { type BrowserContext, test as base, expect, type Locator, type Page } from "@playwright/test";
@@ -47,7 +57,15 @@ const gitHome = (dataDir: string) => {
   return home;
 };
 
+/** Lets every folder under `folder` be written again: the skill library keeps its revisions read-only. */
+const writable = (folder: string) => {
+  chmodSync(folder, 0o755);
+  for (const entry of readdirSync(folder, { withFileTypes: true }))
+    if (entry.isDirectory()) writable(join(folder, entry.name));
+};
+
 export const removeDataDir = (dataDir: string) => {
+  if (dataDir !== "" && existsSync(dataDir)) writable(dataDir);
   rmSync(dataDir, { recursive: true, force: true });
   rmSync(`${dataDir}-git-home`, { recursive: true, force: true });
 };
