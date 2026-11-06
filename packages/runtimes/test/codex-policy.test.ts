@@ -184,14 +184,14 @@ describe("Codex's tool calls under the hob's policy", () => {
   });
 
   // regression for #1082
-  it("[TC-RT-1082-01] tells the hob why the policy refused its command, and that the user was not asked", async () => {
+  it("[TC-RT-1082-01] tells the hob why Hobbots refused its command, and that the user did not refuse it", async () => {
     const outsideFolder = await decide(command("c1", `/bin/bash -lc 'rm -rf ${outside}/x'`));
     expect(outsideFolder.answer).toEqual({ decision: "decline" });
     const reason = outsideFolder.events.find((event) => event._tag === "ToolDenied")?.reason ?? "";
     expect(reason).not.toBe("");
     expect(outsideFolder.told).toEqual([refusalNotice(`rm -rf ${outside}/x`, reason, "policy")]);
     expect(outsideFolder.told[0]).toContain(`Why: ${reason}`);
-    expect(outsideFolder.told[0]).toContain("the user was not asked");
+    expect(outsideFolder.told[0]).toContain("the user did not refuse it");
 
     // A refusal the hub makes before deciding is told too.
     const stdin = await decide(command("c2", "/bin/bash -lc 'cat'", { kind: "writeStdin" }));
@@ -205,7 +205,7 @@ describe("Codex's tool calls under the hob's policy", () => {
   });
 
   // regression for #1082
-  it("[TC-RT-1082-02] tells the hob the user refused its command, with the user's reason", async () => {
+  it("[TC-RT-1082-02] tells the hob the user refused its command with their reason, and an expired approval as not refused by them", async () => {
     const denied = approvalsAnswering(() => Effect.succeed({ _tag: "Denied", reason: "Not today" }));
     const refused = await decide(command("c1", "/bin/bash -lc 'pnpm test'"), {
       preset: "careful",
@@ -214,7 +214,26 @@ describe("Codex's tool calls under the hob's policy", () => {
     expect(refused.told).toHaveLength(1);
     expect(refused.told[0]).toContain("The user refused `pnpm test`");
     expect(refused.told[0]).toContain("Not today");
-    expect(refused.told[0]).not.toContain("the user was not asked");
+    expect(refused.told[0]).not.toContain("the user did not refuse it");
+
+    // An approval the user saw but never decided expires: told why, never that nobody was asked.
+    const expired = approvalsAnswering(() => Effect.succeed({ _tag: "Expired" }));
+    const lapsed = await decide(command("c2", "/bin/bash -lc 'pnpm test'"), {
+      preset: "careful",
+      request: { approvals: expired.approvals },
+    });
+    expect(lapsed.answer).toEqual({ decision: "decline" });
+    expect(lapsed.events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval", "ToolDenied"]);
+    expect(lapsed.told).toEqual([
+      [
+        "<call-refused>",
+        "Hobbots refused `pnpm test`, so it did not run. Codex reports it as rejected by the user, but the user did not refuse it.",
+        "Why: The approval request expired before the user decided, so the call did not run.",
+        "</call-refused>",
+        "Do not send the same call again. Change it as the reason says, or tell the user what you could not do.",
+      ].join("\n"),
+    ]);
+    expect(lapsed.told[0]).not.toContain("not asked");
   });
 
   // covers PE-001, PE-003, ADR 024

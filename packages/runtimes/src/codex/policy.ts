@@ -38,7 +38,8 @@ const NOTICE_CALL = 300;
 /**
  * What the hob is told when a call it made is refused (#1082). Codex's answer to a declined call
  * carries no text and reads "rejected by user", so the reason comes as a note in the same turn, as
- * Claude Code's hook gives it with the refusal. A refusal by the policy says the user was not asked.
+ * Claude Code's hook gives it with the refusal. A refusal the user did not make says so, without
+ * claiming they were never asked: an approval they saw can expire before they decide.
  */
 export const refusalNotice = (call: string, reason: string, decidedBy: "user" | "policy"): string => {
   const shown = call.length > NOTICE_CALL ? `${call.slice(0, NOTICE_CALL)}…` : call;
@@ -46,7 +47,7 @@ export const refusalNotice = (call: string, reason: string, decidedBy: "user" | 
     "<call-refused>",
     decidedBy === "user"
       ? `The user refused \`${shown}\`, so it did not run.`
-      : `Hobbots refused \`${shown}\` under your policy, so it did not run. Codex reports it as rejected by the user, but the user was not asked.`,
+      : `Hobbots refused \`${shown}\`, so it did not run. Codex reports it as rejected by the user, but the user did not refuse it.`,
     reason === "" ? "No reason was given." : `Why: ${reason}`,
     "</call-refused>",
     "Do not send the same call again. Change it as the reason says, or tell the user what you could not do.",

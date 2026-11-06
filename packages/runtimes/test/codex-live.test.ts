@@ -626,7 +626,7 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex under the hob'
     expect(next).toContain("rejected by user");
     expect(next).toContain("<call-refused>");
     expect(next).toContain(JSON.stringify(`Why: ${reason}`).slice(1, -1));
-    expect(next).toContain("the user was not asked");
+    expect(next).toContain("the user did not refuse it");
     expect(events.at(-1)).toMatchObject({ _tag: "Completed", text: "Refused, so I will commit plainly." });
   });
 
