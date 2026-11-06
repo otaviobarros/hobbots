@@ -3,7 +3,7 @@
 - **Date:** 2026-11-06
 - **Issue:** [#1048](https://github.com/otaviobarros/hobbots/issues/1048)
 - **Pull request:** [#1053](https://github.com/otaviobarros/hobbots/pull/1053)
-- **Commit:** `e8eb081` on the pull request's branch, not yet on `main`
+- **Commit:** `5875b57` on the pull request's branch, not yet on `main`
 - **Setup:** Linux x86_64 container, Node 22. Codex 0.166.0 (the native `codex` binary of `@openai/codex@0.166.0-linux-x64` from npm), started by the adapter's turn runner as `codex app-server` with a hob's own `CODEX_HOME` and the hob's policy, without Hobbots' sandbox. No account: a scripted stand-in for the Responses API played the model. Run with `HOBBOTS_CODEX=<codex> pnpm --filter @hobbots/runtimes exec vitest run test/codex-live.test.ts`.
 - **Result:** Passed with gaps. Codex kept the command running after its call returned and after the turn completed, and reported its end; the adapter waited for it, recorded its real exit code and told the hob in a follow-up turn. A real model and the packaged Mac app are not verified.
 
