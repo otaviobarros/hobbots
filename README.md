@@ -67,6 +67,7 @@ pnpm dev:desktop   # Electron app with the local server
 pnpm dev           # server and web client, open http://127.0.0.1:5173
 pnpm check         # Biome, typecheck and tests
 pnpm package:mac   # unsigned .dmg installers for Apple silicon and Intel in apps/desktop/release
+pnpm package:linux # .deb and .rpm packages for x64 and arm64 in apps/desktop/release (needs rpmbuild)
 ```
 
 Every client is an approved device. The desktop app's window needs no approval, so `pnpm dev:desktop` works as it is. A browser asks once, and you allow it on the hub. In `pnpm dev`, the web dev server forwards `/api` to the server, so the browser calls its own origin. If the hub's window is not open, `pnpm --filter @hobbots/server allow` lists the devices waiting and `pnpm --filter @hobbots/server allow <code>` allows one.

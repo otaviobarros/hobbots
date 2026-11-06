@@ -16,18 +16,14 @@ env:
   TURBO_TELEMETRY_DISABLED: 1
 
 jobs:
-  package:
-    name: Package Hobbots.app
-    # electron-builder packages both architectures on Apple silicon; each is then tested on its own.
-    runs-on: macos-26
-    timeout-minutes: 30
+  version:
+    name: Read the version from the tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup
       - id: version
-        name: Read the version from the tag
         run: |
           version="${GITHUB_REF_NAME#v}"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
@@ -35,18 +31,50 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  package:
+    name: Package Hobbots.app
+    needs: version
+    # electron-builder packages both architectures on Apple silicon; each is then tested on its own.
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
       # The tag is the version the app and installers carry.
-      - run: pnpm package:mac -c.extraMetadata.version=${{ steps.version.outputs.version }}
+      - run: pnpm package:mac -c.extraMetadata.version=${{ needs.version.outputs.version }}
       - uses: actions/upload-artifact@v7
         with:
-          name: installers
+          name: installers-macos
           path: apps/desktop/release/*.dmg
           if-no-files-found: error
           retention-days: 7
 
+  package-linux:
+    name: Package for Linux
+    needs: version
+    # The app has no native modules, so electron-builder packages arm64 on x64 too; each package is
+    # then tested on its own architecture.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # electron-builder builds the .rpm with rpmbuild.
+      - run: sudo apt-get update && sudo apt-get install --yes rpm
+      - run: pnpm package:linux -c.extraMetadata.version=${{ needs.version.outputs.version }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers-linux
+          path: |
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.rpm
+          if-no-files-found: error
+          retention-days: 7
+
   smoke-test:
-    name: Smoke test (${{ matrix.arch }})
-    needs: package
+    name: Smoke test (macOS ${{ matrix.arch }})
+    needs: [version, package]
     strategy:
       matrix:
         include:
@@ -62,13 +90,13 @@ jobs:
           sparse-checkout: apps/desktop/scripts
       - uses: actions/download-artifact@v8
         with:
-          name: installers
+          name: installers-macos
           path: installers
       # Tests the app as users get it: copied out of the installer.
       - name: Install from the .dmg
         run: |
           hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" \
-            "installers/Hobbots-${{ needs.package.outputs.version }}-${{ matrix.arch }}.dmg"
+            "installers/Hobbots-${{ needs.version.outputs.version }}-${{ matrix.arch }}.dmg"
           ditto "$RUNNER_TEMP/dmg/Hobbots.app" "$RUNNER_TEMP/Hobbots.app"
           hdiutil detach "$RUNNER_TEMP/dmg"
       - name: Launch with the fake runtime, wait for /api/health, quit
@@ -82,9 +110,74 @@ jobs:
           HOBBOTS_E2E_APP: ${{ runner.temp }}/Hobbots.app
         run: node --test apps/desktop/scripts/background-service.e2e.ts
 
+  smoke-test-deb:
+    name: Smoke test (Ubuntu 24.04 ${{ matrix.arch }})
+    needs: [version, package-linux]
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: apps/desktop/scripts
+      - uses: actions/download-artifact@v8
+        with:
+          name: installers-linux
+          path: installers
+      # Installed as users do, so apt pulls in the dependencies and the package's scripts set up
+      # Chromium's sandbox, which runs as it would for a user (no --no-sandbox).
+      - name: Install the .deb
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes xvfb \
+            "./installers/Hobbots-${{ needs.version.outputs.version }}-${{ matrix.arch }}.deb"
+      - name: Launch with the fake runtime, wait for /api/health, quit
+        run: xvfb-run --auto-servernum apps/desktop/scripts/smoke-test.sh /opt/Hobbots
+
+  smoke-test-rpm:
+    name: Smoke test (Fedora 45 ${{ matrix.arch }})
+    needs: [version, package-linux]
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: fedora:45
+    timeout-minutes: 15
+    steps:
+      # actions/checkout needs Git for a sparse checkout.
+      - run: dnf install --assumeyes git-core
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: apps/desktop/scripts
+      - uses: actions/download-artifact@v8
+        with:
+          name: installers-linux
+          path: installers
+      # dnf pulls in the dependencies the package names. Xvfb is the display, and procps-ng gives
+      # the smoke test pgrep.
+      - name: Install the .rpm
+        run: |
+          dnf install --assumeyes xorg-x11-server-Xvfb procps-ng \
+            "./installers/Hobbots-${{ needs.version.outputs.version }}-${{ matrix.arch }}.rpm"
+      # The container runs as root, which Chromium's sandbox refuses, so this one runs without it.
+      - name: Launch with the fake runtime, wait for /api/health, quit
+        run: |
+          Xvfb :99 &
+          DISPLAY=:99 apps/desktop/scripts/smoke-test.sh /opt/Hobbots --no-sandbox
+
   release:
     name: Draft GitHub Release
-    needs: [package, smoke-test]
+    needs: [version, smoke-test, smoke-test-deb, smoke-test-rpm]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -92,8 +185,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: installers
+          pattern: installers-*
           path: installers
+          merge-multiple: true
       # Release Please drafts the release with its changelog before pushing the tag; the installers
       # join that draft. A tag pushed by hand gets a new draft with generated notes. Either way a
       # maintainer reviews the draft before publishing it.
@@ -101,12 +195,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          VERSION: ${{ needs.package.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" installers/*.dmg --clobber
+            gh release upload "$GITHUB_REF_NAME" installers/* --clobber
           else
             flags=(--draft --generate-notes --verify-tag --title "Hobbots $VERSION")
             if [[ "$VERSION" == *-* ]]; then flags+=(--prerelease); fi
-            gh release create "$GITHUB_REF_NAME" "${flags[@]}" installers/*.dmg
+            gh release create "$GITHUB_REF_NAME" "${flags[@]}" installers/*
           fi

@@ -2,6 +2,9 @@
   "name": "@hobbots/desktop",
   "version": "0.0.2",
   "description": "Hobbots desktop app",
+  "homepage": "https://hobbots.ai",
+  "license": "Apache-2.0",
+  "desktopName": "hobbots.desktop",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
@@ -12,7 +15,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "icon": "node scripts/app-icon.ts",
-    "package:mac": "node scripts/package-mac.ts"
+    "package:mac": "node scripts/package-mac.ts",
+    "package:linux": "node scripts/package-linux.ts"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

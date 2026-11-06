@@ -1,16 +1,27 @@
 #!/usr/bin/env bash
-# Smoke-tests a packaged Hobbots.app: launches it as the hub with the fake runtime, waits for its server's
+# Smoke-tests a packaged Hobbots: launches it as the hub with the fake runtime, waits for its server's
 # health check and for the memory engine it runs, kills the engine to check it is started again, then
 # quits the app and checks that the server and the engine it launched stopped too.
 #
-#   apps/desktop/scripts/smoke-test.sh path/to/Hobbots.app [extra app arguments]
+#   apps/desktop/scripts/smoke-test.sh path/to/Hobbots.app [extra app arguments]   # macOS
+#   apps/desktop/scripts/smoke-test.sh /opt/Hobbots [extra app arguments]          # Linux, installed
 #
-# On a Mac with Hobbots data, pass --user-data-dir=<empty folder> to keep the test out of it.
+# On Linux it needs a display; with none, run it under `xvfb-run -a`.
+# On a computer with Hobbots data, pass --user-data-dir=<empty folder> to keep the test out of it.
 # HOBBOTS_PORT picks the port (default 4317) and SMOKE_TIMEOUT the seconds to wait (default 60).
 set -euo pipefail
 
-app="${1:?usage: smoke-test.sh path/to/Hobbots.app [extra app arguments]}"
+app="${1:?usage: smoke-test.sh path/to/Hobbots.app|path/to/install-folder [extra app arguments]}"
 shift
+# A macOS bundle keeps its executable and resources inside Contents; a Linux install folder, such as
+# the .deb and .rpm's /opt/Hobbots or electron-builder's linux-unpacked, at its top.
+if [[ "$app" == *.app ]]; then
+  executable="${app}/Contents/MacOS/Hobbots"
+  resources="${app}/Contents/Resources"
+else
+  executable="${app}/hobbots"
+  resources="${app}/resources"
+fi
 port="${HOBBOTS_PORT:-4317}"
 timeout="${SMOKE_TIMEOUT:-60}"
 health="http://127.0.0.1:${port}/api/health"
@@ -22,7 +33,7 @@ if curl -fsS --max-time 1 "$health" >/dev/null 2>&1; then
 fi
 
 # A new data folder starts setup with no server (ADR 025); HOBBOTS_MODE=hub makes it the hub, as Run here does.
-HOBBOTS_RUNTIME=fake HOBBOTS_MODE=hub HOBBOTS_PORT="$port" "${app}/Contents/MacOS/Hobbots" "$@" &
+HOBBOTS_RUNTIME=fake HOBBOTS_MODE=hub HOBBOTS_PORT="$port" "$executable" "$@" &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true' EXIT
 
@@ -44,7 +55,7 @@ echo "Hobbots answered on ${health}."
 
 # The bundled memory engine (ADR 028): the hub starts it once its checksum matches, and starts it
 # again after a crash.
-engine="${app}/Contents/Resources/memory/ai-memory serve"
+engine="${resources}/memory/ai-memory serve"
 engine_pid() { pgrep -f "$engine" | head -n 1; }
 wait_for_engine() {
   local not="$1" deadline=$((SECONDS + 30)) found
