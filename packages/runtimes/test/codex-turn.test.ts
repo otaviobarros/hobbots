@@ -694,6 +694,15 @@ describe("reading a Codex turn", () => {
     ]);
   });
 
+  // regression for #1027
+  it("[TC-RT-1020] reports a compacted thread, so the hub tells it again what it relied on it holding", () => {
+    const read = codexTurnEvents(THREAD);
+    expect(read.map(item("item/started", { type: "contextCompaction", id: "k1" })).events).toEqual([]);
+    expect(read.map(item("item/completed", { type: "contextCompaction", id: "k1" })).events).toEqual([
+      { _tag: "SessionCompacted" },
+    ]);
+  });
+
   it("reports a started call's live output and end, and marks it uncertain when Codex is lost", () => {
     const read = codexTurnEvents(THREAD);
     // Nobody decided this call, so nothing is reported for it.

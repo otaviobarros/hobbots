@@ -1,5 +1,6 @@
 import { clip } from "@hobbots/agents";
 import { descendantsOf, type Question, type Task, type TaskTree } from "@hobbots/domain";
+import { type BriefPart, fixed } from "./brief-parts.ts";
 
 /** How much of a question its line in the briefing shows. */
 const QUESTION_LIMIT = 300;
@@ -17,9 +18,10 @@ const answeredBy = (question: Question) =>
  * So the briefing lists the questions under the Task that only the user can answer, says a note is
  * not an answer, and asks the lead to report only what its Task tools did and to read the work
  * instead of guessing. It also lists the questions the lead passed up that are answered since, so
- * it never reasons from one it believes still waits (#659).
+ * it never reasons from one it believes still waits (#659). The questions passed up are a list, so a
+ * resumed session is told only those answered since it was last told (#1027).
  */
-export const reportingRules = (task: Task, tree: TaskTree): ReadonlyArray<string> => {
+export const reportingRules = (task: Task, tree: TaskTree): ReadonlyArray<BriefPart> => {
   const under = new Set<string>([task.id, ...descendantsOf(task, tree.tasks).map((each) => each.id)]);
   const asked = tree.questions.filter((question) => under.has(question.taskId));
   const line = (question: Question) =>
@@ -29,25 +31,30 @@ export const reportingRules = (task: Task, tree: TaskTree): ReadonlyArray<string
     .filter((question) => question.state === "answered" && question.chain.includes(task.ownerId))
     .toSorted((a, b) => (a.answeredAt ?? "").localeCompare(b.answeredAt ?? ""));
   return [
-    ...(forTheUser.length === 0
-      ? []
-      : [
-          "Questions only the user can answer, waiting in the user's Inbox:",
-          ...forTheUser.map(line),
-          "You cannot answer these, and a note or message from the user is not an answer to them. If the user replies to one here, say it is still waiting and that they answer it in the Inbox or on its card.",
-        ]),
+    // Told on every turn, as a resumed session's too: a note from the user is no answer to them (#569).
+    fixed(
+      ...(forTheUser.length === 0
+        ? []
+        : [
+            "Questions only the user can answer, waiting in the user's Inbox:",
+            ...forTheUser.map(line),
+            "You cannot answer these, and a note or message from the user is not an answer to them. If the user replies to one here, say it is still waiting and that they answer it in the Inbox or on its card.",
+          ]),
+    ),
     // A lead that passed a question up kept telling the user it was never answered (#659).
-    ...(passedUp.length === 0
-      ? []
-      : [
-          "Questions you passed up that are answered, latest last; each answer goes back to the hob that asked:",
-          ...passedUp
-            .slice(-PASSED_UP_LIMIT)
-            .map(
-              (question) =>
-                `${line(question)} Answered ${answeredBy(question)}: "${clip((question.answer ?? "").trim(), QUESTION_LIMIT)}"`,
-            ),
-        ]),
-    "Tell the user only what your Task tools did in this turn: never say you sent, passed on, answered or started something unless a tool call here did it. Where the work stands, read it with read_tasks instead of guessing, or say you cannot see it.",
+    {
+      _tag: "Listed",
+      group: "passed-up",
+      heading: ["Questions you passed up that are answered, latest last; each answer goes back to the hob that asked:"],
+      entries: passedUp.slice(-PASSED_UP_LIMIT).map((question) => ({
+        key: question.id,
+        lines: [
+          `${line(question)} Answered ${answeredBy(question)}: "${clip((question.answer ?? "").trim(), QUESTION_LIMIT)}"`,
+        ],
+      })),
+    },
+    fixed(
+      "Tell the user only what your Task tools did in this turn: never say you sent, passed on, answered or started something unless a tool call here did it. Where the work stands, read it with read_tasks instead of guessing, or say you cannot see it.",
+    ),
   ];
 };

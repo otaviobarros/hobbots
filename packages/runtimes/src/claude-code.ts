@@ -607,7 +607,9 @@ export const turnEvents = (tools: ToolTurn | null = null) => {
                 ...sessionPolicy(tools),
               },
             ]
-          : [];
+          : message.subtype === "compact_boundary"
+            ? [{ _tag: "SessionCompacted" }]
+            : [];
       case "stream_event": {
         const event = message.event;
         // Subagents' own output stays out of the hob's reply.

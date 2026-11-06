@@ -14,6 +14,7 @@ import {
   TaskReadiness,
   type TaskTree,
 } from "@hobbots/domain";
+import { type BriefPart, fixed, renderBrief } from "./brief-parts.ts";
 
 /**
  * What a step's fresh session and its owner's chat are told (ADR 018). A step sees only its brief
@@ -308,33 +309,51 @@ const STOPPED_STEP =
   "A blocked step stopped on a finding or blocker, and the steps after it wait for you. To go on, call complete_task on that step with the result the steps after it should work from; to change the plan, cancel it and the steps after it with cancel_task, then plan again.";
 
 /**
- * What the owner's chat turn is told of the open Task it works on: the Task, and for each Task
- * under it, and under its own steps, its state, result or latest checkpoint, and when it leads a
+ * What the owner's chat turn is told of the open Task it works on, as parts: the Task, and for each
+ * Task under it, and under its own steps, its state, result or latest checkpoint, and when it leads a
  * Quest, how results move between its members, then what it writes in the chat: the plan, a
  * question no lead can answer and the finish, nothing between (#901). Transcripts never reach it.
+ * The answers and the work under it are lists, so a resumed session is told only what changed in
+ * them (#1027).
  */
-export const ownerBriefing = (task: Task, tree: TaskTree): string => {
+export const ownerBriefingParts = (task: Task, tree: TaskTree): ReadonlyArray<BriefPart> => {
   const under = briefedUnder(task, tree);
   const above = ancestorsOf(task, tree.tasks).length;
-  const answers = answeredFor(task, tree).map(
-    (question) =>
+  const answers = answeredFor(task, tree).map((question) => ({
+    key: question.id,
+    lines: [
       `- ${cut(question.text, SUMMARY_LIMIT)} Answer: ${cut(question.answer ?? "", SUMMARY_LIMIT)}${answerHow(question)}`,
-  );
+    ],
+  }));
   return [
-    `You are working on Task ${task.id} (${task.state}) for this conversation${above === 0 ? "" : ", under another Task"}: ${firstLine(task.brief)}`,
-    ...leadGuidance(task, tree),
-    ...(answers.length === 0 ? [] : ["Answers to the questions you asked about it:", ...answers]),
+    fixed(
+      `You are working on Task ${task.id} (${task.state}) for this conversation${above === 0 ? "" : ", under another Task"}: ${firstLine(task.brief)}`,
+      ...leadGuidance(task, tree),
+    ),
+    { _tag: "Listed", group: "answer", heading: ["Answers to the questions you asked about it:"], entries: answers },
     ...(under.length === 0
       ? []
       : [
-          "The work under it, each running in its own session, with what it reported:",
-          ...under.flatMap(({ task: child, place }) => childLine(child, tree, place)),
-          ...(under.some(({ task: child }) => child.state === "blocked" && isStep(child, tree.tasks))
-            ? [STOPPED_STEP]
-            : []),
-          "Call complete_task with the Task's result once everything under it has ended.",
+          {
+            _tag: "Listed",
+            group: "task",
+            heading: ["The work under it, each running in its own session, with what it reported:"],
+            entries: under.map(({ task: child, place }) => ({
+              key: child.id,
+              lines: childLine(child, tree, place),
+            })),
+          } satisfies BriefPart,
+          fixed(
+            ...(under.some(({ task: child }) => child.state === "blocked" && isStep(child, tree.tasks))
+              ? [STOPPED_STEP]
+              : []),
+            "Call complete_task with the Task's result once everything under it has ended.",
+          ),
         ]),
-    LEAN_CHAT_RULE,
-    FINISH_RULE,
-  ].join("\n");
+    fixed(LEAN_CHAT_RULE, FINISH_RULE),
+  ];
 };
+
+/** The whole of what the owner's chat turn is told of the open Task, as a new session hears it. */
+export const ownerBriefing = (task: Task, tree: TaskTree): string =>
+  renderBrief(task.id, ownerBriefingParts(task, tree), null).text;
