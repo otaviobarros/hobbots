@@ -118,6 +118,18 @@ const memberAfter = (task: Task, ending: TurnEnding, open: ReadonlyArray<LedgerE
   return { _tag: "Complete", summary: ending.text.trim() || NO_REPLY.member, otherwise: held, explainRefusal: false };
 };
 
+/**
+ * The Task you asked for after its turn: it completes only by complete_task. A wait that still holds
+ * shows waiting (#572); otherwise one that waited, or was blocked, before the turn goes back to that.
+ * One blocked because its Quest had nothing moving it is not blocked once a Task under it is open (#1081).
+ */
+const rootAfter = (task: Task, open: ReadonlyArray<LedgerEntry>, was: TaskState | undefined): TaskMove => {
+  if (task.state !== "active") return STAY;
+  if (open.some((entry) => entry._tag === "Wait")) return move("waiting");
+  if (was === "blocked" && open.some((entry) => entry._tag === "Child")) return STAY;
+  return was === "waiting" || was === "blocked" ? move(was) : STAY;
+};
+
 /** What the Task does after the turn, by its runner. */
 const taskAfter = (input: TurnEndInput): TaskMove => {
   const { runner, task, ending } = input;
@@ -142,13 +154,8 @@ const taskAfter = (input: TurnEndInput): TaskMove => {
         : move("failed");
     case "member":
       return memberAfter(task, ending, open);
-    case "root": {
-      // The Task you asked for completes only by complete_task. A wait that still holds shows
-      // waiting (#572); otherwise one that waited, or was blocked, before the turn goes back to that.
-      if (task.state !== "active") return STAY;
-      if (open.some((entry) => entry._tag === "Wait")) return move("waiting");
-      return input.was === "waiting" || input.was === "blocked" ? move(input.was) : STAY;
-    }
+    case "root":
+      return rootAfter(task, open, input.was);
   }
 };
 

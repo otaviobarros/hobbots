@@ -151,6 +151,17 @@ export const reportsOn = (checkpoint: CheckpointOf) =>
 export const wakesLead = (kind: CheckpointKind): boolean =>
   kind !== "progress" && kind !== "started" && kind !== "waiting" && kind !== "cancelled";
 
+/**
+ * How the hub's finding starts when a turn of the Task you asked for left its Quest with nothing
+ * moving it: no Task open under it and nothing to wait on (#1081). It goes to the Quest's own lead,
+ * so its chat wakes with what is missing.
+ */
+export const IDLE_QUEST = "Nobody is working on this Quest";
+
+/** Whether a checkpoint is the hub's finding that a Quest has nothing moving it (#1081). */
+export const isIdleQuestFinding = (checkpoint: CheckpointOf & { readonly summary: string }): boolean =>
+  checkpoint.source === "automatic" && checkpoint.kind === "finding" && checkpoint.summary.startsWith(IDLE_QUEST);
+
 /** A short record of where a Task stands. */
 export class Checkpoint extends Schema.Class<Checkpoint>("Checkpoint")({
   id: CheckpointId,

@@ -123,14 +123,16 @@ export type Dispatched =
 /**
  * The Task an item's recipient holds it under (ADR 019): the nearest Task, from the item's own up,
  * that the recipient owns. What a member reports about its own Task, its result, failure,
- * checkpoints, progress and questions, is for the Task above it, so the search starts there.
+ * checkpoints, progress and questions, is for the Task above it, so the search starts there. The
+ * Task you asked for has none above it: the hub's finding on it is for its own hob (#1081).
  * Undefined when the recipient owns no Task on the way up, as after a reassignment.
  */
 export const heldUnder = (item: BackpackItem, tree: ReadonlyArray<Task>): Task | undefined => {
   const task = tree.find((each) => each.id === item.taskId);
   if (task === undefined) return undefined;
   const above = ancestorsOf(task, tree);
-  return (REPORTS_UP.includes(item.kind) ? above : [task, ...above]).find((each) => each.ownerId === item.recipientId);
+  const from = REPORTS_UP.includes(item.kind) && task.parentId !== null ? above : [task, ...above];
+  return from.find((each) => each.ownerId === item.recipientId);
 };
 
 /** The kinds a member reports about its own Task to the Task above it. */
