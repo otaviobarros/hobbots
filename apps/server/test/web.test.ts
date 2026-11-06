@@ -76,6 +76,26 @@ describe("web client routes", () => {
     expect((await get("/../package.json")).status).toBe(404);
   });
 
+  // covers DP-001
+  it("[TC-DP-274] has the browser check index.html with the hub on every load and keep hashed assets", async () => {
+    // index.html names the hashed bundle, so a copy reused without asking runs an old client after an update.
+    for (const path of ["/", "/index.html", "/agents/aldric"]) {
+      const page = await get(path, { accept: "text/html" });
+      expect(page.status).toBe(200);
+      expect(page.headers.get("cache-control")).toBe("no-cache");
+    }
+    const revalidated = await get("/", {
+      accept: "text/html",
+      "if-none-match": (await get("/")).headers.get("etag") ?? "",
+    });
+    expect(revalidated.status).toBe(304);
+    expect(revalidated.headers.get("cache-control")).toBe("no-cache");
+
+    const asset = await get("/assets/app.js");
+    expect(asset.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect((await get("/assets/missing.js")).headers.get("cache-control")).toBeNull();
+  });
+
   // covers DP-004
   it("[TC-DP-007] refuses requests addressed to a host name other than localhost", async () => {
     const response = await get("/", { host: "attacker.example:4317" });

@@ -24,4 +24,5 @@ The scenarios that would show this decision holds. Each names the test case or e
 
 - The browser and the desktop app use the same server and the same API: `[TC-OP-015]`, `[TC-AG-098]` (browser) and `[TC-EX-008]` (desktop).
 - The server answers on loopback only by default and serves the web client next to the API: `[TC-DP-008]`, `[TC-DP-005]`.
+- After an update, every client loads the new web client on its first load: the server has browsers check `index.html` on every load while hashed assets stay cached, and the desktop app drops its cached client when its version changes: `[TC-DP-274]`, `[TC-DP-275]`.
 - A remote device reaches the hub only after it is approved, and a revoked device is refused at once: `[TC-DP-145]`, `[TC-DP-146]`, `[TC-DP-150]`, `[TC-DP-155]`, with a fake Tailscale. On a real tailnet, not proven yet: [#416](https://github.com/otaviobarros/hobbots/issues/416).
