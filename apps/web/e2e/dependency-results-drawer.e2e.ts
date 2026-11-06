@@ -92,7 +92,7 @@ test("[TC-OR-215] Rook's Task drawer shows Quill's result and core.py under Hand
       }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));

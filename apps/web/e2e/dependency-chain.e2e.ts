@@ -101,7 +101,7 @@ test("[TC-OR-209] a three-member Quest with a dependency chain runs to finished 
       `fake:then fake:then fake:then ${wrap("wrap-3")}`,
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));

@@ -137,7 +137,7 @@ export function ChatView({
   const streaming = messages.data?.some((m) => isInProgress(m.status)) ?? false;
   // Stopping lasts from the hub recording the request until the runtime confirms the turn ended.
   const stopping = interrupt.isPending || (messages.data?.some((m) => m.status === "stopping") ?? false);
-  // Queued messages wait below the transcript, in the order they will start.
+  // Queued messages wait above the composer, in the order they will start, until they join the transcript.
   const transcript = messages.data?.filter((m) => m.status !== "queued");
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
@@ -297,13 +297,17 @@ export function ChatView({
       )}
       {threadId && <PinNotes threadId={threadId} pins={pins} />}
 
-      <div
+      <section
         onScroll={(event) => {
           const view = event.currentTarget;
           if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
         }}
         ref={stayAtEnd}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px] @max-[480px]/chat:px-4"
+        // A keyboard user scrolls the transcript once it has the focus (WCAG 2.1.1).
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling area must take the focus to scroll from the keyboard
+        tabIndex={0}
+        aria-label={copy.transcript}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px] outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring @max-[480px]/chat:px-4"
       >
         {/* The transcript, the tray and the composer share one centered column (A2-01). Long words
             and paths wrap inside it, so nothing in it is wider than the column (#874). */}
@@ -331,17 +335,6 @@ export function ChatView({
               }
             />
           )}
-          {queued.map((message) => (
-            <QueuedRow
-              key={message.id}
-              message={message}
-              hob={current}
-              replying={streaming}
-              pending={remove.isPending || sendNow.isPending}
-              onRemove={() => remove.mutate(message.id)}
-              onSendNow={() => sendNow.mutate(message.id)}
-            />
-          ))}
           {waiting.map((message, index) => (
             <WaitingRow
               key={message.id}
@@ -383,7 +376,7 @@ export function ChatView({
           )}
           <div ref={bottom} />
         </div>
-      </div>
+      </section>
 
       {/* Folded away beside the room, the chat leaves its toasts to the room's own place. */}
       {inView && <ArchiveToastViewport />}
@@ -410,7 +403,23 @@ export function ChatView({
           )}
           <WorkHeldNotice />
           <NeedsTray entries={needs} />
+          {queued.length > 0 && (
+            <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
+              {queued.map((message) => (
+                <QueuedRow
+                  key={message.id}
+                  message={message}
+                  hob={current}
+                  replying={streaming}
+                  pending={remove.isPending || sendNow.isPending}
+                  onRemove={() => remove.mutate(message.id)}
+                  onSendNow={() => sendNow.mutate(message.id)}
+                />
+              ))}
+            </div>
+          )}
           <Composer
+            name={current.name}
             placeholder={copy.placeholder({ name: current.name, title })}
             place={place}
             lastSent={lastSent}

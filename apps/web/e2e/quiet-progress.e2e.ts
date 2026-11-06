@@ -90,7 +90,7 @@ test("[TC-UX-225] the chat keeps the lead's plan and leaves out its routine prog
       hubCall("wait_for", { key: "wait", tasks: ["$copy.task_id", "$pages.task_id"] }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await openRoom(page, "Ship the launch");
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });

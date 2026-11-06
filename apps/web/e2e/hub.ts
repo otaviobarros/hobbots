@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
 import { type BrowserContext, test as base, expect, type Locator, type Page } from "@playwright/test";
-import { expectAccessible } from "./accessibility.ts";
+import { expectAccessible, type SetAside } from "./accessibility.ts";
 import { type WindowWatch, watchWindow } from "./window-still.ts";
 
 const web = resolve(import.meta.dirname, "..");
@@ -158,10 +158,10 @@ let activeContext: BrowserContext | undefined;
 export const test = base.extend<{
   readonly hubDevice: undefined;
   readonly windowStill: WindowWatch;
-  readonly scan: (within?: Locator) => Promise<void>;
+  readonly scan: (within?: Locator, setAside?: SetAside) => Promise<void>;
 }>({
   scan: async ({ page }, use) => {
-    await use((within) => expectAccessible(page, within));
+    await use((within, setAside) => expectAccessible(page, within, setAside));
   },
   windowStill: [
     async ({ context }, use) => {

@@ -146,7 +146,7 @@ test("[TC-UX-030] a finished Task's summary in its lane says what happened and w
       }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   const questTicket = ticket(page, "Tidy the notes");
@@ -202,7 +202,7 @@ test("[TC-UX-031] a question waiting for you shows in the lane above the Workben
       script("ask", { key: "ask", question: "Should the headings be short?" }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
@@ -233,7 +233,7 @@ test("[TC-UX-032] a Quest pinned from another thread holds its question in its l
       script("ask", { key: "ask", question: "Should the headings be short?" }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
@@ -249,7 +249,7 @@ test("[TC-UX-032] a Quest pinned from another thread holds its question in its l
   await page.getByRole("menuitem", { name: "Pin quest" }).click();
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   await composer.fill("Something else");
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
@@ -280,7 +280,7 @@ test("[TC-UX-033] Still open says nothing is open only once it could read what w
       script("complete_task", { key: "done", summary: "The notes are tidy." }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   const questTicket = ticket(page, "Tidy the notes");
@@ -316,7 +316,7 @@ test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the w
     },
   ];
   await composer.fill(["Tidy the notes", script("plan_steps", { key: "plan", steps })].join("\n"));
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 

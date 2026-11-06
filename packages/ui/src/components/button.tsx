@@ -32,6 +32,8 @@ const buttonVariants = cva(
       size: {
         default: "px-4 py-[9px]",
         sm: "px-3 py-1.5 text-ui",
+        // As tall as the composer's icon Send, for the buttons that sit beside it (Stop, Wake, Queue).
+        bar: "h-[34px] px-3 text-ui",
         xs: "px-2 py-1 text-detail",
         icon: "size-[30px] p-0 text-ui",
       },

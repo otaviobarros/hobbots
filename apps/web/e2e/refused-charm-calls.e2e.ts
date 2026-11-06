@@ -19,7 +19,7 @@ test("[TC-PE-425] a git_init the hub refused shows as a failed step in the reply
       script("git_init", { folder }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });

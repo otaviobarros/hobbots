@@ -1,6 +1,6 @@
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { type KeyboardEvent, useEffect, useRef } from "react";
+import { type KeyboardEvent, useEffect, useId, useRef } from "react";
 import { sendable, useDraft, writeDraft } from "../../api/drafts.ts";
 import type { WaitingPlace } from "../../api/outbox.ts";
 import { messages } from "../messages.ts";
@@ -21,12 +21,32 @@ export interface PausedHob {
   readonly canQueue: boolean;
 }
 
-/** The line under the input, which says what Enter and Stop do right now. */
-const hintFor = (busy: boolean, stopping: boolean, paused: PausedHob | undefined): string => {
-  if (busy) return stopping ? copy.hintStopping : copy.hintBusy;
+/** The paused hob's line under the input, or the keys' hint while nothing runs. */
+const restingHint = (paused: PausedHob | undefined): string => {
   if (!paused) return copy.hint;
   return paused.canQueue ? copy.hintPausedQueue(paused) : copy.hintPausedNew(paused);
 };
+
+/**
+ * While a reply runs, the hint is one line that never wraps: a blinking mint dot and who is
+ * replying, or when a draft will go. Beside the Quest room it keeps only the dot and one word. The
+ * longer sentence is Stop's description.
+ */
+function BusyHint({ name, stopping, drafting }: { name: string; stopping: boolean; drafting: boolean }) {
+  const full = stopping ? copy.hintStopping({ name }) : drafting ? copy.hintSendsAfter : copy.hintReplying({ name });
+  return (
+    <span
+      aria-live="polite"
+      className="flex min-w-0 flex-1 items-center justify-end gap-1.5 text-meta whitespace-nowrap text-text-secondary"
+    >
+      {!stopping && <span aria-hidden className="size-2 flex-none animate-hb-blink rounded-dot bg-mint" />}
+      <span className="truncate @max-[480px]/chat:hidden">{full}</span>
+      <span className="hidden truncate @max-[480px]/chat:inline">
+        {stopping ? copy.hintStoppingShort : copy.hintReplyingShort}
+      </span>
+    </span>
+  );
+}
 
 /**
  * Plain text in, exactly as typed: no Markdown, and a paste keeps its text, line breaks and tabs.
@@ -35,6 +55,7 @@ const hintFor = (busy: boolean, stopping: boolean, paused: PausedHob | undefined
  * unsent draft, and Up on an empty input brings back the last message sent there to edit.
  */
 export function Composer({
+  name,
   place,
   lastSent,
   placeholder,
@@ -45,6 +66,8 @@ export function Composer({
   onStop,
   paused,
 }: {
+  /** The hob's name, which the hint and Stop's description use. */
+  name: string;
   /** Whose draft this is: the thread, or the hob's fresh page. */
   place: WaitingPlace;
   /** The last message sent in this thread, which Up brings back. */
@@ -62,6 +85,8 @@ export function Composer({
   const input = useRef<HTMLTextAreaElement>(null);
   const closed = paused !== undefined && !paused.canQueue;
   const content = sendable(draft);
+  const stopWhat = useId();
+  const sendLabel = busy ? copy.sendAfterReply : copy.send;
 
   // Focus comes back to the input when a reply ends, unless the user has moved it somewhere else
   // or is selecting text to copy.
@@ -95,7 +120,7 @@ export function Composer({
   return (
     <div
       data-composer=""
-      className="cut focus-ring-within flex flex-none flex-col gap-1 border-(length:--edge) border-line-2 bg-card py-2 ps-4 pe-2.5 focus-within:border-focus-ring has-[textarea:disabled]:border-line has-[textarea:disabled]:opacity-70"
+      className="cut focus-ring-within flex flex-none flex-col gap-1 border-(length:--edge) border-line-2 bg-card py-2 ps-4 pe-2.5 focus-within:border-focus-ring has-[textarea:disabled]:border-line"
     >
       <textarea
         ref={input}
@@ -110,25 +135,38 @@ export function Composer({
         className="field-sizing-content max-h-40 min-h-12 resize-none overflow-y-auto border-0 bg-transparent py-0.5 [overflow-wrap:anywhere] whitespace-pre-wrap text-text-strong outline-none [tab-size:4] placeholder:text-label disabled:cursor-not-allowed"
       />
       <div className="flex items-center gap-2">
-        {/* Beside the Quest room the chat is narrow, so the keys' hint gives way to the message; a
-            hint about a busy or paused hob stays. */}
-        <span
-          className={cn(
-            "min-w-0 flex-1 text-end text-meta text-label",
-            !busy && !paused && "@max-[480px]/chat:invisible",
-          )}
-        >
-          {hintFor(busy, stopping, paused)}
-        </span>
+        {busy ? (
+          <BusyHint name={name} stopping={stopping} drafting={content !== ""} />
+        ) : (
+          // Beside the Quest room the chat is narrow, so the keys' hint gives way to the message; a
+          // paused hob's hint stays.
+          <span
+            className={cn("min-w-0 flex-1 text-end text-meta text-label", !paused && "@max-[480px]/chat:invisible")}
+          >
+            {restingHint(paused)}
+          </span>
+        )}
         {busy && (
-          <Button variant="deny" size="sm" onClick={onStop} disabled={stopping}>
-            {stopping ? copy.stopping : copy.stop}
-          </Button>
+          <>
+            <Button
+              variant="deny"
+              size="bar"
+              onClick={onStop}
+              disabled={stopping}
+              aria-describedby={stopWhat}
+              title={copy.stopDescription({ name })}
+            >
+              {stopping ? copy.stopping : copy.stop}
+            </Button>
+            <span id={stopWhat} hidden>
+              {copy.stopDescription({ name })}
+            </span>
+          </>
         )}
         {paused && (
           <Button
             variant={paused.canQueue ? "outline" : "default"}
-            size="sm"
+            size="bar"
             onClick={paused.onWake}
             disabled={paused.waking}
           >
@@ -137,14 +175,14 @@ export function Composer({
         )}
         {!closed &&
           (paused ? (
-            <Button size="sm" onClick={submit} disabled={!content || sending}>
+            <Button size="bar" onClick={submit} disabled={!content || sending}>
               {copy.queue}
             </Button>
           ) : (
             <Button
               size="icon"
-              aria-label={copy.send}
-              title={copy.send}
+              aria-label={sendLabel}
+              title={sendLabel}
               onClick={submit}
               disabled={!content || sending}
               className="size-[34px]"

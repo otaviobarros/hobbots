@@ -321,6 +321,8 @@ export const messages = {
   },
   chat: {
     landmark: "Chat",
+    /** The transcript's scrolling area, which takes the keyboard focus so it scrolls from the keyboard. */
+    transcript: "Messages",
     editHob: "Edit hob",
     ideas: ["Plan a product launch", "Sum up this week's inbox", "Tidy my Downloads folder"],
     askWhat: "What are we making?",
@@ -363,8 +365,17 @@ export const messages = {
     wake: ({ name }: { name: string }) => `Wake ${name}`,
     queue: "Queue",
     send: "Send",
-    hintStopping: "Stopping this reply. What was written so far is kept.",
-    hintBusy: "Stop ends this reply only. Messages you send now wait their turn.",
+    /** Send's name while a reply runs: what you send now goes once it ends. */
+    sendAfterReply: "Send after this reply",
+    /** The one-line hint while a reply runs; beside the Quest room it keeps only the short one. */
+    hintReplying: ({ name }: { name: string }) => `${name} is replying`,
+    hintReplyingShort: "Replying",
+    hintSendsAfter: "Sends after this reply",
+    hintStopping: ({ name }: { name: string }) => `Stopping. What ${name} wrote so far is kept.`,
+    hintStoppingShort: "Stopping",
+    /** Stop's description, read by screen readers and shown on hover. */
+    stopDescription: ({ name }: { name: string }) =>
+      `Stop ends this reply only. What ${name} wrote so far is kept. Messages you send now wait their turn.`,
     hintPausedQueue: ({ name }: { name: string }) =>
       `${name} is paused. Messages you queue wait until you wake ${name}.`,
     hintPausedNew: ({ name }: { name: string }) =>
@@ -412,8 +423,9 @@ export const messages = {
   },
   queued: {
     label: "Queued message",
-    waitsForWake: ({ name }: { name: string }) => `◷ Queued. Waits until you wake ${name}.`,
-    readsNext: ({ name }: { name: string }) => `◷ Queued. ${name} reads it after this reply.`,
+    /** The tag on a message sent while a reply runs, above the composer until it starts. */
+    waitsItsTurn: "Waits its turn",
+    waitsForWake: ({ name }: { name: string }) => `Waits until you wake ${name}`,
     remove: "Remove",
     sendNow: "Send now",
     sendNowAndInterrupt: "Send now and interrupt",

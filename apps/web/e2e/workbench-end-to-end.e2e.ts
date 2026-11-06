@@ -27,7 +27,7 @@ const LONG_REPLY = Array.from({ length: 750 }, (_, i) => `word${i + 1}`).join(" 
 const send = async (page: Page, lines: ReadonlyArray<string>) => {
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(lines.join("\n"));
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 };

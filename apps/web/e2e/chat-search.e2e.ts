@@ -15,7 +15,7 @@ test("[TC-CH-261] Search this chat lists the messages that match, opens the one 
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   for (const prompt of ["Draft the spring banner copy", "Plan the sale emails"]) {
     await composer.fill(prompt);
-    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
     await composer.press("Enter");
     await expect(page.getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
   }

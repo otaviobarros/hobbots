@@ -90,7 +90,7 @@ test("[TC-OR-242] the quest sheet shows the lead Running while the turn that wai
       LONG_REPLY,
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   const stop = page.getByRole("button", { name: /Stop/ });
   await expect(stop).toBeVisible();

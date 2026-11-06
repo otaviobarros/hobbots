@@ -31,11 +31,21 @@ const untilSettled = (page: Page, scanId: string | undefined) =>
   }, scanId);
 
 /**
+ * A part of a screen a scan leaves out, by CSS selector, with the open issue that decides how to
+ * fix it. Only for a known violation that waits on a design decision.
+ */
+export interface SetAside {
+  readonly selector: string;
+  readonly issue: string;
+}
+
+/**
  * Scans what the page shows once it has settled with axe, or only `within` when given, and fails
  * on any serious or critical violation, naming each rule and the elements that break it.
  */
-export const expectAccessible = async (page: Page, within?: Locator) => {
+export const expectAccessible = async (page: Page, within?: Locator, setAside?: SetAside) => {
   let builder = new AxeBuilder({ page });
+  if (setAside !== undefined) builder = builder.exclude(setAside.selector);
   let scanId: string | undefined;
   if (within !== undefined) {
     scanId = await within.evaluate((element) => {

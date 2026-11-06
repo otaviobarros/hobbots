@@ -100,7 +100,7 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
       `fake:then fake:then ${script("answer", { key: "reply", question_id: "$need.question_id", answer: "Handed core.py to your Task." })}`,
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
