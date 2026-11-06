@@ -1655,3 +1655,36 @@ describe("Task records the third run found gaps in", () => {
     expect(result.forged).toMatchObject({ _tag: "TaskRefused", reason: "checkpoint-kind" });
   });
 });
+
+describe("Task records the Quest room run found gaps in", () => {
+  // covers EX-001, OR-006
+  it("[TC-OR-594] a Task that completed keeps the time it ended when its turn ends after it (#1007)", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        yield* tasks.createTask({ task: newTask("alone", PIP, null), delegation: null, milestones: [] });
+        const copy = yield* latest("alone");
+        const started = yield* tasks.startAttempt(copy.id, copy.revision, attempt("a1"));
+        const done = yield* tasks.completeTask(copy.id, started.value.task.revision, {
+          summary: "Done",
+          attemptId: AttemptId.make("a1"),
+          artifacts: [],
+          at: now,
+          carried: yield* carryAll("alone"),
+        });
+        const ended = yield* tasks.updateAttempt(AttemptId.make("a1"), {
+          _tag: "Ended",
+          end: { _tag: "Finished", outcome: null },
+          at: later,
+        });
+        return { done: done.value, ended: ended.value, stored: yield* latest("alone") };
+      }),
+    );
+    expect(result.done.updatedAt).toBe(now);
+    expect(result.ended.attempt.endedAt).toBe(later);
+    expect(result.ended.task.updatedAt).toBe(now);
+    expect(result.stored.updatedAt).toBe(now);
+    expect(result.stored.revision).toBe(result.ended.task.revision);
+  });
+});

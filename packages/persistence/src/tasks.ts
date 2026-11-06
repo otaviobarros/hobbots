@@ -450,7 +450,9 @@ export const TaskRepositoryLive = Layer.effect(
           yield* sql`UPDATE attempts SET state = ${attempt.state}, session_id = ${attempt.sessionId},
             policy_version = ${attempt.policyVersion}, outcome = ${attempt.outcome}, ended_at = ${attempt.endedAt}
             WHERE id = ${attempt.id}`;
-          const task = new Task({ ...owner, updatedAt: update.at, revision });
+          // A Task that already ended keeps the time it ended: its turn often ends a little after.
+          const updatedAt = isTerminalTask(owner.state) ? owner.updatedAt : update.at;
+          const task = new Task({ ...owner, updatedAt, revision });
           yield* saveTask(task);
           return {
             value: { task, attempt },

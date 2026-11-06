@@ -70,6 +70,8 @@ export const messages = {
   briefed: ({ names }: { names: string }) => `Briefed ${names}`,
   waits: ({ names }: { names: string }) => `Waits on ${names}`,
   now: "Working",
+  /** How long ago the room last recorded anything the hob did, once a running lane has gone quiet. */
+  quiet: ({ ago }: { ago: string }) => `last step ${ago}`,
   result: {
     completed: "Result",
     failed: "Stopped",

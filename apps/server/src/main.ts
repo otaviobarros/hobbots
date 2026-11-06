@@ -46,6 +46,7 @@ import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/d
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
 import {
   defaultEngineFolder,
+  ENGINE_BINARY,
   engineSettingsFor,
   loadOrCreateMemoryKeys,
   MemoryEngine,
@@ -153,22 +154,38 @@ const memoryPageLayer = (
 ) => MemoryChanges.layer(Duration.seconds(config.memoryLookSeconds)).pipe(Layer.provideMerge(store));
 
 /**
+ * The engine folder the hub runs memory from: the one it was given, or a checkout's from
+ * `fetch-engine`; empty when this platform has none.
+ */
+const memoryEngineFolder = (config: { readonly memoryEngineDir: Option.Option<string> }) =>
+  Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
+
+/**
  * The memory tools (ADR 028), beside the Task tools on every runtime while memory is on, and the
- * shares hobs ask for with them, which wait for you or go through under the preset. A real
- * runtime's hobs reach the bundled ai-memory through the engine the hub runs; the fake runtime keeps
- * memory in the hub's process, to try memory without the engine: the fake memory the Memory page
- * reads when a run asks for one, so a page a hob saves shows there and its Undo reaches it. With
- * memory off there are none.
+ * shares hobs ask for with them, which wait for you or go through under the preset. Hobs reach the
+ * memory the Memory page reads: the bundled ai-memory through the engine the hub runs, or the fake
+ * memory when a run asks for one, so a page a hob saves shows there and its Undo reaches it. Only the
+ * fake runtime with no engine to run keeps memory in the hub's process, to try memory without it.
+ * With memory off there are none.
  */
 const memoryToolsLayer = (
-  config: { readonly runtime: string; readonly memory: "on" | "off"; readonly fakeMemory: string },
+  config: {
+    readonly runtime: string;
+    readonly memory: "on" | "off";
+    readonly memoryEngineDir: Option.Option<string>;
+    readonly fakeMemory: string;
+  },
   pageStore: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine>,
 ) => {
   if (config.memory === "off") return Layer.empty;
-  const store = config.runtime === "fake" && config.fakeMemory === "off" ? MemoryStoreFake : pageStore;
+  const folder = memoryEngineFolder(config);
+  const noEngine = folder === "" || !existsSync(join(folder, ENGINE_BINARY));
+  const store = config.runtime === "fake" && config.fakeMemory === "off" && noEngine ? MemoryStoreFake : pageStore;
   return MemoryToolsLive.pipe(
     Layer.provideMerge(MemorySharesLive),
-    Layer.provide(Layer.mergeAll(store, MemoryProjectsLive, PolicyEngine.node)),
+    Layer.provide(Layer.mergeAll(MemoryProjectsLive, PolicyEngine.node)),
+    // Kept in the output: chat turns, a step's and a member's sessions and exports read it from here.
+    Layer.provideMerge(store),
   );
 };
 
@@ -179,7 +196,7 @@ const memoryEngineLayer = (
   keys: MemoryKeys,
 ) => {
   if (config.memory === "off") return MemoryEngine.off("disabled", dataDir, keys);
-  const folder = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
+  const folder = memoryEngineFolder(config);
   if (folder === "") return MemoryEngine.off("missing", dataDir, keys);
   // The memory model you chose (ADR 028). The engine reaches it only through the hub's endpoint,
   // which runs each memory task on the runtime's adapter and its sign-in.
@@ -212,8 +229,7 @@ const memoryCaptureLayer = (config: {
   readonly memory: "on" | "off";
   readonly memoryEngineDir: Option.Option<string>;
 }) => {
-  const engine = Option.getOrElse(config.memoryEngineDir, () => defaultEngineFolder() ?? "");
-  if (config.memory === "off" || engine === "") return MemoryCapture.off;
+  if (config.memory === "off" || memoryEngineFolder(config) === "") return MemoryCapture.off;
   return MemoryCapture.layer.pipe(Layer.provide(MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))));
 };
 

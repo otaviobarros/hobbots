@@ -41,7 +41,7 @@ export function TerminalTab({ tree, sources, hobs, shown }: WorkbenchTabProps) {
   if (sources.length === 0) return <div data-slot="terminal" />;
   const folded = foldedWithLog(commands);
   return (
-    <div data-slot="terminal" className="flex h-full min-h-0 flex-col gap-3 px-5 py-4">
+    <div data-slot="terminal" className="flex min-h-0 flex-1 flex-col gap-3 px-5 py-4">
       <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-detail text-text-secondary">
         {commands.length > 0 && <span className="text-text-strong">{copy.tally(tallyCommands(commands))}</span>}
         <span className="text-label">{copy.readOnly}</span>
