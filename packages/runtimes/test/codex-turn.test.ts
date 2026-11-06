@@ -687,7 +687,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
   ];
 
   /** A turn whose policy allows commands, with a stand-in sandbox around Codex. */
-  const toolsTurn = async (server: ReturnType<typeof fakeServer>) => {
+  const toolsSetup = async (server: ReturnType<typeof fakeServer>) => {
     const root = realpathSync(mkdtempSync(join(temp, "outlived-")));
     const project = join(root, "project");
     mkdirSync(project);
@@ -711,22 +711,29 @@ describe("a Codex command that outlives its turn (#1048)", () => {
       runtimeFolder: join(root, "runtimes", "hob-1"),
       commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
     } as const;
-    return run(
-      { ...config(server.start), binary: Effect.succeed(binary), policy: { engine, sandboxState: "on", sandbox } },
-      prompt({ tools }),
-    );
+    const turnConfig: CodexTurnConfig = {
+      ...config(server.start),
+      binary: Effect.succeed(binary),
+      policy: { engine, sandboxState: "on", sandbox },
+    };
+    return { turnConfig, request: prompt({ tools }) };
   };
-  const runsSleep = {
+  const toolsTurn = async (server: ReturnType<typeof fakeServer>) => {
+    const { turnConfig, request } = await toolsSetup(server);
+    return run(turnConfig, request);
+  };
+  const runs = (itemId: string, command = "sleep 15") => ({
     method: "item/commandExecution/requestApproval",
     params: {
       threadId: THREAD,
       turnId: TURN,
       kind: "command",
-      itemId: "c1",
-      command: "/bin/bash -lc 'sleep 15'",
+      itemId,
+      command: `/bin/bash -lc '${command}'`,
       cwd: null,
     },
-  };
+  });
+  const runsSleep = runs("c1");
 
   // regression for #1048
   it("[TC-RT-1048-01] waits for the command, records its real exit code and tells the hob in a follow-up turn", async () => {
@@ -783,6 +790,93 @@ describe("a Codex command that outlives its turn (#1048)", () => {
     expect(events(exit).find((event) => event._tag === "ToolFinished")).toMatchObject({ failed: true, exitCode: 2 });
     expect(events(exit).at(-1)).toMatchObject({ _tag: "Completed", text: "It failed." });
     expect(server.requests.filter((request) => request.method === "turn/start")).toHaveLength(1);
+  });
+
+  // regression for #1048
+  it("[TC-RT-1048-04] reports each of two outlived commands as it ends, saying how many still run", async () => {
+    const turn3 = "turn-3";
+    const server = fakeServer({
+      asks: [runs("c1"), runs("c2", "make build")],
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/started", commandItem("c1")),
+        item("item/started", commandItem("c2", { command: "/bin/bash -lc 'make build'" })),
+        message("m1", "Started both."),
+        completed("completed"),
+        commandEnds("c1", 0, "slept\n"),
+      ],
+      followUps: [
+        [...followUpTurn("Sleep is done."), commandEnds("c2", 2, "error\n")],
+        [
+          inTurn(turn3, "turn/started", { turn: { id: turn3 } }),
+          inTurn(turn3, "item/completed", { item: { type: "agentMessage", id: "m3", text: "The build failed." } }),
+          {
+            method: "turn/completed",
+            params: { threadId: THREAD, turn: { id: turn3, items: [], status: "completed", error: null } },
+          } as AppServerNotification,
+        ],
+      ],
+    });
+    const exit = await toolsTurn(server);
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const finished = events(exit).filter((event) => event._tag === "ToolFinished");
+    expect(finished).toEqual([
+      expect.objectContaining({ id: "c1", failed: false, exitCode: 0 }),
+      expect.objectContaining({ id: "c2", failed: true, exitCode: 2 }),
+    ]);
+    const notices = server.requests
+      .filter((request) => request.method === "turn/start")
+      .slice(1)
+      .map((request) => JSON.stringify(request.params));
+    expect(notices).toHaveLength(2);
+    expect(notices[0]).toContain("`sleep 15` exited with code 0.");
+    expect(notices[0]).toContain("1 other command is still running.");
+    expect(notices[1]).toContain("`make build` exited with code 2.");
+    expect(notices[1]).not.toContain("still running");
+    expect(events(exit).at(-1)).toMatchObject({
+      _tag: "Completed",
+      text: "Started both.\n\nSleep is done.\n\nThe build failed.",
+    });
+  });
+
+  // regression for #1048
+  it("[TC-RT-1048-05] cancelling during a follow-up turn interrupts that turn and ends once Codex acknowledges it", async () => {
+    const server = fakeServer({
+      asks: [runsSleep],
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/started", commandItem("c1")),
+        message("m1", "Done."),
+        completed("completed"),
+        commandEnds("c1", 0, "slept\n"),
+      ],
+      // The follow-up turn never completes by itself.
+      followUps: [[inTurn(TURN_2, "turn/started", { turn: { id: TURN_2 } })]],
+    });
+    const { turnConfig, request } = await toolsSetup(server);
+    const seen = await Effect.runPromise(
+      Effect.gen(function* () {
+        const collected: Array<RuntimeEvent> = [];
+        const fiber = yield* runCodexTurn(turnConfig, request).pipe(
+          Stream.runForEach((event) => Effect.sync(() => collected.push(event))),
+          Effect.forkChild,
+        );
+        yield* Effect.sleep("10 millis").pipe(
+          Effect.repeat({
+            until: () => server.requests.filter((asked) => asked.method === "turn/start").length === 2,
+          }),
+        );
+        yield* Fiber.interrupt(fiber).pipe(Effect.timeout("5 seconds"));
+        return collected;
+      }),
+    );
+    expect(server.requests.find((asked) => asked.method === "turn/interrupt")?.params).toEqual({
+      threadId: THREAD,
+      turnId: TURN_2,
+    });
+    // The command's real end was recorded before the cancel; the reply never completed.
+    expect(seen.find((event) => event._tag === "ToolFinished")).toMatchObject({ id: "c1", exitCode: 0 });
+    expect(seen.some((event) => event._tag === "Completed")).toBe(false);
   });
 
   it("names each ended command, how it ended and the end of its output, and how many still run", () => {
