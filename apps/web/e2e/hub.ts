@@ -2,9 +2,9 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
-import { type BrowserContext, test as base, type Locator, type Page } from "@playwright/test";
+import { type BrowserContext, test as base, expect, type Locator, type Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
-import { expectWindowStill, watchWindow } from "./window-still.ts";
+import { type WindowWatch, watchWindow } from "./window-still.ts";
 
 const web = resolve(import.meta.dirname, "..");
 const server = resolve(web, "../server");
@@ -151,12 +151,13 @@ let activeContext: BrowserContext | undefined;
 /**
  * Playwright's `test`, whose browser context gets a device on each hub the test starts. `scan` checks
  * what its page shows now, or one part of it, for serious and critical accessibility violations
- * (STD-TEST-007). Every test also fails when the window scrolled or grew taller than the viewport on
- * any screen it visited (STD-TEST-010).
+ * (STD-TEST-007). Every test also fails when, on any screen it visited, the window scrolled or grew
+ * taller than the viewport, or something escaped the panel it scrolls in (STD-TEST-010); `windowStill`
+ * checks a page now and holds what was found.
  */
 export const test = base.extend<{
   readonly hubDevice: undefined;
-  readonly windowStill: undefined;
+  readonly windowStill: WindowWatch;
   readonly scan: (within?: Locator) => Promise<void>;
 }>({
   scan: async ({ page }, use) => {
@@ -164,9 +165,10 @@ export const test = base.extend<{
   },
   windowStill: [
     async ({ context }, use) => {
-      await watchWindow(context);
-      await use(undefined);
-      await expectWindowStill(context);
+      const watch = await watchWindow(context);
+      await use(watch);
+      await watch.checkOpenPages();
+      expect(watch.breaks(), "The window must never scroll (#1026, STD-TEST-010)").toEqual([]);
     },
     { auto: true },
   ],

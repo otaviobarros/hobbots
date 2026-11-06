@@ -2,14 +2,15 @@ import type { Page } from "@playwright/test";
 import { SETTINGS_SECTIONS } from "../src/components/settings/sections.ts";
 import { expect, test } from "./hub.ts";
 import { openWorkbench, ticket } from "./quest-room.ts";
-import { windowMoves } from "./window-still.ts";
+import type { WindowWatch } from "./window-still.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #1026: in a long chat the whole window scrolled, leaving the composer at the top of the
 // window over an empty area. Screen-reader labels inside the transcript escaped its scrolling and
 // stretched the window to the transcript's height, so the wheel past the transcript's end, or a
-// focus change, moved the whole frame. Each screen here holds more than fits, and the window stays
-// put however it is scrolled. The shared fixture checks the same on every other test (STD-TEST-010).
+// focus change, moved the whole frame. The chat here holds far more than fits; on it and on every
+// other screen the window stays put however it is scrolled. The shared fixture checks every other
+// test the same way (STD-TEST-010).
 
 test.afterEach(stopAldricHub);
 
@@ -26,19 +27,21 @@ const send = async (page: Page, lines: ReadonlyArray<string>) => {
  * Tries every way to scroll the window: the wheel over the middle of the screen, far past the end
  * of whatever panel is there and back, and scrolling the window itself. None of it may move it.
  */
-const expectStill = async (page: Page, where: string) => {
+const expectStill = async (page: Page, watch: WindowWatch, where: string) => {
   const { width, height } = page.viewportSize() ?? { width: 1280, height: 720 };
   await page.mouse.move(width / 2, height / 2);
   for (let turn = 0; turn < 3; turn++) await page.mouse.wheel(0, 4000);
   await page.evaluate(() => window.scrollTo(0, 100_000));
   await expect.poll(() => page.evaluate(() => window.scrollY), { message: `${where}: the window scrolled` }).toBe(0);
   for (let turn = 0; turn < 3; turn++) await page.mouse.wheel(0, -4000);
-  expect(await windowMoves(page), `${where}: the window must never scroll`).toEqual([]);
+  await watch.check(page);
+  expect(watch.breaks(), `${where}: the window must never scroll`).toEqual([]);
 };
 
 // covers UX-001, UX-006, #1026
 test("[TC-UX-1026-01] a long chat, its Quest room and Workbench, and every other screen never scroll the window", async ({
   page,
+  windowStill,
 }) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/new`);
@@ -70,22 +73,22 @@ test("[TC-UX-1026-01] a long chat, its Quest room and Workbench, and every other
       return panel.scrollHeight - panel.clientHeight;
     }, top);
   await expect.poll(() => transcript()).toBeGreaterThan(page.viewportSize()?.height ?? 720);
-  await expectStill(page, "the chat");
+  await expectStill(page, windowStill, "the chat");
   // Reading back to the top and returning to the composer still moves only the transcript.
   await transcript(0);
   await composer.focus();
   await expect(composer).toBeInViewport();
-  await expectStill(page, "the chat, back at the composer");
+  await expectStill(page, windowStill, "the chat, back at the composer");
 
-  // The room beside the chat, then its Workbench on each tab.
+  // The room beside the chat, then its Workbench on each tab the Task used.
   const bench = await openWorkbench(page, ticket(page, "Walk through the steps"));
-  await expectStill(page, "the Quest room");
+  await expectStill(page, windowStill, "the Quest room");
   for (const tab of ["Changes", "Files", "Terminal"]) {
     const opens = bench.getByRole("tab", { name: new RegExp(`^${tab}`) });
     // A tab the Task left empty is greyed out and cannot open.
     if (!(await opens.isEnabled())) continue;
     await opens.click();
-    await expectStill(page, `the Workbench's ${tab}`);
+    await expectStill(page, windowStill, `the Workbench's ${tab}`);
   }
 
   // Every other screen.
@@ -104,6 +107,6 @@ test("[TC-UX-1026-01] a long chat, its Quest room and Workbench, and every other
   for (const screen of screens) {
     await page.goto(`${url}/#${screen}`);
     await expect(page.getByRole("main").first()).toBeVisible();
-    await expectStill(page, screen);
+    await expectStill(page, windowStill, screen);
   }
 });

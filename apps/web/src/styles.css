@@ -838,16 +838,6 @@ body,
 }
 
 /*
- * The window never scrolls: each panel scrolls inside it (#1026). The desktop window is never
- * shorter than the frame, so it hides the window's own overflow outright. A browser tab can be
- * shorter than the frame's least height, so there the window still scrolls to show the rest, and the
- * scroll panels below keep what they hold out of the window's height.
- */
-:root[data-window="desktop"] {
-  overflow: hidden;
-}
-
-/*
  * Larger text (Settings › This app): the whole app scales up by an eighth, spacing with the type, so
  * every screen keeps its proportions. Under zoom 100vh measures an eighth more than the window, so
  * a frame sized to the screen is divided back.
