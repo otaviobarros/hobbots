@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,10 +11,10 @@ import {
 } from "@hobbots/agents";
 import { ApprovalId, EMPTY_HOB_POLICY } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { Effect, Exit, Fiber, PubSub, Stream } from "effect";
+import { Effect, Exit, Fiber, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { SANDBOX_NOTE } from "../src/claude-code.ts";
-import type { AppServer, AppServerCommand, AppServerNotification } from "../src/codex/app-server.ts";
+import type { AppServer, AppServerNotification } from "../src/codex/app-server.ts";
 import type { ChatGptTokens } from "../src/codex/auth.ts";
 import { codexTurnEvents, LOST_CALL, LOST_TURN } from "../src/codex/events.ts";
 import { notOffered } from "../src/codex/hub-tools.ts";
@@ -29,17 +29,12 @@ import {
   sandboxedCommand,
   TOOLS_CLOSED,
 } from "../src/codex/turn.ts";
-import { NO_GIT_IDENTITY_NOTE } from "../src/git-config.ts";
 import { ProcessSandbox, type ProcessSandboxShape, type SandboxScope, sandboxFilesystem } from "../src/sandbox.ts";
+import { completed, fakeServer, n, THREAD, TURN } from "./codex-app-server.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-codex-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
-const THREAD = "thr-1";
-const TURN = "turn-1";
-
-const n = (method: string, params: Record<string, unknown>) =>
-  ({ method, params: { threadId: THREAD, turnId: TURN, ...params } }) as AppServerNotification;
 const delta = (itemId: string, text: string) => n("item/agentMessage/delta", { itemId, delta: text });
 const item = (kind: "item/started" | "item/completed", body: Record<string, unknown>) => n(kind, { item: body });
 const message = (id: string, text: string) => item("item/completed", { type: "agentMessage", id, text });
@@ -56,79 +51,6 @@ const usage = (last: number, total: number) => {
     tokenUsage: { last: breakdown(last), total: breakdown(total), modelContextWindow: 200_000 },
   });
 };
-const completed = (status: string, error: unknown = null) =>
-  n("turn/completed", { turn: { id: TURN, items: [], status, error } });
-
-/**
- * A scripted App Server: answers the client's requests, and once a turn starts asks `asks` and sends
- * `script`'s notifications. `turn/interrupt` ends the turn as interrupted, as Codex does.
- */
-const fakeServer = (options: {
-  readonly script?: ReadonlyArray<AppServerNotification>;
-  readonly asks?: ReadonlyArray<{ readonly method: string; readonly params: unknown }>;
-  /** Ends the process after the script, before any `turn/completed`. */
-  readonly dies?: boolean;
-  /** Never answers `turn/interrupt`, as a Codex that stopped answering. */
-  readonly deaf?: boolean;
-}) => {
-  const requests: Array<{ readonly method: string; readonly params: unknown }> = [];
-  const answers: Array<unknown> = [];
-  const commands: Array<AppServerCommand> = [];
-  let closed = 0;
-  const start: StartAppServer = (command, { handlers }) =>
-    Effect.gen(function* () {
-      commands.push(command);
-      const notes = yield* PubSub.unbounded<AppServerNotification | null>();
-      yield* Effect.addFinalizer(() => Effect.sync(() => (closed += 1)));
-      const ask = (method: string, params: unknown) => {
-        const handler = handlers?.[method];
-        return handler === undefined
-          ? Effect.succeed({ refused: "no handler" })
-          : handler(params, method).pipe(Effect.catch((error) => Effect.succeed({ refused: error.message })));
-      };
-      const run = Effect.gen(function* () {
-        for (const { method, params } of options.asks ?? []) answers.push(yield* ask(method, params));
-        for (const note of options.script ?? []) yield* PubSub.publish(notes, note);
-        if (options.dies) yield* PubSub.publish(notes, null);
-      });
-      const requestUnknown = (method: string, params: unknown) =>
-        Effect.gen(function* () {
-          requests.push({ method, params });
-          switch (method) {
-            case "thread/start":
-            case "thread/resume":
-              return { thread: { id: THREAD }, model: "m" };
-            case "turn/start":
-              yield* Effect.forkDetach(run);
-              return { turn: { id: TURN, status: "inProgress", error: null } };
-            case "turn/interrupt":
-              if (options.deaf) return yield* Effect.never;
-              yield* PubSub.publish(notes, completed("interrupted"));
-              return {};
-            default:
-              return {};
-          }
-        });
-      return {
-        initialized: {
-          userAgent: "codex",
-          codexHome: command.env.CODEX_HOME ?? "",
-          platformFamily: "unix",
-          platformOs: "linux",
-        },
-        request: requestUnknown as AppServer["request"],
-        requestUnknown,
-        subscribe: PubSub.subscribe(notes).pipe(
-          Effect.map((subscription) =>
-            Stream.fromSubscription(subscription).pipe(Stream.takeWhile((note) => note !== null)),
-          ),
-        ) as AppServer["subscribe"],
-        exited: Effect.never,
-      } satisfies AppServer;
-    });
-  return { start, requests, answers, commands, closed: () => closed };
-};
-
 const config = (
   start: StartAppServer,
   signIn: Effect.Effect<ChatGptTokens | null, RuntimeError> = Effect.succeed(null),
@@ -625,6 +547,7 @@ describe("a Codex turn with tools", () => {
       },
       folders: [project],
       runtimeFolder,
+      commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
     } as const;
     // The hub was started with Claude Code's sign-in, which Codex would hand to every command.
     const hubEnv = { CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN };
@@ -675,93 +598,6 @@ describe("a Codex turn with tools", () => {
     // Without a verified sandbox the policy decides commands as if it were missing, so Codex offers none.
     await run({ ...turnConfig, policy: { engine, sandboxState: "unavailable", sandbox } }, prompt({ tools }));
     expect(readFileSync(join(home, "config.toml"), "utf8")).toContain("shell_tool = false");
-  });
-});
-
-describe("who a Codex hob's commits are made as", () => {
-  // covers OR-004
-  it("[TC-RT-1019] commits as the identity the user gave Hobbots when their Git config sets none, and is told so (#741)", async () => {
-    const root = realpathSync(mkdtempSync(join(temp, "identity-")));
-    const project = join(root, "project");
-    const home = join(root, "home");
-    for (const folder of [project, home]) mkdirSync(folder);
-    const sandbox: ProcessSandboxShape = {
-      state: "on",
-      evidence: "a stand-in sandbox",
-      prepare: () =>
-        Effect.succeed({
-          spawnArgs: (command, args, env) => ({ command: "/sandbox", args: [command, ...args], env }),
-          release: () => undefined,
-        }),
-    };
-    const engine = await Effect.runPromise(Effect.service(PolicyEngine).pipe(Effect.provide(PolicyEngine.node)));
-    const binary = join(root, "codex");
-    writeFileSync(binary, "");
-    const given = { name: "otaviobarros", email: "35647586+otaviobarros@users.noreply.github.com" };
-    const tools = (userIdentity?: typeof given) => ({
-      policy: {
-        preset: "balanced" as const,
-        sharedFolders: [project],
-        hob: EMPTY_HOB_POLICY,
-        dataFolder: join(root, "data"),
-        restrictions: [],
-      },
-      folders: [project],
-      runtimeFolder: join(root, "runtimes", "hob-1"),
-      ...(userIdentity ? { userIdentity } : {}),
-    });
-    /** Starts a turn as the hub would, with the user's home holding no Git config, and returns what Codex got. */
-    const launch = async (userIdentity?: typeof given, sessionId: string | null = null) => {
-      const server = fakeServer({ script: [completed("completed")] });
-      const turnConfig: CodexTurnConfig = {
-        ...config(server.start),
-        binary: Effect.succeed(binary),
-        policy: { engine, sandboxState: "on", sandbox },
-      };
-      const before = process.env.HOME;
-      process.env.HOME = home;
-      try {
-        await run(turnConfig, prompt({ tools: tools(userIdentity), sessionId }));
-      } finally {
-        process.env.HOME = before;
-      }
-      const started = server.requests.find((request) => request.method === "thread/start");
-      const turn = server.requests.find((request) => request.method === "turn/start");
-      return {
-        prompt: JSON.stringify(turn?.params ?? {}),
-        env: server.commands.at(-1)?.env ?? {},
-        instructions: ((started?.params ?? {}) as { developerInstructions?: string }).developerInstructions ?? "",
-      };
-    };
-    /** Commits as a command Codex runs would, with Codex's environment, and returns the author or Git's error. */
-    const commit = (env: Record<string, string | undefined>) => {
-      const repo = mkdtempSync(join(root, "repo-"));
-      const run = { ...env, HOME: home, GIT_CONFIG_NOSYSTEM: "1" };
-      execFileSync("git", ["init", "-q"], { cwd: repo, env: run });
-      try {
-        execFileSync("git", ["commit", "-q", "--allow-empty", "-m", "one"], { cwd: repo, env: run, stdio: "pipe" });
-        return execFileSync("git", ["log", "-1", "--format=%an <%ae>"], { cwd: repo, env: run }).toString().trim();
-      } catch (error) {
-        return `failed: ${String((error as { stderr?: Buffer }).stderr ?? error)}`;
-      }
-    };
-
-    // No identity anywhere: Codex's commands cannot commit, and the hob is told not to and not to ask.
-    const none = await launch();
-    expect(none.instructions).toContain(NO_GIT_IDENTITY_NOTE);
-    expect(commit(none.env)).toMatch(/^failed: .*no email was given/s);
-
-    // The user gave Hobbots one: Codex's commands commit as it, and the hob is told so.
-    const asGiven = await launch(given);
-    expect(asGiven.instructions).toContain(`made as ${given.name} <${given.email}>`);
-    expect(asGiven.instructions).not.toContain(NO_GIT_IDENTITY_NOTE);
-    expect(commit(asGiven.env)).toBe(`${given.name} <${given.email}>`);
-
-    // A Codex thread keeps the instructions it started with, so a resumed one started before you
-    // answered is told in its prompt who it commits as now.
-    const resumed = await launch(given, "thr-1");
-    expect(resumed.prompt).toContain(`<commit-identity>\\nYour commits are made as ${given.name} <${given.email}>`);
-    expect((await launch(undefined, "thr-1")).prompt).toContain("No Git identity is set for your commits yet");
   });
 });
 

@@ -9,10 +9,9 @@ import {
   type ToolStartedEvent,
   type TurnApprovals,
 } from "@hobbots/agents";
-import { leftoverGitNote, steerGitInit } from "@hobbots/domain";
+import { type CommitsAs, leftoverGitNote, steerGitInit } from "@hobbots/domain";
 import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
-import type { CommitsAs } from "./git-config.ts";
 import { inSharedTemp, TEMP_HINT } from "./sandbox.ts";
 import {
   commandWritesTo,
@@ -135,10 +134,10 @@ export const decideCall = (
   approvals: TurnApprovals | null | undefined,
   call: ToolCall,
   report: (event: RuntimeEvent) => void,
+  commitsAs: CommitsAs,
   redaction?: Redactor | null,
   steersPush?: (cwd: string) => Effect.Effect<string | null>,
   initTool?: string,
-  commitsAs: CommitsAs = { _tag: "UserConfig" },
 ): Effect.Effect<CallDecision> =>
   Effect.flatMap(steeredTo(call, steersPush), (pushTool) => {
     const steer = steeredAway(context, call, pushTool, initTool, commitsAs);

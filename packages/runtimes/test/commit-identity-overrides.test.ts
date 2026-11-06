@@ -114,9 +114,13 @@ describe("commit identity overrides", () => {
 
   it("names the identity the hub sets in the refusal: the hob's bot, the user's, the one they gave, or none yet", () => {
     const bot = steerCommitIdentity({ _tag: "Bot", identity: { name: BOT, email: BOT_EMAIL } });
-    const config = steerCommitIdentity({ _tag: "UserConfig" });
-    const given = steerCommitIdentity({ _tag: "UserGiven", identity: { name: "Ada", email: "ada@example.com" } });
-    const missing = steerCommitIdentity({ _tag: "Missing" });
+    const config = steerCommitIdentity({ _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } });
+    const given = steerCommitIdentity({
+      _tag: "UserGiven",
+      config: { name: null, email: null },
+      identity: { name: "Ada", email: "ada@example.com" },
+    });
+    const missing = steerCommitIdentity({ _tag: "Missing", config: { name: null, email: null } });
     expect(bot).toContain(`made as ${BOT} <${BOT_EMAIL}>`);
     expect(config).toContain("made as the user, with the identity their Git config sets");
     expect(given).toContain("made as Ada <ada@example.com>, the identity the user gave Hobbots");

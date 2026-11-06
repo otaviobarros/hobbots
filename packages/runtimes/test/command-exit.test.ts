@@ -25,6 +25,7 @@ const access: ToolAccess = {
   policy: { preset: "balanced", sharedFolders: [project], hob: EMPTY_HOB_POLICY, dataFolder: data, restrictions: [] },
   folders: [project],
   runtimeFolder: join(root, "runtime"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 };
 
 type Recorded = (typeof RECORDED_BASH_HOOKS)[keyof typeof RECORDED_BASH_HOOKS];

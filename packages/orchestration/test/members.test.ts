@@ -83,6 +83,7 @@ const access: ToolAccess = {
   },
   folders: ["/work", "/elsewhere"],
   runtimeFolder: "/data/runtime/quill",
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 };
 
 describe("a party member's session", () => {

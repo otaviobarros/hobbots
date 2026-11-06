@@ -1,7 +1,6 @@
 import { readFileSync, realpathSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { type CommitIdentity, type GitIdentity, secretShapeIn } from "@hobbots/domain";
+import { type CommitIdentity, type CommitsAs, type GitIdentity, secretShapeIn } from "@hobbots/domain";
 
 /**
  * The user's own Git config files, which the sandbox opens for reading (ADR 014). The home folder is
@@ -266,17 +265,6 @@ export const userGitIdentity = (
     read,
   );
 
-/** Who a hob's commits are made as, which its notes and refusals name. */
-export type CommitsAs =
-  /** The hob's own GitHub App's bot (ADR 022). */
-  | { readonly _tag: "Bot"; readonly identity: CommitIdentity }
-  /** The user, with the identity their Git config sets (ADR 018). */
-  | { readonly _tag: "UserConfig" }
-  /** The user, with the identity they gave Hobbots because their Git config sets none (#741). */
-  | { readonly _tag: "UserGiven"; readonly identity: CommitIdentity }
-  /** No one yet: the user's Git config sets no email, and they have not told Hobbots who to commit as (#741). */
-  | { readonly _tag: "Missing" };
-
 /** Adds Git settings to an environment through `GIT_CONFIG_COUNT`, keeping the settings already there. */
 const withGitSettings = (env: NodeJS.ProcessEnv, settings: ReadonlyArray<readonly [string, string]>) => {
   const count = Number.parseInt(env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
@@ -333,8 +321,12 @@ export const NO_GIT_IDENTITY_NOTE = [
 export const givenIdentityNote = (identity: CommitIdentity) =>
   `Your commits are made as ${identity.name} <${identity.email}>, the identity the user gave Hobbots, since their Git config sets none.`;
 
-/** How a turn's commands commit, and what its hob is told about it. */
-export interface UserCommits {
+/**
+ * What every runtime does with who a turn's commits are made as (#586, #741), so that each one
+ * applies it the same way: the environment its commands get, the note its instructions carry, and
+ * the line said again in every resumed session's prompt. A runtime adapter applies all three.
+ */
+export interface TurnCommits {
   /** What the system prompt says of it, when there is more to say than the bot note. */
   readonly note: string;
   /**
@@ -343,18 +335,8 @@ export interface UserCommits {
    * keep "do not commit" after the user answers (#741). Empty for a turn without tools.
    */
   readonly now: string;
+  /** The environment the turn's commands commit with, from the one they would get. */
   readonly env: (env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
-  readonly as: CommitsAs;
-}
-
-/** What a turn's tools say of who its commits are made as. */
-interface CommitTools {
-  /** The hob's own app's bot (ADR 022). */
-  readonly commitAs?: CommitIdentity;
-  /** The identity the user gave Hobbots (#741). */
-  readonly userIdentity?: CommitIdentity;
-  /** The user's own Git identity as the hub read it; the config under `home` is read when absent. */
-  readonly userGitIdentity?: GitIdentity;
 }
 
 /** Who a turn's commits are made as, in one line, whichever it is. */
@@ -371,41 +353,29 @@ export const commitIdentityNow = (as: CommitsAs): string => {
   }
 };
 
-/**
- * The user's identity for a turn with tools, whose commands in its folders may commit, when its hob
- * has no app of its own to commit as (`commitAs`), as the hub read it or else from the user's config now. Where it sets no
- * email, the identity the user gave Hobbots applies (`userIdentity`, #741). Anything else commits as
- * it would.
- */
-export const userCommits = (tools: CommitTools | null, home: string = homedir()): UserCommits => {
-  const commits = (note: string, as: CommitsAs, env: UserCommits["env"] = (env) => env): UserCommits => ({
-    note,
-    now: commitIdentityNow(as),
-    env,
-    as,
-  });
-  if (tools === null) return { ...commits("", { _tag: "UserConfig" }), now: "" };
-  if (tools.commitAs !== undefined) return commits("", { _tag: "Bot", identity: tools.commitAs });
-  const identity = tools.userGitIdentity ?? userGitIdentity(home);
-  const given = identity.email === null ? (tools.userIdentity ?? null) : null;
-  const env = (env: NodeJS.ProcessEnv) => withUserIdentity(env, identity, given);
-  if (identity.email !== null) return commits("", { _tag: "UserConfig" }, env);
-  if (given === null) return commits(NO_GIT_IDENTITY_NOTE, { _tag: "Missing" }, env);
-  const effective = { name: identity.name ?? given.name, email: given.email };
-  return commits(givenIdentityNote(effective), { _tag: "UserGiven", identity: effective }, env);
-};
+/** The environment a turn's commands commit with. The bot's identity is set where the runtime starts (ADR 022). */
+const commitEnv =
+  (as: CommitsAs) =>
+  (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+    switch (as._tag) {
+      case "Bot":
+        return env;
+      case "UserConfig":
+      case "Missing":
+        return withUserIdentity(env, as.config);
+      case "UserGiven":
+        return withUserIdentity(env, as.config, as.identity);
+    }
+  };
 
 /**
- * A turn's tools with who their commits are made as, and how its commands commit, on every runtime:
- * a hob without its own app commits as the user, never as an identity Git makes up (#586), and with
- * the identity the user gave Hobbots when their Git config sets none (#741).
+ * How a turn's commands commit and what its hob is told, from who the hub settled its commits are
+ * made as (`commitsAs`); nothing for a turn without tools. The runtime reads no Git config itself.
  */
-export const committingTurn = <
-  T extends { readonly commitAs?: CommitIdentity; readonly userIdentity?: CommitIdentity },
->(
-  offered: T | null,
-  home: string = homedir(),
-): { readonly tools: (T & { readonly commitsAs: CommitsAs }) | null; readonly commits: UserCommits } => {
-  const commits = userCommits(offered, home);
-  return { commits, tools: offered === null ? null : { ...offered, commitsAs: commits.as } };
+export const turnCommits = (tools: { readonly commitsAs: CommitsAs } | null): TurnCommits => {
+  if (tools === null) return { note: "", now: "", env: (env) => env };
+  const as = tools.commitsAs;
+  const note =
+    as._tag === "Missing" ? NO_GIT_IDENTITY_NOTE : as._tag === "UserGiven" ? givenIdentityNote(as.identity) : "";
+  return { note, now: commitIdentityNow(as), env: commitEnv(as) };
 };

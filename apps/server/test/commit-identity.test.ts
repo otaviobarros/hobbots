@@ -34,7 +34,7 @@ import {
   TaskRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer, userCommits } from "@hobbots/runtimes";
+import { FakeRuntimeLayer, turnCommits } from "@hobbots/runtimes";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -79,7 +79,7 @@ const ME: GitHubUser = { login: "otaviobarros", id: 35647586, name: null };
 const NOREPLY = "35647586+otaviobarros@users.noreply.github.com";
 
 /** The user's Git identity as the hub reads it now: none until a test sets one. */
-let userIdentity: GitIdentity = { name: null, email: null };
+let gitConfig: GitIdentity = { name: null, email: null };
 /** How many times the hub read the user's GitHub account. */
 let githubReads = 0;
 /** What a read of the GitHub account waits on before it answers: nothing until a test holds it. */
@@ -103,7 +103,7 @@ let hub: Hub | undefined;
 afterEach(async () => {
   await hub?.dispose();
   hub = undefined;
-  userIdentity = { name: null, email: null };
+  gitConfig = { name: null, email: null };
   githubReads = 0;
   githubAnswers = Promise.resolve();
 });
@@ -113,7 +113,7 @@ const startHub = async (signedIn = true) => {
     Layer.provideMerge(CommitIdentityQuestions.layer),
     Layer.provideMerge(HubQuestions.layer),
     Layer.provide(FakeGitHub(signedIn)),
-    Layer.provide(Layer.succeed(UserGitIdentity, UserGitIdentity.of({ read: Effect.sync(() => userIdentity) }))),
+    Layer.provide(Layer.succeed(UserGitIdentity, UserGitIdentity.of({ read: Effect.sync(() => gitConfig) }))),
   );
   const App = HobLifecycle.layer.pipe(
     Layer.provideMerge(
@@ -208,10 +208,10 @@ const startHub = async (signedIn = true) => {
 const until = (check: () => Promise<boolean>) => expect.poll(check, { timeout: 10_000 }).toBe(true);
 
 /** Commits in a fresh repository as the hob's command would, and returns the author and committer or Git's error. */
-const commitAs = (access: Parameters<typeof userCommits>[0]) => {
+const commitAs = (access: Parameters<typeof turnCommits>[0]) => {
   const repo = mkdtempSync(join(temp, "repo-"));
   const env = {
-    ...userCommits(access, home).env({ PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: "1" }),
+    ...turnCommits(access).env({ PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: "1" }),
   };
   execFileSync("git", ["init", "-q"], { cwd: repo, env });
   writeFileSync(join(repo, "tide.md"), "High tide at 06:12\n");
@@ -231,14 +231,14 @@ describe("who a hob on your account commits as when your Git config sets no one"
     const current = hub;
 
     // Reading what the hob may do, with no turn starting, asks nothing.
-    expect((await current.accessNow())?.userIdentity).toBeUndefined();
+    expect((await current.accessNow())?.commitsAs._tag).toBe("Missing");
     expect(await current.open()).toEqual([]);
 
     // The turn starts with no identity: the hob gets none, and the hub asks you, once, in the Quest's chat.
     const before = await current.access();
-    expect(before?.userIdentity).toBeUndefined();
+    expect(before?.commitsAs._tag).toBe("Missing");
     expect(commitAs(before)).toMatch(/^failed: .*no email was given/s);
-    expect(userCommits(before, home).note).toContain("Do not ask the user yourself");
+    expect(turnCommits(before).note).toContain("Do not ask the user yourself");
     await current.access();
     const [question, ...others] = await current.open();
     expect(others).toEqual([]);
@@ -259,13 +259,13 @@ describe("who a hob on your account commits as when your Git config sets no one"
     // You pick your GitHub account in the Inbox; the hub keeps it.
     const answered = await current.answer(question as HubQuestion, "My GitHub account, @otaviobarros");
     expect(answered).toMatchObject({ status: 200, body: { picked: 0 } });
-    await until(async () => (await current.access())?.userIdentity !== undefined);
+    await until(async () => (await current.access())?.commitsAs._tag === "UserGiven");
 
     // The hob's next turn commits under it, and asks nothing more.
     const after = await current.access();
-    expect(after?.userIdentity).toEqual({ name: "otaviobarros", email: NOREPLY });
+    expect(after?.commitsAs).toMatchObject({ _tag: "UserGiven", identity: { name: "otaviobarros", email: NOREPLY } });
     expect(commitAs(after)).toBe(`otaviobarros <${NOREPLY}>|otaviobarros <${NOREPLY}>`);
-    expect(userCommits(after, home).note).toContain(`made as otaviobarros <${NOREPLY}>`);
+    expect(turnCommits(after).note).toContain(`made as otaviobarros <${NOREPLY}>`);
     expect(await current.open()).toEqual([]);
   }, 30_000);
 
@@ -287,7 +287,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     expect(second?.chat).toEqual(QUEST_CHAT);
 
     await current.answer(second as HubQuestion, "Otavio Barros <otavio@example.com>");
-    await until(async () => (await current.access())?.userIdentity !== undefined);
+    await until(async () => (await current.access())?.commitsAs._tag === "UserGiven");
     expect(commitAs(await current.access())).toBe(
       "Otavio Barros <otavio@example.com>|Otavio Barros <otavio@example.com>",
     );
@@ -295,21 +295,21 @@ describe("who a hob on your account commits as when your Git config sets no one"
 
   // covers OR-004
   it("[TC-OR-634] asks nothing while your Git config sets an identity, and leaves it to Git when you say you'll set it there", async () => {
-    userIdentity = { name: "Ada Lovelace", email: "ada@example.com" };
+    gitConfig = { name: "Ada Lovelace", email: "ada@example.com" };
     hub = await startHub();
     const current = hub;
-    expect((await current.access())?.userIdentity).toBeUndefined();
+    expect((await current.access())?.commitsAs._tag).toBe("UserConfig");
     expect(await current.open()).toEqual([]);
     expect(githubReads).toBe(0);
 
     // Without one, you say you'll set it in Git yourself: the hub keeps no identity of its own.
-    userIdentity = { name: null, email: null };
+    gitConfig = { name: null, email: null };
     await current.access();
     const [question] = await current.open();
     await current.answer(question as HubQuestion, OWN_GIT_LABEL);
     await until(async () => (await current.open()).length === 0);
-    userIdentity = { name: "Otavio Barros", email: "otavio@example.com" };
-    expect((await current.access())?.userIdentity).toBeUndefined();
+    gitConfig = { name: "Otavio Barros", email: "otavio@example.com" };
+    expect((await current.access())?.commitsAs._tag).toBe("UserConfig");
     expect(await current.open()).toEqual([]);
   }, 30_000);
 
@@ -330,7 +330,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     expect(others).toEqual([]);
 
     await current.answer(question as HubQuestion, "Otavio Barros <otavio@example.com>");
-    await until(async () => (await current.accessNow())?.userIdentity !== undefined);
+    await until(async () => (await current.accessNow())?.commitsAs._tag === "UserGiven");
   }, 30_000);
 
   // covers OR-004
@@ -349,7 +349,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     await current.access();
     const [question] = await current.open();
     await current.answer(question as HubQuestion, "Otavio Barros <otavio@example.com>");
-    await until(async () => (await current.accessNow())?.userIdentity !== undefined);
+    await until(async () => (await current.accessNow())?.commitsAs._tag === "UserGiven");
 
     // GitHub answers the first turn now: it finds your answer and asks nothing.
     answerGitHub();

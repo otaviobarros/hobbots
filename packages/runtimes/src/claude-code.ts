@@ -35,8 +35,8 @@ import {
 } from "@hobbots/agents";
 import {
   type CommitIdentity,
+  type CommitsAs,
   GIT_INIT_TOOL,
-  type GitIdentity,
   type PlanUsage,
   policySandbox,
   type ReplyUsage,
@@ -70,7 +70,7 @@ import {
 } from "./binary.ts";
 import { COMMAND_ENV_FILE_VARIABLE, commandColorFile, plainBashResponse } from "./command-color.ts";
 import { toolFinished } from "./command-exit.ts";
-import { type CommitsAs, committingTurn } from "./git-config.ts";
+import { turnCommits } from "./git-config.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import {
   CLAUDE_CODE_MODEL_HOSTS,
@@ -743,6 +743,24 @@ export const turnPrompt = (
   return [...current, ...identity, ...briefing, request.prompt].join("\n");
 };
 
+/**
+ * What a Claude Code turn starts with: its tools, how its commands commit, and the system prompt
+ * and prompt it is sent, which say who its commits are made as (#586, #741). `sandboxOn` says
+ * whether the sandbox wraps it.
+ */
+export const claudeTurnStart = (request: PromptRequest, policySandboxState: SandboxState, sandboxOn: boolean) => {
+  const tools = toolTurn(request.tools, policySandboxState, request.hubTools);
+  const commits = turnCommits(tools);
+  const instructions = turnInstructions(
+    request.instructions,
+    tools !== null && sandboxOn,
+    tools !== null && Boolean(request.approvals),
+    tools?.commitAs,
+    commits.note,
+  );
+  return { tools, commits, instructions, prompt: turnPrompt(request, instructions, commits.now) };
+};
+
 /** A turn with tools: the context every call is decided under, its folders and the tools offered. */
 export interface ToolTurn {
   readonly context: PolicyContext;
@@ -757,15 +775,8 @@ export interface ToolTurn {
   readonly initTool?: string;
   /** The hob's bot, when it has its own GitHub App: its commands commit as it (ADR 022). */
   readonly commitAs?: CommitIdentity;
-  /**
-   * Who a hob on the user's account commits as when the user's Git config sets no email: the
-   * identity the user gave Hobbots (#741).
-   */
-  readonly userIdentity?: CommitIdentity;
-  /** The user's own Git identity as the hub read it at the turn's start. */
-  readonly userGitIdentity?: GitIdentity;
-  /** Who its commits are made as, which a refused identity override names; the user's config when absent. */
-  readonly commitsAs?: CommitsAs;
+  /** Who its commits are made as, as the hub settled it (#586, #741), which a refused identity override names. */
+  readonly commitsAs: CommitsAs;
 }
 
 /**
@@ -819,9 +830,8 @@ export const toolTurn = (
     runtimeFolder: access.runtimeFolder,
     ...(hubTools?.steersPush ? { steersPush: hubTools.steersPush } : {}),
     ...(hubTools?.tools.some((tool) => tool.name === GIT_INIT_TOOL) ? { initTool: GIT_INIT_TOOL } : {}),
-    ...(access.commitAs ? { commitAs: access.commitAs, commitsAs: { _tag: "Bot", identity: access.commitAs } } : {}),
-    ...(access.userIdentity ? { userIdentity: access.userIdentity } : {}),
-    ...(access.userGitIdentity ? { userGitIdentity: access.userGitIdentity } : {}),
+    ...(access.commitAs ? { commitAs: access.commitAs } : {}),
+    commitsAs: access.commitsAs,
   };
 };
 
@@ -900,7 +910,7 @@ export const policyHooks = (
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
     const decision = await Effect.runPromise(
-      decideCall(engine, turn.context, null, call, report, redaction, turn.steersPush, turn.initTool, turn.commitsAs),
+      decideCall(engine, turn.context, null, call, report, turn.commitsAs, redaction, turn.steersPush, turn.initTool),
     ).catch(() => failed(tool));
     if (decision._tag === "Run") {
       if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
@@ -987,10 +997,10 @@ export const policyHooks = (
         approvals,
         call,
         report,
+        turn.commitsAs,
         redaction,
         turn.steersPush,
         turn.initTool,
-        turn.commitsAs,
       ),
       {
         signal: options.signal,
@@ -1110,16 +1120,10 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const binary = yield* executable;
           // Tools are decided as if the sandbox were missing until it is verified here (ADR 014), but a
           // sandbox that starts still wraps the runtime.
-          const { tools, commits } = committingTurn(toolTurn(request.tools, policySandbox(declared), request.hubTools));
+          const start = claudeTurnStart(request, policySandbox(declared), sandbox.state === "on");
+          const { tools, commits } = start;
           const sandboxed = tools !== null && sandbox.state === "on";
           const commitAs = tools?.commitAs;
-          const instructions = turnInstructions(
-            request.instructions,
-            sandboxed,
-            tools !== null && Boolean(request.approvals),
-            commitAs,
-            commits.note,
-          );
           // The sandbox opens the binary's folder, so it must be a real path, never the hub's own folder.
           const absoluteBinary = sandboxed ? yield* resolveBinary(binary) : binary;
           const login = sandboxed ? yield* sandboxLogin(binary) : {};
@@ -1182,7 +1186,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const turn = yield* Effect.acquireRelease(
             Effect.sync(() =>
               query({
-                prompt: turnPrompt(request, instructions, commits.now),
+                prompt: start.prompt,
                 options: withHubTools(
                   {
                     ...base,
@@ -1208,7 +1212,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                     systemPrompt: {
                       type: "preset",
                       preset: "claude_code",
-                      append: instructions,
+                      append: start.instructions,
                     },
                     ...(request.sessionId ? { resume: request.sessionId } : {}),
                     // A turn of no hob's keeps no session on disk.

@@ -121,6 +121,38 @@ export const githubUserCommitIdentity = (user: GitHubUser): CommitIdentity => ({
   email: `${user.id}+${user.login}@users.noreply.github.com`,
 });
 
+/**
+ * Who a turn's commits are made as. The hub settles it before the turn starts and every runtime
+ * applies it as given (#586, #741); a runtime never reads the user's Git config to decide it.
+ */
+export type CommitsAs =
+  /** The hob's own GitHub App's bot (ADR 022). */
+  | { readonly _tag: "Bot"; readonly identity: CommitIdentity }
+  /** The user, with the identity their Git config sets, whose email `config` holds (ADR 018). */
+  | { readonly _tag: "UserConfig"; readonly config: GitIdentity }
+  /**
+   * The user, with the identity they gave Hobbots because their Git config sets no email (#741):
+   * `identity` is what their commits carry, their config's name when it sets one.
+   */
+  | { readonly _tag: "UserGiven"; readonly config: GitIdentity; readonly identity: CommitIdentity }
+  /** No one yet: the user's Git config sets no email, and they have not told Hobbots who to commit as (#741). */
+  | { readonly _tag: "Missing"; readonly config: GitIdentity };
+
+/**
+ * Who a turn's commits are made as: the hob's bot when it has its own app, else the user as their Git
+ * config sets them, else as they told Hobbots (`given`), else no one yet.
+ */
+export const settleCommitsAs = (
+  bot: CommitIdentity | null,
+  config: GitIdentity,
+  given: CommitIdentity | null,
+): CommitsAs => {
+  if (bot !== null) return { _tag: "Bot", identity: bot };
+  if (config.email !== null) return { _tag: "UserConfig", config };
+  if (given === null) return { _tag: "Missing", config };
+  return { _tag: "UserGiven", config, identity: { name: config.name ?? given.name, email: given.email } };
+};
+
 /** Where a hob's app is installed: the account, whether it reaches all of its repositories or some, and which. */
 export const HobGitHubAppInstallation = Schema.Struct({
   id: Schema.Number,

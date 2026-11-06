@@ -106,6 +106,7 @@ describe("The GitHub Charm on a hub", () => {
             },
             folders: [folder],
             runtimeFolder: join(root, "runtimes", HOB_ID),
+            commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
           })),
       }),
     );

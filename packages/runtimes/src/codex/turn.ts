@@ -14,7 +14,7 @@ import {
   turnPrompt,
   turnSigningAgent,
 } from "../claude-code.ts";
-import { committingTurn } from "../git-config.ts";
+import { turnCommits } from "../git-config.ts";
 import {
   folderAccessFor,
   type PreparedSandbox,
@@ -550,9 +550,8 @@ const sandboxFor = (
 const governedTurn = (config: CodexTurnConfig, request: PromptRequest) => {
   const policy = config.policy;
   // Who its commits are made as, as on Claude Code (#586, #741).
-  const { tools, commits } = committingTurn(
-    policy ? toolTurn(request.tools, policy.sandboxState, request.hubTools, CODEX_MODEL_HOSTS) : null,
-  );
+  const tools = policy ? toolTurn(request.tools, policy.sandboxState, request.hubTools, CODEX_MODEL_HOSTS) : null;
+  const commits = turnCommits(tools);
   if (!policy || tools === null) return null;
   return { policy, tools, commits, sandbox: policy.sandbox.state === "on" ? policy.sandbox : null };
 };

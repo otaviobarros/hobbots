@@ -131,6 +131,7 @@ const accessFor = (folder: string, preset: SafetyPreset = "balanced", push?: Pol
   },
   folders: [folder],
   runtimeFolder: path.join(root, "runtimes", "hob"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 /** The user, as the test plays them: they answer each request the way `answer` says, and are recorded. */

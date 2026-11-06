@@ -62,6 +62,7 @@ const TestHobTools = Layer.sync(HobTools, () =>
         },
         folders: [work],
         runtimeFolder: join(work, "runtimes", agent.id),
+        commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
       }),
   }),
 );

@@ -199,6 +199,7 @@ const accessFor = (preset: SafetyPreset = "balanced", overrides: Record<string, 
   },
   folders: [folder],
   runtimeFolder: path.join(root, "runtimes", "hob"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 interface Turn {

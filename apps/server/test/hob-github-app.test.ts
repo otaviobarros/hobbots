@@ -419,6 +419,7 @@ describe("A hob's own GitHub App on a hub", () => {
       },
       folders: [folder],
       runtimeFolder: join(temp, "sam-runtime"),
+      commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
     };
     // The Charm's choice of credential, over the user's account (unused here) or the hob's app.
     const Credential = GitHubCredentialPerHob.pipe(

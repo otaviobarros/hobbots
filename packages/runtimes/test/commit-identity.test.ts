@@ -73,6 +73,7 @@ const access = (folder: string, commitAs?: typeof BOT): ToolAccess => ({
   },
   folders: [folder],
   runtimeFolder: join(root, "runtimes", "frodo"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
   ...(commitAs ? { commitAs } : {}),
 });
 

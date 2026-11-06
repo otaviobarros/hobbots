@@ -109,6 +109,7 @@ const access = (folders: ReadonlyArray<string>, readGitHub?: PolicyDecision, git
   },
   folders,
   runtimeFolder: path.join(root, "runtimes", "hob"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 const reaches = (repository: GitHubRepository) =>

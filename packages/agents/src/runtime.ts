@@ -2,8 +2,8 @@ import {
   type ApprovalId,
   type ApprovalLifetime,
   type CommitIdentity,
+  type CommitsAs,
   type Effort,
-  type GitIdentity,
   type Grant,
   type GrantId,
   type GrantRule,
@@ -175,15 +175,11 @@ export interface ToolAccess {
    */
   readonly commitAs?: CommitIdentity;
   /**
-   * Who a hob on the user's account commits as when the user's own Git config sets no email: the
-   * identity the user gave the hub when it asked them (#741). Absent until they answer.
+   * Who the turn's commits are made as, which the hub settles before the turn starts: the hob's bot,
+   * the user as their Git config sets them, as they told Hobbots, or no one yet (#586, #741). Every
+   * runtime applies it as given and reads no Git config to decide it.
    */
-  readonly userIdentity?: CommitIdentity;
-  /**
-   * The name and email the user's own Git config sets, as the hub read it when the turn started.
-   * Absent, a runtime reads the config itself.
-   */
-  readonly userGitIdentity?: GitIdentity;
+  readonly commitsAs: CommitsAs;
 }
 
 /** A tool call the policy answered Ask for, as an adapter asks the user about it (PE-003). */

@@ -112,6 +112,7 @@ const ProjectTools = Layer.succeed(
         },
         folders: [project],
         runtimeFolder: join(temp, "runtime", agent.id),
+        commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
       }),
   }),
 );

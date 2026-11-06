@@ -57,6 +57,7 @@ const accessFor = (
   },
   folders: [folder],
   runtimeFolder: path.join(root, "runtimes", "hob"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 /** The user, answering every request as `answer` says, each recorded in `asked`. */

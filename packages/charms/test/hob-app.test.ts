@@ -1100,6 +1100,7 @@ const accessIn = (
   },
   folders: [folder],
   runtimeFolder: join(temp, "runtimes", "frodo"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 /** The GitHub Charm's tools over the hob's app and GitHub's REST API, for hobs working in `folder`. */
@@ -1516,6 +1517,7 @@ const pushAccess = (folder: string): ToolAccess => ({
   },
   folders: [folder],
   runtimeFolder: join(temp, "runtimes", "frodo"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 /** Frodo calls Push once, with the user approving the card. */

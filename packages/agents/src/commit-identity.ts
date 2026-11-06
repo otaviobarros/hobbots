@@ -1,6 +1,7 @@
 import {
   type AgentId,
   type CommitIdentity,
+  type CommitsAs,
   type GitHubUser,
   type GitIdentity,
   githubUserCommitIdentity,
@@ -9,6 +10,7 @@ import {
   parseCommitIdentity,
   type QuestionOption,
   type RaiseHubQuestion,
+  settleCommitsAs,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option, Semaphore } from "effect";
 import { type HubQuestionHandler, HubQuestionRepository, HubQuestions } from "./hub-questions.ts";
@@ -91,23 +93,16 @@ export interface TurnStart {
   readonly chat: HubQuestionChat | null;
 }
 
-/** Who a turn of a hob on your account commits as, as the hub works it out. */
-export interface TurnCommits {
-  /** The name and email your Git config sets now. */
-  readonly userGitIdentity: GitIdentity;
-  /** The identity you gave the hub, or null. */
-  readonly userIdentity: CommitIdentity | null;
-}
-
 export class CommitIdentityQuestions extends Context.Service<
   CommitIdentityQuestions,
   {
     /**
-     * Who `agentId`'s turn commits as. For a turn about to start (`turn`) while neither your Git
-     * config nor your answer sets an identity, it asks you, one question at a time, in the turn's
-     * chat. Reading access at any other time asks nothing.
+     * Who a turn of `agentId`, a hob on your account, commits as: as your Git config sets you, as you
+     * told the hub, or no one yet. For a turn about to start that may commit (`turn`) while neither
+     * sets an identity, it asks you, one question at a time, in the turn's chat. Reading access at
+     * any other time asks nothing.
      */
-    readonly forTurn: (agentId: AgentId, turn?: TurnStart) => Effect.Effect<TurnCommits>;
+    readonly forTurn: (agentId: AgentId, turn?: TurnStart) => Effect.Effect<CommitsAs>;
   }
 >()("@hobbots/agents/CommitIdentityQuestions") {
   static readonly layer = Layer.effect(
@@ -172,7 +167,7 @@ export class CommitIdentityQuestions extends Context.Service<
                 Effect.catchCause((cause) => Effect.logWarning("Could not ask who hobs commit as", cause)),
               );
             }
-            return { userGitIdentity, userIdentity };
+            return settleCommitsAs(null, userGitIdentity, userIdentity);
           }),
       });
     }),
