@@ -112,7 +112,7 @@ export function SkillPickerList({
 }
 
 /** The wand and sparkles the screens use for skills. */
-export function SkillIcon({ size = 14, className }: { size?: number; className?: string }) {
+export function SkillIcon({ size = 14 }: { size?: number }) {
   return (
     <svg
       aria-hidden="true"
@@ -124,7 +124,7 @@ export function SkillIcon({ size = 14, className }: { size?: number; className?:
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={cn("shrink-0", className)}
+      className="shrink-0"
     >
       <path d="M2.5 13.5 9 7M10 2.5l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6zM12.5 8.5l.4 1 1 .4-1 .4-.4 1-.4-1-1-.4 1-.4z" />
     </svg>

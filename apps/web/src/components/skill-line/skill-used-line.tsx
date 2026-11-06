@@ -21,7 +21,9 @@ export function SkillUsedLines({ message, hob }: { message: Message; hob: Agent 
               role="status"
               className="flex flex-wrap items-center gap-2 rounded-card border border-line-2 px-3 py-1.5 text-detail text-text-secondary"
             >
-              <SkillIcon className="text-star" />
+              <span className="flex text-star">
+                <SkillIcon />
+              </span>
               <span className="min-w-0">
                 {copy.used} <b className="font-semibold text-text-strong">{line.title}</b>
                 {line.detail === "" ? "" : ` ${line.detail}`}
