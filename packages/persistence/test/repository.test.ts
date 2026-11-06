@@ -203,6 +203,49 @@ describe("HobbotsRepository", () => {
     });
   });
 
+  // covers UX-006, DP-003
+  it("[TC-DP-273] keeps a lead's quiet reply with its text, out of the thread's last line and its unread dot (#1006)", async () => {
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(
+        new Agent({
+          id: agentId,
+          name: "Aldric",
+          roleTitle: "Guide",
+          runtime: "claude-code",
+          model: null,
+          effort: null,
+          instructions: "",
+          lookSeed: 1,
+          lookColor: "moss",
+          configVersion: 1,
+          createdAt: now,
+        }),
+      );
+      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      const plan = (yield* repo.upsertMessage(new Message({ ...message("m1"), content: "Quill drafts the copy." })))
+        .value;
+      yield* repo.markThreadRead(threadId, plan.id, plan.revision);
+      yield* repo.upsertMessage(
+        new Message({ ...message("m2"), content: "Quill finished; I wait on Ada.", quiet: true }),
+      );
+      const quiet = Option.getOrThrow(yield* repo.findThread(threadId));
+      yield* repo.upsertMessage(new Message({ ...message("m3"), content: "The launch page is live." }));
+      const finish = Option.getOrThrow(yield* repo.findThread(threadId));
+      return { quiet, finish, stored: (yield* repo.listMessages(threadId)).map((each) => [each.id, each.quiet]) };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result.quiet.unread).toBe(false);
+    expect(result.quiet.lastLine).toBe("Quill drafts the copy.");
+    expect(result.finish.unread).toBe(true);
+    expect(result.finish.lastLine).toBe("The launch page is live.");
+    expect(result.stored).toEqual([
+      ["m1", false],
+      ["m2", true],
+      ["m3", false],
+    ]);
+  });
+
   // covers UX-006, CH-009, DP-003
   it("[TC-DP-252] a reply you read that is continued in place is unread again once it ends, even after a late read of the cut-off reply", async () => {
     const result = await Effect.gen(function* () {

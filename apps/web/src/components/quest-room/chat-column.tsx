@@ -47,11 +47,13 @@ export function ChatColumn({
   const replies = useQuery({
     ...messagesQuery(threadId ?? ("" as ThreadId)),
     enabled: threadId !== undefined,
-    select: (all) => all.filter((message) => message.role === "assistant").length,
+    // A lead's routine progress, which the chat leaves out, leaves no dot either (#1006).
+    select: (all) =>
+      all.filter((message) => message.role === "assistant" && !message.quiet).map((message) => message.id),
   }).data;
   const hidden = room && folded;
-  // How many replies this thread held while the chat was last in view; a reply after that leaves the
-  // dot. Another thread starts from its own count, since the column stays mounted across threads.
+  // The replies this thread held while the chat was last in view; a reply after that leaves the dot.
+  // Another thread starts from its own replies, since the column stays mounted across threads.
   const [seen, setSeen] = useState<SeenReplies>();
   const next = nextSeen(seen, threadId, replies, hidden);
   if (next !== seen) setSeen(next);

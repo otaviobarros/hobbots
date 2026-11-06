@@ -96,24 +96,24 @@ export const threadRows = (
     brain: row.brain == null ? null : JSON.parse(String(row.brain)),
   }));
 /**
- * The start of the last message a thread's transcript shows, as `last_content`: queued messages and
- * ones with no text, such as a reply made only of tool calls, are skipped. `threadRows` makes it one line.
+ * The start of the last message a thread's transcript shows, as `last_content`: queued messages, a
+ * lead's quiet progress (#1006) and ones with no text, such as a reply made only of tool calls, are skipped. `threadRows` makes it one line.
  * 600 characters leave room for the whitespace that line collapses before it cuts at `PREVIEW_LENGTH`.
  */
 const lastContent = (sql: SqlClient.SqlClient) =>
   sql`(SELECT substr(m.content, 1, 600) FROM messages m
-    WHERE m.thread_id = threads.id AND m.status <> 'queued' AND trim(m.content) <> ''
+    WHERE m.thread_id = threads.id AND m.status <> 'queued' AND m.quiet = 0 AND trim(m.content) <> ''
     ORDER BY m.seq DESC LIMIT 1) AS last_content`;
 /**
  * Whether the hob wrote in the thread since you last read it, as `unread`: a reply that ended with
  * text, or that failed, written after `read_revision` (ADR 027). That counts a reply continued in
  * place after you read it, since its message takes a new revision. A reply still under way waits
- * until it ends, and your own messages never count.
+ * until it ends, and your own messages and a lead's quiet progress (#1006) never count.
  */
 const unreadColumn = (sql: SqlClient.SqlClient) =>
   sql`(CASE WHEN EXISTS (SELECT 1 FROM messages u
     WHERE u.thread_id = threads.id AND u.role = 'assistant' AND u.revision > COALESCE(threads.read_revision, 0)
-      AND u.status NOT IN ('queued', 'streaming', 'stopping')
+      AND u.status NOT IN ('queued', 'streaming', 'stopping') AND u.quiet = 0
       AND (trim(u.content) <> '' OR u.status = 'failed')) THEN 1 ELSE 0 END) AS unread`;
 const checkpointRows = (rows: ReadonlyArray<{ readonly lines?: unknown; readonly omitted?: unknown }>) =>
   rows.map((row) => ({ ...row, lines: JSON.parse(String(row.lines)), omitted: Number(row.omitted) }));
@@ -151,6 +151,7 @@ const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
     revision: Number(row.revision),
     steps: JSON.parse(String(row.steps ?? "[]")),
     usage: usageOf(row),
+    quiet: Number(row.quiet ?? 0) === 1,
   }));
 
 /** The SQL store of hobs, threads and messages, for SQLite and PostgreSQL (ADR 011). */
@@ -371,13 +372,14 @@ export const HobbotsRepositoryLive = Layer.effect(
         return sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, runtime, model,
           time_to_request_ms, time_to_first_stream_ms, time_to_first_token_ms,
           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-          resets_at, steps, prompt_id, created_at, revision, seq)
+          resets_at, steps, prompt_id, quiet, created_at, revision, seq)
         VALUES (
           ${message.id}, ${message.threadId}, ${message.role}, ${message.content},
           ${message.status}, ${message.error}, ${message.configVersion}, ${message.runtime}, ${message.model},
           ${usage.time_to_request_ms}, ${usage.time_to_first_stream_ms}, ${usage.time_to_first_token_ms},
           ${usage.input_tokens}, ${usage.output_tokens}, ${usage.cache_read_tokens}, ${usage.cache_write_tokens},
           ${message.resetsAt}, ${JSON.stringify(message.steps)}, ${message.promptId},
+          ${message.quiet ? 1 : 0},
           ${message.createdAt}, ${message.revision},
           (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE thread_id = ${message.threadId})
         )
@@ -397,6 +399,7 @@ export const HobbotsRepositoryLive = Layer.effect(
           cache_write_tokens = excluded.cache_write_tokens,
           resets_at = excluded.resets_at,
           steps = excluded.steps,
+          quiet = excluded.quiet,
           revision = excluded.revision`;
       });
 

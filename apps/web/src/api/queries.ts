@@ -286,17 +286,26 @@ export const placeThread = (queryClient: QueryClient, thread: Thread) => {
   queryClient.setQueryData<ReadonlyArray<Thread>>(outOf, (old) => old?.filter((t) => t.id !== thread.id));
 };
 
+const isThreadList = (query: { readonly queryKey: ReadonlyArray<unknown> }) =>
+  query.queryKey[0] === "agents" && /^(threads|archivedThreads)$/.test(String(query.queryKey[2]));
+
 /**
  * A message the transcript shows becomes its thread's last line in the hob's thread lists, so a
  * list of chats follows a reply as it lands. The hub works out the same line when it reads them.
  */
 export const showLastLine = (queryClient: QueryClient, message: Message) => {
+  const lists = queryClient.getQueriesData<ReadonlyArray<Thread>>({ predicate: isThreadList });
+  if (message.quiet) {
+    // A reply kept quiet as it completes may already be the last line, from a read or a step while it
+    // streamed. The hub reads the line from the message before it, so the lists holding the thread
+    // are read again (#1006).
+    for (const [key, threads] of lists)
+      if (threads?.some((thread) => thread.id === message.threadId))
+        void queryClient.invalidateQueries({ queryKey: key, exact: true });
+    return;
+  }
   const lastLine = messagePreview(message);
   if (lastLine === null) return;
-  const lists = queryClient.getQueriesData<ReadonlyArray<Thread>>({
-    predicate: (query) =>
-      query.queryKey[0] === "agents" && /^(threads|archivedThreads)$/.test(String(query.queryKey[2])),
-  });
   for (const [key, threads] of lists) {
     if (!threads?.some((thread) => thread.id === message.threadId && thread.lastLine !== lastLine)) continue;
     queryClient.setQueryData<ReadonlyArray<Thread>>(key, (old) =>
