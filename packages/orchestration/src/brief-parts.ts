@@ -13,8 +13,8 @@ interface BriefEntry {
   readonly lines: ReadonlyArray<string>;
   /**
    * What this turn shows in place of `lines`, as a result told longer when it arrived with the turn
-   * (#1040). It is shown even when `lines` were told before, since they hold less. The mark keeps the
-   * fingerprint of `lines`, so a later turn compares with those.
+   * (#1040). It is shown once a session, even when `lines` were told before, since they hold less.
+   * The mark keeps the fingerprints of both, so a later turn compares with what the session holds.
    */
   readonly shown?: ReadonlyArray<string>;
 }
@@ -55,6 +55,35 @@ export interface Briefed {
 
 const markKey = (group: string, key: string) => `${group}:${key}`;
 
+/** The mark's key for the longer text an entry was shown in place of its lines (#1040). */
+const shownKey = (key: string) => `${key}#shown`;
+
+/**
+ * Whether `entry`, under `key`, is told this turn, recording in `entries` what the session will
+ * hold: its lines' fingerprint, and when it is shown longer, that text's too, kept while its lines
+ * stay the same. A longer text is told once a session, even when its lines were told before, so a
+ * result that arrived after its summary was briefed is told whole, and a redelivery is not (#1040).
+ */
+const tells = (
+  entry: BriefEntry,
+  key: string,
+  since: TaskBriefMark["entries"] | null,
+  entries: Record<string, string>,
+) => {
+  const digest = memoryBriefDigest(entry.lines.join("\n"));
+  entries[key] = digest;
+  const same = since?.[key] === digest;
+  const longer = entry.shown === undefined ? null : entry.shown.join("\n");
+  if (longer === null || longer === entry.lines.join("\n")) {
+    const held = since?.[shownKey(key)];
+    if (same && held !== undefined) entries[shownKey(key)] = held;
+    return !same;
+  }
+  const shown = memoryBriefDigest(longer);
+  entries[shownKey(key)] = shown;
+  return !same || since?.[shownKey(key)] !== shown;
+};
+
 /**
  * The briefing `parts` make on `taskId`: whole when `told` is null or marks another Task, else only
  * what changed since `told`. Fixed lines are always told. The mark it returns covers every entry,
@@ -65,15 +94,7 @@ export const renderBrief = (taskId: TaskId, parts: ReadonlyArray<BriefPart>, tol
   const entries: Record<string, string> = {};
   const lines = parts.flatMap((part): ReadonlyArray<string> => {
     if (part._tag === "Fixed") return part.lines;
-    const changed = part.entries.filter((entry) => {
-      const key = markKey(part.group, entry.key);
-      const digest = memoryBriefDigest(entry.lines.join("\n"));
-      entries[key] = digest;
-      // Shown longer than the mark's lines, as a result that arrived with the turn after its summary
-      // was briefed: the session holds only the summary, so it is told the rest (#1040).
-      const longer = entry.shown !== undefined && entry.shown.join("\n") !== entry.lines.join("\n");
-      return longer || since?.[key] !== digest;
-    });
+    const changed = part.entries.filter((entry) => tells(entry, markKey(part.group, entry.key), since, entries));
     return changed.length === 0 ? [] : [...part.heading, ...changed.flatMap((entry) => entry.shown ?? entry.lines)];
   });
   const [first = "", ...rest] = lines;

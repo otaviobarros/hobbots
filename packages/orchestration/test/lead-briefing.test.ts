@@ -236,10 +236,17 @@ describe("a result that arrives with a lead's turn", () => {
     const plain = renderBrief(lead(tree).id, parts(tree), told);
     expect(plain.text).toContain(`${MEMBERS[1]} finished.`);
     expect(plain.text).not.toContain(result);
-    // The mark is the one the summary leaves, so the next wake does not tell it again, and a whole
-    // briefing later tells the summary.
-    expect(woken.told).toEqual(plain.told);
+    // The mark holds the summary too, so the next wake does not tell it again, and a whole briefing
+    // later tells the summary.
+    expect(woken.told.entries[`task:${rook}`]).toBe(plain.told.entries[`task:${rook}`]);
     expect(renderBrief(lead(tree).id, parts(tree), woken.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+    // The same result delivered again to the same session, as after a cut-off turn, is not told again,
+    // nor after a turn in between that carried nothing.
+    expect(renderBrief(lead(tree).id, carrying, woken.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+    const between = renderBrief(lead(tree).id, parts(tree), woken.told);
+    expect(renderBrief(lead(tree).id, carrying, between.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+    // A session that lost what it held, as after compaction, is told the whole result again.
+    expect(renderBrief(lead(tree).id, carrying, null).text).toContain(result);
 
     // Rook finished before the earlier wake read the tree, so it briefed his summary; the wake that
     // then carries his result still tells the rest of it, once.
@@ -248,7 +255,7 @@ describe("a result that arrives with a lead's turn", () => {
     expect(summarised.text).not.toContain(result);
     const late = renderBrief(lead(tree).id, carrying, summarised.told);
     expect(late.text).toContain(result);
-    expect(late.told).toEqual(summarised.told);
     expect(renderBrief(lead(tree).id, parts(tree), late.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+    expect(renderBrief(lead(tree).id, carrying, late.told).text).not.toContain(`${MEMBERS[1]} finished.`);
   });
 });
