@@ -1,4 +1,4 @@
-import { extname } from "node:path";
+import { extname, posix } from "node:path";
 import { HubHosts, normalizeHost } from "@hobbots/permissions";
 import { Effect, Layer } from "effect";
 import {
@@ -13,14 +13,35 @@ import {
 const HASHED_ASSETS = "/assets/";
 
 /**
+ * The file path a request names, as the static server resolves it: decoded, with every leading
+ * separator and every `.` or `..` segment folded away. Undefined when it cannot be decoded.
+ */
+const servedPath = (url: string) => {
+  try {
+    const pathname = decodeURIComponent(url.split(/[?#]/, 1)[0] ?? "");
+    return posix.normalize(`/${pathname.replace(/^\/+/, "")}`);
+  } catch {
+    return undefined;
+  }
+};
+
+/**
  * How long a browser may keep a file the web client is made of. A hashed asset never changes under
  * its name, so it is kept for a year without asking. Everything else, index.html above all, is
  * checked with the hub on every load: index.html names the hashed bundle, so a stale copy runs an
- * old client against a newer hub after an update. A path without an extension is never a hashed
- * asset, even under /assets/: the static server answers it with index.html.
+ * old client against a newer hub after an update.
+ *
+ * A request counts as a hashed asset only when the file it resolves to sits under /assets/ with an
+ * extension, and the response is not HTML. The static server answers an extensionless path with
+ * index.html, under /assets/ too and after decoding, so neither the raw URL nor the path alone
+ * decides; a 304 has no Content-Type, so the path still has to.
  */
-const webClientCacheControl = (pathname: string) =>
-  pathname.startsWith(HASHED_ASSETS) && extname(pathname) !== "" ? "public, max-age=31536000, immutable" : "no-cache";
+const webClientCacheControl = (url: string, response: HttpServerResponse.HttpServerResponse) => {
+  const path = servedPath(url);
+  const html = response.headers["content-type"]?.startsWith("text/html") ?? false;
+  const hashed = path !== undefined && path.startsWith(HASHED_ASSETS) && extname(path) !== "" && !html;
+  return hashed ? "public, max-age=31536000, immutable" : "no-cache";
+};
 
 /**
  * Serves the built web client next to the API. Paths without a file extension fall back to
@@ -36,8 +57,7 @@ export const WebClientRoutes = (root: string) =>
         const request = yield* HttpServerRequest.HttpServerRequest;
         const response = yield* files;
         if (response.status >= 400) return response;
-        const pathname = new URL(request.url, "http://hub").pathname;
-        return HttpServerResponse.setHeader(response, "Cache-Control", webClientCacheControl(pathname));
+        return HttpServerResponse.setHeader(response, "Cache-Control", webClientCacheControl(request.url, response));
       }).pipe(Effect.catch(HttpServerRespondable.toResponse));
       yield* router.add("GET", "/*", handler);
     }),

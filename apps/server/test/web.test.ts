@@ -79,8 +79,15 @@ describe("web client routes", () => {
   // covers DP-001
   it("[TC-DP-274] has the browser check index.html with the hub on every load and keep hashed assets", async () => {
     // index.html names the hashed bundle, so a copy reused without asking runs an old client after an update.
-    // An extensionless path under /assets/ falls back to index.html too, so it is not a hashed asset.
-    for (const path of ["/", "/index.html", "/agents/aldric", "/assets/example"]) {
+    // Paths the static server answers with index.html under /assets/: extensionless, also once
+    // decoded, and folded back out of it.
+    const fallbacks = [
+      "/assets/example",
+      "/assets/example.js%2Froute",
+      "//assets/example",
+      "/assets/%2e%2e/index.html",
+    ];
+    for (const path of ["/", "/index.html", "/agents/aldric", ...fallbacks]) {
       const page = await get(path, { accept: "text/html" });
       expect(page.status).toBe(200);
       expect(page.headers.get("cache-control")).toBe("no-cache");
@@ -91,6 +98,10 @@ describe("web client routes", () => {
     });
     expect(revalidated.status).toBe(304);
     expect(revalidated.headers.get("cache-control")).toBe("no-cache");
+    const fallbackTag = (await get("/assets/example.js%2Froute", { accept: "text/html" })).headers.get("etag") ?? "";
+    const fallback304 = await get("/assets/example.js%2Froute", { accept: "text/html", "if-none-match": fallbackTag });
+    expect(fallback304.status).toBe(304);
+    expect(fallback304.headers.get("cache-control")).toBe("no-cache");
 
     const asset = await get("/assets/app.js");
     expect(asset.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
