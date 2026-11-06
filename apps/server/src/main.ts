@@ -168,7 +168,9 @@ const memoryToolsLayer = (
   const store = config.runtime === "fake" && config.fakeMemory === "off" ? MemoryStoreFake : pageStore;
   return MemoryToolsLive.pipe(
     Layer.provideMerge(MemorySharesLive),
-    Layer.provide(Layer.mergeAll(store, MemoryProjectsLive, PolicyEngine.node)),
+    Layer.provide(Layer.mergeAll(MemoryProjectsLive, PolicyEngine.node)),
+    // Kept in the output: chat turns, a step's and a member's sessions and exports read it from here.
+    Layer.provideMerge(store),
   );
 };
 
