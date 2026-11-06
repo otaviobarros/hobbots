@@ -28,7 +28,7 @@ export function WorkbenchTabs({
             value={each}
             variant="chip"
             title={hint(each, state)}
-            className={cn(state.kind === "not-used" && "opacity-45")}
+            className={cn(state.kind === "not-used" && "text-label")}
           >
             <span>{messages.tab[each]}</span>
             {counts !== null && each !== "browser" && state.kind !== "not-used" && (

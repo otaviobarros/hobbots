@@ -1,4 +1,5 @@
 import { cn } from "@hobbots/ui/lib/utils";
+import { Said } from "../said/said.tsx";
 import type { RowStatus } from "./work-model.ts";
 
 const tone: Record<RowStatus, string> = {
@@ -24,11 +25,12 @@ export function StatusDot({ status, className }: { status: RowStatus; className?
   return <span aria-hidden className={cn("size-2 shrink-0 rounded-dot", tone[status], className)} />;
 }
 
-/** Where work stands, in words. */
-export function StatusTag({ status, children }: { status: RowStatus; children: string }) {
+/** Where work stands, in words, with what a screen reader says after them when it is part of a name. */
+export function StatusTag({ status, children, said }: { status: RowStatus; children: string; said?: string }) {
   return (
     <span className={cn("rounded-tag px-1.5 py-0.5 text-meta font-bold whitespace-nowrap", tag[status])}>
       {children}
+      {said !== undefined && <Said>{said}</Said>}
     </span>
   );
 }

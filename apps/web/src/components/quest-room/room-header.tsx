@@ -90,7 +90,7 @@ export function RoomHeader({
           {needs > 0 && <span className="font-bold text-lantern"> · {messages.needYou({ count: needs })}</span>}
         </span>
         <span className="ms-auto shrink-0">{lineup}</span>
-        {width !== "narrow" && (
+        {width === "wide" && (
           <Button
             variant="quiet"
             size="sm"
@@ -109,7 +109,7 @@ export function RoomHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <TechnicalItem shown={width === "narrow"} technical={technical} />
+            <TechnicalItem shown={width !== "wide"} technical={technical} />
             <DropdownMenuItem onSelect={() => pins.toggle(top.id)}>
               {pins.pinned.includes(top.id) ? messages.unpin : messages.pin}
             </DropdownMenuItem>
@@ -140,7 +140,7 @@ export function RoomHeader({
   );
 }
 
-/** In a narrow window, where the header has no room for it, the switch for the technical steps. */
+/** Below 1280 px, where the header has no room for it beside the title, the switch for the technical steps. */
 function TechnicalItem({
   shown,
   technical,

@@ -9,8 +9,8 @@ const ENDED: Record<TicketEnd, (took: string) => string> = {
 
 /** Copy for the Quest's ticket under the request in the chat (STD-I18N-001). */
 export const messages = {
-  /** The ticket's name for a screen reader: the Quest, and where it stands, in one line. */
-  label: ({ title, state }: { title: string; state: string }) => `Open the ${title} room: ${state}`,
+  /** What a screen reader hears between the ticket's parts, which the eye gets from the layout. */
+  said: { title: ": ", part: ", ", open: ". " },
   progress: (progress: TicketProgress, now?: Date): string =>
     progress.kind === "count"
       ? `${formatCount(progress.done)} of ${formatCount(progress.total)} done`
