@@ -54,6 +54,9 @@ describe("a lead's briefing over a Quest", () => {
     expect(whole).not.toContain(SINCE_LAST_TURN);
     expect(later.length).toBeGreaterThan(0);
     for (const briefing of later) expect(briefing).toContain(SINCE_LAST_TURN);
+    // Its rules too: the wakes on the session that holds them are not told them again (#1039).
+    expect(whole).toContain("Tell the user only what your Task tools did");
+    for (const briefing of later) expect(briefing).not.toContain("Tell the user only what your Task tools did");
     // Each result reaches the lead's briefings once, whichever wake carries it.
     for (const hob of MEMBERS) {
       expect(briefings.filter((briefing) => briefing.includes(`${hob} finished its part`))).toHaveLength(1);
@@ -68,6 +71,7 @@ describe("a lead's briefing over a Quest", () => {
       ),
     );
     expect(answering?.briefing).not.toContain(SINCE_LAST_TURN);
+    expect(answering?.briefing).toContain("Tell the user only what your Task tools did");
     for (const hob of MEMBERS) expect(answering?.briefing).toContain(`${hob} finished its part`);
   }, 30_000);
 
@@ -90,5 +94,6 @@ describe("a lead's briefing over a Quest", () => {
     expect(next?.sessionId).toBe(compacted?.sessionId);
     expect(next?.briefing).not.toContain(SINCE_LAST_TURN);
     expect(next?.briefing).toContain("Quill finished its part");
+    expect(next?.briefing).toContain("Tell the user only what your Task tools did");
   }, 30_000);
 });
