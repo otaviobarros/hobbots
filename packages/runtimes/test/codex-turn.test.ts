@@ -29,6 +29,7 @@ import {
   sandboxedCommand,
   TOOLS_CLOSED,
 } from "../src/codex/turn.ts";
+import { refusalNotice } from "../src/codex/policy.ts";
 import { ProcessSandbox, type ProcessSandboxShape, type SandboxScope, sandboxFilesystem } from "../src/sandbox.ts";
 import { completed, fakeServer, n, THREAD, TURN } from "./codex-app-server.ts";
 
@@ -278,6 +279,44 @@ describe("a Codex turn", () => {
         decidedBy: "policy",
       }),
     ]);
+    expect(events(exit).at(-1)).toMatchObject({ _tag: "Completed", text: "I could not run it." });
+  });
+
+  // regression for #1082
+  it("[TC-RT-1082-03] tells the running turn why each call was refused, as input the model reads next", async () => {
+    const ask = (method: string, params: Record<string, unknown>) => ({
+      method,
+      params: { threadId: THREAD, turnId: TURN, ...params },
+    });
+    const server = fakeServer({
+      asks: [
+        ask("item/commandExecution/requestApproval", { itemId: "c1", command: "/bin/bash -lc 'ls -la'", cwd: "/w" }),
+        ask("item/fileChange/requestApproval", { itemId: "f1" }),
+      ],
+      script: [message("m1", "I could not run it."), completed("completed")],
+    });
+    const exit = await run(config(server.start));
+    expect(server.answers).toEqual([{ decision: "decline" }, { decision: "decline" }]);
+    const steered = server.requests.filter((request) => request.method === "turn/steer");
+    expect(steered).toEqual([
+      {
+        method: "turn/steer",
+        params: {
+          threadId: THREAD,
+          expectedTurnId: TURN,
+          input: [{ type: "text", text: refusalNotice("ls -la", TOOLS_CLOSED, "policy"), text_elements: [] }],
+        },
+      },
+      {
+        method: "turn/steer",
+        params: {
+          threadId: THREAD,
+          expectedTurnId: TURN,
+          input: [{ type: "text", text: refusalNotice("Changing files", TOOLS_CLOSED, "policy"), text_elements: [] }],
+        },
+      },
+    ]);
+    // The notes are input to the turn, never part of the reply.
     expect(events(exit).at(-1)).toMatchObject({ _tag: "Completed", text: "I could not run it." });
   });
 

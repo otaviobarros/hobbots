@@ -9,7 +9,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { toolTurn } from "../src/claude-code.ts";
 import type { AppServerNotification } from "../src/codex/app-server.ts";
 import { codexTurnEvents } from "../src/codex/events.ts";
-import { type PolicyRequest, policyGate, STDIN_REFUSED, shellScript, UNKNOWN_PATCH } from "../src/codex/policy.ts";
+import { type PolicyRequest, policyGate, refusalNotice, STDIN_REFUSED, shellScript, UNKNOWN_PATCH } from "../src/codex/policy.ts";
 import { CODEX_MODEL_HOSTS } from "../src/codex/turn.ts";
 import { approvalsAnswering as answering, approve } from "./codex-fixture.ts";
 
@@ -76,8 +76,15 @@ const decide = async (
     ...options.request,
   } satisfies PromptRequest;
   const gate = policyGate(engine, tools, request, true, "50 millis");
-  const answer = await Effect.runPromise(gate(asked, { events: mapper, report: (event) => events.push(event) }));
-  return { answer, events, mapper };
+  const told: Array<string> = [];
+  const answer = await Effect.runPromise(
+    gate(asked, {
+      events: mapper,
+      report: (event) => events.push(event),
+      tell: (_turn, text) => Effect.sync(() => told.push(text)),
+    }),
+  );
+  return { answer, events, mapper, told };
 };
 
 describe("Codex's tool calls under the hob's policy", () => {
@@ -167,6 +174,40 @@ describe("Codex's tool calls under the hob's policy", () => {
     const stdin = await decide(command("c3", "/bin/bash -lc 'cat'", { kind: "writeStdin" }));
     expect(stdin.answer).toEqual({ decision: "decline" });
     expect(stdin.events).toEqual([expect.objectContaining({ _tag: "ToolDenied", reason: STDIN_REFUSED })]);
+  });
+
+  // regression for #1082
+  it("[TC-RT-1082-01] tells the hob why the policy refused its command, and that the user was not asked", async () => {
+    const outsideFolder = await decide(command("c1", `/bin/bash -lc 'rm -rf ${outside}/x'`));
+    expect(outsideFolder.answer).toEqual({ decision: "decline" });
+    const reason = outsideFolder.events.find((event) => event._tag === "ToolDenied")?.reason ?? "";
+    expect(reason).not.toBe("");
+    expect(outsideFolder.told).toEqual([refusalNotice(`rm -rf ${outside}/x`, reason, "policy")]);
+    expect(outsideFolder.told[0]).toContain(`Why: ${reason}`);
+    expect(outsideFolder.told[0]).toContain("the user was not asked");
+
+    // A refusal the hub makes before deciding is told too.
+    const stdin = await decide(command("c2", "/bin/bash -lc 'cat'", { kind: "writeStdin" }));
+    expect(stdin.told).toEqual([refusalNotice("cat", STDIN_REFUSED, "policy")]);
+
+    // An allowed command is told nothing.
+    const allowed = await decide(command("c3", "/bin/bash -lc 'ls'"), {
+      request: { recordToolStart: () => Effect.succeed(true) },
+    });
+    expect(allowed.told).toEqual([]);
+  });
+
+  // regression for #1082
+  it("[TC-RT-1082-02] tells the hob the user refused its command, with the user's reason", async () => {
+    const denied = approvalsAnswering(() => Effect.succeed({ _tag: "Denied", reason: "Not today" }));
+    const refused = await decide(command("c1", "/bin/bash -lc 'pnpm test'"), {
+      preset: "careful",
+      request: { approvals: denied.approvals },
+    });
+    expect(refused.told).toHaveLength(1);
+    expect(refused.told[0]).toContain("The user refused `pnpm test`");
+    expect(refused.told[0]).toContain("Not today");
+    expect(refused.told[0]).not.toContain("the user was not asked");
   });
 
   // covers PE-001, PE-003, ADR 024

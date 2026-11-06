@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import { type PromptRequest, type RuntimeEvent, UNRECORDED_TOOL_CALL } from "@hobbots/agents";
+import { redactSecrets } from "@hobbots/domain";
 import type { PolicyEngine } from "@hobbots/permissions";
 import { type Duration, Effect } from "effect";
 import { type CallDecision, decideCall, startCall, type ToolCall, UNKNOWN_TOOL } from "../approval.ts";
@@ -20,11 +21,37 @@ export const POLICY_REQUESTS: ReadonlyArray<PolicyRequest["method"]> = [
   "item/fileChange/requestApproval",
 ];
 
-/** What the policy gate needs of the turn: its events, and how it reports a call. */
+/** What the policy gate needs of the turn: its events, how it reports a call, and how it tells the hob. */
 export interface PolicyTurn {
   readonly events: CodexTurnEvents;
   readonly report: (event: RuntimeEvent) => void;
+  /**
+   * Adds a note to a running turn, which the model reads with its next request. Never fails: a note
+   * Codex would not take is left out.
+   */
+  readonly tell: (turnId: string, text: string) => Effect.Effect<void>;
 }
+
+/** How much of a refused call the hob is shown: its first characters. */
+const NOTICE_CALL = 300;
+
+/**
+ * What the hob is told when a call it made is refused (#1082). Codex's answer to a declined call
+ * carries no text and reads "rejected by user", so the reason comes as a note in the same turn, as
+ * Claude Code's hook gives it with the refusal. A refusal by the policy says the user was not asked.
+ */
+export const refusalNotice = (call: string, reason: string, decidedBy: "user" | "policy"): string => {
+  const shown = call.length > NOTICE_CALL ? `${call.slice(0, NOTICE_CALL)}…` : call;
+  return [
+    "<call-refused>",
+    decidedBy === "user"
+      ? `The user refused \`${shown}\`, so it did not run.`
+      : `Hobbots refused \`${shown}\` under your policy, so it did not run. Codex reports it as rejected by the user, but the user was not asked.`,
+    reason === "" ? "No reason was given." : `Why: ${reason}`,
+    "</call-refused>",
+    "Do not send the same call again. Change it as the reason says, or tell the user what you could not do.",
+  ].join("\n");
+};
 
 /** Why typing into a command that is already running is refused. */
 export const STDIN_REFUSED =
@@ -69,7 +96,8 @@ const DECLINE: Answer = { decision: "decline" };
  * hooks do (ADR 014, ADR 024). Allow records the call with `recordToolStart` and accepts it; a call
  * that could not be recorded is declined (EX-004). Ask reports `ToolAwaitingApproval` and waits for
  * the user, then decides the call again (PE-008). Never declines, reporting the reason. A declined
- * call reaches the model as rejected; the reason stays in the reply's step.
+ * call reaches the model as rejected, so the reason is told to the hob in the same turn (#1082) and
+ * kept in the reply's step.
  */
 export const policyGate =
   (
@@ -81,9 +109,12 @@ export const policyGate =
     patchWait: Duration.Input = "5 seconds",
   ): ((asked: PolicyRequest, turn: PolicyTurn) => Effect.Effect<Answer>) =>
   (asked, turn) => {
-    const label = (call: ToolCall) => toolLabel(call.tool, call.input, request.redaction?.text);
+    const redact = request.redaction?.text ?? ((text: string) => redactSecrets(text));
+    const label = (call: ToolCall) => toolLabel(call.tool, call.input, redact);
     const refuse = (call: ToolCall, decision: CallDecision) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
+        const reason = decision._tag === "Refuse" ? decision.reason : "";
+        const decidedBy = decision._tag === "Refuse" && decision.decidedBy === "user" ? "user" : "policy";
         turn.report({
           _tag: "ToolDenied",
           id: call.id,
@@ -92,11 +123,18 @@ export const policyGate =
           operation: decision.verdict?.operation ?? "outside-folders",
           targets: decision.verdict?.targets ?? [],
           label: label(call),
-          reason: decision._tag === "Refuse" ? decision.reason : "",
-          decidedBy: decision._tag === "Refuse" && decision.decidedBy === "user" ? "user" : "policy",
+          reason,
+          decidedBy,
         });
-        return DECLINE;
+        // Told before the call is declined, so the note is in the model's next request.
+        return turn
+          .tell(asked.params.turnId, refusalNotice(shownCall(call), reason, decidedBy))
+          .pipe(Effect.as(DECLINE));
       });
+    const shownCall = (call: ToolCall) => {
+      const command = call.input.command;
+      return typeof command === "string" ? redact(command) : label(call);
+    };
     const reason = (text: string): CallDecision => ({ _tag: "Refuse", verdict: undefined, reason: text });
 
     const decide = (call: ToolCall) =>
