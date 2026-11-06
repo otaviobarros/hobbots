@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.3](https://github.com/otaviobarros/hobbots/compare/v0.0.2...v0.0.3) (2026-11-06)
+
+
+### Bug Fixes
+
+* **desktop:** load the new web client on the first window after an update ([#1080](https://github.com/otaviobarros/hobbots/issues/1080)) ([965028e](https://github.com/otaviobarros/hobbots/commit/965028e309524907c1e1ee0792c184a0d73785b3))
+* **orchestration:** wake the lead of an idle Quest, then show it stalled ([#1085](https://github.com/otaviobarros/hobbots/issues/1085)) ([8cd8063](https://github.com/otaviobarros/hobbots/commit/8cd8063dd339db549d0a450b757c72b1fc3dd602))
+* **runtimes:** tell a Codex hob why its call was refused ([#1083](https://github.com/otaviobarros/hobbots/issues/1083)) ([3ffef2d](https://github.com/otaviobarros/hobbots/commit/3ffef2d2681cb4271712e2295954aec6c623472e))
+
 ## [0.0.2](https://github.com/otaviobarros/hobbots/compare/v0.0.1...v0.0.2) (2026-11-06)
 
 
