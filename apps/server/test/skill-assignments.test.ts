@@ -341,3 +341,85 @@ describe("skill assignments", () => {
     expect((await request("GET", `/api/skills/hobs/${crypto.randomUUID()}`)).status).toBe(404);
   });
 });
+
+// #1096: which skills a reply used, mapped to the revision its turn mounted, and how often (ADR 029, The use line).
+describe("skill uses", () => {
+  // covers RT-001, ADR 029 (The use line)
+  it("[TC-AG-144] a reply records each skill it used at the revision its turn had, and never one it was not given", async () => {
+    const pip = await summon("Pip", 965);
+    const first = await importSkill("release-steps");
+    await request("POST", `/api/skills/${first.skill.id}/assignments`, { scope: { _tag: "Hob", agentId: pip.id } });
+    const second = (
+      await request("POST", `/api/skills/${first.skill.id}/revisions`, { source: written("release-steps", "Now.") })
+    ).body.revision;
+    const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+
+    // The hob picks it on its own, twice in one turn, and names a skill it does not have.
+    await send(thread, "fake:skill release-steps\nfake:skill release-steps\nfake:skill commit-style");
+    const reply = await replies(thread, 1);
+    expect(reply.skillsUsed).toEqual([
+      {
+        source: "library",
+        skillId: first.skill.id,
+        name: "release-steps",
+        pin: second.hash,
+        number: 2,
+        explicit: false,
+      },
+    ]);
+    // A reply that used none says so with an empty list.
+    await send(thread, "Hello");
+    expect((await replies(thread, 2)).skillsUsed).toEqual([]);
+  });
+
+  // covers RT-001, ADR 029 (Explicit use, The use line)
+  it("[TC-AG-145] a skill you pick is handed to the turn and shown as yours, and its uses are counted per hob and thread", async () => {
+    const pip = await summon("Pip", 966);
+    const quill = await summon("Quill", 967);
+    const skill = await importSkill("release-steps");
+    await request("POST", `/api/skills/${skill.skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+    const pipThread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    const quillThread: Thread = (await request("POST", `/api/agents/${quill.id}/threads`)).body;
+
+    const sent = await request("POST", `/api/threads/${pipThread.id}/messages`, {
+      content: "Ship it.",
+      skill: "release-steps",
+    });
+    expect(sent.body.userMessage.askedSkill).toBe("release-steps");
+    expect((await replies(pipThread, 1)).skillsUsed).toMatchObject([{ name: "release-steps", explicit: true }]);
+    // A skill the hob does not have is not handed to the turn.
+    const unknown = await request("POST", `/api/threads/${pipThread.id}/messages`, { content: "Go.", skill: "other" });
+    expect(unknown.status).toBe(200);
+    expect((await replies(pipThread, 2)).skillsUsed).toEqual([]);
+    // Typed as the composer writes it, `/release-steps` at the start picks it, and the runtime gets the rest.
+    await send(quillThread, "/release-steps Ship it.");
+    const typed = await replies(quillThread, 1);
+    expect(typed.skillsUsed).toMatchObject([{ name: "release-steps", explicit: true }]);
+    expect(typed.content).toBe("Echo: Ship it.");
+    expect((await messages(quillThread)).find((m) => m.role === "user")).toMatchObject({
+      content: "/release-steps Ship it.",
+      askedSkill: "release-steps",
+    });
+    await send(quillThread, "fake:skill release-steps");
+    await replies(quillThread, 2);
+
+    const counts = await request("GET", `/api/skills/${skill.skill.id}/uses`);
+    expect(counts.body).toMatchObject({ skillId: skill.skill.id, total: 3, thisWeek: 3 });
+    expect(counts.body.hobs.map((hob: { agentId: string; count: number }) => [hob.agentId, hob.count]).sort()).toEqual(
+      [
+        [pip.id, 1],
+        [quill.id, 2],
+      ].sort(),
+    );
+    expect(counts.body.threads.map((one: { threadId: string }) => one.threadId).sort()).toEqual(
+      [pipThread.id, quillThread.id].sort(),
+    );
+    const list = (await request("GET", "/api/skills")).body;
+    expect(list.usesThisWeek).toContainEqual({ skillId: skill.skill.id, count: 3 });
+    const hob = (await request("GET", `/api/skills/hobs/${pip.id}`)).body;
+    expect(hob.lastUsed).toMatchObject([
+      { skillId: skill.skill.id, name: "release-steps", number: 1, threadId: pipThread.id, explicit: true },
+    ]);
+    expect((await request("GET", `/api/skills/${crypto.randomUUID()}/uses`)).status).toBe(404);
+  });
+});

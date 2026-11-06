@@ -1,5 +1,15 @@
 import { HobbotsRepository, SkillLibrary, type SkillRevisionInput } from "@hobbots/agents";
-import { Agent, AgentId, MemoryProjectIdentity, SkillName, SkillRevisionHash } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  MemoryProjectIdentity,
+  MessageId,
+  SkillName,
+  SkillRevisionHash,
+  SkillUse,
+  SkillUseId,
+  ThreadId,
+} from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, SkillLibraryLive } from "../src/index.ts";
@@ -197,6 +207,44 @@ describe("skills library", () => {
         expect((yield* library.optOuts(pip)).map((one) => one.skillId)).toEqual([skill.id]);
         expect((yield* library.setOptOut(pip, skill.id, false))?.value.skillId).toBe(skill.id);
         expect(yield* library.optOuts()).toEqual([]);
+      }),
+    ));
+
+  // covers ADR 029 (The use line), #1096
+  it("[TC-DP-282] records each use with its hob, thread and reply, journals it, and reads a skill's or a hob's", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const library = yield* SkillLibrary;
+        const skill = (yield* library.addRevision(null, input(H1))).value.skill;
+        const use = (at: string, threadId: string | null, source: "library" | "organization" = "library") =>
+          new SkillUse({
+            id: SkillUseId.make(`use-${at}`),
+            source,
+            skillId: source === "library" ? skill.id : null,
+            name: source === "library" ? "release" : "security",
+            pin: source === "library" ? H1 : null,
+            number: source === "library" ? 1 : null,
+            explicit: threadId !== null,
+            agentId: pip,
+            threadId: threadId === null ? null : ThreadId.make(threadId),
+            messageId: threadId === null ? null : MessageId.make(`reply-${at}`),
+            at,
+          });
+        const first = yield* library.recordUse(use("2026-11-06T10:00:00.000Z", "t1"));
+        expect(first.entries[0]).toMatchObject({
+          correlation: { agentId: pip, threadId: "t1", messageId: "reply-2026-11-06T10:00:00.000Z" },
+          payload: { _tag: "SkillUsed", use: { name: "release", pin: H1, number: 1, explicit: true } },
+        });
+        yield* library.recordUse(use("2026-11-06T11:00:00.000Z", null));
+        yield* library.recordUse(use("2026-11-06T12:00:00.000Z", null, "organization"));
+        expect((yield* library.uses({ skillId: skill.id })).map((one) => one.at)).toEqual([
+          "2026-11-06T11:00:00.000Z",
+          "2026-11-06T10:00:00.000Z",
+        ]);
+        expect(yield* library.uses({ agentId: pip })).toHaveLength(3);
+        expect(yield* library.uses({ agentId: AgentId.make("quill") })).toEqual([]);
+        expect((yield* library.uses({})).at(0)).toMatchObject({ source: "organization", skillId: null, pin: null });
       }),
     ));
 

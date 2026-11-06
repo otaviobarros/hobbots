@@ -21,7 +21,17 @@ import {
   type SkillSourcePayload,
   SkillStillAssigned,
 } from "@hobbots/api";
-import type { AgentId, Committed, SkillBy, SkillId, SkillNotFound, SkillRevisionHash } from "@hobbots/domain";
+import {
+  type AgentId,
+  type Committed,
+  countSkillUses,
+  lastSkillUses,
+  type SkillBy,
+  type SkillId,
+  type SkillNotFound,
+  type SkillRevisionHash,
+  weeklySkillUses,
+} from "@hobbots/domain";
 import {
   AgentsFolder,
   AgentsFolderLive,
@@ -32,7 +42,7 @@ import {
   type SkillImportSource,
   SkillObjectsLive,
 } from "@hobbots/skills";
-import { Effect, Layer, Option } from "effect";
+import { DateTime, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 
 /**
@@ -65,9 +75,11 @@ const importError = (error: SkillImportError) => {
 
 const NO_LIBRARY = "This hub has no skills library.";
 
+const NO_SKILLS = { skills: [], sources: [], agentsFolder: { path: null, problems: [] }, usesThisWeek: [] };
+
 /** A hub built without the library, as most of the server's tests are: no skills, and nothing to import into. */
 const libraryOff = {
-  list: () => Effect.succeed({ skills: [], sources: [], agentsFolder: { path: null, problems: [] } }),
+  list: () => Effect.succeed(NO_SKILLS),
   get: ({ params }: { readonly params: { readonly skillId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.skillId })),
   revision: ({ params }: { readonly params: { readonly hash: string } }) =>
@@ -75,7 +87,7 @@ const libraryOff = {
   scan: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   import: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   revise: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
-  syncAgentsFolder: () => Effect.succeed({ skills: [], sources: [], agentsFolder: { path: null, problems: [] } }),
+  syncAgentsFolder: () => Effect.succeed(NO_SKILLS),
   remove: ({ params }: { readonly params: { readonly skillId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.skillId })),
   rollOut: ({ params }: { readonly params: { readonly skillId: string } }) =>
@@ -89,7 +101,9 @@ const libraryOff = {
   unassign: ({ params }: { readonly params: { readonly assignmentId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.assignmentId })),
   hob: ({ params }: { readonly params: { readonly agentId: AgentId } }) =>
-    Effect.succeed({ agentId: params.agentId, skills: [], replaced: [], clashes: [], optedOut: [] }),
+    Effect.succeed({ agentId: params.agentId, skills: [], replaced: [], clashes: [], optedOut: [], lastUsed: [] }),
+  uses: ({ params }: { readonly params: { readonly skillId: string } }) =>
+    Effect.fail(new SkillMissing({ id: params.skillId })),
   optOut: ({ params }: { readonly params: { readonly skillId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.skillId })),
 };
@@ -138,6 +152,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
               `The library already has a skill named ${problem.takenBy ?? problem.folder}.`,
           })),
         },
+        usesThisWeek: weeklySkillUses(yield* library.uses({}), DateTime.formatIso(yield* DateTime.now)),
       };
     });
 
@@ -169,6 +184,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           agentId,
           ...resolved,
           optedOut: (yield* library.optOuts(agentId)).map((one) => one.skillId),
+          lastUsed: lastSkillUses(yield* library.uses({ agentId })),
         };
       });
 
@@ -274,6 +290,15 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
             ),
           ),
       hob: ({ params }) => hobView(params.agentId),
+      uses: ({ params }) =>
+        Effect.gen(function* () {
+          const skill = yield* skillOf(params.skillId);
+          return countSkillUses(
+            skill.id,
+            yield* library.uses({ skillId: skill.id }),
+            DateTime.formatIso(yield* DateTime.now),
+          );
+        }),
       optOut: ({ params, payload }) =>
         Effect.gen(function* () {
           if (Option.isNone(yield* hobOf(params.agentId))) return yield* new SkillMissing({ id: params.agentId });

@@ -15,6 +15,7 @@ import {
   type SkillScope,
   SkillSource,
   SkillSourceId,
+  type SkillUse,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 
@@ -33,6 +34,7 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
   const sources: Array<SkillSource> = [];
   const assignments = new Map<SkillAssignmentId, SkillAssignment>();
   const optOuts: Array<SkillOptOut> = [];
+  const uses: Array<SkillUse> = [];
   let sequence = 0;
   let ids = 0;
   const nextId = () => `fake-${++ids}`;
@@ -185,6 +187,19 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
         }
         return committed(new Skill({ ...skill, updatedAt: now(), revision: ++sequence }));
       }),
+    recordUse: (use) =>
+      Effect.sync(() => {
+        uses.unshift(use);
+        return committed(use);
+      }),
+    uses: (filter) =>
+      Effect.sync(() =>
+        uses.filter(
+          (use) =>
+            (filter.skillId === undefined || use.skillId === filter.skillId) &&
+            (filter.agentId === undefined || use.agentId === filter.agentId),
+        ),
+      ),
   };
 };
 

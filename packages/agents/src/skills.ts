@@ -21,6 +21,7 @@ import type {
   SkillRevisionHash,
   SkillScope,
   SkillSource,
+  SkillUse,
 } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 
@@ -130,6 +131,16 @@ export interface SkillLibraryShape {
   ) => Library<Committed<SkillOptOut> | null, SkillNotFound>;
   /** Removes a skill with no assignment left; one that something still assigns is refused with them. */
   readonly remove: (id: SkillId) => Library<Committed<Skill>, SkillNotFound | SkillInUse>;
+  /** Records that a hob used a skill in a turn (ADR 029, The use line), journaled as `SkillUsed`. */
+  readonly recordUse: (use: SkillUse) => Library<Committed<SkillUse>>;
+  /** Uses of one skill, or by one hob, or every use, the most recent first. */
+  readonly uses: (filter: SkillUseFilter) => Library<ReadonlyArray<SkillUse>>;
+}
+
+/** Which uses to read: a skill's, a hob's, or both at once when both are given. */
+export interface SkillUseFilter {
+  readonly skillId?: SkillId;
+  readonly agentId?: AgentId;
 }
 
 export class SkillLibrary extends Context.Service<SkillLibrary, SkillLibraryShape>()("@hobbots/agents/SkillLibrary") {}

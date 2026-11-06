@@ -141,7 +141,7 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
-  // No screen shows the skills library yet (ADR 029, #1062).
+  // No screen shows the skills library yet (ADR 029, #1062). A reply's use line comes with the reply.
   "SkillRevisionAdded",
   "SkillAssigned",
   "SkillUnassigned",
@@ -149,6 +149,7 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "SkillHeld",
   "SkillOptOutChanged",
   "SkillRemoved",
+  "SkillUsed",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -164,7 +165,8 @@ type UnappliedEvent = Extract<
       | "SkillRolledOut"
       | "SkillHeld"
       | "SkillOptOutChanged"
-      | "SkillRemoved";
+      | "SkillRemoved"
+      | "SkillUsed";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);

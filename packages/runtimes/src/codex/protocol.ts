@@ -292,9 +292,21 @@ interface UserInputText {
   readonly text_elements: ReadonlyArray<never>;
 }
 
+/**
+ * A skill the user picked for the turn (ADR 029, Explicit use): Codex loads its `SKILL.md`, at `path`,
+ * with the turn. Writing `$name` in the text alone does not.
+ */
+interface UserInputSkill {
+  readonly type: "skill";
+  readonly name: string;
+  readonly path: string;
+}
+
+type UserInput = UserInputText | UserInputSkill;
+
 interface TurnStartParams {
   readonly threadId: string;
-  readonly input: ReadonlyArray<UserInputText>;
+  readonly input: ReadonlyArray<UserInput>;
   readonly approvalPolicy?: AskForApproval | null;
   readonly sandboxPolicy?: SandboxPolicy | null;
   readonly model?: string | null;
@@ -365,6 +377,11 @@ export interface FileUpdateChange {
   readonly diff: string;
 }
 
+/** What a command does, as Codex parses it; only a read is told apart here. */
+type CommandAction =
+  | { readonly type: "read"; readonly command: string; readonly name: string; readonly path: string }
+  | { readonly type: "listFiles" | "search" | "unknown"; readonly command: string };
+
 type CommandExecutionStatus = "inProgress" | "completed" | "failed" | "declined";
 
 /** An item of a turn, trimmed to the kinds and fields Hobbots reads. */
@@ -380,6 +397,8 @@ export type ThreadItem =
       /** What the command printed, stdout and stderr together. */
       readonly aggregatedOutput: string | null;
       readonly exitCode: number | null;
+      /** What Codex read the command as doing, such as reading a file. Absent from older Codex. */
+      readonly commandActions?: ReadonlyArray<CommandAction>;
     }
   | {
       readonly type: "fileChange";

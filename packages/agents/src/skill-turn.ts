@@ -1,5 +1,16 @@
-import type { AgentId, HobPolicy, SkillAssignment, TurnSkill } from "@hobbots/domain";
-import { Effect, Option } from "effect";
+import {
+  type AgentId,
+  type HobPolicy,
+  type MessageId,
+  type SkillAssignment,
+  type SkillName,
+  SkillUse,
+  SkillUseId,
+  type ThreadId,
+  type TurnSkill,
+  type UsedSkill,
+} from "@hobbots/domain";
+import { DateTime, Effect, Option } from "effect";
 import { MemoryProjects, memoryActorFor } from "./memory.ts";
 import type { SkillMount } from "./runtime.ts";
 import {
@@ -115,3 +126,115 @@ export const skillMounter = Effect.gen(function* () {
   };
   return shape;
 });
+
+/** Where a turn's skill uses are counted: the hob, and the thread and reply when it has them. */
+export interface SkillUseTurn {
+  readonly agentId: AgentId;
+  readonly threadId: ThreadId | null;
+  readonly messageId: MessageId | null;
+}
+
+/** Records the skills a turn uses (ADR 029, The use line), each once per turn. */
+export interface SkillUseRecorderShape {
+  /** The turn's skills, once they are known: what its message was accepted with, or resolved as it started. */
+  readonly given: (skills: ReadonlyArray<TurnSkill> | null) => void;
+  /** The skills an administrator's settings bring, as the session reported them when it started. */
+  readonly organization: (names: ReadonlyArray<string> | undefined) => void;
+  /**
+   * Maps a use the runtime reported to the revision the turn mounted, and journals it. Answers the
+   * skill as the reply records it, or null for a skill the turn already used or was never given.
+   */
+  readonly record: (used: { readonly name: string; readonly explicit: boolean }) => Effect.Effect<UsedSkill | null>;
+}
+
+/**
+ * What records a turn's skill uses. A name is mapped only to a skill the turn was given, so a
+ * runtime that names any other records nothing; without a skills library nothing is journaled, and
+ * the use still shows under the reply.
+ */
+export const skillUseRecorder = (turn: SkillUseTurn) =>
+  Effect.gen(function* () {
+    const library = yield* Effect.serviceOption(SkillLibrary);
+    let skills: ReadonlyArray<TurnSkill> = [];
+    let organization: ReadonlyArray<string> = [];
+    const recorded = new Set<string>();
+    const usedOf = (name: string, explicit: boolean) =>
+      Effect.gen(function* () {
+        const mounted = skills.find((skill) => skill.name === name);
+        if (mounted === undefined) {
+          if (!organization.includes(name)) return null;
+          const used: UsedSkill = { source: "organization", skillId: null, name, pin: null, number: null, explicit };
+          return used;
+        }
+        const revision = Option.isSome(library) ? yield* library.value.revision(mounted.skillId, mounted.pin) : null;
+        const used: UsedSkill = {
+          source: "library",
+          skillId: mounted.skillId,
+          name,
+          pin: mounted.pin,
+          number: revision?.number ?? null,
+          explicit,
+        };
+        return used;
+      });
+    const shape: SkillUseRecorderShape = {
+      given: (given) => {
+        skills = given ?? [];
+      },
+      organization: (names) => {
+        organization = names ?? [];
+      },
+      record: ({ name, explicit }) =>
+        Effect.gen(function* () {
+          if (recorded.has(name)) return null;
+          const used = yield* usedOf(name, explicit);
+          if (used === null) return null;
+          recorded.add(name);
+          if (Option.isSome(library)) {
+            const at = DateTime.formatIso(yield* DateTime.now);
+            yield* library.value.recordUse(
+              new SkillUse({ id: SkillUseId.make(crypto.randomUUID()), ...used, ...turn, at }),
+            );
+          }
+          return used;
+        }),
+    };
+    return shape;
+  });
+
+/** `skills` with `used` added, unless it already holds that skill: a reply records each skill once. */
+export const withUsedSkill = (skills: ReadonlyArray<UsedSkill>, used: UsedSkill): ReadonlyArray<UsedSkill> =>
+  skills.some((one) => one.source === used.source && one.name === used.name && one.pin === used.pin)
+    ? skills
+    : [...skills, used];
+
+/**
+ * The skill you picked for your message, if the turn was given it (ADR 029, Explicit use): one you
+ * since lost, as after an unassign while the message waited, is dropped, and the turn runs without it.
+ */
+export const askedSkillOf = (
+  yours: { readonly askedSkill: string | null } | undefined,
+  given: ReadonlyArray<TurnSkill> | null,
+): string | null => {
+  const asked = yours?.askedSkill ?? null;
+  return asked !== null && (given ?? []).some((skill) => skill.name === asked) ? asked : null;
+};
+
+/** A `/name` at the start of a message, as the composer writes a skill you picked. */
+const MENTION = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/;
+
+/**
+ * The skill a message names at its start with `/` (ADR 029, Explicit use), when the hob has a skill
+ * of that name; null otherwise, so a `/` that names no skill of the hob's stays plain text.
+ */
+export const mentionedSkill = (content: string, given: ReadonlyArray<TurnSkill> | null): SkillName | null => {
+  const name = MENTION.exec(content)?.[1];
+  return (given ?? []).find((skill) => skill.name === name)?.name ?? null;
+};
+
+/**
+ * The prompt without its leading `/name` for the skill you picked, which the runtime gets as its own
+ * mention instead; as it is when you picked none.
+ */
+export const withoutMention = (prompt: string, name: string | null): string =>
+  name !== null && MENTION.exec(prompt)?.[1] === name ? prompt.slice(name.length + 1).trimStart() : prompt;

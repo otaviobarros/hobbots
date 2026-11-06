@@ -707,6 +707,38 @@ describe("reading a Codex turn", () => {
   });
 });
 
+describe("a Codex turn's skill uses (ADR 029, #1096)", () => {
+  const ROOT = "/hub/runtimes/hob-1/skill-mounts/abc/skills";
+  const read = (id: string, path: string, status = "completed", cwd = "/repo") =>
+    item("item/completed", {
+      type: "commandExecution",
+      id,
+      command: `cat ${path}`,
+      cwd,
+      status,
+      aggregatedOutput: "",
+      exitCode: 0,
+      commandActions: [{ type: "read", command: `cat ${path}`, name: "SKILL.md", path }],
+    });
+
+  it("[TC-RT-528] counts a finished read of a mounted SKILL.md as a use, and nothing else", () => {
+    const events = codexTurnEvents(THREAD, [ROOT]);
+    expect(events.map(read("c1", `${ROOT}/release-steps/SKILL.md`)).events).toEqual([
+      { _tag: "SkillUsed", name: "release-steps", explicit: false },
+    ]);
+    // A relative path is read from the command's folder.
+    expect(events.map(read("c2", "../commit-style/SKILL.md", "completed", `${ROOT}/release-steps`)).events).toEqual([
+      { _tag: "SkillUsed", name: "commit-style", explicit: false },
+    ]);
+    // Another of the skill's files, a SKILL.md outside the turn's folder, and a declined read are no use.
+    expect(events.map(read("c3", `${ROOT}/release-steps/references/notes.md`)).events).toEqual([]);
+    expect(events.map(read("c4", "/repo/.agents/skills/other/SKILL.md")).events).toEqual([]);
+    expect(events.map(read("c5", `${ROOT}/release-steps/SKILL.md`, "declined")).events).toEqual([]);
+    // A turn without skills counts none.
+    expect(codexTurnEvents(THREAD).map(read("c6", `${ROOT}/release-steps/SKILL.md`)).events).toEqual([]);
+  });
+});
+
 describe("a Codex command that outlives its turn (#1048)", () => {
   const TURN_2 = "turn-2";
   const inTurn = (turnId: string, method: string, params: Record<string, unknown>) =>

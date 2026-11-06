@@ -22,7 +22,7 @@ import {
   sandboxEnv,
   withCommitIdentity,
 } from "../sandbox.ts";
-import { holdSkillFolder, type SkillFolder, skillFolderScope } from "../skills.ts";
+import { askedMount, holdSkillFolder, type SkillFolder, skillFolderScope } from "../skills.ts";
 import { offeredTools, toolLabel } from "../tool-calls.ts";
 import {
   type AppServer,
@@ -37,7 +37,7 @@ import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
 import { codexCaBundle, codexPath } from "./locate.ts";
 import { POLICY_REQUESTS, type PolicyRequest, policyGate, refusalNotice, shellScript } from "./policy.ts";
 import { TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
-import { admitSkills, skillSettings, unusedSkillRoots } from "./skills.ts";
+import { admitSkills, askedSkillInput, skillRootsOf, skillSettings, unusedSkillRoots } from "./skills.ts";
 
 /** Starts a turn's App Server for as long as the scope lasts. */
 export type StartAppServer = (
@@ -695,7 +695,9 @@ const turnEvents = (
       }
       const opened = yield* openThread(server, request, launch.cwd, launch.instructions).pipe(Effect.mapError(failed));
       const threadId = opened.thread.id;
-      const mapper = codexTurnEvents(threadId);
+      const mapper = codexTurnEvents(threadId, skillRootsOf(launch.skills));
+      // The skill you picked loads with the turn's first input, as Codex's own skill item (ADR 029).
+      const asked = askedSkillInput(launch.skills, askedMount(request.askedSkill, request.skills));
       turn = {
         events: mapper,
         report,
@@ -710,6 +712,7 @@ const turnEvents = (
         ...launch.session,
         ...(admitted.organization.length > 0 ? { organizationSkills: admitted.organization } : {}),
       });
+      if (asked !== null) report({ _tag: "SkillUsed", name: asked.name, explicit: true });
       yield* Deferred.await(accepted);
 
       // Subscribed before the turn starts, so its first notifications are not missed.
@@ -718,14 +721,15 @@ const turnEvents = (
       const now: CodexTurnNow = { turnId: null, ended: yield* Deferred.make<void>() };
       yield* Effect.forkScoped(follow(notifications, mapper, report, signals, now));
 
-      const startTurn = (text: string) =>
+      // A follow-up turn about a command that outlived its turn carries text only.
+      const startTurn = (text: string, skill: typeof asked = null) =>
         Effect.gen(function* () {
           mapper.expect();
           now.ended = yield* Deferred.make<void>();
           const started: TurnStartResponse = yield* server
             .request("turn/start", {
               threadId,
-              input: [{ type: "text", text, text_elements: [] }],
+              input: [{ type: "text", text, text_elements: [] }, ...(skill === null ? [] : [skill])],
               ...TURN_SETTINGS,
               ...(request.model ? { model: request.model } : {}),
               ...(request.effort ? { effort: request.effort } : {}),
@@ -754,7 +758,7 @@ const turnEvents = (
         }),
       );
 
-      yield* startTurn(turnPrompt(request, launch.instructions, launch.commits));
+      yield* startTurn(turnPrompt(request, launch.instructions, launch.commits), asked);
       return yield* finish(yield* settle(signals, mapper, now, startTurn), mapper, report, Queue.end(queue));
     }),
   );

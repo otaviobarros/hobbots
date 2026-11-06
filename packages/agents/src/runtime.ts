@@ -128,6 +128,13 @@ export type RuntimeEvent =
    * told, so Hobbots tells it again what it relies on the session to hold (#1027).
    */
   | { readonly _tag: "SessionCompacted" }
+  /**
+   * The turn used a skill (ADR 029, The use line), read from the runtime's own events at no extra
+   * turn: `name` is a mount's name, or a skill from an administrator's settings that the session
+   * reported. `explicit` when it is the skill the turn was asked to use (`askedSkill`). The hub
+   * maps the name to the revision the turn mounted.
+   */
+  | { readonly _tag: "SkillUsed"; readonly name: string; readonly explicit: boolean }
   | {
       readonly _tag: "Completed";
       readonly sessionId: string;
@@ -356,6 +363,12 @@ export interface PromptRequest {
    * runtime loads these and nothing else: absent, null or empty, the turn has no skills.
    */
   readonly skills?: ReadonlyArray<SkillMount> | null;
+  /**
+   * The name of one of `skills` that you picked for this message with `/` (ADR 029, Explicit use).
+   * The adapter hands it to the runtime as the runtime's own mention, and reports `SkillUsed` with
+   * `explicit` once the turn starts. Absent or null when you picked none.
+   */
+  readonly askedSkill?: string | null;
 }
 
 /** Why a tool call is refused when Hobbots could not record it before it ran. */
