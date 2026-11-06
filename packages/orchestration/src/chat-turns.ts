@@ -42,6 +42,19 @@ const cancelledIn = (trees: ReadonlyArray<TaskTree>, taskId: TaskId) =>
   });
 
 /**
+ * What the message of yours a turn answers says, when it steers the work the turn was briefed on:
+ * you sent it after that work started. Null for the request that started the work, even when
+ * Continue resumes the turn on it after its Task exists, and for a turn on no message of yours (#1005).
+ */
+const steeredBy = (turn: ChatTurn, briefedOn: Task | null): string | null =>
+  turn.promptId != null &&
+  turn.yours !== undefined &&
+  briefedOn !== null &&
+  Date.parse(briefedOn.createdAt) < Date.parse(turn.yours.sentAt)
+    ? turn.yours.text
+    : null;
+
+/**
  * How a chat turn reaches the Task its hob works on in the thread. The Task is found, or started
  * from the turn's prompt, inside each call's own transaction, so a refused call leaves no Task
  * behind and two calls never start two.
@@ -65,12 +78,16 @@ export const makeChatResolver = (
   const carriedBy = (taskId: TaskId): ReadonlyArray<CarriedItem> =>
     carriedWith(turn.holding ?? [], briefed?.taskId === taskId ? briefed.carried : []);
   /** The caller on `taskId`, with what it carries and the message of yours the turn answers (#900). */
-  const callerOn = (taskId: TaskId): TaskToolCaller => ({
-    agentId: turn.agentId,
-    taskId,
-    carried: carriedBy(taskId),
-    ...(turn.promptId != null && { messageId: turn.promptId }),
-  });
+  const callerOn = (taskId: TaskId): TaskToolCaller => {
+    const steers = steeredBy(turn, briefedOn);
+    return {
+      agentId: turn.agentId,
+      taskId,
+      carried: carriedBy(taskId),
+      ...(turn.promptId != null && { messageId: turn.promptId }),
+      ...(steers !== null && { steers }),
+    };
+  };
   return {
     /**
      * What the turn's session is told of the open Task, read as the turn starts. The briefing shows

@@ -36,6 +36,7 @@ import {
   ThreadId,
   type TurnEnding,
   titleFromPrompt,
+  toolsSucceeded,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
@@ -114,6 +115,10 @@ const continuePrompt = (reply: Message) => {
     "Continue from exactly where it stops. Do not repeat what is already written.",
   ].join("\n");
 };
+
+/** The message of yours a turn answers, as a Task turn is told it: what you wrote and when (#1005). */
+const yoursIn = (message: Message | undefined) =>
+  message === undefined ? {} : { yours: { text: message.content, sentAt: message.createdAt } };
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
@@ -490,6 +495,7 @@ export class ChatService extends Context.Service<
         reply: Reply,
         changed: boolean,
         carry: Carry,
+        yours: Message | undefined,
       ) =>
         Effect.gen(function* () {
           const adapter = adapters(brain.runtime);
@@ -611,8 +617,18 @@ export class ChatService extends Context.Service<
                       delta: event.text,
                     }),
                 );
+              // A lead's routine progress is kept out of the chat as it completes, so it shows only while it streams (#1006).
               case "Completed":
-                return update((m) => MessageTransitions.complete(m, reply.prefix + event.text, event.usage));
+                return Effect.gen(function* () {
+                  const quiet = onTask === null ? false : yield* onTask.quiet;
+                  return yield* update((m) => {
+                    const done = MessageTransitions.complete(m, reply.prefix + event.text, event.usage);
+                    // A failed, refused or uncertain call stays in view, with the unread dot and the last line.
+                    return quiet && done instanceof Message && toolsSucceeded(done.steps)
+                      ? new Message({ ...done, quiet })
+                      : done;
+                  });
+                });
               // What the call printed is cut to its start and end before the step is saved; a long
               // output is kept whole in the step's log.
               case "ToolFinished":
@@ -665,6 +681,7 @@ export class ChatService extends Context.Service<
                   threadId: thread.id,
                   messageId: (yield* Ref.get(reply.current)).id,
                   promptId: (yield* Ref.get(reply.current)).promptId,
+                  ...yoursIn(yours),
                   prompt,
                   runtime: brain.runtime,
                   configVersion: config.version,
@@ -861,6 +878,8 @@ export class ChatService extends Context.Service<
               reply,
               changed,
               start.carry ?? NOTHING_CARRIED,
+              // The message of yours the reply answers, as you wrote it, which Continue keeps (#1005).
+              saved.promptId === null ? undefined : transcript.find((m) => m.id === saved.promptId),
             ).pipe(Effect.ensuring(start.drain === false ? Effect.void : Effect.forkIn(drain(thread.id), scope))),
           );
           yield* announceTurn(thread.id, agent.id, turn);

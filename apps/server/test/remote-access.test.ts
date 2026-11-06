@@ -22,6 +22,7 @@ import {
   TailnetPeers,
 } from "../src/devices.ts";
 import { EventBus } from "../src/event-bus.ts";
+import { claimHubPresence, readHubPresence } from "../src/hub-presence.ts";
 import { HubListenersLive } from "../src/listeners.ts";
 import { readNetworkSettings } from "../src/network-settings.ts";
 import {
@@ -515,8 +516,11 @@ describe("remote access over a fake Tailscale", () => {
     const underWay = ask("127.0.0.2", before, { from: "127.0.0.1", path: "/hold" });
     await vi.waitFor(() => expect(holding).toBe(1));
 
+    // The hub's record of itself follows the move, so the command-line tools find it there (#999).
+    await Effect.runPromise(claimHubPresence(hub.dataDir, before));
     const moved = await hub.update({ port: next });
     expect(moved).toMatchObject({ port: next, listening: ["127.0.0.2"], problem: null });
+    expect(readHubPresence(hub.dataDir)).toEqual({ pid: process.pid, port: next });
     await vi.waitFor(() => expect(hub.events.at(-1)?.port).toBe(next));
     expect(readNetworkSettings(hub.dataDir)).toEqual({ port: next });
     expect(await ask("127.0.0.1", next)).toEqual({ status: 200, body: "local" });

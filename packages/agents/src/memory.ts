@@ -17,6 +17,7 @@ import {
   type MemorySave,
   type MemorySaveState,
   type MemoryScope,
+  type MemorySessionId,
   type MemoryUnavailable,
   type MemoryVersion,
   type MemoryVersionChanges,
@@ -111,24 +112,30 @@ export interface MemoryStoreShape {
     expected: MemoryExpected,
   ) => Memory<MemoryVersion, MemoryUnavailable | MemoryConflict>;
   /**
-   * Sends what happened in a thread (ADR 028, Capture and summaries) to its session in `scope`, a
-   * hob's own memory, in order, and answers how many of the first items memory acknowledged. The
-   * thread is the session, so a brain switch never splits it. An item whose key memory has seen in the
-   * last 30 days is acknowledged and skipped.
+   * Sends what happened in a memory session (ADR 028, Capture and summaries), a thread's or an
+   * Attempt's outside any chat, to that session in `scope`, a hob's own memory, in order, and
+   * answers how many of the first items memory acknowledged. A thread is one session, so a brain
+   * switch never splits it. An item whose key memory has seen in the last 30 days is acknowledged
+   * and skipped.
    */
   readonly capture: (
     actor: MemoryActor,
     scope: MemoryScope,
-    threadId: ThreadId,
+    sessionId: MemorySessionId,
     items: ReadonlyArray<MemoryCaptureItem>,
   ) => Memory<number>;
   /**
-   * Ends the thread's session, so memory writes its summary page, `sessions/<thread id>.md`, with the
+   * Ends the session, so memory writes its summary page, `sessions/<session id>.md`, with the
    * memory model or without one. `key` names this end, as an item's does. Items captured later
    * continue the same session, and the next end writes its page again. Answers false, writing
    * nothing, while you have that page pinned: the end waits, and is sent again until it is taken.
    */
-  readonly endSession: (actor: MemoryActor, scope: MemoryScope, threadId: ThreadId, key: string) => Memory<boolean>;
+  readonly endSession: (
+    actor: MemoryActor,
+    scope: MemoryScope,
+    sessionId: MemorySessionId,
+    key: string,
+  ) => Memory<boolean>;
   /**
    * Checks `scope` for pages that disagree and pages that look out of date (ADR 028, Check now), and
    * answers what it found, changing nothing. Only you check.
@@ -305,17 +312,20 @@ export class MemoryTools extends Context.Service<
   }
 >()("@hobbots/agents/MemoryTools") {}
 
-/** A thread whose memory session is open (ADR 028): its hob, when it was last active, and the key of its last item. */
+/**
+ * A memory session that is open (ADR 028), a thread's or an Attempt's: its hob, when it was last
+ * active, and the key of its last item.
+ */
 export interface MemoryCaptureSession {
-  readonly threadId: ThreadId;
+  readonly sessionId: MemorySessionId;
   readonly agentId: AgentId;
-  /** When the thread's last captured entry was committed (ISO 8601), so a backlog sent late still ends on time. */
+  /** When the session's last captured entry was committed (ISO 8601), so a backlog sent late still ends on time. */
   readonly lastAt: string;
-  /** The key of the thread's last captured item, which names the session's end. */
+  /** The key of the session's last captured item, which names the session's end. */
   readonly lastKey: string;
 }
 
-/** Where capture stands: the last journal entry memory acknowledged, and the threads with an open session. */
+/** Where capture stands: the last journal entry memory acknowledged, and the sessions that are open. */
 export interface MemoryCaptureState {
   readonly sequence: number;
   readonly sessions: ReadonlyArray<MemoryCaptureSession>;
@@ -345,7 +355,7 @@ export class MemoryCaptureLog extends Context.Service<
     readonly save: (
       sequence: number,
       active: ReadonlyArray<MemoryCaptureSession>,
-      ended: ReadonlyArray<ThreadId>,
+      ended: ReadonlyArray<MemorySessionId>,
     ) => Effect.Effect<void>;
   }
 >()("@hobbots/agents/MemoryCaptureLog") {}

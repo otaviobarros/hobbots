@@ -33,6 +33,7 @@ import type {
   QuestionSurface,
   QuestLimits,
   RefusedCall,
+  ReplyUsage,
   ResponsibilityLedger,
   RuntimeKind,
   StaleTask,
@@ -98,6 +99,7 @@ export interface NewAttempt {
  * What happened to a live Attempt: the runtime took it in its session, or it ended, and why. The
  * record decides the state it ends in from why and its Task (`AttemptTransitions.end`). A
  * `policyVersion` is the one its first turn's tools ran under: an Attempt keeps the first it is given.
+ * A `reply` is the final reply of the turn that ended it, which the record journals and does not keep.
  */
 export type AttemptChange =
   | { readonly _tag: "Running"; readonly sessionId?: string; readonly policyVersion?: string; readonly at: string }
@@ -106,6 +108,7 @@ export type AttemptChange =
       readonly end: AttemptEnd;
       readonly sessionId?: string;
       readonly policyVersion?: string;
+      readonly reply?: string;
       readonly at: string;
     };
 
@@ -229,6 +232,20 @@ export interface TaskMoveOptions {
   readonly reason?: string;
 }
 
+/**
+ * One turn of an Attempt outside any chat, a planned step's or a party member's, whose usage Usage
+ * counts (#1011). A chat turn's usage stays on its reply.
+ */
+export interface AttemptTurn {
+  readonly attemptId: AttemptId;
+  /** The hob that runs the turn, and the runtime and model it runs on. */
+  readonly agentId: AgentId;
+  readonly runtime: RuntimeKind;
+  readonly model: string | null;
+  /** When the turn started (ISO 8601), which names it on its Attempt and which Usage counts it by. */
+  readonly startedAt: string;
+}
+
 export class TaskRepository extends Context.Service<
   TaskRepository,
   {
@@ -344,6 +361,19 @@ export class TaskRepository extends Context.Service<
       revision: number,
       wait: NewWait,
     ) => Changed<{ readonly task: Task; readonly wait: TaskWait }, TaskChange>;
+    /**
+     * Records, once its runtime took it, a turn of an Attempt outside any chat (#1011), before it has
+     * used anything, so a turn the hub never saw end still counts, as unreported, once its Attempt
+     * ends. An earlier turn of the Attempt still open ends here, since only one turn runs at a time.
+     * Recording it again changes nothing.
+     */
+    readonly startTurn: (turn: AttemptTurn) => Effect.Effect<void>;
+    /** Records what the turn used, once it ends; null when its runtime reported nothing. */
+    readonly endTurn: (
+      turn: Pick<AttemptTurn, "attemptId" | "startedAt">,
+      usage: ReplyUsage | null,
+      endedAt: string,
+    ) => Effect.Effect<void>;
     /** What still keeps the Task open, as its completion gate reads it (ADR 019). */
     readonly readLedger: (taskId: TaskId) => Effect.Effect<Option.Option<ResponsibilityLedger>>;
     /** The Task and everything under it. */

@@ -283,6 +283,86 @@ describe("the Quest room's lanes", () => {
     expect(laneOf(laneRoom(handedOn(), []), ADA).items.at(-1)).toMatchObject({ label: null, since: AT(12) });
   });
 
+  it("[TC-UX-1004-03] names the background command a turn waits on once the hob has gone on past it", () => {
+    // covers UX-004: a running lane says what its hob waits on, from records only (#1004, #1018)
+    const dev: ReplyStep = { id: "dev", kind: "tool", label: "Running pnpm dev", state: "running", startedAt: AT(13) };
+    const check: ReplyStep = {
+      id: "check",
+      kind: "tool",
+      label: "Running echo checked",
+      state: "done",
+      startedAt: AT(14),
+    };
+    const records = activity(BUILD, {
+      attempt: attempt(BUILD, "running"),
+      steps: [dev, check],
+      commands: [
+        command(BUILD, "pnpm dev", 13, { stepId: "turn/dev", state: "running", exitCode: null, endedAt: null }),
+        command(BUILD, "echo checked", 14, { stepId: "turn/check" }),
+      ],
+    });
+    const lane = laneOf(laneRoom(handedOn(), [records]), ADA);
+    expect(lane.items.at(-1)).toMatchObject({ kind: "now", label: "Waiting on pnpm dev", since: AT(14) });
+    expect(lane.plain.at(-1)).toMatchObject({ kind: "now", label: "Waiting for dev to finish" });
+    // While the newest step still runs, that step is what the turn is on.
+    const busy = activity(BUILD, { ...records, steps: [dev] });
+    expect(laneOf(laneRoom(handedOn(), [busy]), ADA).items.at(-1)).toMatchObject({ label: "Running pnpm dev" });
+    // Work that is not a command and still runs beside it, such as an edit, is what the hob is doing,
+    // even when a later quick step has already finished.
+    const edit: ReplyStep = {
+      id: "edit",
+      kind: "tool",
+      label: "Editing page.astro",
+      state: "running",
+      startedAt: AT(15),
+    };
+    const late: ReplyStep = { id: "late", kind: "tool", label: "Reading brief.md", state: "done", startedAt: AT(16) };
+    const overlapping = activity(BUILD, { ...records, steps: [dev, edit, check, late] });
+    expect(laneOf(laneRoom(handedOn(), [overlapping]), ADA).items.at(-1)).toMatchObject({
+      label: "Editing page.astro",
+    });
+    // A command's step is known by its call, not its words: `git -C /work fetch` reads "Running git
+    // fetch", and is still the background command, so a newer running command is what the turn is on.
+    const fetch: ReplyStep = {
+      id: "fetch@2",
+      kind: "tool",
+      label: "Running git fetch",
+      state: "running",
+      call: { tool: "Bash", operation: "local-git", targets: ["/work"] },
+      startedAt: AT(13),
+    };
+    const fetching = command(BUILD, "git -C /work fetch", 13, {
+      stepId: "turn/fetch",
+      state: "running",
+      exitCode: null,
+      endedAt: null,
+    });
+    const tests: ReplyStep = {
+      id: "tests",
+      kind: "tool",
+      label: "Running pnpm test",
+      state: "running",
+      startedAt: AT(15),
+    };
+    const testing = command(BUILD, "pnpm test", 15, {
+      stepId: "turn/tests",
+      state: "running",
+      exitCode: null,
+      endedAt: null,
+    });
+    const both = activity(BUILD, { ...records, steps: [fetch, tests], commands: [fetching, testing] });
+    expect(laneOf(laneRoom(handedOn(), [both]), ADA).items.at(-1)).toMatchObject({ label: "Running pnpm test" });
+    // Once the tests end and a later step finishes, the turn waits on the fetch, named as recorded.
+    const waiting = activity(BUILD, {
+      ...records,
+      steps: [fetch, { ...tests, state: "done" }, check],
+      commands: [fetching, new CommandRecord({ ...testing, state: "succeeded", exitCode: 0, endedAt: AT(16) })],
+    });
+    expect(laneOf(laneRoom(handedOn(), [waiting]), ADA).items.at(-1)).toMatchObject({
+      label: "Waiting on git -C /work fetch",
+    });
+  });
+
   it("says a step that was stopped once, however often the hob tried it again", () => {
     const denied = (id: string, second: number): ReplyStep => ({
       id,

@@ -58,6 +58,7 @@ import {
   type ToolCall,
   UNKNOWN_TOOL,
 } from "./approval.ts";
+import { type BackgroundCommands, backgroundCommands, isTaskEnd } from "./background-commands.ts";
 import {
   binaryLocator,
   findBinary,
@@ -664,11 +665,30 @@ export const turnEvents = (tools: ToolTurn | null = null) => {
   };
 };
 
+/** A count two runs of one turn both used: their sum, or whichever reported one when only one did. */
+const summed = (earlier: number | null, later: number | null) =>
+  earlier === null ? later : later === null ? earlier : earlier + later;
+
+/**
+ * What every run of one turn used: the tokens of each run added up (#1011). The timings say how the
+ * turn got going, so they stay the first run's, and a run that reported none adds nothing.
+ */
+export const wholeUsage = (earlier: ReplyUsage | undefined, later: ReplyUsage | undefined): ReplyUsage | undefined =>
+  earlier === undefined || later === undefined
+    ? (earlier ?? later)
+    : {
+        ...earlier,
+        inputTokens: summed(earlier.inputTokens, later.inputTokens),
+        outputTokens: summed(earlier.outputTokens, later.outputTokens),
+        cacheReadTokens: summed(earlier.cacheReadTokens, later.cacheReadTokens),
+        cacheWriteTokens: summed(earlier.cacheWriteTokens, later.cacheWriteTokens),
+      };
+
 /**
  * One turn as the hub sees it, however many runs Claude Code makes of it. A background command that
  * finishes wakes the session after it replied: Claude Code starts another run in the same process,
  * announced as `init` again, with its own `result`. So the session starts once, and the turn
- * completes when Claude Code stops, with what each run replied. Usage is the last run's.
+ * completes when Claude Code stops, with what each run replied and what all of them used.
  */
 export const wholeTurn = () => {
   let started = false;
@@ -682,7 +702,9 @@ export const wholeTurn = () => {
       if (event._tag !== "Completed") return [event];
       const earlier = completed?.text ?? "";
       const text = earlier !== "" && event.text !== "" ? `${earlier}\n\n${event.text}` : earlier + event.text;
-      completed = { ...event, text };
+      const usage = wholeUsage(completed?.usage, event.usage);
+      // With no usage from either run, `event` has none to carry over.
+      completed = usage === undefined ? { ...event, text } : { ...event, text, usage };
       return [];
     },
     end: (): ReadonlyArray<RuntimeEvent> => (completed === null ? [] : [completed]),
@@ -800,6 +822,7 @@ export const policyHooks = (
   approvals?: TurnApprovals | null,
   redaction?: Redactor | null,
   record?: PromptRequest["recordToolStart"],
+  background?: BackgroundCommands | null,
 ): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
   const label = (tool: string, input: Record<string, unknown>) => toolLabel(tool, input, redaction?.text);
   const started = new Set<string>();
@@ -906,7 +929,8 @@ export const policyHooks = (
         input.hook_event_name === "PostToolUse"
           ? await fullToolOutput(input.tool_name, input.tool_response, [turn.runtimeFolder, userConfigFolder()])
           : input.error;
-      report(toolFinished(input.tool_use_id, input, output));
+      // A command that went on in the background has not finished: its task's end reports it (#1018).
+      if (!(await background?.moved(input.tool_use_id, input))) report(toolFinished(input.tool_use_id, input, output));
     }
     // The notes go with the result, so the hob knows it asked as it would know of a refusal, and
     // what to do with a .git its sandbox kept from a delete (#663).
@@ -996,6 +1020,10 @@ export const toolOptions = (
   hooks: policy.hooks,
   canUseTool: policy.canUseTool,
 });
+
+/** Hands a turn's background commands each task end Claude Code reports (#1018). */
+const taskEnds = (background: BackgroundCommands) => (message: unknown) =>
+  isTaskEnd(message) ? Effect.promise(() => background.ended(message)) : Effect.void;
 
 const errorMessage = (error: unknown) =>
   error instanceof RuntimeError || error instanceof RuntimeLimitReached
@@ -1133,6 +1161,9 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
             stderr = stderrTail(spawned.stderr);
             return spawned;
           };
+          const report = (event: RuntimeEvent) => Queue.offerUnsafe(queue, event);
+          // A call that goes on in the background is reported finished when its task ends.
+          const background = backgroundCommands(report);
           const turn = yield* Effect.acquireRelease(
             Effect.sync(() =>
               query({
@@ -1146,10 +1177,11 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                           policyHooks(
                             engine,
                             tools,
-                            (event) => Queue.offerUnsafe(queue, event),
+                            report,
                             request.approvals,
                             request.redaction,
                             request.recordToolStart,
+                            background,
                           ),
                           // Only Hobbots' script: one the hub was started with never reaches the commands.
                           { ...base.env, [COMMAND_ENV_FILE_VARIABLE]: colorScript },
@@ -1171,7 +1203,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                     ...brainOptions(request),
                   },
                   request.hubTools,
-                  (event) => Queue.offerUnsafe(queue, event),
+                  report,
                 ),
               }),
             ),
@@ -1190,6 +1222,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const whole = wholeTurn();
           // Tool events arrive from the hooks while the turn runs, so the turn's own events share their queue.
           yield* Stream.fromAsyncIterable(turn, errorMessage).pipe(
+            // A background command's end arrives as its task's notification.
+            Stream.tap(taskEnds(background)),
             Stream.mapEffect((message) =>
               Effect.try({ try: () => toEvents(message).flatMap(whole.read), catch: errorMessage }),
             ),

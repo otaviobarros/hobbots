@@ -54,6 +54,7 @@ import { makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeDelegating } from "./delegating.ts";
 import { makeLeading } from "./leading.ts";
 import { makePlanning } from "./planning.ts";
+import { routineReply, waitingForYou } from "./quiet-replies.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
 import { TaskSignal } from "./signal.ts";
 import { endTurn, type TurnEndDeps } from "./turn-end.ts";
@@ -332,6 +333,8 @@ export class TaskTools extends Context.Service<
               resolve: (name, at) => chat.resolve(name, at, attemptId),
               shown: new Map(),
             };
+            // The questions waiting for you as the turn starts, so its end knows one it brought you (#1006).
+            const askedBefore = known === null ? [] : waitingForYou(yield* tasks.readTree(known));
             // A turn briefed on its Task works on it as an Attempt of its own from the start.
             const begun = yield* chat.begin(DateTime.formatIso(yield* DateTime.now));
             // The Task the turn's Attempt is on, which it ends on whatever Task a later call names.
@@ -393,6 +396,11 @@ export class TaskTools extends Context.Service<
               scope: source.scope,
               recordCharms: charmRecords({ agentId: turn.agentId, scope: source.scope, taskOf: () => known }),
               attempt: Effect.sync(() => attemptId),
+              quiet: Effect.suspend(() =>
+                turn.promptId != null || known === null
+                  ? Effect.succeed(false)
+                  : Effect.map(tasks.readTree(known), (tree) => routineReply(tree, askedBefore)),
+              ),
               workIn: Effect.suspend(() =>
                 known === null
                   ? Effect.succeed(null)

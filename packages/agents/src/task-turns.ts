@@ -21,6 +21,11 @@ export interface ChatTurn {
   readonly promptId?: MessageId | null;
   /** The turn's prompt, which becomes the brief of a Task the turn starts. */
   readonly prompt: string;
+  /**
+   * The message of yours the turn answers, as you wrote it and when you sent it. Continue keeps it,
+   * though its prompt is Hobbots' own, so a Task the turn delegates carries your words (#1005).
+   */
+  readonly yours?: { readonly text: string; readonly sentAt: string };
   readonly runtime: RuntimeKind;
   readonly configVersion: number;
   /**
@@ -58,6 +63,12 @@ export interface ChatTaskTurn {
   readonly attempt: Effect.Effect<AttemptId | null>;
   /** The folders the Quest on its Task works in, which the turn's activity is tracked in (#670); null for all. */
   readonly workIn: Effect.Effect<ReadonlyArray<string> | null>;
+  /**
+   * Whether the turn's reply, read as it completes, is routine progress the chat leaves out (#1006):
+   * a turn on work that arrived, not on a message of yours, in a Quest that still runs, which
+   * brought you no question. The plan, a question passed up to you and the finish always show.
+   */
+  readonly quiet: Effect.Effect<boolean>;
   /**
    * Ends the Attempt the turn started on its Task, if it started one, by the one turn-end decision,
    * with the session the turn ran in and the policy version its tools ran under.

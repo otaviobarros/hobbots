@@ -55,6 +55,11 @@ export interface TaskToolCaller {
   readonly carried?: ReadonlyArray<CarriedItem>;
   /** For a chat turn, the message of yours it answers: what its notes to members trace back to (#900). */
   readonly messageId?: MessageId;
+  /**
+   * What that message of yours says, when you sent it while the work it steers ran: a Task the
+   * turn delegates carries it on, so its receipt names the hob it reached (#1005).
+   */
+  readonly steers?: string;
 }
 
 /** What a tool handler sees: the caller, its Task, that Task's whole tree as read in the call's transaction, and now. */
