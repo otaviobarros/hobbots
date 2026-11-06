@@ -23,7 +23,14 @@ import {
   ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
-import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher, type DispatchLimits, decideBlocker } from "@hobbots/inbox";
+import {
+  Backpack,
+  DEFAULT_DISPATCH_LIMITS,
+  Dispatcher,
+  type DispatchLimits,
+  decideBlocker,
+  RESULT_IN_BRIEFING,
+} from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import {
   ApprovalRepositoryLive,
@@ -366,8 +373,9 @@ describe("the backpack end to end", () => {
     expect(continuations(all)).toHaveLength(1);
     const [asked] = continuationsIn(requests);
     expect(continuationsIn(requests)).toHaveLength(1);
-    expect(asked?.prompt).toContain("finished. Its result:");
-    expect(asked?.prompt).toContain("The launch copy is ready");
+    // The prompt points to the briefing for the result, which tells it once (#1040).
+    expect(asked?.prompt).toContain(`finished. ${RESULT_IN_BRIEFING}`);
+    expect(asked?.briefing).toContain("The launch copy is ready");
     expect(asked?.sessionId).not.toBeNull();
     // Its result was consumed by the launch's completion, under the claim of its one delivery.
     const [result] = (await run(Backpack.use((backpack) => backpack.listOpen({ _tag: "Workspace" })))).filter(
@@ -406,7 +414,7 @@ describe("the backpack end to end", () => {
     await run(launched);
     const asked = continuationsIn(requests);
     expect(asked).toHaveLength(1);
-    expect(asked[0]?.prompt).toContain("finished. Its result:");
+    expect(asked[0]?.prompt).toContain(`finished. ${RESULT_IN_BRIEFING}`);
     expect(asked[0]?.prompt).toContain("Routine progress since your last turn, 31 updates in all.");
     expect(asked[0]?.prompt).toContain("sent 31 updates. The latest: Draft 30 written");
     expect(asked[0]?.prompt).not.toContain("Draft 29 written");
@@ -490,8 +498,9 @@ describe("the backpack end to end", () => {
     const all = await run(messagesWhen((each) => continuations(each).length === 3));
     expect(continuations(all).map((m) => m.status)).toEqual(["interrupted", "complete", "complete"]);
     const [cut, redelivered] = continuationsIn(requests);
-    expect(cut?.prompt).toContain("The launch copy is ready");
-    expect(redelivered?.prompt).toContain("The launch copy is ready");
+    // The cut-off turn's session was told the result, so its redelivery points back to it (#1040).
+    expect(cut?.briefing).toContain("The launch copy is ready");
+    expect(redelivered?.prompt).toContain(`finished. ${RESULT_IN_BRIEFING}`);
     const results = (await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId))))[0];
     const quillTask = results === undefined ? undefined : ownedBy(results, QUILL)[0];
     const quillResult = (await run(Backpack.use((backpack) => backpack.listOpen({ _tag: "Workspace" })))).find(

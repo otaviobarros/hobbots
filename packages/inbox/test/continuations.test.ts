@@ -30,6 +30,7 @@ import {
   continuationTask,
   continuationThread,
   lateness,
+  RESULT_IN_BRIEFING,
 } from "../src/index.ts";
 
 const at = "2026-11-02T00:00:00.000Z";
@@ -230,6 +231,16 @@ describe("which thread a backpack item continues", () => {
     expect(arrivalsText([result], "prompt")).toContain("Hobbots wrote this, not the user.");
     expect(arrivalsText([result], "prompt")).toContain("Task pass (Brief for pass) finished. Its result: pass done.");
     expect(arrivalsText([result], "context")).toContain("Answer the user's message first");
+  });
+
+  // covers OR-004, IN-004
+  it("[TC-IN-561] points a lead's chat turn to its briefing for a result, so the result is told once (#1040)", () => {
+    const result = item(FRODO, "pass", "result", { _tag: "result", task: step, artifacts: [] });
+    for (const as of ["prompt", "context"] as const) {
+      const text = arrivalsText([result], as, "briefed");
+      expect(text).toContain(`- Task pass (Brief for pass) finished. ${RESULT_IN_BRIEFING}`);
+      expect(text).not.toContain("pass done");
+    }
   });
 
   it("tells the woken lead a finding's detail with its short summary (#901)", () => {

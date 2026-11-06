@@ -8,6 +8,7 @@ import {
   type EventEnvelope,
   latestThreadTask,
   openThreadTask,
+  type ResponsibilityLedger,
   type Task,
   TaskId,
   type TaskToolName,
@@ -56,6 +57,26 @@ const steeredBy = (turn: ChatTurn, briefedOn: Task | null): string | null =>
     : null;
 
 /**
+ * The Tasks whose results the turn holds claims on in `ledger`: the work that arrived with it, as its
+ * prompt or riding along your message, which points to the briefing for those results (#1040).
+ */
+const resultsHeld =
+  (turn: ChatTurn) =>
+  (ledger: ResponsibilityLedger): ReadonlySet<string> => {
+    const held = new Set<string>((turn.holding ?? []).map((each) => each.itemId));
+    return new Set(
+      ledger.open.flatMap((entry) =>
+        entry._tag === "Item" &&
+        held.has(entry.item.id) &&
+        entry.item.actionable &&
+        entry.item.payload._tag === "result"
+          ? [entry.item.payload.task.id]
+          : [],
+      ),
+    );
+  };
+
+/**
  * How a chat turn reaches the Task its hob works on in the thread. The Task is found, or started
  * from the turn's prompt, inside each call's own transaction, so a refused call leaves no Task
  * behind and two calls never start two.
@@ -98,7 +119,8 @@ export const makeChatResolver = (
      * tree, so only items the briefing shows at their recorded version are carried; one that
      * arrived in between stays open for a later turn. A session told of the same Task before, woken
      * by work that arrived, is told only what changed since (#1027). It still carries every item the
-     * whole briefing shows, since it holds them from then.
+     * whole briefing shows, since it holds them from then. What arrived points to the briefing for
+     * each result, so the briefing is where the session is told it (#1040).
      */
     briefing: Effect.gen(function* () {
       const open = openThreadTask(yield* tasks.readThreadTrees(turn.threadId), turn.agentId);
@@ -107,13 +129,14 @@ export const makeChatResolver = (
       briefedOn = open.top;
       const ledger = yield* tasks.readLedger(open.top.id);
       const shown = briefingShows(open.top, open.tree);
+      const arrived = Option.match(ledger, { onNone: () => new Set<string>(), onSome: resultsHeld(turn) });
       briefed = {
         taskId: open.top.id,
         carried: Option.match(ledger, { onNone: () => [], onSome: (read) => carriedFrom(read, shown) }),
       };
       return renderBrief(
         open.top.id,
-        [...ownerBriefingParts(open.top, open.tree), ...reportingRules(open.top, open.tree)],
+        [...ownerBriefingParts(open.top, open.tree, arrived), ...reportingRules(open.top, open.tree)],
         // Only a turn on work that arrived is told what changed: one that answers your message is told it all.
         turn.promptId == null ? (turn.told ?? null) : null,
       );

@@ -130,7 +130,8 @@ const scripted = (gates: Gates, requests: Array<PromptRequest>) =>
           const stream = fake.sendPrompt(request);
           if (lines.includes(STUCK))
             return Stream.unwrap(Effect.as(Effect.uninterruptible(Deferred.await(gates.stuck)), stream));
-          if (lines.includes(HOLD_STARTED)) {
+          // A result reaches a lead's chat turn in its briefing (#1040), so the hold is read there too.
+          if (lines.includes(HOLD_STARTED) || (sent.briefing ?? "").split("\n").includes(HOLD_STARTED)) {
             let started = false;
             return Stream.mapEffect(stream, (event) => {
               const wait = started ? Deferred.await(gates.hold) : Effect.void;
@@ -626,7 +627,7 @@ describe("cancelling with confirmed outcomes", () => {
         }),
       ),
     );
-    expect(requests.some((each) => each.prompt.split("\n").includes(HOLD_STARTED))).toBe(true);
+    expect(requests.some((each) => (each.briefing ?? "").split("\n").includes(HOLD_STARTED))).toBe(true);
 
     await run(controls((each) => each.cancelQuest(quest.id)));
     const done = await run(

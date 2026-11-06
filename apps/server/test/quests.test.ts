@@ -36,7 +36,7 @@ import {
   ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
-import { Backpack, Dispatcher } from "@hobbots/inbox";
+import { Backpack, Dispatcher, RESULT_IN_BRIEFING } from "@hobbots/inbox";
 import {
   DEFAULT_TASK_TOOL_LIMITS,
   StepRunnerLive,
@@ -398,7 +398,7 @@ describe("leading a party on a Quest", () => {
     const all = await run(messagesWhen((each) => continuations(each).length === 2));
     const [early, wrapUp] = continuations(all);
     expect(early?.content).toContain("Refused");
-    expect(wrapUp?.content).toContain(`finished. Its result:`);
+    expect(wrapUp?.content).toContain(`finished. ${RESULT_IN_BRIEFING}`);
     expect(wrapUp?.content).toContain("complete_task: Task");
     // Nothing is left for anyone to deal with, routine progress included: Ada's reached Aldric as a
     // digest along his next turns (#293), and what the wrap-up carries resolves once it has ended.

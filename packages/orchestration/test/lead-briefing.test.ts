@@ -219,3 +219,43 @@ describe("a lead's briefing on a resumed session", () => {
     expect(renderBrief(lead(tree).id, parts(tree), again.told).text).not.toContain("Which colour?");
   });
 });
+
+describe("a result that arrives with a lead's turn", () => {
+  // covers OR-004, OR-005
+  it("[TC-OR-622] is told in the briefing alone, whole up to the result limit, and once", () => {
+    const before = finishedBy(1);
+    const told = renderBrief(lead(before).id, parts(before), null).told;
+    const tree = finishedBy(2);
+    const rook = `t-${MEMBERS[1]}`;
+    const result = tree.tasks.find((each) => each.id === rook)?.result?.summary.trim() ?? "";
+    const carrying = [...ownerBriefingParts(lead(tree), tree, new Set([rook])), ...reportingRules(lead(tree), tree)];
+    // The wake that carries Rook's result: what arrived points here, so its line keeps the result whole.
+    const woken = renderBrief(lead(tree).id, carrying, told);
+    expect(woken.text).toContain(result);
+    // A turn that carries no result, as Continue, gets the summary.
+    const plain = renderBrief(lead(tree).id, parts(tree), told);
+    expect(plain.text).toContain(`${MEMBERS[1]} finished.`);
+    expect(plain.text).not.toContain(result);
+    // The mark holds the summary too, so the next wake does not tell it again, and a whole briefing
+    // later tells the summary.
+    expect(woken.told.entries[`task:${rook}`]).toBe(plain.told.entries[`task:${rook}`]);
+    expect(renderBrief(lead(tree).id, parts(tree), woken.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+    // The same result delivered again to the same session, as after a cut-off turn, is not told again,
+    // nor after a turn in between that carried nothing.
+    expect(renderBrief(lead(tree).id, carrying, woken.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+    const between = renderBrief(lead(tree).id, parts(tree), woken.told);
+    expect(renderBrief(lead(tree).id, carrying, between.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+    // A session that lost what it held, as after compaction, is told the whole result again.
+    expect(renderBrief(lead(tree).id, carrying, null).text).toContain(result);
+
+    // Rook finished before the earlier wake read the tree, so it briefed his summary; the wake that
+    // then carries his result still tells the rest of it, once.
+    const summarised = renderBrief(lead(tree).id, parts(tree), told);
+    expect(result.length).toBeGreaterThan(600);
+    expect(summarised.text).not.toContain(result);
+    const late = renderBrief(lead(tree).id, carrying, summarised.told);
+    expect(late.text).toContain(result);
+    expect(renderBrief(lead(tree).id, parts(tree), late.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+    expect(renderBrief(lead(tree).id, carrying, late.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+  });
+});

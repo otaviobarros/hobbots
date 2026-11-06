@@ -12,6 +12,8 @@ export {
   carryingThread,
   continuationTask,
   continuationThread,
+  RESULT_IN_BRIEFING,
+  type ResultsIn,
   startingText,
 } from "./continuations.ts";
 export {

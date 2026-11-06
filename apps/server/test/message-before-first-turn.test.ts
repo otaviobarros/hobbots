@@ -26,7 +26,7 @@ describe("a lead's message before the member starts", () => {
 
     // Frodo wraps up in the turn that brings Pip's result, however the two results reach him.
     reactions.push({
-      on: "Its result: Migrated",
+      on: "(Run the migration) finished.",
       lines: [hub("complete_task", { key: "wrap", summary: "Migration shipped" })],
     });
     await run(

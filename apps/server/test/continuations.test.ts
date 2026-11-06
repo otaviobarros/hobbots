@@ -32,7 +32,14 @@ import {
   ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
-import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher, type DispatchLimits, decideBlocker } from "@hobbots/inbox";
+import {
+  Backpack,
+  DEFAULT_DISPATCH_LIMITS,
+  Dispatcher,
+  type DispatchLimits,
+  decideBlocker,
+  RESULT_IN_BRIEFING,
+} from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import {
   ApprovalRepositoryLive,
@@ -349,7 +356,7 @@ describe("continuing a hob when work arrives", () => {
 
     // Its prompt was Hobbots' own, naming what arrived, in the thread's session.
     const asked = requests.find((request) => request.prompt.startsWith("Hobbots wrote this, not the user."));
-    expect(asked?.prompt).toContain("finished. Its result:");
+    expect(asked?.prompt).toContain(`finished. ${RESULT_IN_BRIEFING}`);
     expect(asked?.sessionId).not.toBeNull();
 
     // The result it carried was consumed by the Task's completion, under the dispatcher's claim.
@@ -387,7 +394,7 @@ describe("continuing a hob when work arrives", () => {
     expect(continuations(all)).toEqual([]);
     const answered = requests.find((request) => request.prompt === "Where are we?");
     expect(answered?.briefing).toContain("Hobbots adds this, not the user.");
-    expect(answered?.briefing).toContain("finished. Its result:");
+    expect(answered?.briefing).toContain(`finished. ${RESULT_IN_BRIEFING}`);
     // The item resolves once the turn has ended, just after its reply is saved.
     const [item] = await run(settledItems(waiting.map((each) => each.id)));
     expect(item?.disposition).toEqual({ _tag: "consumed", by: all[3]?.id });

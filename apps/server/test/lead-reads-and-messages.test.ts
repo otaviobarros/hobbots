@@ -168,7 +168,10 @@ describe("a lead reads its subtree and messages its members", () => {
           hub("complete_task", { key: "commit-done", summary: "One local commit" }),
         ],
       },
-      { on: "Reviewed and committed", lines: [hub("complete_task", { key: "wrap", summary: "Built and committed" })] },
+      {
+        on: "(Review and commit) finished.",
+        lines: [hub("complete_task", { key: "wrap", summary: "Built and committed" })],
+      },
     );
     await run(
       send([
@@ -292,7 +295,7 @@ describe("a lead reads its Quest after it ends", () => {
     dispose = hubbed.dispose;
     const { run, answers, reactions } = hubbed;
     reactions.push({
-      on: "Its result: Frontend built",
+      on: "(Build the frontend) finished.",
       lines: [hub("complete_task", { key: "wrap", summary: "The app is built" })],
     });
     await run(

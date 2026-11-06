@@ -22,6 +22,7 @@ import {
   Dispatcher,
   DispatcherHost,
   lateWorkOf,
+  type ResultsIn,
   startingText,
 } from "@hobbots/inbox";
 import { TaskSignal } from "@hobbots/orchestration";
@@ -60,10 +61,11 @@ const makeCarrier = Effect.gen(function* () {
   const workOf = (
     deliveries: ReadonlyArray<Delivery>,
     lost: Deferred.Deferred<never, StaleBackpackClaim>,
+    results: ResultsIn,
   ): CarriedWork => {
     const items: ReadonlyArray<BackpackItem> = deliveries.map((delivery) => delivery.item);
     return {
-      text: (as) => (as === "start" ? startingText(items) : arrivalsText(items, as)),
+      text: (as) => (as === "start" ? startingText(items) : arrivalsText(items, as, results)),
       routineOnly: !items.some((item) => item.actionable),
       holding: deliveries.map(({ item, held }) => ({ itemId: item.id, owner: held.owner, token: held.token })),
       // Routine progress rides along a turn and never starts one, so only the work needing the hob counts.
@@ -86,11 +88,15 @@ const makeCarrier = Effect.gen(function* () {
     };
   };
 
-  /** Puts the items into one turn of the session `target` names, run with `turn`. Returns whether it ran. */
+  /**
+   * Puts the items into one turn of the session `target` names, run with `turn`. Returns whether it
+   * ran. `results` says where that turn is told the results it carries (#1040).
+   */
   const carry = <Id extends string>(
     items: ReadonlyArray<BackpackItem>,
     target: string,
     turn: CarryingTurn<Id>,
+    results: ResultsIn,
   ): Effect.Effect<boolean> =>
     Effect.gen(function* () {
       if (items.length === 0) return false;
@@ -112,7 +118,7 @@ const makeCarrier = Effect.gen(function* () {
                       // and the dispatcher drops its outcome (ADR 019).
                       const lost = yield* Deferred.make<never, StaleBackpackClaim>();
                       const ended = yield* Effect.raceFirst(
-                        turn.run(turnId, workOf(deliveries, lost)),
+                        turn.run(turnId, workOf(deliveries, lost, results)),
                         Deferred.await(lost),
                       );
                       if (ended._tag === "EndedEarly") {
@@ -155,10 +161,12 @@ export const ContinuationsLive = Layer.effect(
     const deliver: Continuations["Service"]["deliver"] = (threadId: ThreadId, agentId: AgentId, turn) =>
       Effect.gen(function* () {
         const items = (yield* threaded({ _tag: "Hob", agentId }, true)).filter((each) => each.threadId === threadId);
+        // A thread's turn is its hob's chat on the Task you asked for, whose briefing lists each result.
         return yield* carry(
           items.map(({ item }) => item),
           `thread:${threadId}`,
           turn,
+          "briefed",
         );
       });
 
@@ -197,6 +205,7 @@ export const MemberContinuationsLive = Layer.effect(
           items.map(({ item }) => item),
           `task:${taskId}`,
           turn,
+          "inline",
         );
       });
 
