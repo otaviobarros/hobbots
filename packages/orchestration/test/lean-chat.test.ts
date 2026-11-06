@@ -129,9 +129,7 @@ describe("short checkpoints and a lean chat", () => {
   it("asks for the plan once when work starts in the chat, and not for a member's own Quest", () => {
     expect(planNote(campaign)).toContain("tell the user the plan in a line or two");
     // The work is handed out first: writing the plan starts nothing (#1081).
-    expect(planNote(campaign)).toMatch(
-      /^ Delegate first: writing the plan starts nothing\. Then tell the user/,
-    );
+    expect(planNote(campaign)).toMatch(/^ Delegate first: writing the plan starts nothing\. Then tell the user/);
     expect(planNote(campaign)).toContain("stay quiet until a question no lead can answer, or the finish");
     expect(planNote(copy)).toBe("");
   });
