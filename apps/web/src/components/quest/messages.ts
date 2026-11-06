@@ -45,8 +45,9 @@ export const messages = {
     recommended: "Recommended",
     recommendedMark: "★",
     /** A chip's name: its label, whether it is recommended and what it does. */
-    chipSaid: ({ label, recommended, consequence }: { label: string; recommended: boolean; consequence: string }) =>
-      `${label}${recommended ? ", recommended" : ""}${consequence === "" ? "" : `. ${consequence}`}`,
+    /** What a chip's name says after its label, which it shows alone. */
+    chipSaid: ({ recommended, consequence }: { recommended: boolean; consequence: string }) =>
+      `${recommended ? ", recommended" : ""}${consequence === "" ? "" : `. ${consequence}`}`,
     orInWords: "or answer in your own words",
     somethingElse: "Something else…",
     youPicked: ({ answer }: { answer: string }) => `You picked: ${answer}`,

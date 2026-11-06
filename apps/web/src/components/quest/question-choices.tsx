@@ -1,6 +1,7 @@
 import type { Question } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { formatList } from "../../lib/format.ts";
+import { Said } from "../said/said.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.question;
@@ -72,12 +73,6 @@ function ChoiceList({
               data-recommended={recommended}
               aria-keyshortcuts={key}
               title={look === "chips" && option.consequence !== "" ? option.consequence : undefined}
-              // A chip shows only its label, so its name says the rest (#740).
-              aria-label={
-                look === "chips"
-                  ? copy.chipSaid({ label: option.label, recommended, consequence: option.consequence })
-                  : undefined
-              }
               disabled={disabled}
               onClick={() => onPick(option.label)}
             >
@@ -99,7 +94,11 @@ function ChoiceList({
                 </span>
               ) : (
                 <>
-                  {option.label}
+                  {/* A chip shows only its label, so its name says the rest after it (#740, WCAG 2.5.3). */}
+                  <span>
+                    {option.label}
+                    <ChipSaid recommended={recommended} consequence={option.consequence} />
+                  </span>
                   {recommended && (
                     <span aria-hidden className="text-mint">
                       {copy.recommendedMark}
@@ -115,9 +114,15 @@ function ChoiceList({
   );
 }
 
+/** What a chip's name says after the label it shows: whether it is recommended and what it does. */
+function ChipSaid({ recommended, consequence }: { recommended: boolean; consequence: string }) {
+  const said = copy.chipSaid({ recommended, consequence });
+  return said === "" ? null : <Said>{said}</Said>;
+}
+
 function Recommended() {
   return (
-    <span className="rounded-tag bg-[color-mix(in_srgb,var(--color-mint)_16%,transparent)] px-1.5 text-meta font-bold text-mint">
+    <span className="rounded-tag bg-[color-mix(in_srgb,var(--color-mint)_12%,transparent)] px-1.5 text-meta font-bold text-mint">
       <span aria-hidden className="me-1">
         {copy.recommendedMark}
       </span>

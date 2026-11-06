@@ -48,6 +48,15 @@ export const expectAccessible = async (page: Page, within?: Locator) => {
   const { violations } = await builder.analyze();
   const failing = violations
     .filter((violation) => FAILING.has(violation.impact ?? ""))
-    .map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(" ")).join(", ")}`);
+    .map(
+      (violation) =>
+        `${violation.id}: ${violation.nodes
+          .map((node) => {
+            // A contrast failure says its colours and ratio, which the selector alone does not.
+            const why = violation.id === "color-contrast" ? node.any[0]?.message : undefined;
+            return why === undefined ? node.target.join(" ") : `${node.target.join(" ")} (${why})`;
+          })
+          .join(", ")}`,
+    );
   expect(failing).toEqual([]);
 };

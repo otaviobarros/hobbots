@@ -52,7 +52,7 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   // without running past its edge.
   const tray = page.getByRole("region", { name: /^Needs you/ });
   await expect(tray.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 15_000 });
-  const ticket = page.getByRole("button", { name: /^Open the Run the Black Friday campaign .* room: / });
+  const ticket = page.getByRole("button", { name: /^Run the Black Friday campaign .*: .*Open room$/ });
   await ticket.click();
   const room = page.getByRole("region", { name: /^Run the Black Friday campaign .*, Quest room$/ });
   const heading = room.getByRole("heading", { name: /^Run the Black Friday campaign/ }).first();
@@ -87,7 +87,7 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
     if (opened) await ticket.click();
     await expect(room).toBeVisible({ visible: opened });
     expect(await lines(ticket.getByText(/^Run the Black Friday campaign/))).toBe(1);
-    for (const end of [ticket.getByText(/(of 2 done|^Finished in .*)$/), ticket.getByText("→", { exact: true })]) {
+    for (const end of [ticket.getByText(/^(\d of 2 done|Finished in )/), ticket.getByText("→", { exact: true })]) {
       await expect(end).toBeVisible();
       await expectInside(end, chat);
     }

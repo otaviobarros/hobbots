@@ -8,6 +8,7 @@ import { HubWait } from "../loading/hub-wait.tsx";
 import { type RoomStatus, roomStatusLabel, roomTone } from "../quest/control-room.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
+import { Said } from "../said/said.tsx";
 import { LANE, LANE_HEAD } from "./lane-focus.ts";
 import { LaneItemRow } from "./lane-items.tsx";
 import { type Lane, type LaneRole, laneDomId } from "./lane-model.ts";
@@ -112,7 +113,6 @@ export function LaneView({
           type="button"
           {...LANE_HEAD}
           aria-pressed={picked}
-          aria-label={messages.show({ name: hob.name })}
           onClick={() => onPick(picked ? null : lane.hobId)}
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-t-card border-0 bg-transparent px-3 py-2.5 text-start text-text-strong hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring"
         >
@@ -120,13 +120,18 @@ export function LaneView({
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate font-heading text-body font-(--heading-weight)">
               {hob.name}
-              {role !== null && <span className="ms-1.5 font-sans text-meta font-normal text-label">{role}</span>}
+              {role !== null && <RoleTag role={role} />}
+              <Said>{messages.said.title}</Said>
             </span>
             <span className="line-clamp-2 text-detail text-text-secondary" title={lane.title}>
               {lane.title}
+              <Said>{messages.said.state}</Said>
             </span>
           </span>
-          <StatusTag status={roomTone(lane.status)}>{roomStatusLabel(lane.status)}</StatusTag>
+          {/* Named by what it shows, then what it does, so speech input can say what it sees (WCAG 2.5.3). */}
+          <StatusTag status={roomTone(lane.status)} said={messages.said.show({ name: hob.name })}>
+            {roomStatusLabel(lane.status)}
+          </StatusTag>
         </button>
         {slots.actions}
       </div>
@@ -159,5 +164,15 @@ function ReadState({ name, reads }: { name: string; reads: LaneReads }) {
         {messages.tryAgain}
       </Button>
     </p>
+  );
+}
+
+/** The hob's role beside its name in the lane's header. */
+function RoleTag({ role }: { role: string }) {
+  return (
+    <span className="ms-1.5 font-sans text-meta font-normal text-label">
+      <Said>{messages.said.role}</Said>
+      {role}
+    </span>
   );
 }
