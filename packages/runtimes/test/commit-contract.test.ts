@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { PromptRequest, RuntimeEvent, ToolAccess } from "@hobbots/agents";
+import type { PromptRequest, ToolAccess } from "@hobbots/agents";
 import { type CommitsAs, EMPTY_HOB_POLICY, settleCommitsAs } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Stream } from "effect";
@@ -64,7 +64,7 @@ interface Runtime {
   readonly name: string;
   /** Starts a turn, or null for a runtime that runs no command of its own. */
   readonly start: ((request: PromptRequest) => Promise<Started>) | null;
-  /** Why the runtime refuses `command`, which sets its own commit identity. */
+  /** What the hob is told when the runtime refuses `command`, which sets its own commit identity. */
   readonly refusal: (tools: ToolAccess, command: string) => Promise<string>;
 }
 
@@ -139,7 +139,8 @@ const codex: Runtime = {
   refusal: async (tools, command) => {
     const turn = toolTurn(tools, "on", null, CODEX_MODEL_HOSTS);
     if (turn === null) throw new Error("expected a tool turn");
-    const events: Array<RuntimeEvent> = [];
+    // What the hob reads is the note told to its turn: Codex's own answer to a declined call has no text (#1082).
+    const told: Array<string> = [];
     const gate = policyGate(engine, turn, { ...request(tools.commitsAs), tools }, true, "50 millis");
     await Effect.runPromise(
       gate(
@@ -147,10 +148,14 @@ const codex: Runtime = {
           method: "item/commandExecution/requestApproval",
           params: { threadId: THREAD, turnId: TURN, kind: "command", itemId: "c1", command, cwd: project },
         } as PolicyRequest,
-        { events: codexTurnEvents(THREAD), report: (event) => events.push(event) },
+        {
+          events: codexTurnEvents(THREAD),
+          report: () => undefined,
+          tell: (_turn, text) => Effect.sync(() => told.push(text)),
+        },
       ),
     );
-    return events.flatMap((event) => (event._tag === "ToolDenied" ? [event.reason] : [])).join("\n");
+    return told.join("\n");
   },
 };
 

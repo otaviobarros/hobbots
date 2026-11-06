@@ -179,6 +179,7 @@ export interface ClientRequests {
   readonly "thread/resume": { readonly params: ThreadResumeParams; readonly result: ThreadResumeResponse };
   readonly "turn/start": { readonly params: TurnStartParams; readonly result: TurnStartResponse };
   readonly "turn/interrupt": { readonly params: TurnInterruptParams; readonly result: unknown };
+  readonly "turn/steer": { readonly params: TurnSteerParams; readonly result: TurnSteerResponse };
 }
 
 // Turns (#438): threads, turns, the notifications a turn reads and the requests Codex sends it.
@@ -290,6 +291,20 @@ export interface Turn {
 
 export interface TurnStartResponse {
   readonly turn: Turn;
+}
+
+/**
+ * Input added to the turn that is running, which the model reads with its next request. Codex refuses
+ * it when `expectedTurnId` is not the running turn.
+ */
+interface TurnSteerParams {
+  readonly threadId: string;
+  readonly input: ReadonlyArray<UserInputText>;
+  readonly expectedTurnId: string;
+}
+
+interface TurnSteerResponse {
+  readonly turnId: string;
 }
 
 interface TurnInterruptParams {

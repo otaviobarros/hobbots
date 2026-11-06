@@ -606,6 +606,30 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex under the hob'
     expect(events.at(-1)).toMatchObject({ _tag: "Completed", text: "Done." });
   });
 
+  // regression for #1082
+  it("[TC-RT-1082-04] tells the hob why a command was refused, beside the rejection in its next model request", {
+    timeout: 60_000,
+  }, async () => {
+    // The commit sets its own identity, which the hub refuses; told why, the hob commits without it.
+    const own = "git -c user.name=Frodo -c user.email=frodo@example.com commit -m notes";
+    model.moves.push(runs("c-own", own), { say: "Refused, so I will commit plainly." });
+    const before = model.requests.length;
+    const { asked, events } = await policyTurn(config, access, "Commit the notes.", null);
+    // Refused by the policy outright: the user was never asked.
+    expect(asked).toEqual([]);
+    const denied = events.find((event) => event._tag === "ToolDenied" && event.id === "c-own");
+    expect(denied).toMatchObject({ decidedBy: "policy" });
+    const reason = denied?._tag === "ToolDenied" ? denied.reason : "";
+    expect(reason).toContain("Run Git without setting who commits");
+    // Codex's own answer to the call still says the user rejected it, and the note beside it says why.
+    const next = textOf(model.requests[before + 1]);
+    expect(next).toContain("rejected by user");
+    expect(next).toContain("<call-refused>");
+    expect(next).toContain(JSON.stringify(`Why: ${reason}`).slice(1, -1));
+    expect(next).toContain("the user did not refuse it");
+    expect(events.at(-1)).toMatchObject({ _tag: "Completed", text: "Refused, so I will commit plainly." });
+  });
+
   // regression for #1048
   it("[TC-RT-1048-03] waits for a command that outlives Codex's turn, records how it really ended and tells the hob", {
     timeout: 60_000,

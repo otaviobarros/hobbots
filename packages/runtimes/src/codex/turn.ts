@@ -34,7 +34,7 @@ import type { ChatGptTokens } from "./auth.ts";
 import { type CodexTurnEvents, codexTurnEvents, type TurnEnd } from "./events.ts";
 import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
 import { codexCaBundle, codexPath } from "./locate.ts";
-import { POLICY_REQUESTS, type PolicyRequest, policyGate } from "./policy.ts";
+import { POLICY_REQUESTS, type PolicyRequest, policyGate, refusalNotice, shellScript } from "./policy.ts";
 import { TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
 
 /** Starts a turn's App Server for as long as the scope lasts. */
@@ -55,6 +55,8 @@ interface CodexToolTurn {
   readonly events: CodexTurnEvents;
   readonly report: (event: RuntimeEvent) => void;
   readonly redact: (text: string) => string;
+  /** Adds a note to a running turn, which the model reads with its next request (#1082). */
+  readonly tell: (turnId: string, text: string) => Effect.Effect<void>;
   /** Decides the turn's tool calls: the policy for a turn with tools, otherwise every one is refused. */
   readonly gate: CodexToolGate;
 }
@@ -80,29 +82,30 @@ const denied = (
 /**
  * Refuses every tool call, as on a turn without tools, reporting each as denied by the policy.
  * Approvals are declined, never cancelled, so the turn goes on and the model hears that the call did
- * not run.
+ * not run, and why.
  */
-const refuseTools: CodexToolGate = (request, turn) =>
-  Effect.sync(() => {
-    switch (request.method) {
-      case "item/commandExecution/requestApproval": {
-        const { itemId, command, cwd } = request.params;
-        const label = toolLabel("Bash", command ? { command } : {}, turn.redact);
-        denied(turn, { id: itemId, tool: "Bash", operation: "run-commands", label }, cwd ? [cwd] : []);
-        return { decision: "decline" };
-      }
-      case "item/fileChange/requestApproval":
-        denied(turn, {
-          id: request.params.itemId,
-          tool: "apply_patch",
-          operation: "edit-files",
-          label: "Changing files",
-        });
-        return { decision: "decline" };
-      case "mcpServer/elicitation/request":
-        return { action: "decline", content: null, _meta: null };
+const refuseTools: CodexToolGate = (request, turn) => {
+  const closed = (turnId: string, call: string) =>
+    turn.tell(turnId, refusalNotice(call, TOOLS_CLOSED, "policy")).pipe(Effect.as({ decision: "decline" }));
+  switch (request.method) {
+    case "item/commandExecution/requestApproval": {
+      const { itemId, command, cwd } = request.params;
+      const label = toolLabel("Bash", command ? { command } : {}, turn.redact);
+      denied(turn, { id: itemId, tool: "Bash", operation: "run-commands", label }, cwd ? [cwd] : []);
+      return closed(request.params.turnId, command ? turn.redact(shellScript(command)) : label);
     }
-  });
+    case "item/fileChange/requestApproval":
+      denied(turn, {
+        id: request.params.itemId,
+        tool: "apply_patch",
+        operation: "edit-files",
+        label: "Changing files",
+      });
+      return closed(request.params.turnId, "Changing files");
+    case "mcpServer/elicitation/request":
+      return Effect.succeed({ action: "decline", content: null, _meta: null });
+  }
+};
 
 /** The rule every Codex turn's instructions end with (ADR 024): Codex's own trailer stays out. */
 export const NO_ATTRIBUTION_NOTE =
@@ -624,6 +627,18 @@ const appServerCommand = (config: CodexTurnConfig, binary: string, home: string,
   cwd,
 });
 
+/**
+ * Adds a note to a running Codex turn with `turn/steer`, which the model reads with its next request
+ * (#1082). A note Codex refuses, as when the turn has ended, is left out: the call it explains is
+ * still refused, and its step keeps the reason.
+ */
+const tellTurn =
+  (server: AppServer, threadId: string) =>
+  (turnId: string, text: string): Effect.Effect<void> =>
+    server
+      .request("turn/steer", { threadId, input: [{ type: "text", text, text_elements: [] }], expectedTurnId: turnId })
+      .pipe(Effect.ignore);
+
 /** The turn's events, which start the turn only once `accepted` holds. */
 const turnEvents = (
   config: CodexTurnConfig,
@@ -657,6 +672,7 @@ const turnEvents = (
         events: mapper,
         report,
         redact: request.redaction?.text ?? ((text) => text),
+        tell: tellTurn(server, threadId),
         gate: launch.gate,
       };
       report({ _tag: "SessionStarted", sessionId: threadId, billing: billingOf(tokens), ...launch.session });
