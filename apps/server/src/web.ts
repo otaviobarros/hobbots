@@ -1,13 +1,67 @@
+import { extname, posix } from "node:path";
 import { HubHosts, normalizeHost } from "@hobbots/permissions";
-import { Effect } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse, HttpStaticServer } from "effect/http";
+import { Effect, Layer } from "effect";
+import {
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerRespondable,
+  HttpServerResponse,
+  HttpStaticServer,
+} from "effect/http";
+
+/** Where the web build puts the files it names by their content hash (Vite's `assetsDir`). */
+const HASHED_ASSETS = "/assets/";
+
+/**
+ * The file path a request names, as the static server resolves it: decoded, with every leading
+ * separator and every `.` or `..` segment folded away. Empty when it cannot be decoded.
+ */
+const servedPath = (url: string) => {
+  try {
+    const pathname = decodeURIComponent(url.split(/[?#]/, 1)[0] ?? "");
+    return posix.normalize(`/${pathname.replace(/^\/+/, "")}`);
+  } catch {
+    return "";
+  }
+};
+
+/**
+ * How long a browser may keep a file the web client is made of. A hashed asset never changes under
+ * its name, so it is kept for a year without asking. Everything else, index.html above all, is
+ * checked with the hub on every load: index.html names the hashed bundle, so a stale copy runs an
+ * old client against a newer hub after an update.
+ *
+ * A request counts as a hashed asset only when the file it resolves to sits under /assets/ with an
+ * extension, and the response is not HTML. The static server answers an extensionless path with
+ * index.html, under /assets/ too and after decoding, so neither the raw URL nor the path alone
+ * decides; a 304 has no Content-Type, so the path still has to.
+ */
+const webClientCacheControl = (url: string, response: HttpServerResponse.HttpServerResponse) => {
+  const path = servedPath(url);
+  const html = response.headers["content-type"]?.startsWith("text/html") ?? false;
+  const hashed = path.startsWith(HASHED_ASSETS) && extname(path) !== "" && !html;
+  return hashed ? "public, max-age=31536000, immutable" : "no-cache";
+};
 
 /**
  * Serves the built web client next to the API. Paths without a file extension fall back to
  * index.html, so the client's own routes load on a refresh; the API routes are more specific and
  * win over this catch-all.
  */
-export const WebClientRoutes = (root: string) => HttpStaticServer.layer({ root, spa: true });
+export const WebClientRoutes = (root: string) =>
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const router = yield* HttpRouter.HttpRouter;
+      const files = yield* HttpStaticServer.make({ root, spa: true });
+      const handler = Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const response = yield* files;
+        if (response.status >= 400) return response;
+        return HttpServerResponse.setHeader(response, "Cache-Control", webClientCacheControl(request.url, response));
+      }).pipe(Effect.catch(HttpServerRespondable.toResponse));
+      yield* router.add("GET", "/*", handler);
+    }),
+  );
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
