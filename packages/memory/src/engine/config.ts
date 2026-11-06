@@ -128,6 +128,11 @@ export const renderEngineConfig = (settings: EngineSettings, endpoint: string | 
     ...model.top,
     ...model.tables,
     "",
+    // Every word of a search is looked for, in any language (#1047): ai-memory's English stopwords
+    // would drop a word such as "IT" or Portuguese "do", which the fake store and the docs keep.
+    "[search.fts]",
+    "stopwords = []",
+    "",
     "[auth]",
     `root_username = ${quoted(ROOT_USERNAME)}`,
     "",

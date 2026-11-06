@@ -14,10 +14,10 @@ import {
   memoryKindOf,
   memoryScopeKey,
   memoryScopeOfKey,
+  memorySearchTerms,
+  memorySnippetOf,
   type SnippetPart,
   sameMemoryScope,
-  searchTerms,
-  snippetOf,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { messages } from "./messages.ts";
@@ -353,10 +353,10 @@ export const shownLines = (lines: ReadonlyArray<MemoryChangedLine>): ReadonlyArr
 
 /** The parts of a search hit's snippet, the words that match the search marked. */
 export const hitParts = (snippet: string, q: string): ReadonlyArray<SnippetPart> => {
-  const terms = searchTerms(q);
+  const terms = memorySearchTerms(q);
   return terms.length === 0
     ? [{ text: snippet, match: false }]
-    : snippetOf(snippet, terms, Math.max(snippet.length, 1));
+    : memorySnippetOf(snippet, terms, Math.max(snippet.length, 1));
 };
 
 /** The search's scope chips: Everywhere, About you, then each project and each hob that holds pages. */
