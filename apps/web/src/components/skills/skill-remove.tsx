@@ -22,7 +22,7 @@ export function SkillRemove({ detail, hobs, say }: { detail: SkillDetail; hobs: 
   const users = detail.assignments.map((assignment) => scopeName(assignment.scope, hobs));
   return (
     <>
-      <Button variant="quiet" className="justify-start" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Button variant="quiet" aria-expanded={open} onClick={() => setOpen(!open)}>
         {copy.remove.open}
       </Button>
       {open && (

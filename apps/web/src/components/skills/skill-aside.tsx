@@ -58,7 +58,7 @@ function GiveTo({
   const rev = skillRevisionLabel({ number: detail.skill.revisions });
   return (
     <>
-      <Button variant="outline" className="justify-start" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Button variant="outline" aria-expanded={open} onClick={() => setOpen(!open)}>
         {copy.give.open}
       </Button>
       {open && (
@@ -155,7 +155,7 @@ export function SkillAside({
     <aside aria-label={copy.skill.aside} className="flex w-[280px] flex-none flex-col gap-4">
       <MemoryCard label={copy.skill.actions}>
         <h3 className="lbl m-0 text-label">{copy.skill.actions}</h3>
-        <Button asChild variant="outline" className="justify-start">
+        <Button asChild variant="outline">
           <Link to="/skills" search={skillsSearchOf({ _tag: "Edit", skillId: detail.skill.id })}>
             {copy.skill.edit}
           </Link>

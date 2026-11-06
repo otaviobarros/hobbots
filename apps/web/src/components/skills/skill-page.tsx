@@ -46,7 +46,7 @@ function SkillTabs({
   ];
   return (
     <Tabs
-      className="min-w-0 gap-4"
+      className="min-w-0"
       value={view.tab ?? "instructions"}
       onValueChange={(tab) =>
         void navigate({
@@ -68,7 +68,7 @@ function SkillTabs({
           </TabsTrigger>
         ))}
       </TabsList>
-      <TabsContent value={view.tab ?? "instructions"}>
+      <TabsContent value={view.tab ?? "instructions"} className="mt-2">
         <SkillBody view={view} detail={detail} hobs={hobs} say={say} />
       </TabsContent>
     </Tabs>
