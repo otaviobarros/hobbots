@@ -2,6 +2,10 @@ import {
   type AgentId,
   type Attempt,
   type AttemptId,
+  answerHow,
+  type BackpackPayload,
+  checkpointText,
+  choicesText,
   type EventEnvelope,
   isLiveAttempt,
   isTerminalTask,
@@ -13,6 +17,7 @@ import {
   MemoryUnavailable,
   type Message,
   type MessageStatus,
+  type Question,
   type ReplyStep,
   type ReplyStepState,
   type Task,
@@ -36,11 +41,12 @@ import { makeRedactor, type Redactor, SecretRedaction } from "./secrets.ts";
  * messages, the hob's replies and their tool steps, and the Quests it led) to that thread's session
  * in its hob's own memory, and what a hob did on a Task outside any chat, as a party member or in a
  * step (the Task's goal, its finished tool steps and each turn's reply), to its Attempt's session in
- * that hob's memory (#1012). It moves the cursor once memory acknowledged all of it. A session quiet
- * for 30 minutes, or whose thread was archived or whose Task ended, is ended, so memory writes its
- * summary page; no runtime turn is spent on it. The same worker sends the `memory_save` calls memory
- * could not take at once. While memory does not answer, nothing moves and nothing is lost: journal
- * compaction keeps every entry after the cursor.
+ * that hob's memory (#1012). The work that wakes a hob, such as an answer to its question, goes to
+ * the session of the turn that took it in, either one (#1028). It moves the cursor once memory
+ * acknowledged all of it. A session quiet for 30 minutes, or whose thread was archived or whose Task
+ * ended, is ended, so memory writes its summary page; no runtime turn is spent on it. The same worker
+ * sends the `memory_save` calls memory could not take at once. While memory does not answer, nothing
+ * moves and nothing is lost: journal compaction keeps every entry after the cursor.
  */
 
 /** How long a session is quiet before it ends. */
@@ -123,6 +129,85 @@ const attemptOpening = (task: Task, attempt: Attempt, redacted: Redacting): Arra
 
 type Redacting = (items: ReadonlyArray<MemoryCaptureItem>) => Array<MemoryCaptureItem>;
 
+const firstLine = (text: string) => text.split("\n", 1)[0]?.trim() ?? "";
+const whoAnswered = (question: Question) =>
+  question.answeredBy?._tag === "User"
+    ? " by the user"
+    : question.answeredBy?._tag === "Lead"
+      ? ` by hob ${question.answeredBy.agentId}`
+      : "";
+
+/** A Task's result, its summary first. */
+const resultText = (task: Task, artifacts: ReadonlyArray<{ readonly label: string }>) => {
+  const made = artifacts.length === 0 ? "" : ` It made: ${artifacts.map((artifact) => artifact.label).join(", ")}.`;
+  return `Task "${firstLine(task.brief)}" finished: ${task.result?.summary ?? "no result given"}.${made} (Task ${task.id})`;
+};
+
+/**
+ * What arrived for a hob, as its memory keeps it (#1028): the work in plain words, what it says
+ * first, since a summary without a model keeps only a line's start, and without the instructions
+ * Hobbots gives the turn around it.
+ */
+const arrivalText = (payload: Exclude<BackpackPayload, { readonly _tag: "task" | "progress" }>): string => {
+  switch (payload._tag) {
+    case "result":
+      return resultText(payload.task, payload.artifacts);
+    case "failure":
+      return `Task "${firstLine(payload.task.brief)}" ended as ${payload.task.state}${payload.reason === undefined ? "" : `: ${payload.reason}`}. (Task ${payload.task.id})`;
+    case "checkpoint":
+      return `${checkpointText(payload.checkpoint)} (a ${payload.checkpoint.kind} on Task ${payload.checkpoint.taskId})`;
+    case "question":
+      return `Question: "${payload.question.text}"${choicesText(payload.question)} (asked by hob ${payload.question.askerId} as ${payload.question.id}, about Task ${payload.question.taskId})`;
+    case "answer":
+      return `Answer: "${payload.question.answer ?? ""}"${answerHow(payload.question)}, to the question "${payload.question.text}", answered${whoAnswered(payload.question)} (${payload.question.id})`;
+    case "hand-off":
+      return `Handed over, "${payload.artifact.label}": ${payload.artifact.value} (to Task ${payload.handOff.toTaskId})`;
+    case "message":
+      return `${payload.senderId === null ? "Note from the user" : "Message"}: ${payload.text}${payload.senderId === null ? "" : ` (from hob ${payload.senderId})`}`;
+    case "approval-outcome":
+      return `Approval ${payload.approval.state}: "${payload.approval.label}"`;
+    case "deadline":
+      return `Deadline passed at ${payload.dueAt} (Task ${payload.taskId})`;
+  }
+};
+
+/**
+ * What a backpack item adds once the runtime accepted the turn it was put into (#1028): the work, to
+ * that turn's session in its recipient's memory, a thread's or a member's Attempt's, as a prompt.
+ * Kept by the item's own id, so a redelivery or a retry of the turn writes it once.
+ */
+const arrivalOf = (
+  event: Extract<EventEnvelope["payload"], { readonly _tag: "BackpackItemChanged" }>,
+  redacted: Redacting,
+): CapturedEntry | null => {
+  const { item } = event;
+  const delivery = item.deliveries.at(-1);
+  if (item.state !== "acknowledged" || delivery === undefined) return null;
+  // A Task's own assignment is its goal already, and routine progress is never kept (IN-005).
+  const { payload } = item;
+  if (payload._tag === "task" || payload._tag === "progress") return null;
+  const text = arrivalText(payload);
+  if (text.trim() === "") return null;
+  const items = redacted([{ key: `arrival:${item.id}`, kind: "message", text }]);
+  const [target, id] = splitTarget(delivery.target);
+  if (target === "thread") {
+    const threadId = id as ThreadId;
+    return { sessionId: threadId, agentId: item.recipientId, opening: [threadStart(threadId)], items, ends: false };
+  }
+  if (target === "task") {
+    const attemptId = delivery.turnId as AttemptId;
+    const opening = [attemptStart(attemptId, id as TaskId, item.threadId)];
+    return { sessionId: attemptId, agentId: item.recipientId, opening, items, ends: false };
+  }
+  return null;
+};
+
+/** A delivery's target, `thread:<id>` or `task:<id>`, as its kind and id. */
+const splitTarget = (target: string): readonly [string, string] => {
+  const at = target.indexOf(":");
+  return at < 0 ? [target, ""] : [target.slice(0, at), target.slice(at + 1)];
+};
+
 /**
  * What a Task's change adds to its Attempt's session (#1012). Only a Task below the top one works
  * outside any chat, a party member's or a step's: the top Task's turns are its thread's. A live
@@ -155,10 +240,39 @@ const taskChangeOf = (
 };
 
 /**
+ * What an Attempt's steps add to its session. Every change carries all the Attempt's steps: each
+ * finished one is kept once, by its own id. Steps only run in an Attempt outside any chat. One that
+ * finishes after its session ended for quiet opens it again, by the same start: the goal it was sent
+ * first is already there.
+ */
+const attemptStepsOf = (
+  entry: EventEnvelope,
+  event: Extract<EventEnvelope["payload"], { readonly _tag: "AttemptStepsRecorded" }>,
+  redacted: Redacting,
+): CapturedEntry | null => {
+  const agentId = entry.correlation.agentId;
+  if (agentId === null) return null;
+  const steps = event.steps
+    .filter((step) => step.kind === "tool" && ENDED_STEP.has(step.state))
+    .map(
+      (step): MemoryCaptureItem => ({ key: `step:${event.attemptId}:${step.id}`, kind: "tool", text: stepText(step) }),
+    );
+  return steps.length === 0
+    ? null
+    : {
+        sessionId: event.attemptId,
+        agentId,
+        opening: [attemptStart(event.attemptId, event.taskId, entry.correlation.threadId)],
+        items: redacted(steps),
+        ends: false,
+      };
+};
+
+/**
  * What memory keeps of a journal entry, redacted by `redactor`, or null for an entry it keeps
  * nothing of. A message of yours is kept once it is no longer queued, by its own id, so saving it
  * again sends nothing new; a reply once its turn ends. An Attempt outside any chat keeps its Task's
- * goal, its finished tool steps and each turn's reply.
+ * goal, its finished tool steps and each turn's reply. Either keeps the work that woke a turn.
  */
 export const capturedEntryOf = (entry: EventEnvelope, redactor: Redactor): CapturedEntry | null => {
   const event = entry.payload;
@@ -206,31 +320,10 @@ export const capturedEntryOf = (entry: EventEnvelope, redactor: Redactor): Captu
     }
     case "TaskStateChanged":
       return taskChangeOf(entry, event, redacted);
-    case "AttemptStepsRecorded": {
-      // Every change carries all the Attempt's steps: each finished one is kept once, by its own id.
-      const agentId = entry.correlation.agentId;
-      if (agentId === null) return null;
-      const steps = event.steps
-        .filter((step) => step.kind === "tool" && ENDED_STEP.has(step.state))
-        .map(
-          (step): MemoryCaptureItem => ({
-            key: `step:${event.attemptId}:${step.id}`,
-            kind: "tool",
-            text: stepText(step),
-          }),
-        );
-      // Steps only run in an Attempt outside any chat. One that finishes after its session ended for
-      // quiet opens it again, by the same start: the goal it was sent first is already there.
-      return steps.length === 0
-        ? null
-        : {
-            sessionId: event.attemptId,
-            agentId,
-            opening: [attemptStart(event.attemptId, event.taskId, entry.correlation.threadId)],
-            items: redacted(steps),
-            ends: false,
-          };
-    }
+    case "BackpackItemChanged":
+      return arrivalOf(event, redacted);
+    case "AttemptStepsRecorded":
+      return attemptStepsOf(entry, event, redacted);
     default:
       return null;
   }
