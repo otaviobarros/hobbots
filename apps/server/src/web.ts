@@ -14,14 +14,14 @@ const HASHED_ASSETS = "/assets/";
 
 /**
  * The file path a request names, as the static server resolves it: decoded, with every leading
- * separator and every `.` or `..` segment folded away. Undefined when it cannot be decoded.
+ * separator and every `.` or `..` segment folded away. Empty when it cannot be decoded.
  */
 const servedPath = (url: string) => {
   try {
     const pathname = decodeURIComponent(url.split(/[?#]/, 1)[0] ?? "");
     return posix.normalize(`/${pathname.replace(/^\/+/, "")}`);
   } catch {
-    return undefined;
+    return "";
   }
 };
 
@@ -39,7 +39,7 @@ const servedPath = (url: string) => {
 const webClientCacheControl = (url: string, response: HttpServerResponse.HttpServerResponse) => {
   const path = servedPath(url);
   const html = response.headers["content-type"]?.startsWith("text/html") ?? false;
-  const hashed = path !== undefined && path.startsWith(HASHED_ASSETS) && extname(path) !== "" && !html;
+  const hashed = path.startsWith(HASHED_ASSETS) && extname(path) !== "" && !html;
   return hashed ? "public, max-age=31536000, immutable" : "no-cache";
 };
 
