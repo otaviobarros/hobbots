@@ -9,7 +9,14 @@ import { afterAll, describe, expect, it } from "vitest";
 import { toolTurn } from "../src/claude-code.ts";
 import type { AppServerNotification } from "../src/codex/app-server.ts";
 import { codexTurnEvents } from "../src/codex/events.ts";
-import { type PolicyRequest, policyGate, refusalNotice, STDIN_REFUSED, shellScript, UNKNOWN_PATCH } from "../src/codex/policy.ts";
+import {
+  type PolicyRequest,
+  policyGate,
+  refusalNotice,
+  STDIN_REFUSED,
+  shellScript,
+  UNKNOWN_PATCH,
+} from "../src/codex/policy.ts";
 import { CODEX_MODEL_HOSTS } from "../src/codex/turn.ts";
 import { approvalsAnswering as answering, approve } from "./codex-fixture.ts";
 

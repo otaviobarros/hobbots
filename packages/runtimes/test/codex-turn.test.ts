@@ -18,6 +18,7 @@ import type { AppServer, AppServerNotification } from "../src/codex/app-server.t
 import type { ChatGptTokens } from "../src/codex/auth.ts";
 import { codexTurnEvents, commandsEndedNotice, LOST_CALL, LOST_TURN } from "../src/codex/events.ts";
 import { notOffered } from "../src/codex/hub-tools.ts";
+import { refusalNotice } from "../src/codex/policy.ts";
 import {
   CODEX_MODEL_HOSTS,
   type CodexTurnConfig,
@@ -29,7 +30,6 @@ import {
   sandboxedCommand,
   TOOLS_CLOSED,
 } from "../src/codex/turn.ts";
-import { refusalNotice } from "../src/codex/policy.ts";
 import { ProcessSandbox, type ProcessSandboxShape, type SandboxScope, sandboxFilesystem } from "../src/sandbox.ts";
 import { completed, fakeServer, n, THREAD, TURN } from "./codex-app-server.ts";
 
