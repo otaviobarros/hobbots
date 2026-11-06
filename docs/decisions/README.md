@@ -30,3 +30,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [026 — Backup, restore, export and diagnostics](026-backup-export-diagnostics.md)
 - [027 — The Quest room](027-quest-room.md)
 - [028 — Memory](028-memory.md)
+- [029 — Skills](029-skills.md)
