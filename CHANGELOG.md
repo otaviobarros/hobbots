@@ -1,5 +1,57 @@
 # Changelog
 
+## [0.0.2](https://github.com/otaviobarros/hobbots/compare/v0.0.1...v0.0.2) (2026-11-06)
+
+
+### Features
+
+* **agents:** add the MemoryStore port and its in-memory fake ([#966](https://github.com/otaviobarros/hobbots/issues/966)) ([db654b3](https://github.com/otaviobarros/hobbots/commit/db654b37d9116231c5b5ae5ed5a9147ddbf415d8))
+* let a hob ask with choices, one recommended, answered with a click ([#936](https://github.com/otaviobarros/hobbots/issues/936)) ([2522ee0](https://github.com/otaviobarros/hobbots/commit/2522ee096abf7d8ca3075b9b1d7c2e1b478f1725))
+* let the hub ask you a question with choices and apply your answer ([#979](https://github.com/otaviobarros/hobbots/issues/979)) ([2938f51](https://github.com/otaviobarros/hobbots/commit/2938f51a56ef0d5759f8b6b1aef5d7cfdcd97c12)), closes [#976](https://github.com/otaviobarros/hobbots/issues/976)
+* **memory:** back up, restore and export memory ([#971](https://github.com/otaviobarros/hobbots/issues/971)) ([d4cd361](https://github.com/otaviobarros/hobbots/commit/d4cd3619d198ea10493f50a8ab2c8d8172e16264))
+* **memory:** brief hobs from memory at the start of a session ([#970](https://github.com/otaviobarros/hobbots/issues/970)) ([ba25572](https://github.com/otaviobarros/hobbots/commit/ba255728296b1f181035f7bf26fca59b3340842a)), closes [#957](https://github.com/otaviobarros/hobbots/issues/957)
+* **memory:** bundle and run the ai-memory engine beside the hub ([#967](https://github.com/otaviobarros/hobbots/issues/967)) ([df5d0bf](https://github.com/otaviobarros/hobbots/commit/df5d0bf473b8a9862e96deda31dc4757e4fa460e)), closes [#953](https://github.com/otaviobarros/hobbots/issues/953)
+* **memory:** capture what hobs do in a thread into their memory ([#978](https://github.com/otaviobarros/hobbots/issues/978)) ([18fa2b1](https://github.com/otaviobarros/hobbots/commit/18fa2b1e5c91b0f70b709275004ab3c5dd7b2e82))
+* **memory:** choose the memory model in Settings ([#973](https://github.com/otaviobarros/hobbots/issues/973)) ([522e5f6](https://github.com/otaviobarros/hobbots/commit/522e5f6572014e6d42478568d9a9f9d24d977ef8))
+* **memory:** edit memory and About you ([#983](https://github.com/otaviobarros/hobbots/issues/983)) ([b0a4ab3](https://github.com/otaviobarros/hobbots/commit/b0a4ab33d526b25185e145373a665f31b944f5c2))
+* **memory:** give hobs memory_search and memory_save hub tools ([#975](https://github.com/otaviobarros/hobbots/issues/975)) ([d654c1d](https://github.com/otaviobarros/hobbots/commit/d654c1dc238a55dd2b7b9e2b470694915d2f8567))
+* **memory:** give party members their own memory of a Quest ([#1019](https://github.com/otaviobarros/hobbots/issues/1019)) ([c99ca96](https://github.com/otaviobarros/hobbots/commit/c99ca9636310207aa80067bfaeaa0b286765bdd8))
+* **memory:** review what hobs want to share ([#984](https://github.com/otaviobarros/hobbots/issues/984)) ([5f18030](https://github.com/otaviobarros/hobbots/commit/5f18030051d34c95bf77b2155b87fc8528b5e301))
+* **memory:** run the memory model on your connected sign-ins ([#982](https://github.com/otaviobarros/hobbots/issues/982)) ([d8dc2d8](https://github.com/otaviobarros/hobbots/commit/d8dc2d83ca320d3b6bcddcafc7592258df3e44af)), closes [#980](https://github.com/otaviobarros/hobbots/issues/980)
+* **memory:** serve MemoryStore from the bundled ai-memory ([#969](https://github.com/otaviobarros/hobbots/issues/969)) ([5e0d5ed](https://github.com/otaviobarros/hobbots/commit/5e0d5ed2ea9f1ed88918d3ed1565f2fe8604c757)), closes [#954](https://github.com/otaviobarros/hobbots/issues/954)
+* **memory:** show a hob's saves in its chat and its memory on its page ([#981](https://github.com/otaviobarros/hobbots/issues/981)) ([47d5c8d](https://github.com/otaviobarros/hobbots/commit/47d5c8dfb84dc2020abd28671727123f4ac9e3ff))
+* start over from Settings › Your data ([#949](https://github.com/otaviobarros/hobbots/issues/949)) ([4cb1302](https://github.com/otaviobarros/hobbots/commit/4cb13021d55572c002f75ba9ead936d3985839be)), closes [#948](https://github.com/otaviobarros/hobbots/issues/948)
+* **web:** build the Memory page ([#977](https://github.com/otaviobarros/hobbots/issues/977)) ([a297cb8](https://github.com/otaviobarros/hobbots/commit/a297cb8dc18a622d40227c50f40b634214fb00d8))
+* **web:** keep the composer's busy state on one line, with Stop, Send after this reply and messages that wait their turn ([#1044](https://github.com/otaviobarros/hobbots/issues/1044)) ([ceb66e9](https://github.com/otaviobarros/hobbots/commit/ceb66e977dd25acdd1f7b1ccb58a2218dd1a0b32))
+
+
+### Bug Fixes
+
+* ask who hobs commit as when your Git config sets no one ([#1037](https://github.com/otaviobarros/hobbots/issues/1037)) ([e58736d](https://github.com/otaviobarros/hobbots/commit/e58736d13ab012bac9a583f9df0ee93795575455))
+* keep a lead's routine progress out of its chat during a Quest ([#1020](https://github.com/otaviobarros/hobbots/issues/1020)) ([41c1d2e](https://github.com/otaviobarros/hobbots/commit/41c1d2e54082c096218808b2d8807216f6d44b4e))
+* **memory:** find a page by a plain question, a word start or a hyphenated name ([#1052](https://github.com/otaviobarros/hobbots/issues/1052)) ([c8204d1](https://github.com/otaviobarros/hobbots/commit/c8204d1273d223f1e1bcf329e8afde8583fc4f38))
+* **memory:** keep the work that wakes a hob in its memory session ([#1035](https://github.com/otaviobarros/hobbots/issues/1035)) ([fafeba5](https://github.com/otaviobarros/hobbots/commit/fafeba50501f9d2adc0eab9c5cf65d68aeb58f4d))
+* **memory:** stop warning ai-memory's log on reads of empty scopes ([#1033](https://github.com/otaviobarros/hobbots/issues/1033)) ([081091e](https://github.com/otaviobarros/hobbots/commit/081091e6bb705b00bf0706302394add55448eee8))
+* **memory:** tell a session page when a kept save lands, and keep each event's own time ([#1054](https://github.com/otaviobarros/hobbots/issues/1054)) ([845b1ea](https://github.com/otaviobarros/hobbots/commit/845b1ead1a0456a05cb629696443189e09b08cb9))
+* **orchestration:** carry your note on to a Task the lead delegates for it ([#1015](https://github.com/otaviobarros/hobbots/issues/1015)) ([32330cd](https://github.com/otaviobarros/hobbots/commit/32330cdb41b764ffa622cf5e6327a207c447424a))
+* **orchestration:** stop a continuation whose Quest you cancel before it starts ([#996](https://github.com/otaviobarros/hobbots/issues/996)) ([6cd92a4](https://github.com/otaviobarros/hobbots/commit/6cd92a470374c9c723b962379cbaf4253c9fcb63))
+* **orchestration:** tell a woken lead each result once ([#1043](https://github.com/otaviobarros/hobbots/issues/1043)) ([2cadb5a](https://github.com/otaviobarros/hobbots/commit/2cadb5acbcf22999c11cc01fcccd79ae4677254c))
+* **orchestration:** tell a woken lead its rules once per session ([#1042](https://github.com/otaviobarros/hobbots/issues/1042)) ([f2732ab](https://github.com/otaviobarros/hobbots/commit/f2732abdd4af312172bebe69f653a6fef077fcc2))
+* **orchestration:** tell a woken lead only what changed since its last turn ([#1036](https://github.com/otaviobarros/hobbots/issues/1036)) ([27aa136](https://github.com/otaviobarros/hobbots/commit/27aa136efd9b9aad23b77afaef19cceba9c2c390))
+* **persistence:** count what party members and steps spend ([#1017](https://github.com/otaviobarros/hobbots/issues/1017)) ([e1cf987](https://github.com/otaviobarros/hobbots/commit/e1cf98735e07188ee06af8b60082e796b4eed439))
+* **runtimes:** keep a background command running until it really ends ([#1022](https://github.com/otaviobarros/hobbots/issues/1022)) ([2e1f63d](https://github.com/otaviobarros/hobbots/commit/2e1f63ddd4dda17c3d7102864471014db17fd89e))
+* **runtimes:** wait for a Codex command that outlives its turn and tell the hob how it ended ([#1053](https://github.com/otaviobarros/hobbots/issues/1053)) ([4144023](https://github.com/otaviobarros/hobbots/commit/4144023757d2115e54824a58fb8e0d5ad6eef440))
+* **server:** give chat turns and exports the memory store ([#998](https://github.com/otaviobarros/hobbots/issues/998)) ([127ba3e](https://github.com/otaviobarros/hobbots/commit/127ba3e7af8140d64ffa1581e3165dee1e1771c8))
+* **server:** keep reset and restore off a data folder a hub is using ([#1014](https://github.com/otaviobarros/hobbots/issues/1014)) ([35b8b74](https://github.com/otaviobarros/hobbots/commit/35b8b745c1c39579e8ccd0fd899390be87890646))
+* **web:** fit the Workbench's Terminal to its dock so the Quest room stops scrolling ([#1008](https://github.com/otaviobarros/hobbots/issues/1008)) ([b0613fe](https://github.com/otaviobarros/hobbots/commit/b0613fe6f3226ffd8ade218dcf6dbddc399d913e))
+* **web:** keep a chat's unread dot when its list lands after the reply ([#990](https://github.com/otaviobarros/hobbots/issues/990)) ([f8e0ec6](https://github.com/otaviobarros/hobbots/commit/f8e0ec6116c1ab810b8cc1617c2bf1e0ea38782a))
+* **web:** keep keyboard focus and confirm the send after answering or retrying ([#997](https://github.com/otaviobarros/hobbots/issues/997)) ([40189a3](https://github.com/otaviobarros/hobbots/commit/40189a33c2dfbb7c62535a0b49dcf9ded4270c01))
+* **web:** keep keyboard focus in a Quest room card when its backpack moves ([#994](https://github.com/otaviobarros/hobbots/issues/994)) ([c156d00](https://github.com/otaviobarros/hobbots/commit/c156d00b1198cf6293fa8f3730c870c2a77b4960))
+* **web:** keep the window from scrolling past its content on every screen ([#1041](https://github.com/otaviobarros/hobbots/issues/1041)) ([2f46abd](https://github.com/otaviobarros/hobbots/commit/2f46abde13f5289961a9d52c4078bcbe1626ec6b))
+* **web:** name the background command a running lane waits on ([#1023](https://github.com/otaviobarros/hobbots/issues/1023)) ([da6501f](https://github.com/otaviobarros/hobbots/commit/da6501f9a6fcc93bc07936ab513273d350b0fd55))
+* **web:** say when a running lane's hob last moved ([#1010](https://github.com/otaviobarros/hobbots/issues/1010)) ([454dcc9](https://github.com/otaviobarros/hobbots/commit/454dcc9cd635b59194c52d891421d5ed7b154d3e))
+* **web:** show one fixed duration for a finished Quest ([#1013](https://github.com/otaviobarros/hobbots/issues/1013)) ([4eeb464](https://github.com/otaviobarros/hobbots/commit/4eeb46409549120a0d4422aa155066b3cc60b714))
+
 ## 0.0.1 (2026-11-05)
 
 
