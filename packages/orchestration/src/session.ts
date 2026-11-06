@@ -9,6 +9,7 @@ import {
   redactEvent,
   type runtimeAdapters,
   sessionMemoryBrief,
+  skillMounter,
   startedMemoryBrief,
   type TaskRepository,
   type ToolAccess,
@@ -121,6 +122,12 @@ export const runSessionTurn = (
     // The hob's memory brief (ADR 028), as a chat session gets it: when the session is new, or did not
     // last receive this brief.
     const memory = yield* sessionMemoryBrief(turn.agent.id, turn.access?.folders ?? [], turn.sessionId);
+    // The hob's skills (ADR 029), resolved as the turn starts, as a chat's are.
+    const skills = yield* (yield* skillMounter)({
+      agentId: turn.agent.id,
+      policy: turn.config.policy,
+      folders: turn.access?.folders ?? [],
+    });
     const expected = turn.sessionId === null ? undefined : { sessionId: turn.sessionId };
     // Counted as received only once the runtime answers the prompt that carried it.
     let session: string | null = null;
@@ -157,6 +164,7 @@ export const runSessionTurn = (
           model: turn.config.model,
           effort: turn.config.effort,
           tools: turn.access,
+          skills,
           approvals: turn.approvals,
           redaction: redactor,
           recordToolStart: (event) =>

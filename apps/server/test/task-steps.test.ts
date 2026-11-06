@@ -5,6 +5,8 @@ import {
   HobTools,
   type PromptRequest,
   RuntimeAdapter,
+  SkillFiles,
+  SkillLibrary,
   TaskRepository,
 } from "@hobbots/agents";
 import {
@@ -13,6 +15,8 @@ import {
   AttemptId,
   isLiveAttempt,
   type Message,
+  SkillName,
+  SkillRevisionHash,
   type Task,
   TaskId,
   type TaskTree,
@@ -30,6 +34,7 @@ import {
 import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { makeSkillLibraryFake } from "@hobbots/skills/testing";
 import { Deferred, Effect, Layer, ManagedRuntime, Option, Schedule, Scheduler, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -144,6 +149,8 @@ interface Options {
   readonly before?: Before;
   /** How many operations a fiber runs before it lets others run. */
   readonly opsBeforeYield?: number;
+  /** A skills library, so every session gets the hob's skills. */
+  readonly skills?: Layer.Layer<SkillLibrary | SkillFiles>;
 }
 
 const makeApp = (options: Options, gates: Map<string, Deferred.Deferred<void>>, requests: Array<PromptRequest>) =>
@@ -168,6 +175,7 @@ const makeApp = (options: Options, gates: Map<string, Deferred.Deferred<void>>, 
         WorkFolders,
         HobAdmission.layer,
         gated(gates, requests),
+        options.skills ?? Layer.empty,
       ),
     ),
     Layer.provideMerge(TestDatabase),
@@ -337,6 +345,52 @@ describe("a Task's steps in fresh sessions", () => {
   });
 
   // covers OR-005, IN-005
+  // covers RT-001, ADR 029 (Delivery per runtime)
+  it("[TC-OR-647] a step's fresh session gets its hob's skills, as its chat does", async () => {
+    const library = makeSkillLibraryFake();
+    const hash = SkillRevisionHash.make("a".repeat(64));
+    const added = await Effect.runPromise(
+      library.addRevision(null, {
+        hash,
+        name: SkillName.make("release"),
+        description: "Releases.",
+        charms: [],
+        files: [],
+        flags: [],
+        dropped: [],
+        origin: null,
+        commit: null,
+        path: null,
+        label: null,
+        addedBy: { _tag: "You" },
+      }),
+    );
+    await Effect.runPromise(
+      library.assign({
+        skillId: added.value.skill.id,
+        scope: { _tag: "Hob", agentId: ALDRIC },
+        pin: hash,
+        held: false,
+        onlyWhenAsked: true,
+        by: { _tag: "You" },
+      }),
+    );
+    const skills = Layer.mergeAll(
+      Layer.succeed(SkillLibrary, library),
+      Layer.succeed(SkillFiles, { folder: (pin) => Effect.succeed(`/hobbots/skills/objects/${pin}`) }),
+    );
+    const { run, control, stepsAsked } = setUp({ skills });
+    const thread = await run(seed);
+    await run(send(thread.id, `Ship it\n${hub("plan_steps", { key: "plan", steps: chain(["Cut the release"]) })}`));
+    await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    await run(control.open("Cut the release"));
+    await run(treeWhen(thread.id, (tree) => states(tree)[0] === "completed"));
+    const mount = { name: "release", revision: hash, folder: `/hobbots/skills/objects/${hash}`, implicit: false };
+    expect(stepsAsked()[0]?.skills).toEqual([mount]);
+    // The chat turn that planned the step had them too.
+    expect(control.requests[0]?.skills).toEqual([mount]);
+  });
+
   it("[TC-OR-026] the owner's session holds the steps' checkpoints and results, not their transcripts", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);

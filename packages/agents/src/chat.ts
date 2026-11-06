@@ -58,6 +58,7 @@ import {
   type ToolStartedEvent,
 } from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
+import { skillMounter } from "./skill-turn.ts";
 import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
 import { callScope } from "./tasks.ts";
@@ -319,6 +320,10 @@ export class ChatService extends Context.Service<
         Option.isNone(memoryStore)
           ? Effect.succeed<TurnMemoryBrief | null>(null)
           : turnMemoryBrief(memoryStore.value, memoryProjects, agent.id, tools?.folders ?? [], session?.memoryBrief);
+      // Without a skills library, turns have no skills (ADR 029).
+      const skillMounts = yield* skillMounter;
+      const skillsFor = (agent: Agent, config: AgentConfiguration, tools: ToolAccess | null) =>
+        skillMounts({ agentId: agent.id, policy: config.policy, folders: tools?.folders ?? [] });
       // Without a backpack, a thread starts only your queued messages.
       const continuations = yield* Effect.serviceOption(Continuations);
       // After a restore nothing that waited starts on its own until you resume work (ADR 026).
@@ -758,6 +763,7 @@ export class ChatService extends Context.Service<
           const tools = yield* grant(thread.id, agent);
           const expected = thread.sessions.find((s) => s.runtime === brain.runtime);
           const memory = yield* memoryBriefFor(agent, tools, expected);
+          const skills = yield* skillsFor(agent, config, tools);
           // What the turn runs and changes, recorded for the Workbench on the Attempt it works on (ADR 023).
           // Acquired after the Task's turn, so the end-of-turn compare lands before its Attempt ends.
           const activity = yield* activityOf(tools, taskTurn);
@@ -775,6 +781,7 @@ export class ChatService extends Context.Service<
                 model: brain.model,
                 effort: brain.effort,
                 tools,
+                skills,
                 approvals: turnApprovals?.approvals ?? null,
                 redaction: redactor,
                 recordToolStart,
