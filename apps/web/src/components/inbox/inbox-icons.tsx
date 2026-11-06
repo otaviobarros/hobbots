@@ -8,6 +8,9 @@ const PATHS = {
   screen: "M2 3h12v8H2zM5.5 14h5M8 11v3",
   /** An open book, for memory: what hobs want to share. */
   memory: "M8 4.5C6.5 3.3 4.5 3 2.5 3.5v9c2-.5 4-.2 5.5 1 1.5-1.2 3.5-1.5 5.5-1v-9c-2-.5-4-.2-5.5 1zM8 4.5v9",
+  /** A wand with two sparks, for skills: what hobs drafted for the library. */
+  skills:
+    "M2.8 13.2 8.8 7.2M10 2.8l.64 1.6 1.6.64-1.6.64-.64 1.6-.64-1.6-1.6-.64 1.6-.64zM12.4 8.4l.4.96.96.4-.96.4-.4.96-.4-.96-.96-.4.96-.4z",
   /** Two sheets, for Copy. */
   copy: "M5.5 5.5h8v8h-8zM3 10.5v-7a1 1 0 0 1 1-1h6.5",
 } as const;

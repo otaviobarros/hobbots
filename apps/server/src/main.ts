@@ -81,6 +81,7 @@ import {
   SearchIndex,
   SetupRepository,
   SkillLibraryLive,
+  SkillProposalLogLive,
   SqliteLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
@@ -93,6 +94,7 @@ import {
   FolderSandboxLive,
   ProcessSandbox,
 } from "@hobbots/runtimes";
+import { SkillToolsLive } from "@hobbots/skills";
 import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
 import { Deferred, Duration, Effect, Layer, Option, Redacted, References } from "effect";
 import { FetchHttpClient, HttpRouter } from "effect/http";
@@ -133,6 +135,7 @@ import { QuietRoutineReads } from "./request-log.ts";
 import { finishReset, HubReset, wipeHubData } from "./resets.ts";
 import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLive, WorkHoldLive } from "./restores.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
+import { SkillReviewsLive } from "./skill-proposals.ts";
 import { agentsSkillsFolder, SkillsLive } from "./skills.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
 import { TaskFileRoute } from "./task-files.ts";
@@ -292,6 +295,7 @@ const ServerLive = Layer.unwrap(
       MemorySavesLive,
       MemoryShareLogLive,
       SkillLibraryLive,
+      SkillProposalLogLive,
       MemoryCaptureLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
@@ -400,6 +404,9 @@ const ServerLive = Layer.unwrap(
     // One layer, so the fake runtime's memory tools and the Memory page share one fake memory.
     const PageStore = memoryPageStore(config);
     const MemoryTooling = memoryToolsLayer(config, PageStore);
+    // The skill tools (ADR 029), beside the memory tools on every runtime, and your reviews of what
+    // hobs propose with them, which wait for you under every preset.
+    const SkillTooling = SkillToolsLive.pipe(Layer.provideMerge(SkillReviewsLive), Layer.provide(PolicyEngine.node));
     // The memory engine (ADR 028): the bundled ai-memory, run beside the hub and stopped with it. Its
     // two keys stay in the data folder and reach only the engine's environment. Without an engine,
     // or one that fails its checksum, memory is off and everything else works.
@@ -510,7 +517,7 @@ const ServerLive = Layer.unwrap(
       // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
       .pipe(Layer.provideMerge(HubQuestions.layer))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
-      .pipe(Layer.provideMerge(Layer.mergeAll(Charms, LocalGit, MemoryTooling, CharmCallService.layer)))
+      .pipe(Layer.provideMerge(Layer.mergeAll(Charms, LocalGit, MemoryTooling, SkillTooling, CharmCallService.layer)))
       // Before approvals, so a decision can save grants and every call reads the hob's live ones; before
       // the hob's own GitHub app, which revokes GitHub grants whenever the hob's identity changes (ADR 022).
       .pipe(Layer.provideMerge(GrantService.layer))

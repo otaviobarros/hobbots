@@ -11,7 +11,7 @@ import {
 import { Context, Effect, Layer, Option } from "effect";
 import type { TurnStart } from "./commit-identity.ts";
 import type { HobbotsRepository } from "./repository.ts";
-import type { ToolAccess, ToolPolicy } from "./runtime.ts";
+import type { HubCallStep, HubTool, HubToolAnswer, HubTools, ToolAccess, ToolPolicy } from "./runtime.ts";
 
 /** The preset's answer for an operation, narrowed by the hob's overrides and every restriction. */
 export const operationDecision = (
@@ -22,6 +22,21 @@ export const operationDecision = (
     PRESET_DECISIONS[context.preset][operation],
     ...[context.hob.overrides, ...context.restrictions].flatMap((layer) => layer[operation] ?? []),
   );
+
+/**
+ * The hub tools a turn is offered under `access`: each whose operation its policy does not answer
+ * Never for, reached through `call`, or null when there is no access or no tool left.
+ */
+export const offeredHubTools = (
+  access: ToolAccess | null,
+  tools: ReadonlyArray<HubTool>,
+  operationOf: (tool: string) => PolicyOperation,
+  call: (name: string, input: unknown, step: HubCallStep | undefined) => Effect.Effect<HubToolAnswer>,
+): HubTools | null => {
+  if (access === null) return null;
+  const open = tools.filter((tool) => operationDecision(access.policy, operationOf(tool.name)) !== "deny");
+  return open.length === 0 ? null : { tools: open, call: (name, input, step) => call(name, input, step) };
+};
 
 /**
  * Which of a hob's tools its answers open (ADR 014), whatever the runtime calls them: file reads,

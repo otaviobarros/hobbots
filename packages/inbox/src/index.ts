@@ -30,4 +30,10 @@ export {
   lateWorkOf,
   type Turn,
 } from "./dispatcher.ts";
-export { type BackpackContext, backpackItemsFor, type ToolCallSource, tasksTouched } from "./items.ts";
+export {
+  type BackpackContext,
+  backpackItemsFor,
+  needsItemsWithoutTasks,
+  type ToolCallSource,
+  tasksTouched,
+} from "./items.ts";

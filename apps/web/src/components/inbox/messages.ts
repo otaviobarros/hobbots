@@ -17,6 +17,9 @@ export const messages = {
   /** The group of shares: "Memory · Things hobs want to share". */
   memory: "Memory",
   memoryDetail: "Things hobs want to share",
+  /** The group of skill proposals: "Skills · New skills and changes". */
+  skills: "Skills",
+  skillsDetail: "New skills and changes",
   /** A group heading in full, for its tooltip: "Aldric's quest · Plan the spring launch". */
   groupTitle: ({ label, detail }: { label: string; detail: string }) => `${label} · ${detail}`,
   hub: "This hub",
@@ -35,6 +38,7 @@ export const messages = {
     failed: "Failed",
     device: "New device",
     share: "Share",
+    skill: "Skill",
   },
   /** One row of the list: who asked, as a chain, and when. */
   row: {
@@ -105,6 +109,7 @@ export const messages = {
     onceOnlyFoot: "Allow once covers this one action only.",
     shareLabel: ({ name }: { name: string }) => `Share from ${name}`,
     shareDiff: "What would be shared",
+    skillLabel: ({ name }: { name: string }) => `Skill from ${name}`,
   },
   history: {
     heading: "Decision history",

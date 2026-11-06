@@ -116,6 +116,7 @@ export function InboxViewPicker({ view, onChange }: { view: InboxView; onChange:
 const placeName = (place: InboxPlace, directory: InboxDirectory): string => {
   if (place.kind === "hub") return copy.hub;
   if (place.kind === "memory") return copy.memory;
+  if (place.kind === "skills") return copy.skills;
   if (place.kind === "quest") return copy.questName({ name: directory.hobName(place.quest.leadId) });
   return directory.threadTitle(place.threadId);
 };
@@ -123,14 +124,19 @@ const placeName = (place: InboxPlace, directory: InboxDirectory): string => {
 /**
  * A group's heading: a short label with its icon, then the detail. A quest is its lead's quest and
  * its goal, a thread outside a quest whose chat it is and its title, this hub its devices, and
- * memory the shares.
+ * memory the shares, and skills the proposals.
  */
 const groupHeading = (
   { place, entries }: InboxGroup,
   directory: InboxDirectory,
-): { readonly icon: "quest" | "chat" | "screen" | "memory"; readonly label: string; readonly detail: string } => {
+): {
+  readonly icon: "quest" | "chat" | "screen" | "memory" | "skills";
+  readonly label: string;
+  readonly detail: string;
+} => {
   if (place.kind === "hub") return { icon: "screen", label: copy.hub, detail: copy.devices };
   if (place.kind === "memory") return { icon: "memory", label: copy.memory, detail: copy.memoryDetail };
+  if (place.kind === "skills") return { icon: "skills", label: copy.skills, detail: copy.skillsDetail };
   if (place.kind === "quest") {
     return {
       icon: "quest",

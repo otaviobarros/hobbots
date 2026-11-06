@@ -51,12 +51,16 @@ describe("per-hob rules", () => {
       "local-git",
       "open-pull-request",
       "outside-folders",
+      "propose-skill",
       "push",
       "read-files",
       "read-github",
+      "request-skill",
       "run-commands",
       "save-memory",
       "search-memory",
+      "search-skills",
+      "skill-feedback",
       "use-web",
     ]);
   });
@@ -94,6 +98,10 @@ describe("per-hob rules", () => {
       "outside-folders": "deny",
       "search-memory": "allow",
       "save-memory": "allow",
+      "search-skills": "allow",
+      "request-skill": "ask",
+      "propose-skill": "allow",
+      "skill-feedback": "allow",
     } as const;
     expect(enforcement("delete-files", balanced)).toBe("checked");
     expect(enforcement("push", balanced)).toBe("checked");
@@ -117,6 +125,10 @@ describe("per-hob rules", () => {
       "outside-folders": "deny",
       "search-memory": "allow",
       "save-memory": "allow",
+      "search-skills": "allow",
+      "request-skill": "ask",
+      "propose-skill": "allow",
+      "skill-feedback": "allow",
     } as const;
     expect(enforcement("local-git", balanced)).toBe("enforced");
     expect(enforcement("local-git", { ...balanced, "local-git": "deny" })).toBe("checked");

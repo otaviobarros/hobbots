@@ -67,6 +67,7 @@ import memorySaveAttempt from "./0064_memory_save_attempt.ts";
 import skills from "./0065_skills.ts";
 import skillRollouts from "./0066_skill_rollouts.ts";
 import messageSkills from "./0067_message_skills.ts";
+import skillProposals from "./0068_skill_proposals.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -141,4 +142,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0065_skills": skills,
   "0066_skill_rollouts": skillRollouts,
   "0067_message_skills": messageSkills,
+  "0068_skill_proposals": skillProposals,
 };

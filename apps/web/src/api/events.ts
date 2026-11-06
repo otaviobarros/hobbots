@@ -36,6 +36,7 @@ import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertM
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
+import { skillProposalsChanged } from "./skill-proposals.ts";
 import {
   newer,
   recordAgent,
@@ -187,6 +188,11 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     applyMemoryEvent(queryClient, event);
     return;
   }
+  if (isProposalEvent(event)) {
+    // The Inbox reads the proposals again; a note on a skill shows on its page, which #1062 builds.
+    if (event._tag !== "SkillFeedbackLeft") void skillProposalsChanged(queryClient);
+    return;
+  }
   switch (event._tag) {
     case "AgentUpserted":
       applyAgent(queryClient, event.agent);
@@ -237,6 +243,17 @@ const MEMORY_EVENTS = new Set<HobbotsEvent["_tag"]>([
   "MemoryShareChanged",
 ]);
 const isMemoryEvent = (event: HobbotsEvent): event is MemoryEvent => MEMORY_EVENTS.has(event._tag);
+
+type ProposalEvent = Extract<
+  HobbotsEvent,
+  { readonly _tag: "SkillProposalRequested" | "SkillProposalChanged" | "SkillFeedbackLeft" }
+>;
+const PROPOSAL_EVENTS = new Set<HobbotsEvent["_tag"]>([
+  "SkillProposalRequested",
+  "SkillProposalChanged",
+  "SkillFeedbackLeft",
+]);
+const isProposalEvent = (event: HobbotsEvent): event is ProposalEvent => PROPOSAL_EVENTS.has(event._tag);
 
 /** A hob's save or share, as memory's lists show it (ADR 028). */
 const applyMemoryEvent = (queryClient: QueryClient, event: MemoryEvent) => {

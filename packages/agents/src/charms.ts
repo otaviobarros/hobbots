@@ -3,6 +3,7 @@ import { Context, Effect, Option, Schema, type Scope } from "effect";
 import { MemoryTools } from "./memory.ts";
 import type { HubToolAnswer, HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
+import { SkillTools } from "./skill-proposals.ts";
 
 /** A turn that may offer Charm tools: its hob, and how to read the hob's tool access now. */
 export interface CharmTurn {
@@ -92,16 +93,17 @@ export const combineHubTools = (...sets: ReadonlyArray<HubTools | null>): HubToo
 };
 
 /**
- * The local Git, Charm and memory tools a turn offers, read at its start under the access the turn
+ * The local Git, Charm, memory and skill tools a turn offers, read at its start under the access the turn
  * reads (ADR 014): a chat turn's, a party member's or a step's, each narrowed by its Delegations.
  * Every kind of turn that offers Task tools offers them this one way, so the tools a delegation
  * promises are the tools its member gets (#699), and every runtime that serves hub tools serves
- * memory (ADR 028). Without a service, a turn offers none of its tools.
+ * memory (ADR 028) and skills (ADR 029). Without a service, a turn offers none of its tools.
  */
 export const charmOffer = Effect.gen(function* () {
   const localGit = yield* Effect.serviceOption(LocalGitTools);
   const charms = yield* Effect.serviceOption(CharmTools);
   const memory = yield* Effect.serviceOption(MemoryTools);
+  const skills = yield* Effect.serviceOption(SkillTools);
   // Each reads the turn's access itself, so they are read side by side.
   return (turn: CharmTurn) =>
     Effect.all(
@@ -109,6 +111,7 @@ export const charmOffer = Effect.gen(function* () {
         Option.isSome(localGit) ? localGit.value.forTurn(turn) : Effect.succeed(null),
         Option.isSome(charms) ? charms.value.forTurn(turn) : Effect.succeed(null),
         Option.isSome(memory) ? memory.value.forTurn(turn) : Effect.succeed(null),
+        Option.isSome(skills) ? skills.value.forTurn(turn) : Effect.succeed(null),
       ],
       { concurrency: "unbounded" },
     ).pipe(Effect.map((sets) => combineHubTools(...sets)));

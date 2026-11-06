@@ -12,7 +12,10 @@ import {
 import { GIT_IDENTITY_VARIABLES } from "./sandbox.ts";
 
 /** A request a runtime tool call becomes: every kind but a Charm's, which the hub makes itself. */
-type ToolRequest = Exclude<PolicyRequest, { readonly _tag: "GitHub" | "PullRequest" | "GitHubComment" | "Memory" }>;
+type ToolRequest = Exclude<
+  PolicyRequest,
+  { readonly _tag: "GitHub" | "PullRequest" | "GitHubComment" | "Memory" | "Skills" }
+>;
 
 /**
  * Claude Code's tool calls in the policy engine's terms (ADR 014). Only what the call itself says is

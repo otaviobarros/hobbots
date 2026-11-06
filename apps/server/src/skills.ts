@@ -48,7 +48,7 @@ const sourceOf = (payload: SkillSourcePayload): SkillImportSource =>
     : payload;
 
 /** The library's refusals, in the words of the HTTP contract. */
-const importError = (error: SkillImportError) => {
+export const importError = (error: SkillImportError) => {
   switch (error._tag) {
     case "SkillRefused":
       return new SkillImportRefused({ check: error.check, path: error.path, message: error.message });

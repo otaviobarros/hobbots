@@ -16,6 +16,10 @@ const lead: Authority = {
     "outside-folders": "deny",
     "search-memory": "allow",
     "save-memory": "allow",
+    "search-skills": "allow",
+    "request-skill": "ask",
+    "propose-skill": "allow",
+    "skill-feedback": "allow",
   },
   // Its own override asks before a push; the other Asks are the preset's.
   fixed: ["push"],

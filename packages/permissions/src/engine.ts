@@ -14,6 +14,7 @@ import {
   ruleEnforcement,
   type SafetyPreset,
   type SandboxState,
+  SkillOperation,
   stableJson,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
@@ -117,6 +118,12 @@ export const PolicyRequest = Schema.TaggedUnion({
    * approval card. No grant answers an Ask: a rule could name nothing narrower than the tool.
    */
   Memory: { operation: MemoryOperation, scope: Schema.String },
+  /**
+   * A skill tool call (ADR 029), served on the hub over the skills library, never inside the
+   * sandbox, so it is decided on the hob's answers alone. `skill` names the skill it is about, or
+   * the search, for the approval card. No grant answers an Ask, as for memory.
+   */
+  Skills: { operation: SkillOperation, skill: Schema.String },
 });
 export type PolicyRequest = typeof PolicyRequest.Type;
 
@@ -217,7 +224,8 @@ export type ResolvedRequest =
       readonly repository: string;
       readonly number: number;
     }
-  | Extract<PolicyRequest, { readonly _tag: "Memory" }>;
+  | Extract<PolicyRequest, { readonly _tag: "Memory" }>
+  | Extract<PolicyRequest, { readonly _tag: "Skills" }>;
 
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
@@ -272,6 +280,10 @@ const OPERATION_WORDS: Record<PolicyOperation, string> = {
   "outside-folders": "anything outside the hob's folders",
   "search-memory": "searching memory",
   "save-memory": "saving to memory",
+  "search-skills": "searching skills",
+  "request-skill": "asking for a skill",
+  "propose-skill": "suggesting a skill",
+  "skill-feedback": "reporting a skill problem",
 };
 
 interface Answer {
@@ -638,6 +650,8 @@ const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: Re
       return evaluateGitHubWrite(context, scope, request);
     case "Memory":
       return { targets: [request.scope], answers: [fromLayers(context, request.operation)] };
+    case "Skills":
+      return { targets: [request.skill], answers: [fromLayers(context, request.operation)] };
   }
 };
 
@@ -771,6 +785,7 @@ export class PolicyEngine extends Context.Service<
           }
           case "Web":
           case "Memory":
+          case "Skills":
             return Effect.succeed(request);
           case "GitHub":
           case "PullRequest":

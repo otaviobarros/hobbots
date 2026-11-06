@@ -783,6 +783,8 @@ describe("only the user decides approvals and manages grants", () => {
     expect(named).toEqual(
       [
         join("apps", "server", "src", "user-session.ts"),
+        // Skill reviews import into the library, which only the server may reach (ADR 029).
+        join("apps", "server", "src", "skill-proposals.ts"),
         join("packages", "agents", "src", "approvals.ts"),
         join("packages", "agents", "src", "charm-calls.ts"),
         join("packages", "agents", "src", "devices.ts"),
@@ -791,6 +793,7 @@ describe("only the user decides approvals and manages grants", () => {
         join("packages", "agents", "src", "hub-questions.ts"),
         join("packages", "agents", "src", "memory-shares.ts"),
         join("packages", "agents", "src", "questions.ts"),
+        join("packages", "agents", "src", "skill-proposals.ts"),
         join("packages", "api", "src", "user-session.ts"),
       ].sort(),
     );
@@ -805,6 +808,8 @@ describe("only the user decides approvals and manages grants", () => {
       "grants.ts",
       "memory-shares.ts",
       "questions.ts",
+      "skill-proposals.ts",
+      join("..", "..", "..", "apps", "server", "src", "skill-proposals.ts"),
     ]) {
       const lines = readFileSync(join(root, "packages", "agents", "src", service), "utf8")
         .split("\n")

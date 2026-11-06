@@ -135,6 +135,26 @@ export const RULES: ReadonlyArray<RuleInfo> = [
     label: "Remember things",
     note: "Save notes to its own memory. You see a line in the chat each time.",
   },
+  {
+    operation: "search-skills",
+    label: "Look through your skills",
+    note: "Search the names and descriptions in your library, to find one to ask for.",
+  },
+  {
+    operation: "request-skill",
+    label: "Ask for a skill",
+    note: "Ask for a skill already in your library. Under Trusting it goes through, with Undo.",
+  },
+  {
+    operation: "propose-skill",
+    label: "Suggest a new skill or a change",
+    note: "Draft a skill, or a change to one it uses. New content always waits for you.",
+  },
+  {
+    operation: "skill-feedback",
+    label: "Report a skill problem",
+    note: "Note that a skill is wrong, outdated or unclear. You see the notes on the skill.",
+  },
 ];
 
 /** The operations the GitHub Charm card sets, in its order. Permissions lists the others. */

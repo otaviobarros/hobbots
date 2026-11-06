@@ -1,4 +1,4 @@
-import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
+import type { SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
 import type {
   ApprovalRequest,
   BackpackItem,
@@ -29,6 +29,7 @@ import { memorySharesQuery, waitingShares } from "../../api/memory-shares.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
 import { agentsQuery } from "../../api/queries.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
+import { skillProposalsQuery, waitingProposals } from "../../api/skill-proposals.ts";
 import { readStored, writeStored } from "../../lib/storage.ts";
 import { PageToastViewport } from "../archive/archive-toast.tsx";
 import { messages as blockerCopy } from "../blockers/messages.ts";
@@ -70,6 +71,7 @@ const NO_QUESTIONS: ReadonlyArray<WaitingQuestion> = [];
 const NO_FAILED: ReadonlyArray<FailedTask> = [];
 const NO_HUB: ReadonlyArray<HubQuestion> = [];
 const NO_SHARES: ReadonlyArray<MemoryShare> = [];
+const NO_PROPOSALS: ReadonlyArray<SkillProposalView> = [];
 
 type BlockersRead = ReturnType<typeof useBlockersQuery>;
 type QuestionsRead = ReturnType<typeof useWaitingQuestionsQuery>;
@@ -128,7 +130,8 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
   const reads: WaitReads = { blockers, questions, failed, hub };
   const devices = usePromptedDevices();
   const shares = useQuery(memorySharesQuery).data ?? NO_SHARES;
-  const entries = tabEntries(tab, requests, devices, reads, shares, requestId);
+  const proposals = useQuery(skillProposalsQuery).data ?? NO_PROPOSALS;
+  const entries = tabEntries(tab, requests, devices, reads, { shares, proposals }, requestId);
   const questOf = useEntryQuests(entries);
   return {
     questOf,
@@ -139,7 +142,11 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
     reads,
     entries,
     selected: tab === "history" || shown.hold !== undefined ? undefined : selectedEntry(entries, requestId),
-    waiting: waitingCount(approvals, reads) + devices.length + waitingShares(shares).length,
+    waiting:
+      waitingCount(approvals, reads) +
+      devices.length +
+      waitingShares(shares).length +
+      waitingProposals(proposals).length,
     empty: emptyState(tab, inbox.isSuccess, entries, reads),
   };
 };
@@ -332,7 +339,10 @@ const tabEntries = (
   requests: ReadonlyArray<ApprovalRequest>,
   devices: ReadonlyArray<WaitingDevice>,
   { questions, blockers, failed, hub }: WaitReads,
-  shares: ReadonlyArray<MemoryShare>,
+  {
+    shares,
+    proposals,
+  }: { readonly shares: ReadonlyArray<MemoryShare>; readonly proposals: ReadonlyArray<SkillProposalView> },
   selected: string | undefined,
 ): ReadonlyArray<InboxEntry> =>
   tab === "needs"
@@ -344,6 +354,7 @@ const tabEntries = (
         failed: failed.data ?? NO_FAILED,
         requests,
         shares,
+        proposals,
         selected,
       })
     : [];

@@ -22,6 +22,10 @@ export const PolicyOperation = Schema.Literals([
   "outside-folders",
   "search-memory",
   "save-memory",
+  "search-skills",
+  "request-skill",
+  "propose-skill",
+  "skill-feedback",
 ]);
 export type PolicyOperation = typeof PolicyOperation.Type;
 
@@ -30,6 +34,14 @@ export const POLICY_OPERATIONS: ReadonlyArray<PolicyOperation> = PolicyOperation
 /** The Memory group (ADR 028): `memory_search` and `memory_save` to the hob's own memory. */
 export const MemoryOperation = Schema.Literals(["search-memory", "save-memory"]);
 export type MemoryOperation = typeof MemoryOperation.Type;
+
+/**
+ * The Skills group (ADR 029): `skill_search`, `skill_request`, `skill_propose` and `skill_feedback`.
+ * A proposal always waits for your review whatever the answer here, which decides only whether the
+ * hob may make the call; a request for a skill already in the library follows the preset.
+ */
+export const SkillOperation = Schema.Literals(["search-skills", "request-skill", "propose-skill", "skill-feedback"]);
+export type SkillOperation = typeof SkillOperation.Type;
 
 /** Allow proceeds, Ask pauses the turn for an approval, Deny refuses (the UI says Never). */
 export const PolicyDecision = Schema.Literals(["allow", "ask", "deny"]);
@@ -61,6 +73,10 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "outside-folders": "deny",
     "search-memory": "allow",
     "save-memory": "allow",
+    "search-skills": "allow",
+    "request-skill": "ask",
+    "propose-skill": "allow",
+    "skill-feedback": "allow",
   },
   balanced: {
     "read-files": "allow",
@@ -76,6 +92,10 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "outside-folders": "deny",
     "search-memory": "allow",
     "save-memory": "allow",
+    "search-skills": "allow",
+    "request-skill": "ask",
+    "propose-skill": "allow",
+    "skill-feedback": "allow",
   },
   trusting: {
     "read-files": "allow",
@@ -91,6 +111,10 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "outside-folders": "deny",
     "search-memory": "allow",
     "save-memory": "allow",
+    "search-skills": "allow",
+    "request-skill": "allow",
+    "propose-skill": "allow",
+    "skill-feedback": "allow",
   },
 };
 
@@ -144,6 +168,10 @@ export const PolicyOverrides = Schema.Struct({
   "outside-folders": Schema.optionalKey(PolicyDecision),
   "search-memory": Schema.optionalKey(PolicyDecision),
   "save-memory": Schema.optionalKey(PolicyDecision),
+  "search-skills": Schema.optionalKey(PolicyDecision),
+  "request-skill": Schema.optionalKey(PolicyDecision),
+  "propose-skill": Schema.optionalKey(PolicyDecision),
+  "skill-feedback": Schema.optionalKey(PolicyDecision),
 });
 export type PolicyOverrides = typeof PolicyOverrides.Type;
 
