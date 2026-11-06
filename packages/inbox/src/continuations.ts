@@ -55,10 +55,25 @@ const firstLine = (text: string) => text.split("\n", 1)[0]?.trim() ?? "";
 
 const about = (task: Task) => `Task ${task.id} (${firstLine(task.brief)})`;
 
-/** A result, with what its Task made. */
-const describeResult = (task: Task, artifacts: ReadonlyArray<{ readonly label: string }>) => {
+/**
+ * How a turn is told the results that arrive with it: `inline` in what arrived, or `briefed` when
+ * its Task briefing lists them, as a lead's chat turn's does (#1040).
+ */
+export type ResultsIn = "inline" | "briefed";
+
+/** Where a lead's chat turn finds a result that arrived for it (#1040). */
+export const RESULT_IN_BRIEFING =
+  "Its result is under that Task in your briefing, this turn's or the one that listed it first; read_tasks shows it whole.";
+
+/**
+ * A result, with what its Task made. A turn whose briefing lists it is pointed there, so the result
+ * reaches its session once: in that briefing, or in the earlier one that listed it first (#1040).
+ */
+const describeResult = (task: Task, artifacts: ReadonlyArray<{ readonly label: string }>, results: ResultsIn) => {
   const made = artifacts.length === 0 ? "" : ` It made: ${artifacts.map((artifact) => artifact.label).join(", ")}.`;
-  return `${about(task)} finished. Its result: ${task.result?.summary ?? "none given"}.${made}`;
+  return results === "briefed"
+    ? `${about(task)} finished.${made} ${RESULT_IN_BRIEFING}`
+    : `${about(task)} finished. Its result: ${task.result?.summary ?? "none given"}.${made}`;
 };
 
 /** An approval's outcome, and whether its call ran. */
@@ -93,11 +108,11 @@ const answeredBy = (question: Question) =>
       : "";
 
 /** One item, as the continuation's prompt lists it: what arrived, and from where. */
-const describeArrival = (item: BackpackItem): string => {
+const describeArrival = (item: BackpackItem, results: ResultsIn): string => {
   const payload = item.payload;
   switch (payload._tag) {
     case "result":
-      return describeResult(payload.task, payload.artifacts);
+      return describeResult(payload.task, payload.artifacts, results);
     case "failure":
       return `${about(payload.task)} ended as ${payload.task.state}${payload.reason === undefined ? "." : `: ${payload.reason}`}`;
     case "checkpoint":
@@ -152,9 +167,14 @@ const digestSection = (items: ReadonlyArray<BackpackItem>, alone: boolean): Read
  * What a turn that carries backpack items is told (ADR 019). Hobbots writes it and says so, so the
  * hob never takes it for a message from you. As a continuation's prompt it asks the hob to act;
  * riding along a message of yours, it is context only, and your message comes first. Routine
- * progress is folded into one digest after the work that needs the hob.
+ * progress is folded into one digest after the work that needs the hob. A lead's chat turn is
+ * pointed to its briefing for each result, which lists it there (#1040).
  */
-export const arrivalsText = (items: ReadonlyArray<BackpackItem>, as: "prompt" | "context"): string => {
+export const arrivalsText = (
+  items: ReadonlyArray<BackpackItem>,
+  as: "prompt" | "context",
+  results: ResultsIn = "inline",
+): string => {
   const work = items.filter((item) => item.actionable);
   const progress = items.filter((item) => !item.actionable);
   return [
@@ -164,7 +184,7 @@ export const arrivalsText = (items: ReadonlyArray<BackpackItem>, as: "prompt" | 
         ? "Hobbots adds this, not the user."
         : "Hobbots adds this, not the user. Work also arrived for you since your last turn:",
     "",
-    ...work.map((item) => `- ${describeArrival(item)}`),
+    ...work.map((item) => `- ${describeArrival(item, results)}`),
     ...digestSection(progress, work.length === 0),
     "",
     as === "prompt"
@@ -187,7 +207,7 @@ export const startingText = (items: ReadonlyArray<BackpackItem>): string => {
   return [
     "Hobbots wrote this, not the user. This also arrived for you before you started:",
     "",
-    ...work.map((item) => `- ${describeArrival(item)}`),
+    ...work.map((item) => `- ${describeArrival(item, "inline")}`),
     ...digestSection(
       others.filter((item) => !item.actionable),
       work.length === 0,

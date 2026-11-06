@@ -6,7 +6,8 @@ import { hub, partyHub, send } from "./party-hub.ts";
 
 // Issue #1027: a lead's chat resumes the same session on every wake, yet each wake told it the whole
 // Quest again, every result so far included. A wake on the session that was told before is now
-// told only what changed since, so its prompts stay bounded as members finish.
+// told only what changed since, so its prompts stay bounded as members finish. A result that arrives
+// with a wake is told once, in the briefing that wake points to (#1040).
 
 let dispose: (() => Promise<void>) | undefined;
 afterEach(async () => {
@@ -16,6 +17,9 @@ afterEach(async () => {
 
 /** How a briefing of only what changed starts. */
 const SINCE_LAST_TURN = "Only what changed since your last turn is listed below";
+
+/** Where a woken lead is pointed for a result that arrived for it (#1040). */
+const RESULT_IN_BRIEFING = "Its result is under that Task in your briefing";
 
 const MEMBERS = ["Quill", "Rook", "Pip", "Nettle"] as const;
 
@@ -57,10 +61,14 @@ describe("a lead's briefing over a Quest", () => {
     // Its rules too: the wakes on the session that holds them are not told them again (#1039).
     expect(whole).toContain("Tell the user only what your Task tools did");
     for (const briefing of later) expect(briefing).not.toContain("Tell the user only what your Task tools did");
-    // Each result reaches the lead's briefings once, whichever wake carries it.
-    for (const hob of MEMBERS) {
-      expect(briefings.filter((briefing) => briefing.includes(`${hob} finished its part`))).toHaveLength(1);
-    }
+    // Each result reaches the lead once, whichever turn tells it: the wake that carries it points to
+    // the briefing instead of repeating it (#1040).
+    const told = requests
+      .filter((each) => (each.briefing ?? "").includes("for this conversation:"))
+      .map((each) => `${each.briefing}\n${each.prompt}`)
+      .join("\n");
+    for (const hob of MEMBERS) expect(told.split(`${hob} finished its part`)).toHaveLength(2);
+    expect(told).toContain(RESULT_IN_BRIEFING);
     // A turn that answers your message is told it all, every result included.
     await run(send(["How is it going?"]));
     const answering = await run(

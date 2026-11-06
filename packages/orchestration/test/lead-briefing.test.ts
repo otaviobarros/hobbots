@@ -219,3 +219,26 @@ describe("a lead's briefing on a resumed session", () => {
     expect(renderBrief(lead(tree).id, parts(tree), again.told).text).not.toContain("Which colour?");
   });
 });
+
+describe("a result that arrives with a lead's turn", () => {
+  // covers OR-004, OR-005
+  it("[TC-OR-606] is told in the briefing alone, whole up to the result limit, and once", () => {
+    const before = finishedBy(1);
+    const told = renderBrief(lead(before).id, parts(before), null).told;
+    const tree = finishedBy(2);
+    const rook = `t-${MEMBERS[1]}`;
+    const result = tree.tasks.find((each) => each.id === rook)?.result?.summary.trim() ?? "";
+    const carrying = [...ownerBriefingParts(lead(tree), tree, new Set([rook])), ...reportingRules(lead(tree), tree)];
+    // The wake that carries Rook's result: what arrived points here, so its line keeps the result whole.
+    const woken = renderBrief(lead(tree).id, carrying, told);
+    expect(woken.text).toContain(result);
+    // A turn that carries no result, as Continue, gets the summary.
+    const plain = renderBrief(lead(tree).id, parts(tree), told);
+    expect(plain.text).toContain(`${MEMBERS[1]} finished.`);
+    expect(plain.text).not.toContain(result);
+    // The mark is the one the summary leaves, so the next wake does not tell it again, and a whole
+    // briefing later tells the summary.
+    expect(woken.told).toEqual(plain.told);
+    expect(renderBrief(lead(tree).id, parts(tree), woken.told).text).not.toContain(`${MEMBERS[1]} finished.`);
+  });
+});

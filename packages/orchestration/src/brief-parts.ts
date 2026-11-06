@@ -11,6 +11,11 @@ import type { TaskBriefMark, TaskId } from "@hobbots/domain";
 interface BriefEntry {
   readonly key: string;
   readonly lines: ReadonlyArray<string>;
+  /**
+   * What this turn shows in place of `lines`, as a result told longer when it arrived with the turn
+   * (#1040). The mark keeps the fingerprint of `lines`, so a later turn compares with those.
+   */
+  readonly shown?: ReadonlyArray<string>;
 }
 
 export type BriefPart =
@@ -65,7 +70,7 @@ export const renderBrief = (taskId: TaskId, parts: ReadonlyArray<BriefPart>, tol
       entries[key] = digest;
       return since?.[key] !== digest;
     });
-    return changed.length === 0 ? [] : [...part.heading, ...changed.flatMap((entry) => entry.lines)];
+    return changed.length === 0 ? [] : [...part.heading, ...changed.flatMap((entry) => entry.shown ?? entry.lines)];
   });
   const [first = "", ...rest] = lines;
   return {

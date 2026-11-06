@@ -229,14 +229,14 @@ const briefedUnder = (task: Task, tree: TaskTree): ReadonlyArray<{ readonly task
  * One line for a Task under the owner's, indented by how deep it sits: its state, then its result
  * or its latest checkpoint, a reported one before routine progress.
  */
-const childLine = (child: Task, tree: TaskTree, place: string) => {
+const childLine = (child: Task, tree: TaskTree, place: string, resultLimit = SUMMARY_LIMIT) => {
   const own = tree.checkpoints.filter((checkpoint) => checkpoint.taskId === child.id);
   const latest = own.filter((checkpoint) => checkpoint.kind !== "progress").at(-1) ?? own.at(-1);
   // Held by a Task it comes after that failed, was cancelled or is blocked: it waits for its owner.
   const stuck = child.state === "queued" && TaskReadiness.of(child, tree.tasks)._tag === "Blocked";
   const outcome =
     child.result !== null
-      ? ` Result: ${cut(child.result.summary, SUMMARY_LIMIT)}`
+      ? ` Result: ${cut(child.result.summary, resultLimit)}`
       : latest === undefined
         ? ""
         : ` Latest: ${latest.kind}, ${cut(checkpointText(latest, SUMMARY_LIMIT), 2 * SUMMARY_LIMIT)}`;
@@ -315,8 +315,17 @@ const STOPPED_STEP =
  * question no lead can answer and the finish, nothing between (#901). Transcripts never reach it.
  * The answers and the work under it are lists, so a resumed session is told only what changed in
  * them (#1027). The rules are told once a session, and again only once they change (#1039).
+ * Each result is told here only: what arrives with a turn points to it (#1040).
  */
-export const ownerBriefingParts = (task: Task, tree: TaskTree): ReadonlyArray<BriefPart> => {
+export const ownerBriefingParts = (
+  task: Task,
+  tree: TaskTree,
+  /**
+   * The Tasks whose results arrived with the turn (#1040). What arrived points to the briefing for
+   * them, so their lines keep each result up to `RESULT_LIMIT` instead of a summary.
+   */
+  arrived: ReadonlySet<string> = new Set(),
+): ReadonlyArray<BriefPart> => {
   const under = briefedUnder(task, tree);
   const above = ancestorsOf(task, tree.tasks).length;
   const answers = answeredFor(task, tree).map((question) => ({
@@ -341,6 +350,8 @@ export const ownerBriefingParts = (task: Task, tree: TaskTree): ReadonlyArray<Br
             entries: under.map(({ task: child, place }) => ({
               key: child.id,
               lines: childLine(child, tree, place),
+              ...(child.result !== null &&
+                arrived.has(child.id) && { shown: childLine(child, tree, place, RESULT_LIMIT) }),
             })),
           } satisfies BriefPart,
           rule(

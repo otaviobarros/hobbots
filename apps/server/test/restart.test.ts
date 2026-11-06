@@ -10,7 +10,7 @@ import {
   TaskRepository,
 } from "@hobbots/agents";
 import { Agent, AgentId, AttemptId, type BackpackItem, type Message, TaskId, Thread, ThreadId } from "@hobbots/domain";
-import { Backpack, Dispatcher } from "@hobbots/inbox";
+import { Backpack, Dispatcher, RESULT_IN_BRIEFING } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import {
   ApprovalRepositoryLive,
@@ -274,7 +274,9 @@ describe("recovering after a restart", () => {
     const all = await second.run(messagesWhen((each) => each.length === 3));
     expect(all.map((m) => m.status)).toEqual(["complete", "complete", "complete"]);
     expect(continuations(all)).toHaveLength(1);
-    expect(second.requests.find((r) => r.prompt.startsWith(CONTINUATION))?.prompt).toContain("finished. Its result:");
+    expect(second.requests.find((r) => r.prompt.startsWith(CONTINUATION))?.prompt).toContain(
+      `finished. ${RESULT_IN_BRIEFING}`,
+    );
     const done = await second.run(settled(result.id));
     expect(done.disposition).toEqual({ _tag: "consumed", by: all[2]?.id });
   });
@@ -408,7 +410,7 @@ describe("recovering after a restart", () => {
 
     const second = await start(database);
     const all = await second.run(messagesWhen((each) => each.length === 1));
-    expect(second.requests.find((r) => r.prompt.startsWith(CONTINUATION))?.prompt).toContain("Reached the pass");
+    expect(second.requests.find((r) => r.prompt.startsWith(CONTINUATION))?.briefing).toContain("Reached the pass");
     const [tree] = await second.run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
     const step = tree?.tasks.find((task) => task.id === stepId);
     expect(step?.state).toBe("completed");
