@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-06
 - **Issue:** [#951](https://github.com/otaviobarros/hobbots/issues/951)
-- **Pull request:** [#PRNUM](https://github.com/otaviobarros/hobbots/pull/PRNUM)
+- **Pull request:** [#1050](https://github.com/otaviobarros/hobbots/pull/1050)
 - **Commit:** `ceb66e9` on `main`, with a clean tree
 - **Setup:** Apple M1 Pro, macOS 27.0.1, arm64, an ad hoc signed `pnpm package:mac` build, ai-memory 3.4.2, Claude Code 2.1.316 on a signed-in subscription with the `haiku` model, Codex 0.166.0 on a signed-in subscription with the `gpt-6-luna` model, both on low effort. The memory model was the default, which resolves to `haiku`. The app ran on a new data folder (`--user-data-dir`) with `HOBBOTS_MODE=hub` and opening at login off, never the Mac's Hobbots data, under the Balanced preset, with one approved Git folder and no remote. Hobs: Moss and Fern on Claude Code, Reed and Sedge on Codex.
 - **Result:** Passed with gaps. On both runtimes a share reaches another hob only after it is approved in the Inbox, and stopping ai-memory in the middle of a chat loses no save and no turn. Three bugs came up, and none of them breaks these checks: search misses plain questions, a long Codex command ends as uncertain, and a session page reads a kept save as lost.
