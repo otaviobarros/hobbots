@@ -22,6 +22,7 @@ import {
   TaskNote,
   TaskWait,
 } from "./quest.ts";
+import { Skill, SkillAssignment, SkillOptOut, SkillRevision, SkillRevisionHash, SkillSource } from "./skills.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { Thread } from "./thread.ts";
 
@@ -155,6 +156,27 @@ const MemorySaveChanged = Schema.TaggedStruct("MemorySaveChanged", { save: Memor
 const MemoryShareRequested = Schema.TaggedStruct("MemoryShareRequested", { share: MemoryShare });
 /** A share moved: it went through, you shared it or kept it private, or you took it back. */
 const MemoryShareChanged = Schema.TaggedStruct("MemoryShareChanged", { share: MemoryShare });
+/**
+ * A revision joined the library (ADR 029): a new skill's first, or a later one of a skill it has, with
+ * the source it was read from when that source is new. `skill` is the skill as it now is.
+ */
+const SkillRevisionAdded = Schema.TaggedStruct("SkillRevisionAdded", {
+  skill: Skill,
+  revision: SkillRevision,
+  source: Schema.NullOr(SkillSource),
+});
+/** A skill was assigned to a scope, pinned to a revision, or an assignment's Only when asked changed. */
+const SkillAssigned = Schema.TaggedStruct("SkillAssigned", { assignment: SkillAssignment });
+/** A skill was taken off a scope. */
+const SkillUnassigned = Schema.TaggedStruct("SkillUnassigned", { assignment: SkillAssignment });
+/** An assignment's pin moved from `from` to its `pin`: a rollout, or a rollback to an older revision. */
+const SkillRolledOut = Schema.TaggedStruct("SkillRolledOut", { assignment: SkillAssignment, from: SkillRevisionHash });
+/** An assignment was held on its revision (Keep on r4), or let follow rollouts again; `held` says which. */
+const SkillHeld = Schema.TaggedStruct("SkillHeld", { assignment: SkillAssignment });
+/** A hob turned an Everyone or Project skill off for itself, or on again. */
+const SkillOptOutChanged = Schema.TaggedStruct("SkillOptOutChanged", { optOut: SkillOptOut, optedOut: Schema.Boolean });
+/** A skill left the library, with its assignments gone before it. Its revisions' files stay for backups. */
+const SkillRemoved = Schema.TaggedStruct("SkillRemoved", { skill: Skill });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
 const FolderScanned = Schema.TaggedStruct("FolderScanned", { scan: FolderScan });
 /**
@@ -242,6 +264,13 @@ export const JournaledEvent = Schema.Union([
   MemorySaveChanged,
   MemoryShareRequested,
   MemoryShareChanged,
+  SkillRevisionAdded,
+  SkillAssigned,
+  SkillUnassigned,
+  SkillRolledOut,
+  SkillHeld,
+  SkillOptOutChanged,
+  SkillRemoved,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -308,6 +337,13 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   MemorySaveChanged: 1,
   MemoryShareRequested: 1,
   MemoryShareChanged: 1,
+  SkillRevisionAdded: 1,
+  SkillAssigned: 1,
+  SkillUnassigned: 1,
+  SkillRolledOut: 1,
+  SkillHeld: 1,
+  SkillOptOutChanged: 1,
+  SkillRemoved: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

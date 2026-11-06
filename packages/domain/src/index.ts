@@ -36,6 +36,7 @@ export * from "./roles.ts";
 export * from "./runtime.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
+export * from "./skills.ts";
 export * from "./steering.ts";
 export * from "./task.ts";
 export * from "./task-files.ts";

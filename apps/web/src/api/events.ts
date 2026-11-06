@@ -141,11 +141,30 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
+  // No screen shows the skills library yet (ADR 029, #1062).
+  "SkillRevisionAdded",
+  "SkillAssigned",
+  "SkillUnassigned",
+  "SkillRolledOut",
+  "SkillHeld",
+  "SkillOptOutChanged",
+  "SkillRemoved",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
   {
-    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded";
+    readonly _tag:
+      | "TurnStopRequested"
+      | "TurnStopped"
+      | "TurnStarted"
+      | "TurnEnded"
+      | "SkillRevisionAdded"
+      | "SkillAssigned"
+      | "SkillUnassigned"
+      | "SkillRolledOut"
+      | "SkillHeld"
+      | "SkillOptOutChanged"
+      | "SkillRemoved";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
