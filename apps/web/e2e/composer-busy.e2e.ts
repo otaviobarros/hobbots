@@ -75,6 +75,7 @@ const expectOneLine = async (hint: Locator) => {
 // covers CH-007, CH-008
 test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself, and Send says when it goes", async ({
   page,
+  scan,
 }) => {
   await openMoss(page);
   const composer = page.getByRole("textbox", { name: /^Message Moss/ });
@@ -106,6 +107,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   expect(Math.round(stopBox?.height ?? 0)).toBe(Math.round(sendBox?.height ?? -1));
   expect((stopBox?.x ?? 0) < (sendBox?.x ?? 0)).toBe(true);
   await expect(composer).toBeFocused();
+  await scan();
 
   // With a draft: the hint says when it goes and Send lights up. Escape does not stop the reply.
   await composer.fill("Also check the hero image on phones");
@@ -113,6 +115,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   await expect(sendsAfter).toBeVisible();
   await expectOneLine(sendsAfter);
   await expect(sendAfter).toBeEnabled();
+  await scan(composerCard(page));
   await composer.press("Escape");
   await expect(stopButton(page)).toBeVisible();
   await expect(composer).toHaveValue("Also check the hero image on phones");
@@ -126,6 +129,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   const [rowBox, cardBox] = [await row.boundingBox(), await composerCard(page).boundingBox()];
   expect((rowBox?.y ?? 0) + (rowBox?.height ?? 0)).toBeLessThanOrEqual(cardBox?.y ?? 0);
   await expect(hint).toBeVisible();
+  await scan();
 
   // Stopping: Stopping… until the hob confirms, and the hint says what is kept.
   await composer.fill("a draft that stays");
@@ -134,6 +138,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   const stopping = composerCard(page).getByText("Stopping. What Moss wrote so far is kept.", { exact: true });
   await expect(stopping).toBeVisible();
   await expectOneLine(stopping);
+  await scan(composerCard(page));
 
   // The waiting message then joins the transcript as usual, and the draft is still there.
   await expect(page.getByText("Echo: Also check the hero image on phones", { exact: true })).toBeVisible({
@@ -149,6 +154,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
 // covers AG-006, CH-008
 test("[TC-CH-291] a paused hob keeps Wake first and Queue in a thread, and a new thread keeps its draft", async ({
   page,
+  scan,
 }) => {
   const { current, mossId } = await openMoss(page);
   const composer = page.getByRole("textbox", { name: /^Message Moss/ });
@@ -166,6 +172,7 @@ test("[TC-CH-291] a paused hob keeps Wake first and Queue in a thread, and a new
   await expect(composer).toHaveValue("Plan the autumn page");
   await expect(composerCard(page)).toContainText("Paused hobs take no new work.");
   await expect(page.getByRole("button", { name: "Queue", exact: true })).toHaveCount(0);
+  await scan();
 
   // In the thread: Wake comes first, then Queue, which keeps the message until Moss wakes.
   await page.goto(threadUrl);
@@ -179,6 +186,7 @@ test("[TC-CH-291] a paused hob keeps Wake first and Queue in a thread, and a new
   ];
   expect((wake?.x ?? 0) < (queue?.x ?? 0)).toBe(true);
   expect(Math.round(wake?.height ?? 0)).toBe(34);
+  await scan();
 });
 
 const themeIds: readonly string[] = (
@@ -193,6 +201,7 @@ test.describe("beside the Quest room", () => {
   // covers CH-007, UX-002
   test("[TC-CH-292] beside the Quest room the busy hint keeps only the dot and Replying, on one line in every theme and at larger text", async ({
     page,
+    scan,
   }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1024, height: 800 });
@@ -217,16 +226,18 @@ test.describe("beside the Quest room", () => {
     for (const textSize of ["standard", "larger"]) {
       for (const theme of themeIds) {
         const at = `${theme}, ${textSize} text`;
+        // Each look is set in place, as the app sets it, so every one is checked on the same screen
+        // as the reply runs, with the window guard watching throughout.
         await page.evaluate(
-          ([id, size]) => {
-            localStorage.setItem("hobbots.theme", JSON.stringify(id));
-            localStorage.setItem("hobbots.text-size", JSON.stringify(size));
+          ({ id, size }) => {
+            const root = document.documentElement;
+            root.setAttribute("data-theme", id);
+            if (size === "larger") root.setAttribute("data-text-size", size);
+            else root.removeAttribute("data-text-size");
           },
-          [theme, textSize],
+          { id: theme, size: textSize },
         );
-        await page.reload();
         await expect(page.locator("html"), at).toHaveAttribute("data-theme", theme);
-        await expect(stopButton(page), at).toBeVisible();
         const short = card.getByText("Replying", { exact: true });
         await expect(short, at).toBeVisible();
         await expect(card.getByText("Aldric is replying", { exact: true }), at).toBeHidden();
@@ -237,6 +248,7 @@ test.describe("beside the Quest room", () => {
         await expect(page.getByRole("button", { name: "Send after this reply" }), at).toBeVisible();
         const [hintBox, stopBox] = [await short.boundingBox(), await stopButton(page).boundingBox()];
         expect((hintBox?.x ?? 0) + (hintBox?.width ?? 0), at).toBeLessThanOrEqual(stopBox?.x ?? 0);
+        await scan(chat);
       }
     }
   });

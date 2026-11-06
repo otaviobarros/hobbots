@@ -120,7 +120,7 @@ export function Composer({
   return (
     <div
       data-composer=""
-      className="cut focus-ring-within flex flex-none flex-col gap-1 border-(length:--edge) border-line-2 bg-card py-2 ps-4 pe-2.5 focus-within:border-focus-ring has-[textarea:disabled]:border-line has-[textarea:disabled]:opacity-70"
+      className="cut focus-ring-within flex flex-none flex-col gap-1 border-(length:--edge) border-line-2 bg-card py-2 ps-4 pe-2.5 focus-within:border-focus-ring has-[textarea:disabled]:border-line"
     >
       <textarea
         ref={input}

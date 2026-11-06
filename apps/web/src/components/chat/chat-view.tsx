@@ -297,13 +297,17 @@ export function ChatView({
       )}
       {threadId && <PinNotes threadId={threadId} pins={pins} />}
 
-      <div
+      <section
         onScroll={(event) => {
           const view = event.currentTarget;
           if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
         }}
         ref={stayAtEnd}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px] @max-[480px]/chat:px-4"
+        // A keyboard user scrolls the transcript once it has the focus (WCAG 2.1.1).
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling area must take the focus to scroll from the keyboard
+        tabIndex={0}
+        aria-label={copy.transcript}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px] outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring @max-[480px]/chat:px-4"
       >
         {/* The transcript, the tray and the composer share one centered column (A2-01). Long words
             and paths wrap inside it, so nothing in it is wider than the column (#874). */}
@@ -372,7 +376,7 @@ export function ChatView({
           )}
           <div ref={bottom} />
         </div>
-      </div>
+      </section>
 
       {/* Folded away beside the room, the chat leaves its toasts to the room's own place. */}
       {inView && <ArchiveToastViewport />}

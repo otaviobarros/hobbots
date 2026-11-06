@@ -321,6 +321,8 @@ export const messages = {
   },
   chat: {
     landmark: "Chat",
+    /** The transcript's scrolling area, which takes the keyboard focus so it scrolls from the keyboard. */
+    transcript: "Messages",
     editHob: "Edit hob",
     ideas: ["Plan a product launch", "Sum up this week's inbox", "Tidy my Downloads folder"],
     askWhat: "What are we making?",
