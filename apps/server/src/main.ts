@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
+import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
@@ -7,6 +8,7 @@ import {
   ApprovalService,
   CharmCallService,
   ChatService,
+  CommitIdentityQuestions,
   DataExport,
   DeviceService,
   GrantService,
@@ -97,7 +99,7 @@ import { DispatcherHostLive } from "./backpack.ts";
 import { BackupHolds, HeldActivityStore, HeldRuntimes } from "./backup-holds.ts";
 import { HubBackups } from "./backups.ts";
 import { BlockOnRetirement } from "./blockers.ts";
-import { CommitIdentityGateLive } from "./commit-identity.ts";
+import { ConnectedGitHubUserLive, UserGitIdentityLive } from "./commit-identity.ts";
 import { ServerConfig } from "./config.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "./continuations.ts";
 import { SaveDestinationsLive } from "./destination.ts";
@@ -490,7 +492,18 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(HobToolsLive))
       // Before every turn's tools: who a hob on your account commits as when your Git config sets no
       // one, which the hub asks you and keeps (#741).
-      .pipe(Layer.provideMerge(CommitIdentityGateLive()))
+      .pipe(
+        Layer.provideMerge(
+          CommitIdentityQuestions.layer.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                UserGitIdentityLive(Option.getOrElse(config.gitHome, () => homedir())),
+                ConnectedGitHubUserLive,
+              ),
+            ),
+          ),
+        ),
+      )
       // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
       .pipe(Layer.provideMerge(HubQuestions.layer))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.

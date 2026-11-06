@@ -31,6 +31,7 @@ import {
   TaskReadiness,
   type TaskTree,
   type TurnEnding,
+  taskChat,
 } from "@hobbots/domain";
 import { DateTime, Effect, FiberMap, Option, Semaphore } from "effect";
 import { type PathSeparator, sharedFolders } from "./authority.ts";
@@ -390,7 +391,8 @@ export const makeMemberRunner = (deps: MemberDeps) => {
             const run: Running = {
               agentId,
               rootId: task.rootId,
-              access: narrowed(yield* deps.hobTools.access(agent.value)),
+              // Its turn starts here, so a question about it goes to the Quest's chat (#741).
+              access: narrowed(yield* deps.hobTools.access(agent.value, { chat: taskChat(task, tree.tasks) })),
               accessNow: Effect.map(accessNow(repo, deps.hobTools, agentId), narrowed),
               stop: null,
             };

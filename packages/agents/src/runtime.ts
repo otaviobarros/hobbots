@@ -3,6 +3,7 @@ import {
   type ApprovalLifetime,
   type CommitIdentity,
   type Effort,
+  type GitIdentity,
   type Grant,
   type GrantId,
   type GrantRule,
@@ -173,6 +174,11 @@ export interface ToolAccess {
    * identity the user gave the hub when it asked them (#741). Absent until they answer.
    */
   readonly userIdentity?: CommitIdentity;
+  /**
+   * The name and email the user's own Git config sets, as the hub read it when the turn started.
+   * Absent, a runtime reads the config itself.
+   */
+  readonly userGitIdentity?: GitIdentity;
 }
 
 /** A tool call the policy answered Ask for, as an adapter asks the user about it (PE-003). */

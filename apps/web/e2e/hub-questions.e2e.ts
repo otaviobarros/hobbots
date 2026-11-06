@@ -95,7 +95,10 @@ test("[TC-UX-912] Home's Needs you shows the hub's question with its choices, an
   page,
   scan,
 }) => {
-  await hubThatAsks(page);
+  // Once the Inbox shows the question, which it then keeps in the address, Home is opened.
+  const list = await hubThatAsks(page);
+  await expect(row(list, /How often should the hub back up/)).toBeVisible({ timeout: 15_000 });
+  await expect(page).toHaveURL(/request=hub-question/);
   await page.getByRole("link", { name: "Home", exact: true }).click();
   const needsYou = page.getByRole("region", { name: "Needs you", exact: true });
   const tray = needsYou.getByRole("region", { name: /^Needs you, \d of 2$/ });

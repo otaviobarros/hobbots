@@ -490,6 +490,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
         command,
         cwd: config.workspaceDir,
         instructions: codexInstructions(turnInstructions(request.instructions, false)),
+        commits: "",
         gate: refuseTools,
         session: {},
       };
@@ -508,6 +509,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
           commits.note,
         ),
       ),
+      commits: commits.now,
       gate: withPolicy(policyGate(policy.engine, tools, request, sandbox !== null)),
       session: sessionPolicy(tools),
     };
@@ -621,7 +623,7 @@ const turnEvents = (
       const started: TurnStartResponse = yield* server
         .request("turn/start", {
           threadId,
-          input: [{ type: "text", text: turnPrompt(request, launch.instructions), text_elements: [] }],
+          input: [{ type: "text", text: turnPrompt(request, launch.instructions, launch.commits), text_elements: [] }],
           ...TURN_SETTINGS,
           ...(request.model ? { model: request.model } : {}),
           ...(request.effort ? { effort: request.effort } : {}),

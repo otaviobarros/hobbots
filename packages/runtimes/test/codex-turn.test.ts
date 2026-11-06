@@ -711,7 +711,7 @@ describe("who a Codex hob's commits are made as", () => {
       ...(userIdentity ? { userIdentity } : {}),
     });
     /** Starts a turn as the hub would, with the user's home holding no Git config, and returns what Codex got. */
-    const launch = async (userIdentity?: typeof given) => {
+    const launch = async (userIdentity?: typeof given, sessionId: string | null = null) => {
       const server = fakeServer({ script: [completed("completed")] });
       const turnConfig: CodexTurnConfig = {
         ...config(server.start),
@@ -721,12 +721,14 @@ describe("who a Codex hob's commits are made as", () => {
       const before = process.env.HOME;
       process.env.HOME = home;
       try {
-        await run(turnConfig, prompt({ tools: tools(userIdentity) }));
+        await run(turnConfig, prompt({ tools: tools(userIdentity), sessionId }));
       } finally {
         process.env.HOME = before;
       }
       const started = server.requests.find((request) => request.method === "thread/start");
+      const turn = server.requests.find((request) => request.method === "turn/start");
       return {
+        prompt: JSON.stringify(turn?.params ?? {}),
         env: server.commands.at(-1)?.env ?? {},
         instructions: ((started?.params ?? {}) as { developerInstructions?: string }).developerInstructions ?? "",
       };
@@ -754,6 +756,12 @@ describe("who a Codex hob's commits are made as", () => {
     expect(asGiven.instructions).toContain(`made as ${given.name} <${given.email}>`);
     expect(asGiven.instructions).not.toContain(NO_GIT_IDENTITY_NOTE);
     expect(commit(asGiven.env)).toBe(`${given.name} <${given.email}>`);
+
+    // A Codex thread keeps the instructions it started with, so a resumed one started before you
+    // answered is told in its prompt who it commits as now.
+    const resumed = await launch(given, "thr-1");
+    expect(resumed.prompt).toContain(`<commit-identity>\\nYour commits are made as ${given.name} <${given.email}>`);
+    expect((await launch(undefined, "thr-1")).prompt).toContain("No Git identity is set for your commits yet");
   });
 });
 

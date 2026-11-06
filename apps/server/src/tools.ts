@@ -1,10 +1,17 @@
 import { realpathSync } from "node:fs";
 import { basename, dirname, join, sep } from "node:path";
-import { effectiveFolders, FolderChecks, HobGitHubApps, HobTools, openTools, operationDecision } from "@hobbots/agents";
+import {
+  CommitIdentityQuestions,
+  effectiveFolders,
+  FolderChecks,
+  HobGitHubApps,
+  HobTools,
+  openTools,
+  operationDecision,
+} from "@hobbots/agents";
 import { hobAppCommitIdentity } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { Effect, Layer, Option } from "effect";
-import { CommitIdentityGate } from "./commit-identity.ts";
 import { Installation } from "./installation.ts";
 
 /**
@@ -27,9 +34,9 @@ export const HobToolsLive = Layer.effect(
     // A hob's own GitHub App, on a hub with the GitHub Charm (ADR 022), makes the hob commit as its bot.
     const apps = yield* Effect.serviceOption(HobGitHubApps);
     // A hob on your account commits as you, or as who you told the hub when your Git config sets no one (#741).
-    const identities = yield* Effect.serviceOption(CommitIdentityGate);
+    const identities = yield* Effect.serviceOption(CommitIdentityQuestions);
     return HobTools.of({
-      access: (agent) =>
+      access: (agent, turn) =>
         Effect.gen(function* () {
           const { safetyPreset, approvedFolders } = yield* setup.get;
           const folders = yield* effectiveFolders(folderChecks, approvedFolders, agent.policy);
@@ -55,13 +62,15 @@ export const HobToolsLive = Layer.effect(
             app === null &&
             turnFolders.length > 0 &&
             openTools((operation) => operationDecision(policy, operation)).commands;
-          const userIdentity = commits && Option.isSome(identities) ? yield* identities.value.forTurn(agent.id) : null;
+          const identity =
+            commits && Option.isSome(identities) ? yield* identities.value.forTurn(agent.id, turn) : null;
           return {
             policy,
             folders: turnFolders,
             runtimeFolder: join(runtimeFolders(dataDir), agent.id),
             ...(app === null ? {} : { commitAs: hobAppCommitIdentity(app) }),
-            ...(userIdentity === null ? {} : { userIdentity }),
+            ...(identity === null ? {} : { userGitIdentity: identity.userGitIdentity }),
+            ...(identity?.userIdentity ? { userIdentity: identity.userIdentity } : {}),
           };
         }).pipe(
           // Without its policy the hob gets no tools: closed, never open.

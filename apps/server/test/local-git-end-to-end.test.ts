@@ -16,13 +16,16 @@ import {
   ActivityRecorder,
   ApprovalService,
   ChatService,
+  CommitIdentityQuestions,
   GrantService,
   HobAdmission,
   HobLifecycle,
   HobService,
+  HubQuestions,
   PermissionSummary,
   SecretRedaction,
   TaskFiles,
+  UserGitIdentity,
 } from "@hobbots/agents";
 import type { AttemptActivityRead, ThreadTasksRead } from "@hobbots/api";
 import { LocalGitToolsLive } from "@hobbots/charms";
@@ -45,6 +48,8 @@ import {
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
+  HubCommitIdentityRepository,
+  HubQuestionRepositoryLive,
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
@@ -112,6 +117,17 @@ beforeAll(() => {
     .pipe(Layer.provideMerge(ApprovalService.layer))
     .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))
+    // The user's Git config sets an identity, whatever the machine running the test has (#741).
+    .pipe(Layer.provideMerge(CommitIdentityQuestions.layer))
+    .pipe(Layer.provideMerge(HubQuestions.layer))
+    .pipe(
+      Layer.provideMerge(
+        Layer.succeed(
+          UserGitIdentity,
+          UserGitIdentity.of({ read: Effect.succeed({ name: "Otavio", email: "otavio@example.com" }) }),
+        ),
+      ),
+    )
     .pipe(Layer.provideMerge(LocalGit))
     .pipe(Layer.provideMerge(CanonicalSharedFolders))
     .pipe(
@@ -124,6 +140,8 @@ beforeAll(() => {
             TaskRepositoryLive,
             TaskToolCallsLive,
             ActivityRepositoryLive,
+            HubQuestionRepositoryLive,
+            HubCommitIdentityRepository,
             EventJournal.layer,
             BackpackLive,
             SetupRepository.layer,

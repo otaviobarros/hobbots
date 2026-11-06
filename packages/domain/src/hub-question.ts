@@ -31,6 +31,19 @@ export const HubQuestionChat = Schema.Struct({ agentId: AgentId, threadId: Threa
 export type HubQuestionChat = typeof HubQuestionChat.Type;
 
 /**
+ * The chat a question about `task`'s work concerns: the thread whose request started its tree, which
+ * belongs to the hob that owns the tree's top Task. A Quest's members and steps all point to it, so
+ * a question there shows in the Quest's own chat. Null for work with no thread.
+ */
+export const taskChat = (
+  task: { readonly rootId: string; readonly threadId: ThreadId | null },
+  tasks: ReadonlyArray<{ readonly id: string; readonly ownerId: AgentId }>,
+): HubQuestionChat | null => {
+  const root = tasks.find((each) => each.id === task.rootId);
+  return task.threadId === null || root === undefined ? null : { agentId: root.ownerId, threadId: task.threadId };
+};
+
+/**
  * What the hub raises a question with. It needs a subject and never names a Task; its choices follow
  * the same rules as a hob's (#740), with `recommended` an index from 0.
  */

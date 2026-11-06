@@ -309,6 +309,11 @@ describe("a hob's instructions on a resumed Claude Code session", () => {
       /<\/current-instructions>\n\n## Since your last reply\n\nhi$/,
     );
     expect(turnPrompt({ ...request, sessionId: "s1", instructionsChanged: false, briefing: null })).toBe("hi");
+    // A resumed session keeps its first system prompt, so it is told who it commits as now (#741).
+    expect(turnPrompt({ ...request, sessionId: "s1", instructionsChanged: false }, "", "Commit as Ada.")).toBe(
+      "<commit-identity>\nCommit as Ada.\n</commit-identity>\n\nhi",
+    );
+    expect(turnPrompt({ ...request, sessionId: null }, "", "Commit as Ada.")).toBe("hi");
   });
 });
 

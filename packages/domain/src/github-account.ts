@@ -83,6 +83,12 @@ export const hobAppCommitIdentity = (app: Pick<HobGitHubApp, "slug" | "botUserId
   };
 };
 
+/** The name and email the user's own Git config sets, either of which may be missing. */
+export interface GitIdentity {
+  readonly name: string | null;
+  readonly email: string | null;
+}
+
 /** A GitHub account as GitHub's `/user` gives it: its login, numeric ID and profile name, if set. */
 export interface GitHubUser {
   readonly login: string;

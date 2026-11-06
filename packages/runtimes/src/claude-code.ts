@@ -36,6 +36,7 @@ import {
 import {
   type CommitIdentity,
   GIT_INIT_TOOL,
+  type GitIdentity,
   type PlanUsage,
   policySandbox,
   type ReplyUsage,
@@ -721,6 +722,7 @@ export const wholeTurn = () => {
 export const turnPrompt = (
   request: Pick<PromptRequest, "prompt" | "briefing" | "sessionId" | "instructions" | "instructionsChanged">,
   instructions: string = request.instructions,
+  commits = "",
 ) => {
   const current =
     request.sessionId && request.instructionsChanged
@@ -734,7 +736,9 @@ export const turnPrompt = (
         ]
       : [];
   const briefing = request.briefing ? [request.briefing, ""] : [];
-  return [...current, ...briefing, request.prompt].join("\n");
+  // A resumed session keeps its first system prompt, so who it commits as now is said again (#741).
+  const identity = request.sessionId && commits !== "" ? ["<commit-identity>", commits, "</commit-identity>", ""] : [];
+  return [...current, ...identity, ...briefing, request.prompt].join("\n");
 };
 
 /** A turn with tools: the context every call is decided under, its folders and the tools offered. */
@@ -756,6 +760,8 @@ export interface ToolTurn {
    * identity the user gave Hobbots (#741).
    */
   readonly userIdentity?: CommitIdentity;
+  /** The user's own Git identity as the hub read it at the turn's start. */
+  readonly userGitIdentity?: GitIdentity;
   /** Who its commits are made as, which a refused identity override names; the user's config when absent. */
   readonly commitsAs?: CommitsAs;
 }
@@ -813,6 +819,7 @@ export const toolTurn = (
     ...(hubTools?.tools.some((tool) => tool.name === GIT_INIT_TOOL) ? { initTool: GIT_INIT_TOOL } : {}),
     ...(access.commitAs ? { commitAs: access.commitAs, commitsAs: { _tag: "Bot", identity: access.commitAs } } : {}),
     ...(access.userIdentity ? { userIdentity: access.userIdentity } : {}),
+    ...(access.userGitIdentity ? { userGitIdentity: access.userGitIdentity } : {}),
   };
 };
 
@@ -1173,7 +1180,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const turn = yield* Effect.acquireRelease(
             Effect.sync(() =>
               query({
-                prompt: turnPrompt(request, instructions),
+                prompt: turnPrompt(request, instructions, commits.now),
                 options: withHubTools(
                   {
                     ...base,

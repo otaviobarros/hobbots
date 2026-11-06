@@ -6,17 +6,29 @@ import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
   ChatService,
+  CommitIdentityQuestions,
+  ConnectedGitHubUser,
   GrantService,
   HobAdmission,
+  HobbotsRepository,
   HobLifecycle,
   HobService,
   HobTools,
   HubQuestions,
+  OWN_GIT_LABEL,
   PermissionSummary,
+  UserGitIdentity,
 } from "@hobbots/agents";
 import { HubQuestionsRead } from "@hobbots/api";
-import { GitHubApi, GitHubError } from "@hobbots/charms";
-import { type Agent, EMPTY_HOB_POLICY, type HubQuestion } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  type GitHubUser,
+  type GitIdentity,
+  type HubQuestion,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -30,11 +42,10 @@ import {
   TaskRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer, type GitIdentity, userCommits } from "@hobbots/runtimes";
+import { FakeRuntimeLayer, userCommits } from "@hobbots/runtimes";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { CommitIdentityGateLive, OWN_GIT_LABEL } from "../src/commit-identity.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
@@ -56,25 +67,44 @@ const project = join(temp, "tide-table");
 const home = join(temp, "home");
 for (const folder of [dataDir, project, home]) mkdirSync(folder, { recursive: true });
 
-const nettle = { id: "nettle", policy: EMPTY_HOB_POLICY } as unknown as Agent;
-const ME = { login: "otaviobarros", id: 35647586, name: null };
+const NOW = "2026-11-06T02:00:00.000Z";
+const nettle = new Agent({
+  id: AgentId.make("nettle"),
+  name: "Nettle",
+  roleTitle: "Builder",
+  runtime: "claude-code",
+  model: null,
+  effort: null,
+  instructions: "",
+  lookSeed: 1,
+  lookColor: "moss",
+  configVersion: 1,
+  createdAt: NOW,
+});
+/** The Quest's chat, where the work was asked for. */
+const QUEST_CHAT = { agentId: nettle.id, threadId: ThreadId.make("tide-table") };
+const ME: GitHubUser = { login: "otaviobarros", id: 35647586, name: null };
 const NOREPLY = "35647586+otaviobarros@users.noreply.github.com";
 
 /** The user's Git identity as the hub reads it now: none until a test sets one. */
 let userIdentity: GitIdentity = { name: null, email: null };
 /** How many times the hub read the user's GitHub account. */
 let githubReads = 0;
+/** What a read of the GitHub account waits on before it answers: nothing until a test holds it. */
+let githubAnswers: Promise<void> = Promise.resolve();
 
 const FakeGitHub = (signedIn: boolean) =>
-  Layer.succeed(GitHubApi, {
-    user: () =>
-      Effect.suspend(() => {
-        githubReads++;
-        return signedIn
-          ? Effect.succeed(ME)
-          : Effect.fail(new GitHubError({ reason: "signed-out", message: "No GitHub account is connected." }));
-      }),
-  } as unknown as GitHubApi["Service"]);
+  Layer.succeed(
+    ConnectedGitHubUser,
+    ConnectedGitHubUser.of({
+      get: () =>
+        Effect.promise(async () => {
+          githubReads++;
+          await githubAnswers;
+          return signedIn ? ME : null;
+        }),
+    }),
+  );
 
 type Hub = Awaited<ReturnType<typeof startHub>>;
 let hub: Hub | undefined;
@@ -83,13 +113,15 @@ afterEach(async () => {
   hub = undefined;
   userIdentity = { name: null, email: null };
   githubReads = 0;
+  githubAnswers = Promise.resolve();
 });
 
 const startHub = async (signedIn = true) => {
   const Tools = HobToolsLive.pipe(
-    Layer.provideMerge(CommitIdentityGateLive(() => userIdentity)),
+    Layer.provideMerge(CommitIdentityQuestions.layer),
     Layer.provideMerge(HubQuestions.layer),
     Layer.provide(FakeGitHub(signedIn)),
+    Layer.provide(Layer.succeed(UserGitIdentity, UserGitIdentity.of({ read: Effect.sync(() => userIdentity) }))),
   );
   const App = HobLifecycle.layer.pipe(
     Layer.provideMerge(
@@ -144,11 +176,28 @@ const startHub = async (signedIn = true) => {
     const text = await response.text();
     return { status: response.status, body: (text === "" ? null : JSON.parse(text)) as unknown };
   };
-  await runtime.runPromise(SetupRepository.use((setup) => setup.update({ approvedFolders: [project] })));
+  await runtime.runPromise(
+    Effect.gen(function* () {
+      yield* SetupRepository.use((setup) => setup.update({ approvedFolders: [project] }));
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(nettle);
+      yield* repo.upsertThread(
+        new Thread({
+          id: QUEST_CHAT.threadId,
+          agentId: nettle.id,
+          title: "Tide table",
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      );
+    }),
+  );
   return {
     request,
-    /** What the hob's turn is given to work with, as the hub works it out when the turn starts. */
-    access: (agent: Agent = nettle) => runtime.runPromise(HobTools.use((tools) => tools.access(agent))),
+    /** What the hob's turn in the Quest's chat is given to work with, as the hub works it out when it starts. */
+    access: () => runtime.runPromise(HobTools.use((tools) => tools.access(nettle, { chat: QUEST_CHAT }))),
+    /** What the hob may do now, read when no turn starts, as when its authority is checked. */
+    accessNow: () => runtime.runPromise(HobTools.use((tools) => tools.access(nettle))),
     open: async (): Promise<ReadonlyArray<HubQuestion>> => {
       const { status, body } = await request("GET", "/api/hub-questions");
       expect(status).toBe(200);
@@ -163,14 +212,8 @@ const startHub = async (signedIn = true) => {
   };
 };
 
-const until = async (check: () => Promise<boolean>) => {
-  let done = await check();
-  for (let tries = 0; tries < 100 && !done; tries++) {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    done = await check();
-  }
-  expect(done).toBe(true);
-};
+/** Waits, up to ten seconds, for `check` to hold on the hub's state. */
+const until = (check: () => Promise<boolean>) => expect.poll(check, { timeout: 10_000 }).toBe(true);
 
 /** Commits in a fresh repository as the hob's command would, and returns the author and committer or Git's error. */
 const commitAs = (access: Parameters<typeof userCommits>[0]) => {
@@ -195,7 +238,11 @@ describe("who a hob on your account commits as when your Git config sets no one"
     hub = await startHub();
     const current = hub;
 
-    // The turn starts with no identity: the hob gets none, and the hub asks you, once.
+    // Reading what the hob may do, with no turn starting, asks nothing.
+    expect((await current.accessNow())?.userIdentity).toBeUndefined();
+    expect(await current.open()).toEqual([]);
+
+    // The turn starts with no identity: the hob gets none, and the hub asks you, once, in the Quest's chat.
     const before = await current.access();
     expect(before?.userIdentity).toBeUndefined();
     expect(commitAs(before)).toMatch(/^failed: .*no email was given/s);
@@ -205,6 +252,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     expect(others).toEqual([]);
     expect(question).toMatchObject({
       subject: { kind: "commit-identity", key: "user", title: "Who hobs commit as" },
+      chat: QUEST_CHAT,
       options: [
         {
           label: "My GitHub account, @otaviobarros",
@@ -244,6 +292,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     await until(async () => (await current.open()).some((question) => question.id !== first?.id));
     const [second] = await current.open();
     expect(second?.text).toContain(`couldn't find a name and email in "whatever you think"`);
+    expect(second?.chat).toEqual(QUEST_CHAT);
 
     await current.answer(second as HubQuestion, "Otavio Barros <otavio@example.com>");
     await until(async () => (await current.access())?.userIdentity !== undefined);
@@ -269,6 +318,50 @@ describe("who a hob on your account commits as when your Git config sets no one"
     await until(async () => (await current.open()).length === 0);
     userIdentity = { name: "Otavio Barros", email: "otavio@example.com" };
     expect((await current.access())?.userIdentity).toBeUndefined();
+    expect(await current.open()).toEqual([]);
+  }, 30_000);
+
+  // covers OR-004
+  it("[TC-OR-605] two turns that start at once ask you once", async () => {
+    hub = await startHub();
+    const current = hub;
+    // Both turns read GitHub at once, and GitHub answers only once both have passed the first check.
+    let answerGitHub: () => void = () => {};
+    githubAnswers = new Promise((resolve) => {
+      answerGitHub = () => resolve();
+    });
+    const both = Promise.all([current.access(), current.access()]);
+    await until(async () => githubReads === 2);
+    answerGitHub();
+    await both;
+    const [question, ...others] = await current.open();
+    expect(others).toEqual([]);
+
+    await current.answer(question as HubQuestion, "Otavio Barros <otavio@example.com>");
+    await until(async () => (await current.accessNow())?.userIdentity !== undefined);
+  }, 30_000);
+
+  // covers OR-004
+  it("[TC-OR-606] a turn still reading GitHub when another turn's question is answered asks nothing more", async () => {
+    hub = await startHub();
+    const current = hub;
+    // The first turn finds nothing asked yet, and waits on GitHub.
+    let answerGitHub: () => void = () => {};
+    githubAnswers = new Promise((resolve) => {
+      answerGitHub = () => resolve();
+    });
+    const slow = current.access();
+    await until(async () => githubReads === 1);
+    // Meanwhile another turn asks, GitHub answering it at once, and you answer.
+    githubAnswers = Promise.resolve();
+    await current.access();
+    const [question] = await current.open();
+    await current.answer(question as HubQuestion, "Otavio Barros <otavio@example.com>");
+    await until(async () => (await current.accessNow())?.userIdentity !== undefined);
+
+    // GitHub answers the first turn now: it finds your answer and asks nothing.
+    answerGitHub();
+    await slow;
     expect(await current.open()).toEqual([]);
   }, 30_000);
 });

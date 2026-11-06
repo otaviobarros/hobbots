@@ -27,6 +27,7 @@ import { backgroundFinished } from "./background-commands.ts";
 import { sessionPolicy, toolTurn } from "./claude-code.ts";
 import { type HookEnd, toolFinished } from "./command-exit.ts";
 import { applyScriptedWrites } from "./fake-writes.ts";
+import { committingTurn } from "./git-config.ts";
 import { commandOf, toolLabel, toolRequests } from "./tool-calls.ts";
 
 /**
@@ -378,7 +379,8 @@ export const scriptedToolEvents = (
   background: Array<BackgroundRun> = [],
 ): Stream.Stream<RuntimeEvent> => {
   // Commands are decided as on a hub where the sandbox started, or where it cannot start.
-  const turn = engine ? toolTurn(request.tools, sandbox, request.hubTools) : null;
+  // Who its commits are made as is told apart as on the real runtimes (#741).
+  const turn = engine ? committingTurn(toolTurn(request.tools, sandbox, request.hubTools)).tools : null;
   if (engine === undefined || turn === null) return Stream.empty;
   const cwd = turn.folders[0] as string;
   const calls = request.prompt
