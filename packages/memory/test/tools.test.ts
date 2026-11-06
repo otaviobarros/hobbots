@@ -22,6 +22,7 @@ import {
   type AgentId,
   AgentId as AgentIds,
   ApprovalId,
+  AttemptId,
   EMPTY_HOB_POLICY,
   MEMORY_SAVE_TOOL,
   MEMORY_SEARCH_TOOL,
@@ -161,6 +162,8 @@ interface CallOptions {
   readonly after?: ToolAccess | null;
   readonly user?: { readonly asked: Array<ApprovalAction>; readonly answer: "approve" | "deny" };
   readonly work?: string;
+  /** The Attempt a turn outside any chat runs as. */
+  readonly attemptId?: AttemptId;
 }
 
 /** A turn's memory tools, and one call of `name`, with a step the user can be asked on. */
@@ -174,6 +177,7 @@ const callOn = (hub: Hub, name: string, input: unknown, options: CallOptions = {
       messageId: null,
       scope: () => options.work ?? "reply:m1",
       also: options.work ?? "reply:m1",
+      ...(options.attemptId === undefined ? {} : { attemptId: options.attemptId }),
       currentAccess: Effect.sync(() => {
         if (started) return options.after === undefined ? access : options.after;
         started = true;
@@ -306,6 +310,19 @@ describe("the memory tools", () => {
     ).toHaveLength(1);
     const searched = await callOn(hub, MEMORY_SEARCH_TOOL, { query: "tests" });
     expect(searched.answer).toEqual({ text: MEMORY_UNAVAILABLE_TEXT, refused: false });
+  });
+
+  // covers ADR 028 (When memory is down), #1049
+  it("[TC-GEN-403] records the Attempt a save outside any chat was made in, so it settles in that Attempt's session", async () => {
+    const hub = makeHub();
+    hub.memory.controls.setDown(true);
+    const attemptId = AttemptId.make(crypto.randomUUID());
+    await callOn(hub, MEMORY_SAVE_TOOL, page("steps"), { work: "task:t1", attemptId });
+    await callOn(hub, MEMORY_SAVE_TOOL, page("chat", { path: "notes/chat.md" }));
+    expect(hub.saves.saves().map((save) => [save.path, save.attemptId])).toEqual([
+      ["notes/tests.md", attemptId],
+      ["notes/chat.md", undefined],
+    ]);
   });
 
   // covers ADR 028 (The memory tools), ADR 014 (the Memory group), PE-008

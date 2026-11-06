@@ -10,7 +10,8 @@ import type { EngineProject } from "./scopes.ts";
  * wrote a reply, so a brain switch never splits the session. A message of yours, or a Task's goal, is
  * a prompt, a reply ends a turn (`stop`), a tool step and a Quest are events of Hobbots' own
  * vocabulary, and the end of the session (`session-end`) has ai-memory write its summary page,
- * `sessions/<session id>.md`.
+ * `sessions/<session id>.md`. Each event carries the time it happened as `occurred_at`, so one sent
+ * late, as after an outage, keeps its own time and not the time it reached ai-memory.
  */
 
 /** Hobbots' producer name, in every event's `agent` and `extension`. */
@@ -59,7 +60,7 @@ const bodyOf = (kind: Kind, text: string): Record<string, unknown> => {
 export const hookEventOf = (
   where: EngineProject,
   sessionId: MemorySessionId,
-  item: { readonly kind: Kind; readonly key: string; readonly text: string },
+  item: { readonly kind: Kind; readonly key: string; readonly text: string; readonly at?: string | undefined },
 ) => {
   const query = new URLSearchParams({
     event: EVENTS[item.kind],
@@ -72,7 +73,13 @@ export const hookEventOf = (
     // A session's end writes its summary page and nothing else: no handoff waits for a next agent.
     ...(item.kind === "end" ? { auto_handoff: "false" } : {}),
   });
-  return { url: `/hook?${query.toString()}`, body: { session_id: sessionId, ...bodyOf(item.kind, item.text) } };
+  // ai-memory reads `occurred_at` (RFC 3339) from the top of the body only, and keeps "now" for one it
+  // cannot read or that sits more than a few minutes ahead of its clock.
+  const at = item.at === undefined ? {} : { occurred_at: item.at };
+  return {
+    url: `/hook?${query.toString()}`,
+    body: { session_id: sessionId, ...bodyOf(item.kind, item.text), ...at },
+  };
 };
 
 /** What `/hook/batch` answers, in the fields read. */

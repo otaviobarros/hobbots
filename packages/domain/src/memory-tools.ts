@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { MemoryPath, MemoryScope, MemoryVersion } from "./memory.ts";
+import { AttemptId } from "./task.ts";
 import { toolInputJsonSchema } from "./task-tools.ts";
 
 /**
@@ -132,6 +133,11 @@ export class MemorySave extends Schema.Class<MemorySave>("MemorySave")({
   /** The version memory answered, once saved. */
   version: Schema.NullOr(MemoryVersion),
   ...MEMORY_CALL_ORIGIN,
+  /**
+   * The Attempt it was made in, for a save made outside any chat, as a party member's or a step's
+   * (#1049): the session it settles in. Absent for a save made in a chat, or recorded before it was kept.
+   */
+  attemptId: Schema.optionalKey(AttemptId),
   /**
    * When you undid it from its reply, which put back the version it replaced or, for a new page,
    * removed it. Absent while it stands.
