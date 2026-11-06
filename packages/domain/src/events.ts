@@ -76,8 +76,8 @@ export type TaskControl = typeof TaskControl.Type;
  * cancel, or its Attempt moving on. `attempt` is the current one when it changed; `quest` the
  * Task's Quest when it ended or reopened with it; `wait` the wait its owner started or replaced, so
  * who it waits on shows live; `control` what you did, when the change was yours; `reply` the final
- * reply of the turn that ended `attempt`, for a Task below the top one, redacted and cut as its
- * result would be, so memory keeps what the hob said outside any chat (ADR 028).
+ * reply of the turn that ended `attempt`, for a Task below the top one, redacted as its runner gave
+ * it, so memory keeps what the hob said outside any chat (ADR 028); capture cuts it on its way out.
  */
 const TaskStateChanged = Schema.TaggedStruct("TaskStateChanged", {
   task: Task,

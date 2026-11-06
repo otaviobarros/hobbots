@@ -1,6 +1,7 @@
 import {
   type AgentId,
   type Attempt,
+  type AttemptId,
   type EventEnvelope,
   isLiveAttempt,
   isTerminalTask,
@@ -15,6 +16,7 @@ import {
   type ReplyStep,
   type ReplyStepState,
   type Task,
+  type TaskId,
   type ThreadId,
 } from "@hobbots/domain";
 import { Context, DateTime, Duration, Effect, Layer, Option, Schedule } from "effect";
@@ -91,8 +93,8 @@ export interface CapturedEntry {
   readonly sessionId: MemorySessionId;
   readonly agentId: AgentId;
   /**
-   * What starts the session when it is not open: its start, and for an Attempt its Task's goal. Null
-   * for an entry that only adds to a session already open, as an Attempt's steps do.
+   * What starts the session when it is not open: its start, and for an Attempt its Task's goal once
+   * it is known. Null for an entry that only adds to a session already open, as an archive does.
    */
   readonly opening: ReadonlyArray<MemoryCaptureItem> | null;
   readonly items: ReadonlyArray<MemoryCaptureItem>;
@@ -106,20 +108,16 @@ const threadStart = (threadId: ThreadId): MemoryCaptureItem => ({
   text: `thread:${threadId}`,
 });
 
-/**
- * What starts an Attempt's session: its start, tagged with the Attempt, its Task and the thread its
- * Quest started in, then the Task's goal, as the prompt the hob worked on.
- */
+/** An Attempt's session start, tagged with the Attempt, its Task and the thread its Quest started in. */
+const attemptStart = (attemptId: AttemptId, taskId: TaskId, threadId: ThreadId | null): MemoryCaptureItem => ({
+  key: `start:${attemptId}`,
+  kind: "start",
+  text: [`attempt:${attemptId}`, `task:${taskId}`, ...(threadId === null ? [] : [`thread:${threadId}`])].join("\n"),
+});
+
+/** What starts an Attempt's session: its start, then the Task's goal, as the prompt the hob worked on. */
 const attemptOpening = (task: Task, attempt: Attempt, redacted: Redacting): Array<MemoryCaptureItem> => [
-  {
-    key: `start:${attempt.id}`,
-    kind: "start",
-    text: [
-      `attempt:${attempt.id}`,
-      `task:${task.id}`,
-      ...(task.threadId === null ? [] : [`thread:${task.threadId}`]),
-    ].join("\n"),
-  },
+  attemptStart(attempt.id, task.id, task.threadId),
   ...redacted([{ key: `goal:${attempt.id}`, kind: "message", text: task.brief }]),
 ];
 
@@ -221,9 +219,17 @@ export const capturedEntryOf = (entry: EventEnvelope, redactor: Redactor): Captu
             text: stepText(step),
           }),
         );
+      // Steps only run in an Attempt outside any chat. One that finishes after its session ended for
+      // quiet opens it again, by the same start: the goal it was sent first is already there.
       return steps.length === 0
         ? null
-        : { sessionId: event.attemptId, agentId, opening: null, items: redacted(steps), ends: false };
+        : {
+            sessionId: event.attemptId,
+            agentId,
+            opening: [attemptStart(event.attemptId, event.taskId, entry.correlation.threadId)],
+            items: redacted(steps),
+            ends: false,
+          };
     }
     default:
       return null;
@@ -255,8 +261,8 @@ interface Round {
 
 /**
  * Plans what a page of entries sends, from the sessions open before it and the keys already sent to
- * them. An entry that only adds to an open session, such as an Attempt's steps, is skipped when its
- * session is not open: memory gets what happens from the session's start on.
+ * them. An entry that only ends a session, as an archive does, does nothing when its session is not
+ * open; any other entry opens its session again, which memory continues.
  */
 export const planRound = (
   entries: ReadonlyArray<EventEnvelope>,

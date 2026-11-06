@@ -639,6 +639,38 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
         }),
       ));
 
+    // covers ADR 028 (Capture and summaries), #1012
+    it("[TC-GEN-398] keeps the steps an Attempt finishes after its session ended for quiet, in the same session", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          const work = taskWork(journal, threadId, quill, "Migrate the database");
+          const attemptId = work.start();
+          const first = step("s1", "Running pnpm db:backup", "backed up");
+          work.steps([first, { ...step("s2", "Running pnpm db:migrate", ""), state: "running" }]);
+          yield* capture.runOnce;
+          // A long migration, or an approval nobody answers yet: the session ends for quiet meanwhile.
+          yield* quietPassed;
+          journal.skip(Duration.minutes(32));
+          yield* capture.runOnce;
+          expect(journal.sessions()).toEqual([]);
+          expect(yield* memory.store.page(you, quillsOwn, sessionPage(attemptId))).not.toBeNull();
+
+          // The tool finishes, then the turn replies: both reach the same session, and nothing twice.
+          work.steps([first, step("s2", "Running pnpm db:migrate", "12 migrations applied")]);
+          yield* capture.runOnce;
+          expect(journal.sessions().map((session) => session.sessionId)).toEqual([attemptId]);
+          work.replied("The database is migrated.", "completed");
+          yield* capture.runOnce;
+          // start, goal, two steps and the reply
+          expect(yield* memory.observations(quill, attemptId)).toBe(5);
+          const page = yield* memory.store.page(you, quillsOwn, sessionPage(attemptId));
+          expect(page?.markdown).toContain("Running pnpm db:migrate");
+          expect(page?.markdown).toContain("The database is migrated.");
+          expect(journal.sessions()).toEqual([]);
+        }),
+      ));
+
     // covers ADR 028 (When memory is down)
     it("[TC-GEN-309] settles a save memory took before the hub stopped without writing it again", () =>
       run(
