@@ -24,6 +24,7 @@
     "@hobbots/permissions": "workspace:*",
     "@hobbots/persistence": "workspace:*",
     "@hobbots/runtimes": "workspace:*",
+    "@hobbots/skills": "workspace:*",
     "@hobbots/workbench": "workspace:*",
     "effect": "catalog:"
   },

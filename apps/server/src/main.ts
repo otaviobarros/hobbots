@@ -80,6 +80,7 @@ import {
   RestoreRepository,
   SearchIndex,
   SetupRepository,
+  SkillLibraryLive,
   SqliteLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
@@ -132,6 +133,7 @@ import { QuietRoutineReads } from "./request-log.ts";
 import { finishReset, HubReset, wipeHubData } from "./resets.ts";
 import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLive, WorkHoldLive } from "./restores.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
+import { agentsSkillsFolder, SkillsLive } from "./skills.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
 import { TaskFileRoute } from "./task-files.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
@@ -289,6 +291,7 @@ const ServerLive = Layer.unwrap(
       CharmCallsLive,
       MemorySavesLive,
       MemoryShareLogLive,
+      SkillLibraryLive,
       MemoryCaptureLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
@@ -532,6 +535,10 @@ const ServerLive = Layer.unwrap(
             // projects of its folders, and what each session was briefed from it (ADR 028).
             MemoryProjectsLive,
             MemoryBriefReceipts.layer,
+            // The skills library's files, import, and ~/.agents/skills read by the hub (ADR 029).
+            SkillsLive(dataDir, agentsSkillsFolder(config.agentsSkills, config.runtime)).pipe(
+              Layer.provide(Layer.mergeAll(Persistence, EventBus.layer)),
+            ),
             // The memory model you chose, kept beside the engine's folder (ADR 028).
             MemorySettingsStore.layer(dataDir),
             // The hub's credentials, provider keys and memory keys included, are redacted by value

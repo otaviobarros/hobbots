@@ -27,6 +27,10 @@ export const ServerConfig = Config.all({
   // The home folder whose Git config says who you commit as (#741); your own by default. Browser
   // tests point it elsewhere, so the machine running them decides nothing.
   gitHome: Config.String("HOBBOTS_GIT_HOME").pipe(Config.option),
+  // The shared skills folder the hub reads into the library under Everyone (ADR 029): `off`, or a
+  // folder. Unset, it is `~/.agents/skills` with a real runtime and off with the fake one, so a
+  // test never reads the skills of the machine running it.
+  agentsSkills: Config.String("HOBBOTS_AGENTS_SKILLS").pipe(Config.option),
   // Memory (ADR 028): `off` runs the hub without its memory engine, as tests and a hub without one do.
   memory: Config.Literals(["on", "off"], "HOBBOTS_MEMORY").pipe(Config.withDefault("on" as const)),
   // The folder with the memory engine's binary and checksum. The desktop app passes the copy in its
