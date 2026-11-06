@@ -2,6 +2,7 @@ import { RuntimeError, type RuntimeEvent, RuntimeLimitReached } from "@hobbots/a
 import type { ReplyUsage } from "@hobbots/domain";
 import { Deferred, type Duration, Effect, Option } from "effect";
 import type { AppServerNotification } from "./app-server.ts";
+import { shellScript } from "./policy.ts";
 import type {
   FileUpdateChange,
   ThreadItem,
@@ -13,18 +14,64 @@ import type {
 
 /**
  * How a Codex turn ended, from its `turn/completed` (ADR 024). `interrupted` is the acknowledgement
- * of `turn/interrupt`: Codex has stopped, and what it ran was stopped with it.
+ * of `turn/interrupt`: Codex has stopped, and what it ran was stopped with it. A completed turn is
+ * the hob's whole reply only once no command it started still runs (#1048).
  */
 export type TurnEnd =
-  | { readonly _tag: "Completed"; readonly event: RuntimeEvent }
+  | { readonly _tag: "Completed" }
   | { readonly _tag: "Interrupted" }
   | { readonly _tag: "Failed"; readonly error: RuntimeError | RuntimeLimitReached };
 
-/** What one notification means for the turn: events to report, and the end once it arrived. */
+/**
+ * What one notification means for the turn: events to report, the end once it arrived, and whether
+ * a command that outlived its Codex turn just ended.
+ */
 export interface TurnStep {
   readonly events: ReadonlyArray<RuntimeEvent>;
   readonly end?: TurnEnd;
+  readonly commandEnded?: true;
 }
+
+/** A command that outlived the Codex turn it ran in, as it ended. */
+interface EndedCommand {
+  readonly command: string;
+  readonly failed: boolean;
+  readonly exitCode: number | undefined;
+  readonly output: string;
+}
+
+/** How much of an ended command's output the hob is shown again: its last characters. */
+const NOTICE_OUTPUT = 2000;
+
+/**
+ * What the hob is told once commands that outlived their Codex turn have ended, so it never goes on
+ * believing one finished before it did (#1048). Claude Code wakes the session the same way when a
+ * background command ends (#1018).
+ */
+export const commandsEndedNotice = (ended: ReadonlyArray<EndedCommand>, stillRunning: number): string => {
+  const lines = ended.flatMap((command) => {
+    const how =
+      command.exitCode !== undefined ? `exited with code ${command.exitCode}` : command.failed ? "failed" : "ended";
+    const output = command.output.trimEnd();
+    const tail = output.length > NOTICE_OUTPUT ? `…${output.slice(-NOTICE_OUTPUT)}` : output;
+    return [
+      `- \`${command.command}\` ${how}.`,
+      ...(tail === ""
+        ? []
+        : ["  Its output ended with:", "  ```", ...tail.split("\n").map((line) => `  ${line}`), "  ```"]),
+    ];
+  });
+  const waiting =
+    stillRunning === 0 ? [] : [`${stillRunning} other command${stillRunning === 1 ? " is" : "s are"} still running.`];
+  return [
+    "<commands-ended>",
+    "These commands kept running after their call returned and your turn ended. They have now ended:",
+    ...lines,
+    ...waiting,
+    "</commands-ended>",
+    "Anything you said before about how they went may be wrong. Tell the user how they really ended, and carry on if your task depended on them.",
+  ].join("\n");
+};
 
 const NOTHING: TurnStep = { events: [] };
 
@@ -75,11 +122,20 @@ const turnFailure = (error: TurnError | null): RuntimeError | RuntimeLimitReache
  * its output and end come from Codex's items. A tool item nobody started is not reported here.
  */
 export const codexTurnEvents = (threadId: string) => {
-  let turnId: string | null = null;
+  // The Codex turns of this Hobbots turn: its first, and any that follow up on a command (#1048).
+  const turns = new Set<string>();
+  // Whether a follow-up turn was asked for that Codex has not named yet.
+  let expecting = true;
   // The text of each agent message, in order, so the reply's text matches what was streamed.
   const messages = new Map<string, string>();
   const thinking = new Set<string>();
   const running = new Set<string>();
+  // Each command's script, from its `item/started`, so a command that outlives its turn can be named.
+  const commands = new Map<string, string>();
+  // Commands still running when a Codex turn completed: Hobbots waits for them (#1048).
+  const outlived = new Set<string>();
+  // Outlived commands that ended since the hob was last told.
+  let ended: Array<EndedCommand> = [];
   // Each file change's files, from its `item/started`, which Codex sends before it asks about the change.
   const patches = new Map<string, Deferred.Deferred<ReadonlyArray<FileUpdateChange>>>();
   const patch = (itemId: string) => {
@@ -114,6 +170,9 @@ export const codexTurnEvents = (threadId: string) => {
       case "fileChange":
         Deferred.doneUnsafe(patch(item.id), Effect.succeed(item.changes));
         return NOTHING;
+      case "commandExecution":
+        commands.set(item.id, shellScript(item.command));
+        return NOTHING;
       default:
         return NOTHING;
     }
@@ -121,6 +180,8 @@ export const codexTurnEvents = (threadId: string) => {
 
   const toolFinished = (item: Extract<ThreadItem, { readonly status: string }>): TurnStep => {
     patches.delete(item.id);
+    const command = commands.get(item.id);
+    commands.delete(item.id);
     if (!running.delete(item.id)) return NOTHING;
     const output =
       item.type === "commandExecution"
@@ -129,12 +190,16 @@ export const codexTurnEvents = (threadId: string) => {
           ? JSON.stringify(item.result ?? item.error)
           : undefined;
     const exitCode = item.type === "commandExecution" ? (item.exitCode ?? undefined) : undefined;
+    const failed = item.status !== "completed";
+    const outlivedTurn = outlived.delete(item.id);
+    if (outlivedTurn) ended.push({ command: command ?? "", failed, exitCode, output: output ?? "" });
     return {
+      ...(outlivedTurn ? { commandEnded: true as const } : {}),
       events: [
         {
           _tag: "ToolFinished",
           id: item.id,
-          failed: item.status !== "completed",
+          failed,
           ...(output === undefined ? {} : { output }),
           ...(exitCode === undefined ? {} : { exitCode }),
         },
@@ -173,30 +238,27 @@ export const codexTurnEvents = (threadId: string) => {
   };
 
   const turnCompleted = (turn: Turn): TurnStep => {
-    const ended = endAll();
+    const stepsEnded = endAll();
     switch (turn.status) {
       case "completed":
-        return {
-          events: ended,
-          end: {
-            _tag: "Completed",
-            event: {
-              _tag: "Completed",
-              sessionId: threadId,
-              text: text(),
-              ...(latest === null || baseline === null ? {} : { usage: toUsage(minus(latest, baseline)) }),
-            },
-          },
-        };
+        // Codex keeps a command whose call returned before it ended running after the turn, and
+        // reports its end once it comes (#1048).
+        for (const id of running) if (commands.has(id)) outlived.add(id);
+        return { events: stepsEnded, end: { _tag: "Completed" } };
       case "interrupted":
-        return { events: ended, end: { _tag: "Interrupted" } };
+        return { events: stepsEnded, end: { _tag: "Interrupted" } };
       default:
-        return { events: ended, end: { _tag: "Failed", error: turnFailure(turn.error ?? lastError) } };
+        return { events: stepsEnded, end: { _tag: "Failed", error: turnFailure(turn.error ?? lastError) } };
     }
   };
 
+  const follow = (id: string) => {
+    turns.add(id);
+    expecting = false;
+  };
+
   const ours = (params: { readonly threadId?: string; readonly turnId?: string | null }) =>
-    params.threadId === threadId && (turnId === null || params.turnId == null || params.turnId === turnId);
+    params.threadId === threadId && (expecting || params.turnId == null || turns.has(params.turnId));
 
   const map = (received: AppServerNotification): TurnStep => {
     // Only the methods below are read, and each by the fields the protocol gives it.
@@ -205,7 +267,7 @@ export const codexTurnEvents = (threadId: string) => {
     if (!ours(params)) return NOTHING;
     switch (notification.method) {
       case "turn/started":
-        turnId ??= notification.params.turn.id;
+        if (expecting) follow(notification.params.turn.id);
         return NOTHING;
       case "item/started":
         return itemStarted(notification.params.item);
@@ -235,10 +297,31 @@ export const codexTurnEvents = (threadId: string) => {
 
   return {
     map,
-    /** The turn this mapper follows, once Codex has said which, so other turns' notifications are left out. */
-    follow: (id: string) => {
-      turnId ??= id;
+    /** A turn this mapper follows, once Codex has said which, so other turns' notifications are left out. */
+    follow,
+    /** A follow-up turn was asked for: its notifications count before Codex names it. */
+    expect: () => {
+      expecting = true;
     },
+    /**
+     * After a Codex turn completed, or an outlived command ended while none ran: what to tell the hob
+     * about outlived commands that ended since it was last told, and whether any still run (#1048).
+     */
+    afterTurn: (): { readonly notice: string | null; readonly waiting: boolean } => {
+      const told = ended;
+      ended = [];
+      return {
+        notice: told.length === 0 ? null : commandsEndedNotice(told, outlived.size),
+        waiting: outlived.size > 0,
+      };
+    },
+    /** The hob's whole reply: what every Codex turn of it said, and what they used. */
+    reply: (): RuntimeEvent => ({
+      _tag: "Completed",
+      sessionId: threadId,
+      text: text(),
+      ...(latest === null || baseline === null ? {} : { usage: toUsage(minus(latest, baseline)) }),
+    }),
     /**
      * The files a file change touches, once its `item/started` has been read, or none when it does not
      * arrive within `wait`.
@@ -256,6 +339,7 @@ export const codexTurnEvents = (threadId: string) => {
     lost: (): { readonly events: ReadonlyArray<RuntimeEvent>; readonly error: RuntimeError } => {
       const uncertain = [...running].map((id): RuntimeEvent => ({ _tag: "ToolUncertain", id, reason: LOST_CALL }));
       running.clear();
+      outlived.clear();
       return { events: [...endAll(), ...uncertain], error: new RuntimeError({ message: LOST_TURN }) };
     },
   };
