@@ -7,6 +7,7 @@ export { clip } from "./briefing.ts";
 export * from "./charm-calls.ts";
 export * from "./charms.ts";
 export * from "./chat.ts";
+export * from "./commit-identity.ts";
 export * from "./continuations.ts";
 export * from "./controls.ts";
 export * from "./destinations.ts";

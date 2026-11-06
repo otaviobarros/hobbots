@@ -82,6 +82,7 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
       },
       branchHead: () => Effect.succeed(null),
       viewer: () => Effect.succeed("otaviobarros"),
+      user: () => Effect.die("not read in these tests"),
       pullRequests: () => Effect.die("not used"),
       commentsSince: () => Effect.die("not used"),
       openPullRequest: () => Effect.die("not used"),
@@ -108,6 +109,7 @@ const access = (folders: ReadonlyArray<string>, readGitHub?: PolicyDecision, git
   },
   folders,
   runtimeFolder: path.join(root, "runtimes", "hob"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 const reaches = (repository: GitHubRepository) =>

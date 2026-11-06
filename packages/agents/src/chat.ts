@@ -500,7 +500,8 @@ export class ChatService extends Context.Service<
       const grant = (threadId: ThreadId, agent: Agent) =>
         Semaphore.withPermit(
           authority,
-          currentAccess(agent.id).pipe(
+          // The turn starts here, so a question about it goes to this chat (#741).
+          accessNow(repo, hobTools, agent.id, { chat: { agentId: agent.id, threadId } }).pipe(
             Effect.tap((access) => Effect.sync(() => granted.set(threadId, { agentId: agent.id, access }))),
           ),
         );

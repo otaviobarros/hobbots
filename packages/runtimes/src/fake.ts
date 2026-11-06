@@ -384,6 +384,7 @@ export const scriptedToolEvents = (
   background: Array<BackgroundRun> = [],
 ): Stream.Stream<RuntimeEvent> => {
   // Commands are decided as on a hub where the sandbox started, or where it cannot start.
+  // Who its commits are made as comes with the turn, as on the real runtimes (#741).
   const turn = engine ? toolTurn(request.tools, sandbox, request.hubTools) : null;
   if (engine === undefined || turn === null) return Stream.empty;
   const cwd = turn.folders[0] as string;
@@ -407,10 +408,10 @@ export const scriptedToolEvents = (
             request.approvals,
             call,
             (event) => Queue.offerUnsafe(queue, event),
+            turn.commitsAs,
             request.redaction,
             turn.steersPush,
             turn.initTool,
-            turn.commitAs,
           );
           const label = toolLabel(call.tool, call.input, request.redaction?.text);
           const command =

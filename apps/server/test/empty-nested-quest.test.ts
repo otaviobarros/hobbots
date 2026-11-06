@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FRODO, hub, messagesWhen, ownedBy, PIP, partyHub, send, treeWhen } from "./party-hub.ts";
 
@@ -51,7 +52,9 @@ describe("an empty nested Quest", () => {
     );
     const toFrodo = requests.filter((each) => each.prompt.includes(EMPTY));
     expect(toFrodo.length).toBeGreaterThan(0);
-    expect(toFrodo.every((each) => !each.prompt.includes(`You work on Task ${pip?.id} `))).toBe(true);
+    // Each is Frodo's own turn, told by the hob's runtime folder: a prompt's text can quote Pip's own
+    // prompt, once Pip's Task has finished with it as its result.
+    expect(toFrodo.every((each) => basename(each.tools?.runtimeFolder ?? "") === FRODO)).toBe(true);
 
     // Pip's later turn, once answered, leaves the Quest empty again: still one finding. It goes on
     // in his Task's one Attempt (#668), so his later prompts are counted instead.

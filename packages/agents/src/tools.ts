@@ -9,6 +9,7 @@ import {
   PRESET_DECISIONS,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
+import type { TurnStart } from "./commit-identity.ts";
 import type { HobbotsRepository } from "./repository.ts";
 import type { ToolAccess, ToolPolicy } from "./runtime.ts";
 
@@ -76,16 +77,29 @@ export const narrows = (before: ToolAccess | null, after: ToolAccess | null): bo
  */
 export class HobTools extends Context.Service<
   HobTools,
-  { readonly access: (agent: Agent) => Effect.Effect<ToolAccess | null> }
+  {
+    /**
+     * What `agent` may do with tools now. `turn` is given for a turn about to start: only then may
+     * the hub put a question about it to you, such as who its commits are made as (#741).
+     */
+    readonly access: (agent: Agent, turn?: TurnStart) => Effect.Effect<ToolAccess | null>;
+  }
 >()("@hobbots/agents/HobTools") {
   /** Every turn chat-only, for hubs and tests that give hobs no tools. */
   static readonly chatOnly = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succeed(null) }));
 }
 
 /** What the hob may do with tools now, read again from its stored policy; null once it is gone. */
-export const accessNow = (repo: HobbotsRepository["Service"], hobTools: HobTools["Service"], agentId: AgentId) =>
+export const accessNow = (
+  repo: HobbotsRepository["Service"],
+  hobTools: HobTools["Service"],
+  agentId: AgentId,
+  turn?: TurnStart,
+) =>
   repo
     .findAgent(agentId)
     .pipe(
-      Effect.flatMap(Option.match({ onNone: () => Effect.succeed(null), onSome: (agent) => hobTools.access(agent) })),
+      Effect.flatMap(
+        Option.match({ onNone: () => Effect.succeed(null), onSome: (agent) => hobTools.access(agent, turn) }),
+      ),
     );

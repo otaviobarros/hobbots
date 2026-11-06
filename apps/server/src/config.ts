@@ -24,6 +24,9 @@ export const ServerConfig = Config.all({
   claudeExecutable: Config.String("HOBBOTS_CLAUDE_EXECUTABLE").pipe(Config.option),
   // Overrides the host Codex the runtime finds on its own.
   codexExecutable: Config.String("HOBBOTS_CODEX_EXECUTABLE").pipe(Config.option),
+  // The home folder whose Git config says who you commit as (#741); your own by default. Browser
+  // tests point it elsewhere, so the machine running them decides nothing.
+  gitHome: Config.String("HOBBOTS_GIT_HOME").pipe(Config.option),
   // Memory (ADR 028): `off` runs the hub without its memory engine, as tests and a hub without one do.
   memory: Config.Literals(["on", "off"], "HOBBOTS_MEMORY").pipe(Config.withDefault("on" as const)),
   // The folder with the memory engine's binary and checksum. The desktop app passes the copy in its

@@ -1,6 +1,7 @@
 import type { InvalidFolder } from "@hobbots/api";
 import type {
   AgentId,
+  CommitIdentity,
   EventEnvelope,
   GitHubAccount,
   HobGitHubApp,
@@ -88,6 +89,19 @@ export class GitHubAccounts extends Context.Service<
     readonly clear: Effect.Effect<void>;
   }
 >()("@hobbots/agents/GitHubAccounts") {}
+
+/**
+ * Who hobs on the user's account commit as when the user's own Git config sets no identity (#741):
+ * the name and email the user gave the hub, in one row at most.
+ */
+export class HubCommitIdentities extends Context.Service<
+  HubCommitIdentities,
+  {
+    readonly get: Effect.Effect<CommitIdentity | null>;
+    /** Replaces the identity the user gave before, if any. */
+    readonly save: (identity: CommitIdentity, at: string) => Effect.Effect<void>;
+  }
+>()("@hobbots/agents/HubCommitIdentities") {}
 
 /**
  * Each hob's own GitHub App, by hob (ADR 022): its identity only. Its private key is kept in the OS

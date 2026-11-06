@@ -71,6 +71,7 @@ const FakeGitHub = Layer.succeed(
     item: () => Effect.die("not read in these tests"),
     branchHead: () => Effect.die("not read in these tests"),
     viewer: () => Effect.die("not read in these tests"),
+    user: () => Effect.die("not read in these tests"),
     pullRequests: () => Effect.die("not read in these tests"),
     commentsSince: () => Effect.die("not read in these tests"),
     openPullRequest: () => Effect.die("not written in these tests"),
@@ -105,6 +106,7 @@ describe("The GitHub Charm on a hub", () => {
             },
             folders: [folder],
             runtimeFolder: join(root, "runtimes", HOB_ID),
+            commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
           })),
       }),
     );

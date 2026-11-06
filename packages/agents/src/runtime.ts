@@ -2,6 +2,7 @@ import {
   type ApprovalId,
   type ApprovalLifetime,
   type CommitIdentity,
+  type CommitsAs,
   type Effort,
   type Grant,
   type GrantId,
@@ -173,6 +174,12 @@ export interface ToolAccess {
    * hob on the user's account, which keeps the user's own Git identity.
    */
   readonly commitAs?: CommitIdentity;
+  /**
+   * Who the turn's commits are made as, which the hub settles before the turn starts: the hob's bot,
+   * the user as their Git config sets them, as they told Hobbots, or no one yet (#586, #741). Every
+   * runtime applies it as given and reads no Git config to decide it.
+   */
+  readonly commitsAs: CommitsAs;
 }
 
 /** A tool call the policy answered Ask for, as an adapter asks the user about it (PE-003). */

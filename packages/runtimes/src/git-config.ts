@@ -1,7 +1,6 @@
 import { readFileSync, realpathSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { secretShapeIn } from "@hobbots/domain";
+import { type CommitIdentity, type CommitsAs, type GitIdentity, secretShapeIn } from "@hobbots/domain";
 
 /**
  * The user's own Git config files, which the sandbox opens for reading (ADR 014). The home folder is
@@ -227,12 +226,6 @@ export const gitConfigAccess = (
   return { _tag: "Open", files: [...new Set(files)] };
 };
 
-/** The name and email the user's own Git config sets, either of which may be missing. */
-export interface GitIdentity {
-  readonly name: string | null;
-  readonly email: string | null;
-}
-
 /** The identity `files` set, read as Git reads them, following unconditional includes. */
 const identityIn = (files: ReadonlyArray<string>, home: string, read: ReadText): GitIdentity => {
   const identity: { name: string | null; email: string | null } = { name: null, email: null };
@@ -272,6 +265,17 @@ export const userGitIdentity = (
     read,
   );
 
+/** Adds Git settings to an environment through `GIT_CONFIG_COUNT`, keeping the settings already there. */
+const withGitSettings = (env: NodeJS.ProcessEnv, settings: ReadonlyArray<readonly [string, string]>) => {
+  const count = Number.parseInt(env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
+  const added: Record<string, string> = { GIT_CONFIG_COUNT: String(count + settings.length) };
+  for (const [index, [key, value]] of settings.entries()) {
+    added[`GIT_CONFIG_KEY_${count + index}`] = key;
+    added[`GIT_CONFIG_VALUE_${count + index}`] = value;
+  }
+  return { ...env, ...added };
+};
+
 /**
  * The environment a hob's commands commit with when no app identity applies (#586). Git would
  * otherwise make an email up from the user's account and the computer's name when no config gives
@@ -284,45 +288,101 @@ export const userGitIdentity = (
  *   removes `GIT_CONFIG_GLOBAL`, and `GIT_AUTHOR_NAME` or a command-level `user.name` would override
  *   every repository's own. Where neither config sets one, as when the user's config stays closed,
  *   Git takes the account's full name, and fails when that is empty.
- * - With no email, Git is told to take an email from config only, so a commit without one fails,
- *   and the hob asks.
+ * - With no email in the user's config, the identity the user gave Hobbots (`given`, #741) is used:
+ *   its email in `EMAIL`, and its name as `user.name` when the user's config sets no name either.
+ *   That name then wins over a repository's own, which is the price of a user with no Git identity.
+ *   `user.useConfigOnly` is turned off, since Git refuses `EMAIL` when the user's config turns it on;
+ *   a repository's own `user.email` still wins.
+ * - With neither, Git is told to take an email from config only, so a commit without one fails
+ *   rather than go out under a made-up address.
  *
  * Settings already in `GIT_CONFIG_COUNT` are kept.
  */
-export const withUserIdentity = (env: NodeJS.ProcessEnv, identity: GitIdentity): NodeJS.ProcessEnv => {
+export const withUserIdentity = (
+  env: NodeJS.ProcessEnv,
+  identity: GitIdentity,
+  given: CommitIdentity | null = null,
+): NodeJS.ProcessEnv => {
   if (identity.email !== null) return { ...env, EMAIL: identity.email };
-  const count = Number.parseInt(env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
-  return {
-    ...env,
-    GIT_CONFIG_COUNT: String(count + 1),
-    [`GIT_CONFIG_KEY_${count}`]: "user.useConfigOnly",
-    [`GIT_CONFIG_VALUE_${count}`]: "true",
-  };
+  if (given === null) return withGitSettings(env, [["user.useConfigOnly", "true"]]);
+  // `user.useConfigOnly` from the user's config would make Git refuse `EMAIL`; turning it off still
+  // lets a repository's own `user.email` win.
+  const settings: ReadonlyArray<readonly [string, string]> = [
+    ...(identity.name === null ? [["user.name", given.name] as const] : []),
+    ["user.useConfigOnly", "false"],
+  ];
+  return { ...withGitSettings(env, settings), EMAIL: given.email };
 };
 
-/** What a hob is told when no identity applies to its commits (#586). */
-export const NO_GIT_IDENTITY_NOTE =
-  "No Git identity is set for your commits: neither yours nor the user's. Ask the user who to commit as before you commit, and never set one yourself.";
+/**
+ * What a hob is told when no identity applies to its commits (#741). It can set none, and Hobbots
+ * asks the user itself, so asking again in chat only goes round in circles.
+ */
+export const NO_GIT_IDENTITY_NOTE = [
+  "No Git identity is set for your commits yet: the user's Git config sets none, and Hobbots is asking the user who hobs should commit as.",
+  "Do not ask the user yourself and never set an identity: Hobbots applies their answer to your next turn.",
+  "Until then, do not commit. Do the rest of the work, leave your changes uncommitted, and say in your reply that the commit waits for the user to answer Hobbots' question about who hobs commit as.",
+].join(" ");
 
-/** How a turn's commands commit, and what its hob is told about it. */
-export interface UserCommits {
+/** What a hob is told when it commits under the identity the user gave Hobbots (#741). */
+export const givenIdentityNote = (identity: CommitIdentity) =>
+  `Your commits are made as ${identity.name} <${identity.email}>, the identity the user gave Hobbots, since their Git config sets none.`;
+
+/**
+ * What every runtime does with who a turn's commits are made as (#586, #741), so that each one
+ * applies it the same way: the environment its commands get, the note its instructions carry, and
+ * the line said again in every resumed session's prompt. A runtime adapter applies all three.
+ */
+export interface TurnCommits {
+  /** What the system prompt says of it, when there is more to say than the bot note. */
   readonly note: string;
+  /**
+   * Who the turn's commits are made as, said again in every resumed session's prompt, since a
+   * session keeps the system prompt it started with: one started with no identity would otherwise
+   * keep "do not commit" after the user answers (#741). Empty for a turn without tools.
+   */
+  readonly now: string;
+  /** The environment the turn's commands commit with, from the one they would get. */
   readonly env: (env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
 }
 
-/**
- * The user's identity for a turn with tools, whose commands in its folders may commit, when its hob
- * has no app of its own to commit as (`commitAs`), read from the user's config and the folders'
- * repositories now. Anything else commits as it would.
- */
-export const userCommits = (
-  tools: { readonly commitAs?: { readonly name: string; readonly email: string } } | null,
-  home: string = homedir(),
-): UserCommits => {
-  if (tools === null || tools.commitAs !== undefined) return { note: "", env: (env) => env };
-  const identity = userGitIdentity(home);
-  return {
-    note: identity.email === null ? NO_GIT_IDENTITY_NOTE : "",
-    env: (env) => withUserIdentity(env, identity),
+/** Who a turn's commits are made as, in one line, whichever it is. */
+export const commitIdentityNow = (as: CommitsAs): string => {
+  switch (as._tag) {
+    case "Missing":
+      return NO_GIT_IDENTITY_NOTE;
+    case "UserGiven":
+      return givenIdentityNote(as.identity);
+    case "UserConfig":
+      return "Your commits are made as the user, with the identity their Git config sets.";
+    case "Bot":
+      return `Your commits are made as ${as.identity.name} <${as.identity.email}>, the bot of your own GitHub App.`;
+  }
+};
+
+/** The environment a turn's commands commit with. The bot's identity is set where the runtime starts (ADR 022). */
+const commitEnv =
+  (as: CommitsAs) =>
+  (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+    switch (as._tag) {
+      case "Bot":
+        return env;
+      case "UserConfig":
+      case "Missing":
+        return withUserIdentity(env, as.config);
+      case "UserGiven":
+        return withUserIdentity(env, as.config, as.identity);
+    }
   };
+
+/**
+ * How a turn's commands commit and what its hob is told, from who the hub settled its commits are
+ * made as (`commitsAs`); nothing for a turn without tools. The runtime reads no Git config itself.
+ */
+export const turnCommits = (tools: { readonly commitsAs: CommitsAs } | null): TurnCommits => {
+  if (tools === null) return { note: "", now: "", env: (env) => env };
+  const as = tools.commitsAs;
+  const note =
+    as._tag === "Missing" ? NO_GIT_IDENTITY_NOTE : as._tag === "UserGiven" ? givenIdentityNote(as.identity) : "";
+  return { note, now: commitIdentityNow(as), env: commitEnv(as) };
 };

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
+import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
@@ -7,6 +8,7 @@ import {
   ApprovalService,
   CharmCallService,
   ChatService,
+  CommitIdentityQuestions,
   DataExport,
   DeviceService,
   GrantService,
@@ -70,6 +72,7 @@ import {
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   HobGitHubAppRepository,
+  HubCommitIdentityRepository,
   HubQuestionRepositoryLive,
   MemoryCaptureLive,
   MemorySavesLive,
@@ -96,6 +99,7 @@ import { DispatcherHostLive } from "./backpack.ts";
 import { BackupHolds, HeldActivityStore, HeldRuntimes } from "./backup-holds.ts";
 import { HubBackups } from "./backups.ts";
 import { BlockOnRetirement } from "./blockers.ts";
+import { ConnectedGitHubUserLive, UserGitIdentityLive } from "./commit-identity.ts";
 import { ServerConfig } from "./config.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "./continuations.ts";
 import { SaveDestinationsLive } from "./destination.ts";
@@ -290,6 +294,7 @@ const ServerLive = Layer.unwrap(
       BackpackLive,
       DeviceRepositoryLive,
       HubQuestionRepositoryLive,
+      HubCommitIdentityRepository,
       RestoreRepository.layer,
       EventJournal.layer,
       SetupRepository.layer,
@@ -364,7 +369,6 @@ const ServerLive = Layer.unwrap(
     const Charms = GitHubCharmTools.pipe(
       Layer.provide(
         Layer.mergeAll(
-          GitHubApiNode(),
           GitRemotes.layer,
           PolicyEngine.node,
           GitPushLive({ folder: charmFolder }).pipe(
@@ -380,6 +384,8 @@ const ServerLive = Layer.unwrap(
           }),
         ),
       ),
+      // GitHub's API is the hub's too: it offers your account when it asks who hobs commit as (#741).
+      Layer.provideMerge(GitHubApiNode()),
       Layer.provideMerge(GitHub),
       Layer.provide(NodeServices.layer),
     );
@@ -481,11 +487,25 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       )
-      // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
-      .pipe(Layer.provideMerge(HubQuestions.layer))
       // Before the chat service, so turns can ask, and after a restart the requests left pending expire.
       .pipe(Layer.provideMerge(ApprovalService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
+      // Before every turn's tools: who a hob on your account commits as when your Git config sets no
+      // one, which the hub asks you and keeps (#741).
+      .pipe(
+        Layer.provideMerge(
+          CommitIdentityQuestions.layer.pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                UserGitIdentityLive(Option.getOrElse(config.gitHome, () => homedir())),
+                ConnectedGitHubUserLive,
+              ),
+            ),
+          ),
+        ),
+      )
+      // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
+      .pipe(Layer.provideMerge(HubQuestions.layer))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(Layer.provideMerge(Layer.mergeAll(Charms, LocalGit, MemoryTooling, CharmCallService.layer)))
       // Before approvals, so a decision can save grants and every call reads the hob's live ones; before

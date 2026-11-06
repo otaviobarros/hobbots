@@ -16,13 +16,16 @@ import {
   ActivityRecorder,
   ApprovalService,
   ChatService,
+  CommitIdentityQuestions,
   GrantService,
   HobAdmission,
   HobLifecycle,
   HobService,
+  HubQuestions,
   PermissionSummary,
   SecretRedaction,
   TaskFiles,
+  UserGitIdentity,
 } from "@hobbots/agents";
 import type { AttemptActivityRead, ThreadTasksRead } from "@hobbots/api";
 import { LocalGitToolsLive } from "@hobbots/charms";
@@ -33,6 +36,7 @@ import {
   isInProgress,
   type Message,
   roleFields,
+  settleCommitsAs,
   type Thread,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
@@ -45,13 +49,15 @@ import {
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
+  HubCommitIdentityRepository,
+  HubQuestionRepositoryLive,
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
   TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer, userCommits } from "@hobbots/runtimes";
+import { FakeRuntimeLayer, turnCommits } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
 import { Effect, Layer, Schedule } from "effect";
 import { HttpRouter } from "effect/http";
@@ -112,6 +118,17 @@ beforeAll(() => {
     .pipe(Layer.provideMerge(ApprovalService.layer))
     .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))
+    // The user's Git config sets an identity, whatever the machine running the test has (#741).
+    .pipe(Layer.provideMerge(CommitIdentityQuestions.layer))
+    .pipe(Layer.provideMerge(HubQuestions.layer))
+    .pipe(
+      Layer.provideMerge(
+        Layer.succeed(
+          UserGitIdentity,
+          UserGitIdentity.of({ read: Effect.succeed({ name: "Otavio", email: "otavio@example.com" }) }),
+        ),
+      ),
+    )
     .pipe(Layer.provideMerge(LocalGit))
     .pipe(Layer.provideMerge(CanonicalSharedFolders))
     .pipe(
@@ -124,6 +141,8 @@ beforeAll(() => {
             TaskRepositoryLive,
             TaskToolCallsLive,
             ActivityRepositoryLive,
+            HubQuestionRepositoryLive,
+            HubCommitIdentityRepository,
             EventJournal.layer,
             BackpackLive,
             SetupRepository.layer,
@@ -523,7 +542,8 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     const ledger = join(temp, "ledger");
     mkdirSync(home);
     writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = Otavio\n\temail = otavio@example.com\n");
-    const env = userCommits({}, home).env({ PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: "1" });
+    const commitsAs = settleCommitsAs(null, { name: "Otavio", email: "otavio@example.com" }, null);
+    const env = turnCommits({ commitsAs }).env({ PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: "1" });
     const run = (command: string) => execFileSync("sh", ["-c", command], { cwd: ledger, env, encoding: "utf8" });
     const author = () => run("git log -1 --format='%an <%ae>|%cn <%ce>'").trim();
     execFileSync("git", ["init", "--quiet", ledger], { env });

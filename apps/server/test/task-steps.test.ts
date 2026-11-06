@@ -93,6 +93,7 @@ const accessTo = (agent: Agent, now: ReadonlyArray<string>) =>
         },
         folders: now,
         runtimeFolder: `/hobbots/runtimes/${agent.id}`,
+        commitsAs: { _tag: "UserConfig" as const, config: { name: "Ada", email: "ada@example.com" } },
       };
 const WorkFolders = Layer.succeed(
   HobTools,

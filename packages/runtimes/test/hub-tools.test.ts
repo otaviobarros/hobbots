@@ -152,6 +152,7 @@ describe("hub tools on Claude Code's control channel", () => {
         },
         folders: [project],
         runtimeFolder: join(root, "runtimes"),
+        commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
       },
       "on",
     );
@@ -215,6 +216,7 @@ describe("hub tools on Claude Code's control channel", () => {
         },
         folders: [project],
         runtimeFolder: join(root, "runtimes"),
+        commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
       },
       "on",
     );

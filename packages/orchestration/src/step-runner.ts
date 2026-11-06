@@ -37,6 +37,7 @@ import {
   type TaskToolName,
   type TaskTree,
   type TurnEnding,
+  taskChat,
 } from "@hobbots/domain";
 import { DateTime, Effect, FiberMap, Layer, Option, Semaphore } from "effect";
 import type { PathSeparator } from "./authority.ts";
@@ -314,7 +315,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                 // A step of a party member's Task works under every Delegation above it, as the
                 // member does (ADR 018).
                 const narrowed = (own: ToolAccess | null) => delegatedAccess(own, queued, tree, separator);
-                const access = narrowed(yield* hobTools.access(agent.value));
+                // Its turn starts here, so a question about it goes to the Quest's chat (#741).
+                const access = narrowed(yield* hobTools.access(agent.value, { chat: taskChat(queued, tree.tasks) }));
                 const started = yield* attempt(
                   tasks.startAttempt(queued.id, queued.revision, {
                     id: attemptId,

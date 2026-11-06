@@ -64,6 +64,7 @@ const access = (hob: HobPolicy = EMPTY_HOB_POLICY): ToolAccess => ({
   policy: { preset: "balanced", sharedFolders: [project], hob, dataFolder: data, restrictions: [] },
   folders: [project],
   runtimeFolder: join(runtimes, "hob-1"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 /** Runs one tool call through the hooks as Claude Code would, with what each hook reported. */

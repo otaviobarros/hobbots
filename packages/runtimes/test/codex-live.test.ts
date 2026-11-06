@@ -396,6 +396,7 @@ const askingHob = (root: string): ToolAccess => ({
   },
   folders: [join(root, "project")],
   runtimeFolder: join(root, "runtimes", "hob-1"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 /**

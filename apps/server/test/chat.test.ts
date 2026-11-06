@@ -276,6 +276,7 @@ describe("tool calls in a reply", () => {
           },
           folders: [folder],
           runtimeFolder: join(root, "runtimes", HOB_ID),
+          commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
         }),
     }),
   );
@@ -415,6 +416,7 @@ describe("tool calls in a reply", () => {
             },
             folders,
             runtimeFolder: join(root, "runtimes", HOB_ID),
+            commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
           })),
       }),
     );
@@ -472,6 +474,7 @@ describe("tool calls in a reply", () => {
         },
         folders: [folder],
         runtimeFolder: join(root, "runtimes", HOB_ID),
+        commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
       });
       // The turn's grant reads the policy, then holds on until released.
       const slow = Layer.succeed(

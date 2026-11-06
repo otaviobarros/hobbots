@@ -36,6 +36,7 @@ const access: ToolAccess = {
   policy: { preset: "balanced", sharedFolders: [project], hob: EMPTY_HOB_POLICY, dataFolder: data, restrictions: [] },
   folders: [project],
   runtimeFolder: join(root, "runtime"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 };
 
 const GREEN = "\u001b[32m";

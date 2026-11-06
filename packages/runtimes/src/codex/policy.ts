@@ -107,10 +107,10 @@ export const policyGate =
           request.approvals,
           call,
           turn.report,
+          tools.commitsAs,
           request.redaction,
           tools.steersPush,
           tools.initTool,
-          tools.commitAs,
         ).pipe(Effect.catchCause(() => Effect.succeed(reason(UNKNOWN_TOOL(call.tool)))));
         if (decision._tag !== "Run") return yield* refuse(call, decision);
         const { verdict } = decision;

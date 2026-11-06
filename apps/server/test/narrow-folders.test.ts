@@ -53,6 +53,7 @@ const ThreeFolders = Layer.sync(HobTools, () =>
         },
         folders: [test, hobbots, other],
         runtimeFolder: join(work, "runtime", agent.id),
+        commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
       }),
   }),
 );

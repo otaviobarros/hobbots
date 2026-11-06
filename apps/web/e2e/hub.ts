@@ -36,12 +36,26 @@ export const emptyDataDir = (): string => {
   return mkdtempSync(join(dataRoot, "hub-"));
 };
 
-export const removeDataDir = (dataDir: string) => rmSync(dataDir, { recursive: true, force: true });
+/**
+ * The home whose Git config a test hub reads, beside its data folder: one that sets who hobs commit
+ * as, so a hub never asks for it because of how this machine's Git is set up (#741).
+ */
+const gitHome = (dataDir: string) => {
+  const home = `${dataDir}-git-home`;
+  mkdirSync(home, { recursive: true });
+  writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = Playwright\n\temail = playwright@example.com\n");
+  return home;
+};
+
+export const removeDataDir = (dataDir: string) => {
+  rmSync(dataDir, { recursive: true, force: true });
+  rmSync(`${dataDir}-git-home`, { recursive: true, force: true });
+};
 
 /**
  * Starts the hub on `dataDir` from the server build that the global setup makes from source,
  * serving the web client's build, and waits until it answers. The fake runtime is the default;
- * `env` picks another runtime or Claude Code binary. Fails when another hub answers on the port,
+ * `env` picks another runtime or Claude Code binary, or with `HOBBOTS_GIT_HOME` another Git config. Fails when another hub answers on the port,
  * so a test never acts on someone else's data.
  */
 export const startHub = async (dataDir: string, env: Record<string, string> = {}): Promise<Hub> => {
@@ -61,6 +75,7 @@ export const startHub = async (dataDir: string, env: Record<string, string> = {}
       HOBBOTS_MEMORY: "off",
       // A hub on the real runtimes never finds a Codex installed on this machine unless a test gives it one.
       HOBBOTS_CODEX_EXECUTABLE: join(dataDir, "bin", "codex"),
+      HOBBOTS_GIT_HOME: env.HOBBOTS_GIT_HOME ?? gitHome(dataDir),
       ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],

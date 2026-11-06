@@ -2,8 +2,9 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { settleCommitsAs } from "@hobbots/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userGitIdentity, withUserIdentity } from "../src/git-config.ts";
+import { NO_GIT_IDENTITY_NOTE, turnCommits, userGitIdentity, withUserIdentity } from "../src/git-config.ts";
 import { gitConfigEnv, UNSIGNED_GIT } from "../src/sandbox.ts";
 
 // Issue #586: a hob without its own app commits as the user, never as an identity Git makes up
@@ -151,5 +152,48 @@ describe("Commits a hob makes without its own app", () => {
     const linked = join(root, "site-linked");
     git(site, "worktree", "add", "-q", "-b", "linked", linked);
     expect(commit(linked)).toBe("Site Bot <site@example.com>, Site Bot <site@example.com>");
+  });
+
+  // covers OR-004
+  it("[TC-OR-630] with no identity in the user's config, commit under the one they gave Hobbots, or not at all (#741)", () => {
+    const empty = join(root, "empty-home");
+    mkdirSync(empty);
+    const given = { name: "otaviobarros", email: "35647586+otaviobarros@users.noreply.github.com" };
+    // What the hub settles from the user's config under `home` and their answer, and the turn applies.
+    const settled = (home: string, answer: typeof given | null, bot: typeof given | null = null) => {
+      const commitsAs = settleCommitsAs(bot, userGitIdentity(home), answer);
+      return { as: commitsAs, ...turnCommits({ commitsAs }) };
+    };
+    // Neither the user's config nor Hobbots has one: the hob is told not to commit and not to ask.
+    const none = settled(empty, null);
+    expect(none.as._tag).toBe("Missing");
+    expect(none.note).toBe(NO_GIT_IDENTITY_NOTE);
+    expect(none.note).toContain("Do not ask the user yourself");
+    const noHome = { HOME: empty };
+    expect(commit(repo, "open", { ...none.env(UNSIGNED_GIT), ...noHome })).toMatch(/^failed: .*no email was given/s);
+    // The user gave Hobbots one: it is used, name and email, and the hob is told so.
+    const asGiven = settled(empty, given);
+    expect(asGiven.as).toMatchObject({ _tag: "UserGiven", identity: given });
+    expect(asGiven.note).toContain(`made as ${given.name} <${given.email}>`);
+    expect(commit(repo, "open", { ...asGiven.env(UNSIGNED_GIT), ...noHome })).toBe(
+      `${given.name} <${given.email}>, ${given.name} <${given.email}>`,
+    );
+    // A config that sets only a name keeps it, with the given email.
+    writeFileSync(join(empty, ".gitconfig"), '[user]\n  name = "Otavio Barros"\n');
+    const named = settled(empty, given);
+    expect(named.as).toMatchObject({ _tag: "UserGiven", identity: { name: "Otavio Barros", email: given.email } });
+    expect(commit(repo, "open", { ...named.env(UNSIGNED_GIT), ...noHome })).toBe(
+      `Otavio Barros <${given.email}>, Otavio Barros <${given.email}>`,
+    );
+    // The user's own config wins over the given one once it sets an email.
+    const own = settled(join(root, "home"), given);
+    expect(own.as._tag).toBe("UserConfig");
+    expect(own.note).toBe("");
+    expect(commit(repo, "open", own.env(UNSIGNED_GIT))).toBe(
+      "Ada Lovelace <ada@example.com>, Ada Lovelace <ada@example.com>",
+    );
+    // A hob with its own app commits as its bot, whatever the user gave.
+    const bot = { name: "frodo[bot]", email: "1+frodo[bot]@users.noreply.github.com" };
+    expect(settled(empty, given, bot).as).toEqual({ _tag: "Bot", identity: bot });
   });
 });

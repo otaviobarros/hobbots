@@ -246,6 +246,7 @@ const accessFor = (preset: SafetyPreset): ToolAccess => ({
   },
   folders: [siteFolder],
   runtimeFolder: path.join(root, "runtimes", "ada"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 /** Ada saves the deploy how-to to `scope` under `preset`, in a turn of its own. */

@@ -18,11 +18,12 @@ export const stopAldricHub = async () => {
 /**
  * A hub past setup with Aldric, who works in a folder of his own beside the hub's data, holding
  * `files` (text or bytes, by their path inside it) when the hub starts, and a hob for each of
- * `members`, with no folders of its own, whose ids it returns in order.
+ * `members`, with no folders of its own, whose ids it returns in order. `env` goes to the hub.
  */
 export const aldricHub = async (
   files: Readonly<Record<string, string | Uint8Array>> = { "notes.md": "# Notes\n" },
   members: ReadonlyArray<string> = [],
+  env: Record<string, string> = {},
 ) => {
   dataDir = emptyDataDir();
   folder = realpathSync(mkdtempSync(`${dataDir}-aldric-`));
@@ -30,7 +31,7 @@ export const aldricHub = async (
     mkdirSync(dirname(join(folder, path)), { recursive: true });
     writeFileSync(join(folder, path), content);
   }
-  hub = await startHub(dataDir);
+  hub = await startHub(dataDir, env);
   const { url, headers } = hub;
   const api = async (method: string, path: string, body: unknown) => {
     const response = await fetch(`${url}/api${path}`, {

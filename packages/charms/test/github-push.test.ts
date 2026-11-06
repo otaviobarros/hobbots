@@ -111,6 +111,7 @@ const fakeApi = Layer.succeed(
     item: () => Effect.die("not used"),
     branchHead: (_agentId, repository, branch) => Effect.sync(() => headOf(remoteOf(repository), branch)),
     viewer: () => Effect.succeed("otaviobarros"),
+    user: () => Effect.die("not read in these tests"),
     pullRequests: () => Effect.die("not used"),
     commentsSince: () => Effect.die("not used"),
     openPullRequest: () => Effect.die("not used"),
@@ -130,6 +131,7 @@ const accessFor = (folder: string, preset: SafetyPreset = "balanced", push?: Pol
   },
   folders: [folder],
   runtimeFolder: path.join(root, "runtimes", "hob"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 /** The user, as the test plays them: they answer each request the way `answer` says, and are recorded. */

@@ -61,6 +61,7 @@ const access = (project: string, preset: SafetyPreset = "balanced"): ToolAccess 
   policy: { preset, sharedFolders: [project], hob: EMPTY_HOB_POLICY, dataFolder: data, restrictions: [] },
   folders: [project],
   runtimeFolder: join(runtimes, "hob-1"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 /** The hub tools of a turn that offers `git_init`, as the hub's local Git tools do. */

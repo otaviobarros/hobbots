@@ -28,6 +28,7 @@ const access = (preset: SafetyPreset = "balanced", hob: HobPolicy = EMPTY_HOB_PO
   policy: { preset, sharedFolders: [project], hob, dataFolder: join(root, "data"), restrictions: [] },
   folders: [project],
   runtimeFolder: join(root, "runtimes", "hob-1"),
+  commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
 const approvalsAnswering = (answer: Parameters<typeof answering>[0]) => answering(answer, access("careful"));
