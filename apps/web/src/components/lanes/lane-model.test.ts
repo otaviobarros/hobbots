@@ -307,6 +307,20 @@ describe("the Quest room's lanes", () => {
     // While the newest step still runs, that step is what the turn is on.
     const busy = activity(BUILD, { ...records, steps: [dev] });
     expect(laneOf(laneRoom(handedOn(), [busy]), ADA).items.at(-1)).toMatchObject({ label: "Running pnpm dev" });
+    // Work that is not a command and still runs beside it, such as an edit, is what the hob is doing,
+    // even when a later quick step has already finished.
+    const edit: ReplyStep = {
+      id: "edit",
+      kind: "tool",
+      label: "Editing page.astro",
+      state: "running",
+      startedAt: AT(15),
+    };
+    const late: ReplyStep = { id: "late", kind: "tool", label: "Reading brief.md", state: "done", startedAt: AT(16) };
+    const overlapping = activity(BUILD, { ...records, steps: [dev, edit, check, late] });
+    expect(laneOf(laneRoom(handedOn(), [overlapping]), ADA).items.at(-1)).toMatchObject({
+      label: "Editing page.astro",
+    });
   });
 
   it("says a step that was stopped once, however often the hob tried it again", () => {

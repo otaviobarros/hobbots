@@ -8,6 +8,7 @@ import {
   isTerminalTask,
   liveAttemptOn,
   pendingApprovalsOn,
+  type ReplyStep,
   saysMore,
   TASK_TOOLS,
   type Task,
@@ -407,10 +408,17 @@ const lastActivity = (tree: TaskTree, unit: ReadonlyArray<Task>, attempt: Attemp
   ]);
 };
 
+/** Whether a step runs a command, which a record of the Attempt may show still running in the background. */
+const runsCommand = (step: ReplyStep, activity: AttemptActivity): boolean =>
+  step.call?.operation === "run-commands" ||
+  activity.commands.some((each) => each.state === "running" && step.label === `Running ${each.command}`);
+
 /**
- * The step a running turn is on, from the records of the Attempt that runs. A command the hob left
- * running in the background, such as a dev server or a watch, is what the turn waits on once the hob
- * has gone on past it: no step runs, or the newest step is not one that runs (#1004, #1018).
+ * The step a running turn is on, from the records of the Attempt that runs. A step that is not a
+ * command, such as thinking or an edit, is work the hob is doing now and always shows. Otherwise a
+ * command the hob left running in the background, such as a dev server or a watch, is what the turn
+ * waits on once the hob has gone on past it: no step runs, or the newest step is not one that runs
+ * (#1004, #1018).
  */
 const nowItem = (tree: TaskTree, unit: ReadonlyArray<Task>, read: Reads): LaneItem | null => {
   const running = unit.find((each) => liveAttemptOn(each, tree));
@@ -419,18 +427,21 @@ const nowItem = (tree: TaskTree, unit: ReadonlyArray<Task>, read: Reads): LaneIt
   const activity = read.of(attempt.id);
   const since = lastActivity(tree, unit, attempt, activity);
   const key = `now-${running.id}`;
-  const newest = activity?.steps.at(-1);
-  const command = activity?.commands.findLast((each) => each.state === "running");
-  if (command !== undefined && newest?.state !== "running")
-    return {
-      kind: "now",
-      key,
-      label: messages.waitsOnCommand({ command: command.command }),
-      plain: commandAwaited(command),
-      since,
-    };
-  const step = activity?.steps.findLast((each) => each.state === "running");
-  return { kind: "now", key, label: step?.label ?? null, plain: step === undefined ? null : stepDoing(step), since };
+  const on = (step: ReplyStep | undefined): LaneItem => ({
+    kind: "now",
+    key,
+    label: step?.label ?? null,
+    plain: step === undefined ? null : stepDoing(step),
+    since,
+  });
+  if (activity === undefined) return on(undefined);
+  const steps = activity.steps.filter((each) => each.state === "running");
+  const active = steps.findLast((each) => !runsCommand(each, activity));
+  if (active !== undefined) return on(active);
+  const command = activity.commands.findLast((each) => each.state === "running");
+  if (command === undefined || activity.steps.at(-1)?.state === "running") return on(steps.at(-1));
+  const label = messages.waitsOnCommand({ command: command.command });
+  return { kind: "now", key, label, plain: commandAwaited(command), since };
 };
 
 /**
