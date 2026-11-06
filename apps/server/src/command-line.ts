@@ -1,6 +1,6 @@
-import { mkdirSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { Console, Effect } from "effect";
-import { hubPresenceFile, processAlive, readHubPresence } from "./hub-presence.ts";
+import { hubClaimLock, hubPresenceFile, inspectHubPresence, processAlive } from "./hub-presence.ts";
 import { parseServerIdentity, readInstallationId } from "./installation.ts";
 import { hubPort } from "./network-settings.ts";
 
@@ -13,7 +13,8 @@ const refused = (error: unknown) =>
 
 /**
  * Whether a hub may be using this data folder, so a command must not touch it (#999). A hub records
- * its process in the folder while it runs, so it is found whatever port it listens on. With no live
+ * its process in the folder while it runs, so it is found whatever port it listens on. A hub that is
+ * claiming the folder, and a record that cannot be read, count as one. With no live
  * record, as for a hub of an earlier version, the hub's port is asked: only a refused connection or
  * a whole answer from another installation counts as no hub. Anything else counts as one: a port that
  * does not answer, or not in full, and an answer that does not say which hub it is.
@@ -21,8 +22,14 @@ const refused = (error: unknown) =>
  */
 export const hubUsing = (dataDir: string) =>
   Effect.promise(async (): Promise<string | undefined> => {
-    const presence = readHubPresence(dataDir);
-    if (presence !== undefined && processAlive(presence.pid)) {
+    if (existsSync(hubClaimLock(dataDir))) {
+      return `A hub is starting on ${dataDir}. If none is, delete ${hubClaimLock(dataDir)}.`;
+    }
+    const presence = inspectHubPresence(dataDir);
+    if (presence === "unreadable") {
+      return `${hubPresenceFile(dataDir)} cannot be read, so a hub may be using ${dataDir}. If none is, delete it.`;
+    }
+    if (presence !== "none" && processAlive(presence.pid)) {
       return `A hub is using ${dataDir} (process ${presence.pid}, port ${presence.port}). If none is running, delete ${hubPresenceFile(dataDir)}.`;
     }
     const port = hubPort(dataDir, process.env);

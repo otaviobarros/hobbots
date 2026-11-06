@@ -1,14 +1,15 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { hubUsing } from "../src/command-line.ts";
 import {
   claimHubPresence,
   forgetHubPresence,
+  hubClaimLock,
   hubPresenceFile,
   readHubPresence,
   recordHubPort,
@@ -17,6 +18,10 @@ import { ensureInstallationId } from "../src/installation.ts";
 
 // How the command-line tools tell whether a hub is using a data folder (#999). They refuse whenever
 // they cannot tell, because a reset cannot be undone.
+
+const serverDir = resolve(import.meta.dirname, "..");
+const tsx = join(serverDir, "node_modules", ".bin", "tsx");
+const claimant = join(import.meta.dirname, "presence-claimant.ts");
 
 let dataDir: string;
 let server: Server | undefined;
@@ -127,7 +132,10 @@ describe("a hub's record of itself", () => {
     try {
       writeFileSync(hubPresenceFile(dataDir), JSON.stringify({ pid: other.pid, port: 4393 }));
       const claimed = await Effect.runPromise(Effect.flip(claimHubPresence(dataDir, 4317)));
-      expect(claimed).toMatchObject({ _tag: "HubAlreadyRunning", pid: other.pid, port: 4393 });
+      expect(claimed).toMatchObject({
+        _tag: "HubPresenceRefused",
+        reason: `Another hub (process ${other.pid}, port 4393) is using ${dataDir}. Stop it first.`,
+      });
       await Effect.runPromise(recordHubPort(dataDir, 4317));
       await Effect.runPromise(forgetHubPresence(dataDir));
       expect(readHubPresence(dataDir)).toEqual({ pid: other.pid, port: 4393 });
@@ -149,5 +157,74 @@ describe("a hub's record of itself", () => {
     // With no record at all, the first claim makes one.
     await Effect.runPromise(claimHubPresence(dataDir, 4317));
     expect(readHubPresence(dataDir)).toEqual({ pid: process.pid, port: 4317 });
+  });
+});
+
+describe("hubs that claim a data folder at once", () => {
+  // covers OP-003 (#999)
+  it("[TC-OP-113] of hubs starting together on a crashed hub's folder, exactly one takes it", {
+    timeout: 60_000,
+  }, async () => {
+    const gone = spawnSync(process.execPath, ["-e", "process.pid"]).pid;
+    writeFileSync(hubPresenceFile(dataDir), JSON.stringify({ pid: gone, port: 4393 }));
+    // Each claims as a hub's start does and, once it has the folder, stays alive as a hub would.
+    const claimants = Array.from({ length: 8 }, (_, index) => {
+      const child = spawn(tsx, [claimant, dataDir, String(5000 + index)], { cwd: serverDir });
+      let output = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        output += chunk.toString("utf8");
+      });
+      /** Waits until the claimant has printed `lines` lines, or exited. */
+      const printed = (lines: number) =>
+        new Promise<string>((done) => {
+          const check = () => {
+            if (output.split("\n").length > lines || child.exitCode !== null)
+              done(output.trim().split("\n").at(-1) ?? "");
+          };
+          child.stdout.on("data", check);
+          child.once("exit", check);
+          check();
+        });
+      const said = printed(2);
+      const ready = printed(1);
+      return { child, said, ready };
+    });
+    try {
+      await Promise.all(claimants.map((each) => each.ready));
+      for (const { child } of claimants) child.stdin.write("go\n");
+      const outcomes = await Promise.all(claimants.map((each) => each.said));
+      const claimed = outcomes.filter((outcome) => outcome.startsWith("claimed"));
+      expect(claimed).toHaveLength(1);
+      const winner = Number(claimed[0]?.split(" ")[1]);
+      expect(readHubPresence(dataDir)?.pid).toBe(winner);
+      for (const outcome of outcomes.filter((each) => !each.startsWith("claimed"))) {
+        expect(outcome).toMatch(/^refused Another hub \(process \d+, port \d+\) is using /);
+      }
+      expect(existsSync(hubClaimLock(dataDir))).toBe(false);
+    } finally {
+      for (const { child } of claimants) child.kill("SIGKILL");
+    }
+  });
+
+  it("[TC-OP-114] a record that cannot be read, or a claim under way, stops both a hub and the commands", {
+    timeout: 15_000,
+  }, async () => {
+    await closedPort();
+    writeFileSync(hubPresenceFile(dataDir), "");
+    expect(await Effect.runPromise(Effect.flip(claimHubPresence(dataDir, 4317)))).toMatchObject({
+      reason: `${hubPresenceFile(dataDir)} cannot be read, so a hub may be using ${dataDir}. If none is, delete it.`,
+    });
+    expect(await Effect.runPromise(hubUsing(dataDir))).toContain(`${hubPresenceFile(dataDir)} cannot be read`);
+    expect(readFileSync(hubPresenceFile(dataDir), "utf8")).toBe("");
+
+    rmSync(hubPresenceFile(dataDir));
+    mkdirSync(hubClaimLock(dataDir));
+    expect(await Effect.runPromise(hubUsing(dataDir))).toBe(
+      `A hub is starting on ${dataDir}. If none is, delete ${hubClaimLock(dataDir)}.`,
+    );
+    expect(await Effect.runPromise(Effect.flip(claimHubPresence(dataDir, 4317)))).toMatchObject({
+      reason: `Another hub is starting on ${dataDir}. If none is, delete ${hubClaimLock(dataDir)}.`,
+    });
+    expect(existsSync(hubPresenceFile(dataDir))).toBe(false);
   });
 });
