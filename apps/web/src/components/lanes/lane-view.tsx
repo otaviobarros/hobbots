@@ -122,14 +122,14 @@ export function LaneView({
               {role !== null && <RoleTag role={role} />}
             </span>
             <span className="line-clamp-2 text-detail text-text-secondary" title={lane.title}>
-              <Said>: </Said>
+              <Said>{messages.said.title}</Said>
               {lane.title}
             </span>
           </span>
-          <Said>, </Said>
+          <Said>{messages.said.state}</Said>
           <StatusTag status={roomTone(lane.status)}>{roomStatusLabel(lane.status)}</StatusTag>
           {/* Named by what it shows, then what it does, so speech input can say what it sees (WCAG 2.5.3). */}
-          <Said>. {messages.show({ name: hob.name })}</Said>
+          <Said>{messages.said.show({ name: hob.name })}</Said>
         </button>
         {slots.actions}
       </div>
@@ -169,7 +169,7 @@ function ReadState({ name, reads }: { name: string; reads: LaneReads }) {
 function RoleTag({ role }: { role: string }) {
   return (
     <span className="ms-1.5 font-sans text-meta font-normal text-label">
-      <Said>, </Said>
+      <Said>{messages.said.role}</Said>
       {role}
     </span>
   );

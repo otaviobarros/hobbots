@@ -78,25 +78,25 @@ export function QuestTicket({
         </span>
         <span className="min-w-0 flex-1 truncate font-heading text-body font-(--heading-weight) @max-sm/ticket:order-1 @max-sm/ticket:basis-[calc(100%-2rem)] @sm/ticket:flex-initial">
           {ticket.title}
-          <span className="sr-only">: </span>
+          <span className="sr-only">{messages.said.title}</span>
         </span>
         <span className="flex min-w-0 items-center gap-2 @max-sm/ticket:order-4 @max-sm/ticket:flex-1">
           <span className="min-w-0 truncate text-detail text-text-secondary">{progress}</span>
           {needs !== null && (
             <>
-              <span className="sr-only">, </span>
+              <span className="sr-only">{messages.said.part}</span>
               <StatusTag status="needs-you">{needs}</StatusTag>
             </>
           )}
           {stuck && (
             <>
-              <span className="sr-only">, </span>
+              <span className="sr-only">{messages.said.part}</span>
               <StatusTag status="blocked">{messages.stuck}</StatusTag>
             </>
           )}
         </span>
         <span className="ms-auto shrink-0 text-ui font-bold whitespace-nowrap text-lantern @max-sm/ticket:order-2">
-          <span className="sr-only">. </span>
+          <span className="sr-only">{messages.said.open}</span>
           <span className="@max-sm/ticket:sr-only">{messages.openRoom} </span>
           <span aria-hidden>→</span>
         </span>
