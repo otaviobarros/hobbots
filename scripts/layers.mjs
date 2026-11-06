@@ -28,7 +28,7 @@ export const layers = {
     may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"],
   },
   // The Workbench's records (ADR 023): the scanner of a hob's folders and the store of logs and contents.
-  "@hobbots/workbench": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents"] },
+  "@hobbots/workbench": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"] },
   // Memory (ADR 028): the bundled ai-memory engine and the only code that knows it, behind `MemoryStore`, its
   // fake, and the memory tools, which ask the policy engine before each call as every hub tool does.
   "@hobbots/memory": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"] },

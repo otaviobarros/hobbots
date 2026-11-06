@@ -3,8 +3,9 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, join, normalize, relative, sep } from "node:path";
 import { HobFiles } from "@hobbots/agents";
 import { SERVED_FILE_BYTES } from "@hobbots/domain";
+import { openFileIn } from "@hobbots/permissions";
 import { Effect, Layer, Option } from "effect";
-import { openFileIn, type Seen, unchangedSince } from "./scanner.ts";
+import { type Seen, unchangedSince } from "./scanner.ts";
 
 /**
  * The hob's folders as the Workbench's Files tab reads them (ADR 023). Every read opens the file

@@ -1,6 +1,6 @@
-import { constants } from "node:fs";
-import { type FileHandle, lstat, open, readdir, readlink, realpath } from "node:fs/promises";
+import { type FileHandle, lstat, readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
+import { openFileIn } from "@hobbots/permissions";
 import { SKIPPED_FOLDERS, type SkillTree, TREE_ENTRIES_MAX, type TreeEntry, TreeUnreadable } from "../tree.ts";
 
 type Stats = Awaited<ReturnType<typeof lstat>>;
@@ -82,36 +82,25 @@ const ancestorsOf = (path: string): ReadonlyArray<string> => {
   return ["", ...parts.map((_, index) => parts.slice(0, index + 1).join("/"))];
 };
 
-/**
- * Where an open file really is, on a system that says (Linux, through `/proc`); null elsewhere. It
- * names the file the handle holds, so no link or swap along the way can make it read as inside.
- */
-const realPathOf = (handle: FileHandle): Promise<string | null> =>
-  readlink(`/proc/self/fd/${handle.fd}`).catch(() => null);
-
-/** No link is followed on open where the system offers it (not on Windows). */
-const OPEN_FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0);
-
 /** A folder on the hub's computer, read in place; import copies what it takes. */
 export const folderTree = async (root: string): Promise<SkillTree> => {
   const stats = await lstat(root).catch(() => null);
   if (stats === null || !stats.isDirectory()) throw new TreeUnreadable(`${root} is not a folder.`);
+  // The canonical folder, so that a read can refuse a link anywhere below it.
   const top = await realpath(root);
-  const { entries, identities } = await walk(root);
+  const { entries, identities } = await walk(top);
   const files = new Set(entries.filter((entry) => entry.kind === "file").map((entry) => entry.path));
 
   /**
-   * The file opened without following a link, and only when it is the very file that was listed and
-   * still sits at its path inside the folder: a file or a folder above it swapped since the listing,
-   * for a link or for anything else, is refused rather than read.
+   * The file is opened through no link anywhere on its path, which the kernel enforces in the same
+   * step as the open (`openFileIn`), and read only when it is the very file that was listed, under
+   * the very folders that were: a file or a folder swapped since the listing, for a link or for
+   * anything else, is refused rather than read, even one swapped back in between.
    */
   const verified = async (handle: FileHandle, path: string) => {
-    const opened = await handle.stat();
-    if (!opened.isFile() || !sameObject(opened, identities.get(path))) throw changed(path);
-    const real = await realPathOf(handle);
-    if (real !== null && real !== join(top, path)) throw changed(path);
+    if (!sameObject(await handle.stat(), identities.get(path))) throw changed(path);
     for (const folder of ancestorsOf(path)) {
-      if (!(await stillFolder(root, folder, identities.get(folder)))) throw changed(path);
+      if (!(await stillFolder(top, folder, identities.get(folder)))) throw changed(path);
     }
   };
 
@@ -120,9 +109,8 @@ export const folderTree = async (root: string): Promise<SkillTree> => {
     commit: null,
     read: async (path) => {
       if (!files.has(path)) throw new TreeUnreadable(`${path} is not a file of the folder.`);
-      const handle = await open(join(root, path), OPEN_FLAGS).catch(() => {
-        throw changed(path);
-      });
+      const handle = await openFileIn(top, path);
+      if (handle === null) throw changed(path);
       try {
         await verified(handle, path);
         return await handle.readFile();
