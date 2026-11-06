@@ -15,6 +15,7 @@ import {
 } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
 import { type CheckedSkill, type CheckResult, checkSkill } from "./check.ts";
+import { editedTree, type SkillEdit } from "./edit.ts";
 import { findSkills } from "./find.ts";
 import { type LockedSkill, readLock } from "./lock.ts";
 import { archiveTree } from "./sources/archive.ts";
@@ -29,7 +30,9 @@ export type SkillImportSource =
   | { readonly _tag: "Archive"; readonly fileName: string; readonly bytes: Uint8Array }
   | { readonly _tag: "Git"; readonly url: string; readonly ref: string | null }
   /** Written in Hobbots: each file's path in the skill and its text. */
-  | { readonly _tag: "Written"; readonly files: ReadonlyArray<{ readonly path: string; readonly text: string }> };
+  | { readonly _tag: "Written"; readonly files: ReadonlyArray<{ readonly path: string; readonly text: string }> }
+  /** A revision's folder, edited in Hobbots: its other files are kept as they are. */
+  | ({ readonly _tag: "Edited"; readonly folder: string } & SkillEdit);
 
 /** One skill a source holds, as import would take it, or the rule it broke. */
 export interface SkillCandidate {
@@ -116,6 +119,8 @@ const openTree = (source: SkillImportSource) => {
         return gitTree(source.url, source.ref);
       case "Written":
         return Promise.resolve(writtenTree(source.files));
+      case "Edited":
+        return editedTree(source.folder, source);
     }
   };
   return Effect.acquireRelease(
@@ -155,6 +160,7 @@ const originOf = (source: SkillImportSource, locked: LockedSkill | null): SkillO
     case "Git":
       return { _tag: "Git", url: source.url, ref: source.ref };
     case "Written":
+    case "Edited":
       return null;
   }
 };

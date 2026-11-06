@@ -165,6 +165,21 @@ export function MemoryOverviewSkeleton() {
 }
 
 /** Nothing remembered yet: how memory fills, in three steps. */
+/** Numbered steps on cards, three to a row, as a page with nothing in it yet explains itself. */
+export function StepCards({ steps }: { steps: ReadonlyArray<{ readonly title: string; readonly body: string }> }) {
+  return (
+    <ol className="m-0 grid list-none grid-cols-1 gap-3 p-0 min-[900px]:grid-cols-3">
+      {steps.map((step, at) => (
+        <li key={step.title} className="flex flex-col gap-1.5 rounded-card bg-card p-4">
+          <span className="text-meta text-label tabular-nums">{formatCount(at + 1)}</span>
+          <span className="text-body font-semibold text-text-strong">{step.title}</span>
+          <span className="text-detail text-text-secondary">{step.body}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function MemoryNothingYet() {
   return (
     <div className="flex max-w-form-max flex-col gap-6">
@@ -172,15 +187,7 @@ export function MemoryNothingYet() {
         <h2 className="m-0 font-heading text-display font-bold text-text-strong">{copy.empty.title}</h2>
         <p className="m-0 max-w-[600px] text-text-secondary">{copy.empty.body}</p>
       </div>
-      <ol className="m-0 grid list-none grid-cols-1 gap-3 p-0 min-[900px]:grid-cols-3">
-        {copy.empty.steps.map((step, at) => (
-          <li key={step.title} className="flex flex-col gap-1.5 rounded-card bg-card p-4">
-            <span className="text-meta text-label tabular-nums">{formatCount(at + 1)}</span>
-            <span className="text-body font-semibold text-text-strong">{step.title}</span>
-            <span className="text-detail text-text-secondary">{step.body}</span>
-          </li>
-        ))}
-      </ol>
+      <StepCards steps={copy.empty.steps} />
       <p className="m-0 text-detail text-label">{copy.empty.footnote}</p>
     </div>
   );

@@ -133,7 +133,8 @@ export function MemoryNav({
   );
 }
 
-function NavSkeleton() {
+/** Two skeleton rows, as a nav shows while what it lists is read. */
+export function NavSkeleton() {
   return (
     <>
       {["90px", "120px"].map((width) => (

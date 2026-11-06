@@ -336,4 +336,40 @@ describe("skill import", () => {
       }),
     );
   });
+  // covers ADR 029 (Storage and revisions), #1062
+  it("[TC-AG-145] edits a revision into a new one: the description and instructions change, every other file stays", async () => {
+    const { layer } = await importerLayer();
+    const folder = await folderOf({
+      "SKILL.md": "---\nname: release\ndescription: Releases.\nlicense: MIT\n---\n\nTag it.\n",
+      "scripts/tag.sh": { text: "#!/bin/sh\ngit tag", executable: true },
+    });
+    await runWith(layer)(
+      Effect.gen(function* () {
+        const importer = yield* SkillImporter;
+        const [first] = yield* importer.add({ _tag: "Folder", path: folder }, you);
+        if (first === undefined) return expect.unreachable();
+        const base = (yield* (yield* SkillFiles).folder(first.revision.hash)) ?? "";
+        const edit = {
+          _tag: "Edited",
+          folder: base,
+          description: "Use when releasing: tag: then push.",
+          instructions: "Tag it, then push.",
+        } as const;
+        const [second] = yield* importer.add(edit, { ...you, skillId: first.skill.id });
+        expect(second?.revision).toMatchObject({
+          number: 2,
+          name: "release",
+          description: "Use when releasing: tag: then push.",
+        });
+        const object = (yield* (yield* SkillFiles).folder(second?.revision.hash ?? first.revision.hash)) ?? "";
+        const text = yield* Effect.promise(() => readFile(join(object, "SKILL.md"), "utf8"));
+        expect(text).toContain("license: MIT");
+        expect(text).toContain("Tag it, then push.");
+        expect(second?.revision.files.find((file) => file.path === "scripts/tag.sh")?.mode).toBe("executable");
+        // The same edit again is the revision it already made.
+        const [again] = yield* importer.add(edit, { ...you, skillId: first.skill.id });
+        expect(again).toMatchObject({ added: false, revision: { number: 2 } });
+      }),
+    );
+  });
 });

@@ -15,12 +15,13 @@ import { useSidebarOpen } from "./use-sidebar-open.ts";
 
 const copy = messages;
 
-// The five sections; the hobs follow them. Routines return after the MVP. Only the Inbox carries a
-// badge: Memory never does, since nothing there waits on you that the Inbox does not count.
+// The six sections; the hobs follow them. Routines return after the MVP. Only the Inbox carries a
+// badge: Memory and Skills never do, since nothing there waits on you that the Inbox does not count.
 const ITEMS = [
   { label: "Home", to: "/" },
   { label: "Inbox", to: "/inbox" },
   { label: "Memory", to: "/memory" },
+  { label: "Skills", to: "/skills" },
   { label: "Usage", to: "/usage" },
   { label: "Settings", to: "/settings" },
 ] as const satisfies ReadonlyArray<{ label: SectionName; to: string }>;

@@ -169,4 +169,37 @@ describe("skills routes", () => {
     expect(inUse).toMatchObject({ status: 409, body: { _tag: "SkillStillAssigned", skillId: sharedId } });
     expect(inUse.body.assignments).toHaveLength(1);
   });
+  // covers ADR 029 (Storage and revisions, The Skills page), #1062
+  it("[TC-AG-146] reads a revision's files only by the paths it lists, and edits a skill into a new revision", async () => {
+    const folder = await folderWith({
+      "SKILL.md": skillMd("release"),
+      "references/checks.md": "Check the banner.",
+      "logo.bin": "\u0000\u0001",
+    });
+    const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
+    const [{ skill, revision }] = imported.body.imported;
+    const at = `/api/skills/${skill.id}/revisions/${revision.hash}/file`;
+
+    const checks = await request("GET", `${at}?path=references%2Fchecks.md`);
+    expect(checks.body).toEqual({ path: "references/checks.md", mode: "regular", size: 17, text: "Check the banner." });
+    expect((await request("GET", `${at}?path=logo.bin`)).body).toMatchObject({ path: "logo.bin", text: null });
+    // A path the revision does not list is not read, whatever it names.
+    expect((await request("GET", `${at}?path=..%2F..%2Fetc%2Fpasswd`)).status).toBe(404);
+    expect((await request("GET", `${at}?path=missing.md`)).status).toBe(404);
+
+    const edit = { base: revision.hash, description: "Use when releasing.", instructions: "Tag, then push." };
+    const edited = await request("POST", `/api/skills/${skill.id}/edits`, edit);
+    expect(edited.body).toMatchObject({ added: true, revision: { number: 2, description: "Use when releasing." } });
+    expect(edited.body.revision.files.map((file: { path: string }) => file.path)).toEqual([
+      "SKILL.md",
+      "logo.bin",
+      "references/checks.md",
+    ]);
+    const read = await request("GET", `/api/skills/${skill.id}/revisions/${edited.body.revision.hash}`);
+    expect(read.body.instructions).toBe(
+      "---\nname: release\ndescription: Use when releasing.\n---\n\nTag, then push.\n",
+    );
+    const stale = await request("POST", `/api/skills/${skill.id}/edits`, { ...edit, base: "0".repeat(64) });
+    expect(stale.status).toBe(404);
+  });
 });
