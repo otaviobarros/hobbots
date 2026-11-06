@@ -4,8 +4,10 @@ import {
   ancestorsOf,
   type BackpackItemKind,
   type BackpackPayload,
+  type Checkpoint,
   type CheckpointKind,
   type Delegation,
+  isIdleQuestFinding,
   type JournaledEvent,
   leadsAbove,
   type NewBackpackItem,
@@ -128,10 +130,18 @@ const taskStateChanged: Rule<"TaskStateChanged"> = ({ task, attempt, control }, 
   ];
 };
 
+/**
+ * The hob a report on `task` goes to: its nearest lead. The hub's finding that the Quest you asked
+ * for has nothing moving it has no lead above, so it goes to that Quest's own lead (#1081).
+ */
+const reportTo = (task: Task, checkpoint: Checkpoint, trees: Trees): AgentId | undefined =>
+  leadsAbove(task, trees.all)[0] ??
+  (task.parentId === null && isIdleQuestFinding(checkpoint) ? task.ownerId : undefined);
+
 /** A member's report goes to its nearest lead: routine progress as Progress, anything else as a Checkpoint. */
 const checkpointRecorded: Rule<"CheckpointRecorded"> = ({ checkpoint }, trees) => {
   const task = trees.byId.get(checkpoint.taskId);
-  const lead = task === undefined ? undefined : leadsAbove(task, trees.all)[0];
+  const lead = task === undefined ? undefined : reportTo(task, checkpoint, trees);
   if (task === undefined || lead === undefined || ENDING.includes(checkpoint.kind)) return [];
   // The reason for a move to a Failure state comes with the Failure item, when that goes to the same lead.
   const withFailure = trees.movedFor.get(task.id) === checkpoint.summary && checkpoint.kind === "blocker";

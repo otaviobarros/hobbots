@@ -44,6 +44,7 @@ import type { PathSeparator } from "./authority.ts";
 import { cut, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { makeCancelSettler } from "./cancels.ts";
+import { recoverIdleQuests } from "./empty-quests.ts";
 import { delegatedAccess, makeMemberRunner } from "./members.ts";
 import { currentAccessOf, type Ending, type Running, runSessionTurn, STOPPED, type StopReason } from "./session.ts";
 import { TaskSignal } from "./signal.ts";
@@ -441,6 +442,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
         );
       }
       yield* endStranded;
+      // A turn's end that the stop cut off before its idle Quest was flagged is flagged now (#1081).
+      yield* recoverIdleQuests({ tasks, attempt }, yield* nowIso);
 
       yield* Effect.forkScoped(Effect.forever(Effect.andThen(signal.next, round)));
       yield* signal.notify;

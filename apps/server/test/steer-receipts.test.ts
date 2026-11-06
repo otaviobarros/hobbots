@@ -404,8 +404,10 @@ describe("a steer receipt for a message you send the lead", () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run } = hubbed;
-    // The work runs with no member yet, so no turn of the lead's comes between yours.
+    // The work runs with no member yet: the hub wakes the lead once about it, and its Task is blocked
+    // once that turn too leaves the Quest idle (#1081), so no turn of the lead's comes between yours.
     await run(send(["Build the site", hub("start_quest", { key: "quest", goal: "Build the site" })]));
+    await run(treeWhen((tree) => tree.tasks[0]?.state === "blocked"));
     await run(messagesWhen((all) => all.some((each) => each.role === "assistant" && each.status === "complete")));
 
     // The reply to your steer is cut off; the turn you continue it with delegates the report.

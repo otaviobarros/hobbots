@@ -250,4 +250,25 @@ describe("turnEnded", () => {
       );
     expect([was("waiting"), was("blocked"), was("active")]).toEqual(["→waiting", "→blocked", "stay"]);
   });
+
+  // covers OR-004, EX-002
+  it("[TC-OR-640] keeps the root it was blocked on a stalled Quest active once a Task under it is open", () => {
+    const child: LedgerEntry = { _tag: "Child", task: task("active") };
+    const moved = (ledger: ReadonlyArray<LedgerEntry>) =>
+      shown(
+        turnEnded({
+          runner: "root",
+          task: task("active"),
+          ending: ENDINGS.replied,
+          ledger,
+          carried: new Set(),
+          was: "blocked",
+        }).task,
+      );
+    // Its lead delegated again: a Task under it moves the Quest on, so it is not blocked (#1081).
+    expect(moved([child])).toBe("stay");
+    // A wait that holds still shows waiting, and nothing open gives the block back.
+    expect(moved([child, waitEntry])).toBe("→waiting");
+    expect(moved([])).toBe("→blocked");
+  });
 });
