@@ -1,4 +1,4 @@
-import type { AgentId } from "@hobbots/domain";
+import type { AgentId, GitHubUser } from "@hobbots/domain";
 import {
   type GitHubComment,
   type GitHubItem,
@@ -51,6 +51,11 @@ export class GitHubApi extends Context.Service<
     ) => Effect.Effect<string | null, GitHubError>;
     /** The login the hob's sign-in acts as, which a push card shows: its bot when it has its own app. */
     readonly viewer: (agentId: AgentId) => Effect.Effect<string, GitHubError>;
+    /**
+     * The connected account's login, ID and profile name, from which its commit identity is made
+     * (#741). Read with the user's account, so a hob with its own app has none.
+     */
+    readonly user: (agentId: AgentId) => Effect.Effect<GitHubUser, GitHubError>;
     /** Pull requests in any state from `head` into `base` of the same repository, newest first (#324). */
     readonly pullRequests: (
       agentId: AgentId,
@@ -280,6 +285,7 @@ const refusalText = (response: HttpClientResponse.HttpClientResponse) =>
     Effect.orElseSucceed(() => `GitHub refused it (${response.status}).`),
   );
 const ViewerJson = Schema.Struct({ login: Schema.String });
+const UserJson = Schema.Struct({ login: Schema.String, id: Schema.Number, name: Schema.NullOr(Schema.String) });
 const ShaJson = Schema.Struct({ sha: Schema.String });
 const RateLimitJson = Schema.Struct({
   resources: Schema.Struct({ core: Schema.Struct({ remaining: Schema.Number, reset: Schema.Number }) }),
@@ -596,6 +602,7 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
             const json = yield* read(agentId, null, "/user", ViewerJson, "the account the hub signs in as");
             return json.login;
           }),
+        user: (agentId) => read(agentId, null, "/user", UserJson, "the account the hub signs in as"),
         repository: (agentId, repository) =>
           read(
             agentId,

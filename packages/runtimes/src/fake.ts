@@ -404,7 +404,7 @@ export const scriptedToolEvents = (
             request.redaction,
             turn.steersPush,
             turn.initTool,
-            turn.commitAs,
+            turn.commitsAs,
           );
           const label = toolLabel(call.tool, call.input, request.redaction?.text);
           const command =

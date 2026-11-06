@@ -9,9 +9,10 @@ import {
   type ToolStartedEvent,
   type TurnApprovals,
 } from "@hobbots/agents";
-import { type CommitIdentity, leftoverGitNote, steerGitInit } from "@hobbots/domain";
+import { leftoverGitNote, steerGitInit } from "@hobbots/domain";
 import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
+import type { CommitsAs } from "./git-config.ts";
 import { inSharedTemp, TEMP_HINT } from "./sandbox.ts";
 import {
   commandWritesTo,
@@ -81,14 +82,25 @@ export const steerPush = (tool: string) =>
 
 /**
  * Why a command that sets its own commit identity is refused (#700), naming the one the hub sets:
- * the hob's bot when it has its own GitHub App (ADR 022), else the user's (ADR 018).
+ * the hob's bot when it has its own GitHub App (ADR 022), else the user's (ADR 018), from their Git
+ * config or, when it sets none, the one they gave Hobbots (#741). With neither, it says no identity
+ * is set yet and Hobbots asks the user, so the hob neither sets one nor asks itself.
  */
-export const steerCommitIdentity = (commitAs: CommitIdentity | undefined) =>
-  `Run Git without setting who commits: no -c user.*, git config user.*, --author or -C on git commit, and no GIT_AUTHOR_*, GIT_COMMITTER_*, EMAIL or GIT_CONFIG* variables, whether set, exported or unset. Hobbots sets who your commits are made as, and they are made as ${
-    commitAs === undefined
-      ? "the user, with the identity their Git config sets"
-      : `${commitAs.name} <${commitAs.email}>`
-  }, never as another hob or person.`;
+export const steerCommitIdentity = (commitsAs: CommitsAs) => {
+  const rule =
+    "Run Git without setting who commits: no -c user.*, git config user.*, --author or -C on git commit, and no GIT_AUTHOR_*, GIT_COMMITTER_*, EMAIL or GIT_CONFIG* variables, whether set, exported or unset.";
+  switch (commitsAs._tag) {
+    case "Missing":
+      return `${rule} Hobbots sets who your commits are made as, never you, and none is set yet: the user's Git config sets no identity, and Hobbots is asking the user who hobs should commit as. Do not ask them yourself, and do not commit until a later turn: leave your changes uncommitted and say that the commit waits for their answer.`;
+    case "Bot":
+    case "UserGiven":
+      return `${rule} Hobbots sets who your commits are made as, and they are made as ${commitsAs.identity.name} <${commitsAs.identity.email}>${
+        commitsAs._tag === "UserGiven" ? ", the identity the user gave Hobbots" : ""
+      }, never as another hob or person.`;
+    case "UserConfig":
+      return `${rule} Hobbots sets who your commits are made as, and they are made as the user, with the identity their Git config sets, never as another hob or person.`;
+  }
+};
 
 /** Whether a call runs, and the verdict it runs under or why it does not. */
 export type CallDecision = AskedDecision<PolicyVerdict>;
@@ -126,10 +138,10 @@ export const decideCall = (
   redaction?: Redactor | null,
   steersPush?: (cwd: string) => Effect.Effect<string | null>,
   initTool?: string,
-  commitAs?: CommitIdentity,
+  commitsAs: CommitsAs = { _tag: "UserConfig" },
 ): Effect.Effect<CallDecision> =>
   Effect.flatMap(steeredTo(call, steersPush), (pushTool) => {
-    const steer = steeredAway(context, call, pushTool, initTool, commitAs);
+    const steer = steeredAway(context, call, pushTool, initTool, commitsAs);
     return steer !== null
       ? Effect.succeed<CallDecision>({ _tag: "Refuse", verdict: undefined, reason: steer })
       : askUntilDecided({
@@ -158,10 +170,10 @@ const steeredAway = (
   call: ToolCall,
   pushTool: string | null,
   initTool: string | undefined,
-  commitAs: CommitIdentity | undefined,
+  commitsAs: CommitsAs,
 ): string | null => {
   if (pushTool !== null) return steerPush(pushTool);
-  if (overridesCommitIdentity(call.tool, call.input, call.cwd)) return steerCommitIdentity(commitAs);
+  if (overridesCommitIdentity(call.tool, call.input, call.cwd)) return steerCommitIdentity(commitsAs);
   if (initTool !== undefined && initsRepository(call.tool, call.input, call.cwd)) return steerGitInit(initTool);
   const temp = sharedTempWrites(context, call);
   return temp.length > 0 ? steerTemp(temp) : null;

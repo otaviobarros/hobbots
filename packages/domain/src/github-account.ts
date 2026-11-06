@@ -83,6 +83,38 @@ export const hobAppCommitIdentity = (app: Pick<HobGitHubApp, "slug" | "botUserId
   };
 };
 
+/** A GitHub account as GitHub's `/user` gives it: its login, numeric ID and profile name, if set. */
+export interface GitHubUser {
+  readonly login: string;
+  readonly id: number;
+  readonly name: string | null;
+}
+
+/**
+ * The name and email in an answer written as Git writes them, `Ada Lovelace <ada@example.com>`, or
+ * null when it holds none (#741). The email needs one `@` with text on both sides and no spaces.
+ */
+export const parseCommitIdentity = (text: string): CommitIdentity | null => {
+  const trimmed = text.trim().replace(/\.$/, "");
+  const open = trimmed.lastIndexOf("<");
+  if (open === -1 || !trimmed.endsWith(">")) return null;
+  const name = trimmed.slice(0, open).trim();
+  const email = trimmed.slice(open + 1, -1).trim();
+  const at = email.indexOf("@");
+  const valid = at > 0 && at === email.lastIndexOf("@") && at < email.length - 1 && !/[\s<>]/.test(email);
+  return name === "" || /[<>\n]/.test(name) || !valid ? null : { name, email };
+};
+
+/**
+ * Who the user commits as with their GitHub account (#741): their profile name, or their login when
+ * they set none, at their noreply address `<id>+<login>@users.noreply.github.com`, which GitHub
+ * links to the account without showing their own email.
+ */
+export const githubUserCommitIdentity = (user: GitHubUser): CommitIdentity => ({
+  name: user.name?.trim() || user.login,
+  email: `${user.id}+${user.login}@users.noreply.github.com`,
+});
+
 /** Where a hob's app is installed: the account, whether it reaches all of its repositories or some, and which. */
 export const HobGitHubAppInstallation = Schema.Struct({
   id: Schema.Number,

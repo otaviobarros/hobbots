@@ -1,9 +1,10 @@
 import { realpathSync } from "node:fs";
 import { basename, dirname, join, sep } from "node:path";
-import { effectiveFolders, FolderChecks, HobGitHubApps, HobTools } from "@hobbots/agents";
+import { effectiveFolders, FolderChecks, HobGitHubApps, HobTools, openTools, operationDecision } from "@hobbots/agents";
 import { hobAppCommitIdentity } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { Effect, Layer, Option } from "effect";
+import { CommitIdentityGate } from "./commit-identity.ts";
 import { Installation } from "./installation.ts";
 
 /**
@@ -25,6 +26,8 @@ export const HobToolsLive = Layer.effect(
     const { dataDir } = yield* Installation;
     // A hob's own GitHub App, on a hub with the GitHub Charm (ADR 022), makes the hob commit as its bot.
     const apps = yield* Effect.serviceOption(HobGitHubApps);
+    // A hob on your account commits as you, or as who you told the hub when your Git config sets no one (#741).
+    const identities = yield* Effect.serviceOption(CommitIdentityGate);
     return HobTools.of({
       access: (agent) =>
         Effect.gen(function* () {
@@ -38,18 +41,27 @@ export const HobToolsLive = Layer.effect(
           const holder = folders.find((folder) => holds(folder, runtimes));
           if (holder !== undefined)
             yield* Effect.logWarning(`${holder} holds Hobbots' own state; the turn is chat-only`);
+          const policy = {
+            preset: safetyPreset,
+            sharedFolders: approvedFolders,
+            hob: agent.policy,
+            dataFolder: dataDir,
+            // Threads, Quests and delegations add no restrictions yet.
+            restrictions: [],
+          };
+          const turnFolders = holder === undefined ? folders : [];
+          // Only a turn whose commands may run can commit, so only then is who it commits as settled.
+          const commits =
+            app === null &&
+            turnFolders.length > 0 &&
+            openTools((operation) => operationDecision(policy, operation)).commands;
+          const userIdentity = commits && Option.isSome(identities) ? yield* identities.value.forTurn(agent.id) : null;
           return {
-            policy: {
-              preset: safetyPreset,
-              sharedFolders: approvedFolders,
-              hob: agent.policy,
-              dataFolder: dataDir,
-              // Threads, Quests and delegations add no restrictions yet.
-              restrictions: [],
-            },
-            folders: holder === undefined ? folders : [],
+            policy,
+            folders: turnFolders,
             runtimeFolder: join(runtimeFolders(dataDir), agent.id),
             ...(app === null ? {} : { commitAs: hobAppCommitIdentity(app) }),
+            ...(userIdentity === null ? {} : { userIdentity }),
           };
         }).pipe(
           // Without its policy the hob gets no tools: closed, never open.

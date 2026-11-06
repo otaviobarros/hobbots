@@ -1,0 +1,274 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { NodeHttpServer } from "@effect/platform-node";
+import {
+  ApprovalService,
+  ChatService,
+  GrantService,
+  HobAdmission,
+  HobLifecycle,
+  HobService,
+  HobTools,
+  HubQuestions,
+  PermissionSummary,
+} from "@hobbots/agents";
+import { HubQuestionsRead } from "@hobbots/api";
+import { GitHubApi, GitHubError } from "@hobbots/charms";
+import { type Agent, EMPTY_HOB_POLICY, type HubQuestion } from "@hobbots/domain";
+import {
+  ApprovalRepositoryLive,
+  BackpackLive,
+  EventJournal,
+  GrantRepositoryLive,
+  HobbotsRepositoryLive,
+  HubCommitIdentityRepository,
+  HubQuestionRepositoryLive,
+  SearchIndex,
+  SetupRepository,
+  TaskRepositoryLive,
+} from "@hobbots/persistence";
+import { TestDatabase } from "@hobbots/persistence/testing";
+import { FakeRuntimeLayer, type GitIdentity, userCommits } from "@hobbots/runtimes";
+import { Effect, Layer, ManagedRuntime, Schema } from "effect";
+import { HttpRouter } from "effect/http";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { CommitIdentityGateLive, OWN_GIT_LABEL } from "../src/commit-identity.ts";
+import { EventBus } from "../src/event-bus.ts";
+import { NodeFolderChecks } from "../src/folders.ts";
+import { ApiRoutes } from "../src/http.ts";
+import { Installation } from "../src/installation.ts";
+import { HobToolsLive } from "../src/tools.ts";
+import { AS_WINDOW, TestDevices } from "./window-device.ts";
+
+// Issue #741: on a computer whose Git config sets no name and email, a hob on the user's account
+// could not commit, could not set an identity, and kept asking the user who to commit as, though
+// nothing could act on the answer. Now the hub asks the user itself, once, with their GitHub
+// account recommended, keeps the answer, and the hob's next turn commits under it. The hub's own
+// composition runs on SQLite or PostgreSQL (TestDatabase); the fake runtime runs no command, so the
+// commit runs here with the environment the Claude Code adapter gives a turn's commands.
+
+const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-commit-identity-")));
+afterAll(() => rmSync(temp, { recursive: true, force: true }));
+const dataDir = join(temp, "hub", "data");
+const project = join(temp, "tide-table");
+const home = join(temp, "home");
+for (const folder of [dataDir, project, home]) mkdirSync(folder, { recursive: true });
+
+const nettle = { id: "nettle", policy: EMPTY_HOB_POLICY } as unknown as Agent;
+const ME = { login: "otaviobarros", id: 35647586, name: null };
+const NOREPLY = "35647586+otaviobarros@users.noreply.github.com";
+
+/** The user's Git identity as the hub reads it now: none until a test sets one. */
+let userIdentity: GitIdentity = { name: null, email: null };
+/** How many times the hub read the user's GitHub account. */
+let githubReads = 0;
+
+const FakeGitHub = (signedIn: boolean) =>
+  Layer.succeed(GitHubApi, {
+    user: () =>
+      Effect.suspend(() => {
+        githubReads++;
+        return signedIn
+          ? Effect.succeed(ME)
+          : Effect.fail(new GitHubError({ reason: "signed-out", message: "No GitHub account is connected." }));
+      }),
+  } as unknown as GitHubApi["Service"]);
+
+type Hub = Awaited<ReturnType<typeof startHub>>;
+let hub: Hub | undefined;
+afterEach(async () => {
+  await hub?.dispose();
+  hub = undefined;
+  userIdentity = { name: null, email: null };
+  githubReads = 0;
+});
+
+const startHub = async (signedIn = true) => {
+  const Tools = HobToolsLive.pipe(
+    Layer.provideMerge(CommitIdentityGateLive(() => userIdentity)),
+    Layer.provideMerge(HubQuestions.layer),
+    Layer.provide(FakeGitHub(signedIn)),
+  );
+  const App = HobLifecycle.layer.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
+        ApprovalService.layer,
+        GrantService.layer,
+        HobService.layer,
+        PermissionSummary.layer,
+      ),
+    ),
+    Layer.provideMerge(Tools),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          HobbotsRepositoryLive,
+          ApprovalRepositoryLive,
+          GrantRepositoryLive,
+          TaskRepositoryLive,
+          HubQuestionRepositoryLive,
+          HubCommitIdentityRepository,
+          EventJournal.layer,
+          BackpackLive,
+          SetupRepository.layer,
+          SearchIndex.layer,
+        ).pipe(Layer.provideMerge(TestDatabase)),
+        EventBus.layer,
+        HobAdmission.layer,
+        NodeFolderChecks,
+        FakeRuntimeLayer({ availability: "signedOut" }),
+        Layer.succeed(Installation, { app: "hobbots", installationId: "commit-identity", version: "0.0.0", dataDir }),
+      ),
+    ),
+  );
+  const runtime = ManagedRuntime.make(App);
+  const web = HttpRouter.toWebHandler(
+    ApiRoutes.pipe(
+      Layer.provide(TestDevices),
+      Layer.provide(Layer.succeedContext(await runtime.context())),
+      Layer.provide(NodeHttpServer.layerHttpServices),
+    ),
+    { disableLogger: true },
+  );
+  const request = async (method: "GET" | "POST", path: string, body?: unknown) => {
+    const response = await web.handler(
+      new Request(`http://localhost:4390${path}`, {
+        method,
+        headers: { ...AS_WINDOW, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+    const text = await response.text();
+    return { status: response.status, body: (text === "" ? null : JSON.parse(text)) as unknown };
+  };
+  await runtime.runPromise(SetupRepository.use((setup) => setup.update({ approvedFolders: [project] })));
+  return {
+    request,
+    /** What the hob's turn is given to work with, as the hub works it out when the turn starts. */
+    access: (agent: Agent = nettle) => runtime.runPromise(HobTools.use((tools) => tools.access(agent))),
+    open: async (): Promise<ReadonlyArray<HubQuestion>> => {
+      const { status, body } = await request("GET", "/api/hub-questions");
+      expect(status).toBe(200);
+      return Schema.decodeUnknownSync(HubQuestionsRead)(body).questions;
+    },
+    answer: (question: HubQuestion, answer: string) =>
+      request("POST", `/api/hub-questions/${question.id}/answer`, { answer, via: "inbox" }),
+    dispose: async () => {
+      await web.dispose();
+      await runtime.dispose();
+    },
+  };
+};
+
+const until = async (check: () => Promise<boolean>) => {
+  let done = await check();
+  for (let tries = 0; tries < 100 && !done; tries++) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    done = await check();
+  }
+  expect(done).toBe(true);
+};
+
+/** Commits in a fresh repository as the hob's command would, and returns the author and committer or Git's error. */
+const commitAs = (access: Parameters<typeof userCommits>[0]) => {
+  const repo = mkdtempSync(join(temp, "repo-"));
+  const env = {
+    ...userCommits(access, home).env({ PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: "1" }),
+  };
+  execFileSync("git", ["init", "-q"], { cwd: repo, env });
+  writeFileSync(join(repo, "tide.md"), "High tide at 06:12\n");
+  try {
+    execFileSync("git", ["add", "tide.md"], { cwd: repo, env });
+    execFileSync("git", ["commit", "-q", "-m", "docs: add the tide table"], { cwd: repo, env, stdio: "pipe" });
+    return execFileSync("git", ["log", "-1", "--format=%an <%ae>|%cn <%ce>"], { cwd: repo, env }).toString().trim();
+  } catch (error) {
+    return `failed: ${String((error as { stderr?: Buffer }).stderr ?? error)}`;
+  }
+};
+
+describe("who a hob on your account commits as when your Git config sets no one", () => {
+  // covers OR-004, IN-004
+  it("[TC-OR-602] the hub asks you once with your GitHub account recommended, and the hob's next turn commits as it", async () => {
+    hub = await startHub();
+    const current = hub;
+
+    // The turn starts with no identity: the hob gets none, and the hub asks you, once.
+    const before = await current.access();
+    expect(before?.userIdentity).toBeUndefined();
+    expect(commitAs(before)).toMatch(/^failed: .*no email was given/s);
+    expect(userCommits(before, home).note).toContain("Do not ask the user yourself");
+    await current.access();
+    const [question, ...others] = await current.open();
+    expect(others).toEqual([]);
+    expect(question).toMatchObject({
+      subject: { kind: "commit-identity", key: "user", title: "Who hobs commit as" },
+      options: [
+        {
+          label: "My GitHub account, @otaviobarros",
+          consequence: `Commits are made as otaviobarros <${NOREPLY}>, which GitHub links to your account.`,
+        },
+        { label: OWN_GIT_LABEL },
+      ],
+      recommended: 0,
+    });
+    expect(githubReads).toBe(1);
+
+    // You pick your GitHub account in the Inbox; the hub keeps it.
+    const answered = await current.answer(question as HubQuestion, "My GitHub account, @otaviobarros");
+    expect(answered).toMatchObject({ status: 200, body: { picked: 0 } });
+    await until(async () => (await current.access())?.userIdentity !== undefined);
+
+    // The hob's next turn commits under it, and asks nothing more.
+    const after = await current.access();
+    expect(after?.userIdentity).toEqual({ name: "otaviobarros", email: NOREPLY });
+    expect(commitAs(after)).toBe(`otaviobarros <${NOREPLY}>|otaviobarros <${NOREPLY}>`);
+    expect(userCommits(after, home).note).toContain(`made as otaviobarros <${NOREPLY}>`);
+    expect(await current.open()).toEqual([]);
+  }, 30_000);
+
+  // covers OR-004
+  it("[TC-OR-603] takes a typed name and email, asks again when it finds none, and asks nothing when Git sets one", async () => {
+    hub = await startHub(false);
+    const current = hub;
+    await current.access();
+    // No GitHub account is connected: the question asks you to type one, with no choices.
+    const [first] = await current.open();
+    expect(first?.options).toEqual([]);
+    expect(first?.text).toContain("Ada Lovelace <ada@example.com>");
+
+    // Words with no name and email in them are asked about again, saying so.
+    await current.answer(first as HubQuestion, "whatever you think");
+    await until(async () => (await current.open()).some((question) => question.id !== first?.id));
+    const [second] = await current.open();
+    expect(second?.text).toContain(`couldn't find a name and email in "whatever you think"`);
+
+    await current.answer(second as HubQuestion, "Otavio Barros <otavio@example.com>");
+    await until(async () => (await current.access())?.userIdentity !== undefined);
+    expect(commitAs(await current.access())).toBe(
+      "Otavio Barros <otavio@example.com>|Otavio Barros <otavio@example.com>",
+    );
+  }, 30_000);
+
+  // covers OR-004
+  it("[TC-OR-604] asks nothing while your Git config sets an identity, and leaves it to Git when you say you'll set it there", async () => {
+    userIdentity = { name: "Ada Lovelace", email: "ada@example.com" };
+    hub = await startHub();
+    const current = hub;
+    expect((await current.access())?.userIdentity).toBeUndefined();
+    expect(await current.open()).toEqual([]);
+    expect(githubReads).toBe(0);
+
+    // Without one, you say you'll set it in Git yourself: the hub keeps no identity of its own.
+    userIdentity = { name: null, email: null };
+    await current.access();
+    const [question] = await current.open();
+    await current.answer(question as HubQuestion, OWN_GIT_LABEL);
+    await until(async () => (await current.open()).length === 0);
+    userIdentity = { name: "Otavio Barros", email: "otavio@example.com" };
+    expect((await current.access())?.userIdentity).toBeUndefined();
+    expect(await current.open()).toEqual([]);
+  }, 30_000);
+});

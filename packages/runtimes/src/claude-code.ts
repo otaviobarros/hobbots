@@ -69,7 +69,7 @@ import {
 } from "./binary.ts";
 import { COMMAND_ENV_FILE_VARIABLE, commandColorFile, plainBashResponse } from "./command-color.ts";
 import { toolFinished } from "./command-exit.ts";
-import { userCommits } from "./git-config.ts";
+import { type CommitsAs, userCommits } from "./git-config.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import {
   CLAUDE_CODE_MODEL_HOSTS,
@@ -751,6 +751,13 @@ export interface ToolTurn {
   readonly initTool?: string;
   /** The hob's bot, when it has its own GitHub App: its commands commit as it (ADR 022). */
   readonly commitAs?: CommitIdentity;
+  /**
+   * Who a hob on the user's account commits as when the user's Git config sets no email: the
+   * identity the user gave Hobbots (#741).
+   */
+  readonly userIdentity?: CommitIdentity;
+  /** Who its commits are made as, which a refused identity override names; the user's config when absent. */
+  readonly commitsAs?: CommitsAs;
 }
 
 /**
@@ -804,8 +811,19 @@ export const toolTurn = (
     runtimeFolder: access.runtimeFolder,
     ...(hubTools?.steersPush ? { steersPush: hubTools.steersPush } : {}),
     ...(hubTools?.tools.some((tool) => tool.name === GIT_INIT_TOOL) ? { initTool: GIT_INIT_TOOL } : {}),
-    ...(access.commitAs ? { commitAs: access.commitAs } : {}),
+    ...(access.commitAs ? { commitAs: access.commitAs, commitsAs: { _tag: "Bot", identity: access.commitAs } } : {}),
+    ...(access.userIdentity ? { userIdentity: access.userIdentity } : {}),
   };
+};
+
+/**
+ * The turn's tools with who their commits are made as, and how its commands commit: a hob without
+ * its own app commits as the user, never as an identity Git makes up (#586), and with the identity
+ * the user gave Hobbots when their Git config sets none (#741).
+ */
+const committingTurn = (offered: ToolTurn | null) => {
+  const commits = userCommits(offered);
+  return { commits, tools: offered === null ? null : { ...offered, commitsAs: commits.as } };
 };
 
 /**
@@ -883,7 +901,7 @@ export const policyHooks = (
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
     const decision = await Effect.runPromise(
-      decideCall(engine, turn.context, null, call, report, redaction, turn.steersPush, turn.initTool, turn.commitAs),
+      decideCall(engine, turn.context, null, call, report, redaction, turn.steersPush, turn.initTool, turn.commitsAs),
     ).catch(() => failed(tool));
     if (decision._tag === "Run") {
       if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
@@ -973,7 +991,7 @@ export const policyHooks = (
         redaction,
         turn.steersPush,
         turn.initTool,
-        turn.commitAs,
+        turn.commitsAs,
       ),
       {
         signal: options.signal,
@@ -1093,11 +1111,9 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const binary = yield* executable;
           // Tools are decided as if the sandbox were missing until it is verified here (ADR 014), but a
           // sandbox that starts still wraps the runtime.
-          const tools = toolTurn(request.tools, policySandbox(declared), request.hubTools);
+          const { tools, commits } = committingTurn(toolTurn(request.tools, policySandbox(declared), request.hubTools));
           const sandboxed = tools !== null && sandbox.state === "on";
           const commitAs = tools?.commitAs;
-          // A hob without its own app commits as the user, never as an identity Git makes up (#586).
-          const commits = userCommits(tools);
           const instructions = turnInstructions(
             request.instructions,
             sandboxed,

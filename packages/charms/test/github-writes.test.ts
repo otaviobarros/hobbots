@@ -150,6 +150,7 @@ const makeFakeGitHub = () => {
       },
       branchHead: (_agentId, _repository, branch) => Effect.succeed(branches.has(branch) ? "a".repeat(40) : null),
       viewer: () => Effect.succeed(ME),
+      user: () => Effect.die("not read in these tests"),
       pullRequests: (_agentId, _repository, head, base) =>
         Effect.succeed(pulls.filter((pr) => pr.head === head && pr.base === base).toReversed()),
       commentsSince: (_agentId, _repository, number, since) =>

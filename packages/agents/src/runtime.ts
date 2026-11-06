@@ -168,6 +168,11 @@ export interface ToolAccess {
    * hob on the user's account, which keeps the user's own Git identity.
    */
   readonly commitAs?: CommitIdentity;
+  /**
+   * Who a hob on the user's account commits as when the user's own Git config sets no email: the
+   * identity the user gave the hub when it asked them (#741). Absent until they answer.
+   */
+  readonly userIdentity?: CommitIdentity;
 }
 
 /** A tool call the policy answered Ask for, as an adapter asks the user about it (PE-003). */
