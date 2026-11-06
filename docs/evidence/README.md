@@ -74,3 +74,4 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-05 A hob's saves show under its replies with Undo, and its page shows its memory](2026-11-05-memory-in-chat.md)
 - [2026-11-05 You edit memory and About you, and an edit never overwrites a hob's save](2026-11-05-memory-editing.md)
 - [2026-11-06 The first window after an update from 0.0.1 runs the new web client](2026-11-06-update-loads-new-client.md)
+- [2026-11-06 The v0.0.2 release build on a Mac, on Claude Code and Codex](2026-11-06-mac-release-checks.md)
