@@ -99,6 +99,7 @@ export interface NewAttempt {
  * What happened to a live Attempt: the runtime took it in its session, or it ended, and why. The
  * record decides the state it ends in from why and its Task (`AttemptTransitions.end`). A
  * `policyVersion` is the one its first turn's tools ran under: an Attempt keeps the first it is given.
+ * A `reply` is the final reply of the turn that ended it, which the record journals and does not keep.
  */
 export type AttemptChange =
   | { readonly _tag: "Running"; readonly sessionId?: string; readonly policyVersion?: string; readonly at: string }
@@ -107,6 +108,7 @@ export type AttemptChange =
       readonly end: AttemptEnd;
       readonly sessionId?: string;
       readonly policyVersion?: string;
+      readonly reply?: string;
       readonly at: string;
     };
 

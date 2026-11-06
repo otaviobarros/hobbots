@@ -263,9 +263,16 @@ const remoteIdentity = (origin: string): string | null => {
 };
 
 /**
- * One thing that happened in a thread, as capture sends it to memory (ADR 028, Capture and
- * summaries): its start, a message of yours, a reply, a tool step, or a Quest it took part in.
- * Memory keeps a thread's items as one session in the hob's own memory, whichever brain wrote them.
+ * A memory session's id (ADR 028, Capture and summaries): a thread's id for a chat, or an Attempt's
+ * id for a Task's work outside any chat, a party member's or a step's. Memory writes its summary to
+ * `sessions/<id>.md` in the hob's own memory.
+ */
+export type MemorySessionId = string;
+
+/**
+ * One thing that happened in a memory session, as capture sends it to memory (ADR 028, Capture and
+ * summaries): its start, a message of yours or a Task's goal, a reply, a tool step, or a Quest it
+ * took part in. Memory keeps a session's items in the hob's own memory, whichever brain wrote them.
  */
 export interface MemoryCaptureItem {
   /**

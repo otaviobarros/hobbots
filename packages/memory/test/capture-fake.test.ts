@@ -7,8 +7,8 @@ captureContract("the fake", () =>
     const { store, controls } = makeMemoryStoreFake();
     return {
       store,
-      observations: (agentId, threadId) =>
-        Effect.sync(() => controls.captured({ _tag: "Hob", agentId }, threadId).length),
+      observations: (agentId, sessionId) =>
+        Effect.sync(() => controls.captured({ _tag: "Hob", agentId }, sessionId).length),
       down: Effect.sync(() => controls.setDown(true)),
       up: Effect.sync(() => controls.setDown(false)),
     };
