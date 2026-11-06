@@ -1050,18 +1050,23 @@ export const TaskRepositoryLive = Layer.effect(
       listFailedTasks: read.failedTasks.pipe(Effect.orDie),
       handOff,
       waitFor,
-      recordTurnUsage: (turn) =>
-        sql`INSERT INTO attempt_turns ${sql.insert({
-          attempt_id: turn.attemptId,
-          agent_id: turn.agentId,
-          runtime: turn.runtime,
-          model: turn.model,
-          started_at: turn.startedAt,
-          input_tokens: turn.usage?.inputTokens ?? null,
-          output_tokens: turn.usage?.outputTokens ?? null,
-          cache_read_tokens: turn.usage?.cacheReadTokens ?? null,
-          cache_write_tokens: turn.usage?.cacheWriteTokens ?? null,
-        })} ON CONFLICT (attempt_id, started_at) DO NOTHING`.pipe(Effect.asVoid, Effect.orDie),
+      startTurn: (turn) =>
+        Effect.all([
+          sql`UPDATE attempt_turns SET ended_at = ${turn.startedAt}
+            WHERE attempt_id = ${turn.attemptId} AND ended_at IS NULL AND started_at < ${turn.startedAt}`,
+          sql`INSERT INTO attempt_turns ${sql.insert({
+            attempt_id: turn.attemptId,
+            agent_id: turn.agentId,
+            runtime: turn.runtime,
+            model: turn.model,
+            started_at: turn.startedAt,
+          })} ON CONFLICT (attempt_id, started_at) DO NOTHING`,
+        ]).pipe(sql.withTransaction, Effect.asVoid, Effect.orDie),
+      endTurn: (turn, usage, endedAt) =>
+        sql`UPDATE attempt_turns SET ended_at = ${endedAt}, input_tokens = ${usage?.inputTokens ?? null},
+          output_tokens = ${usage?.outputTokens ?? null}, cache_read_tokens = ${usage?.cacheReadTokens ?? null},
+          cache_write_tokens = ${usage?.cacheWriteTokens ?? null}
+          WHERE attempt_id = ${turn.attemptId} AND started_at = ${turn.startedAt}`.pipe(Effect.asVoid, Effect.orDie),
       readLedger: (taskId) =>
         read.task(taskId).pipe(
           Effect.flatMap(([task]) =>

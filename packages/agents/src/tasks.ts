@@ -231,19 +231,17 @@ export interface TaskMoveOptions {
 }
 
 /**
- * What one turn of an Attempt outside any chat used, a planned step's or a party member's (#1011). A
- * chat turn's usage stays on its reply.
+ * One turn of an Attempt outside any chat, a planned step's or a party member's, whose usage Usage
+ * counts (#1011). A chat turn's usage stays on its reply.
  */
-export interface AttemptTurnUsage {
+export interface AttemptTurn {
   readonly attemptId: AttemptId;
-  /** The hob that ran the turn, and the runtime and model it ran on. */
+  /** The hob that runs the turn, and the runtime and model it runs on. */
   readonly agentId: AgentId;
   readonly runtime: RuntimeKind;
   readonly model: string | null;
-  /** When the turn started (ISO 8601), which Usage counts it by. */
+  /** When the turn started (ISO 8601), which names it on its Attempt and which Usage counts it by. */
   readonly startedAt: string;
-  /** What the runtime reported; null when it reported nothing, as for a turn that failed or was stopped. */
-  readonly usage: ReplyUsage | null;
 }
 
 export class TaskRepository extends Context.Service<
@@ -361,8 +359,19 @@ export class TaskRepository extends Context.Service<
       revision: number,
       wait: NewWait,
     ) => Changed<{ readonly task: Task; readonly wait: TaskWait }, TaskChange>;
-    /** Records what one turn of an Attempt outside any chat used, once it ends (#1011). Recording it again changes nothing. */
-    readonly recordTurnUsage: (turn: AttemptTurnUsage) => Effect.Effect<void>;
+    /**
+     * Records, once its runtime took it, a turn of an Attempt outside any chat (#1011), before it has
+     * used anything, so a turn the hub never saw end still counts, as unreported, once its Attempt
+     * ends. An earlier turn of the Attempt still open ends here, since only one turn runs at a time.
+     * Recording it again changes nothing.
+     */
+    readonly startTurn: (turn: AttemptTurn) => Effect.Effect<void>;
+    /** Records what the turn used, once it ends; null when its runtime reported nothing. */
+    readonly endTurn: (
+      turn: Pick<AttemptTurn, "attemptId" | "startedAt">,
+      usage: ReplyUsage | null,
+      endedAt: string,
+    ) => Effect.Effect<void>;
     /** What still keeps the Task open, as its completion gate reads it (ADR 019). */
     readonly readLedger: (taskId: TaskId) => Effect.Effect<Option.Option<ResponsibilityLedger>>;
     /** The Task and everything under it. */

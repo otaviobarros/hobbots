@@ -14,12 +14,17 @@ import { SqlClient } from "effect/sql";
 // planned step's or a party member's (#1011), summed in SQL. A reply carries its usage in the columns
 // of migration 0037 and its runtime and model in those of migration 0020; a turn outside a chat has a
 // row of its own (migration 0060). Only settled replies count: one still streaming has not reported
-// yet. A reply or turn whose four token columns are all empty counts as unreported. A reply counts for
-// the Quest whose chat it was written in while the Quest ran; when several ran there at once, for the
-// one that started last. A turn counts for the Quest at the top of its Task's tree, so a Quest's total
-// is its whole party's. A sub-quest's replies count for the Quest at the top.
+// yet, and neither has a turn still running. A reply or turn whose four token columns are all empty
+// counts as unreported. A reply counts for the Quest whose chat it was written in while the Quest ran;
+// when several ran there at once, for the one that started last. A turn counts for the Quest at the
+// top of its Task's tree, so a Quest's total is its whole party's. A sub-quest's replies count for the
+// Quest at the top.
 
 const SETTLED = "m.role = 'assistant' AND m.status NOT IN ('queued', 'streaming', 'stopping')";
+// A turn has ended, or its Attempt has: one the hub stopped before it saw the turn end counts once
+// the hub ends its Attempt on its next start.
+const SETTLED_TURN = `(u.ended_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM attempts x
+  WHERE x.id = u.attempt_id AND x.state IN ('starting', 'running')))`;
 const UNREPORTED =
   "s.input_tokens IS NULL AND s.output_tokens IS NULL AND s.cache_read_tokens IS NULL AND s.cache_write_tokens IS NULL";
 const TOKENS =
@@ -107,7 +112,7 @@ export class UsageLedger extends Context.Service<
             SELECT u.agent_id, u.runtime, u.model, u.started_at, NULL, ${sql.literal(QUEST_OF_TURN)},
               u.input_tokens, u.output_tokens, u.cache_read_tokens, u.cache_write_tokens
             FROM attempt_turns u
-            WHERE u.started_at >= ${since} AND u.started_at < ${until}
+            WHERE ${sql.literal(SETTLED_TURN)} AND u.started_at >= ${since} AND u.started_at < ${until}
           ) s`;
           return Effect.all(
             [

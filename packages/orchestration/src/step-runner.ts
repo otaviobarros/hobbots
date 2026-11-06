@@ -221,7 +221,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                   ),
                 ),
               ),
-            recordUsage: tasks.recordTurnUsage,
+            turns: tasks,
           },
           recorder,
         );

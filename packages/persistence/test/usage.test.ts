@@ -4,6 +4,7 @@ import {
   AgentId,
   type AgentStatus,
   AttemptId,
+  type HobUsage,
   Message,
   MessageId,
   type MessageStatus,
@@ -158,6 +159,20 @@ const run = <A>(effect: Effect.Effect<A, never, HobbotsRepository | UsageLedger 
     return yield* effect;
   }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
+/** Starts a haiku turn on the Attempt, and ends it with `usage` unless that is "open". */
+const turn = (
+  tasks: TaskRepository["Service"],
+  attemptId: string,
+  agentId: string,
+  startedAt: string,
+  usage: ReplyUsage | null | "open",
+) =>
+  Effect.gen(function* () {
+    const counted = { attemptId: AttemptId.make(attemptId), startedAt };
+    yield* tasks.startTurn({ ...counted, agentId: AgentId.make(agentId), runtime: "claude-code", model: "haiku" });
+    if (usage !== "open") yield* tasks.endTurn(counted, usage, startedAt.replace(":00.000Z", ":30.000Z"));
+  });
+
 // Bramble's Task on Pip's Quest ran two turns at 09:45 on Oct 28, on Haiku: the second resumed the
 // first and failed without a report. Moss ran a step of a Task outside any Quest that day.
 const seedTurns = Effect.gen(function* () {
@@ -200,20 +215,11 @@ const seedTurns = Effect.gen(function* () {
     })}`;
   }
   const tasks = yield* TaskRepository;
-  const turn = (attemptId: string, agentId: string, startedAt: string, usage: ReplyUsage | null) =>
-    tasks.recordTurnUsage({
-      attemptId: AttemptId.make(attemptId),
-      agentId: AgentId.make(agentId),
-      runtime: "claude-code",
-      model: "haiku",
-      startedAt,
-      usage,
-    });
-  yield* turn("a-draft", "bramble", at, tokens(40, 400, 4000, 0));
+  yield* turn(tasks, "a-draft", "bramble", at, tokens(40, 400, 4000, 0));
   // Recording a turn again changes nothing.
-  yield* turn("a-draft", "bramble", at, tokens(40, 400, 4000, 0));
-  yield* turn("a-draft", "bramble", "2026-10-28T09:50:00.000Z", null);
-  yield* turn("a-tidy", "moss", "2026-10-28T11:00:00.000Z", tokens(1, 1));
+  yield* turn(tasks, "a-draft", "bramble", at, tokens(40, 400, 4000, 0));
+  yield* turn(tasks, "a-draft", "bramble", "2026-10-28T09:50:00.000Z", null);
+  yield* turn(tasks, "a-tidy", "moss", "2026-10-28T11:00:00.000Z", tokens(1, 1));
 }).pipe(Effect.orDie);
 
 describe("UsageLedger", () => {
@@ -276,6 +282,51 @@ describe("UsageLedger", () => {
       hobStatus: "retired",
       runtime: "claude-code",
     });
+  });
+
+  // regression for #1011: a turn the hub stopped before it ended was never recorded
+  // covers OP-002
+  it("[TC-OP-109] counts a turn the hub never saw end, as unreported, once a later turn or a restart ends it", async () => {
+    const period = (ledger: UsageLedger["Service"]) =>
+      ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z");
+    const haiku = (hobs: ReadonlyArray<HobUsage>) =>
+      hobs.filter((row) => row.model === "haiku").map(({ hobId, replies, unreported }) => [hobId, replies, unreported]);
+    const { running, resumed, restarted } = await Effect.gen(function* () {
+      yield* seed;
+      yield* seedQuests;
+      yield* seedTurns;
+      const tasks = yield* TaskRepository;
+      const ledger = yield* UsageLedger;
+      // The hub stops mid-turn twice: in Bramble's third turn and in Moss's second.
+      yield* turn(tasks, "a-draft", "bramble", "2026-10-28T09:55:00.000Z", "open");
+      yield* turn(tasks, "a-tidy", "moss", "2026-10-28T11:05:00.000Z", "open");
+      const running = haiku((yield* period(ledger)).hobs);
+      // Bramble's Attempt resumes after the restart: its next turn ends the one left open.
+      yield* turn(tasks, "a-draft", "bramble", "2026-10-28T10:00:00.000Z", "open");
+      const resumed = haiku((yield* period(ledger)).hobs);
+      // Moss's Attempt ends as the restart ends every Attempt left live.
+      yield* tasks.updateAttempt(AttemptId.make("a-tidy"), {
+        _tag: "Ended",
+        end: { _tag: "Stopped", reason: "Hobbots stopped while this ran." },
+        at: "2026-10-28T12:00:00.000Z",
+      });
+      const restarted = haiku((yield* period(ledger)).hobs);
+      return { running, resumed, restarted };
+    }).pipe(Effect.provide(TasksLayer), Effect.scoped, Effect.runPromise);
+
+    // A turn of a live Attempt still running has not reported yet.
+    expect(running).toEqual([
+      ["bramble", 2, 1],
+      ["moss", 1, 0],
+    ]);
+    expect(resumed).toEqual([
+      ["bramble", 3, 2],
+      ["moss", 1, 0],
+    ]);
+    expect(restarted).toEqual([
+      ["bramble", 3, 2],
+      ["moss", 2, 1],
+    ]);
   });
 
   // covers OP-002
