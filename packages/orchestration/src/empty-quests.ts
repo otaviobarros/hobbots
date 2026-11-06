@@ -129,3 +129,15 @@ export const flagIdleQuest = (deps: TurnEndDeps, taskId: TaskId, carried: Readon
       "block a stalled Quest",
     );
   });
+
+/**
+ * Looks again, as the hub starts, at each Quest you asked for that is still at work (#1081). A turn's
+ * end commits before its wake is recorded, so a hub that stopped in between left a Quest idle with
+ * nothing to wake its lead; this records what that turn's end would have. It is idempotent: a wake
+ * already recorded is open backpack work, which moves nothing on only once a turn has carried it.
+ * Runs once no Attempt is live, so no turn's own end is racing it.
+ */
+export const recoverIdleQuests = (deps: TurnEndDeps, at: string) =>
+  Effect.gen(function* () {
+    for (const rootId of yield* deps.tasks.listRootsAtWork) yield* flagIdleQuest(deps, rootId, new Set(), at);
+  }).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not look over idle Quests", cause)));

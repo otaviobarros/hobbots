@@ -41,15 +41,15 @@ const STEP_INPUT_LIMIT = 16_000;
 export const CHECKPOINT_RULE = `Keep each checkpoint's summary to about ${CHECKPOINT_WORDS} words, like "Three headlines drafted", and put anything more in its detail.`;
 
 /**
- * What a call that starts work in the user's chat adds to its result (#901): the lead hands out the
- * work first, since a smaller model takes "the last thing you write" as the end of it (#1081), then
- * tells the user the plan once, and stays quiet. Only the Task you asked for in a chat has one: any other, as a
+ * What a call that starts work in the user's chat adds to its result (#901): the lead delegates
+ * first, since a smaller model took "the last thing you write this turn" as the end of the work
+ * (#1081), then tells the user the plan once, and stays quiet. It stays short: it is in every result. Only the Task you asked for in a chat has one: any other, as a
  * member's, gets nothing.
  */
 export const planNote = (task: Task): string =>
   task.parentId !== null || task.threadId === null
     ? ""
-    : " Hand out the work in this same turn first: the work moves on only through the Tasks you delegate and the steps you plan, so writing the plan starts nothing. Then tell the user the plan in a line or two, who does what, as the last thing you write this turn, after your tool calls, so the chat shows it. Then stay quiet until a question no lead can answer, or the finish.";
+    : " Delegate first: writing the plan starts nothing. Then tell the user the plan in a line or two, who does what, after your tool calls. Then stay quiet until a question no lead can answer, or the finish.";
 
 /** `text` trimmed and cut to `limit` characters, marked when it was cut. */
 export const cut = (text: string, limit: number): string => clip(text.trim(), limit);

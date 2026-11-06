@@ -20,6 +20,7 @@ import {
   AgentId,
   ApprovalId,
   ApprovalRequest,
+  AttemptId,
   type BackpackItem,
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
@@ -422,6 +423,78 @@ describe("continuing a hob when work arrives", () => {
     expect(all[0]?.content).toContain("ended as failed.");
     const [settled] = await run(settledItems([id]));
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
+  });
+
+  // covers OR-004, IN-004, EX-004
+  it("[TC-OR-646] a Quest whose turn ended just before Hobbots stopped, before its wake was recorded, wakes its lead as the hub starts (#1081)", async () => {
+    // The records as that stop left them: Frodo's Task leads an active Quest, his turn's Attempt
+    // has ended, and nothing is under it, waits or is in his backpack.
+    const crashed: Before = Layer.effectDiscard(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        yield* repo.insertAgent(frodo);
+        yield* repo.upsertThread(
+          new Thread({ id: threadId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
+        );
+        const tasks = yield* TaskRepository;
+        const root = yield* tasks.createTask({
+          task: {
+            id: TaskId.make("ring"),
+            ownerId: FRODO,
+            parentId: null,
+            threadId,
+            brief: "Carry the ring to Mordor",
+            dependsOn: [],
+            createdAt: now,
+          },
+          delegation: null,
+          milestones: [],
+        });
+        const attemptId = AttemptId.make("ring-1");
+        yield* tasks.startAttempt(root.value.id, root.value.revision, {
+          id: attemptId,
+          runtime: "claude-code",
+          sessionId: null,
+          configVersion: 1,
+          policyVersion: null,
+          startedAt: now,
+        });
+        yield* tasks.startQuest({
+          id: QuestId.make("q-ring"),
+          taskId: root.value.id,
+          goal: "Destroy the ring",
+          acceptance: [],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        yield* tasks.updateAttempt(attemptId, {
+          _tag: "Ended",
+          end: { _tag: "Finished", outcome: "The turn finished." },
+          at: now,
+        });
+      }).pipe(Effect.orDie),
+    );
+    const { run, requests } = setUp(crashed);
+
+    // The hub records the wake that turn's end would have, and Frodo's continuation carries it.
+    await run(messagesWhen((all) => continuations(all).length > 0));
+    const woken = requests.filter((request) => request.prompt.includes(IDLE_QUEST));
+    expect(woken).toHaveLength(1);
+    expect(woken[0]?.prompt).toContain("Quest q-ring (Destroy the ring)");
+
+    // That turn again leaves the Quest idle: the Task is blocked, and only one wake was recorded.
+    const tree = await run(
+      retry(
+        Effect.flatMap(
+          TaskRepository.use((tasks) => tasks.readTree(TaskId.make("ring"))),
+          (read) =>
+            read._tag === "Some" && read.value.tasks[0]?.state === "blocked"
+              ? Effect.succeed(read.value)
+              : Effect.fail("not yet" as const),
+        ),
+      ),
+    );
+    expect(tree.checkpoints.filter((each) => each.summary === IDLE_QUEST)).toHaveLength(1);
   });
 
   // covers IN-004, PE-007
