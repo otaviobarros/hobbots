@@ -15,10 +15,13 @@ describe("skill names", () => {
 
 describe("skill file paths", () => {
   it("stays inside the skill", () => {
-    for (const path of ["SKILL.md", "scripts/run.sh", ".hidden/file", "a/b..c"]) {
+    for (const path of ["SKILL.md", "scripts/run.sh", ".hidden/file", "a/b..c", "...", "notas/café.md"]) {
       expect(valid(SkillFilePath, path)).toBe(true);
     }
-    for (const path of ["", "/etc/passwd", "../x", "a/../b", "./a", "a/./b", "a//b", "a\\b", "a/"]) {
+    const outside = ["", "/etc/passwd", "../x", "a/../b", "./a", "a/./b", "a//b", "a\\b", "a/", "..", "a/.."];
+    // A line break or another control character never hides a '..' part from the check.
+    const hidden = ["a\n/../../outside", "a\r/../x", "a/\n..", "\n/..", "a\u0000b", "a\tb", "a\u007fb"];
+    for (const path of [...outside, ...hidden]) {
       expect(valid(SkillFilePath, path)).toBe(false);
     }
   });

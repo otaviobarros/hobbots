@@ -81,12 +81,16 @@ export const skillCharmsOf = (frontMatter: SkillFrontMatter): ReadonlyArray<stri
   return needs._tag === "Some" ? [...new Set(needs.value.hobbots.charms)].sort() : [];
 };
 
+/** One part of a skill file's path: any name but `.` and `..`, with no slash, backslash or control character. */
+const SKILL_PATH_PART = String.raw`(?!\.{1,2}(?:/|$))[^/\\\u0000-\u001f\u007f]+`;
+
 /**
- * A file's place inside its skill: a relative path of folders and a name, with no empty, `.` or `..`
- * part, no backslash and no leading slash.
+ * A file's place inside its skill: a relative path of folders and a name. Each part is checked on
+ * its own, so no part is empty, `.` or `..`, and none holds a backslash, a line break or another
+ * control character; there is no leading slash.
  */
 export const SkillFilePath = Schema.String.check(
-  Schema.isPattern(/^(?!.*(?:^|\/)\.{1,2}(?:\/|$))[^/\\\0]+(?:\/[^/\\\0]+)*$/, {
+  Schema.isPattern(new RegExp(`^${SKILL_PATH_PART}(?:/${SKILL_PATH_PART})*$`), {
     message: "A skill file's path is relative, inside the skill, with no '.' or '..' part.",
   }),
   Schema.isMaxLength(400),
