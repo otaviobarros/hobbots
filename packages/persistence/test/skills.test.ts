@@ -144,6 +144,47 @@ describe("skills library", () => {
       }),
     ));
 
+  // covers ADR 029 (Pins and rollout), #1061
+  it("[TC-DP-281] rolls a revision out once, to every assignment that is not held, and a later save never undoes a rollback", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const library = yield* SkillLibrary;
+        const { skill } = (yield* library.addRevision(null, input(H1))).value;
+        const assign = (scope: Parameters<typeof library.assign>[0]["scope"], held: boolean) =>
+          library.assign({ skillId: skill.id, scope, pin: H1, held, onlyWhenAsked: false, by: { _tag: "You" } });
+        const everyone = (yield* assign({ _tag: "Everyone" }, false)).value;
+        const kept = (yield* assign({ _tag: "Hob", agentId: pip }, true)).value;
+        const added = (yield* library.addRevision(skill.id, input(H2))).value.revision;
+        // A revision just added waits for its rollout, so an interrupted save can finish it.
+        expect(added.rolledOutAt).toBeNull();
+        const rolled = yield* library.rollOutRevision(skill.id, H2, { _tag: "You" }, "pending");
+        expect(rolled.value.map((one) => [one.id, one.pin])).toEqual([[everyone.id, H2]]);
+        expect(rolled.entries.map((entry) => entry.type)).toEqual(["SkillRolledOut"]);
+        expect((yield* library.revision(skill.id, H2))?.rolledOutAt).not.toBeNull();
+        expect((yield* library.assignments(skill.id)).find((one) => one.id === kept.id)?.pin).toBe(H1);
+        // A second save of the same content, after a rollback, moves nothing: the rollback stays.
+        yield* library.rollOut(everyone.id, H1, { _tag: "You" });
+        expect((yield* library.rollOutRevision(skill.id, H2, { _tag: "You" }, "pending")).value).toEqual([]);
+        expect((yield* library.assignments(skill.id)).find((one) => one.id === everyone.id)?.pin).toBe(H1);
+        // Nor does a save of a revision that is no longer the newest, even one never rolled out.
+        yield* library.addRevision(skill.id, input(H3));
+        yield* library.rollOut(everyone.id, H1, { _tag: "You" });
+        expect((yield* library.revision(skill.id, H1))?.rolledOutAt).toBeNull();
+        expect((yield* library.rollOutRevision(skill.id, H1, { _tag: "You" }, "pending")).value).toEqual([]);
+        // A rollout you ask for goes ahead whatever the revision's past: Roll back to r2.
+        const back = yield* library.rollOutRevision(skill.id, H2, { _tag: "You" }, "always");
+        expect(back.value.map((one) => [one.id, one.pin])).toEqual([[everyone.id, H2]]);
+        expect(
+          yield* Effect.flip(
+            library.rollOutRevision(skill.id, H3.replace("c", "d") as never, { _tag: "You" }, "always"),
+          ),
+        ).toMatchObject({
+          _tag: "SkillNotFound",
+        });
+      }),
+    ));
+
   it("[TC-DP-279] keeps a hob's opt-outs, journaling only a change", () =>
     run(
       Effect.gen(function* () {

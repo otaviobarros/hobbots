@@ -1,4 +1,4 @@
-import { SkillLibrary, type SkillLibraryShape, type SkillRevisionInput } from "@hobbots/agents";
+import { rolloutTargets, SkillLibrary, type SkillLibraryShape, type SkillRevisionInput } from "@hobbots/agents";
 import {
   type Committed,
   Skill,
@@ -142,6 +142,23 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
         const before = yield* assignmentOf(id);
         if (revisionOf(before.skillId, pin) === null) return yield* new SkillNotFound({ id: pin });
         return save(new SkillAssignment({ ...before, pin, by, revision: ++sequence }));
+      }),
+    rollOutRevision: (skillId, pin, by, when) =>
+      Effect.gen(function* () {
+        const revision = revisionOf(skillId, pin);
+        if (revision === null) return yield* new SkillNotFound({ id: pin });
+        const pending = revision.rolledOutAt === null && skills.get(skillId)?.latest === pin;
+        if (when === "pending" && !pending) return committed([]);
+        const moved = rolloutTargets([...assignments.values()], skillId, pin).map(
+          (one) => save(new SkillAssignment({ ...one, pin, by, revision: ++sequence })).value,
+        );
+        revisions.set(
+          skillId,
+          (revisions.get(skillId) ?? []).map((one) =>
+            one === revision ? new SkillRevision({ ...one, rolledOutAt: one.rolledOutAt ?? now() }) : one,
+          ),
+        );
+        return committed(moved);
       }),
     hold: (id, held) =>
       Effect.map(assignmentOf(id), (before) => save(new SkillAssignment({ ...before, held, revision: ++sequence }))),

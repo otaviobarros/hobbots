@@ -1,6 +1,8 @@
 import {
+  AgentId,
   Skill,
   SkillAssignment,
+  SkillAssignmentId,
   SkillCheck,
   SkillDropped,
   SkillFlag,
@@ -8,6 +10,7 @@ import {
   SkillName,
   SkillRevision,
   SkillRevisionHash,
+  SkillScope,
   SkillSource,
 } from "@hobbots/domain";
 import { Schema } from "effect";
@@ -17,7 +20,8 @@ import { DeviceSession } from "./user-session.ts";
 /**
  * The skills library (ADR 029, Import): list and read skills, see what a source holds, import from
  * a folder on the hub's computer, an archive or a Git repository, add a revision, and remove a skill
- * nothing assigns. Assignments and rollouts have their own routes later (#1061, #1062).
+ * nothing assigns. Then where each skill applies (#1061): assign it to Everyone, a project or a hob,
+ * pinned to a revision; hold an assignment, roll one out or back; and turn a skill off for one hob.
  */
 
 /** There is no such skill, revision or folder in the source. */
@@ -118,6 +122,55 @@ export const ReviseSkillPayload = Schema.Struct({
 /** A revision import added, or found the library already had. */
 export const ImportedSkill = Schema.Struct({ skill: Skill, revision: SkillRevision, added: Schema.Boolean });
 
+/**
+ * A revision you added, and the assignments it rolled out to: every one of the skill that is not held
+ * (ADR 029, Pins and rollout). None when the skill already had that content.
+ */
+export const RevisedSkill = Schema.Struct({
+  ...ImportedSkill.fields,
+  rolledOut: Schema.Array(SkillAssignment),
+});
+export type RevisedSkill = typeof RevisedSkill.Type;
+
+/** Assigns a skill to a scope, or changes its assignment there. The pin is the newest revision when absent. */
+export const AssignSkillPayload = Schema.Struct({
+  scope: SkillScope,
+  pin: Schema.optionalKey(SkillRevisionHash),
+  held: Schema.optionalKey(Schema.Boolean),
+  onlyWhenAsked: Schema.optionalKey(Schema.Boolean),
+});
+
+/** Moves assignments to a revision of their skill: a rollout to a newer one, or a rollback to an older one. */
+export const RollOutPayload = Schema.Struct({ pin: SkillRevisionHash });
+
+/** What a rollout moved; an assignment already on the revision is left as it is. */
+export const RolledOut = Schema.Struct({ rolledOut: Schema.Array(SkillAssignment) });
+
+/** A skill a hob loads, as its profile shows it. */
+export const HobSkill = Schema.Struct({
+  skillId: SkillId,
+  name: SkillName,
+  pin: SkillRevisionHash,
+  scope: SkillScope,
+  onlyWhenAsked: Schema.Boolean,
+  /** The Charms it names that the hob does not have: shown as "Needs the GitHub Charm". */
+  missingCharms: Schema.Array(Schema.String),
+});
+
+/**
+ * A hob's skills as its next turn would get them, in the folders it works in now: the ones it loads,
+ * the wider ones a narrower one replaced, names two projects both define (a warning, and neither
+ * loads), and the skills it turned off.
+ */
+export const HobSkills = Schema.Struct({
+  agentId: AgentId,
+  skills: Schema.Array(HobSkill),
+  replaced: Schema.Array(Schema.Struct({ assignment: SkillAssignment, by: SkillAssignment })),
+  clashes: Schema.Array(Schema.Struct({ name: SkillName, assignments: Schema.Array(SkillAssignment) })),
+  optedOut: Schema.Array(SkillId),
+});
+export type HobSkills = typeof HobSkills.Type;
+
 export const ImportedSkills = Schema.Struct({ imported: Schema.Array(ImportedSkill) });
 
 /** A skill in `~/.agents/skills` the hub did not take, and why; `folder` is "" when the folder itself could not be read. */
@@ -146,6 +199,8 @@ export type SkillDetail = typeof SkillDetail.Type;
 export const SkillRevisionDetail = Schema.Struct({ revision: SkillRevision, instructions: Schema.String });
 
 const skillParams = { skillId: SkillId };
+const assignmentParams = { assignmentId: SkillAssignmentId };
+const hobParams = { agentId: AgentId };
 const importErrors = [SkillImportRefused, SkillSourceNotRead, SkillMissing, SkillNameConflict];
 
 export class SkillsGroup extends HttpApiGroup.make("skills")
@@ -179,8 +234,66 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
     HttpApiEndpoint.post("revise", "/skills/:skillId/revisions", {
       params: skillParams,
       payload: ReviseSkillPayload,
-      success: ImportedSkill,
+      success: RevisedSkill,
       error: importErrors,
+    }),
+  )
+  .add(
+    // Rolls a revision out to every assignment of the skill that is not held.
+    HttpApiEndpoint.post("rollOut", "/skills/:skillId/roll-out", {
+      params: skillParams,
+      payload: RollOutPayload,
+      success: RolledOut,
+      error: SkillMissing,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("assign", "/skills/:skillId/assignments", {
+      params: skillParams,
+      payload: AssignSkillPayload,
+      success: SkillAssignment,
+      error: SkillMissing,
+    }),
+  )
+  .add(
+    // Rolls one assignment to a revision, a held one included: Roll back, or moving a held one on.
+    HttpApiEndpoint.post("rollOutAssignment", "/skills/assignments/:assignmentId/roll-out", {
+      params: assignmentParams,
+      payload: RollOutPayload,
+      success: SkillAssignment,
+      error: SkillMissing,
+    }),
+  )
+  .add(
+    // Keep on rN, or follow rollouts again.
+    HttpApiEndpoint.post("hold", "/skills/assignments/:assignmentId/hold", {
+      params: assignmentParams,
+      payload: Schema.Struct({ held: Schema.Boolean }),
+      success: SkillAssignment,
+      error: SkillMissing,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("unassign", "/skills/assignments/:assignmentId", {
+      params: assignmentParams,
+      success: SkillAssignment,
+      error: SkillMissing,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("hob", "/skills/hobs/:agentId", {
+      params: hobParams,
+      success: HobSkills,
+      error: SkillMissing,
+    }),
+  )
+  .add(
+    // Turns an Everyone or Project skill off for one hob, or on again.
+    HttpApiEndpoint.put("optOut", "/skills/hobs/:agentId/opt-outs/:skillId", {
+      params: { ...hobParams, ...skillParams },
+      payload: Schema.Struct({ optedOut: Schema.Boolean }),
+      success: HobSkills,
+      error: SkillMissing,
     }),
   )
   .add(

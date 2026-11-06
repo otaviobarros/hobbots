@@ -152,6 +152,7 @@ const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
     steps: JSON.parse(String(row.steps ?? "[]")),
     usage: usageOf(row),
     quiet: Number(row.quiet ?? 0) === 1,
+    skills: row.skills === null || row.skills === undefined ? null : JSON.parse(String(row.skills)),
   }));
 
 /** The SQL store of hobs, threads and messages, for SQLite and PostgreSQL (ADR 011). */
@@ -372,7 +373,7 @@ export const HobbotsRepositoryLive = Layer.effect(
         return sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, runtime, model,
           time_to_request_ms, time_to_first_stream_ms, time_to_first_token_ms,
           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-          resets_at, steps, prompt_id, quiet, created_at, revision, seq)
+          resets_at, steps, prompt_id, quiet, skills, created_at, revision, seq)
         VALUES (
           ${message.id}, ${message.threadId}, ${message.role}, ${message.content},
           ${message.status}, ${message.error}, ${message.configVersion}, ${message.runtime}, ${message.model},
@@ -380,6 +381,7 @@ export const HobbotsRepositoryLive = Layer.effect(
           ${usage.input_tokens}, ${usage.output_tokens}, ${usage.cache_read_tokens}, ${usage.cache_write_tokens},
           ${message.resetsAt}, ${JSON.stringify(message.steps)}, ${message.promptId},
           ${message.quiet ? 1 : 0},
+          ${message.skills === null ? null : JSON.stringify(message.skills)},
           ${message.createdAt}, ${message.revision},
           (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE thread_id = ${message.threadId})
         )
@@ -400,6 +402,7 @@ export const HobbotsRepositoryLive = Layer.effect(
           resets_at = excluded.resets_at,
           steps = excluded.steps,
           quiet = excluded.quiet,
+          skills = excluded.skills,
           revision = excluded.revision`;
       });
 

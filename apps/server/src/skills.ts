@@ -1,7 +1,17 @@
 import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { announcer, EventPublisher, SkillFiles, SkillLibrary } from "@hobbots/agents";
+import {
+  announcer,
+  EventPublisher,
+  HobbotsRepository,
+  hobSkills,
+  MemoryProjects,
+  PermissionSummary,
+  SkillFiles,
+  SkillLibrary,
+  type SkillLibraryShape,
+} from "@hobbots/agents";
 import {
   HobbotsApi,
   SkillImportRefused,
@@ -11,7 +21,7 @@ import {
   type SkillSourcePayload,
   SkillStillAssigned,
 } from "@hobbots/api";
-import type { SkillBy } from "@hobbots/domain";
+import type { AgentId, Committed, SkillBy, SkillId, SkillNotFound, SkillRevisionHash } from "@hobbots/domain";
 import {
   AgentsFolder,
   AgentsFolderLive,
@@ -68,7 +78,37 @@ const libraryOff = {
   syncAgentsFolder: () => Effect.succeed({ skills: [], sources: [], agentsFolder: { path: null, problems: [] } }),
   remove: ({ params }: { readonly params: { readonly skillId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.skillId })),
+  rollOut: ({ params }: { readonly params: { readonly skillId: string } }) =>
+    Effect.fail(new SkillMissing({ id: params.skillId })),
+  assign: ({ params }: { readonly params: { readonly skillId: string } }) =>
+    Effect.fail(new SkillMissing({ id: params.skillId })),
+  rollOutAssignment: ({ params }: { readonly params: { readonly assignmentId: string } }) =>
+    Effect.fail(new SkillMissing({ id: params.assignmentId })),
+  hold: ({ params }: { readonly params: { readonly assignmentId: string } }) =>
+    Effect.fail(new SkillMissing({ id: params.assignmentId })),
+  unassign: ({ params }: { readonly params: { readonly assignmentId: string } }) =>
+    Effect.fail(new SkillMissing({ id: params.assignmentId })),
+  hob: ({ params }: { readonly params: { readonly agentId: AgentId } }) =>
+    Effect.succeed({ agentId: params.agentId, skills: [], replaced: [], clashes: [], optedOut: [] }),
+  optOut: ({ params }: { readonly params: { readonly skillId: string } }) =>
+    Effect.fail(new SkillMissing({ id: params.skillId })),
 };
+
+/**
+ * Rolls `pin` out to every assignment of the skill that is not held and not on it already (ADR 029,
+ * Pins and rollout), in one transaction, journaled and announced. Returns the assignments it moved.
+ */
+const rollOutAll = (
+  library: SkillLibraryShape,
+  announce: (entries: Committed<unknown>["entries"]) => Effect.Effect<void>,
+  skillId: SkillId,
+  pin: SkillRevisionHash,
+  when: "pending" | "always",
+) =>
+  library.rollOutRevision(skillId, pin, YOU, when).pipe(
+    Effect.tap((committed) => announce(committed.entries)),
+    Effect.map((committed) => committed.value),
+  );
 
 export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handlers) =>
   Effect.gen(function* () {
@@ -100,6 +140,37 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
         },
       };
     });
+
+    const repo = yield* Effect.serviceOption(HobbotsRepository);
+    const permissions = yield* Effect.serviceOption(PermissionSummary);
+    const projects = yield* Effect.serviceOption(MemoryProjects);
+    const hobOf = (agentId: AgentId) =>
+      Option.isNone(repo) ? Effect.succeed(Option.none()) : repo.value.findAgent(agentId);
+    const missing = <A, R>(effect: Effect.Effect<A, SkillNotFound, R>) =>
+      Effect.mapError(effect, (error) => new SkillMissing({ id: error.id }));
+    const committedValue = <A>(change: Effect.Effect<Committed<A>, SkillNotFound>) =>
+      missing(
+        change.pipe(
+          Effect.tap((committed) => announce(committed.entries)),
+          Effect.map((committed) => committed.value),
+        ),
+      );
+    // A hob's skills as its next turn would get them, in the folders it works in now.
+    const hobView = (agentId: AgentId) =>
+      Effect.gen(function* () {
+        const found = yield* hobOf(agentId);
+        if (Option.isNone(found)) return yield* new SkillMissing({ id: agentId });
+        const agent = found.value;
+        const folders = Option.isSome(permissions)
+          ? (yield* permissions.value.of(agent)).folders
+          : agent.policy.ownFolders;
+        const resolved = yield* hobSkills(library, projects, { agentId, policy: agent.policy, folders });
+        return {
+          agentId,
+          ...resolved,
+          optedOut: (yield* library.optOuts(agentId)).map((one) => one.skillId),
+        };
+      });
 
     const skillOf = (skillId: Parameters<typeof library.get>[0]) =>
       Effect.flatMap(library.get(skillId), (skill) =>
@@ -153,7 +224,62 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
             })
             .pipe(Effect.mapError(importError));
           const [one] = added;
-          return one === undefined ? yield* new SkillMissing({ id: skill.id }) : one;
+          if (one === undefined) return yield* new SkillMissing({ id: skill.id });
+          // Your edit rolls out to every assignment that is not held. Whether it still may is decided inside
+          // the rollout's transaction: saving it again finishes a rollout the hub stopped in the middle of,
+          // and content already rolled out, or no longer the newest, moves none, so a rollback stays.
+          const rolledOut = yield* missing(rollOutAll(library, announce, skill.id, one.revision.hash, "pending"));
+          return { ...one, rolledOut };
+        }),
+      rollOut: ({ params, payload }) =>
+        Effect.gen(function* () {
+          const skill = yield* skillOf(params.skillId);
+          if ((yield* library.revision(skill.id, payload.pin)) === null)
+            return yield* new SkillMissing({ id: payload.pin });
+          return { rolledOut: yield* rollOutAll(library, announce, skill.id, payload.pin, "always").pipe(missing) };
+        }),
+      assign: ({ params, payload }) =>
+        Effect.gen(function* () {
+          const skill = yield* skillOf(params.skillId);
+          const [newest] = yield* library.revisions(skill.id);
+          const pin = payload.pin ?? newest?.hash;
+          if (pin === undefined) return yield* new SkillMissing({ id: skill.id });
+          if (payload.scope._tag === "Hob" && Option.isNone(yield* hobOf(payload.scope.agentId)))
+            return yield* new SkillMissing({ id: payload.scope.agentId });
+          const before = (yield* library.assignments(skill.id)).find(
+            (one) => JSON.stringify(one.scope) === JSON.stringify(payload.scope),
+          );
+          return yield* committedValue(
+            library.assign({
+              skillId: skill.id,
+              scope: payload.scope,
+              pin,
+              held: payload.held ?? before?.held ?? false,
+              onlyWhenAsked: payload.onlyWhenAsked ?? before?.onlyWhenAsked ?? false,
+              by: YOU,
+            }),
+          );
+        }),
+      rollOutAssignment: ({ params, payload }) =>
+        committedValue(library.rollOut(params.assignmentId, payload.pin, YOU)),
+      hold: ({ params, payload }) => committedValue(library.hold(params.assignmentId, payload.held)),
+      unassign: ({ params }) =>
+        library
+          .unassign(params.assignmentId)
+          .pipe(
+            Effect.flatMap((committed) =>
+              committed === null
+                ? Effect.fail(new SkillMissing({ id: params.assignmentId }))
+                : Effect.as(announce(committed.entries), committed.value),
+            ),
+          ),
+      hob: ({ params }) => hobView(params.agentId),
+      optOut: ({ params, payload }) =>
+        Effect.gen(function* () {
+          if (Option.isNone(yield* hobOf(params.agentId))) return yield* new SkillMissing({ id: params.agentId });
+          const changed = yield* library.setOptOut(params.agentId, params.skillId, payload.optedOut).pipe(missing);
+          if (changed !== null) yield* announce(changed.entries);
+          return yield* hobView(params.agentId);
         }),
       syncAgentsFolder: () =>
         Effect.gen(function* () {

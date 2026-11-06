@@ -102,6 +102,22 @@ export interface SkillLibraryShape {
     pin: SkillRevisionHash,
     by: SkillBy,
   ) => Library<Committed<SkillAssignment>, SkillNotFound>;
+  /**
+   * Rolls `pin`, a revision of the skill, out to every assignment of it that is not held and not on it
+   * already, in one transaction that rereads each, and marks the revision rolled out (ADR 029, Pins
+   * and rollout). Answers the assignments it moved.
+   *
+   * `when` is `pending` for the rollout a save makes on its own: inside the same transaction it rolls
+   * out only a revision that is still its skill's newest and was never rolled out, so two saves of
+   * one content roll it out once and a rollback made between them stays. `always` is a rollout you
+   * ask for, such as Roll back, which goes ahead whatever the revision's past.
+   */
+  readonly rollOutRevision: (
+    skillId: SkillId,
+    pin: SkillRevisionHash,
+    by: SkillBy,
+    when: "pending" | "always",
+  ) => Library<Committed<ReadonlyArray<SkillAssignment>>, SkillNotFound>;
   /** Holds an assignment on its revision, or lets it follow rollouts again. */
   readonly hold: (id: SkillAssignmentId, held: boolean) => Library<Committed<SkillAssignment>, SkillNotFound>;
   /** Every hob's opt-outs, or one hob's. */

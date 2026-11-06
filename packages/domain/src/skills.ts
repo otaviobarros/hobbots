@@ -196,6 +196,15 @@ export class SkillRevision extends Schema.Class<SkillRevision>("SkillRevision")(
   label: Schema.NullOr(Schema.String),
   addedBy: SkillBy,
   addedAt: Schema.String,
+  /**
+   * When it was rolled out to every assignment of its skill that is not held, or null while that has
+   * not finished (ADR 029, Pins and rollout). Saving it again finishes an interrupted rollout, and a
+   * source that still holds it never rolls it out a second time, so a rollback stays.
+   */
+  rolledOutAt: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
 }) {}
 
 /** A skill in the library. */
@@ -231,6 +240,19 @@ export class SkillAssignment extends Schema.Class<SkillAssignment>("SkillAssignm
   assignedAt: Schema.String,
   revision: Revision,
 }) {}
+
+/**
+ * A skill a turn was given, as recorded with its message (ADR 029, Pins and rollout): the revision
+ * its assignment pinned when your message was accepted, so a queued message keeps it, and on the
+ * reply what its latest turn used, so History shows which revision each reply had.
+ */
+export const TurnSkill = Schema.Struct({
+  skillId: SkillId,
+  name: SkillName,
+  pin: SkillRevisionHash,
+  onlyWhenAsked: Schema.Boolean,
+});
+export type TurnSkill = typeof TurnSkill.Type;
 
 /** A hob that turned off an Everyone or Project skill for itself. A hob setting, so it survives updates. */
 export const SkillOptOut = Schema.Struct({ agentId: AgentId, skillId: SkillId, at: Schema.String });
