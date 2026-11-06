@@ -75,7 +75,9 @@ export type TaskControl = typeof TaskControl.Type;
  * A Task's state, owner or current Attempt changed: a start, a retry, a reassignment, a wait, a
  * cancel, or its Attempt moving on. `attempt` is the current one when it changed; `quest` the
  * Task's Quest when it ended or reopened with it; `wait` the wait its owner started or replaced, so
- * who it waits on shows live; `control` what you did, when the change was yours.
+ * who it waits on shows live; `control` what you did, when the change was yours; `reply` the final
+ * reply of the turn that ended `attempt`, for a Task below the top one, redacted and cut as its
+ * result would be, so memory keeps what the hob said outside any chat (ADR 028).
  */
 const TaskStateChanged = Schema.TaggedStruct("TaskStateChanged", {
   task: Task,
@@ -83,6 +85,7 @@ const TaskStateChanged = Schema.TaggedStruct("TaskStateChanged", {
   quest: Schema.NullOr(Quest),
   wait: Schema.NullOr(TaskWait).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
   control: Schema.optionalKey(TaskControl),
+  reply: Schema.optionalKey(Schema.String),
 });
 /** A Task gained its Quest record: its owner brought in another hob. */
 const QuestStarted = Schema.TaggedStruct("QuestStarted", { quest: Quest });
@@ -273,7 +276,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   GrantCreated: 1,
   GrantRevoked: 1,
   TaskCreated: 1,
-  // A change's `wait` was added with a default, and its optional `control` later, compatibly.
+  // A change's `wait` was added with a default, and its optional `control` and `reply` later, compatibly.
   TaskStateChanged: 1,
   QuestStarted: 1,
   CheckpointRecorded: 1,

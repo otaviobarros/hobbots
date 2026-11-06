@@ -10,6 +10,9 @@ import {
 } from "@hobbots/agents";
 import {
   AgentId,
+  Attempt,
+  AttemptId,
+  type AttemptState,
   EVENT_SCHEMA_VERSIONS,
   EventEnvelope,
   type JournaledEvent,
@@ -21,7 +24,9 @@ import {
   Quest,
   QuestId,
   type ReplyStep,
+  Task,
   TaskId,
+  type TaskState,
   Thread,
   ThreadId,
 } from "@hobbots/domain";
@@ -42,8 +47,8 @@ import { makeMemorySavesFake } from "../src/testing.ts";
 export interface CaptureUnderTest {
   /** The memory under test. Its calls fail while it is down. */
   readonly store: MemoryStoreShape;
-  /** How many observations memory keeps of a thread's session in a hob's memory. */
-  readonly observations: (agentId: AgentId, threadId: ThreadId) => Effect.Effect<number>;
+  /** How many observations memory keeps of a session, a thread's or an Attempt's, in a hob's memory. */
+  readonly observations: (agentId: AgentId, sessionId: string) => Effect.Effect<number>;
   /** Takes memory down: the fake stops answering, and ai-memory's engine stops. */
   readonly down: Effect.Effect<void>;
   /** Brings it back on the same data. */
@@ -53,6 +58,9 @@ export interface CaptureUnderTest {
 const SECRET = "hobbots-test-secret-0123456789abcdef";
 const pip = AgentId.make("0d6e2f0a-0000-4000-8000-0000000000a1");
 const pipsOwn = { _tag: "Hob", agentId: pip } as const;
+/** A party member Pip brings into its Quest. */
+const quill = AgentId.make("0d6e2f0a-0000-4000-8000-0000000000b2");
+const quillsOwn = { _tag: "Hob", agentId: quill } as const;
 const you = { _tag: "You" } as const;
 const asPip = { _tag: "Hob", agentId: pip, projects: [] } as const;
 
@@ -110,8 +118,8 @@ const makeJournal = (start: string) => {
           crashNextSave = false;
           return Effect.die(new Error("The hub stopped before it saved the cursor."));
         }
-        const replaced = new Set([...active.map((session) => session.threadId), ...ended]);
-        sessions = [...sessions.filter((session) => !replaced.has(session.threadId)), ...active];
+        const replaced = new Set([...active.map((session) => session.sessionId), ...ended]);
+        sessions = [...sessions.filter((session) => !replaced.has(session.sessionId)), ...active];
         cursor = sequence;
         return Effect.void;
       }),
@@ -194,7 +202,85 @@ const archive = (journal: Journal, threadId: ThreadId) =>
     threadId,
   );
 
-const sessionPage = (threadId: ThreadId) => MemoryPath.make(`sessions/${threadId}.md`);
+const sessionPage = (sessionId: string) => MemoryPath.make(`sessions/${sessionId}.md`);
+
+/**
+ * A Task's work outside any chat, as the hub journals it (#1012): its Attempts start, record their
+ * steps, end with a turn's reply, and the Task ends. The Task sits under Pip's top Task in `threadId`.
+ */
+const taskWork = (journal: Journal, threadId: ThreadId, owner: AgentId, brief: string) => {
+  const root = TaskId.make(crypto.randomUUID());
+  let task = new Task({
+    id: TaskId.make(crypto.randomUUID()),
+    ownerId: owner,
+    parentId: root,
+    rootId: root,
+    threadId,
+    brief,
+    state: "queued",
+    dependsOn: [],
+    result: null,
+    currentAttemptId: null,
+    createdAt: "2026-11-05T12:00:00.000Z",
+    updatedAt: "2026-11-05T12:00:00.000Z",
+  });
+  let attempt: Attempt | null = null;
+  const changed = (state: TaskState, current: Attempt | null, reply?: string) => {
+    task = new Task({ ...task, state, currentAttemptId: current?.id ?? task.currentAttemptId });
+    journal.append(
+      {
+        _tag: "TaskStateChanged",
+        task,
+        attempt: current,
+        quest: null,
+        wait: null,
+        ...(reply === undefined ? {} : { reply }),
+      },
+      threadId,
+      owner,
+    );
+  };
+  const withState = (state: AttemptState) => {
+    attempt = new Attempt({ ...(attempt as Attempt), state });
+    return attempt;
+  };
+  return {
+    /** A new Attempt starts, as a first start or a retry does. */
+    start: () => {
+      attempt = new Attempt({
+        id: AttemptId.make(crypto.randomUUID()),
+        taskId: task.id,
+        number: (attempt?.number ?? 0) + 1,
+        agentId: owner,
+        runtime: "claude-code",
+        sessionId: null,
+        configVersion: 1,
+        policyVersion: null,
+        state: "starting",
+        outcome: null,
+        startedAt: "2026-11-05T12:00:00.000Z",
+        endedAt: null,
+      });
+      changed("active", attempt);
+      return attempt.id;
+    },
+    /** The current Attempt goes on in a next turn, as when work is delivered to it again. */
+    resume: () => changed("active", withState("starting")),
+    /** The Attempt's steps so far, all of them, as each change records them. */
+    steps: (steps: ReadonlyArray<ReplyStep>) => {
+      const current = attempt as Attempt;
+      journal.append({ _tag: "AttemptStepsRecorded", attemptId: current.id, taskId: task.id, steps }, threadId, owner);
+    },
+    /** The turn ends with its reply, and the Task waits for more, or completes. */
+    replied: (reply: string, state: TaskState = "waiting") => changed(state, withState("completed"), reply),
+    /** The turn fails, and its Task fails after it. */
+    failed: () => {
+      changed("active", withState("failed"));
+      changed("failed", null);
+    },
+    taskId: task.id,
+  };
+};
 
 export const captureContract = (name: string, open: () => Effect.Effect<CaptureUnderTest>) => {
   /**
@@ -346,7 +432,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           yield* quietPassed;
           yield* capture.runOnce;
           expect(yield* memory.store.page(you, pipsOwn, path)).toMatchObject({ version: pinnedAt, pinned: true });
-          expect(journal.sessions().map((session) => session.threadId)).toEqual([threadId]);
+          expect(journal.sessions().map((session) => session.sessionId)).toEqual([threadId]);
 
           // Unpinned, the next round ends the session, and the note takes what was said meanwhile.
           yield* memory.store.write(
@@ -448,10 +534,108 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           yield* TestClock.adjust(Duration.minutes(29));
           yield* capture.runOnce;
           expect(yield* memory.store.page(you, pipsOwn, sessionPage(threadId))).toBeNull();
-          expect(journal.sessions().map((session) => session.threadId)).toEqual([threadId]);
+          expect(journal.sessions().map((session) => session.sessionId)).toEqual([threadId]);
           yield* TestClock.adjust(Duration.minutes(2));
           yield* capture.runOnce;
           expect(yield* memory.store.page(you, pipsOwn, sessionPage(threadId))).not.toBeNull();
+        }),
+      ));
+
+    // covers ADR 028 (Capture and summaries), #1012
+    it("[TC-GEN-395] keeps a party member's Attempt in a session of the member's own memory, ended with its Task", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          exchange(journal, threadId, "Ship the release.", "I brought Quill in for the changelog.");
+          const work = taskWork(journal, threadId, quill, "Write the changelog for 2.0");
+          const attemptId = work.start();
+          const first = step("s1", "Reading CHANGELOG.md", "## 1.9.0");
+          // Every change carries all the steps so far: the first is kept once.
+          work.steps([{ ...first, state: "running" }]);
+          work.steps([first]);
+          yield* capture.runOnce;
+          work.steps([first, step("s2", "Running git log", "42 commits")]);
+          work.replied("The changelog for 2.0 is in CHANGELOG.md.", "completed");
+          yield* capture.runOnce;
+
+          // start, goal, two tool steps and the reply
+          expect(yield* memory.observations(quill, attemptId)).toBe(5);
+          const page = yield* memory.store.page(you, quillsOwn, sessionPage(attemptId));
+          expect(page?.markdown).toContain("Write the changelog for 2.0");
+          expect(page?.markdown).toContain("The changelog for 2.0 is in CHANGELOG.md.");
+          expect(journal.sessions().map((session) => session.sessionId)).toEqual([threadId]);
+          // The lead's memory keeps its own thread, and nothing of the member's work.
+          expect(yield* memory.observations(pip, attemptId)).toBe(0);
+          expect(yield* memory.store.page(you, pipsOwn, sessionPage(attemptId))).toBeNull();
+        }),
+      ));
+
+    // covers ADR 028 (Capture and summaries), #1012
+    it("[TC-GEN-396] writes nothing twice for a redelivered or retried Attempt, or a replayed journal", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          const work = taskWork(journal, threadId, quill, "Fix the flaky upload test");
+          const failed = work.start();
+          work.steps([step("s1", "Running pnpm test", "1 failed")]);
+          work.failed();
+          yield* capture.runOnce;
+          // start, goal and the step; the failed Task ended the session.
+          expect(yield* memory.observations(quill, failed)).toBe(3);
+          expect(yield* memory.store.page(you, quillsOwn, sessionPage(failed))).not.toBeNull();
+
+          // The retry is a new Attempt, in a session of its own.
+          const retried = work.start();
+          work.steps([step("s1", "Running pnpm test", "1 failed")]);
+          work.replied("It waits on a fixture; I asked Pip which one.");
+          yield* capture.runOnce;
+          // Work delivered again goes on in the same Attempt, whose steps carry the earlier one.
+          work.resume();
+          work.steps([step("s1", "Running pnpm test", "1 failed"), step("s2", "Running pnpm test", "all passed")]);
+          work.replied("Fixed: the test now waits for the upload.", "completed");
+          yield* capture.runOnce;
+          // start, goal, two steps and two replies
+          expect(yield* memory.observations(quill, retried)).toBe(6);
+          expect(yield* memory.observations(quill, failed)).toBe(3);
+
+          // Every entry sent again, as after a lost cursor, adds nothing.
+          const replay = makeJournal("2026-11-05T12:00:00.000Z");
+          const replayed = yield* Layer.build(
+            MemoryCapture.make.pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  Layer.succeed(MemoryStore, memory.store),
+                  Layer.succeed(MemoryCaptureLog, { ...replay.log, readAfter: journal.log.readAfter }),
+                ),
+              ),
+            ),
+          );
+          yield* Context.get(replayed, MemoryCapture).runOnce;
+          expect(yield* memory.observations(quill, retried)).toBe(6);
+          expect(yield* memory.observations(quill, failed)).toBe(3);
+          expect(yield* memory.store.history(you, quillsOwn, sessionPage(retried))).toHaveLength(1);
+        }),
+      ));
+
+    // covers ADR 028 (Capture and summaries), PE-006, #1012
+    it("[TC-GEN-397] sends nothing of a member's work that redaction removes, and ends a quiet Attempt's session", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          const work = taskWork(journal, threadId, quill, `Deploy with the token ${SECRET}`);
+          const attemptId = work.start();
+          work.steps([step("s1", `curl -H "Authorization: Bearer ${SECRET}"`, `token=${SECRET}`)]);
+          work.replied(`Deployed with ${SECRET}.`);
+          yield* capture.runOnce;
+          // The Task waits for more: its session ends once it has been quiet for 30 minutes.
+          expect(yield* memory.store.page(you, quillsOwn, sessionPage(attemptId))).toBeNull();
+          yield* quietPassed;
+          yield* capture.runOnce;
+          const page = yield* memory.store.page(you, quillsOwn, sessionPage(attemptId));
+          expect(page).not.toBeNull();
+          expect(page?.markdown).not.toContain(SECRET);
+          expect(page?.markdown).toContain("[redacted");
+          expect(journal.sessions()).toEqual([]);
         }),
       ));
 

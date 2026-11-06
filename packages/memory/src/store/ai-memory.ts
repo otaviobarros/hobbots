@@ -13,12 +13,12 @@ import {
   MemoryPath,
   MemoryProjectIdentity,
   type MemoryScope,
+  type MemorySessionId,
   MemoryUnavailable,
   MemoryVersion,
   type MemoryVersionChanges,
   memoryTitleOf,
   searchTerms,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema, Semaphore } from "effect";
 import { acknowledgedPrefix, HOOK_BATCH_MAX, HookBatchJson, hookEventOf } from "./capture.ts";
@@ -617,7 +617,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
           .pipe(Effect.catchTag("EngineRefused", () => currentConflict(scope, path)));
         return yield* stampedYours(actor, scope, path, MemoryVersion.make(json.page_id));
       }).pipe(refusalIsOutage, changing.withPermit),
-    capture: (actor, scope, threadId, items) =>
+    capture: (actor, scope, sessionId, items) =>
       Effect.gen(function* () {
         const where = engineProjectOf(scope);
         let acknowledged = 0;
@@ -626,7 +626,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
           const batch = items.slice(acknowledged, acknowledged + HOOK_BATCH_MAX);
           const json = yield* client.hookBatch(
             callerOf(actor),
-            batch.map((item) => hookEventOf(where, threadId, item)),
+            batch.map((item) => hookEventOf(where, sessionId, item)),
             HookBatchJson,
           );
           const prefix = Math.min(acknowledgedPrefix(json), batch.length);
@@ -635,12 +635,12 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         }
         return acknowledged;
       }).pipe(refusalIsOutage),
-    endSession: (actor, scope, threadId, key) =>
-      Effect.flatMap(pageOf(scope, MemoryPath.make(`sessions/${threadId}.md`)), (note) =>
+    endSession: (actor, scope, sessionId, key) =>
+      Effect.flatMap(pageOf(scope, MemoryPath.make(`sessions/${sessionId}.md`)), (note) =>
         // The engine writes a session's page again at every end, pinned or not, so the end of a
         // session whose chat note you pinned is not sent: the note stays as it is, and the capture
         // worker keeps the end and sends it again once you unpin it.
-        note?.pinned === true ? Effect.succeed(false) : Effect.as(endOf(actor, scope, threadId, key), true),
+        note?.pinned === true ? Effect.succeed(false) : Effect.as(endOf(actor, scope, sessionId, key), true),
       ).pipe(refusalIsOutage, changing.withPermit),
     check: (_actor, scope) =>
       client
@@ -654,11 +654,11 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
     health: client.health,
   };
 
-  const endOf = (actor: MemoryActor, scope: MemoryScope, threadId: ThreadId, key: string) =>
+  const endOf = (actor: MemoryActor, scope: MemoryScope, sessionId: MemorySessionId, key: string) =>
     client
       .hookBatch(
         callerOf(actor),
-        [hookEventOf(engineProjectOf(scope), threadId, { kind: "end", key, text: "" })],
+        [hookEventOf(engineProjectOf(scope), sessionId, { kind: "end", key, text: "" })],
         HookBatchJson,
       )
       .pipe(

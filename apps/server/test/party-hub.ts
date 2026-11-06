@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  ActivityRecorder,
   ApprovalRepository,
   ApprovalService,
   ChatService,
@@ -36,6 +37,7 @@ import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
+  ActivityRepositoryLive,
   ApprovalRepositoryLive,
   BackpackLive,
   EventJournal,
@@ -45,6 +47,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { ActivityStoreLive, FolderScannerLive } from "@hobbots/workbench";
 import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { DispatcherHostLive } from "../src/backpack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
@@ -121,11 +124,13 @@ const reacted = (prompt: string, reactions: Array<Reaction>) => {
 
 /**
  * The hub's services, a temporary project folder, and what each scripted call was answered. With
- * `memory`, the hub's hobs remember through it (ADR 028).
+ * `memory`, the hub's hobs remember through it (ADR 028); with `activity`, each turn outside a chat
+ * keeps its steps on its Attempt, as the hub's Workbench records them (ADR 023).
  */
 export const partyHub = (
   options: {
     readonly memory?: MemoryStoreShape;
+    readonly activity?: boolean;
     /** Which turns announce their session twice, as a runtime bug would. */
     readonly announcesTwice?: (prompt: string) => boolean;
   } = {},
@@ -210,6 +215,13 @@ export const partyHub = (
     ),
     Layer.provideMerge(Dispatcher.layer().pipe(Layer.provideMerge(DispatcherHostLive))),
     Layer.provideMerge(Layer.mergeAll(ApprovalService.layer, QuestionService.layer)),
+    Layer.provideMerge(
+      options.activity === true
+        ? ActivityRecorder.layer().pipe(
+            Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(temp, "activity")))),
+          )
+        : Layer.empty,
+    ),
     Layer.provideMerge(party),
     Layer.provideMerge(
       Layer.mergeAll(
@@ -217,6 +229,7 @@ export const partyHub = (
         TaskRepositoryLive,
         TaskToolCallsLive,
         ApprovalRepositoryLive,
+        ActivityRepositoryLive,
         BackpackLive,
         EventJournal.layer,
         EventBus.layer,

@@ -58,7 +58,7 @@ describe.runIf(engineEnabled)("memory capture on ai-memory", () => {
       });
       return {
         store,
-        observations: (agentId, threadId) => observationsOf(engine, engineActorOf(agentId), threadId),
+        observations: (agentId, sessionId) => observationsOf(engine, engineActorOf(agentId), sessionId),
         down: Effect.promise(() => Effect.runPromise(Scope.close(engine.scope, Exit.void))),
         up: Effect.promise(async () => {
           engine = await Effect.runPromise(startEngineStore(dataDir, keys));
