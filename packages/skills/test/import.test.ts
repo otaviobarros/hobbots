@@ -295,6 +295,34 @@ describe("skill import", () => {
     );
   });
 
+  // covers STD-SEC-005, ADR 029 (Import), #1060
+  it("[TC-AG-136] reads crafted text and names in linear time: long runs of dots, line breaks, fences and slashes", async () => {
+    const { layer } = await importerLayer();
+    const RUN = 200_000;
+    const crafted = [
+      `See https://example.com/${".".repeat(RUN)}x for more.`,
+      "\n".repeat(RUN),
+      "```\n".repeat(3),
+      `[ref]:${" ".repeat(RUN)}x`,
+    ].join("\n");
+    const folder = await folderOf({ "SKILL.md": skillMd("release", "Releases.", "") + crafted });
+    const archive = await archiveOf({ "SKILL.md": skillMd("release"), [`notes${"/".repeat(30_000)}x`]: "x" });
+    await runWith(layer)(
+      Effect.gen(function* () {
+        const importer = yield* SkillImporter;
+        const started = performance.now();
+        const [added] = yield* importer.add({ _tag: "Folder", path: folder }, you);
+        expect(added?.revision.flags).toEqual([
+          { _tag: "Url", path: "SKILL.md", url: `https://example.com/${".".repeat(RUN)}x` },
+        ]);
+        // The archive's name with a long run of slashes is read, and refused, without backtracking.
+        const refused = yield* Effect.flip(importer.add({ _tag: "Archive", fileName: "x.zip", bytes: archive }, you));
+        expect(refused._tag).toBe("SkillRefused");
+        expect(performance.now() - started).toBeLessThan(2_000);
+      }),
+    );
+  });
+
   it("[TC-AG-131] imports a skill written in Hobbots, with no source", async () => {
     const { layer } = await importerLayer();
     await runWith(layer)(

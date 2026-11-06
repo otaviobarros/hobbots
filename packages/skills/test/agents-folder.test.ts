@@ -1,4 +1,4 @@
-import { rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SkillLibrary } from "@hobbots/agents";
 import { SkillName } from "@hobbots/domain";
@@ -66,6 +66,39 @@ describe("~/.agents/skills", () => {
       const review = yield* library.byName(SkillName.make("review"));
       expect(review).not.toBeNull();
       expect(yield* library.assignments(review?.id)).toEqual([]);
+    }).pipe(Effect.provide(await layerFor(folder)), Effect.runPromise);
+  });
+
+  it("[TC-AG-139] keeps every assignment, and says why, while the folder cannot be read", async () => {
+    const folder = await folderOf({ "release/SKILL.md": skillMd("release") });
+    await Effect.gen(function* () {
+      const library = yield* SkillLibrary;
+      const agents = yield* AgentsFolder;
+      const [release] = yield* library.list;
+      if (release === undefined) return expect.unreachable();
+      const [everyone] = yield* library.assignments(release.id);
+      if (everyone === undefined) return expect.unreachable();
+      yield* library.hold(everyone.id, true);
+
+      // Something that is there but is not a folder is not a missing folder: nothing is let go.
+      yield* Effect.promise(async () => {
+        await rm(folder, { recursive: true });
+        await writeFile(folder, "not a folder");
+      });
+      yield* agents.sync;
+      expect(yield* library.assignments(release.id)).toMatchObject([{ id: everyone.id, held: true }]);
+      const problems = yield* agents.problems;
+      expect(problems).toMatchObject([{ folder: "", unreadable: `${folder} is not a folder.` }]);
+
+      // Once it reads again, the same assignment carries on, still held.
+      yield* Effect.promise(async () => {
+        await rm(folder);
+        await mkdir(join(folder, "release"), { recursive: true });
+        await writeFile(join(folder, "release/SKILL.md"), skillMd("release"));
+      });
+      yield* agents.sync;
+      expect(yield* library.assignments(release.id)).toMatchObject([{ id: everyone.id, held: true }]);
+      expect(yield* agents.problems).toEqual([]);
     }).pipe(Effect.provide(await layerFor(folder)), Effect.runPromise);
   });
 

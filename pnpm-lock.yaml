@@ -684,6 +684,9 @@ importers:
       '@hobbots/domain':
         specifier: workspace:*
         version: link:../domain
+      '@hobbots/permissions':
+        specifier: workspace:*
+        version: link:../permissions
       effect:
         specifier: 'catalog:'
         version: 4.1.0
@@ -758,6 +761,9 @@ importers:
       '@hobbots/domain':
         specifier: workspace:*
         version: link:../domain
+      '@hobbots/permissions':
+        specifier: workspace:*
+        version: link:../permissions
       effect:
         specifier: 'catalog:'
         version: 4.1.0

@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import type { Readable } from "node:stream";
+import { trimTrailingSlashes } from "@hobbots/domain";
 import yauzl from "yauzl";
 import { type SkillTree, TREE_ENTRIES_MAX, type TreeEntry, TreeUnreadable } from "../tree.ts";
 
@@ -43,7 +44,7 @@ export const archiveTree = async (bytes: Uint8Array): Promise<SkillTree> => {
       // With `decodeStrings: false` the name is the archive's own bytes.
       const name = Buffer.from(entry.fileName as unknown as Uint8Array).toString("utf8");
       const kind = kindOf(name, entry.externalFileAttributes);
-      const path = name.replace(/\/+$/, "");
+      const path = trimTrailingSlashes(name);
       if (path === "") continue;
       if (entry.isEncrypted()) throw new TreeUnreadable(`${path} is encrypted.`);
       entries.push({

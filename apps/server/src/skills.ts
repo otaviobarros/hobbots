@@ -138,7 +138,9 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
             folder: problem.folder,
             check: problem.refusal?.check ?? null,
             message:
-              problem.refusal?.message ?? `The library already has a skill named ${problem.takenBy ?? problem.folder}.`,
+              problem.unreadable ??
+              problem.refusal?.message ??
+              `The library already has a skill named ${problem.takenBy ?? problem.folder}.`,
           })),
         },
       };

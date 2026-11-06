@@ -173,7 +173,7 @@ export type HobSkills = typeof HobSkills.Type;
 
 export const ImportedSkills = Schema.Struct({ imported: Schema.Array(ImportedSkill) });
 
-/** A skill in `~/.agents/skills` the hub did not take, and why. */
+/** A skill in `~/.agents/skills` the hub did not take, and why; `folder` is "" when the folder itself could not be read. */
 export const AgentsFolderProblem = Schema.Struct({
   folder: Schema.String,
   check: Schema.NullOr(SkillCheck),

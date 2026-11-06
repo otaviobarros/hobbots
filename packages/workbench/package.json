@@ -12,6 +12,7 @@
   "dependencies": {
     "@hobbots/agents": "workspace:*",
     "@hobbots/domain": "workspace:*",
+    "@hobbots/permissions": "workspace:*",
     "effect": "catalog:",
     "ignore": "7.0.14",
     "isomorphic-git": "1.44.10"
