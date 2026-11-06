@@ -1,4 +1,4 @@
-import { Task, TaskId } from "@hobbots/domain";
+import { Quest, Task, TaskId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   ADA,
@@ -13,6 +13,7 @@ import {
   task,
   tree,
 } from "../../test/quests.ts";
+import { workCard } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
 import { questTicket } from "./ticket-model.ts";
 
@@ -84,6 +85,23 @@ describe("questTicket", () => {
     expect(messages.progress(cancelled?.progress ?? { kind: "count", done: 0, total: 0 })).toBe(
       "Cancelled after 2 min",
     );
+  });
+
+  it("keeps the time the Quest ended when its lead's turn ends after it (#1007)", () => {
+    const top = ended(task(CAMPAIGN, { brief: "Plan a Black Friday campaign" }), "completed", 17);
+    const endedAt = top.updatedAt;
+    const later = new Task({ ...top, updatedAt: new Date(Date.parse(endedAt) + 4_000).toISOString() });
+    const finished = (each: Task) => {
+      const base = withTasks(each);
+      const [record] = base.quests;
+      if (record === undefined) throw new Error("no Quest");
+      return tree({ ...base, quests: [new Quest({ ...record, state: "completed", endedAt })] });
+    };
+    for (const each of [top, later]) {
+      expect(questTicket(finished(each))?.progress).toEqual({ kind: "ended", end: "completed", took: 17 * 60_000 });
+      expect(workCard(finished(each))?.took).toBe(17 * 60_000);
+    }
+    expect(workCard(blackFriday())?.took).toBeNull();
   });
 
   it("has no ticket for a tree with no Task", () => {

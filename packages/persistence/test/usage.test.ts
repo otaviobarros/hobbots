@@ -1,8 +1,10 @@
-import { HobbotsRepository } from "@hobbots/agents";
+import { HobbotsRepository, TaskRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
   type AgentStatus,
+  AttemptId,
+  type HobUsage,
   Message,
   MessageId,
   type MessageStatus,
@@ -13,7 +15,7 @@ import {
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepositoryLive, UsageLedger } from "../src/index.ts";
+import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, UsageLedger } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 const created = "2026-10-01T00:00:00.000Z";
@@ -101,6 +103,12 @@ const seed = Effect.gen(function* () {
 });
 
 const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, UsageLedger.layer).pipe(Layer.provideMerge(TestDatabase));
+const TasksLayer = Layer.mergeAll(
+  HobbotsRepositoryLive,
+  TaskRepositoryLive,
+  EventJournal.layer,
+  UsageLedger.layer,
+).pipe(Layer.provideMerge(TestDatabase));
 
 // Pip led a Quest in its chat from 09:30 to 10:00 on Oct 28, with Bramble in the party, and started a
 // sub-quest under it at 09:35. Only Pip's 09:40 reply was written while the Quest ran.
@@ -151,7 +159,102 @@ const run = <A>(effect: Effect.Effect<A, never, HobbotsRepository | UsageLedger 
     return yield* effect;
   }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
+/** Starts a haiku turn on the Attempt, and ends it with `usage` unless that is "open". */
+const turn = (
+  tasks: TaskRepository["Service"],
+  attemptId: string,
+  agentId: string,
+  startedAt: string,
+  usage: ReplyUsage | null | "open",
+) =>
+  Effect.gen(function* () {
+    const counted = { attemptId: AttemptId.make(attemptId), startedAt };
+    yield* tasks.startTurn({ ...counted, agentId: AgentId.make(agentId), runtime: "claude-code", model: "haiku" });
+    if (usage !== "open") yield* tasks.endTurn(counted, usage, startedAt.replace(":00.000Z", ":30.000Z"));
+  });
+
+// Bramble's Task on Pip's Quest ran two turns at 09:45 on Oct 28, on Haiku: the second resumed the
+// first and failed without a report. Moss ran a step of a Task outside any Quest that day.
+const seedTurns = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const repo = yield* HobbotsRepository;
+  yield* repo.upsertThread(
+    new Thread({
+      id: ThreadId.make("t-moss-plan"),
+      agentId: AgentId.make("moss"),
+      title: "t-moss-plan",
+      createdAt: created,
+      updatedAt: created,
+    }),
+  );
+  const at = "2026-10-28T09:45:00.000Z";
+  yield* sql`INSERT INTO tasks ${sql.insert({
+    id: "k-tidy",
+    owner_id: "moss",
+    parent_id: null,
+    root_id: "k-tidy",
+    thread_id: "t-moss-plan",
+    brief: "k-tidy",
+    state: "active",
+    created_at: at,
+    updated_at: at,
+  })}`;
+  for (const [id, task, agent] of [
+    ["a-draft", "k-draft", "bramble"],
+    ["a-tidy", "k-tidy", "moss"],
+  ] as const) {
+    yield* sql`INSERT INTO attempts ${sql.insert({
+      id,
+      task_id: task,
+      number: 1,
+      agent_id: agent,
+      runtime: "claude-code",
+      config_version: 1,
+      state: "running",
+      started_at: at,
+    })}`;
+  }
+  const tasks = yield* TaskRepository;
+  yield* turn(tasks, "a-draft", "bramble", at, tokens(40, 400, 4000, 0));
+  // Recording a turn again changes nothing.
+  yield* turn(tasks, "a-draft", "bramble", at, tokens(40, 400, 4000, 0));
+  yield* turn(tasks, "a-draft", "bramble", "2026-10-28T09:50:00.000Z", null);
+  yield* turn(tasks, "a-tidy", "moss", "2026-10-28T11:00:00.000Z", tokens(1, 1));
+}).pipe(Effect.orDie);
+
 describe("UsageLedger", () => {
+  // regression for #1011: a party member's turns wrote no reply, so Usage left them out
+  // covers OP-002
+  it("[TC-OP-107] counts each turn outside a chat under its hob, and a party member's for its Quest", async () => {
+    const { hobs, quests, minutes } = await Effect.gen(function* () {
+      yield* seed;
+      yield* seedQuests;
+      yield* seedTurns;
+      return yield* UsageLedger.use((ledger) => ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z"));
+    }).pipe(Effect.provide(TasksLayer), Effect.scoped, Effect.runPromise);
+
+    expect(hobs.filter((row) => row.model === "haiku")).toMatchObject([
+      // Bramble's failed turn counts as one that reported nothing.
+      { hobId: "bramble", replies: 2, unreported: 1, inputTokens: 40, outputTokens: 400, cacheReadTokens: 4000 },
+      { hobId: "moss", replies: 1, unreported: 0, inputTokens: 1, outputTokens: 1 },
+    ]);
+    // Pip's Quest counts Bramble's turns with Pip's reply, in the one chat they were written in.
+    expect(quests.find((row) => row.questId === "q-plan")).toMatchObject({
+      party: 2,
+      chats: 1,
+      replies: 3,
+      unreported: 1,
+      tokens: 600 + 4440,
+    });
+    // Moss's step is outside any Quest.
+    expect(quests.find((row) => row.questId === null)).toMatchObject({ chats: 3, replies: 5, tokens: 1322 });
+    expect(minutes.find((row) => row.minute === "2026-10-28T09:45:00.000Z")).toEqual({
+      minute: "2026-10-28T09:45:00.000Z",
+      replies: 1,
+      tokens: 4440,
+    });
+  });
+
   // covers OP-002
   it("[TC-OP-070] sums each hob's settled replies in the period by runtime and model", async () => {
     const { hobs } = await run(
@@ -179,6 +282,51 @@ describe("UsageLedger", () => {
       hobStatus: "retired",
       runtime: "claude-code",
     });
+  });
+
+  // regression for #1011: a turn the hub stopped before it ended was never recorded
+  // covers OP-002
+  it("[TC-OP-109] counts a turn the hub never saw end, as unreported, once a later turn or a restart ends it", async () => {
+    const period = (ledger: UsageLedger["Service"]) =>
+      ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z");
+    const haiku = (hobs: ReadonlyArray<HobUsage>) =>
+      hobs.filter((row) => row.model === "haiku").map(({ hobId, replies, unreported }) => [hobId, replies, unreported]);
+    const { running, resumed, restarted } = await Effect.gen(function* () {
+      yield* seed;
+      yield* seedQuests;
+      yield* seedTurns;
+      const tasks = yield* TaskRepository;
+      const ledger = yield* UsageLedger;
+      // The hub stops mid-turn twice: in Bramble's third turn and in Moss's second.
+      yield* turn(tasks, "a-draft", "bramble", "2026-10-28T09:55:00.000Z", "open");
+      yield* turn(tasks, "a-tidy", "moss", "2026-10-28T11:05:00.000Z", "open");
+      const running = haiku((yield* period(ledger)).hobs);
+      // Bramble's Attempt resumes after the restart: its next turn ends the one left open.
+      yield* turn(tasks, "a-draft", "bramble", "2026-10-28T10:00:00.000Z", "open");
+      const resumed = haiku((yield* period(ledger)).hobs);
+      // Moss's Attempt ends as the restart ends every Attempt left live.
+      yield* tasks.updateAttempt(AttemptId.make("a-tidy"), {
+        _tag: "Ended",
+        end: { _tag: "Stopped", reason: "Hobbots stopped while this ran." },
+        at: "2026-10-28T12:00:00.000Z",
+      });
+      const restarted = haiku((yield* period(ledger)).hobs);
+      return { running, resumed, restarted };
+    }).pipe(Effect.provide(TasksLayer), Effect.scoped, Effect.runPromise);
+
+    // A turn of a live Attempt still running has not reported yet.
+    expect(running).toEqual([
+      ["bramble", 2, 1],
+      ["moss", 1, 0],
+    ]);
+    expect(resumed).toEqual([
+      ["bramble", 3, 2],
+      ["moss", 1, 0],
+    ]);
+    expect(restarted).toEqual([
+      ["bramble", 3, 2],
+      ["moss", 2, 1],
+    ]);
   });
 
   // covers OP-002

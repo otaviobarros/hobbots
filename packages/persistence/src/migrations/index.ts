@@ -59,7 +59,8 @@ import memoryCapture from "./0056_memory_capture.ts";
 import hubQuestions from "./0057_hub_questions.ts";
 import memorySaveUndo from "./0058_memory_save_undo.ts";
 import memoryShares from "./0059_memory_shares.ts";
-import memoryCaptureSessionIds from "./0060_memory_capture_session_ids.ts";
+import attemptTurnUsage from "./0060_attempt_turn_usage.ts";
+import memoryCaptureSessionIds from "./0061_memory_capture_session_ids.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -126,5 +127,6 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0057_hub_questions": hubQuestions,
   "0058_memory_save_undo": memorySaveUndo,
   "0059_memory_shares": memoryShares,
-  "0060_memory_capture_session_ids": memoryCaptureSessionIds,
+  "0060_attempt_turn_usage": attemptTurnUsage,
+  "0061_memory_capture_session_ids": memoryCaptureSessionIds,
 };

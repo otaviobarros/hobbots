@@ -44,6 +44,7 @@ import {
   HobbotsRepositoryLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
+  UsageLedger,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -227,6 +228,7 @@ export const partyHub = (
       Layer.mergeAll(
         HobbotsRepositoryLive,
         TaskRepositoryLive,
+        UsageLedger.layer,
         TaskToolCallsLive,
         ApprovalRepositoryLive,
         ActivityRepositoryLive,

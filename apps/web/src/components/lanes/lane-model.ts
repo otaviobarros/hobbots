@@ -88,8 +88,17 @@ export type LaneItem =
   /** Where a hob with more than one Task on the Quest starts the next. */
   | { readonly kind: "task"; readonly key: string; readonly title: string }
   | { readonly kind: "wait"; readonly key: string; readonly on: ReadonlyArray<LaneWaited> }
-  /** A turn runs now: the step it is on, or null before it reported one. */
-  | { readonly kind: "now"; readonly key: string; readonly label: string | null; readonly plain: string | null }
+  /**
+   * A turn runs now: the step it is on, or null before it reported one. `since` is when the room last
+   * recorded anything the hob did on the Task, so a lane that has gone quiet says for how long (#1004).
+   */
+  | {
+      readonly kind: "now";
+      readonly key: string;
+      readonly label: string | null;
+      readonly plain: string | null;
+      readonly since: string;
+    }
   | {
       readonly kind: "result";
       readonly key: string;
@@ -369,17 +378,40 @@ const sectionOf = (tree: TaskTree, task: Task, read: Reads) => {
   return { unit, items: result === null ? ordered : [...ordered, result] };
 };
 
-/** The step a running turn is on, from the records of the Attempt that runs. */
+/** The latest of some times in ISO 8601, which sort as text. */
+const latest = (times: ReadonlyArray<string>): string =>
+  times.reduce((last, each) => (last.localeCompare(each) < 0 ? each : last));
+
+/**
+ * When the room last recorded something the hob did on its running Task: the turn starting, a step,
+ * a command starting or ending, a file change, a beat, a refused call or a brief.
+ */
+const lastActivity = (tree: TaskTree, unit: ReadonlyArray<Task>, attempt: Attempt, activity?: AttemptActivity) => {
+  const ids: ReadonlySet<TaskId | null> = new Set(unit.map((each) => each.id));
+  return latest([
+    attempt.startedAt,
+    ...(activity?.steps.flatMap((each) => (each.startedAt === undefined ? [] : [each.startedAt])) ?? []),
+    ...(activity?.commands.flatMap((each) => [each.startedAt, ...(each.endedAt === null ? [] : [each.endedAt])]) ?? []),
+    ...(activity?.changes.map((each) => each.recordedAt) ?? []),
+    ...tree.checkpoints.filter((each) => ids.has(each.taskId)).map((each) => each.createdAt),
+    ...tree.refusals.filter((each) => ids.has(each.taskId)).map((each) => each.refusedAt),
+    ...tree.delegations.filter((each) => ids.has(each.parentTaskId)).map((each) => each.createdAt),
+  ]);
+};
+
+/** The step a running turn is on, from the records of the Attempt that runs, and when the hob last did something. */
 const nowItem = (tree: TaskTree, unit: ReadonlyArray<Task>, read: Reads): LaneItem | null => {
   const running = unit.find((each) => liveAttemptOn(each, tree));
-  if (running === undefined) return null;
-  const activity = running.currentAttemptId === null ? undefined : read.of(running.currentAttemptId);
+  const attempt = tree.attempts.find((each) => each.id === running?.currentAttemptId);
+  if (running === undefined || attempt === undefined) return null;
+  const activity = read.of(attempt.id);
   const step = activity?.steps.findLast((each) => each.state === "running");
   return {
     kind: "now",
     key: `now-${running.id}`,
     label: step?.label ?? null,
     plain: step === undefined ? null : stepDoing(step),
+    since: lastActivity(tree, unit, attempt, activity),
   };
 };
 

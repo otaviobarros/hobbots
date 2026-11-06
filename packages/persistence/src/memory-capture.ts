@@ -20,7 +20,7 @@ const sessionOf = (row: SessionRow): MemoryCaptureSession => ({
 });
 
 /**
- * The capture worker's cursor and open sessions (migrations 0056 and 0060, ADR 028). Journal compaction reads
+ * The capture worker's cursor and open sessions (migrations 0056 and 0061, ADR 028). Journal compaction reads
  * the same row, and keeps every entry after the cursor while it holds.
  */
 export const MemoryCaptureLive = Layer.effect(
