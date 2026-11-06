@@ -24,6 +24,7 @@ import {
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
+  IDLE_QUEST,
   Message,
   MessageId,
   QuestId,
@@ -705,8 +706,14 @@ describe("coalescing routine progress", () => {
     await run(ChatService.use((chat) => chat.wake(threadId)));
     const all = await run(messagesWhen((each) => each.length === 1));
     expect(all[0]?.content).toContain("ended as failed.");
-    const asked = requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"));
+    // Frodo's reply does nothing about the failure, so the hub then wakes him once about his idle
+    // Quest (#1081): that turn is not about the progress, and carries none of it.
+    const continued = () => requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"));
+    const asked = continued().filter((request) => !request.prompt.includes(IDLE_QUEST));
     expect(asked).toHaveLength(1);
+    expect(continued().every((request) => request === asked[0] || !request.prompt.includes("Routine progress"))).toBe(
+      true,
+    );
     expect(asked[0]?.prompt).toContain("Routine progress since your last turn, 30 updates in all.");
     expect(asked[0]?.prompt).toContain("- Task cook sent 30 updates. The latest: Stirred 30 times");
     expect(asked[0]?.prompt).not.toContain("Stirred 29 times");
@@ -715,7 +722,7 @@ describe("coalescing routine progress", () => {
     const settled = await run(settledItems(progress.map((item) => item.id)));
     expect(settled.every((item) => item.disposition?._tag === "consumed")).toBe(true);
     await run(Effect.sleep("150 millis"));
-    expect(requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"))).toHaveLength(1);
+    expect(continued().filter((request) => !request.prompt.includes(IDLE_QUEST))).toHaveLength(1);
   }, 10_000);
 
   // covers IN-005, CH-008

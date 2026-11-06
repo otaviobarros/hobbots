@@ -9,6 +9,7 @@ import {
   type CheckpointKind,
   DEFAULT_QUEST_LIMITS,
   HandOff,
+  IDLE_QUEST,
   type JournaledEvent,
   NoteId,
   Quest,
@@ -189,6 +190,29 @@ describe("backpackItemsFor", () => {
     expect(items({ _tag: "CheckpointRecorded", checkpoint: checkpoint("done"), milestone: null })).toEqual([]);
     const own = checkpoint("finding", campaign.id);
     expect(items({ _tag: "CheckpointRecorded", checkpoint: own, milestone: null })).toEqual([]);
+  });
+
+  // covers IN-004, OR-004
+  it("[TC-IN-562] sends the hub's finding that the Quest you asked for has nothing moving it to that Quest's own lead", () => {
+    const idle = (overrides: Partial<Pick<Checkpoint, "source" | "kind" | "summary" | "taskId">>) =>
+      new Checkpoint({ ...checkpoint("finding", campaign.id), source: "automatic", summary: IDLE_QUEST, ...overrides });
+    expect(items({ _tag: "CheckpointRecorded", checkpoint: idle({}), milestone: null })).toEqual([
+      { to: ALDRIC, kind: "checkpoint", task: "campaign", quest: null, key: "checkpoint:c-finding:checkpoint" },
+    ]);
+    // It continues Aldric's chat on the Task, and is not late while the Task is open.
+    const [made] = backpackItemsFor([{ _tag: "CheckpointRecorded", checkpoint: idle({}), milestone: null }], context);
+    const held = { ...made, kind: "checkpoint", actionable: true } as unknown as BackpackItem;
+    expect(carryingThread(held, context.tasks)).toBe(threadId);
+    expect(lateness(held, context.tasks)).toBeNull();
+    expect(arrivalsText([held], "prompt")).toContain(IDLE_QUEST);
+    // Any other finding on it, or one its own hob reported, still goes to no one.
+    for (const other of [idle({ summary: "Two Tasks changed one file" }), idle({ source: "unplanned" })]) {
+      expect(items({ _tag: "CheckpointRecorded", checkpoint: other, milestone: null })).toEqual([]);
+    }
+    // On a member's Task the finding still goes to its nearest lead.
+    expect(items({ _tag: "CheckpointRecorded", checkpoint: idle({ taskId: copy.id }), milestone: null })).toMatchObject(
+      [{ to: ALDRIC, task: "copy" }],
+    );
   });
 
   // covers IN-004, OR-005

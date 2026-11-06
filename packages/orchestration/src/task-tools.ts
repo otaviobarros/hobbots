@@ -52,6 +52,7 @@ import {
 import { makeCharmRecords } from "./charm-records.ts";
 import { makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeDelegating } from "./delegating.ts";
+import { flagIdleQuest } from "./empty-quests.ts";
 import { makeLeading } from "./leading.ts";
 import { makePlanning } from "./planning.ts";
 import { routineReply, waitingForYou } from "./quiet-replies.ts";
@@ -361,7 +362,7 @@ export class TaskTools extends Context.Service<
               Effect.gen(function* () {
                 if (attemptId === null || attemptOn === null) return;
                 const at = DateTime.formatIso(yield* DateTime.now);
-                yield* endTurn(ended, {
+                const { completed } = yield* endTurn(ended, {
                   runner: "root",
                   taskId: attemptOn,
                   attemptId,
@@ -372,6 +373,11 @@ export class TaskTools extends Context.Service<
                   ...(begun === null ? {} : { was: begun.was }),
                   at,
                 });
+                // A reply that left its Quest with nothing moving it wakes its lead, or stalls it (#1081).
+                if (!completed && ending._tag === "Replied") {
+                  const carried = new Set<string>((turn.holding ?? []).map((each) => each.itemId));
+                  yield* flagIdleQuest(ended, attemptOn, carried, at);
+                }
               }).pipe(
                 Effect.catchCause((cause) => Effect.logWarning("Could not end a chat turn's Attempt", cause)),
                 Effect.provideContext(context),
