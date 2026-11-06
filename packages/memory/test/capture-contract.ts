@@ -13,6 +13,13 @@ import {
   Attempt,
   AttemptId,
   type AttemptState,
+  BackpackDelivery,
+  BackpackItem,
+  BackpackItemId,
+  type BackpackItemState,
+  type BackpackPayload,
+  Checkpoint,
+  CheckpointId,
   EVENT_SCHEMA_VERSIONS,
   EventEnvelope,
   type JournaledEvent,
@@ -23,6 +30,8 @@ import {
   MessageId,
   Quest,
   QuestId,
+  Question,
+  QuestionId,
   type ReplyStep,
   Task,
   TaskId,
@@ -203,6 +212,90 @@ const archive = (journal: Journal, threadId: ThreadId) =>
   );
 
 const sessionPage = (sessionId: string) => MemoryPath.make(`sessions/${sessionId}.md`);
+
+/**
+ * Work that arrived for `recipient`, put into a turn of the session `target` names (`thread:<id>` or
+ * `task:<id>`), as the backpack journals each change of it (#1028): `deliveries` is how many turns
+ * it was put into so far, the last one `turnId`.
+ */
+const arrived = (
+  journal: Journal,
+  threadId: ThreadId,
+  recipient: AgentId,
+  payload: BackpackPayload,
+  delivery: { readonly target: string; readonly turnId: string },
+) => {
+  const id = BackpackItemId.make(crypto.randomUUID());
+  const at = "2026-11-05T12:00:00.000Z";
+  let deliveries: Array<BackpackDelivery> = [];
+  const changed = (state: BackpackItemState) =>
+    journal.append(
+      {
+        _tag: "BackpackItemChanged",
+        item: new BackpackItem({
+          id,
+          recipientId: recipient,
+          kind: payload._tag,
+          actionable: payload._tag !== "progress",
+          priority: 1,
+          state,
+          taskId: null,
+          questId: null,
+          attemptId: null,
+          threadId,
+          dedupeKey: id,
+          payload,
+          notBefore: null,
+          claim: null,
+          fencingToken: deliveries.length,
+          deliveries,
+          disposition: null,
+          error: null,
+          createdAt: at,
+          updatedAt: at,
+          revision: 1,
+        }),
+      },
+      threadId,
+      recipient,
+    );
+  return {
+    /** Put into a turn, which the runtime then accepted. */
+    taken: () => {
+      deliveries = [
+        ...deliveries,
+        new BackpackDelivery({
+          number: deliveries.length + 1,
+          ...delivery,
+          deliveredAt: at,
+          acknowledgedSessionId: null,
+          acknowledgedAt: null,
+        }),
+      ];
+      changed("delivered");
+      changed("acknowledged");
+    },
+  };
+};
+
+/** Pip's answer to a question Quill asked about its Task. */
+const answered = (taskId: TaskId, text: string, answer: string): BackpackPayload => ({
+  _tag: "answer",
+  question: new Question({
+    id: QuestionId.make(crypto.randomUUID()),
+    taskId,
+    askerId: quill,
+    recipientId: pip,
+    chain: [pip],
+    text,
+    state: "answered",
+    answer,
+    answeredBy: { _tag: "Lead", agentId: pip },
+    createdAt: "2026-11-05T12:00:00.000Z",
+    answeredAt: "2026-11-05T12:00:00.000Z",
+    revision: 2,
+  }),
+});
 
 /**
  * A Task's work outside any chat, as the hub journals it (#1012): its Attempts start, record their
@@ -668,6 +761,94 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           expect(page?.markdown).toContain("Running pnpm db:migrate");
           expect(page?.markdown).toContain("The database is migrated.");
           expect(journal.sessions()).toEqual([]);
+        }),
+      ));
+
+    // covers ADR 028 (Capture and summaries), #1028
+    it("[TC-GEN-399] keeps the work that wakes a member or a thread in the session of the turn that took it in, once", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          const work = taskWork(journal, threadId, quill, "Wire make check");
+          const attemptId = work.start();
+          work.replied("I asked Pip whether lint belongs in make check.");
+          const answer = arrived(
+            journal,
+            threadId,
+            quill,
+            answered(work.taskId, "Does lint belong in make check?", `Yes, with the key ${SECRET}.`),
+            { target: `task:${work.taskId}`, turnId: attemptId },
+          );
+          // The answer wakes Quill. Its first turn breaks, and the answer is put into the next one.
+          work.resume();
+          answer.taken();
+          answer.taken();
+          // Routine progress rides along, and memory leaves it out.
+          const checkpoint = new Checkpoint({
+            id: CheckpointId.make(crypto.randomUUID()),
+            taskId: work.taskId,
+            attemptId: null,
+            source: "automatic",
+            kind: "progress",
+            milestoneId: null,
+            summary: "Pip is reviewing the release notes",
+            createdAt: "2026-11-05T12:00:00.000Z",
+            revision: 1,
+          });
+          arrived(
+            journal,
+            threadId,
+            quill,
+            { _tag: "progress", checkpoint },
+            {
+              target: `task:${work.taskId}`,
+              turnId: attemptId,
+            },
+          ).taken();
+          work.replied("make check now runs lint.", "completed");
+          yield* capture.runOnce;
+
+          // start, goal, the first reply, the answer once and the last reply
+          expect(yield* memory.observations(quill, attemptId)).toBe(5);
+          const page = yield* memory.store.page(you, quillsOwn, sessionPage(attemptId));
+          // The answer first, so a summary written without a model keeps it too.
+          expect(page?.markdown).toContain('Answer: "Yes, with the key');
+          expect(page?.markdown).toContain('to the question "Does lint');
+          expect(page?.markdown).not.toContain(SECRET);
+          expect(page?.markdown).not.toContain("reviewing the release notes");
+          expect(page?.markdown).not.toContain("Answer it with");
+
+          // A member's result wakes Pip in the thread, and goes to the thread's session.
+          exchange(journal, threadId, "Ship the release.", "I brought Quill in.");
+          yield* capture.runOnce;
+          const before = yield* memory.observations(pip, threadId);
+          const done = new Task({
+            id: work.taskId,
+            ownerId: quill,
+            parentId: work.taskId,
+            rootId: work.taskId,
+            threadId,
+            brief: "Wire make check",
+            state: "completed",
+            dependsOn: [],
+            result: { summary: "make check runs lint", attemptId },
+            currentAttemptId: attemptId,
+            createdAt: "2026-11-05T12:00:00.000Z",
+            updatedAt: "2026-11-05T12:00:00.000Z",
+          });
+          arrived(
+            journal,
+            threadId,
+            pip,
+            { _tag: "result", task: done, artifacts: [] },
+            {
+              target: `thread:${threadId}`,
+              turnId: crypto.randomUUID(),
+            },
+          ).taken();
+          yield* capture.runOnce;
+          expect(yield* memory.observations(pip, threadId)).toBe(before + 1);
+          expect(yield* memory.observations(quill, threadId)).toBe(0);
         }),
       ));
 
