@@ -185,6 +185,12 @@ describe("Hobbots.app as the hub's background service", { concurrency: false }, 
         instructions: "",
       }),
     );
+    // A session is briefed from memory, and the fake runtime echoes that brief. Until the bundled
+    // engine first answers, the brief says memory is unavailable, so the check waits for it first.
+    await waitFor("the memory engine to answer", async () => {
+      const memory = await getJson<{ engine: { state: string } | null }>(`${api}/memory`);
+      return memory.engine?.state === "running" ? true : undefined;
+    });
     const thread = await getJson<{ id: string }>(`${api}/agents/${hob.id}/threads`, { method: "POST" });
     // The fake runtime streams one word every 40ms, so this reply takes about 8 seconds.
     const prompt = Array.from({ length: 200 }, (_, i) => `word${i}`).join(" ");
