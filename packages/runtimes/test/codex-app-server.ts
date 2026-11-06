@@ -11,8 +11,13 @@ export const TURN = "turn-1";
 export const n = (method: string, params: Record<string, unknown>) =>
   ({ method, params: { threadId: THREAD, turnId: TURN, ...params } }) as AppServerNotification;
 
-export const completed = (status: string, error: unknown = null) =>
-  n("turn/completed", { turn: { id: TURN, items: [], status, error } });
+export const completedTurn = (turnId: string, status: string, error: unknown = null) =>
+  ({
+    method: "turn/completed",
+    params: { threadId: THREAD, turnId, turn: { id: turnId, items: [], status, error } },
+  }) as AppServerNotification;
+
+export const completed = (status: string, error: unknown = null) => completedTurn(TURN, status, error);
 
 /**
  * A scripted App Server: answers the client's requests, and once a turn starts asks `asks` and sends
@@ -68,7 +73,8 @@ export const fakeServer = (options: {
             }
             case "turn/interrupt":
               if (options.deaf) return yield* Effect.never;
-              yield* PubSub.publish(notes, completed("interrupted"));
+              // The acknowledgement names the turn that was interrupted.
+              yield* PubSub.publish(notes, completedTurn((params as { turnId: string }).turnId, "interrupted"));
               return {};
             default:
               return {};

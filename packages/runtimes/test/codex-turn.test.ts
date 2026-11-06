@@ -854,6 +854,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
       followUps: [[inTurn(TURN_2, "turn/started", { turn: { id: TURN_2 } })]],
     });
     const { turnConfig, request } = await toolsSetup(server);
+    let stoppedAfter = Number.POSITIVE_INFINITY;
     const seen = await Effect.runPromise(
       Effect.gen(function* () {
         const collected: Array<RuntimeEvent> = [];
@@ -866,7 +867,9 @@ describe("a Codex command that outlives its turn (#1048)", () => {
             until: () => server.requests.filter((asked) => asked.method === "turn/start").length === 2,
           }),
         );
-        yield* Fiber.interrupt(fiber).pipe(Effect.timeout("5 seconds"));
+        const before = Date.now();
+        yield* Fiber.interrupt(fiber);
+        stoppedAfter = Date.now() - before;
         return collected;
       }),
     );
@@ -874,6 +877,8 @@ describe("a Codex command that outlives its turn (#1048)", () => {
       threadId: THREAD,
       turnId: TURN_2,
     });
+    // Ended on the follow-up turn's own acknowledgement, well inside the 10-second grace period.
+    expect(stoppedAfter).toBeLessThan(2_000);
     // The command's real end was recorded before the cancel; the reply never completed.
     expect(seen.find((event) => event._tag === "ToolFinished")).toMatchObject({ id: "c1", exitCode: 0 });
     expect(seen.some((event) => event._tag === "Completed")).toBe(false);
