@@ -1,6 +1,5 @@
 import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
-import { cn } from "@hobbots/ui/lib/utils";
 import { useId, useState } from "react";
 
 /**
@@ -48,7 +47,7 @@ export function DraftForm({
         id={fieldId}
         variant="deep"
         rows={rows}
-        className={cn(code && "font-mono")}
+        text={code ? "mono" : "body"}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
       />
