@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import type { SDKMessage, SDKUsageReport } from "@anthropic-ai/claude-agent-sdk";
 import { type RuntimeEvent, RuntimeLimitReached } from "@hobbots/agents";
-import { hobAppCommitIdentity, policySandbox } from "@hobbots/domain";
+import { hobAppCommitIdentity, policySandbox, type ReplyUsage } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -490,6 +490,45 @@ describe("one turn over several runs of Claude Code", () => {
     const whole = wholeTurn();
     expect([started, completed("Waiting."), started, completed("Done.")].flatMap(whole.read)).toEqual([started]);
     expect(whole.end()).toEqual([completed("Waiting.\n\nDone.")]);
+  });
+
+  // regression for #1011: completion kept only the last run's usage
+  // covers OP-002
+  it("[TC-RT-508] counts the tokens of every run, and keeps the first run's timings", () => {
+    const used = (input: number, output: number, cacheRead: number | null, timing: number): ReplyUsage => ({
+      timeToRequestMs: timing,
+      timeToFirstStreamMs: timing,
+      timeToFirstTokenMs: timing,
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadTokens: cacheRead,
+      cacheWriteTokens: null,
+    });
+    const whole = wholeTurn();
+    for (const event of [
+      started,
+      { ...completed("Waiting."), usage: used(10, 200, 3000, 400) },
+      started,
+      { ...completed("Done."), usage: used(5, 80, null, 900) },
+      started,
+      completed("Still done."),
+    ]) {
+      whole.read(event);
+    }
+    expect(whole.end()).toEqual([
+      {
+        ...completed("Waiting.\n\nDone.\n\nStill done."),
+        usage: {
+          timeToRequestMs: 400,
+          timeToFirstStreamMs: 400,
+          timeToFirstTokenMs: 400,
+          inputTokens: 15,
+          outputTokens: 280,
+          cacheReadTokens: 3000,
+          cacheWriteTokens: null,
+        },
+      },
+    ]);
   });
 
   it("completes nothing when no run finished", () => {

@@ -221,6 +221,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                   ),
                 ),
               ),
+            turns: tasks,
           },
           recorder,
         );

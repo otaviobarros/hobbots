@@ -10,6 +10,7 @@ import {
   type runtimeAdapters,
   sessionMemoryBrief,
   startedMemoryBrief,
+  type TaskRepository,
   type ToolAccess,
   type ToolStartedEvent,
   type TurnApprovals,
@@ -23,6 +24,7 @@ import {
   endedSteps,
   previewToolOutput,
   type ReplyStep,
+  type ReplyUsage,
   RUNTIME_NAMES,
   stripEscapes,
   systemInstructions,
@@ -52,6 +54,8 @@ export interface SessionTurn {
   readonly hubTools: Effect.Effect<HubTools>;
   /** Records the runtime's evidence that it took the turn: its session, and the policy version its tools run under. */
   readonly started: (session: { readonly sessionId: string; readonly policyVersion?: string }) => Effect.Effect<void>;
+  /** Records the turn under its hob, runtime and model once the runtime takes it, and what it used once it ends (#1011). */
+  readonly turns: Pick<TaskRepository["Service"], "startTurn" | "endTurn">;
 }
 
 /** Runs one turn of a Task's own session to its end: its final reply, or why it ended without one. */
@@ -71,6 +75,8 @@ export const runSessionTurn = (
       } as Ending;
     }
     let ending: Ending = { _tag: "Failed", reason: "The runtime ended without a result." };
+    const startedAt = DateTime.formatIso(yield* DateTime.now);
+    let usage: ReplyUsage | null = null;
     // The turn's steps, kept on its Attempt as a chat reply keeps its own (#892). Saved in order, each
     // change whole; a turn resumed on the Attempt adds to the steps its earlier turns left.
     const stepsLock = yield* Semaphore.make(1);
@@ -119,6 +125,21 @@ export const runSessionTurn = (
     // Counted as received only once the runtime answers the prompt that carried it.
     let session: string | null = null;
     let delivered = false;
+    // A turn the runtime never took used nothing. One it took is recorded as it starts, so it counts
+    // however it ends: with no report when it failed or was stopped, as a chat reply does, or when the
+    // hub stopped before it ended.
+    const counted = { attemptId: turn.attemptId, startedAt };
+    const startTurn = turn.turns.startTurn({
+      ...counted,
+      agentId: turn.agent.id,
+      runtime: turn.config.runtime,
+      model: turn.config.model,
+    });
+    const endTurn = Effect.suspend(() =>
+      session === null
+        ? Effect.void
+        : Effect.flatMap(DateTime.now, (now) => turn.turns.endTurn(counted, usage, DateTime.formatIso(now))),
+    );
     const confirmBrief = Effect.suspend(() => {
       const digest = memory === null ? null : deliveredMemoryBrief(memory);
       if (delivered || digest === null || session === null) return Effect.void;
@@ -147,21 +168,28 @@ export const runSessionTurn = (
       .pipe(
         Stream.runForEach((event) => {
           if (event._tag === "SessionStarted") {
+            const first = session === null;
             session = event.sessionId;
-            return turn
-              .started({
-                sessionId: event.sessionId,
-                ...(event.policyVersion && { policyVersion: event.policyVersion }),
-              })
-              .pipe(
-                Effect.andThen(
-                  memory === null
-                    ? Effect.void
-                    : recordMemoryBrief(event.sessionId, startedMemoryBrief(memory, expected, event.sessionId)),
+            return Effect.andThen(
+              first ? startTurn : Effect.void,
+              turn
+                .started({
+                  sessionId: event.sessionId,
+                  ...(event.policyVersion && { policyVersion: event.policyVersion }),
+                })
+                .pipe(
+                  Effect.andThen(
+                    memory === null
+                      ? Effect.void
+                      : recordMemoryBrief(event.sessionId, startedMemoryBrief(memory, expected, event.sessionId)),
+                  ),
                 ),
-              );
+            );
           }
-          if (event._tag === "Completed") ending = { _tag: "Replied", text: event.text };
+          if (event._tag === "Completed") {
+            ending = { _tag: "Replied", text: event.text };
+            usage = event.usage ?? null;
+          }
           return Effect.andThen(confirmBrief, stepOf(event));
         }),
         Effect.catchTags({
@@ -178,7 +206,7 @@ export const runSessionTurn = (
               };
             }),
         }),
-        Effect.ensuring(endSteps),
+        Effect.ensuring(Effect.andThen(endSteps, endTurn)),
       );
     return ending;
   }).pipe(
