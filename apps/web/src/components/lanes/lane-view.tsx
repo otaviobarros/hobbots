@@ -112,7 +112,6 @@ export function LaneView({
           type="button"
           {...LANE_HEAD}
           aria-pressed={picked}
-          aria-label={messages.show({ name: hob.name })}
           onClick={() => onPick(picked ? null : lane.hobId)}
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-t-card border-0 bg-transparent px-3 py-2.5 text-start text-text-strong hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring"
         >
@@ -120,13 +119,17 @@ export function LaneView({
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate font-heading text-body font-(--heading-weight)">
               {hob.name}
-              {role !== null && <span className="ms-1.5 font-sans text-meta font-normal text-label">{role}</span>}
+              {role !== null && <RoleTag role={role} />}
             </span>
             <span className="line-clamp-2 text-detail text-text-secondary" title={lane.title}>
+              <Said>: </Said>
               {lane.title}
             </span>
           </span>
+          <Said>, </Said>
           <StatusTag status={roomTone(lane.status)}>{roomStatusLabel(lane.status)}</StatusTag>
+          {/* Named by what it shows, then what it does, so speech input can say what it sees (WCAG 2.5.3). */}
+          <Said>. {messages.show({ name: hob.name })}</Said>
         </button>
         {slots.actions}
       </div>
@@ -160,4 +163,19 @@ function ReadState({ name, reads }: { name: string; reads: LaneReads }) {
       </Button>
     </p>
   );
+}
+
+/** The hob's role beside its name in the lane's header. */
+function RoleTag({ role }: { role: string }) {
+  return (
+    <span className="ms-1.5 font-sans text-meta font-normal text-label">
+      <Said>, </Said>
+      {role}
+    </span>
+  );
+}
+
+/** Words a screen reader says between the parts of a name, which the eye gets from the layout. */
+function Said({ children }: { children: ReactNode }) {
+  return <span className="sr-only">{children}</span>;
 }

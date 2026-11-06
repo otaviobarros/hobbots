@@ -51,12 +51,10 @@ export function QuestTicket({
   const ended = ticket.progress.kind === "ended";
   const progress = messages.progress(ticket.progress);
   const needs = ticket.needsYou > 0 ? messages.needsYou(ticket.needsYou) : null;
-  const state = [progress, needs, stuck ? messages.stuck : null].filter((part) => part !== null).join(", ");
   const sprites = ticket.party.slice(0, WIDE_SPRITES);
   return (
     <button
       type="button"
-      aria-label={messages.label({ title: ticket.title, state })}
       onClick={() => onOpen(ticket.top.id)}
       className="@container/ticket ms-10 block w-[calc(100%-2.5rem)] max-w-work-max animate-hb-in cursor-pointer rounded-card border-(length:--edge) border-line-2 bg-card px-3 py-2 text-start text-text-strong transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
     >
@@ -80,13 +78,25 @@ export function QuestTicket({
         </span>
         <span className="min-w-0 flex-1 truncate font-heading text-body font-(--heading-weight) @max-sm/ticket:order-1 @max-sm/ticket:basis-[calc(100%-2rem)] @sm/ticket:flex-initial">
           {ticket.title}
+          <span className="sr-only">: </span>
         </span>
         <span className="flex min-w-0 items-center gap-2 @max-sm/ticket:order-4 @max-sm/ticket:flex-1">
           <span className="min-w-0 truncate text-detail text-text-secondary">{progress}</span>
-          {needs !== null && <StatusTag status="needs-you">{needs}</StatusTag>}
-          {stuck && <StatusTag status="blocked">{messages.stuck}</StatusTag>}
+          {needs !== null && (
+            <>
+              <span className="sr-only">, </span>
+              <StatusTag status="needs-you">{needs}</StatusTag>
+            </>
+          )}
+          {stuck && (
+            <>
+              <span className="sr-only">, </span>
+              <StatusTag status="blocked">{messages.stuck}</StatusTag>
+            </>
+          )}
         </span>
         <span className="ms-auto shrink-0 text-ui font-bold whitespace-nowrap text-lantern @max-sm/ticket:order-2">
+          <span className="sr-only">. </span>
           <span className="@max-sm/ticket:sr-only">{messages.openRoom} </span>
           <span aria-hidden>→</span>
         </span>

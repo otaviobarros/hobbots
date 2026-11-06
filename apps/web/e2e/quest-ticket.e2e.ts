@@ -33,14 +33,14 @@ test("[TC-UX-220] a Quest's ticket stays one line under the request and follows 
   // One button, named for the Quest and where it stands, with the party's sprites and Open room.
   const title = "Plan the Black Friday campaign";
   const quest = ticket(page, title);
-  await expect(quest).toHaveAccessibleName(/^Open the Plan the Black Friday campaign room: \d of 2 done/);
+  await expect(quest).toHaveAccessibleName(/^Plan the Black Friday campaign: \d of 2 done/);
   await expect(sprites(quest)).toHaveCount(3);
   await expect(quest).toContainText("Open room");
   const tall = await height(quest);
 
   // Ada's question reaches you: the ticket says so, and stays the same size.
   await expect(quest).toContainText("1 needs you", { timeout: 15_000 });
-  await expect(quest).toHaveAccessibleName(/of 2 done, 1 needs you$/);
+  await expect(quest).toHaveAccessibleName(/of 2 done, 1 needs you\. Open room$/);
   expect(await height(quest)).toBe(tall);
 
   // Your answer goes back, the tag leaves, and once the Quest finishes the ticket says how it ended.
@@ -49,7 +49,7 @@ test("[TC-UX-220] a Quest's ticket stays one line under the request and follows 
   await asks.getByRole("button", { name: "Send answer" }).click();
   await expect(quest).not.toContainText("needs you");
   await expect(quest).toContainText("Finished in", { timeout: 30_000 });
-  await expect(quest).toHaveAccessibleName(/^Open the Plan the Black Friday campaign room: Finished in /);
+  await expect(quest).toHaveAccessibleName(/^Plan the Black Friday campaign: Finished in /);
   expect(await height(quest)).toBe(tall);
 
   // The ticket is the only thing the request leaves in the chat: no Task rows, no Workbench button.
@@ -95,10 +95,10 @@ test("[TC-UX-221] two Quests in one thread each keep their own ticket under the 
   const order = () =>
     chat.evaluate((root) => {
       const marks = [...root.querySelectorAll("*")].flatMap((each) => {
-        const label = each.getAttribute("aria-label") ?? "";
+        const ticket = each.tagName === "BUTTON" ? (each.textContent ?? "") : "";
         const text = each.childElementCount === 0 ? (each.textContent ?? "") : "";
-        if (label.startsWith("Open the Tidy the notes room")) return ["ticket 1"];
-        if (label.startsWith("Open the Write the summary room")) return ["ticket 2"];
+        if (ticket.startsWith("Tidy the notes: ")) return ["ticket 1"];
+        if (ticket.startsWith("Write the summary: ")) return ["ticket 2"];
         if (text.startsWith("Tidy the notes\nfake:hub start_quest")) return ["request 1"];
         if (text.startsWith("Write the summary\nfake:hub start_quest")) return ["request 2"];
         return [];
@@ -136,7 +136,7 @@ test("[TC-UX-222] a finished Quest's ticket says how it ended, needs nothing fro
   );
   await composer.press("Enter");
   const done = ticket(page, "Tidy the notes");
-  await expect(done).toHaveAccessibleName(/^Open the Tidy the notes room: Finished in \S+/, { timeout: 30_000 });
+  await expect(done).toHaveAccessibleName(/^Tidy the notes: Finished in \S+/, { timeout: 30_000 });
   await expect(done).not.toContainText("needs you");
   await expect(sprites(done)).toHaveCount(1);
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
@@ -218,7 +218,7 @@ test("[TC-UX-223] at 1024 wide, beside the room, a party of five's ticket keeps 
   // and two sprites, how many more, the progress and the needs-you tag the second, all inside it.
   await openRoom(page, title);
   const chat = page.getByRole("main", { name: "Chat" });
-  await expect(quest).toHaveAccessibleName(/of \d+ done, 1 needs you$/);
+  await expect(quest).toHaveAccessibleName(/of \d+ done, 1 needs you\. Open room$/);
   await expect(sprites(quest).filter({ visible: true })).toHaveCount(2);
   await expect(quest.getByText("+3", { exact: true })).toBeVisible();
   for (const part of [

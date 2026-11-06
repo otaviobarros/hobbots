@@ -60,8 +60,12 @@ describe("a question's choices", () => {
     const html = form(asked(), "chips");
     expect(html.match(/data-variant="chip"/g)).toHaveLength(3);
     expect(html).toContain('title="Matches the brand guide."');
-    expect(html).toContain('aria-label="Light, recommended. Matches the brand guide."');
-    expect(html).toContain('aria-label="Both, with a switch"');
+    // Named by the label each shows, then the rest, so speech input can say what it sees (WCAG 2.5.3).
+    expect(html).not.toMatch(/<button[^>]*aria-label=/);
+    expect(html).toMatch(
+      /Light<span[^>]*>★<\/span><span class="sr-only">, recommended\. Matches the brand guide\.<\/span>/,
+    );
+    expect(html).toMatch(/Both, with a switch<\/button>/);
   });
 
   it("[TC-UX-906] keeps today's box and primary Send answer for a question without choices", () => {
