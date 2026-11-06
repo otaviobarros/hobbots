@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-06
 - **Issue:** [#1079](https://github.com/otaviobarros/hobbots/issues/1079)
-- **Pull request:** [#PR_NUMBER](https://github.com/otaviobarros/hobbots/pull/PR_NUMBER)
+- **Pull request:** [#1089](https://github.com/otaviobarros/hobbots/pull/1089)
 - **Commit:** `d688850` on `main`, tag `v0.0.2`
 - **Setup:** Apple M1 Pro, macOS 27.0.1, arm64, `Hobbots-0.0.2-arm64.dmg` from the v0.0.2 release (sha256 `e9149d57`), ad hoc signed and run by path with `--user-data-dir` under a scratch folder. Claude Code 2.1.316 with `haiku`, Codex 0.166.0 with `gpt-6-luna`, both on signed-in subscriptions, low effort, Balanced unless a row says otherwise. Git set no global name or email. The window was driven over its debugging port.
 - **Result:** Failed on one check. After an update from 0.0.1 the first window ran the old web client until a reload ([#1079](https://github.com/otaviobarros/hobbots/issues/1079), fixed in [#1080](https://github.com/otaviobarros/hobbots/pull/1080) after this tag). Everything else passed, with three new bugs filed.
