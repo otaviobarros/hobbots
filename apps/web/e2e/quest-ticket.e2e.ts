@@ -1,4 +1,4 @@
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
 import { lane, laneTask, openRoom, questRoom, ticket } from "./quest-room.ts";
@@ -147,6 +147,48 @@ test("[TC-UX-222] a finished Quest's ticket says how it ended, needs nothing fro
   await openRoom(page, "Tidy the notes");
   await expect(lane(page, "Aldric")).toBeVisible();
   await expect(laneTask(page, "Tidy the notes", "Aldric")).toContainText("The notes are tidy.");
+});
+
+/** The duration a finished ticket and the room's finish banner each show. */
+const durations = async (page: Page, title: string) => {
+  const name = (await ticket(page, title).getAttribute("aria-label")) ?? "";
+  const meta =
+    (await questRoom(page, title)
+      .getByRole("region", { name: /^(Quest|Task) finished$/ })
+      .textContent()) ?? "";
+  return { ticket: /Finished in (.+?)(,|$)/.exec(name)?.[1], banner: /took (.+?)( ·|$)/.exec(meta)?.[1] };
+};
+
+// covers UX-002, UX-006
+test("[TC-UX-224] a finished Quest's ticket and finish banner show one duration, which a reload after its lead's turn ends keeps (#1007)", async ({
+  page,
+}) => {
+  const { url, aldric } = await aldricHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  // The reply streams its words after complete_task, so the lead's turn ends seconds after the Quest.
+  await composer.fill(
+    [
+      "Tidy the notes",
+      script("start_quest", { key: "quest", goal: "Tidy the notes" }),
+      script("complete_task", { key: "done", summary: "The notes are tidy." }),
+      Array.from({ length: 120 }, (_, index) => `word${index}`).join(" "),
+    ].join("\n"),
+  );
+  await composer.press("Enter");
+  const done = ticket(page, "Tidy the notes");
+  await expect(done).toHaveAccessibleName(/Finished in /, { timeout: 30_000 });
+  await openRoom(page, "Tidy the notes");
+  const live = await durations(page, "Tidy the notes");
+  expect(live.ticket).toBeDefined();
+  expect(live.banner).toBe(live.ticket);
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+
+  // Once the turn has ended, a reload reads the same duration in both places.
+  await page.reload();
+  await expect(done).toHaveAccessibleName(/Finished in /);
+  await expect(questRoom(page, "Tidy the notes").getByRole("region", { name: /finished$/ })).toContainText("took ");
+  expect(await durations(page, "Tidy the notes")).toEqual(live);
 });
 
 /** Fails unless `inner` lies inside `outer`'s left and right edges, and has some width of its own. */
