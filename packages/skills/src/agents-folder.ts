@@ -1,4 +1,5 @@
 import { watch } from "node:fs";
+import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { announcer, EventPublisher, rolloutTargets, SkillLibrary } from "@hobbots/agents";
@@ -17,13 +18,15 @@ import type { SkillTree } from "./tree.ts";
  * rule it broke and is not delivered.
  */
 
-/** A skill in the folder that the hub did not take, and why. */
+/** A skill in the folder that the hub did not take, and why; or the folder itself, when it could not be read. */
 export interface AgentsFolderProblem {
-  /** Its folder's name under `~/.agents/skills`. */
+  /** Its folder's name under `~/.agents/skills`; "" for the folder itself. */
   readonly folder: string;
   readonly refusal: SkillRefused | null;
   /** Set when the library already has a skill of its name from somewhere else. */
   readonly takenBy: SkillName | null;
+  /** Set when the folder could not be read in full, so nothing was changed. */
+  readonly unreadable: string | null;
 }
 
 export interface AgentsFolderShape {
@@ -47,15 +50,38 @@ const skillFoldersOf = (tree: SkillTree): ReadonlyArray<string> =>
     .map((entry) => entry.path.slice(0, -"/SKILL.md".length))
     .sort();
 
+/** Whether nothing is at `path`: the one case read as an empty folder. */
+const isMissing = (path: string) =>
+  lstat(path).then(
+    () => false,
+    (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT",
+  );
+
+/**
+ * Reads every skill in the folder. A folder that is not there reads as empty; any other failure,
+ * such as a folder it may not read or a file gone in the middle, fails the read, so the skills
+ * already taken keep their assignments rather than being let go.
+ */
 const readFolder = (path: string) =>
-  Effect.promise(async () => {
-    const tree = await folderTree(path).catch(() => null);
-    if (tree === null) return [];
-    const results = [];
-    for (const folder of skillFoldersOf(tree))
-      results.push(await checkSkill(tree, { folder, dropped: [], plugin: null }));
-    return results;
+  Effect.tryPromise({
+    try: async () => {
+      if (await isMissing(path)) return [];
+      const tree = await folderTree(path);
+      const results = [];
+      for (const folder of skillFoldersOf(tree))
+        results.push(await checkSkill(tree, { folder, dropped: [], plugin: null }));
+      return results;
+    },
+    catch: (error) => (error instanceof Error ? error.message : String(error)),
   });
+
+const problemOf = (folder: string, fields: Partial<AgentsFolderProblem>): AgentsFolderProblem => ({
+  folder,
+  refusal: null,
+  takenBy: null,
+  unreadable: null,
+  ...fields,
+});
 
 /** Syncs `~/.agents/skills` at `path` now, then whenever it changes and every five minutes. */
 export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
@@ -122,35 +148,47 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
           }
         });
 
+      /** Brings the library in line with a full read of the folder. */
+      const reconcile = (results: Effect.Success<ReturnType<typeof readFolder>>) =>
+        Effect.gen(function* () {
+          const found: Array<AgentsFolderProblem> = [];
+          const present = new Set<SkillName>();
+          for (const result of results) {
+            if (result._tag === "Refused") {
+              found.push(problemOf(result.folder, { refusal: result.refusal }));
+              continue;
+            }
+            const existing = yield* library.byName(result.skill.name);
+            if (existing !== null && !(yield* fromFolder(existing))) {
+              found.push(problemOf(result.skill.folder, { takenBy: existing.name }));
+              continue;
+            }
+            present.add(result.skill.name);
+            yield* take(result.skill, existing).pipe(
+              Effect.catchTags({
+                SkillNameTaken: (error) =>
+                  Effect.sync(() => found.push(problemOf(result.skill.folder, { takenBy: error.name }))),
+                SkillNameChanged: () => Effect.void,
+                SkillNotFound: () => Effect.void,
+              }),
+            );
+          }
+          for (const skill of yield* library.list) {
+            if (!present.has(skill.name) && (yield* fromFolder(skill))) yield* letGo(skill);
+          }
+          return found;
+        });
+
       const once = yield* Semaphore.make(1);
-      const sync = Effect.gen(function* () {
-        const found: Array<AgentsFolderProblem> = [];
-        const present = new Set<SkillName>();
-        for (const result of yield* readFolder(path)) {
-          if (result._tag === "Refused") {
-            found.push({ folder: result.folder, refusal: result.refusal, takenBy: null });
-            continue;
-          }
-          const existing = yield* library.byName(result.skill.name);
-          if (existing !== null && !(yield* fromFolder(existing))) {
-            found.push({ folder: result.skill.folder, refusal: null, takenBy: existing.name });
-            continue;
-          }
-          present.add(result.skill.name);
-          yield* take(result.skill, existing).pipe(
-            Effect.catchTags({
-              SkillNameTaken: (error) =>
-                Effect.sync(() => found.push({ folder: result.skill.folder, refusal: null, takenBy: error.name })),
-              SkillNameChanged: () => Effect.void,
-              SkillNotFound: () => Effect.void,
-            }),
-          );
-        }
-        for (const skill of yield* library.list) {
-          if (!present.has(skill.name) && (yield* fromFolder(skill))) yield* letGo(skill);
-        }
-        yield* Ref.set(problems, found);
-      }).pipe(
+      const sync = readFolder(path).pipe(
+        Effect.matchEffect({
+          onSuccess: reconcile,
+          onFailure: (message) =>
+            Effect.as(Effect.logWarning("Could not read ~/.agents/skills", message), [
+              problemOf("", { unreadable: message }),
+            ]),
+        }),
+        Effect.flatMap((found) => Ref.set(problems, found)),
         Effect.catchCause((cause) => Effect.logWarning("Could not read ~/.agents/skills", cause)),
         once.withPermits(1),
       );

@@ -69,15 +69,52 @@ const textOf = (bytes: Uint8Array): string | null => {
 const HIDDEN = /[​-‏‪-‮⁠-⁤⁦-⁩﻿\u{E0000}-\u{E007F}]/u;
 const URL = /\bhttps?:\/\/[^\s<>"'`)\]\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]+/g;
 const SCRIPT_EXTENSIONS = /\.(?:sh|bash|zsh|fish|py|js|mjs|cjs|ts|rb|pl|php|ps1|psm1|bat|cmd|exe|bin)$/i;
-const LINK_TARGETS = [
-  /\]\(\s*<?([^)\s>]+)>?/g,
-  /^\s*\[[^\]]+\]:\s*<?(\S+?)>?\s*$/gm,
-  /\b(?:src|href)\s*=\s*["']([^"']+)["']/gi,
-];
+const LINK_TARGETS = [/\]\(\s*<?([^)\s>]+)>?/g, /\b(?:src|href)\s*=\s*["']([^"']+)["']/gi];
+/** A reference definition, `[name]: target`, on a line that has been trimmed. */
+const REFERENCE = /^\[[^\]]+\]:[ \t]*(\S+)/;
+/** What ends a URL in prose rather than belonging to it. */
+const URL_TRAILING: ReadonlySet<string> = new Set([".", ",", ";", ":", "!", "?"]);
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
-/** Markdown with its fenced code taken out, so an example in a code block is not read as a link. */
-const withoutCode = (text: string) => text.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, "");
+/**
+ * Markdown with its fenced code taken out, so an example in a code block is not read as a link. One
+ * pass over the lines (STD-SEC-005). A fence that is never closed is kept, so it hides nothing.
+ */
+const withoutCode = (text: string) => {
+  const kept: Array<string> = [];
+  let fence: { readonly marker: string; readonly lines: Array<string> } | null = null;
+  for (const line of text.split("\n")) {
+    if (fence !== null) {
+      if (line.startsWith(fence.marker)) fence = null;
+      else fence.lines.push(line);
+      continue;
+    }
+    const marker = line.startsWith("```") ? "```" : line.startsWith("~~~") ? "~~~" : null;
+    if (marker === null) kept.push(line);
+    else fence = { marker, lines: [line] };
+  }
+  if (fence !== null) kept.push(...fence.lines);
+  return kept.join("\n");
+};
+
+/** The URL without the punctuation that ends its sentence, cut by hand (STD-SEC-005). */
+const withoutTrailingPunctuation = (url: string) => {
+  let end = url.length;
+  while (end > 0 && URL_TRAILING.has(url[end - 1] ?? "")) end -= 1;
+  return url.slice(0, end);
+};
+
+/** The link targets of a file: inline links, `src` and `href`, and reference definitions. */
+const linkTargetsOf = (source: string): ReadonlyArray<string> => {
+  const targets = LINK_TARGETS.flatMap((pattern) => [...source.matchAll(pattern)].map((match) => match[1] ?? ""));
+  for (const line of source.split("\n")) {
+    const target = REFERENCE.exec(line.trim())?.[1];
+    if (target === undefined) continue;
+    const opened = target.startsWith("<") ? target.slice(1) : target;
+    targets.push(opened.endsWith(">") ? opened.slice(0, -1) : opened);
+  }
+  return targets;
+};
 
 /** Whether a link in the file at `path` reaches outside the skill: an absolute path, a `file:` URL, or `..` past the top. */
 const reachesOutside = (path: string, target: string): boolean => {
@@ -95,11 +132,8 @@ const reachesOutside = (path: string, target: string): boolean => {
 
 const checkLinks = (path: string, text: string) => {
   const source = path.toLowerCase().endsWith(".md") ? withoutCode(text) : text;
-  for (const pattern of LINK_TARGETS) {
-    for (const match of source.matchAll(pattern)) {
-      const target = match[1] ?? "";
-      if (reachesOutside(path, target)) refuse("outside-path", path, `${path} links to ${target}, outside the skill.`);
-    }
+  for (const target of linkTargetsOf(source)) {
+    if (reachesOutside(path, target)) refuse("outside-path", path, `${path} links to ${target}, outside the skill.`);
   }
 };
 
@@ -109,7 +143,7 @@ const flagsOf = (file: SkillContent, text: string | null): ReadonlyArray<SkillFl
     flags.push({ _tag: "Script", path: file.path });
   }
   if (text === null) return flags;
-  const urls = (text.match(URL) ?? []).map((url) => url.replace(/[.,;:!?]+$/, ""));
+  const urls = (text.match(URL) ?? []).map(withoutTrailingPunctuation);
   for (const url of new Set(urls)) flags.push({ _tag: "Url", path: file.path, url });
   const hidden = HIDDEN.exec(text.startsWith("﻿") ? text.slice(1) : text);
   if (hidden !== null) {
