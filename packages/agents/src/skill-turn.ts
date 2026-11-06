@@ -1,4 +1,4 @@
-import type { AgentId, HobPolicy, SkillAssignment } from "@hobbots/domain";
+import type { AgentId, HobPolicy, SkillAssignment, TurnSkill } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { MemoryProjects, memoryActorFor } from "./memory.ts";
 import type { SkillMount } from "./runtime.ts";
@@ -62,22 +62,46 @@ export const hobSkills = (
     });
   });
 
+/** What a turn's skills are: resolved from the library, and read as the runtime's mounts. */
+export interface SkillMounterShape {
+  /** Whether the hub has a skills library: without one, no turn has skills and nothing is read. */
+  readonly enabled: boolean;
+  /**
+   * The hob's skills as the library assigns them now, to record with the turn: when your message
+   * is accepted, so a queued message keeps them, or when a turn with no message of yours starts.
+   * Null on a hub without a skills library.
+   */
+  readonly resolve: (hob: SkillHob) => Effect.Effect<ReadonlyArray<TurnSkill> | null>;
+  /** The mounts of recorded skills: each the read-only folder of its pinned revision. */
+  readonly mounts: (skills: ReadonlyArray<TurnSkill> | null) => Effect.Effect<ReadonlyArray<SkillMount> | null>;
+}
+
 /**
- * What hands each turn its skills: the mounts of the hob's resolved skills, each the read-only folder
- * of the revision its assignment pins. Read once the turn starts and given to the runtime with its
- * prompt, so a turn keeps those revisions to its end, its follow-up turns included, while the next
- * turn gets what a rollout changed. Null on a hub without a skills library: the turn has no skills.
+ * What hands each turn its skills (ADR 029, Pins and rollout). A turn is given the skills recorded
+ * when it was accepted, and the runtime gets their mounts with its prompt, so the turn keeps those
+ * revisions to its end, its follow-up turns included, while the next one gets what a rollout changed.
  */
 export const skillMounter = Effect.gen(function* () {
   const library = yield* Effect.serviceOption(SkillLibrary);
   const files = yield* Effect.serviceOption(SkillFiles);
   const projects = yield* Effect.serviceOption(MemoryProjects);
-  return (hob: SkillHob): Effect.Effect<ReadonlyArray<SkillMount> | null> =>
-    Option.isNone(library) || Option.isNone(files)
-      ? Effect.succeed(null)
-      : Effect.gen(function* () {
-          const resolved = yield* hobSkills(library.value, projects, hob);
-          const mounts = yield* Effect.forEach(resolved.skills, (skill) =>
+  const shape: SkillMounterShape = {
+    enabled: Option.isSome(library) && Option.isSome(files),
+    resolve: (hob) =>
+      Option.isNone(library) || Option.isNone(files)
+        ? Effect.succeed(null)
+        : Effect.map(hobSkills(library.value, projects, hob), (resolved) =>
+            resolved.skills.map((skill) => ({
+              skillId: skill.skillId,
+              name: skill.name,
+              pin: skill.pin,
+              onlyWhenAsked: skill.onlyWhenAsked,
+            })),
+          ),
+    mounts: (skills) =>
+      skills === null || Option.isNone(files)
+        ? Effect.succeed(null)
+        : Effect.forEach(skills, (skill) =>
             Effect.gen(function* () {
               const folder = yield* files.value.folder(skill.pin);
               if (folder !== null) {
@@ -87,7 +111,7 @@ export const skillMounter = Effect.gen(function* () {
               yield* Effect.logWarning(`No files for ${skill.name} at ${skill.pin}; the turn goes on without it.`);
               return [];
             }),
-          );
-          return mounts.flat();
-        });
+          ).pipe(Effect.map((each) => each.flat())),
+  };
+  return shape;
 });

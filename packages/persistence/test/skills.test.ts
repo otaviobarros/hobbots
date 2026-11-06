@@ -144,6 +144,33 @@ describe("skills library", () => {
       }),
     ));
 
+  // covers ADR 029 (Pins and rollout), #1061
+  it("[TC-DP-281] rolls a revision out to every assignment that is not held, in one change, and marks it rolled out", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const library = yield* SkillLibrary;
+        const { skill } = (yield* library.addRevision(null, input(H1))).value;
+        const assign = (scope: Parameters<typeof library.assign>[0]["scope"], held: boolean) =>
+          library.assign({ skillId: skill.id, scope, pin: H1, held, onlyWhenAsked: false, by: { _tag: "You" } });
+        const everyone = (yield* assign({ _tag: "Everyone" }, false)).value;
+        const kept = (yield* assign({ _tag: "Hob", agentId: pip }, true)).value;
+        const added = (yield* library.addRevision(skill.id, input(H2))).value.revision;
+        // A revision just added waits for its rollout, so an interrupted save can finish it.
+        expect(added.rolledOutAt).toBeNull();
+        const rolled = yield* library.rollOutRevision(skill.id, H2, { _tag: "You" });
+        expect(rolled.value.map((one) => [one.id, one.pin])).toEqual([[everyone.id, H2]]);
+        expect(rolled.entries.map((entry) => entry.type)).toEqual(["SkillRolledOut"]);
+        expect((yield* library.revision(skill.id, H2))?.rolledOutAt).not.toBeNull();
+        expect((yield* library.assignments(skill.id)).find((one) => one.id === kept.id)?.pin).toBe(H1);
+        // Nothing left to move: the rollout is done.
+        expect((yield* library.rollOutRevision(skill.id, H2, { _tag: "You" })).value).toEqual([]);
+        expect(yield* Effect.flip(library.rollOutRevision(skill.id, H3, { _tag: "You" }))).toMatchObject({
+          _tag: "SkillNotFound",
+        });
+      }),
+    ));
+
   it("[TC-DP-279] keeps a hob's opt-outs, journaling only a change", () =>
     run(
       Effect.gen(function* () {

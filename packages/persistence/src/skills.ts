@@ -56,6 +56,7 @@ interface RevisionRow {
   readonly label: string | null;
   readonly addedBy: string;
   readonly addedAt: string;
+  readonly rolledOutAt: string | null;
 }
 
 interface AssignmentRow {
@@ -114,6 +115,7 @@ const revisionOf = (row: RevisionRow) =>
     label: row.label,
     addedBy: JSON.parse(row.addedBy),
     addedAt: row.addedAt,
+    rolledOutAt: row.rolledOutAt,
   }).pipe(Effect.orDie);
 
 const assignmentOf = (row: AssignmentRow) =>
@@ -234,6 +236,7 @@ export const SkillLibraryLive = Layer.effect(
         label: revision.label,
         added_by: byJson(revision.addedBy),
         added_at: revision.addedAt,
+        rolled_out_at: revision.rolledOutAt,
       })}`;
 
     const writeSkill = (skill: Skill, isNew: boolean) =>
@@ -422,6 +425,29 @@ export const SkillLibraryLive = Layer.effect(
             const assignment = new SkillAssignment({ ...before, pin, by, revision: first });
             yield* saveAssignment(assignment);
             return { value: assignment, events: [{ _tag: "SkillRolledOut", assignment, from: before.pin }] };
+          }),
+        ),
+      rollOutRevision: (skillId, pin, by) =>
+        change<ReadonlyArray<SkillAssignment>, SkillNotFound | SqlError.SqlError>((first) =>
+          Effect.gen(function* () {
+            yield* knownPin(skillId, pin);
+            const moved: Array<SkillAssignment> = [];
+            const events: Array<JournaledEvent> = [];
+            for (const before of yield* assignmentsOf(skillId)) {
+              if (before.held || before.pin === pin) continue;
+              // Moved only while it is still not held and still on the pin it was read with, so a
+              // Keep on rN that lands meanwhile is never overwritten.
+              const [row] = yield* sql<AssignmentRow>`UPDATE skill_assignments
+                SET pin = ${pin}, assigned_by = ${byJson(by)}, revision = ${first}
+                WHERE id = ${before.id} AND held = 0 AND pin = ${before.pin} RETURNING *`;
+              if (row === undefined) continue;
+              const assignment = yield* assignmentOf(row);
+              moved.push(assignment);
+              events.push({ _tag: "SkillRolledOut", assignment, from: before.pin });
+            }
+            yield* sql`UPDATE skill_revisions SET rolled_out_at = ${yield* now}
+              WHERE skill_id = ${skillId} AND hash = ${pin}`;
+            return { value: moved, events };
           }),
         ),
       hold: (id, held) =>

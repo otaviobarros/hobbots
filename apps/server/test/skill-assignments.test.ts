@@ -241,7 +241,7 @@ describe("skill assignments", () => {
   });
 
   // covers RT-001, ADR 029 (Pins and rollout)
-  it("[TC-AG-137] saving a revision rolls it out to every assignment but a held one, a running turn keeps its revision, and Roll back moves one back", async () => {
+  it("[TC-AG-137] saving a revision rolls it out to every assignment but a held one, running and queued turns keep their revision, and Roll back moves one back", async () => {
     const pip = await summon("Pip", 963);
     const quill = await summon("Quill", 964);
     const first = await importSkill("release");
@@ -256,10 +256,11 @@ describe("skill assignments", () => {
     const kept = await request("POST", `/api/skills/assignments/${toQuill.id}/hold`, { held: true });
     expect(kept.body).toMatchObject({ held: true, pin: first.revision.hash });
 
-    // A turn starts on r1 and is still running when r2 is saved.
+    // A turn starts on r1 and is still running when r2 is saved; a message queued behind it was accepted on r1.
     const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
     await send(thread, "hold\n/skills");
     await eventually(async () => (given.length === 1 ? true : undefined));
+    await send(thread, "/skills");
     const revised = await request("POST", `/api/skills/${first.skill.id}/revisions`, {
       source: written("release", "Releases, now."),
     });
@@ -268,14 +269,25 @@ describe("skill assignments", () => {
     expect(revised.body.rolledOut.map((one: { id: string; pin: string }) => [one.id, one.pin])).toEqual([
       [toPip.id, second.hash],
     ]);
+    // Saving the same content again moves nothing more.
+    const again = await request("POST", `/api/skills/${first.skill.id}/revisions`, {
+      source: written("release", "Releases, now."),
+    });
+    expect(again.body).toMatchObject({ added: false, rolledOut: [] });
     release();
-    await replies(thread, 1);
-    expect(given[0]?.map((mount) => mount.revision)).toEqual([first.revision.hash, expect.any(String)]);
-
-    // The next turn gets r2; the held hob stays on r1.
-    await send(thread, "/skills");
     await replies(thread, 2);
-    expect(given.at(-1)?.find((mount) => mount.name === "release")?.revision).toBe(second.hash);
+    const pinOf = (mounts: ReadonlyArray<SkillMount> | undefined) =>
+      mounts?.find((mount) => mount.name === "release")?.revision;
+    expect([pinOf(given[0]), pinOf(given[1])]).toEqual([first.revision.hash, first.revision.hash]);
+
+    // The next message gets r2, and each reply records the revision it used; the held hob stays on r1.
+    await send(thread, "/skills");
+    await replies(thread, 3);
+    expect(pinOf(given.at(-1))).toBe(second.hash);
+    const used = (await messages(thread))
+      .filter((m) => m.role === "assistant")
+      .map((m) => m.skills?.find((skill) => skill.name === "release")?.pin);
+    expect(used).toEqual([first.revision.hash, first.revision.hash, second.hash]);
     const detail = (await request("GET", `/api/skills/${first.skill.id}`)).body;
     expect(Object.fromEntries(detail.assignments.map((one: { id: string; pin: string }) => [one.id, one.pin]))).toEqual(
       { [toPip.id]: second.hash, [toQuill.id]: first.revision.hash },

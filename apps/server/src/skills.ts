@@ -8,7 +8,6 @@ import {
   hobSkills,
   MemoryProjects,
   PermissionSummary,
-  rolloutTargets,
   SkillFiles,
   SkillLibrary,
   type SkillLibraryShape,
@@ -97,7 +96,7 @@ const libraryOff = {
 
 /**
  * Rolls `pin` out to every assignment of the skill that is not held and not on it already (ADR 029,
- * Pins and rollout), each journaled and announced. Returns the assignments it moved.
+ * Pins and rollout), in one transaction, journaled and announced. Returns the assignments it moved.
  */
 const rollOutAll = (
   library: SkillLibraryShape,
@@ -105,15 +104,10 @@ const rollOutAll = (
   skillId: SkillId,
   pin: SkillRevisionHash,
 ) =>
-  Effect.gen(function* () {
-    const targets = rolloutTargets(yield* library.assignments(skillId), skillId, pin);
-    return yield* Effect.forEach(targets, (target) =>
-      library.rollOut(target.id, pin, YOU).pipe(
-        Effect.tap((committed) => announce(committed.entries)),
-        Effect.map((committed) => committed.value),
-      ),
-    );
-  });
+  library.rollOutRevision(skillId, pin, YOU).pipe(
+    Effect.tap((committed) => announce(committed.entries)),
+    Effect.map((committed) => committed.value),
+  );
 
 export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handlers) =>
   Effect.gen(function* () {
@@ -230,8 +224,10 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
             .pipe(Effect.mapError(importError));
           const [one] = added;
           if (one === undefined) return yield* new SkillMissing({ id: skill.id });
-          // Your edit rolls out to every assignment that is not held; content the skill had moves none.
-          const rolledOut = one.added ? yield* missing(rollOutAll(library, announce, skill.id, one.revision.hash)) : [];
+          // Your edit rolls out to every assignment that is not held. Saving it again finishes a rollout
+          // the hub stopped in the middle of; content rolled out before, or older than the newest, moves none.
+          const pending = one.revision.rolledOutAt === null && one.skill.latest === one.revision.hash;
+          const rolledOut = pending ? yield* missing(rollOutAll(library, announce, skill.id, one.revision.hash)) : [];
           return { ...one, rolledOut };
         }),
       rollOut: ({ params, payload }) =>

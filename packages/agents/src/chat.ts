@@ -322,8 +322,25 @@ export class ChatService extends Context.Service<
           : turnMemoryBrief(memoryStore.value, memoryProjects, agent.id, tools?.folders ?? [], session?.memoryBrief);
       // Without a skills library, turns have no skills (ADR 029).
       const skillMounts = yield* skillMounter;
-      const skillsFor = (agent: Agent, config: AgentConfiguration, tools: ToolAccess | null) =>
-        skillMounts({ agentId: agent.id, policy: config.policy, folders: tools?.folders ?? [] });
+      // The skills recorded with a message of yours when it was accepted (ADR 029), so a queued message
+      // keeps them through a rollout. Read with the folders the hob works in now.
+      const acceptedSkills = (agent: Agent) =>
+        skillMounts.enabled
+          ? Effect.flatMap(hobTools.access(agent), (access) =>
+              skillMounts.resolve({ agentId: agent.id, policy: agent.policy, folders: access?.folders ?? [] }),
+            )
+          : Effect.succeed(null);
+      // A turn's skills: those its message was accepted with, or, for a continuation or a message
+      // from before, the hob's as the turn starts. The reply records them, and the runtime gets their mounts.
+      const skillsFor = (agent: Agent, config: AgentConfiguration, tools: ToolAccess | null, yours?: Message) =>
+        Effect.gen(function* () {
+          const recorded =
+            yours?.skills ??
+            (yield* skillMounts.resolve({ agentId: agent.id, policy: config.policy, folders: tools?.folders ?? [] }));
+          return { recorded, mounts: yield* skillMounts.mounts(recorded) };
+        });
+      const withSkills = (recorded: Message["skills"]) => (message: Message) =>
+        recorded === null ? undefined : new Message({ ...message, skills: recorded });
       // Without a backpack, a thread starts only your queued messages.
       const continuations = yield* Effect.serviceOption(Continuations);
       // After a restore nothing that waited starts on its own until you resume work (ADR 026).
@@ -763,7 +780,8 @@ export class ChatService extends Context.Service<
           const tools = yield* grant(thread.id, agent);
           const expected = thread.sessions.find((s) => s.runtime === brain.runtime);
           const memory = yield* memoryBriefFor(agent, tools, expected);
-          const skills = yield* skillsFor(agent, config, tools);
+          const skills = yield* skillsFor(agent, config, tools, yours);
+          yield* update(withSkills(skills.recorded));
           // What the turn runs and changes, recorded for the Workbench on the Attempt it works on (ADR 023).
           // Acquired after the Task's turn, so the end-of-turn compare lands before its Attempt ends.
           const activity = yield* activityOf(tools, taskTurn);
@@ -781,7 +799,7 @@ export class ChatService extends Context.Service<
                 model: brain.model,
                 effort: brain.effort,
                 tools,
-                skills,
+                skills: skills.mounts,
                 approvals: turnApprovals?.approvals ?? null,
                 redaction: redactor,
                 recordToolStart,
@@ -1179,6 +1197,7 @@ export class ChatService extends Context.Service<
               status: waits || carries ? "queued" : "complete",
               error: null,
               configVersion: null,
+              skills: yield* acceptedSkills(agent),
               createdAt: yield* nowIso,
             });
             const saved = yield* saveMessage(userMessage);

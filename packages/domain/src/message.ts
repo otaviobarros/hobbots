@@ -3,6 +3,7 @@ import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
 import { PolicyOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
+import { TurnSkill } from "./skills.ts";
 import { ToolOutput } from "./tool-output.ts";
 
 export const MessageRole = Schema.Literals(["user", "assistant"]);
@@ -173,6 +174,15 @@ export class Message extends Schema.Class<Message>("Message")({
   quiet: Schema.Boolean.pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(false)),
     Schema.withConstructorDefault(Effect.succeed(false)),
+  ),
+  /**
+   * The skills of a turn (ADR 029): on your message, those it was given when the hub accepted it, which
+   * its turn uses even after a rollout while it waited; on a reply, those its latest turn used. Null
+   * on a hub without a skills library, for a continuation's prompt, and for messages from before.
+   */
+  skills: Schema.NullOr(Schema.Array(TurnSkill)).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
   ),
   createdAt: Schema.String,
   revision: Revision,

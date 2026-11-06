@@ -69,6 +69,26 @@ describe("~/.agents/skills", () => {
     }).pipe(Effect.provide(await layerFor(folder)), Effect.runPromise);
   });
 
+  // covers ADR 029 (Pins and rollout), #1061
+  it("[TC-AG-141] a rollback stays while the folder still holds the revision it rolled back from", async () => {
+    const folder = await folderOf({ "release/SKILL.md": skillMd("release") });
+    await Effect.gen(function* () {
+      const library = yield* SkillLibrary;
+      const agents = yield* AgentsFolder;
+      const [first] = yield* library.list;
+      if (first === undefined) return expect.unreachable();
+      yield* Effect.promise(() => writeFile(join(folder, "release/SKILL.md"), skillMd("release", "Releases, now.")));
+      yield* agents.sync;
+      const [everyone] = yield* library.assignments(first.id);
+      if (everyone === undefined) return expect.unreachable();
+      expect(everyone.pin).not.toBe(first.latest);
+      // Roll back to r1; the folder, unchanged, never rolls r2 out again.
+      yield* library.rollOut(everyone.id, first.latest, { _tag: "You" });
+      yield* agents.sync;
+      expect((yield* library.assignments(first.id)).map((one) => one.pin)).toEqual([first.latest]);
+    }).pipe(Effect.provide(await layerFor(folder)), Effect.runPromise);
+  });
+
   it("[TC-AG-139] keeps every assignment, and says why, while the folder cannot be read", async () => {
     const folder = await folderOf({ "release/SKILL.md": skillMd("release") });
     await Effect.gen(function* () {

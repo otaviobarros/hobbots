@@ -2,7 +2,7 @@ import { watch } from "node:fs";
 import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { announcer, EventPublisher, rolloutTargets, SkillLibrary } from "@hobbots/agents";
+import { announcer, EventPublisher, SkillLibrary } from "@hobbots/agents";
 import type { Skill, SkillBy, SkillName, SkillRefused } from "@hobbots/domain";
 import { Context, Duration, Effect, Layer, Queue, Ref, Schedule, Semaphore } from "effect";
 import { type CheckedSkill, checkSkill } from "./check.ts";
@@ -133,8 +133,10 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
             });
             yield* announce(assigned.entries);
           }
-          for (const target of rolloutTargets(assignments, skill.id, checked.hash)) {
-            yield* announce((yield* library.rollOut(target.id, checked.hash, by)).entries);
+          // A changed copy rolls out like your own edit, once: an unchanged one leaves a rollback as it is.
+          const { revision } = added.value;
+          if (revision.rolledOutAt === null && skill.latest === revision.hash) {
+            yield* announce((yield* library.rollOutRevision(skill.id, revision.hash, by)).entries);
           }
         });
 
