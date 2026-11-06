@@ -197,6 +197,13 @@ export const endedSteps = (steps: ReadonlyArray<ReplyStep>): ReadonlyArray<Reply
   });
 
 /**
+ * Whether every tool call in the steps plainly succeeded. A failed, refused or uncertain call is
+ * something you need to see, so a reply with one is never kept quiet (#1006).
+ */
+export const toolsSucceeded = (steps: ReadonlyArray<ReplyStep>): boolean =>
+  steps.every((step) => step.kind !== "tool" || step.state === "done");
+
+/**
  * A turn's end. A tool call cut off while it ran is uncertain: it may have taken effect. Anything
  * else still under way, thinking or a call awaiting approval, is unfinished.
  */

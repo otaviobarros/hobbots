@@ -1,4 +1,4 @@
-import type { Message } from "@hobbots/domain";
+import { type Message, toolsSucceeded } from "@hobbots/domain";
 
 /**
  * Whether the chat leaves a reply out (#901, #1006): a lead woken by work that arrived for it, not
@@ -11,5 +11,5 @@ import type { Message } from "@hobbots/domain";
 export const isQuietReply = (message: Message, before: Message | undefined): boolean =>
   message.role === "assistant" &&
   message.status === "complete" &&
-  message.steps.every((step) => step.kind !== "tool" || step.state === "done") &&
+  toolsSucceeded(message.steps) &&
   (message.quiet || (message.content.trim() === "" && before !== undefined && before.role === "assistant"));

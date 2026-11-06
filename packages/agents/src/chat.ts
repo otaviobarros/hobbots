@@ -36,6 +36,7 @@ import {
   ThreadId,
   type TurnEnding,
   titleFromPrompt,
+  toolsSucceeded,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
@@ -616,13 +617,16 @@ export class ChatService extends Context.Service<
                       delta: event.text,
                     }),
                 );
-              // A lead's routine progress is kept out of the chat as it completes, so it never shows (#1006).
+              // A lead's routine progress is kept out of the chat as it completes, so it shows only while it streams (#1006).
               case "Completed":
                 return Effect.gen(function* () {
                   const quiet = onTask === null ? false : yield* onTask.quiet;
                   return yield* update((m) => {
                     const done = MessageTransitions.complete(m, reply.prefix + event.text, event.usage);
-                    return quiet && done instanceof Message ? new Message({ ...done, quiet }) : done;
+                    // A failed, refused or uncertain call stays in view, with the unread dot and the last line.
+                    return quiet && done instanceof Message && toolsSucceeded(done.steps)
+                      ? new Message({ ...done, quiet })
+                      : done;
                   });
                 });
               // What the call printed is cut to its start and end before the step is saved; a long

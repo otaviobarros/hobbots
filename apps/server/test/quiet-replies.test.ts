@@ -124,4 +124,30 @@ describe("a lead's routine progress", () => {
     const finish = continuations(all).find((each) => each.content.includes("complete_task"));
     expect(finish?.quiet).toBe(false);
   }, 30_000);
+
+  // covers UX-006, OR-004, EX-004
+  it("[TC-OR-599] a lead's reply to work that arrived with a tool call that failed still shows", async () => {
+    const party = partyHub();
+    dispose = party.dispose;
+    const { run } = party;
+    await run(
+      send([
+        "Ship the launch",
+        hub("delegate_task", { key: "copy", hob: "Quill", brief: "Write the copy" }),
+        stuck("pages", "Pip", "Build the pages"),
+        hub("wait_for", { key: "wait", tasks: ["$copy.task_id", "$pages.task_id"] }),
+        `fake:then fake:run ${JSON.stringify({ command: "pnpm deploy", output: "deploy failed", exitCode: 1 })}`,
+      ]),
+    );
+    // Quill's result wakes Frodo, whose deploy fails: what you need to see to recover, not progress.
+    const all = await run(
+      messagesWhen((each) =>
+        continuations(each).some(
+          (m) => m.status === "complete" && m.steps.some((step) => step.kind === "tool" && step.state === "failed"),
+        ),
+      ),
+    );
+    const failed = continuations(all).find((m) => m.steps.some((step) => step.state === "failed"));
+    expect(failed?.quiet).toBe(false);
+  }, 30_000);
 });
