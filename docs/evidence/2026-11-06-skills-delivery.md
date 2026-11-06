@@ -3,9 +3,9 @@
 - **Date:** 2026-11-06
 - **Issue:** [#1061](https://github.com/otaviobarros/hobbots/issues/1061)
 - **Pull request:** the pull request that adds skill delivery to `@hobbots/runtimes`
-- **Commit:** the head of `claude/project-thread-xu1diu`, with a clean tree
+- **Commit:** `426437f` on `claude/project-thread-xu1diu`, with a clean tree
 - **Setup:** Linux x86_64 container (Node 22), running as root. Codex 0.166.0 (`@openai/codex` from npm) through `runCodexTurn`, with a stand-in for the Responses API set as a custom model provider. Claude Code 2.1.311 (the Agent SDK's own binary) and 2.1.319 through the adapter's `sendPrompt`, with a stand-in for the Messages API (`ANTHROPIC_BASE_URL`, a throwaway token) and every `CLAUDE*` and `ANTHROPIC*` variable of the machine removed. `HOME` pointed at a fake home folder for each run. The fixture, `packages/runtimes/test/clean-runtime.ts`, holds a skill, an MCP server, a plugin, a hook and instruction files in `~/.claude`, `~/.claude.json` and `~/.codex`, a skill in `~/.agents/skills`, and skills, hooks and MCP servers in a repository's `.claude`, `.mcp.json`, `.agents/skills` and `.codex/skills`. Every hook and MCP server touches a file if it ever runs. The turns mounted three hand-made revisions: one the hob may pick, one Only when asked, and the `~/.agents` skill as the hub would serve it. For Codex, an administrator's skill was written to `/etc/codex/skills`. No account and no real model on either runtime.
-- **Result:** Passed. On both runtimes, chat-only turns and turns in the repository were offered exactly the mounted skills, the `~/.agents` one included, and nothing from the home folder or the repository; no hook or MCP server ran. claude.ai connectors and a real model were not observed.
+- **Result:** Passed, with one failure not explained. Across 20 runs of the Claude Code suite on `426437f`, TC-RT-514 failed once, after 10 seconds, and its error was not kept; 19 runs passed and the failure did not come back, so its cause is unknown. On both runtimes, chat-only turns and turns in the repository were offered exactly the mounted skills, the `~/.agents` one included, and nothing from the home folder or the repository; no hook or MCP server ran. claude.ai connectors and a real model were not observed.
 
 ## Codex 0.166.0
 
@@ -32,6 +32,16 @@
 | TC-RT-516 | The model calls `Skill` for the mounted skill, then for a home folder skill | ✅ The first returned the skill's instructions, shown as a step; the second was refused with `Unknown skill` |
 | TC-RT-517 | The prompt is `/hobbots-skills:asked-skill` (Only when asked) | ✅ The skill's instructions reached the model |
 | TC-RT-518 | A turn without skills | ✅ No skill listed and no tool offered |
+
+## Read-only revisions
+
+`pnpm --filter @hobbots/runtimes exec vitest run test/skills.test.ts`, run as `nobody`
+
+| Case | Check | Result |
+|---|---|---|
+| TC-RT-524 | An Only when asked mount from a revision whose files and folders are all read-only, with a runnable script | ✅ Marked in the copy, the script ran from the mounted folder, and nothing in it was writable. On `8734e52`, before the fix, the same test failed with `EACCES` writing the copy's `SKILL.md` |
+
+The live suites above mount writable revisions; TC-RT-524 covers read-only ones.
 
 ## Gaps
 
