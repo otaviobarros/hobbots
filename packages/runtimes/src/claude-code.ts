@@ -665,11 +665,30 @@ export const turnEvents = (tools: ToolTurn | null = null) => {
   };
 };
 
+/** A count two runs of one turn both used: their sum, or whichever reported one when only one did. */
+const summed = (earlier: number | null, later: number | null) =>
+  earlier === null ? later : later === null ? earlier : earlier + later;
+
+/**
+ * What every run of one turn used: the tokens of each run added up (#1011). The timings say how the
+ * turn got going, so they stay the first run's, and a run that reported none adds nothing.
+ */
+export const wholeUsage = (earlier: ReplyUsage | undefined, later: ReplyUsage | undefined): ReplyUsage | undefined =>
+  earlier === undefined || later === undefined
+    ? (earlier ?? later)
+    : {
+        ...earlier,
+        inputTokens: summed(earlier.inputTokens, later.inputTokens),
+        outputTokens: summed(earlier.outputTokens, later.outputTokens),
+        cacheReadTokens: summed(earlier.cacheReadTokens, later.cacheReadTokens),
+        cacheWriteTokens: summed(earlier.cacheWriteTokens, later.cacheWriteTokens),
+      };
+
 /**
  * One turn as the hub sees it, however many runs Claude Code makes of it. A background command that
  * finishes wakes the session after it replied: Claude Code starts another run in the same process,
  * announced as `init` again, with its own `result`. So the session starts once, and the turn
- * completes when Claude Code stops, with what each run replied. Usage is the last run's.
+ * completes when Claude Code stops, with what each run replied and what all of them used.
  */
 export const wholeTurn = () => {
   let started = false;
@@ -683,7 +702,9 @@ export const wholeTurn = () => {
       if (event._tag !== "Completed") return [event];
       const earlier = completed?.text ?? "";
       const text = earlier !== "" && event.text !== "" ? `${earlier}\n\n${event.text}` : earlier + event.text;
-      completed = { ...event, text };
+      const usage = wholeUsage(completed?.usage, event.usage);
+      // With no usage from either run, `event` has none to carry over.
+      completed = usage === undefined ? { ...event, text } : { ...event, text, usage };
       return [];
     },
     end: (): ReadonlyArray<RuntimeEvent> => (completed === null ? [] : [completed]),

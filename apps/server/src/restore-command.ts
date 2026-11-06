@@ -1,8 +1,7 @@
-import { mkdirSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { NodeRuntime } from "@effect/platform-node";
 import { Console, Effect } from "effect";
-import { exitOnFailure, hubRunning } from "./command-line.ts";
+import { exitOnFailure, freeDataFolder } from "./command-line.ts";
 import { ServerConfig } from "./config.ts";
 import { checkBackup, performRestore, summaryOf } from "./restores.ts";
 
@@ -18,11 +17,7 @@ const restore = Effect.gen(function* () {
   const confirmed = args.includes("--yes");
   const path = args.find((arg) => arg !== "--yes");
   if (path === undefined) return yield* Effect.fail("Name the backup folder: restore <backup folder> [--yes]");
-  mkdirSync(config.dataDir, { recursive: true });
-  const dataDir = realpathSync(config.dataDir);
-  if (yield* hubRunning(dataDir)) {
-    return yield* Effect.fail(`A hub is using ${dataDir}. Stop it first, or restore from its Settings.`);
-  }
+  const dataDir = yield* freeDataFolder(config.dataDir, "restore from its Settings");
   const backup = resolve(path);
   const manifest = yield* checkBackup(backup).pipe(Effect.mapError((refused) => refused.reason));
   const summary = yield* summaryOf(backup, manifest);

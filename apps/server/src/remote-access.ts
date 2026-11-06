@@ -16,6 +16,7 @@ import { HttpApiBuilder } from "effect/http-api";
 import { arrivedOnTailnet, arrivedThroughServe, socketOf } from "./arrival.ts";
 import { type TailnetPeer, TailnetPeers } from "./devices.ts";
 import { EventBus } from "./event-bus.ts";
+import { recordHubPort } from "./hub-presence.ts";
 import { HubListeners, type ListenFailure } from "./listeners.ts";
 import { writeNetworkSettings } from "./network-settings.ts";
 import { forwardsTo, Tailscale } from "./tailscale.ts";
@@ -258,6 +259,8 @@ export const RemoteAccessLive = (dataDir: string) =>
             return yield* new PortUnavailable({ port, detail: "Hobbots uses it for HTTPS through Tailscale" });
           }
           yield* listeners.movePort(port).pipe(Effect.mapError((detail) => new PortUnavailable({ port, detail })));
+          // Before the move is announced, so the command-line tools find the hub on its new port (#999).
+          yield* recordHubPort(dataDir, port);
           yield* Effect.log(`Moved the hub to port ${port}`);
         });
 

@@ -13,6 +13,7 @@ import {
   type MemoryPageSummary,
   MemoryPath,
   type MemoryScope,
+  type MemorySessionId,
   MemoryUnavailable,
   MemoryVersion,
   memoryAuthorOf,
@@ -20,7 +21,6 @@ import {
   memoryTitleOf,
   searchTerms,
   snippetOf,
-  type ThreadId,
 } from "@hobbots/domain";
 import { diffLines } from "diff";
 import { DateTime, Effect, Layer } from "effect";
@@ -55,21 +55,21 @@ interface StoredVersion {
 export interface MemoryStoreFakeControls {
   /** While down, every call fails with `MemoryUnavailable`. */
   readonly setDown: (down: boolean) => void;
-  /** What a thread's session holds in `scope`, in the order it arrived, replays skipped. */
-  readonly captured: (scope: MemoryScope, threadId: ThreadId) => ReadonlyArray<MemoryCaptureItem>;
+  /** What a session holds in `scope`, in the order it arrived, replays skipped. */
+  readonly captured: (scope: MemoryScope, sessionId: MemorySessionId) => ReadonlyArray<MemoryCaptureItem>;
   /** Has Check now find `finding`, while every page it names is still there. */
   readonly flag: (finding: MemoryFinding) => void;
 }
 
-/** A thread's session: what arrived, and every key seen, the ends' included. */
+/** A session: what arrived, and every key seen, the ends' included. */
 interface Session {
   readonly items: Array<MemoryCaptureItem>;
   readonly seen: Set<string>;
 }
 
 /** The fake's summary of a session: its first message as the title, then each item, as a model-free summary lists them. */
-const summaryOf = (threadId: ThreadId, items: ReadonlyArray<MemoryCaptureItem>) => {
-  const first = items.find((item) => item.kind === "message")?.text.split("\n", 1)[0] ?? `Thread ${threadId}`;
+const summaryOf = (sessionId: MemorySessionId, items: ReadonlyArray<MemoryCaptureItem>) => {
+  const first = items.find((item) => item.kind === "message")?.text.split("\n", 1)[0] ?? `Session ${sessionId}`;
   return [
     `# ${first}`,
     "",
@@ -116,8 +116,8 @@ export const makeMemoryStoreFake = (): {
   const flagged: Array<MemoryFinding> = [];
   let down = false;
   let versions = 0;
-  const sessionOf = (scope: MemoryScope, threadId: ThreadId) => {
-    const key = `${scopeKey(scope)} ${threadId}`;
+  const sessionOf = (scope: MemoryScope, sessionId: MemorySessionId) => {
+    const key = `${scopeKey(scope)} ${sessionId}`;
     const existing = sessions.get(key);
     if (existing) return existing;
     const session: Session = { items: [], seen: new Set() };
@@ -297,9 +297,9 @@ export const makeMemoryStoreFake = (): {
           ? Effect.fail(conflict(scope, path))
           : append(scope, path, { ...old, author: memoryAuthorOf(actor), forgotten: false });
       }),
-    capture: (_actor, scope, threadId, items) =>
+    capture: (_actor, scope, sessionId, items) =>
       Effect.map(up, () => {
-        const session = sessionOf(scope, threadId);
+        const session = sessionOf(scope, sessionId);
         for (const item of items) {
           if (session.seen.has(item.key)) continue;
           session.seen.add(item.key);
@@ -307,16 +307,16 @@ export const makeMemoryStoreFake = (): {
         }
         return items.length;
       }),
-    endSession: (actor, scope, threadId, key) =>
+    endSession: (actor, scope, sessionId, key) =>
       Effect.flatMap(up, () => {
-        const session = sessionOf(scope, threadId);
-        const path = MemoryPath.make(`sessions/${threadId.toLowerCase()}.md`);
+        const session = sessionOf(scope, sessionId);
+        const path = MemoryPath.make(`sessions/${sessionId.toLowerCase()}.md`);
         // A pinned chat note is never rewritten: the end waits, its key unused, until you unpin it.
         if (currentOf(scope, path)?.pinned === true) return Effect.succeed(false);
         if (session.seen.has(key)) return Effect.succeed(true);
         session.seen.add(key);
         return append(scope, path, {
-          markdown: summaryOf(threadId, session.items),
+          markdown: summaryOf(sessionId, session.items),
           tags: [],
           pinned: false,
           forgetOn: null,
@@ -341,7 +341,7 @@ export const makeMemoryStoreFake = (): {
       setDown: (value) => {
         down = value;
       },
-      captured: (scope, threadId) => [...sessionOf(scope, threadId).items],
+      captured: (scope, sessionId) => [...sessionOf(scope, sessionId).items],
       flag: (finding) => {
         flagged.push(finding);
       },

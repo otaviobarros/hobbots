@@ -1,15 +1,16 @@
 import { createHash } from "node:crypto";
-import type { MemoryCaptureItem, ThreadId } from "@hobbots/domain";
+import type { MemoryCaptureItem, MemorySessionId } from "@hobbots/domain";
 import { Schema } from "effect";
 import type { EngineProject } from "./scopes.ts";
 
 /**
- * Capture on ai-memory (ADR 028, Capture and summaries): what happened in a thread, sent to
- * `/hook/batch` as lifecycle events of one ai-memory session, the thread's. Hobbots is the producer
- * (`extension=hobbots`) and the agent, whichever brain wrote a reply, so a brain switch never splits
- * the session. A message of yours is a prompt, a reply ends a turn (`stop`), a tool step and a Quest
- * are events of Hobbots' own vocabulary, and the end of the session (`session-end`) has ai-memory
- * write its summary page, `sessions/<thread id>.md`.
+ * Capture on ai-memory (ADR 028, Capture and summaries): what happened in a thread, or in an Attempt
+ * outside any chat, sent to `/hook/batch` as lifecycle events of one ai-memory session, the thread's
+ * or the Attempt's. Hobbots is the producer (`extension=hobbots`) and the agent, whichever brain
+ * wrote a reply, so a brain switch never splits the session. A message of yours, or a Task's goal, is
+ * a prompt, a reply ends a turn (`stop`), a tool step and a Quest are events of Hobbots' own
+ * vocabulary, and the end of the session (`session-end`) has ai-memory write its summary page,
+ * `sessions/<session id>.md`.
  */
 
 /** Hobbots' producer name, in every event's `agent` and `extension`. */
@@ -54,10 +55,10 @@ const bodyOf = (kind: Kind, text: string): Record<string, unknown> => {
   return { title: titleOf(text), body: text };
 };
 
-/** One event of the thread's session, as `/hook/batch` takes it. */
+/** One event of a session, as `/hook/batch` takes it. */
 export const hookEventOf = (
   where: EngineProject,
-  threadId: ThreadId,
+  sessionId: MemorySessionId,
   item: { readonly kind: Kind; readonly key: string; readonly text: string },
 ) => {
   const query = new URLSearchParams({
@@ -68,10 +69,10 @@ export const hookEventOf = (
     extension: PRODUCER,
     source_event: item.kind,
     ingest_key: ingestKeyOf(item.key),
-    // A thread's end writes its summary page and nothing else: no handoff waits for a next agent.
+    // A session's end writes its summary page and nothing else: no handoff waits for a next agent.
     ...(item.kind === "end" ? { auto_handoff: "false" } : {}),
   });
-  return { url: `/hook?${query.toString()}`, body: { session_id: threadId, ...bodyOf(item.kind, item.text) } };
+  return { url: `/hook?${query.toString()}`, body: { session_id: sessionId, ...bodyOf(item.kind, item.text) } };
 };
 
 /** What `/hook/batch` answers, in the fields read. */

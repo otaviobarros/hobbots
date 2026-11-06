@@ -1,4 +1,11 @@
-import { type AttemptResume, type NewNote, type NewTask, type TaskCompletion, TaskRepository } from "@hobbots/agents";
+import {
+  type AttemptChange,
+  type AttemptResume,
+  type NewNote,
+  type NewTask,
+  type TaskCompletion,
+  TaskRepository,
+} from "@hobbots/agents";
 import {
   type AgentId,
   type Answerer,
@@ -427,6 +434,10 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
+    /** The reply of the turn that ended an Attempt, journaled with its end for memory (ADR 028) and kept nowhere else. */
+    const replyOf = (update: AttemptChange) =>
+      update._tag === "Ended" && update.reply !== undefined ? { reply: update.reply } : {};
+
     const updateAttempt: TaskRepository["Service"]["updateAttempt"] = (attemptId, update) =>
       change((revision) =>
         Effect.gen(function* () {
@@ -456,7 +467,7 @@ export const TaskRepositoryLive = Layer.effect(
           yield* saveTask(task);
           return {
             value: { task, attempt },
-            events: [{ _tag: "TaskStateChanged", task, attempt, quest: null, wait: null } as const],
+            events: [{ _tag: "TaskStateChanged", task, attempt, quest: null, wait: null, ...replyOf(update) } as const],
           };
         }),
       );
@@ -1050,6 +1061,23 @@ export const TaskRepositoryLive = Layer.effect(
       listFailedTasks: read.failedTasks.pipe(Effect.orDie),
       handOff,
       waitFor,
+      startTurn: (turn) =>
+        Effect.all([
+          sql`UPDATE attempt_turns SET ended_at = ${turn.startedAt}
+            WHERE attempt_id = ${turn.attemptId} AND ended_at IS NULL AND started_at < ${turn.startedAt}`,
+          sql`INSERT INTO attempt_turns ${sql.insert({
+            attempt_id: turn.attemptId,
+            agent_id: turn.agentId,
+            runtime: turn.runtime,
+            model: turn.model,
+            started_at: turn.startedAt,
+          })} ON CONFLICT (attempt_id, started_at) DO NOTHING`,
+        ]).pipe(sql.withTransaction, Effect.asVoid, Effect.orDie),
+      endTurn: (turn, usage, endedAt) =>
+        sql`UPDATE attempt_turns SET ended_at = ${endedAt}, input_tokens = ${usage?.inputTokens ?? null},
+          output_tokens = ${usage?.outputTokens ?? null}, cache_read_tokens = ${usage?.cacheReadTokens ?? null},
+          cache_write_tokens = ${usage?.cacheWriteTokens ?? null}
+          WHERE attempt_id = ${turn.attemptId} AND started_at = ${turn.startedAt}`.pipe(Effect.asVoid, Effect.orDie),
       readLedger: (taskId) =>
         read.task(taskId).pipe(
           Effect.flatMap(([task]) =>

@@ -7,6 +7,7 @@ import {
   DelegationId,
   isTerminalTask,
   MilestoneId,
+  NoteId,
   POLICY_OPERATIONS,
   type PolicyDecision,
   type PolicyOperation,
@@ -22,7 +23,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { type Authority, delegatedAuthority, narrowBy, type PathSeparator } from "./authority.ts";
-import { firstLine, planNote } from "./briefs.ts";
+import { cut, firstLine, planNote } from "./briefs.ts";
 import {
   type CallScope,
   depthWithin,
@@ -53,6 +54,9 @@ interface Deps {
 }
 
 type DelegateInput = Omit<TaskToolInput<"delegate_task">, "key">;
+
+/** Longest text of yours a delegated Task carries on as its lead's note. */
+const NOTE_LIMIT = 2_000;
 
 /** A hob that can take work, by its id or its name. */
 const findHob = (hobs: Deps["hobs"], named: string): Effect.Effect<Agent, TaskToolRefused> =>
@@ -222,6 +226,29 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
       );
     });
 
+  /**
+   * A Task delegated by a turn on a message you sent while the work ran carries that message on, as
+   * the lead's note to its hob, so the message's receipt and the hob's lane show where it went (#1005).
+   */
+  const carryNote = (scope: CallScope, created: Task, journal: ReturnType<typeof journalOf>) =>
+    Effect.gen(function* () {
+      const { messageId, steers, agentId } = scope.caller;
+      if (messageId === undefined || steers === undefined || steers.trim() === "") return "";
+      journal.keep(
+        yield* fromRecords(
+          tasks.leaveNote({
+            id: NoteId.make(newId()),
+            taskId: created.id,
+            text: cut(steers, NOTE_LIMIT),
+            createdAt: scope.at,
+            senderId: agentId,
+            messageId,
+          }),
+        ),
+      );
+      return " The user's message this turn answers goes with it as your note, so they can see it reached this hob.";
+    });
+
   return {
     delegate_task: (scope: CallScope, input: DelegateInput) =>
       Effect.gen(function* () {
@@ -262,9 +289,10 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
             }),
           ),
         );
+        const carried = yield* carryNote(scope, created, journal);
         return {
           done: {
-            message: `Delegated Task ${created.id} to ${member.name}. You lead Quest ${quest.id}.${tools}${alreadyOpen(scope.tree, task, member)}${existing === undefined ? planNote(task) : ""}`,
+            message: `Delegated Task ${created.id} to ${member.name}.${carried} You lead Quest ${quest.id}.${tools}${alreadyOpen(scope.tree, task, member)}${existing === undefined ? planNote(task) : ""}`,
             details: {
               task_id: created.id,
               quest_id: quest.id,

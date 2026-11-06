@@ -53,7 +53,7 @@ Take the test database from `TestDatabase` in `@hobbots/persistence/testing`, so
 
 ### STD-TEST-007 Every end-to-end screen passes an accessibility scan
 
-Every end-to-end spec scans each screen it visits with `@axe-core/playwright`, through a shared fixture. A serious or critical violation fails the test.
+Every end-to-end spec scans each screen it visits with `@axe-core/playwright`, through a shared fixture. The fixture first waits for any fade or color change on the text it checks to finish, since text caught mid-fade reads as low contrast. A serious or critical violation fails the test.
 
 - **Why:** the scan catches missing names, contrast and ARIA mistakes that role selectors alone miss (STD-UI-003).
 - **Enforced by:** the shared Playwright fixture and the end-to-end CI job.
