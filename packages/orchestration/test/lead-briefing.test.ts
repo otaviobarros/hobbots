@@ -2,6 +2,8 @@ import {
   AgentId,
   AttemptId,
   DEFAULT_QUEST_LIMITS,
+  FINISH_RULE,
+  LEAN_CHAT_RULE,
   Quest,
   QuestId,
   Question,
@@ -13,13 +15,14 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { renderBrief, SINCE_LAST_TURN } from "../src/brief-parts.ts";
+import { type BriefPart, fixed, renderBrief, rule, SINCE_LAST_TURN } from "../src/brief-parts.ts";
 import { ownerBriefing, ownerBriefingParts } from "../src/briefs.ts";
 import { reportingRules } from "../src/reporting.ts";
 
 // Issue #1027: a lead's chat resumes the same session on every wake, yet each wake told it the whole
 // Quest again, every result so far included. On a real five-hob Quest its prompts grew from about
-// 2,900 to 10,900 characters. A session told of the same Task before is now told only what changed.
+// 2,900 to 10,900 characters. A session told of the same Task before is now told only what changed,
+// and its rules only once (#1039).
 
 const at = "2026-11-06T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
@@ -81,12 +84,21 @@ const finishedBy = (done: number) =>
     waits: [],
   });
 
+/** The lead's rules, which a session is told once (#1039). */
+const RULES = [
+  "You lead the Quest on this Task.",
+  "Call complete_task with the Task's result once everything under it has ended.",
+  LEAN_CHAT_RULE,
+  FINISH_RULE,
+  "Tell the user only what your Task tools did in this turn",
+];
+
 const lead = (tree: TaskTree) => tree.tasks[0] as Task;
 const parts = (tree: TaskTree) => [...ownerBriefingParts(lead(tree), tree), ...reportingRules(lead(tree), tree)];
 
 describe("a lead's briefing on a resumed session", () => {
   // covers OR-004, OR-005
-  it("[TC-OR-600] a lead told of its Task before is told only what changed, and its rules on every turn", () => {
+  it("[TC-OR-600] a lead told of its Task before is told only what changed, its rules once", () => {
     let told = renderBrief(lead(finishedBy(0)).id, parts(finishedBy(0)), null).told;
     const sizes: number[] = [];
     for (let done = 1; done <= MEMBERS.length; done++) {
@@ -97,12 +109,12 @@ describe("a lead's briefing on a resumed session", () => {
       // The member that just finished, with its result, and none that finished before.
       expect(briefed.text).toContain(`${MEMBERS[done - 1]} finished.`);
       for (const earlier of MEMBERS.slice(0, done - 1)) expect(briefed.text).not.toContain(`${earlier} finished.`);
-      // The rules still come on every turn.
-      expect(briefed.text).toContain("You lead the Quest on this Task.");
-      expect(briefed.text).toContain("Call complete_task with the Task's result once everything under it has ended.");
+      // The session holds its rules from the first briefing (#1039).
+      for (const told of RULES) expect(briefed.text).not.toContain(told);
     }
     // Each wake is as long as the last, however many results came before it.
     expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThan(200);
+    expect(Math.max(...sizes)).toBeLessThan(2_400);
     expect(Math.max(...sizes)).toBeLessThan(
       ownerBriefing(lead(finishedBy(MEMBERS.length)), finishedBy(MEMBERS.length)).length,
     );
@@ -117,13 +129,60 @@ describe("a lead's briefing on a resumed session", () => {
     expect(whole.text).toContain(`${MEMBERS[1]} finished.`);
 
     const elsewhere = renderBrief(lead(tree).id, parts(tree), { taskId: TaskId.make("other"), entries: {} });
+    for (const told of RULES) expect(whole.text).toContain(told);
     expect(elsewhere.text).toBe(whole.text);
 
-    // Nothing changed: the rules alone, with no Task listed again.
+    // Nothing changed: where the Task stands, with no Task or rule told again.
     const same = renderBrief(lead(tree).id, parts(tree), whole.told);
     expect(same.text).toContain(SINCE_LAST_TURN);
     expect(same.text).not.toContain("finished.");
+    for (const told of RULES) expect(same.text).not.toContain(told);
     expect(same.told).toEqual(whole.told);
+  });
+
+  // covers OR-004, OR-005
+  it("[TC-OR-620] a rule that comes to apply, or changes, partway is told on the next wake, and once", () => {
+    const tree = finishedBy(1);
+    const noQuest = new TaskTree({ ...tree, quests: [] });
+    // Before the Quest starts on the Task, there is no lead guidance to tell.
+    const before = renderBrief(lead(noQuest).id, parts(noQuest), null);
+    expect(before.text).not.toContain("You lead the Quest on this Task.");
+    // The wake after it starts tells it, and only it of the rules.
+    const started = renderBrief(lead(tree).id, parts(tree), before.told);
+    expect(started.text).toContain("You lead the Quest on this Task.");
+    for (const told of RULES.slice(1)) expect(started.text).not.toContain(told);
+    // The next wake does not tell it again.
+    expect(renderBrief(lead(tree).id, parts(tree), started.told).text).not.toContain(
+      "You lead the Quest on this Task.",
+    );
+    // A mark from before rules were kept in it, as #1027 saved, has none: the session is told them all.
+    const older = {
+      ...started.told,
+      entries: Object.fromEntries(Object.entries(started.told.entries).filter(([key]) => !key.startsWith("rule:"))),
+    };
+    const resent = renderBrief(lead(tree).id, parts(tree), older);
+    for (const told of RULES) expect(resent.text).toContain(told);
+  });
+
+  // covers OR-004
+  it("[TC-OR-621] a rule whose text changes, or that stops applying and applies again, is told again once", () => {
+    const id = lead(finishedBy(0)).id;
+    const briefed = (...rules: ReadonlyArray<BriefPart>) => [fixed("You are working on it."), ...rules];
+    const first = renderBrief(id, briefed(rule("chat", "Write only the plan.")), null);
+    const same = renderBrief(id, briefed(rule("chat", "Write only the plan.")), first.told);
+    expect(same.text).not.toContain("Write only the plan.");
+    // Its text changes: told again, then kept.
+    const changed = renderBrief(id, briefed(rule("chat", "Write only the plan and the finish.")), same.told);
+    expect(changed.text).toContain("Write only the plan and the finish.");
+    expect(
+      renderBrief(id, briefed(rule("chat", "Write only the plan and the finish.")), changed.told).text,
+    ).not.toContain("Write only the plan");
+    // It stops applying, then applies again: told again on its return.
+    const gone = renderBrief(id, briefed(rule("chat")), changed.told);
+    expect(gone.text).not.toContain("Write only the plan");
+    expect(renderBrief(id, briefed(rule("chat", "Write only the plan and the finish.")), gone.told).text).toContain(
+      "Write only the plan and the finish.",
+    );
   });
 
   // covers OR-004, IN-004
@@ -154,6 +213,8 @@ describe("a lead's briefing on a resumed session", () => {
     expect(again.text).toContain(SINCE_LAST_TURN);
     expect(again.text).toContain("Which colour?");
     expect(again.text).toContain("a note or message from the user is not an answer to them");
+    // So is how to report, while a question waits for the user (#1039).
+    expect(again.text).toContain("Tell the user only what your Task tools did in this turn");
     // Once it is answered it is no longer listed as waiting.
     expect(renderBrief(lead(tree).id, parts(tree), again.told).text).not.toContain("Which colour?");
   });
