@@ -73,19 +73,21 @@ describe("a lead's briefing over a Quest", () => {
 
   // covers OR-004
   it("[TC-OR-604] a lead whose session was compacted is told the whole Quest on its next wake", async () => {
-    // Claude Code compacts the lead's session in its first wake.
-    const firstWake = (prompt: string) => prompt.startsWith("Hobbots wrote this") && prompt.includes("Quill finished");
-    const party = partyHub({ compacts: firstWake });
+    const party = partyHub();
     dispose = party.dispose;
     const { run, requests } = party;
-    await run(send(["Ship the launch", ...delegated]));
-    const lead = () => requests.filter((each) => (each.briefing ?? "").includes("for this conversation:"));
+    // The runtime compacts the lead's session in its first wake, the turn after this one.
+    await run(send(["Ship the launch", ...delegated, "fake:then fake:compact"]));
+    const lead = () =>
+      requests.filter((each) => (each.briefing ?? "").includes("for this conversation:") && each.sessionId !== null);
     const turns = await run(
       waitUntil(Effect.sync(lead), (all) => all.length >= 2, { what: "the lead's wake after the compaction" }),
     );
     const [compacted, next] = turns;
-    expect(firstWake(compacted?.prompt ?? "")).toBe(true);
+    // The compacted wake was briefed as a resumed one; the session holds a summary of it after.
+    expect(compacted?.briefing).not.toContain(SINCE_LAST_TURN);
     // It holds a summary, not what it was told: the next wake is told the whole Quest again.
+    expect(next?.sessionId).toBe(compacted?.sessionId);
     expect(next?.briefing).not.toContain(SINCE_LAST_TURN);
     expect(next?.briefing).toContain("Quill finished its part");
   }, 30_000);
