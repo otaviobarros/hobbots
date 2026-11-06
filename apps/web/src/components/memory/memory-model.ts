@@ -355,7 +355,11 @@ export const shownLines = (lines: ReadonlyArray<MemoryChangedLine>): ReadonlyArr
 /** The parts of a search hit's snippet, the words that match the search marked. */
 export const hitParts = (snippet: string, q: string): ReadonlyArray<SnippetPart> => {
   // The words the search looked for, with `tide-check` marked as the snippet reads it, `tide` and `check`.
-  const terms = searchTerms(memorySearchTerms(q).join(" "));
+  const terms = searchTerms(
+    memorySearchTerms(q)
+      .map((term) => term.word)
+      .join(" "),
+  );
   return terms.length === 0
     ? [{ text: snippet, match: false }]
     : snippetOf(snippet, terms, Math.max(snippet.length, 1));

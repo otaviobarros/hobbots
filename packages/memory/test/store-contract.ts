@@ -196,6 +196,51 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
         }),
       ));
 
+    // covers ADR 028 (memory_search), #1047
+    it("[TC-GEN-1047-02] finds a page by a question in another language, the words common to every page weighing least", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          yield* store.write(
+            asPip,
+            theApp,
+            draft(
+              "fatos/testes.md",
+              "# Como este projeto roda os testes\n\nEste projeto roda os testes com `make tide-check`. Não use `npm test`.",
+            ),
+            fresh,
+          );
+          yield* store.write(
+            asPip,
+            theApp,
+            draft(
+              "fatos/recados.md",
+              "# Como falar com o time\n\nComo este time prefere: os recados curtos, como sempre, de manhã.",
+            ),
+            fresh,
+          );
+          yield* store.write(
+            asPip,
+            theApp,
+            draft("fatos/deploy.md", "# Como este projeto faz deploy\n\nO deploy sai de cada merge, como os outros."),
+            fresh,
+          );
+          const found = (query: string) =>
+            Effect.map(store.search(asPip, [theApp], query, 10), (hits) => hits.map((hit) => hit.path));
+          for (const query of [
+            "como este projeto roda os testes?",
+            "como rodar os testes",
+            "teste",
+            "nao use npm",
+            "tide-check",
+          ]) {
+            expect([query, (yield* found(query))[0]]).toEqual([query, "fatos/testes.md"]);
+          }
+          // A word of one or two letters matches only as a whole word.
+          expect(yield* found("ma")).toEqual([]);
+          expect((yield* found("o")).sort()).toEqual(["fatos/deploy.md", "fatos/recados.md"]);
+        }),
+      ));
+
     // covers ADR 028 (the hub is the boundary), #954
     it("[TC-GEN-174] never lets a hob touch another hob's memory or a project it does not work in, and leaves forget and restore to you", () =>
       run(({ store }) =>

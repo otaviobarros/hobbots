@@ -192,7 +192,7 @@ export const makeMemoryStoreFake = (): {
         const terms = memorySearchTerms(query);
         if (terms.length === 0) return [];
         // The snippet marks the words as the snippet reads them, `tide-check` as `tide` and `check`.
-        const marked = searchTerms(terms.join(" "));
+        const marked = searchTerms(terms.map((term) => term.word).join(" "));
         const hits: Array<MemoryHit & { readonly found: number; readonly updatedAt: string }> = [];
         for (const scope of inScopes) {
           for (const summary of summaries(scope)) {

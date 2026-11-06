@@ -193,15 +193,15 @@ const pagesRoute = (where: EngineProject) =>
   `workspaces/${encodeURIComponent(where.workspace)}/projects/${encodeURIComponent(where.project)}`;
 
 /**
- * A search's words as the plain query ai-memory takes (#1047): each word bare with a trailing `*`,
- * which ai-memory reads as a word or its start, and joins with OR, ranking pages that hold more of
- * them first. A quote would make ai-memory read the query as FTS5 syntax: it then keeps `"run"*` as
- * the exact word "run" and needs every word in one page. A word holds only letters, digits, `-` and
- * `_`, so nothing in it is FTS5 syntax, and ai-memory quotes a word with `-` or `_` itself.
+ * A search's words as the plain query ai-memory takes (#1047): each word bare, with a trailing `*`
+ * when it also matches the start of a longer word, which ai-memory joins with OR and ranks by bm25.
+ * A quote would make ai-memory read the query as FTS5 syntax: it then keeps `"run"*` as the exact
+ * word "run" and needs every word in one page. A word holds only letters, digits, `-` and `_`, so
+ * nothing in it is FTS5 syntax, and ai-memory quotes a word with `-` or `_` itself.
  */
 const ftsQuery = (query: string) =>
   memorySearchTerms(query)
-    .map((term) => `${term}*`)
+    .map((term) => (term.prefix ? `${term.word}*` : term.word))
     .join(" ");
 
 const plain = (snippet: string | undefined) => (snippet ?? "").replace(/<\/?mark>/g, "");
