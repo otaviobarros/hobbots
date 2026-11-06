@@ -57,6 +57,9 @@ const LONG = `Please ${Array.from({ length: 300 }, (_, i) => `word${i}`).join(" 
 const KEYS = "Enter sends · Shift+Enter adds a line · ↑ brings back your last message";
 
 const composerCard = (page: Page) => page.locator("[data-composer]");
+// The composer with what waits above it. Scans of a running reply look here: the streaming
+// transcript fades each new part in, so it never settles for a scan of the whole page.
+const composerArea = (page: Page) => composerCard(page).locator("..");
 const stopButton = (page: Page) => page.getByRole("button", { name: "■ Stop" });
 const waiting = (page: Page) => page.getByRole("region", { name: "Queued message" });
 
@@ -107,7 +110,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   expect(Math.round(stopBox?.height ?? 0)).toBe(Math.round(sendBox?.height ?? -1));
   expect((stopBox?.x ?? 0) < (sendBox?.x ?? 0)).toBe(true);
   await expect(composer).toBeFocused();
-  await scan();
+  await scan(composerArea(page));
 
   // With a draft: the hint says when it goes and Send lights up. Escape does not stop the reply.
   await composer.fill("Also check the hero image on phones");
@@ -115,7 +118,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   await expect(sendsAfter).toBeVisible();
   await expectOneLine(sendsAfter);
   await expect(sendAfter).toBeEnabled();
-  await scan(composerCard(page));
+  await scan(composerArea(page));
   await composer.press("Escape");
   await expect(stopButton(page)).toBeVisible();
   await expect(composer).toHaveValue("Also check the hero image on phones");
@@ -129,7 +132,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   const [rowBox, cardBox] = [await row.boundingBox(), await composerCard(page).boundingBox()];
   expect((rowBox?.y ?? 0) + (rowBox?.height ?? 0)).toBeLessThanOrEqual(cardBox?.y ?? 0);
   await expect(hint).toBeVisible();
-  await scan();
+  await scan(composerArea(page));
 
   // Stopping: Stopping… until the hob confirms, and the hint says what is kept.
   await composer.fill("a draft that stays");
@@ -138,7 +141,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   const stopping = composerCard(page).getByText("Stopping. What Moss wrote so far is kept.", { exact: true });
   await expect(stopping).toBeVisible();
   await expectOneLine(stopping);
-  await scan(composerCard(page));
+  await scan(composerArea(page));
 
   // The waiting message then joins the transcript as usual, and the draft is still there.
   await expect(page.getByText("Echo: Also check the hero image on phones", { exact: true })).toBeVisible({
@@ -248,7 +251,7 @@ test.describe("beside the Quest room", () => {
         await expect(page.getByRole("button", { name: "Send after this reply" }), at).toBeVisible();
         const [hintBox, stopBox] = [await short.boundingBox(), await stopButton(page).boundingBox()];
         expect((hintBox?.x ?? 0) + (hintBox?.width ?? 0), at).toBeLessThanOrEqual(stopBox?.x ?? 0);
-        await scan(chat);
+        await scan(composerArea(page));
       }
     }
   });
