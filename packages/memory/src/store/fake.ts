@@ -1,6 +1,5 @@
 import { guardMemoryStore, MemoryStore, type MemoryStoreShape } from "@hobbots/agents";
 import {
-  foldWord,
   type MemoryAuthor,
   type MemoryCaptureItem,
   type MemoryChangedLine,
@@ -18,7 +17,10 @@ import {
   MemoryVersion,
   memoryAuthorOf,
   memoryForgotten,
+  memorySearchTerms,
+  memoryTermsFound,
   memoryTitleOf,
+  memoryWordsOf,
   searchTerms,
   snippetOf,
 } from "@hobbots/domain";
@@ -77,8 +79,6 @@ const summaryOf = (sessionId: MemorySessionId, items: ReadonlyArray<MemoryCaptur
     "",
   ].join("\n");
 };
-
-const WORD = /[\p{L}\p{N}]+/gu;
 
 const scopeKey = (scope: MemoryScope) => {
   switch (scope._tag) {
@@ -189,25 +189,35 @@ export const makeMemoryStoreFake = (): {
   const store: MemoryStoreShape = {
     search: (_actor, inScopes, query, limit) =>
       Effect.map(up, () => {
-        const terms = searchTerms(query);
+        const terms = memorySearchTerms(query);
         if (terms.length === 0) return [];
-        const hits: Array<MemoryHit & { readonly updatedAt: string }> = [];
+        // The snippet marks the words as the snippet reads them, `tide-check` as `tide` and `check`.
+        const marked = searchTerms(terms.join(" "));
+        const hits: Array<MemoryHit & { readonly found: number; readonly updatedAt: string }> = [];
         for (const scope of inScopes) {
           for (const summary of summaries(scope)) {
             const page = pageOf(scope, summary.path) as MemoryPage;
             const text = `${summary.title}\n${page.markdown}\n${page.tags.join(" ")}`;
-            const words = (text.match(WORD) ?? []).map(foldWord);
-            if (!terms.every((term) => words.some((word) => word.startsWith(term)))) continue;
-            const snippet = snippetOf(text, terms)
+            const found = memoryTermsFound(memoryWordsOf(text), terms);
+            if (found === 0) continue;
+            const snippet = snippetOf(text, marked)
               .map((part) => part.text)
               .join("");
-            hits.push({ scope, path: summary.path, title: summary.title, snippet, updatedAt: summary.updatedAt });
+            hits.push({
+              scope,
+              path: summary.path,
+              title: summary.title,
+              snippet,
+              found,
+              updatedAt: summary.updatedAt,
+            });
           }
         }
+        // As ai-memory ranks them: the pages that hold more of the words first.
         return hits
-          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .sort((a, b) => b.found - a.found || b.updatedAt.localeCompare(a.updatedAt))
           .slice(0, limit)
-          .map(({ updatedAt: _, ...hit }) => hit);
+          .map(({ found: _, updatedAt: __, ...hit }) => hit);
       }),
     page: (_actor, scope, path) => Effect.map(up, () => pageOf(scope, path)),
     versionChanges: (_actor, scope, path, version) =>

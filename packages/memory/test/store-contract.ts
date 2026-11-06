@@ -151,6 +151,51 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
         }),
       ));
 
+    // covers ADR 028 (memory_search), #1047
+    it("[TC-GEN-1047-01] finds a page by a question in plain words, a word start or a hyphenated name, the page holding more of the words first", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          yield* store.write(
+            asPip,
+            theApp,
+            draft(
+              "facts/tests.md",
+              "# How this project runs its tests\n\nThis project runs its tests with `make tide-check`.",
+            ),
+            fresh,
+          );
+          yield* store.write(
+            asPip,
+            theApp,
+            draft("facts/deploy.md", "# Deploy\n\nThe project deploys on merge."),
+            fresh,
+          );
+          const found = (query: string) =>
+            Effect.map(store.search(asPip, [theApp], query, 10), (hits) => hits.map((hit) => hit.path));
+          for (const query of [
+            "tests",
+            "make",
+            "how this project runs its tests",
+            "how does this project run its tests",
+            "how this repository runs its tests",
+            "run tests",
+            "tes",
+            "tide",
+            "tide-check",
+            "Tide-Check?",
+          ]) {
+            expect([query, (yield* found(query))[0]]).toEqual([query, "facts/tests.md"]);
+          }
+          // A word that ends the page's word, and words no page holds, find nothing.
+          expect(yield* found("check")).toEqual([]);
+          expect(yield* found("lint rules")).toEqual([]);
+          // A query of nothing but common words still looks for them.
+          expect(yield* found("how")).toEqual(["facts/tests.md"]);
+          expect((yield* found("deploys")).sort()).toEqual(["facts/deploy.md"]);
+          expect((yield* found("project")).sort()).toEqual(["facts/deploy.md", "facts/tests.md"]);
+        }),
+      ));
+
     // covers ADR 028 (the hub is the boundary), #954
     it("[TC-GEN-174] never lets a hob touch another hob's memory or a project it does not work in, and leaves forget and restore to you", () =>
       run(({ store }) =>
@@ -462,7 +507,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             fresh,
           );
           expect((yield* store.list(asPip, pipsOwn, 50)).map((page) => page.path)).toEqual([path]);
-          expect(yield* store.search(asPip, [pipsOwn], "old launch", 10)).toEqual([]);
+          expect((yield* store.search(asPip, [pipsOwn], "old launch", 10)).map((hit) => hit.path)).toEqual([path]);
           expect(yield* store.page(you, pipsOwn, MemoryPath.make("notes/old.md"))).toMatchObject({
             forgetOn: "2000-01-01",
           });

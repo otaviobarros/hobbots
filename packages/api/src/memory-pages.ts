@@ -123,7 +123,7 @@ export class MemoryPagesGroup extends HttpApiGroup.make("memoryPages")
     }),
   )
   .add(
-    // Pages that mention every word of `q`, in one scope or, without `scope`, in all of them.
+    // Pages that mention any word of `q`, those holding more first, in one scope or, without `scope`, in all of them.
     HttpApiEndpoint.get("search", "/memory/search", {
       query: {
         q: Schema.String.check(Schema.isMaxLength(200)),

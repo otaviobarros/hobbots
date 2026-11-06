@@ -20,6 +20,7 @@ export * from "./local-git.ts";
 export * from "./look.ts";
 export * from "./memory.ts";
 export * from "./memory-engine.ts";
+export * from "./memory-search.ts";
 export * from "./memory-settings.ts";
 export * from "./memory-shares.ts";
 export * from "./memory-tools.ts";

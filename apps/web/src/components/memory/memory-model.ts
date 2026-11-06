@@ -14,6 +14,7 @@ import {
   memoryKindOf,
   memoryScopeKey,
   memoryScopeOfKey,
+  memorySearchTerms,
   type SnippetPart,
   sameMemoryScope,
   searchTerms,
@@ -353,7 +354,8 @@ export const shownLines = (lines: ReadonlyArray<MemoryChangedLine>): ReadonlyArr
 
 /** The parts of a search hit's snippet, the words that match the search marked. */
 export const hitParts = (snippet: string, q: string): ReadonlyArray<SnippetPart> => {
-  const terms = searchTerms(q);
+  // The words the search looked for, with `tide-check` marked as the snippet reads it, `tide` and `check`.
+  const terms = searchTerms(memorySearchTerms(q).join(" "));
   return terms.length === 0
     ? [{ text: snippet, match: false }]
     : snippetOf(snippet, terms, Math.max(snippet.length, 1));
