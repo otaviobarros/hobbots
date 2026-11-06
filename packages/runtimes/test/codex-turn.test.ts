@@ -16,7 +16,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { SANDBOX_NOTE } from "../src/claude-code.ts";
 import type { AppServer, AppServerNotification } from "../src/codex/app-server.ts";
 import type { ChatGptTokens } from "../src/codex/auth.ts";
-import { codexTurnEvents, LOST_CALL, LOST_TURN } from "../src/codex/events.ts";
+import { codexTurnEvents, commandsEndedNotice, LOST_CALL, LOST_TURN } from "../src/codex/events.ts";
 import { notOffered } from "../src/codex/hub-tools.ts";
 import {
   CODEX_MODEL_HOSTS,
@@ -655,6 +655,270 @@ describe("reading a Codex turn", () => {
       ],
       error: new RuntimeError({ message: LOST_TURN }),
     });
+  });
+});
+
+describe("a Codex command that outlives its turn (#1048)", () => {
+  const TURN_2 = "turn-2";
+  const inTurn = (turnId: string, method: string, params: Record<string, unknown>) =>
+    ({ method, params: { threadId: THREAD, turnId, ...params } }) as AppServerNotification;
+  const commandItem = (id: string, fields: Record<string, unknown> = {}) => ({
+    type: "commandExecution",
+    id,
+    command: "/bin/bash -lc 'sleep 15'",
+    cwd: "/w",
+    status: "inProgress",
+    aggregatedOutput: null,
+    exitCode: null,
+    ...fields,
+  });
+  const commandEnds = (id: string, exitCode: number, output: string) =>
+    item(
+      "item/completed",
+      commandItem(id, { status: exitCode === 0 ? "completed" : "failed", aggregatedOutput: output, exitCode }),
+    );
+  const followUpTurn = (text: string) => [
+    inTurn(TURN_2, "turn/started", { turn: { id: TURN_2 } }),
+    inTurn(TURN_2, "item/completed", { item: { type: "agentMessage", id: "m2", text } }),
+    {
+      method: "turn/completed",
+      params: { threadId: THREAD, turn: { id: TURN_2, items: [], status: "completed", error: null } },
+    } as AppServerNotification,
+  ];
+
+  /** A turn whose policy allows commands, with a stand-in sandbox around Codex. */
+  const toolsSetup = async (server: ReturnType<typeof fakeServer>) => {
+    const root = realpathSync(mkdtempSync(join(temp, "outlived-")));
+    const project = join(root, "project");
+    mkdirSync(project);
+    const binary = join(root, "codex");
+    writeFileSync(binary, "");
+    const engine = await Effect.runPromise(Effect.service(PolicyEngine).pipe(Effect.provide(PolicyEngine.node)));
+    const sandbox: ProcessSandboxShape = {
+      state: "on",
+      evidence: "a stand-in sandbox",
+      prepare: () => Effect.succeed({ spawnArgs: (command, args, env) => ({ command, args, env }), release: () => {} }),
+    };
+    const tools = {
+      policy: {
+        preset: "balanced",
+        sharedFolders: [project],
+        hob: EMPTY_HOB_POLICY,
+        dataFolder: join(root, "data"),
+        restrictions: [],
+      },
+      folders: [project],
+      runtimeFolder: join(root, "runtimes", "hob-1"),
+      commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
+    } as const;
+    const turnConfig: CodexTurnConfig = {
+      ...config(server.start),
+      binary: Effect.succeed(binary),
+      policy: { engine, sandboxState: "on", sandbox },
+    };
+    return { turnConfig, request: prompt({ tools }) };
+  };
+  const toolsTurn = async (server: ReturnType<typeof fakeServer>) => {
+    const { turnConfig, request } = await toolsSetup(server);
+    return run(turnConfig, request);
+  };
+  const runs = (itemId: string, command = "sleep 15") => ({
+    method: "item/commandExecution/requestApproval",
+    params: {
+      threadId: THREAD,
+      turnId: TURN,
+      kind: "command",
+      itemId,
+      command: `/bin/bash -lc '${command}'`,
+      cwd: null,
+    },
+  });
+  const runsSleep = runs("c1");
+
+  // regression for #1048
+  it("[TC-RT-1048-01] waits for the command, records its real exit code and tells the hob in a follow-up turn", async () => {
+    const server = fakeServer({
+      asks: [runsSleep],
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/started", commandItem("c1")),
+        // Codex's wait for the call ended first: the hob replied while the command still ran.
+        message("m1", "Done."),
+        completed("completed"),
+        commandEnds("c1", 0, "slept\n"),
+      ],
+      followUps: [followUpTurn("It finished after all.")],
+    });
+    const exit = await toolsTurn(server);
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const seen = events(exit);
+    expect(seen.find((event) => event._tag === "ToolFinished")).toEqual({
+      _tag: "ToolFinished",
+      id: "c1",
+      failed: false,
+      output: "slept\n",
+      exitCode: 0,
+    });
+    expect(seen.at(-1)).toMatchObject({ _tag: "Completed", text: "Done.\n\nIt finished after all." });
+    // The follow-up turn tells the hob how the command really ended.
+    const turns = server.requests.filter((request) => request.method === "turn/start");
+    expect(turns).toHaveLength(2);
+    expect(turns[1]?.params).toMatchObject({
+      threadId: THREAD,
+      input: [
+        {
+          type: "text",
+          text: commandsEndedNotice([{ command: "sleep 15", failed: false, exitCode: 0, output: "slept\n" }], 0),
+        },
+      ],
+    });
+  });
+
+  // regression for #1048
+  it("[TC-RT-1048-02] ends with no follow-up when every command ended inside the turn", async () => {
+    const server = fakeServer({
+      asks: [runsSleep],
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/started", commandItem("c1")),
+        commandEnds("c1", 2, "boom\n"),
+        message("m1", "It failed."),
+        completed("completed"),
+      ],
+    });
+    const exit = await toolsTurn(server);
+    expect(events(exit).find((event) => event._tag === "ToolFinished")).toMatchObject({ failed: true, exitCode: 2 });
+    expect(events(exit).at(-1)).toMatchObject({ _tag: "Completed", text: "It failed." });
+    expect(server.requests.filter((request) => request.method === "turn/start")).toHaveLength(1);
+  });
+
+  // regression for #1048
+  it("[TC-RT-1048-04] reports each of two outlived commands as it ends, saying how many still run", async () => {
+    const turn3 = "turn-3";
+    const server = fakeServer({
+      asks: [runs("c1"), runs("c2", "make build")],
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/started", commandItem("c1")),
+        item("item/started", commandItem("c2", { command: "/bin/bash -lc 'make build'" })),
+        message("m1", "Started both."),
+        completed("completed"),
+        commandEnds("c1", 0, "slept\n"),
+      ],
+      followUps: [
+        [...followUpTurn("Sleep is done."), commandEnds("c2", 2, "error\n")],
+        [
+          inTurn(turn3, "turn/started", { turn: { id: turn3 } }),
+          inTurn(turn3, "item/completed", { item: { type: "agentMessage", id: "m3", text: "The build failed." } }),
+          {
+            method: "turn/completed",
+            params: { threadId: THREAD, turn: { id: turn3, items: [], status: "completed", error: null } },
+          } as AppServerNotification,
+        ],
+      ],
+    });
+    const exit = await toolsTurn(server);
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const finished = events(exit).filter((event) => event._tag === "ToolFinished");
+    expect(finished).toEqual([
+      expect.objectContaining({ id: "c1", failed: false, exitCode: 0 }),
+      expect.objectContaining({ id: "c2", failed: true, exitCode: 2 }),
+    ]);
+    const notices = server.requests
+      .filter((request) => request.method === "turn/start")
+      .slice(1)
+      .map((request) => JSON.stringify(request.params));
+    expect(notices).toHaveLength(2);
+    expect(notices[0]).toContain("`sleep 15` exited with code 0.");
+    expect(notices[0]).toContain("1 other command is still running.");
+    expect(notices[1]).toContain("`make build` exited with code 2.");
+    expect(notices[1]).not.toContain("still running");
+    expect(events(exit).at(-1)).toMatchObject({
+      _tag: "Completed",
+      text: "Started both.\n\nSleep is done.\n\nThe build failed.",
+    });
+  });
+
+  // regression for #1048
+  it("[TC-RT-1048-05] cancelling during a follow-up turn interrupts that turn and ends once Codex acknowledges it", async () => {
+    const server = fakeServer({
+      asks: [runsSleep],
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/started", commandItem("c1")),
+        message("m1", "Done."),
+        completed("completed"),
+        commandEnds("c1", 0, "slept\n"),
+      ],
+      // The follow-up turn never completes by itself.
+      followUps: [[inTurn(TURN_2, "turn/started", { turn: { id: TURN_2 } })]],
+    });
+    const { turnConfig, request } = await toolsSetup(server);
+    let stoppedAfter = Number.POSITIVE_INFINITY;
+    const seen = await Effect.runPromise(
+      Effect.gen(function* () {
+        const collected: Array<RuntimeEvent> = [];
+        const fiber = yield* runCodexTurn(turnConfig, request).pipe(
+          Stream.runForEach((event) => Effect.sync(() => collected.push(event))),
+          Effect.forkChild,
+        );
+        yield* Effect.sleep("10 millis").pipe(
+          Effect.repeat({
+            until: () => server.requests.filter((asked) => asked.method === "turn/start").length === 2,
+          }),
+        );
+        const before = Date.now();
+        yield* Fiber.interrupt(fiber);
+        stoppedAfter = Date.now() - before;
+        return collected;
+      }),
+    );
+    expect(server.requests.find((asked) => asked.method === "turn/interrupt")?.params).toEqual({
+      threadId: THREAD,
+      turnId: TURN_2,
+    });
+    // Ended on the follow-up turn's own acknowledgement, well inside the 10-second grace period.
+    expect(stoppedAfter).toBeLessThan(2_000);
+    // The command's real end was recorded before the cancel; the reply never completed.
+    expect(seen.find((event) => event._tag === "ToolFinished")).toMatchObject({ id: "c1", exitCode: 0 });
+    expect(seen.some((event) => event._tag === "Completed")).toBe(false);
+  });
+
+  it("names each ended command, how it ended and the end of its output, and how many still run", () => {
+    const notice = commandsEndedNotice(
+      [
+        { command: "make build", failed: true, exitCode: 2, output: `${"x".repeat(3000)}\nerror: missing\n` },
+        { command: "kill-me", failed: true, exitCode: undefined, output: "" },
+      ],
+      1,
+    );
+    expect(notice).toContain("- `make build` exited with code 2.");
+    expect(notice).toContain("  error: missing");
+    // Only the end of a long output is repeated.
+    expect(notice).not.toContain("x".repeat(2100));
+    expect(notice).toContain("- `kill-me` failed.");
+    expect(notice).toContain("1 other command is still running.");
+  });
+
+  it("follows a follow-up turn's notifications and an outlived command's end from the turn it ran in", () => {
+    const read = codexTurnEvents(THREAD);
+    read.follow(TURN);
+    read.started("c1");
+    read.map(item("item/started", commandItem("c1")));
+    expect(read.map(completed("completed")).end).toEqual({ _tag: "Completed" });
+    expect(read.afterTurn()).toEqual({ notice: null, waiting: true });
+    // A turn Hobbots did not ask for is left out; one it asked for counts before Codex names it.
+    expect(read.map(inTurn(TURN_2, "item/agentMessage/delta", { itemId: "m2", delta: "x" })).events).toEqual([]);
+    const step = read.map(commandEnds("c1", 0, "ok"));
+    expect(step.commandEnded).toBe(true);
+    expect(read.afterTurn()).toEqual({
+      notice: commandsEndedNotice([{ command: "sleep 15", failed: false, exitCode: 0, output: "ok" }], 0),
+      waiting: false,
+    });
+    read.expect();
+    expect(read.map(inTurn(TURN_2, "item/agentMessage/delta", { itemId: "m2", delta: "x" })).events).toEqual([
+      { _tag: "TextDelta", text: "x" },
+    ]);
   });
 });
 

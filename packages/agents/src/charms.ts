@@ -1,4 +1,4 @@
-import type { AgentId, MessageId, ThreadId } from "@hobbots/domain";
+import type { AgentId, AttemptId, MessageId, ThreadId } from "@hobbots/domain";
 import { Context, Effect, Option, Schema, type Scope } from "effect";
 import { MemoryTools } from "./memory.ts";
 import type { HubToolAnswer, HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
@@ -10,6 +10,8 @@ export interface CharmTurn {
   /** The thread and reply the turn writes, so a Charm call's record names the step it showed as. */
   readonly threadId: ThreadId | null;
   readonly messageId: MessageId | null;
+  /** The Attempt a turn outside any chat runs as, so a call it makes names the session it belongs to (#1049). */
+  readonly attemptId?: AttemptId;
   /** The work the turn's call keys belong to now (#660), from `callScope`, as its Task tools key theirs. */
   readonly scope: () => string;
   /** Another scope a retry of a key is found in: the turn's reply, as for its Task tools. */

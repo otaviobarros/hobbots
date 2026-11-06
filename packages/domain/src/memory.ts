@@ -283,6 +283,11 @@ export interface MemoryCaptureItem {
   readonly kind: "start" | "message" | "reply" | "tool" | "quest";
   /** Already redacted. */
   readonly text: string;
+  /**
+   * When it happened (ISO 8601), so an item sent late, as after an outage, keeps its own time and not
+   * the time it reached memory. Absent, memory stamps it as it arrives.
+   */
+  readonly at?: string;
 }
 
 /**
