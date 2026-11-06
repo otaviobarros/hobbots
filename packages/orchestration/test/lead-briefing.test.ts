@@ -222,7 +222,7 @@ describe("a lead's briefing on a resumed session", () => {
 
 describe("a result that arrives with a lead's turn", () => {
   // covers OR-004, OR-005
-  it("[TC-OR-606] is told in the briefing alone, whole up to the result limit, and once", () => {
+  it("[TC-OR-622] is told in the briefing alone, whole up to the result limit, and once", () => {
     const before = finishedBy(1);
     const told = renderBrief(lead(before).id, parts(before), null).told;
     const tree = finishedBy(2);
