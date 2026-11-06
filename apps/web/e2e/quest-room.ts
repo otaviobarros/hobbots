@@ -3,11 +3,11 @@ import type { Locator, Page } from "@playwright/test";
 const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
- * The ticket under the request with this title (ADR 027): one button, named for the Quest and where
- * it stands, which stays there whether the work runs or has ended.
+ * The ticket under the request with this title (ADR 027): one button, named by what it shows (the
+ * Quest, where it stands, then Open room), which stays there whether the work runs or has ended.
  */
 export const ticket = (page: Page, title: string): Locator =>
-  page.getByRole("button", { name: new RegExp(`^Open the ${literal(title)} room: `) });
+  page.getByRole("button", { name: new RegExp(`^${literal(title)}: .*Open room$`) });
 
 /** Opens a request's Quest room with its ticket in the chat, and gives back the room. */
 export const openRoom = async (page: Page, title: string): Promise<Locator> => {

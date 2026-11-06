@@ -88,7 +88,10 @@ function WaitingRow({
       <StatusDot status={tone} />
       {owners && <HobSprite hob={owner} size={18} />}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-detail">{waitingWhat(item, (id) => hobs(id).name)}</span>
+        {/* A handled item reads quieter, in a colour that keeps its contrast rather than by fading. */}
+        <span className={cn("truncate text-detail", item.state === "resolved" && "text-text-secondary")}>
+          {waitingWhat(item, (id) => hobs(id).name)}
+        </span>
         <span className="truncate text-meta text-label">
           {owners && `${copy.awaiting({ name: owner.name })} · `}
           <time dateTime={item.createdAt}>{copy.since({ since: formatWhen(item.createdAt, now) })}</time>
@@ -101,7 +104,7 @@ function WaitingRow({
     </>
   );
   return (
-    <div className={cn("flex flex-col", item.state === "resolved" && "opacity-70")}>
+    <div className="flex flex-col">
       {/* An item about a Task opens it; one about none, such as your note, is only shown. */}
       {item.taskId === null ? (
         <div className={ROW}>{body}</div>

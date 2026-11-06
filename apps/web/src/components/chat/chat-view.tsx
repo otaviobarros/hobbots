@@ -259,8 +259,9 @@ export function ChatView({
         >
           <HobSprite hob={current} size={40} state={state} badge />
         </Link>
-        {/* The title keeps its room when the quest button crowds the header. */}
-        <div className="flex min-w-[120px] flex-1 flex-col overflow-hidden">
+        {/* The title keeps its room when the quest button crowds the header, and gives it up in a
+            column beside the Quest room, where the buttons need it. */}
+        <div className="flex min-w-[120px] flex-1 flex-col overflow-hidden @max-[340px]/header:min-w-0">
           <ChatTitle thread={thread.data} title={title} renaming={renaming} onDone={() => setRenaming(false)} />
           <span className="truncate text-detail text-text-secondary">
             <Link

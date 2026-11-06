@@ -132,7 +132,7 @@ export const messages = {
     lead: ({ lead, party }: { lead: string; party: number }) =>
       plural(party, { one: `${lead}'s quest`, other: `${lead}'s quest · ${formatCount(party)} hobs` }),
     chats: ({ chats }: { chats: number }) => plural(chats, { one: "1 chat", other: `${formatCount(chats)} chats` }),
-    note: "A reply counts for a quest when it was written in the quest's chat while the quest ran. Each share is its part of every token your providers reported for chat replies in the period, so the shares add up to 100%. Task steps aren't counted yet.",
+    note: "A reply counts for a quest when it was written in the quest's chat while the quest ran, and so does every turn a party member or a step ran on its Tasks. Each share is its part of every token your providers reported in the period, so the shares add up to 100%.",
   },
   tips: {
     label: "Ways to make it last",
@@ -146,5 +146,5 @@ export const messages = {
     fresh: "Start a new chat for a new topic",
     freshWhy: "Every reply reads its whole chat again, so a long chat uses more with each reply.",
   },
-  note: "Each share is the hob's part of every token your providers reported for chat replies in the period, cache reads included, so the shares add up to 100%. Task steps aren't counted yet.",
+  note: "Each share is the hob's part of every token your providers reported in the period, for its chat replies and its turns on Tasks and steps, cache reads included, so the shares add up to 100%.",
 };

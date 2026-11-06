@@ -6,6 +6,16 @@ export const messages = {
   lane: ({ name }: { name: string }) => `${name}'s lane`,
   party: ({ name }: { name: string }) => `${name}'s party`,
   show: ({ name }: { name: string }) => `Show ${name}'s work in the Workbench`,
+  /**
+   * What a screen reader hears between the parts of a lane's header, which the eye gets from the
+   * layout, and what the header does after them.
+   */
+  said: {
+    role: ", ",
+    title: ": ",
+    state: ", ",
+    show: ({ name }: { name: string }) => `. Show ${name}'s work in the Workbench`,
+  },
   lineup: "The party",
   jump: ({ name, state }: { name: string; state: string }) => `Go to ${name}'s lane, ${state}`,
   jumpTitle: ({ name, state }: { name: string; state: string }) => `${name} · ${state}`,

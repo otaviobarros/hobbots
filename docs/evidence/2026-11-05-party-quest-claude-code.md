@@ -5,7 +5,7 @@
 - **Pull request:** [#1025](https://github.com/otaviobarros/hobbots/pull/1025)
 - **Commit:** `da6501f` on `main`, which holds `e1cf987` ([#1017](https://github.com/otaviobarros/hobbots/pull/1017)), `c99ca96` ([#1019](https://github.com/otaviobarros/hobbots/pull/1019)) and `2e1f63d` ([#1022](https://github.com/otaviobarros/hobbots/pull/1022))
 - **Setup:** Apple silicon Mac, arm64, an ad hoc signed `pnpm package:mac` build started with a new data folder (`--user-data-dir`) and `HOBBOTS_MODE=hub`, never the Mac's Hobbots data, with opening at login off. Claude Code 2.1.316 on a signed-in subscription. Five hobs, all on Claude Code with the `haiku` model, under the Balanced preset, with one approved folder. ai-memory as bundled, with the default memory model. The run was driven through the app's own window.
-- **Result:** Passed with gaps. Usage counts every member's turns under its own name, a turn woken again by a background command counts both runs, and every token figure matches the Claude Code transcripts. Each member's Attempt became a session page in its own memory. The Quest's commit step did not finish, because the Mac has no Git identity and a hob cannot set one.
+- **Result:** Passed with gaps. Usage counts every member's turns under its own name, a turn woken again by a background command counts both runs, and every token figure matches the Claude Code transcripts. Each member's Attempt became a session page in its own memory, but that page leaves out the messages that woke the member, such as the answers to its questions. The Quest's commit step did not finish, because the Mac has no Git identity and a hob cannot set one.
 
 ## The Quest
 
@@ -33,10 +33,10 @@ One message to Frodo (the lead) asked for a small Python CLI, "Tide Table", in t
 ## Findings
 
 - A hob is told to ask who to commit as when no Git identity is set, but no answer lets it commit: it cannot set an identity, and Hobbots does not set one for it. Six of the eight questions in the run were about this.
-- Nettle's session summary says the lead's answer never arrived, while the hub shows all three of its questions answered.
-- Usage's note under Who used what still says Task steps aren't counted yet, which #1017 changed.
+- Nettle's session summary says the lead's answer never arrived, while the hub shows all three of its questions answered. A member's session holds only its Task's goal, its tool steps and its replies: the messages that wake it, answers included, never reach it, so none of the answers are among Nettle's 35 observations.
+- Usage's notes still said Task steps aren't counted yet, which #1017 changed. This pull request rewords them.
 - Eight Task tool calls were refused, each for a reason the hub states: `wait_for` on the hob's own question id (Rook and Nettle), a milestone name that did not match (Frodo), and `complete_task` with milestones, children or items still open (Nettle and Pip).
-- ai-memory logged 106 warnings for a workspace or project not found. Whether these are lookups of scopes with no pages yet was not checked.
+- ai-memory logged 106 warnings for a workspace or project not found. Whether these are lookups of scopes with no pages yet was not checked. They were: see [#1032](https://github.com/otaviobarros/hobbots/issues/1032).
 
 ## Gaps
 
