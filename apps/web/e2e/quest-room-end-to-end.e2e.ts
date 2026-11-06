@@ -40,6 +40,7 @@ const idle = (page: Page) => expect(page.getByRole("button", { name: /Stop/ })).
 // covers OR-001, OR-004, UX-001, UX-002, IN-002
 test("[TC-UX-290] the nested Black Friday Quest is followed from the room alone, with Ada's question answered in her lane, until Aldric reports it done", async ({
   page,
+  scan,
 }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -62,6 +63,7 @@ test("[TC-UX-290] the nested Black Friday Quest is followed from the room alone,
   await expect(asks).toContainText("Should international orders get an earlier cutoff", { timeout: 30_000 });
   await expect(asks).toContainText("Passed up by Ada → Aldric → you");
   await expect(room).toContainText("1 needs you");
+  await scan();
   await asks.getByRole("textbox", { name: "Your answer to Ada" }).fill("Yes, Dec 12 for international orders.");
   await asks.getByRole("button", { name: "Send answer" }).click();
   await expect(asks).toBeHidden();
@@ -71,12 +73,14 @@ test("[TC-UX-290] the nested Black Friday Quest is followed from the room alone,
   await expect(laneHead(page, "Ada")).toContainText("Done", { timeout: 30_000 });
   await expect(ticket(page, TITLE)).toContainText("Finished in", { timeout: 30_000 });
   await expect(chat(page)).toContainText("The Black Friday campaign is ready.", { timeout: 30_000 });
+  await scan();
   await expect(room).toBeVisible();
 });
 
 // covers OR-006, EX-001, UX-001
 test("[TC-UX-291] from the room, one failed Task is retried and the other is given to another hob, and nothing is left waiting on you", async ({
   page,
+  scan,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   stop = stopQuestHub;
@@ -109,6 +113,7 @@ test("[TC-UX-291] from the room, one failed Task is retried and the other is giv
   await expect(
     page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Inbox/ }),
   ).not.toHaveAccessibleName(/waiting on you/);
+  await scan();
 });
 
 /** A prompt line that makes the fake run a command, with what it prints and how it exits. */
@@ -117,6 +122,7 @@ const run = (input: object) => `fake:run ${JSON.stringify(input)}`;
 // covers OR-001, OR-002, OR-007, UX-002, UX-006
 test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its receipt, and its Workbench is filtered by lane and by try with the Terminal split by hob", async ({
   page,
+  scan,
 }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -194,6 +200,7 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
     /Passed it to Ada$/,
   ]);
   await expect(notes("Ada").getByRole("listitem")).toHaveText([/Your note, via Aldric$/]);
+  await scan();
   await idle(page);
 
   // The docked Workbench, unfiltered: the Terminal has a tab per hob that ran a command, and Split
@@ -215,6 +222,7 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
   await expect(rows(adaTerminal)).toContainText("built the landing page");
   const [left, right] = [await aldricTerminal.boundingBox(), await adaTerminal.boundingBox()];
   expect(left !== null && right !== null && left.x + left.width <= right.x + 1 && left.y === right.y).toBe(true);
+  await scan();
 
   // Unfiltered, Changes lists Aldric's work and not the copy Quill's failed try wrote.
   const changesTab = bench.getByRole("tab", { name: /^Changes/ });
@@ -243,6 +251,7 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
   await expect(tries.getByRole("button", { name: "Attempt 1, failed" })).toHaveAttribute("aria-pressed", "true");
   await expect(changed.getByRole("button")).toHaveText([/^copy\.md/]);
   await expect(room).toBeVisible();
+  await scan();
 });
 
 const themeIds: readonly string[] = (
@@ -254,6 +263,7 @@ const themeIds: readonly string[] = (
 // covers UX-002, UX-006
 test("[TC-UX-293] the room holds up in all four themes at 1280, 1024 and 960 px, with no sideways scroll and the chat column as each width sets it", async ({
   page,
+  scan,
 }) => {
   test.setTimeout(120_000);
   expect(themeIds).toHaveLength(4);
@@ -314,6 +324,7 @@ test("[TC-UX-293] the room holds up in all four themes at 1280, 1024 and 960 px,
         };
       });
       expect(overflow, at).toEqual({ by: 0, sticking: [] });
+      await scan();
     }
   }
 });
