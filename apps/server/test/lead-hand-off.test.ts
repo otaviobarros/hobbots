@@ -29,7 +29,7 @@ const DUTY = "never hand a Task what the Tasks it comes after returned";
 
 describe("a lead that follows the hand-off rule", () => {
   // covers OR-003, OR-005
-  it("[TC-OR-218] Aldric, told the rule on Quill's result, hands core.py to Rook, who asked for it while running, and Rook completes from it", async () => {
+  it("[TC-OR-218] Aldric, told the rule by Quill's result, hands core.py to Rook, who asked for it while running, and Rook completes from it", async () => {
     const { run, requests, release } = await startHub(await sharedDatabase(), [
       {
         on: "(Write the backend) finished",
@@ -81,9 +81,17 @@ describe("a lead that follows the hand-off rule", () => {
     await run(HobLifecycle.use((lifecycle) => lifecycle.wake(ROOK)));
     const done = await run(settledTree((tree) => tree.tasks[0]?.state === "completed"));
 
-    // The turn Aldric handed off from was told the rule, in the member's words.
-    const leadTurn = requests.find((each) => each.prompt.includes("(Write the backend) finished"));
-    expect(`${leadTurn?.briefing ?? ""}\n${leadTurn?.prompt ?? ""}`).toContain(RULE);
+    // The session Aldric handed off from was told the rule, in the member's words, on that turn or an
+    // earlier one: it keeps its rules once told (#1039).
+    const leadAt = requests.findIndex((each) => each.prompt.includes("(Write the backend) finished"));
+    const leadSession = requests[leadAt]?.sessionId;
+    expect(leadAt).toBeGreaterThanOrEqual(0);
+    expect(
+      requests
+        .slice(0, leadAt + 1)
+        .filter((each) => each.sessionId === leadSession || each.sessionId === null)
+        .some((each) => `${each.briefing ?? ""}\n${each.prompt}`.includes(RULE)),
+    ).toBe(true);
     const rook = taskOf(done, ROOK);
     const [first, resumed] = promptsTo(requests, rook);
     expect(first?.prompt).toContain(RULE);
