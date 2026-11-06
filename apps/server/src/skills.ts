@@ -103,8 +103,9 @@ const rollOutAll = (
   announce: (entries: Committed<unknown>["entries"]) => Effect.Effect<void>,
   skillId: SkillId,
   pin: SkillRevisionHash,
+  when: "pending" | "always",
 ) =>
-  library.rollOutRevision(skillId, pin, YOU).pipe(
+  library.rollOutRevision(skillId, pin, YOU, when).pipe(
     Effect.tap((committed) => announce(committed.entries)),
     Effect.map((committed) => committed.value),
   );
@@ -224,10 +225,10 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
             .pipe(Effect.mapError(importError));
           const [one] = added;
           if (one === undefined) return yield* new SkillMissing({ id: skill.id });
-          // Your edit rolls out to every assignment that is not held. Saving it again finishes a rollout
-          // the hub stopped in the middle of; content rolled out before, or older than the newest, moves none.
-          const pending = one.revision.rolledOutAt === null && one.skill.latest === one.revision.hash;
-          const rolledOut = pending ? yield* missing(rollOutAll(library, announce, skill.id, one.revision.hash)) : [];
+          // Your edit rolls out to every assignment that is not held. Whether it still may is decided inside
+          // the rollout's transaction: saving it again finishes a rollout the hub stopped in the middle of,
+          // and content already rolled out, or no longer the newest, moves none, so a rollback stays.
+          const rolledOut = yield* missing(rollOutAll(library, announce, skill.id, one.revision.hash, "pending"));
           return { ...one, rolledOut };
         }),
       rollOut: ({ params, payload }) =>
@@ -235,7 +236,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           const skill = yield* skillOf(params.skillId);
           if ((yield* library.revision(skill.id, payload.pin)) === null)
             return yield* new SkillMissing({ id: payload.pin });
-          return { rolledOut: yield* rollOutAll(library, announce, skill.id, payload.pin).pipe(missing) };
+          return { rolledOut: yield* rollOutAll(library, announce, skill.id, payload.pin, "always").pipe(missing) };
         }),
       assign: ({ params, payload }) =>
         Effect.gen(function* () {

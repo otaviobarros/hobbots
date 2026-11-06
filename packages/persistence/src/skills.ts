@@ -427,10 +427,18 @@ export const SkillLibraryLive = Layer.effect(
             return { value: assignment, events: [{ _tag: "SkillRolledOut", assignment, from: before.pin }] };
           }),
         ),
-      rollOutRevision: (skillId, pin, by) =>
+      rollOutRevision: (skillId, pin, by, when) =>
         change<ReadonlyArray<SkillAssignment>, SkillNotFound | SqlError.SqlError>((first) =>
           Effect.gen(function* () {
             yield* knownPin(skillId, pin);
+            // A save's own rollout claims the revision first, in this transaction: only the newest,
+            // never rolled out, so a second save of it, or one after a rollback, moves nothing.
+            const claimed = yield* sql<{
+              readonly hash: string;
+            }>`UPDATE skill_revisions SET rolled_out_at = ${yield* now}
+              WHERE skill_id = ${skillId} AND hash = ${pin} AND rolled_out_at IS NULL
+                AND hash = (SELECT latest FROM skills WHERE id = ${skillId}) RETURNING hash`;
+            if (when === "pending" && claimed.length === 0) return { value: [], events: [] };
             const moved: Array<SkillAssignment> = [];
             const events: Array<JournaledEvent> = [];
             for (const before of yield* assignmentsOf(skillId)) {
@@ -445,8 +453,10 @@ export const SkillLibraryLive = Layer.effect(
               moved.push(assignment);
               events.push({ _tag: "SkillRolledOut", assignment, from: before.pin });
             }
-            yield* sql`UPDATE skill_revisions SET rolled_out_at = ${yield* now}
-              WHERE skill_id = ${skillId} AND hash = ${pin}`;
+            if (claimed.length === 0) {
+              yield* sql`UPDATE skill_revisions SET rolled_out_at = COALESCE(rolled_out_at, ${yield* now})
+                WHERE skill_id = ${skillId} AND hash = ${pin}`;
+            }
             return { value: moved, events };
           }),
         ),

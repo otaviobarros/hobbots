@@ -135,8 +135,8 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
           }
           // A changed copy rolls out like your own edit, once: an unchanged one leaves a rollback as it is.
           const { revision } = added.value;
-          if (revision.rolledOutAt === null && skill.latest === revision.hash) {
-            yield* announce((yield* library.rollOutRevision(skill.id, revision.hash, by)).entries);
+          if (revision.rolledOutAt === null) {
+            yield* announce((yield* library.rollOutRevision(skill.id, revision.hash, by, "pending")).entries);
           }
         });
 

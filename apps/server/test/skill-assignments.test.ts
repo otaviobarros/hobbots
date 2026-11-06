@@ -190,7 +190,7 @@ const importSkill = async (name: string, extra?: string) => {
 
 describe("skill assignments", () => {
   // covers RT-001, ADR 029 (Scopes, Delivery per runtime)
-  it("[TC-AG-136] a turn gets Everyone's skills, the hob's own and Only when asked ones, never another hob's or one it opted out of", async () => {
+  it("[TC-AG-142] a turn gets Everyone's skills, the hob's own and Only when asked ones, never another hob's or one it opted out of", async () => {
     const pip = await summon("Pip", 961);
     const quill = await summon("Quill", 962);
     const releaseSkill = await importSkill("release");
@@ -241,7 +241,7 @@ describe("skill assignments", () => {
   });
 
   // covers RT-001, ADR 029 (Pins and rollout)
-  it("[TC-AG-137] saving a revision rolls it out to every assignment but a held one, running and queued turns keep their revision, and Roll back moves one back", async () => {
+  it("[TC-AG-143] saving a revision rolls it out to every assignment but a held one, running and queued turns keep their revision, and Roll back moves one back", async () => {
     const pip = await summon("Pip", 963);
     const quill = await summon("Quill", 964);
     const first = await importSkill("release");
@@ -303,7 +303,7 @@ describe("skill assignments", () => {
   });
 
   // covers ADR 029 (Scopes, Skills and Charms)
-  it("[TC-AG-138] a hob's skills show what replaced what, a name two of its projects define, and a Charm it lacks", async () => {
+  it("[TC-AG-144] a hob's skills show what replaced what, a name two of its projects define, and a Charm it lacks", async () => {
     const alpha = join(root, "alpha");
     const beta = join(root, "beta");
     await mkdir(alpha);
