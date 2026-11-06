@@ -31,6 +31,14 @@ describe("quiet replies", () => {
     expect(isQuietReply(message("assistant", ""), undefined)).toBe(false);
   });
 
+  it("leaves out a reply the hub marked as a lead's routine progress, whatever it says (#1006)", () => {
+    const progress = new Message({ ...message("assistant", "Quill finished; I now wait on Ada."), quiet: true });
+    expect(isQuietReply(progress, plan)).toBe(true);
+    expect(isQuietReply(progress, message("user", "Ship it"))).toBe(true);
+    const failedStep: ReplyStep = { id: "t-failed", kind: "tool", label: "Pushing", state: "failed" };
+    expect(isQuietReply(new Message({ ...progress, steps: [failedStep] }), plan)).toBe(false);
+  });
+
   it("keeps a quiet reply whose tool call did not plainly succeed, so an uncertain write can be settled", () => {
     const step = (state: ReplyStep["state"]): ReplyStep => ({
       id: `t-${state}`,

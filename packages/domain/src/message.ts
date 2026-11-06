@@ -164,6 +164,16 @@ export class Message extends Schema.Class<Message>("Message")({
     Schema.withDecodingDefaultKey(Effect.succeed([])),
     Schema.withConstructorDefault(Effect.succeed([])),
   ),
+  /**
+   * For a lead's reply to work that arrived while its Quest runs (ADR 027): true when the reply
+   * neither finished the work nor brought you a question, so it is routine progress the room already
+   * shows. The chat leaves it out, and it makes no thread unread (#1006). Kept, so its hob's history
+   * and an export still hold it.
+   */
+  quiet: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(false)),
+    Schema.withConstructorDefault(Effect.succeed(false)),
+  ),
   createdAt: Schema.String,
   revision: Revision,
 }) {}
@@ -185,6 +195,13 @@ export const endedSteps = (steps: ReadonlyArray<ReplyStep>): ReadonlyArray<Reply
     const state = endedState(step);
     return state === step.state ? step : { ...step, state };
   });
+
+/**
+ * Whether every tool call in the steps plainly succeeded. A failed, refused or uncertain call is
+ * something you need to see, so a reply with one is never kept quiet (#1006).
+ */
+export const toolsSucceeded = (steps: ReadonlyArray<ReplyStep>): boolean =>
+  steps.every((step) => step.kind !== "tool" || step.state === "done");
 
 /**
  * A turn's end. A tool call cut off while it ran is uncertain: it may have taken effect. Anything

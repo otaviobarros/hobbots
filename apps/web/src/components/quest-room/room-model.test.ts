@@ -28,20 +28,32 @@ describe("parseFold", () => {
 });
 
 describe("the folded chat's unread mark", () => {
+  const ids = (n: number, from = 1) => Array.from({ length: n }, (_, i) => `r${from + i}`);
+
   it("marks a reply that came while folded, and clears once the chat is back in view", () => {
-    const read = nextSeen(undefined, "a", 10, false);
-    expect(hasUnread(nextSeen(read, "a", 11, true), "a", 11)).toBe(true);
-    const back = nextSeen(nextSeen(read, "a", 11, true), "a", 11, false);
-    expect(hasUnread(back, "a", 11)).toBe(false);
+    const read = nextSeen(undefined, "a", ids(10), false);
+    expect(hasUnread(nextSeen(read, "a", ids(11), true), "a", ids(11))).toBe(true);
+    const back = nextSeen(nextSeen(read, "a", ids(11), true), "a", ids(11), false);
+    expect(hasUnread(back, "a", ids(11))).toBe(false);
   });
 
-  it("starts another thread from its own count, so its first new reply is marked", () => {
-    const longA = nextSeen(undefined, "a", 10, false);
-    const openB = nextSeen(longA, "b", 2, true);
-    expect(openB).toEqual({ thread: "b", count: 2 });
-    expect(hasUnread(openB, "b", 2)).toBe(false);
-    expect(hasUnread(nextSeen(openB, "b", 3, true), "b", 3)).toBe(true);
-    // A thread longer than the last one's count is not marked just for being longer.
-    expect(hasUnread(nextSeen(openB, "c", 40, true), "c", 40)).toBe(false);
+  it("starts another thread from its own replies, so its first new reply is marked", () => {
+    const longA = nextSeen(undefined, "a", ids(10), false);
+    const openB = nextSeen(longA, "b", ids(2), true);
+    expect(openB).toEqual({ thread: "b", ids: new Set(ids(2)) });
+    expect(hasUnread(openB, "b", ids(2))).toBe(false);
+    expect(hasUnread(nextSeen(openB, "b", ids(3), true), "b", ids(3))).toBe(true);
+    // A thread with more replies than the last one is not marked just for being longer.
+    expect(hasUnread(nextSeen(openB, "c", ids(40), true), "c", ids(40))).toBe(false);
+  });
+
+  it("marks the next reply after one folded away as routine progress while you were not looking (#1006)", () => {
+    // You fold the chat while r3 streams; it completes quiet and leaves the chat's replies.
+    const streaming = nextSeen(undefined, "a", ids(3), false);
+    const folded = nextSeen(streaming, "a", ids(2), true);
+    expect(hasUnread(folded, "a", ids(2))).toBe(false);
+    // The lead's question, r4, comes next: the chat holds as many replies as when you folded it.
+    const question = [...ids(2), "r4"];
+    expect(hasUnread(nextSeen(folded, "a", question, true), "a", question)).toBe(true);
   });
 });
