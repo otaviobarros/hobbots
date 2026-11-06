@@ -11,8 +11,13 @@ export const TURN = "turn-1";
 export const n = (method: string, params: Record<string, unknown>) =>
   ({ method, params: { threadId: THREAD, turnId: TURN, ...params } }) as AppServerNotification;
 
-export const completed = (status: string, error: unknown = null) =>
-  n("turn/completed", { turn: { id: TURN, items: [], status, error } });
+export const completedTurn = (turnId: string, status: string, error: unknown = null) =>
+  ({
+    method: "turn/completed",
+    params: { threadId: THREAD, turnId, turn: { id: turnId, items: [], status, error } },
+  }) as AppServerNotification;
+
+export const completed = (status: string, error: unknown = null) => completedTurn(TURN, status, error);
 
 /**
  * A scripted App Server: answers the client's requests, and once a turn starts asks `asks` and sends
@@ -21,6 +26,8 @@ export const completed = (status: string, error: unknown = null) =>
 export const fakeServer = (options: {
   readonly script?: ReadonlyArray<AppServerNotification>;
   readonly asks?: ReadonlyArray<{ readonly method: string; readonly params: unknown }>;
+  /** The notifications of each later turn the client starts, as `turn-2`, `turn-3` and on. */
+  readonly followUps?: ReadonlyArray<ReadonlyArray<AppServerNotification>>;
   /** Ends the process after the script, before any `turn/completed`. */
   readonly dies?: boolean;
   /** Never answers `turn/interrupt`, as a Codex that stopped answering. */
@@ -33,6 +40,7 @@ export const fakeServer = (options: {
   const start: StartAppServer = (command, { handlers }) =>
     Effect.gen(function* () {
       commands.push(command);
+      let turns = 0;
       const notes = yield* PubSub.unbounded<AppServerNotification | null>();
       yield* Effect.addFinalizer(() => Effect.sync(() => (closed += 1)));
       const ask = (method: string, params: unknown) => {
@@ -53,12 +61,20 @@ export const fakeServer = (options: {
             case "thread/start":
             case "thread/resume":
               return { thread: { id: THREAD }, model: "m" };
-            case "turn/start":
-              yield* Effect.forkDetach(run);
-              return { turn: { id: TURN, status: "inProgress", error: null } };
+            case "turn/start": {
+              turns += 1;
+              if (turns === 1) {
+                yield* Effect.forkDetach(run);
+                return { turn: { id: TURN, status: "inProgress", error: null } };
+              }
+              const later = options.followUps?.[turns - 2] ?? [];
+              yield* Effect.forkDetach(Effect.forEach(later, (note) => PubSub.publish(notes, note)));
+              return { turn: { id: `turn-${turns}`, status: "inProgress", error: null } };
+            }
             case "turn/interrupt":
               if (options.deaf) return yield* Effect.never;
-              yield* PubSub.publish(notes, completed("interrupted"));
+              // The acknowledgement names the turn that was interrupted.
+              yield* PubSub.publish(notes, completedTurn((params as { turnId: string }).turnId, "interrupted"));
               return {};
             default:
               return {};

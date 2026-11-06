@@ -40,7 +40,10 @@ type Memory<A, E = MemoryUnavailable> = Effect.Effect<A, E>;
  * touch a scope it names (`guardMemoryStore`).
  */
 export interface MemoryStoreShape {
-  /** Pages in `scopes` that match `query`, best first, at most `limit`. */
+  /**
+   * Pages in `scopes` that hold any word of `query`, a word of three letters or more also as the
+   * start of a longer one (`memorySearchTerms`), the best matches first, at most `limit`.
+   */
   readonly search: (
     actor: MemoryActor,
     scopes: ReadonlyArray<MemoryScope>,

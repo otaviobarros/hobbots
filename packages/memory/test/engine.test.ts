@@ -161,6 +161,8 @@ describe("the engine's config file", () => {
     expect(config).toContain('root_username = "you"');
     expect(config).toContain('llm_provider = "openai-compat"');
     expect(config).toContain('embedding_provider = "none"');
+    // Every word of a search is looked for, in any language (#1047).
+    expect(config).toContain("[search.fts]\nstopwords = []\n");
     expect(configHoldsCredential(config, keys)).toBe(false);
     expect(configHoldsCredential(`${config}\nbearer_token = "x"\n`, keys)).toBe(true);
     expect(configHoldsCredential(`${config}\n# ${Redacted.value(keys.proxy)}\n`, keys)).toBe(true);

@@ -54,17 +54,27 @@ const wordsOf = (query: string, normalize: (word: string) => string): ReadonlyAr
     MAX_TERMS,
   );
 
+/** Whether a word of a text matches a search term: by default, as the word or its start. */
+export type TermMatch = (word: string, term: string) => boolean;
+
+const startsWithTerm: TermMatch = (word, term) => word.startsWith(term);
+
 /**
  * The words around the first match in `content`, at most about `width` characters, with matching
  * words marked. Whitespace collapses to single spaces.
  */
 // complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
-export const snippetOf = (content: string, terms: ReadonlyArray<string>, width = 120): Array<SnippetPart> => {
+export const snippetOf = (
+  content: string,
+  terms: ReadonlyArray<string>,
+  width = 120,
+  matches: TermMatch = startsWithTerm,
+): Array<SnippetPart> => {
   const text = content.replace(/\s+/g, " ").trim();
   const ranges: Array<[number, number]> = [];
   for (const word of text.matchAll(WORD)) {
     const folded = foldWord(word[0]);
-    if (terms.some((term) => folded.startsWith(term))) ranges.push([word.index, word.index + word[0].length]);
+    if (terms.some((term) => matches(folded, term))) ranges.push([word.index, word.index + word[0].length]);
   }
   const first = ranges[0]?.[0] ?? 0;
   // A little context before the first match, then the rest of the width after it.

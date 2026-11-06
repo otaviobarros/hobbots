@@ -17,8 +17,8 @@ import {
   MemoryUnavailable,
   MemoryVersion,
   type MemoryVersionChanges,
+  memorySearchTerms,
   memoryTitleOf,
-  searchTerms,
 } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema, Semaphore } from "effect";
 import { acknowledgedPrefix, HOOK_BATCH_MAX, HookBatchJson, hookEventOf } from "./capture.ts";
@@ -192,10 +192,16 @@ const target = (scope: MemoryScope, where: EngineProject): Record<string, unknow
 const pagesRoute = (where: EngineProject) =>
   `workspaces/${encodeURIComponent(where.workspace)}/projects/${encodeURIComponent(where.project)}`;
 
-/** A search's words as an FTS5 query that matches them as words or their starts, with nothing to escape. */
+/**
+ * A search's words as the plain query ai-memory takes (#1047): each word bare, with a trailing `*`
+ * when it also matches the start of a longer word, which ai-memory joins with OR and ranks by bm25.
+ * A quote would make ai-memory read the query as FTS5 syntax: it then keeps `"run"*` as the exact
+ * word "run" and needs every word in one page. A word holds only letters, digits, `-` and `_`, so
+ * nothing in it is FTS5 syntax, and ai-memory quotes a word with `-` or `_` itself.
+ */
 const ftsQuery = (query: string) =>
-  searchTerms(query)
-    .map((term) => `"${term}"*`)
+  memorySearchTerms(query)
+    .map((term) => (term.prefix ? `${term.word}*` : term.word))
     .join(" ");
 
 const plain = (snippet: string | undefined) => (snippet ?? "").replace(/<\/?mark>/g, "");
