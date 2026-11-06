@@ -87,7 +87,7 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
     if (opened) await ticket.click();
     await expect(room).toBeVisible({ visible: opened });
     expect(await lines(ticket.getByText(/^Run the Black Friday campaign/))).toBe(1);
-    for (const end of [ticket.getByText(/(of 2 done|^Finished in .*)$/), ticket.getByText("→", { exact: true })]) {
+    for (const end of [ticket.getByText(/^(\d of 2 done|Finished in )/), ticket.getByText("→", { exact: true })]) {
       await expect(end).toBeVisible();
       await expectInside(end, chat);
     }

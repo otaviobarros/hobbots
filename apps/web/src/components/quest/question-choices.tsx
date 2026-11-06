@@ -122,7 +122,7 @@ function ChipSaid({ recommended, consequence }: { recommended: boolean; conseque
 
 function Recommended() {
   return (
-    <span className="rounded-tag bg-[color-mix(in_srgb,var(--color-mint)_16%,transparent)] px-1.5 text-meta font-bold text-mint">
+    <span className="rounded-tag bg-[color-mix(in_srgb,var(--color-mint)_12%,transparent)] px-1.5 text-meta font-bold text-mint">
       <span aria-hidden className="me-1">
         {copy.recommendedMark}
       </span>

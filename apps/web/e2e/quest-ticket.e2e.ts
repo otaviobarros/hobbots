@@ -151,12 +151,12 @@ test("[TC-UX-222] a finished Quest's ticket says how it ended, needs nothing fro
 
 /** The duration a finished ticket and the room's finish banner each show. */
 const durations = async (page: Page, title: string) => {
-  const name = (await ticket(page, title).getAttribute("aria-label")) ?? "";
+  const name = (await ticket(page, title).textContent()) ?? "";
   const meta =
     (await questRoom(page, title)
       .getByRole("region", { name: /^(Quest|Task) finished$/ })
       .textContent()) ?? "";
-  return { ticket: /Finished in (.+?)(,|$)/.exec(name)?.[1], banner: /took (.+?)( ·|$)/.exec(meta)?.[1] };
+  return { ticket: /Finished in (.+?)(?:, |\. Open room)/.exec(name)?.[1], banner: /took (.+?)( ·|$)/.exec(meta)?.[1] };
 };
 
 // covers UX-002, UX-006
@@ -221,22 +221,23 @@ test("[TC-UX-223] at 1024 wide, beside the room, a party of five's ticket keeps 
   await expect(quest).toHaveAccessibleName(/of \d+ done, 1 needs you\. Open room$/);
   await expect(sprites(quest).filter({ visible: true })).toHaveCount(2);
   await expect(quest.getByText("+3", { exact: true })).toBeVisible();
+  // Each part ends in the words a screen reader hears after it, so it is found by what it starts with.
   for (const part of [
-    quest.getByText(title, { exact: true }),
-    quest.getByText(/of \d+ done$/),
-    quest.getByText("1 needs you", { exact: true }),
+    quest.getByText(title),
+    quest.getByText(/of \d+ done/),
+    quest.getByText("1 needs you"),
     quest.getByText("→", { exact: true }),
   ]) {
     await expect(part).toBeVisible();
     await expectWithin(part, chat);
   }
-  expect((await quest.getByText(title, { exact: true }).boundingBox())?.width ?? 0).toBeGreaterThan(140);
+  expect((await quest.getByText(title).boundingBox())?.width ?? 0).toBeGreaterThan(140);
 
   // In the chat's full width it is one line again, with four sprites and Open room in words.
   await questRoom(page, title).getByRole("button", { name: "Close room" }).click();
   await expect(quest.getByText("+1", { exact: true })).toBeVisible();
   await expect(quest.getByText("Open room")).toBeVisible();
-  const line = await quest.getByText(title, { exact: true }).boundingBox();
-  const state = await quest.getByText("1 needs you", { exact: true }).boundingBox();
+  const line = await quest.getByText(title).boundingBox();
+  const state = await quest.getByText("1 needs you").boundingBox();
   expect(Math.abs((line?.y ?? 0) - (state?.y ?? 100))).toBeLessThan(12);
 });
