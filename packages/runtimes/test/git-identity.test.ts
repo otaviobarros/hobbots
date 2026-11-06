@@ -154,7 +154,7 @@ describe("Commits a hob makes without its own app", () => {
   });
 
   // covers OR-004
-  it("[TC-OR-600] with no identity in the user's config, commit under the one they gave Hobbots, or not at all (#741)", () => {
+  it("[TC-OR-630] with no identity in the user's config, commit under the one they gave Hobbots, or not at all (#741)", () => {
     const empty = join(root, "empty-home");
     mkdirSync(empty);
     const given = { name: "otaviobarros", email: "35647586+otaviobarros@users.noreply.github.com" };

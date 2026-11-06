@@ -45,7 +45,7 @@ const questToCommit = [
 ];
 
 // covers OR-004, IN-004, UX-001
-test("[TC-OR-607] with no Git identity the hub asks once in the chat who hobs commit as, asks again there when it cannot read the answer, and a Quest member's later commit asks nothing more", async ({
+test("[TC-OR-637] with no Git identity the hub asks once in the chat who hobs commit as, asks again there when it cannot read the answer, and a Quest member's later commit asks nothing more", async ({
   page,
   scan,
 }) => {

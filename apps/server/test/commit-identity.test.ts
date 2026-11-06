@@ -226,7 +226,7 @@ const commitAs = (access: Parameters<typeof userCommits>[0]) => {
 
 describe("who a hob on your account commits as when your Git config sets no one", () => {
   // covers OR-004, IN-004
-  it("[TC-OR-602] the hub asks you once with your GitHub account recommended, and the hob's next turn commits as it", async () => {
+  it("[TC-OR-632] the hub asks you once with your GitHub account recommended, and the hob's next turn commits as it", async () => {
     hub = await startHub();
     const current = hub;
 
@@ -270,7 +270,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
   }, 30_000);
 
   // covers OR-004
-  it("[TC-OR-603] takes a typed name and email, asks again when it finds none, and asks nothing when Git sets one", async () => {
+  it("[TC-OR-633] takes a typed name and email, asks again when it finds none, and asks nothing when Git sets one", async () => {
     hub = await startHub(false);
     const current = hub;
     await current.access();
@@ -294,7 +294,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
   }, 30_000);
 
   // covers OR-004
-  it("[TC-OR-604] asks nothing while your Git config sets an identity, and leaves it to Git when you say you'll set it there", async () => {
+  it("[TC-OR-634] asks nothing while your Git config sets an identity, and leaves it to Git when you say you'll set it there", async () => {
     userIdentity = { name: "Ada Lovelace", email: "ada@example.com" };
     hub = await startHub();
     const current = hub;
@@ -314,7 +314,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
   }, 30_000);
 
   // covers OR-004
-  it("[TC-OR-605] two turns that start at once ask you once", async () => {
+  it("[TC-OR-635] two turns that start at once ask you once", async () => {
     hub = await startHub();
     const current = hub;
     // Both turns read GitHub at once, and GitHub answers only once both have passed the first check.
@@ -334,7 +334,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
   }, 30_000);
 
   // covers OR-004
-  it("[TC-OR-606] a turn still reading GitHub when another turn's question is answered asks nothing more", async () => {
+  it("[TC-OR-636] a turn still reading GitHub when another turn's question is answered asks nothing more", async () => {
     hub = await startHub();
     const current = hub;
     // The first turn finds nothing asked yet, and waits on GitHub.

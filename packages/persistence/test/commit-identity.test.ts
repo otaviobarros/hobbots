@@ -9,7 +9,7 @@ import { TestDatabase } from "../src/testing.ts";
 
 describe("The commit identity the user gave the hub", () => {
   // covers OR-004
-  it("[TC-OR-601] is none until given, round-trips, and a new answer replaces the old one", async () => {
+  it("[TC-OR-631] is none until given, round-trips, and a new answer replaces the old one", async () => {
     const found = await Effect.gen(function* () {
       const identities = yield* HubCommitIdentities;
       const before = yield* identities.get;
