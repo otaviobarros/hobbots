@@ -6,6 +6,8 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { exitOnFailure } from "./command-line.ts";
 import { ServerConfig } from "./config.ts";
+import { readHubPresence } from "./hub-presence.ts";
+import { hubPort } from "./network-settings.ts";
 import { windowKeyFile } from "./window-key.ts";
 
 /**
@@ -19,8 +21,10 @@ const allow = Effect.gen(function* () {
   const key = yield* Effect.try(() => readFileSync(windowKeyFile(config.dataDir), "utf8").trim()).pipe(
     Effect.mapError(() => `No window key in ${config.dataDir}: is the hub running with this data folder?`),
   );
+  // The port the running hub recorded, whatever set it (#999), else the one it would choose.
+  const port = readHubPresence(config.dataDir)?.port ?? hubPort(config.dataDir, process.env);
   const client = yield* HttpApiClient.make(HobbotsApi, {
-    baseUrl: `http://127.0.0.1:${config.port}`,
+    baseUrl: `http://127.0.0.1:${port}`,
     transformClient: HttpClient.mapRequest(HttpClientRequest.bearerToken(key)),
   });
   const waiting = (yield* client.pairingRequests.list()).map((device) => device.request);
