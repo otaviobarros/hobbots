@@ -53,7 +53,7 @@ const type = async (page: Page, content: string) => {
   await composer(page).fill(content);
   // The composer ignores Enter while the message before is still on its way to the hub, so the
   // test waits for Send to be ready, as a person would see it, before pressing it.
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer(page).press("Enter");
   await expect(composer(page)).toHaveValue("");
 };
@@ -73,7 +73,7 @@ test("[TC-CH-011] messages sent during a reply queue and run in order, also afte
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await type(page, "two");
   await type(page, "three");
-  await expect(queued(page, "two")).toContainText("Queued. Pip reads it after this reply.");
+  await expect(queued(page, "two")).toContainText("Waits its turn");
   await expect(queued(page, "three")).toBeVisible();
 
   // The hub stops mid-reply; the queue is on disk and starts again with the hub.
@@ -120,7 +120,7 @@ test("[TC-CH-014] messages sent to a paused hob queue and run once it wakes", as
   await composer(page).fill("three");
   await page.getByRole("button", { name: "Queue" }).click();
   await expect(composer(page)).toHaveValue("");
-  await expect(queued(page, "three")).toContainText("Queued. Waits until you wake Pip.");
+  await expect(queued(page, "three")).toContainText("Waits until you wake Pip");
   await expect(queued(page, "three").getByRole("button", { name: /Send now/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Wake Pip" }).click();

@@ -25,7 +25,7 @@ test("[TC-UX-165] a step's summary in its lane shows its tool calls live, a refu
     "fake:tool Bash sleep 600",
   ].join("\n");
   await composer.fill(["Tidy the notes", script("plan_steps", { key: "plan", steps: [{ brief }] })].join("\n"));
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
 
   await openRoom(page, "Tidy the notes");

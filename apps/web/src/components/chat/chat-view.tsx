@@ -137,7 +137,7 @@ export function ChatView({
   const streaming = messages.data?.some((m) => isInProgress(m.status)) ?? false;
   // Stopping lasts from the hub recording the request until the runtime confirms the turn ended.
   const stopping = interrupt.isPending || (messages.data?.some((m) => m.status === "stopping") ?? false);
-  // Queued messages wait below the transcript, in the order they will start.
+  // Queued messages wait above the composer, in the order they will start, until they join the transcript.
   const transcript = messages.data?.filter((m) => m.status !== "queued");
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
@@ -331,17 +331,6 @@ export function ChatView({
               }
             />
           )}
-          {queued.map((message) => (
-            <QueuedRow
-              key={message.id}
-              message={message}
-              hob={current}
-              replying={streaming}
-              pending={remove.isPending || sendNow.isPending}
-              onRemove={() => remove.mutate(message.id)}
-              onSendNow={() => sendNow.mutate(message.id)}
-            />
-          ))}
           {waiting.map((message, index) => (
             <WaitingRow
               key={message.id}
@@ -410,7 +399,23 @@ export function ChatView({
           )}
           <WorkHeldNotice />
           <NeedsTray entries={needs} />
+          {queued.length > 0 && (
+            <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
+              {queued.map((message) => (
+                <QueuedRow
+                  key={message.id}
+                  message={message}
+                  hob={current}
+                  replying={streaming}
+                  pending={remove.isPending || sendNow.isPending}
+                  onRemove={() => remove.mutate(message.id)}
+                  onSendNow={() => sendNow.mutate(message.id)}
+                />
+              ))}
+            </div>
+          )}
           <Composer
+            name={current.name}
             placeholder={copy.placeholder({ name: current.name, title })}
             place={place}
             lastSent={lastSent}

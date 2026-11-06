@@ -34,7 +34,7 @@ const askToPush = async (page: Page, current: Hub, pipId: string) => {
   await page.goto(`${current.url}/#/hobs/${pipId}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("Ship it\nfake:tool Bash git push origin feature");
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
   const card = page.getByRole("region", { name: "Pip asks permission" });

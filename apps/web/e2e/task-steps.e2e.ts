@@ -78,7 +78,7 @@ test("[TC-OR-034] a Task split into four steps shows step 2 of 4 in the chat and
 
   // Once every step is done, Aldric hears their results, not their sessions, and returns one result.
   await composer.fill(script("complete_task", { key: "done", summary: "The spring launch is planned." }));
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   // The Task completes as the call is made; the reply that tells of it streams after.

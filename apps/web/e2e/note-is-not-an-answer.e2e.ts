@@ -80,7 +80,7 @@ const escalatedToYou = async (page: Page) => {
       `fake:then ${hubCall("escalate", { key: "up", question_id: "$theme.question_id" })}`,
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
   const waiting = await request<{
@@ -128,7 +128,7 @@ test("[TC-OR-471] after you answer a question the lead passed up, the lead's nex
   // Frodo's next turn lists the answer, so Frodo never tells you it is still waiting.
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill("Did the theme get answered?");
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled({ timeout: 45_000 });
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled({ timeout: 45_000 });
   await composer.press("Enter");
   await expect(page.getByText("Questions you passed up that are answered, latest last").last()).toBeVisible({
     timeout: 45_000,

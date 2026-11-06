@@ -78,7 +78,7 @@ test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in their lan
       hubCall("delegate_task", { key: "check", hob: "Pip", brief: ["Check the build", LONG].join("\n") }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await openRoom(page, "Build the project");
 

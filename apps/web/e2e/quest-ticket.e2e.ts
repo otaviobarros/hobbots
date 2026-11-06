@@ -81,7 +81,7 @@ test("[TC-UX-221] two Quests in one thread each keep their own ticket under the 
   await composer.fill(
     ["Write the summary", script("start_quest", { key: "quest", goal: "Write the summary" })].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   const second = ticket(page, "Write the summary");
   await expect(second).toBeVisible({ timeout: 20_000 });

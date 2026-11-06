@@ -1,5 +1,6 @@
 import { HOB_COLORS } from "@hobbots/art/look";
 import { type Agent, isInProgress, type Message } from "@hobbots/domain";
+import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { type CSSProperties, type ReactNode, useEffect } from "react";
@@ -192,8 +193,9 @@ function ResumeControls({ resume, name }: { resume: ContinueReply; name: string 
 }
 
 /**
- * A message waiting for the thread's running reply (CH-008). It can be taken back before it
- * starts, or sent now, which stops the running reply.
+ * A message sent while a reply runs (CH-008). It waits above the composer, tagged "Waits its turn",
+ * until the reply ends and it joins the transcript. It can be taken back before it starts, or sent
+ * now, which stops the running reply.
  */
 export function QueuedRow({
   message,
@@ -212,21 +214,24 @@ export function QueuedRow({
 }) {
   const paused = hob.status !== "active";
   return (
-    <section aria-label={messages.queued.label} className={cn(yourColumn, "gap-1.5")}>
-      <div className={cn(bubble, "opacity-80")}>{message.content}</div>
-      <span className="text-meta text-label">
-        {paused ? messages.queued.waitsForWake({ name: hob.name }) : messages.queued.readsNext({ name: hob.name })}
+    <section
+      aria-label={messages.queued.label}
+      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-1 text-detail"
+    >
+      <Badge variant="waiting">
+        {paused ? messages.queued.waitsForWake({ name: hob.name }) : messages.queued.waitsItsTurn}
+      </Badge>
+      <span className="min-w-24 flex-1 truncate text-text-secondary" title={message.content}>
+        {message.content}
       </span>
-      <span className="flex gap-2">
-        <Button variant="outline" size="xs" onClick={onRemove} disabled={pending}>
-          {messages.queued.remove}
+      <Button variant="quiet" size="xs" onClick={onRemove} disabled={pending}>
+        {messages.queued.remove}
+      </Button>
+      {!paused && (
+        <Button variant="quiet" size="xs" onClick={onSendNow} disabled={pending}>
+          {replying ? messages.queued.sendNowAndInterrupt : messages.queued.sendNow}
         </Button>
-        {!paused && (
-          <Button variant="outline" size="xs" onClick={onSendNow} disabled={pending}>
-            {replying ? messages.queued.sendNowAndInterrupt : messages.queued.sendNow}
-          </Button>
-        )}
-      </span>
+      )}
     </section>
   );
 }

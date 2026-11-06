@@ -93,7 +93,7 @@ test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill
       }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden();

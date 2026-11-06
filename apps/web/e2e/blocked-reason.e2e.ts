@@ -72,7 +72,7 @@ test("[TC-OR-223] Rook's lane says why its Task is blocked, not a bare Blocked",
       script("delegate_task", { key: "frontend", hob: "Rook", brief: "Write the frontend", milestones: ["Page live"] }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));

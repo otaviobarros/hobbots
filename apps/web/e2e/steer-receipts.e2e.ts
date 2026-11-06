@@ -100,7 +100,7 @@ const send = async (page: Page, lines: ReadonlyArray<string>) => {
   await expect(stop).toBeHidden({ timeout: 90_000 });
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(lines.join("\n"));
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled({ timeout: 30_000 });
   await composer.press("Enter");
   await expect(stop).toBeHidden({ timeout: 90_000 });
 };

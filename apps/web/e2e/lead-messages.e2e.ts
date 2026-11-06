@@ -89,7 +89,7 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
       hubCall("wait_for", { key: "wait", tasks: ["$commit.task_id"] }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   const tasks = await openRoom(page, "Commit the project");
@@ -106,7 +106,7 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
       hubCall("message_task", { key: "tell-pip", task_id: "$commit.task_id", text: "git init is done. Commit now." }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByText("Sent to hob").first()).toBeVisible({ timeout: 45_000 });
 
@@ -155,7 +155,7 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
       hubCall("wait_for", { key: "wait", tasks: ["$ship.task_id"] }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 45_000 });
@@ -173,7 +173,7 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
       hubCall("message_task", { key: "rename", task_id: asked.taskId, text: "The product is now Hobbots." }),
     ].join("\n"),
   );
-  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByText(/Held for hob .*: their turn waits for the user to decide/).first()).toBeVisible({
     timeout: 45_000,
