@@ -22,6 +22,7 @@ import {
   sandboxEnv,
   withCommitIdentity,
 } from "../sandbox.ts";
+import { holdSkillFolder, type SkillFolder, skillFolderScope } from "../skills.ts";
 import { offeredTools, toolLabel } from "../tool-calls.ts";
 import {
   type AppServer,
@@ -36,6 +37,7 @@ import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
 import { codexCaBundle, codexPath } from "./locate.ts";
 import { POLICY_REQUESTS, type PolicyRequest, policyGate, refusalNotice, shellScript } from "./policy.ts";
 import { TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
+import { admitSkills, skillSettings, unusedSkillRoots } from "./skills.ts";
 
 /** Starts a turn's App Server for as long as the scope lasts. */
 export type StartAppServer = (
@@ -227,6 +229,8 @@ export interface CodexTurnConfig {
   readonly policy?: CodexPolicy;
   /** How long a cancelled turn waits for Codex's acknowledgement before its process is ended. */
   readonly interruptGrace?: Duration.Input;
+  /** The user's home folder, whose `~/.agents/skills` Codex lists (ADR 029); the system's by default. */
+  readonly userHome?: string;
   /** More `codex app-server` arguments, such as `-c` settings for a stand-in model. */
   readonly extraArgs?: ReadonlyArray<string>;
 }
@@ -462,6 +466,7 @@ const prepareSandbox = (
   policy: CodexPolicy,
   binary: string,
   runtimeFolder: string,
+  skills: SkillFolder | null,
 ) =>
   Effect.gen(function* () {
     // The sandbox opens the binary's folder and its real location's, so it must be a path that exists.
@@ -480,6 +485,7 @@ const prepareSandbox = (
       runtimeFiles: files,
       ...(signingAgent ? { signingAgent } : {}),
       ...(tools.commitAs ? { commitAs: tools.commitAs } : {}),
+      ...skillFolderScope(skills),
       allowedHosts: CODEX_MODEL_HOSTS,
       decideHost: grantedHosts(policy.engine, tools.context, request.approvals),
     });
@@ -535,11 +541,20 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
     const governed = governedTurn(config, request);
     const runtimeFolder = request.tools?.runtimeFolder ?? join(config.workspaceDir, "codex-chat");
     const home = yield* prepareHome(runtimeFolder, config.workspaceDir, codexSettings(governed));
-    const command = appServerCommand(config, binary, home, governed?.tools.folders[0] ?? config.workspaceDir);
+    const cwd = governed?.tools.folders[0] ?? config.workspaceDir;
+    // The turn's skills, in a folder of their own for as long as it runs, and every other skill Codex
+    // would list turned off (ADR 029).
+    const skills = yield* holdSkillFolder(runtimeFolder, request.skills);
+    const skillArgs = yield* Effect.try({
+      try: () => skillSettings(unusedSkillRoots(home, cwd, repositoryRoot(cwd), config.userHome)),
+      catch: (error) => new RuntimeError({ message: `Could not read the skills Codex would load: ${String(error)}` }),
+    });
+    const command = appServerCommand(config, binary, home, cwd, skillArgs);
     if (governed === null) {
       return {
         command,
-        cwd: config.workspaceDir,
+        cwd,
+        skills,
         instructions: codexInstructions(turnInstructions(request.instructions, false)),
         commits: "",
         gate: refuseTools,
@@ -547,10 +562,11 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
       };
     }
     const { tools, sandbox, policy, commits } = governed;
-    const prepared = yield* sandboxFor(config, governed, request, command, runtimeFolder);
+    const prepared = yield* sandboxFor(config, governed, request, command, runtimeFolder, skills);
     return {
       command: sandboxedCommand(command, prepared, tools.commitAs, commits.env),
-      cwd: tools.folders[0] as string,
+      cwd,
+      skills,
       instructions: codexInstructions(
         turnInstructions(
           request.instructions,
@@ -582,12 +598,13 @@ const sandboxFor = (
   request: PromptRequest,
   command: AppServerCommand,
   runtimeFolder: string,
+  skills: SkillFolder | null,
 ) => {
   const { sandbox, tools, policy } = governed;
   if (sandbox === null) return Effect.succeed(null);
   return Effect.acquireRelease(
     Effect.flatMap(firstStart(config, command, command.env.CODEX_HOME as string), () =>
-      prepareSandbox(sandbox, tools, request, policy, command.command, runtimeFolder),
+      prepareSandbox(sandbox, tools, request, policy, command.command, runtimeFolder, skills),
     ),
     (prepared) => Effect.sync(prepared.release),
   );
@@ -613,10 +630,19 @@ const caVariable = (): Record<string, string> => {
   return bundle ? { CODEX_CA_CERTIFICATE: bundle } : {};
 };
 
-/** Starts `codex app-server` in `cwd` with its own home and only named variables (ADR 014). */
-const appServerCommand = (config: CodexTurnConfig, binary: string, home: string, cwd: string): AppServerCommand => ({
+/**
+ * Starts `codex app-server` in `cwd` with its own home, the turn's skill settings and only named
+ * variables (ADR 014, ADR 029).
+ */
+const appServerCommand = (
+  config: CodexTurnConfig,
+  binary: string,
+  home: string,
+  cwd: string,
+  skillArgs: ReadonlyArray<string>,
+): AppServerCommand => ({
   command: binary,
-  args: ["app-server", ...(config.extraArgs ?? [])],
+  args: ["app-server", ...skillArgs, ...(config.extraArgs ?? [])],
   // Codex hands its whole environment to its commands, so Claude Code's sign-in and settings stay out.
   env: {
     ...withoutClaude(sandboxEnv(process.env)),
@@ -658,6 +684,8 @@ const turnEvents = (
           clientVersion: config.clientVersion,
         })
         .pipe(Effect.mapError(failed));
+      // Before the thread opens, so Codex lists nothing to the model that Hobbots did not give it.
+      const admitted = yield* admitSkills(server, launch.skills, launch.cwd);
 
       const tokens = yield* config.signIn(binary);
       if (tokens !== null) {
@@ -675,7 +703,13 @@ const turnEvents = (
         tell: tellTurn(server, threadId),
         gate: launch.gate,
       };
-      report({ _tag: "SessionStarted", sessionId: threadId, billing: billingOf(tokens), ...launch.session });
+      report({
+        _tag: "SessionStarted",
+        sessionId: threadId,
+        billing: billingOf(tokens),
+        ...launch.session,
+        ...(admitted.organization.length > 0 ? { organizationSkills: admitted.organization } : {}),
+      });
       yield* Deferred.await(accepted);
 
       // Subscribed before the turn starts, so its first notifications are not missed.

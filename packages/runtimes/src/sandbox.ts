@@ -8,6 +8,7 @@ import type { CommitIdentity, SandboxState } from "@hobbots/domain";
 import type { PolicyContext } from "@hobbots/permissions";
 import { Context, Effect, Layer } from "effect";
 import { gitConfigAccess } from "./git-config.ts";
+import { SKILL_MOUNTS } from "./skills.ts";
 
 /**
  * The OS sandbox a runtime with tools starts in (ADR 014). Commands, and the runtime itself, run
@@ -63,6 +64,12 @@ export interface SandboxScope {
   readonly runtimeAccess?: { readonly read: ReadonlyArray<string>; readonly write: ReadonlyArray<string> };
   /** More places that must stay readable for the runtime to start, such as the package its binary runs from. */
   readonly runtimeFiles?: ReadonlyArray<string>;
+  /**
+   * The turn's skill folder (ADR 029), which its processes may read and never write. The folder that
+   * holds every turn's skill folders in `runtimeFolder` stays read-only too, so no turn can lay out the
+   * files a later turn would load.
+   */
+  readonly skillFolder?: string;
   /** The turn's own temporary folder. */
   readonly tempFolder: string;
   /** Hosts the turn always reaches, such as its model API. */
@@ -182,6 +189,7 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
         scope.tempFolder,
         ...binaryDirs,
         ...(scope.runtimeFiles ?? []),
+        ...(scope.skillFolder ? [scope.skillFolder] : []),
         ...homeTools,
         ...(scope.gitConfigFiles ?? []),
         ...(scope.signingAgent ? [scope.signingAgent] : []),
@@ -194,6 +202,7 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
     ],
     denyWrite: [
       scope.dataFolder,
+      join(scope.runtimeFolder, SKILL_MOUNTS),
       // Loaded later by the user's own Claude Code, outside any policy.
       ...userClaudeCode(home),
       // Git's hooks and config, in each folder and in any repository below it, submodules' included:

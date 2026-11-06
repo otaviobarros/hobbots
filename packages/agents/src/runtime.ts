@@ -60,6 +60,11 @@ export type RuntimeEvent =
       readonly billing: string | null;
       /** The policy version the turn's tools run under (ADR 014); absent for a turn without tools. */
       readonly policyVersion?: string;
+      /**
+       * Skills the runtime loads from an administrator's settings (ADR 029), which Hobbots leaves in
+       * force: shown as the organization's, outside the library. Absent when there are none.
+       */
+      readonly organizationSkills?: ReadonlyArray<string>;
     }
   | { readonly _tag: "TextDelta"; readonly text: string }
   /** The runtime began something other than writing, such as thinking. `id` is unique within the turn. */
@@ -286,6 +291,21 @@ export interface HubTools {
   readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
 }
 
+/**
+ * A skill a turn carries (ADR 029): one revision of a library skill, which the adapter hands to its
+ * runtime in the runtime's own way. Adapters never know the library, a revision's history or a scope.
+ */
+export interface SkillMount {
+  /** The skill's name, as its `SKILL.md` front matter gives it. */
+  readonly name: string;
+  /** The revision's content hash, which names the files in `folder`. */
+  readonly revision: string;
+  /** The read-only folder that holds the revision's files, its `SKILL.md` at the top. */
+  readonly folder: string;
+  /** Whether the hob may pick the skill on its own; false is Only when asked. */
+  readonly implicit: boolean;
+}
+
 export interface PromptRequest {
   readonly prompt: string;
   /**
@@ -331,6 +351,11 @@ export interface PromptRequest {
    * session of it, so it can never be resumed or listed. It starts a new session (`sessionId` null).
    */
   readonly ephemeral?: boolean;
+  /**
+   * The hob's skills for this turn, resolved by the hub when it accepted the turn (ADR 029). The
+   * runtime loads these and nothing else: absent, null or empty, the turn has no skills.
+   */
+  readonly skills?: ReadonlyArray<SkillMount> | null;
 }
 
 /** Why a tool call is refused when Hobbots could not record it before it ran. */
