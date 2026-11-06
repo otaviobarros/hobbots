@@ -14,7 +14,14 @@ import {
   type TaskId,
   type TaskTree,
 } from "@hobbots/domain";
-import { blockedLine, changeLine, commandLine, type StepOutcome, stepDoing } from "../plain-words/plain-words.ts";
+import {
+  blockedLine,
+  changeLine,
+  commandAwaited,
+  commandLine,
+  type StepOutcome,
+  stepDoing,
+} from "../plain-words/plain-words.ts";
 import { type RoomStatus, roomRows, roomStatus } from "../quest/control-room.ts";
 import { questionForYou, taskTitle } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
@@ -89,8 +96,9 @@ export type LaneItem =
   | { readonly kind: "task"; readonly key: string; readonly title: string }
   | { readonly kind: "wait"; readonly key: string; readonly on: ReadonlyArray<LaneWaited> }
   /**
-   * A turn runs now: the step it is on, or null before it reported one. `since` is when the room last
-   * recorded anything the hob did on the Task, so a lane that has gone quiet says for how long (#1004).
+   * A turn runs now: the step it is on, or the command it waits on while no step runs, or null for
+   * neither. `since` is when the room last recorded anything the hob did on the Task, so a lane that
+   * has gone quiet says for how long (#1004).
    */
   | {
       readonly kind: "now";
@@ -399,20 +407,30 @@ const lastActivity = (tree: TaskTree, unit: ReadonlyArray<Task>, attempt: Attemp
   ]);
 };
 
-/** The step a running turn is on, from the records of the Attempt that runs, and when the hob last did something. */
+/**
+ * The step a running turn is on, from the records of the Attempt that runs. A command the hob left
+ * running in the background, such as a dev server or a watch, is what the turn waits on once the hob
+ * has gone on past it: no step runs, or the newest step is not one that runs (#1004, #1018).
+ */
 const nowItem = (tree: TaskTree, unit: ReadonlyArray<Task>, read: Reads): LaneItem | null => {
   const running = unit.find((each) => liveAttemptOn(each, tree));
   const attempt = tree.attempts.find((each) => each.id === running?.currentAttemptId);
   if (running === undefined || attempt === undefined) return null;
   const activity = read.of(attempt.id);
+  const since = lastActivity(tree, unit, attempt, activity);
+  const key = `now-${running.id}`;
+  const newest = activity?.steps.at(-1);
+  const command = activity?.commands.findLast((each) => each.state === "running");
+  if (command !== undefined && newest?.state !== "running")
+    return {
+      kind: "now",
+      key,
+      label: messages.waitsOnCommand({ command: command.command }),
+      plain: commandAwaited(command),
+      since,
+    };
   const step = activity?.steps.findLast((each) => each.state === "running");
-  return {
-    kind: "now",
-    key: `now-${running.id}`,
-    label: step?.label ?? null,
-    plain: step === undefined ? null : stepDoing(step),
-    since: lastActivity(tree, unit, attempt, activity),
-  };
+  return { kind: "now", key, label: step?.label ?? null, plain: step === undefined ? null : stepDoing(step), since };
 };
 
 /**
