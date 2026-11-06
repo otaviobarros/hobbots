@@ -254,6 +254,11 @@ export class SkillRefused extends Schema.TaggedError<SkillRefused>()("SkillRefus
   message: Schema.String,
 }) {}
 
+/** A source could not be read: a folder that is not there, an archive that is not one, a Git fetch that failed. */
+export class SkillSourceUnreadable extends Schema.TaggedError<SkillSourceUnreadable>()("SkillSourceUnreadable", {
+  message: Schema.String,
+}) {}
+
 /** No skill, source or assignment with that id. */
 export class SkillNotFound extends Schema.TaggedError<SkillNotFound>()("SkillNotFound", {
   id: Schema.String,
