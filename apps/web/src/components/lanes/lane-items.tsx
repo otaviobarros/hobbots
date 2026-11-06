@@ -7,6 +7,7 @@ import type { StepOutcome } from "../plain-words/plain-words.ts";
 import type { HobLookup } from "../quest/use-work.ts";
 import { useLineCounts } from "../workbench/changes/use-line-counts.ts";
 import type { LaneFoldable, LaneItem, LaneMark, LaneStep } from "./lane-model.ts";
+import { LaneStatusRow } from "./lane-status.tsx";
 import { messages } from "./messages.ts";
 
 type Mark = Extract<LaneMark, { kind: "edit" }>;
@@ -20,9 +21,8 @@ const GLYPH: Readonly<Record<LaneMark["kind"] | "refused", string>> = {
   refused: "⊘",
 };
 
-/** Decorative marks for a beat and a wait; their words are always beside them. */
+/** A decorative mark for a beat; its words are always beside it. */
 const BEAT = "◆";
-const WAIT = "◷";
 
 /** A compact mark: its glyph, what it was about in mono, and how it went. */
 function MarkRow({
@@ -201,49 +201,5 @@ export function LaneItemRow({ item, hobs }: { item: LaneItem; hobs: HobLookup })
       return <li className="pt-2 text-meta font-bold text-label">{item.title}</li>;
     default:
       return <LaneStatusRow item={item} hobs={hobs} />;
-  }
-}
-
-/** The lines that say where the Task stands: a wait, a turn that runs now, or how it ended. */
-function LaneStatusRow({
-  item,
-  hobs,
-}: {
-  item: Extract<LaneItem, { kind: "wait" | "now" | "result" }>;
-  hobs: HobLookup;
-}) {
-  switch (item.kind) {
-    case "wait": {
-      const who = item.on.map((each) => (each.kind === "you" ? messages.you : hobs(each.id).name));
-      return (
-        <li className="flex items-center gap-2 text-detail text-lantern">
-          <span aria-hidden>{WAIT}</span>
-          <span>{messages.waits({ names: messages.names(who) })}</span>
-        </li>
-      );
-    }
-    case "now":
-      return (
-        <li className="flex items-center gap-2 text-detail text-mint">
-          <span aria-hidden className="size-2 shrink-0 animate-hb-blink rounded-dot bg-mint" />
-          <span className="min-w-0 truncate">{item.label ?? messages.now}</span>
-        </li>
-      );
-    case "result":
-      return (
-        <li
-          className={cn(
-            // A result can quote a long folder path, which wraps rather than widening the lane.
-            "rounded-control px-2 py-1.5 text-detail text-text wrap-anywhere",
-            item.outcome === "completed"
-              ? "bg-[color-mix(in_srgb,var(--color-mint)_12%,var(--color-card))]"
-              : "bg-[color-mix(in_srgb,var(--color-rose)_12%,var(--color-card))]",
-          )}
-        >
-          <b className={item.outcome === "completed" ? "text-mint" : "text-rose"}>{messages.result[item.outcome]}</b>
-          {item.text !== null && ` · ${item.text}`}
-          {item.text === null && item.outcome === "failed" && ` · ${messages.stoppedWhy}`}
-        </li>
-      );
   }
 }
