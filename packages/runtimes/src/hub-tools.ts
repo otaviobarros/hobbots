@@ -112,11 +112,7 @@ const hubOptions = (hub: HubTools, report: (event: RuntimeEvent) => void): Parti
       },
     };
   };
-  const end: HookCallback = async (input) => {
-    if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") return {};
-    if (started.delete(input.tool_use_id)) report({ _tag: "StepEnded", id: input.tool_use_id });
-    return {};
-  };
+  const end = stepEnds(started, report);
   const matcher = `${PREFIX}.*`;
   return {
     mcpServers: { [HUB_SERVER]: hubServer(hub, announced, report) },
@@ -128,6 +124,15 @@ const hubOptions = (hub: HubTools, report: (event: RuntimeEvent) => void): Parti
     },
   };
 };
+
+/** A hook that ends the step of each call in `started` once it finishes, and forgets the call. */
+export const stepEnds =
+  (started: Set<string>, report: (event: RuntimeEvent) => void): HookCallback =>
+  async (input) => {
+    if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") return {};
+    if (started.delete(input.tool_use_id)) report({ _tag: "StepEnded", id: input.tool_use_id });
+    return {};
+  };
 
 /** Both sets of hooks, each event's in order. */
 const mergeHooks = (

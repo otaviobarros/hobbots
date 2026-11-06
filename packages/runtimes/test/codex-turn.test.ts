@@ -19,6 +19,7 @@ import type { ChatGptTokens } from "../src/codex/auth.ts";
 import { codexTurnEvents, commandsEndedNotice, LOST_CALL, LOST_TURN } from "../src/codex/events.ts";
 import { notOffered } from "../src/codex/hub-tools.ts";
 import { refusalNotice } from "../src/codex/policy.ts";
+import { unexpectedSkillsMessage } from "../src/codex/skills.ts";
 import {
   CODEX_MODEL_HOSTS,
   type CodexTurnConfig,
@@ -34,6 +35,9 @@ import { ProcessSandbox, type ProcessSandboxShape, type SandboxScope, sandboxFil
 import { completed, fakeServer, n, THREAD, TURN } from "./codex-app-server.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-codex-"));
+
+/** The skill settings of a turn with nothing to turn off but Codex's bundled skills (ADR 029). */
+const NO_SKILLS = ["-c", "skills.bundled.enabled=false", "-c", "skills.config=[]"];
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
 const delta = (itemId: string, text: string) => n("item/agentMessage/delta", { itemId, delta: text });
@@ -61,6 +65,7 @@ const config = (
   signIn: () => signIn,
   clientVersion: "0.0.0",
   workspaceDir: mkdtempSync(join(temp, "w-")),
+  userHome: join(temp, "home"),
 });
 
 const prompt = (overrides: Partial<PromptRequest> = {}): PromptRequest => ({
@@ -153,7 +158,8 @@ describe("a Codex turn", () => {
     });
     // The process gets named variables and its own home, never the hub's whole environment.
     const [command] = server.commands;
-    expect(command?.args).toEqual(["app-server"]);
+    // Every skill Hobbots did not mount is off (ADR 029); here there are none to turn off.
+    expect(command?.args).toEqual(["app-server", ...NO_SKILLS]);
     expect(command?.env.CODEX_HOME).toBe(codexFolders(join(turnConfig.workspaceDir, "codex-chat")).home);
     expect(Object.keys(command?.env ?? {}).every((key) => !/TOKEN|SECRET|KEY/.test(key))).toBe(true);
   });
@@ -604,7 +610,11 @@ describe("a Codex turn with tools", () => {
     }
     // Codex started once outside the sandbox to set up its home, then inside it for the turn.
     expect(server.commands.map((command) => command.command)).toEqual([binary, "/sandbox"]);
-    expect(server.commands[1]).toMatchObject({ args: [binary, "app-server"], env: { CODEX_HOME: home }, cwd: project });
+    expect(server.commands[1]).toMatchObject({
+      args: [binary, "app-server", ...NO_SKILLS],
+      env: { CODEX_HOME: home },
+      cwd: project,
+    });
     expect(scopes).toEqual([
       expect.objectContaining({
         folders: [project],
@@ -1018,4 +1028,75 @@ describe.runIf(realSandbox)("Codex's command in the real sandbox", () => {
       else process.env.CLAUDE_CODE_OAUTH_TOKEN = hubEnv.CLAUDE_CODE_OAUTH_TOKEN;
     }
   }, 30_000);
+});
+
+describe("a Codex turn's skills (ADR 029)", () => {
+  /** A revision's files, as the library keeps them. */
+  const revision = (name: string) => {
+    const folder = mkdtempSync(join(temp, `${name}-`));
+    writeFileSync(join(folder, "SKILL.md"), `---\nname: ${name}\ndescription: About ${name}.\n---\n`);
+    return folder;
+  };
+  const mounted = () => [{ name: "release", revision: "r4", folder: revision("release"), implicit: true }];
+  const scripted = (skills: NonNullable<Parameters<typeof fakeServer>[0]["skills"]>) =>
+    fakeServer({ script: [message("m1", "Hi."), completed("completed")], skills });
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-521] gives the App Server the turn's folder as its only extra root, with every other skill off", async () => {
+    const server = scripted([]);
+    // A home of its own, so no other test sees its skill.
+    const turnConfig = { ...config(server.start), userHome: mkdtempSync(join(temp, "home-")) };
+    const userSkill = join(turnConfig.userHome ?? "", ".agents", "skills", "mine", "SKILL.md");
+    mkdirSync(join(userSkill, ".."), { recursive: true });
+    writeFileSync(userSkill, "---\nname: mine\ndescription: Mine.\n---\n");
+    const exit = await run(turnConfig, prompt({ skills: mounted() }));
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    // Set before the thread opened, then checked.
+    expect(server.skillRequests.map((request) => request.method)).toEqual(["skills/extraRoots/set", "skills/list"]);
+    const set = server.skillRequests[0]?.params as { extraRoots: ReadonlyArray<string> } | undefined;
+    const root = set?.extraRoots[0] ?? "";
+    expect(root).toMatch(/codex-chat\/skill-mounts\/[0-9a-f]{64}\/skills$/);
+    expect(server.skillRequests[1]?.params).toEqual({ cwds: [turnConfig.workspaceDir], forceReload: true });
+    expect(server.commands[0]?.args).toEqual([
+      "app-server",
+      "-c",
+      "skills.bundled.enabled=false",
+      "-c",
+      `skills.config=[{ path = ${JSON.stringify(userSkill)}, enabled = false }]`,
+    ]);
+    // The turn's folder is gone with the turn.
+    expect(existsSync(root)).toBe(false);
+  });
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-522] does not start a turn Codex would load another skill in, and lets an administrator's through", async () => {
+    const refused = scripted([
+      { name: "stray", path: "/repo/.agents/skills/stray/SKILL.md", scope: "repo", enabled: true },
+    ]);
+    const exit = await run(config(refused.start), prompt({ skills: mounted() }));
+    expect(exit).toEqual(
+      Exit.fail(
+        new RuntimeError({
+          message: unexpectedSkillsMessage([
+            { name: "stray", path: "/repo/.agents/skills/stray/SKILL.md", scope: "repo", enabled: true },
+          ]),
+        }),
+      ),
+    );
+    expect(refused.requests.map((request) => request.method)).not.toContain("thread/start");
+
+    const admitted = scripted([
+      { name: "org-steps", path: "/etc/codex/skills/org-steps/SKILL.md", scope: "admin", enabled: true },
+      { name: "off", path: "/home/u/.agents/skills/off/SKILL.md", scope: "user", enabled: false },
+    ]);
+    const ran = await run(config(admitted.start));
+    expect(events(ran)[0]).toEqual({
+      _tag: "SessionStarted",
+      sessionId: THREAD,
+      billing: null,
+      organizationSkills: ["org-steps"],
+    });
+    // A turn without skills sets no root.
+    expect(admitted.skillRequests[0]?.params).toEqual({ extraRoots: [] });
+  });
 });

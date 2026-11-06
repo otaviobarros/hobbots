@@ -180,6 +180,37 @@ export interface ClientRequests {
   readonly "turn/start": { readonly params: TurnStartParams; readonly result: TurnStartResponse };
   readonly "turn/interrupt": { readonly params: TurnInterruptParams; readonly result: unknown };
   readonly "turn/steer": { readonly params: TurnSteerParams; readonly result: TurnSteerResponse };
+  readonly "skills/extraRoots/set": { readonly params: SkillsExtraRootsSetParams; readonly result: unknown };
+  readonly "skills/list": { readonly params: SkillsListParams; readonly result: SkillsListResponse };
+}
+
+// Skills (ADR 029): the turn's own root, and what Codex would load.
+
+interface SkillsExtraRootsSetParams {
+  /** Absolute folders whose skills Codex lists beside its own roots, replacing any set before. */
+  readonly extraRoots: ReadonlyArray<string>;
+}
+
+interface SkillsListParams {
+  /** When empty, the session's working folder. */
+  readonly cwds?: ReadonlyArray<string>;
+  /** Scan the roots again rather than answer from the cache. */
+  readonly forceReload?: boolean;
+}
+
+/** Where a skill came from: `admin` is an administrator's system configuration. */
+type SkillScope = "user" | "repo" | "system" | "admin";
+
+export interface SkillMetadata {
+  readonly name: string;
+  /** The skill's `SKILL.md`. */
+  readonly path: string;
+  readonly scope: SkillScope;
+  readonly enabled: boolean;
+}
+
+interface SkillsListResponse {
+  readonly data: ReadonlyArray<{ readonly cwd: string; readonly skills: ReadonlyArray<SkillMetadata> }>;
 }
 
 // Turns (#438): threads, turns, the notifications a turn reads and the requests Codex sends it.

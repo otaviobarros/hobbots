@@ -32,8 +32,17 @@ export const fakeServer = (options: {
   readonly dies?: boolean;
   /** Never answers `turn/interrupt`, as a Codex that stopped answering. */
   readonly deaf?: boolean;
+  /** What `skills/list` answers: the skills Codex would load (ADR 029). */
+  readonly skills?: ReadonlyArray<{
+    readonly name: string;
+    readonly path: string;
+    readonly scope: string;
+    readonly enabled: boolean;
+  }>;
 }) => {
   const requests: Array<{ readonly method: string; readonly params: unknown }> = [];
+  // Kept apart, so the turn's own requests read as they always have.
+  const skillRequests: Array<{ readonly method: string; readonly params: unknown }> = [];
   const answers: Array<unknown> = [];
   const commands: Array<AppServerCommand> = [];
   let closed = 0;
@@ -56,7 +65,7 @@ export const fakeServer = (options: {
       });
       const requestUnknown = (method: string, params: unknown) =>
         Effect.gen(function* () {
-          requests.push({ method, params });
+          (method.startsWith("skills/") ? skillRequests : requests).push({ method, params });
           switch (method) {
             case "thread/start":
             case "thread/resume":
@@ -71,6 +80,8 @@ export const fakeServer = (options: {
               yield* Effect.forkDetach(Effect.forEach(later, (note) => PubSub.publish(notes, note)));
               return { turn: { id: `turn-${turns}`, status: "inProgress", error: null } };
             }
+            case "skills/list":
+              return { data: [{ cwd: "", skills: options.skills ?? [], errors: [] }] };
             case "turn/interrupt":
               if (options.deaf) return yield* Effect.never;
               // The acknowledgement names the turn that was interrupted.
@@ -97,5 +108,5 @@ export const fakeServer = (options: {
         exited: Effect.never,
       } satisfies AppServer;
     });
-  return { start, requests, answers, commands, closed: () => closed };
+  return { start, requests, skillRequests, answers, commands, closed: () => closed };
 };

@@ -716,7 +716,22 @@ describe("the runtime settings", () => {
   it("[TC-CH-201] adds no Claude attribution to a hob's commits or pull requests", () => {
     const options = baseOptions({ workspaceDir: "/w" } as ClaudeCodeConfig, "/bin/claude");
     expect(options.settingSources).toEqual([]);
-    expect(options.settings).toEqual({ attribution: false });
+    expect(options.settings).toMatchObject({ attribution: false });
+  });
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-509] loads nothing a claude.ai sign-in or Claude Code itself brings, on chat-only turns too", () => {
+    const options = baseOptions({ workspaceDir: "/w" } as ClaudeCodeConfig, "/bin/claude");
+    expect(options.strictMcpConfig).toBe(true);
+    expect(options.skills).toEqual([]);
+    expect(options.settings).toEqual({
+      attribution: false,
+      disableClaudeAiConnectors: true,
+      syncClaudeAiSkills: false,
+      syncClaudeAiPlugins: false,
+      disableBundledSkills: true,
+      disableSkillShellExecution: true,
+    });
   });
 });
 
