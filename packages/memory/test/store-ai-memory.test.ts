@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { MemoryStoreShape } from "@hobbots/agents";
 import {
   AgentId,
@@ -69,6 +71,45 @@ describe("ai-memory scopes", () => {
     expect(scopeOfEngineProject(INDEX_PROJECT)).toBe(null);
     expect(scopeOfEngineProject({ workspace: "hobbots", project: "scratch" })).toBe(null);
     expect(scopeOfEngineProject({ workspace: "other", project: "hob-h-pip" })).toBe(null);
+  });
+});
+
+describe.runIf(engineEnabled)("scopes with nothing in them yet on ai-memory", () => {
+  // covers #1032
+  it("[TC-GEN-399] reads a hob's, a project's and everyone's empty memory without a warning in the engine's log", async () => {
+    const { dataDir, keys } = engineDataDir();
+    const { store } = await Effect.runPromise(startEngineStore(dataDir, keys));
+    const you = { _tag: "You" } as const;
+    const empty: ReadonlyArray<MemoryScope> = [
+      { _tag: "Hob", agentId: AgentId.make("h-new") },
+      { _tag: "Project", identity: memoryProjectIdentity(null, "tide-table") },
+      { _tag: "Everyone" },
+    ];
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        expect(yield* store.search(you, empty, "lesson", 5)).toEqual([]);
+        for (const scope of empty) {
+          expect(yield* store.list(you, scope, 10)).toEqual([]);
+          expect(yield* store.changes(you, scope, new Date(0).toISOString())).toEqual([]);
+          expect(yield* store.check(you, scope)).toEqual([]);
+        }
+        // Once a scope holds a page, its tool calls go to the engine again.
+        yield* store.write(
+          you,
+          empty[0] as MemoryScope,
+          { path: MemoryPath.make("notes/lesson.md"), markdown: "# Lesson", tags: [], pinned: true },
+          { _tag: "New" },
+        );
+        expect(yield* store.search(you, empty, "lesson", 5)).toMatchObject([{ path: "notes/lesson.md" }]);
+        expect(yield* store.list(you, empty[0] as MemoryScope, 10)).toMatchObject([{ pinned: true }]);
+      }),
+    );
+    const logs = join(dataDir, "memory", "logs");
+    const warnings = readdirSync(logs)
+      .flatMap((file) => readFileSync(join(logs, file), "utf8").split("\n"))
+      // A log line starts with its time and level; the migrations it prints span many lines.
+      .filter((line) => /^\S+Z\s+WARN /.test(line));
+    expect(warnings).toEqual([]);
   });
 });
 

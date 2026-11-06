@@ -36,7 +36,7 @@ One message to Frodo (the lead) asked for a small Python CLI, "Tide Table", in t
 - Nettle's session summary says the lead's answer never arrived, while the hub shows all three of its questions answered. A member's session holds only its Task's goal, its tool steps and its replies: the messages that wake it, answers included, never reach it, so none of the answers are among Nettle's 35 observations.
 - Usage's notes still said Task steps aren't counted yet, which #1017 changed. This pull request rewords them.
 - Eight Task tool calls were refused, each for a reason the hub states: `wait_for` on the hob's own question id (Rook and Nettle), a milestone name that did not match (Frodo), and `complete_task` with milestones, children or items still open (Nettle and Pip).
-- ai-memory logged 106 warnings for a workspace or project not found. Whether these are lookups of scopes with no pages yet was not checked.
+- ai-memory logged 106 warnings for a workspace or project not found. Whether these are lookups of scopes with no pages yet was not checked. They were: see [#1032](https://github.com/otaviobarros/hobbots/issues/1032).
 
 ## Gaps
 

@@ -260,6 +260,41 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         Effect.tap(() => Effect.sync(() => indexed.add(project))),
       );
   };
+  /**
+   * The engine projects known to exist. ai-memory makes a scope's project on its first write, and
+   * logs a warning for every tool call on a project it does not hold, though Hobbots reads such a
+   * scope as empty. So a tool call that only reads asks `/api/v1/projects`, which answers quietly,
+   * until the project shows there, and is not sent while it does not.
+   */
+  const held = new Set<string>();
+  const heldKey = (where: EngineProject) => `${where.workspace}\u0000${where.project}`;
+  const whenHeld = <A, E, R>(
+    where: EngineProject,
+    empty: A,
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | EngineRefused | MemoryUnavailable, R> => {
+    const key = heldKey(where);
+    const known: Effect.Effect<boolean, MemoryUnavailable | EngineRefused> = held.has(key)
+      ? Effect.succeed(true)
+      : Effect.map(client.get("projects", ProjectsJson), (projects) => {
+          for (const each of projects)
+            held.add(heldKey({ workspace: each.workspace_name, project: each.project_name }));
+          return held.has(key);
+        });
+    return Effect.flatMap(known, (found) =>
+      found
+        ? effect.pipe(
+            // A project that went away, with a restored backup, is asked about again.
+            Effect.tapError((error) =>
+              Effect.sync(() => {
+                const refused = error as Partial<EngineRefused>;
+                if (refused._tag === "EngineRefused" && noSuchProject(refused as EngineRefused)) held.delete(key);
+              }),
+            ),
+          )
+        : Effect.succeed(empty),
+    );
+  };
   const identityOf = (project: string) =>
     client.get(`${pagesRoute(INDEX_PROJECT)}/pages/${project}.md`, PageJson).pipe(
       Effect.map((json) => {
@@ -292,20 +327,24 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
 
   /** The scope's pinned pages under `prefix`, the newest first and at most `PIN_FIRST_MAX` of them. */
   const pinsUnder = (where: EngineProject, prefix: string) =>
-    client
-      .tool(
-        ROOT,
-        "memory_query",
-        {
-          ...where,
-          query: PINNED_ONLY,
-          pin_first: true,
-          limit: PAGE_LIMIT,
-          ...(prefix === "" ? {} : { path_prefix: prefix }),
-        },
-        HitsJson,
-      )
-      .pipe(Effect.map((json) => json.hits.filter((hit) => hit.pinned === true).map((hit) => hit.path)));
+    whenHeld(
+      where,
+      [] as Array<string>,
+      client
+        .tool(
+          ROOT,
+          "memory_query",
+          {
+            ...where,
+            query: PINNED_ONLY,
+            pin_first: true,
+            limit: PAGE_LIMIT,
+            ...(prefix === "" ? {} : { path_prefix: prefix }),
+          },
+          HitsJson,
+        )
+        .pipe(Effect.map((json) => json.hits.filter((hit) => hit.pinned === true).map((hit) => hit.path))),
+    );
 
   /**
    * Every pinned page of the scope, from pin metadata alone. ai-memory answers at most ten pins a
@@ -431,15 +470,18 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
     );
 
   const searchOne = (actor: MemoryActor, scope: MemoryScope, query: string, limit: number) =>
-    client.tool(callerOf(actor), "memory_query", { ...engineProjectOf(scope), query, limit }, HitsJson).pipe(
-      Effect.map((json) =>
-        json.hits.map((hit) => ({
-          rank: hit.rank,
-          hit: { scope, path: MemoryPath.make(hit.path), title: hit.title, snippet: plain(hit.snippet) } as MemoryHit,
-        })),
+    whenHeld(
+      engineProjectOf(scope),
+      [] as Array<{ readonly rank: number; readonly hit: MemoryHit }>,
+      client.tool(callerOf(actor), "memory_query", { ...engineProjectOf(scope), query, limit }, HitsJson).pipe(
+        Effect.map((json) =>
+          json.hits.map((hit) => ({
+            rank: hit.rank,
+            hit: { scope, path: MemoryPath.make(hit.path), title: hit.title, snippet: plain(hit.snippet) } as MemoryHit,
+          })),
+        ),
       ),
-      orEmpty([] as Array<{ readonly rank: number; readonly hit: MemoryHit }>),
-    );
+    ).pipe(orEmpty([] as Array<{ readonly rank: number; readonly hit: MemoryHit }>));
 
   const changesFrom = (
     scope: MemoryScope,
@@ -643,14 +685,14 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         note?.pinned === true ? Effect.succeed(false) : Effect.as(endOf(actor, scope, sessionId, key), true),
       ).pipe(refusalIsOutage, changing.withPermit),
     check: (_actor, scope) =>
-      client
-        // A dry run, so the engine keeps no report page of its own among your pages.
-        .tool(ROOT, "memory_lint", { ...target(scope, engineProjectOf(scope)), dry_run: true }, LintJson)
-        .pipe(
-          Effect.map((json) => findingsOf(scope, json)),
-          orEmpty([] as ReadonlyArray<MemoryFinding>),
-          refusalIsOutage,
-        ),
+      whenHeld(
+        engineProjectOf(scope),
+        [] as ReadonlyArray<MemoryFinding>,
+        client
+          // A dry run, so the engine keeps no report page of its own among your pages.
+          .tool(ROOT, "memory_lint", { ...target(scope, engineProjectOf(scope)), dry_run: true }, LintJson)
+          .pipe(Effect.map((json) => findingsOf(scope, json))),
+      ).pipe(orEmpty([] as ReadonlyArray<MemoryFinding>), refusalIsOutage),
     health: client.health,
   };
 
