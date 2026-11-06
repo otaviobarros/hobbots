@@ -65,7 +65,17 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // you add it, a turned-down proposal leaves it as it was, and the hob is told either way.
 
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hobbots-skill-proposals-")));
-afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
+/** Makes every folder under `folder` writable again, since the skills store keeps its revisions read-only. */
+const unlock = (folder: string): void => {
+  fs.chmodSync(folder, 0o755);
+  for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+    if (entry.isDirectory() && !entry.isSymbolicLink()) unlock(path.join(folder, entry.name));
+  }
+};
+afterAll(() => {
+  unlock(root);
+  fs.rmSync(root, { recursive: true, force: true });
+});
 
 const ada = AgentId.make("0d6e2f0a-0000-4000-8000-0000000000b1");
 const folder = path.join(root, "work");
