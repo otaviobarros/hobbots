@@ -47,6 +47,11 @@ export interface WorkCard {
   readonly leadId: AgentId;
   /** Done Tasks and all Tasks under the top one, for the progress line. */
   readonly progress: { readonly done: number; readonly total: number };
+  /**
+   * How long the work ran, in milliseconds, once its top Task has ended, or null while it runs. It
+   * ends when the Quest ended, or when a Task with no Quest ended, so every place shows one value (#1007).
+   */
+  readonly took: number | null;
 }
 
 const childrenOf = (tree: TaskTree, id: TaskId) => tree.tasks.filter((task) => task.parentId === id);
@@ -112,9 +117,11 @@ export const workCard = (tree: TaskTree): WorkCard | null => {
   if (top === undefined) return null;
   const quest = tree.quests.find((each) => each.taskId === top.id) ?? null;
   const under = tree.tasks.filter((task) => task.id !== top.id);
+  const endedAt = isTerminalTask(top.state) ? (quest?.endedAt ?? top.updatedAt) : null;
   return {
     top,
     quest,
+    took: endedAt === null ? null : Math.max(0, Date.parse(endedAt) - Date.parse(top.createdAt)),
     leadId: top.ownerId,
     progress: {
       done: under.filter((task) => task.state === "completed").length,

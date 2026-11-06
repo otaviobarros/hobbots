@@ -11,8 +11,8 @@ const copy = messages.finished;
 const finishedText = (tree: TaskTree): { readonly summary: string | null; readonly meta: string } | null => {
   const card = workCard(tree);
   if (card === null || card.top.state !== "completed") return null;
-  const { top, quest } = card;
-  const took = formatDuration(Date.parse(quest?.endedAt ?? top.updatedAt) - Date.parse(top.createdAt));
+  const { top } = card;
+  const took = formatDuration(card.took ?? 0);
   const { done, total } = card.progress;
   const parts = [
     ...(total > 0 ? [copy.tasks({ done, total })] : []),
