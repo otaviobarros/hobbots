@@ -20,6 +20,8 @@ describe("the docked Workbench's height", () => {
 
   it("reads the height the device kept, and the design's height for anything else", () => {
     expect(parseHeight({ v: 1, height: 420 })).toBe(420);
+    // A height kept while the dock could be shorter opens at its least now (#1002).
+    expect(parseHeight({ v: 1, height: 180 })).toBe(DOCK_MIN);
     expect(parseHeight({ height: 420 })).toBe(DOCK_HEIGHT);
     expect(parseHeight(null)).toBe(DOCK_HEIGHT);
   });

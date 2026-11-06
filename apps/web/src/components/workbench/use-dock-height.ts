@@ -9,8 +9,11 @@ const StoredHeight = Schema.Struct({ v: Schema.Literal(1), height: Schema.Number
 
 /** The open dock's height when none is kept: tall enough to read a diff without scrolling at once. */
 export const DOCK_HEIGHT = 420;
-/** The least an open dock takes: its strip and a few rows. */
-export const DOCK_MIN = 180;
+/**
+ * The least an open dock takes: its strip and a few rows. The Terminal is the tallest to hold, with
+ * its tally, its tabs and Find, two rows and its folded commands, so it sets the floor (#1002).
+ */
+export const DOCK_MIN = 288;
 /** The most of the room the dock takes, so the lanes keep a row of their work. */
 const DOCK_MAX_SHARE = 0.8;
 /** How far an arrow key moves the dock's edge. */
@@ -20,7 +23,9 @@ const KEY_STEP = 32;
 export const clampHeight = (height: number, room: number): number =>
   Math.round(Math.min(Math.max(height, DOCK_MIN), Math.max(DOCK_MIN, room * DOCK_MAX_SHARE)));
 
-export const parseHeight = (stored: unknown): number => (Schema.is(StoredHeight)(stored) ? stored.height : DOCK_HEIGHT);
+/** The height the device kept, raised to the least the dock takes now, or the design's height. */
+export const parseHeight = (stored: unknown): number =>
+  Schema.is(StoredHeight)(stored) ? Math.max(stored.height, DOCK_MIN) : DOCK_HEIGHT;
 
 /** The height a key on the dock's edge moves it to, or null for a key that does not move it. */
 export const keyedHeight = (key: string, height: number, room: number): number | null => {
