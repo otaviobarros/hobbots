@@ -55,7 +55,7 @@ Local pages load from the app's custom protocol, never from `file://`. Every pag
 The package config sets `electronFuses`: `runAsNode`, `enableNodeOptionsEnvironmentVariable` and `enableNodeCliInspectArguments` off; `enableEmbeddedAsarIntegrityValidation`, `onlyLoadAppFromAsar` and `enableCookieEncryption` on.
 
 - **Why:** the default fuses let another program run code with the app's identity and permissions, for example through `ELECTRON_RUN_AS_NODE`.
-- **Enforced by:** `electron-builder.config.mjs`, and a step after `package:mac` that reads the fuses with `@electron/fuses read` and fails on a wrong one.
+- **Enforced by:** `electron-builder.config.mjs`, and a step after `package:mac` and `package:linux` that reads the fuses with `@electron/fuses read` and fails on a wrong one.
 - **Applies to:** `apps/desktop`.
 
 ### STD-DESKTOP-008 The main process never blocks

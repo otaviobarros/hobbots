@@ -6,7 +6,8 @@
  * Every size is drawn from a pixel grid with whole-pixel cells, never scaled from a large image:
  * 16 px uses the small chief, every larger size the full one.
  * Run `pnpm --filter @hobbots/desktop icon` (Node 22.18 or later, for type stripping) to
- * regenerate `resources/icon.icns` and `resources/icon.png` after changing the art.
+ * regenerate `resources/icon.icns`, `resources/icon.png` and the Linux icons in `resources/icons`
+ * after changing the art. `icon.icns` needs macOS's `iconutil`; elsewhere it is left as it is.
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -115,17 +116,29 @@ const ICONSET = [16, 32, 128, 256, 512].flatMap((points) => [
   { name: `icon_${points}x${points}@2x.png`, size: points * 2 },
 ]);
 
+/**
+ * The Linux icons, one PNG per size named `<size>x<size>.png` as electron-builder expects of an icon
+ * folder. It installs each into the hicolor theme, whose largest size is 512.
+ */
+export const LINUX_ICON_SIZES = [16, 32, 64, 128, 256, 512];
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const resources = join(import.meta.dirname, "../resources");
-  const work = mkdtempSync(join(tmpdir(), "hobbots-icon-"));
-  try {
-    const iconset = join(work, "Hobbots.iconset");
-    mkdirSync(iconset);
-    for (const { name, size } of ICONSET) writeFileSync(join(iconset, name), encodePng(size, renderIcon(size)));
-    mkdirSync(resources, { recursive: true });
-    execFileSync("iconutil", ["--convert", "icns", "--output", join(resources, "icon.icns"), iconset]);
-    writeFileSync(join(resources, "icon.png"), encodePng(1024, renderIcon(1024)));
-  } finally {
-    rmSync(work, { recursive: true, force: true });
+  mkdirSync(join(resources, "icons"), { recursive: true });
+  writeFileSync(join(resources, "icon.png"), encodePng(1024, renderIcon(1024)));
+  for (const size of LINUX_ICON_SIZES) {
+    writeFileSync(join(resources, "icons", `${size}x${size}.png`), encodePng(size, renderIcon(size)));
+  }
+  if (process.platform !== "darwin") console.log("Left resources/icon.icns as it is: it needs macOS's iconutil.");
+  else {
+    const work = mkdtempSync(join(tmpdir(), "hobbots-icon-"));
+    try {
+      const iconset = join(work, "Hobbots.iconset");
+      mkdirSync(iconset);
+      for (const { name, size } of ICONSET) writeFileSync(join(iconset, name), encodePng(size, renderIcon(size)));
+      execFileSync("iconutil", ["--convert", "icns", "--output", join(resources, "icon.icns"), iconset]);
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
   }
 }
