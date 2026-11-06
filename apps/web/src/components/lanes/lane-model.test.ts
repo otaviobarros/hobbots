@@ -297,8 +297,8 @@ describe("the Quest room's lanes", () => {
       attempt: attempt(BUILD, "running"),
       steps: [dev, check],
       commands: [
-        command(BUILD, "pnpm dev", 13, { state: "running", exitCode: null, endedAt: null }),
-        command(BUILD, "echo checked", 14),
+        command(BUILD, "pnpm dev", 13, { stepId: "turn/dev", state: "running", exitCode: null, endedAt: null }),
+        command(BUILD, "echo checked", 14, { stepId: "turn/check" }),
       ],
     });
     const lane = laneOf(laneRoom(handedOn(), [records]), ADA);
@@ -320,6 +320,46 @@ describe("the Quest room's lanes", () => {
     const overlapping = activity(BUILD, { ...records, steps: [dev, edit, check, late] });
     expect(laneOf(laneRoom(handedOn(), [overlapping]), ADA).items.at(-1)).toMatchObject({
       label: "Editing page.astro",
+    });
+    // A command's step is known by its call, not its words: `git -C /work fetch` reads "Running git
+    // fetch", and is still the background command, so a newer running command is what the turn is on.
+    const fetch: ReplyStep = {
+      id: "fetch@2",
+      kind: "tool",
+      label: "Running git fetch",
+      state: "running",
+      call: { tool: "Bash", operation: "local-git", targets: ["/work"] },
+      startedAt: AT(13),
+    };
+    const fetching = command(BUILD, "git -C /work fetch", 13, {
+      stepId: "turn/fetch",
+      state: "running",
+      exitCode: null,
+      endedAt: null,
+    });
+    const tests: ReplyStep = {
+      id: "tests",
+      kind: "tool",
+      label: "Running pnpm test",
+      state: "running",
+      startedAt: AT(15),
+    };
+    const testing = command(BUILD, "pnpm test", 15, {
+      stepId: "turn/tests",
+      state: "running",
+      exitCode: null,
+      endedAt: null,
+    });
+    const both = activity(BUILD, { ...records, steps: [fetch, tests], commands: [fetching, testing] });
+    expect(laneOf(laneRoom(handedOn(), [both]), ADA).items.at(-1)).toMatchObject({ label: "Running pnpm test" });
+    // Once the tests end and a later step finishes, the turn waits on the fetch, named as recorded.
+    const waiting = activity(BUILD, {
+      ...records,
+      steps: [fetch, { ...tests, state: "done" }, check],
+      commands: [fetching, new CommandRecord({ ...testing, state: "succeeded", exitCode: 0, endedAt: AT(16) })],
+    });
+    expect(laneOf(laneRoom(handedOn(), [waiting]), ADA).items.at(-1)).toMatchObject({
+      label: "Waiting on git -C /work fetch",
     });
   });
 

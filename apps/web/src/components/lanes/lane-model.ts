@@ -408,10 +408,15 @@ const lastActivity = (tree: TaskTree, unit: ReadonlyArray<Task>, attempt: Attemp
   ]);
 };
 
-/** Whether a step runs a command, which a record of the Attempt may show still running in the background. */
+/** A step's id as the runtime gave it, without the `@n` a reply adds to keep a resumed turn's ids apart. */
+const callId = (step: ReplyStep): string => step.id.split("@")[0] ?? step.id;
+
+/**
+ * Whether a step runs a command: a command record of the Attempt was made for its call. A record
+ * names its call as `<turn>/<call id>`, which is how it is matched, never by the step's words.
+ */
 const runsCommand = (step: ReplyStep, activity: AttemptActivity): boolean =>
-  step.call?.operation === "run-commands" ||
-  activity.commands.some((each) => each.state === "running" && step.label === `Running ${each.command}`);
+  activity.commands.some((each) => each.stepId.slice(each.stepId.lastIndexOf("/") + 1) === callId(step));
 
 /**
  * The step a running turn is on, from the records of the Attempt that runs. A step that is not a
