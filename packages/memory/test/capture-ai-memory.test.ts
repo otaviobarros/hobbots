@@ -16,6 +16,13 @@ vi.setConfig({ testTimeout: 90_000 });
  */
 type RunningEngine = Effect.Success<ReturnType<typeof startEngineStore>>;
 
+/** One observation as `memory_read_session_observations` lists it, in the fields read. */
+interface EngineObservation {
+  readonly kind: string;
+  readonly title: string;
+  readonly created_at: string;
+}
+
 const observationsOf = (engine: RunningEngine, hob: string, threadId: string) =>
   Effect.promise(async () => {
     const response = await fetch(`${engine.endpoint.url}/mcp`, {
@@ -41,10 +48,10 @@ const observationsOf = (engine: RunningEngine, hob: string, threadId: string) =>
       error?: { message: string };
     };
     // A session memory never saw holds nothing.
-    if (rpc.error?.message.includes("not found") === true) return 0;
+    if (rpc.error?.message.includes("not found") === true) return [];
     if (rpc.error !== undefined || rpc.result?.isError === true) throw new Error(JSON.stringify(rpc));
-    const json = JSON.parse(rpc.result?.content[0]?.text ?? "{}") as { observations?: Array<{ kind: string }> };
-    return (json.observations ?? []).filter((observation) => observation.kind !== "session-end").length;
+    const json = JSON.parse(rpc.result?.content[0]?.text ?? "{}") as { observations?: Array<EngineObservation> };
+    return (json.observations ?? []).filter((observation) => observation.kind !== "session-end");
   });
 
 describe.runIf(engineEnabled)("memory capture on ai-memory", () => {
@@ -58,7 +65,12 @@ describe.runIf(engineEnabled)("memory capture on ai-memory", () => {
       });
       return {
         store,
-        observations: (agentId, sessionId) => observationsOf(engine, engineActorOf(agentId), sessionId),
+        observations: (agentId, sessionId) =>
+          Effect.map(observationsOf(engine, engineActorOf(agentId), sessionId), (observations) => observations.length),
+        observed: (agentId, sessionId) =>
+          Effect.map(observationsOf(engine, engineActorOf(agentId), sessionId), (observations) =>
+            observations.map((observation) => ({ title: observation.title, at: observation.created_at })),
+          ),
         down: Effect.promise(() => Effect.runPromise(Scope.close(engine.scope, Exit.void))),
         up: Effect.promise(async () => {
           engine = await Effect.runPromise(startEngineStore(dataDir, keys));

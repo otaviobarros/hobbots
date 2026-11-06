@@ -93,6 +93,8 @@ const withShown = (caller: TaskToolCaller, shown: ReadonlyMap<string, CarriedIte
 
 /** What a session's Charm calls run under: the hob's access now, its redactor, and who answers an Ask. */
 export interface SessionCharms {
+  /** The Attempt the session runs as: a memory save it makes settles in that Attempt's session (#1049). */
+  readonly attemptId: AttemptId;
   readonly currentAccess: Effect.Effect<ToolAccess | null>;
   readonly redactor: Redactor;
   readonly approvals: TurnApprovals | null;

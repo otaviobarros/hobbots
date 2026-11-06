@@ -8,6 +8,7 @@ import { sqlOrDie } from "./sql-errors.ts";
 
 interface Row extends MemoryCallRow {
   readonly undoneAt: string | null;
+  readonly attemptId: string | null;
 }
 
 const decodeSave = Schema.decodeUnknownEffect(MemorySave);
@@ -16,12 +17,17 @@ const fromRow = (row: Row) =>
   decodeSave({
     ...memoryCallFields(row),
     ...(row.undoneAt === null ? {} : { undoneAt: row.undoneAt }),
+    ...(row.attemptId === null ? {} : { attemptId: row.attemptId }),
   }).pipe(Effect.orDie);
 
-const toRow = (save: MemorySave) => ({ ...memoryCallColumns(save), undone_at: save.undoneAt ?? null });
+const toRow = (save: MemorySave) => ({
+  ...memoryCallColumns(save),
+  undone_at: save.undoneAt ?? null,
+  attempt_id: save.attemptId ?? null,
+});
 
 /**
- * The SQL record of memory saves (migrations 0055 and 0058), keyed by hob, work and key. A save is recorded
+ * The SQL record of memory saves (migrations 0055, 0058 and 0064), keyed by hob, work and key. A save is recorded
  * and journaled in one transaction (ADR 028: the journal is the outbox), with the journal's head
  * taken first, so two calls with one key take turns on PostgreSQL and only the first is recorded.
  */
