@@ -1,7 +1,7 @@
-import { ApprovalService, HobLifecycle, TaskControls } from "@hobbots/agents";
-import { type Message, steerReceipt, type TaskNote, type TaskTree } from "@hobbots/domain";
+import { ApprovalService, ChatService, HobLifecycle, TaskControls } from "@hobbots/agents";
+import { isResumable, type Message, type MessageId, steerReceipt, type TaskNote, type TaskTree } from "@hobbots/domain";
 import { EventJournal } from "@hobbots/persistence";
-import { Effect } from "effect";
+import { Effect, Schedule } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   FRODO,
@@ -59,6 +59,12 @@ const answeredTo = (text: string) =>
     const message = all.find((each) => each.role === "user" && each.content.startsWith(text));
     return message !== undefined && all.some((each) => each.role === "assistant" && each.promptId === message.id);
   });
+
+/** Continue on the reply, once its turn has let go of the thread. */
+const resume = (replyId: MessageId) =>
+  ChatService.use((chat) => chat.continueReply(threadId, replyId)).pipe(
+    Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }),
+  );
 
 const picked = (note: TaskNote) => note.pickedUpBy !== null;
 
@@ -384,5 +390,63 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(passed?.receipt._tag).toBe("PickedUp");
     // The request that started the work is no note: Pip's Task carries nothing of it.
     expect(steerReceipt([tree], yours(all, "Build the site").message.id)).toEqual([]);
+  }, 30_000);
+  // covers OR-002, UX-006, CH-009
+  it("[TC-OR-547] a steer whose reply you continue carries your words, not the Continue prompt, to the Task it delegates (#1005)", async () => {
+    const hubbed = partyHub();
+    dispose = hubbed.dispose;
+    const { run } = hubbed;
+    // The work runs with no member yet, so no turn of the lead's comes between yours.
+    await run(send(["Build the site", hub("start_quest", { key: "quest", goal: "Build the site" })]));
+    await run(messagesWhen((all) => all.some((each) => each.role === "assistant" && each.status === "complete")));
+
+    // The reply to your steer is cut off; the turn you continue it with delegates the report.
+    await run(
+      send([
+        "Keep the report under one page",
+        "fake:fail",
+        `fake:then ${hub("delegate_task", { key: "report", hob: "Quill", brief: "Write a one-page report" })}`,
+      ]),
+    );
+    const cut = await run(
+      messagesWhen((all) => {
+        const message = all.find((each) => each.role === "user" && each.content.startsWith("Keep the report"));
+        return all.some((each) => each.promptId === message?.id && isResumable(each.status));
+      }),
+    );
+    const { message, reply } = yours(cut, "Keep the report under one page");
+    if (reply === undefined) throw new Error("no reply");
+    await run(resume(reply.id));
+
+    const tree = await run(pickedUp(message.id, 1));
+    const [passed, ...others] = steerReceipt([tree], message.id);
+    expect(others).toEqual([]);
+    expect(passed?.note).toMatchObject({ recipientId: QUILL, messageId: message.id, fromNoteId: null });
+    expect(passed?.note.text.startsWith("Keep the report under one page")).toBe(true);
+    expect(passed?.note.text).not.toContain("cut off");
+  }, 30_000);
+
+  // covers OR-002, UX-006, CH-009
+  it("[TC-OR-548] the request that started the work carries nothing, even when the turn you continue on it delegates (#1005)", async () => {
+    const hubbed = partyHub();
+    dispose = hubbed.dispose;
+    const { run } = hubbed;
+    // The request's turn starts the Quest and is cut off; the turn you continue it with delegates.
+    await run(
+      send([
+        "Write the report",
+        hub("start_quest", { key: "quest", goal: "Write the report" }),
+        "fake:fail",
+        `fake:then ${hub("delegate_task", { key: "report", hob: "Quill", brief: "Write the report" })}`,
+      ]),
+    );
+    const cut = await run(messagesWhen((all) => all.some((each) => isResumable(each.status))));
+    const { message, reply } = yours(cut, "Write the report");
+    if (reply === undefined) throw new Error("no reply");
+    await run(resume(reply.id));
+
+    const tree = await run(treeWhen((each) => ownedBy(each, QUILL)?.state === "completed"));
+    expect(tree.notes).toEqual([]);
+    expect(steerReceipt([tree], message.id)).toEqual([]);
   }, 30_000);
 });

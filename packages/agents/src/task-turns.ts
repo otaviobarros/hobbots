@@ -21,6 +21,11 @@ export interface ChatTurn {
   readonly promptId?: MessageId | null;
   /** The turn's prompt, which becomes the brief of a Task the turn starts. */
   readonly prompt: string;
+  /**
+   * The message of yours the turn answers, as you wrote it and when you sent it. Continue keeps it,
+   * though its prompt is Hobbots' own, so a Task the turn delegates carries your words (#1005).
+   */
+  readonly yours?: { readonly text: string; readonly sentAt: string };
   readonly runtime: RuntimeKind;
   readonly configVersion: number;
   /**
