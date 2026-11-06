@@ -1,3 +1,4 @@
+import { extname } from "node:path";
 import { HubHosts, normalizeHost } from "@hobbots/permissions";
 import { Effect, Layer } from "effect";
 import {
@@ -15,10 +16,11 @@ const HASHED_ASSETS = "/assets/";
  * How long a browser may keep a file the web client is made of. A hashed asset never changes under
  * its name, so it is kept for a year without asking. Everything else, index.html above all, is
  * checked with the hub on every load: index.html names the hashed bundle, so a stale copy runs an
- * old client against a newer hub after an update.
+ * old client against a newer hub after an update. A path without an extension is never a hashed
+ * asset, even under /assets/: the static server answers it with index.html.
  */
 const webClientCacheControl = (pathname: string) =>
-  pathname.startsWith(HASHED_ASSETS) ? "public, max-age=31536000, immutable" : "no-cache";
+  pathname.startsWith(HASHED_ASSETS) && extname(pathname) !== "" ? "public, max-age=31536000, immutable" : "no-cache";
 
 /**
  * Serves the built web client next to the API. Paths without a file extension fall back to

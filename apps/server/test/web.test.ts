@@ -79,7 +79,8 @@ describe("web client routes", () => {
   // covers DP-001
   it("[TC-DP-274] has the browser check index.html with the hub on every load and keep hashed assets", async () => {
     // index.html names the hashed bundle, so a copy reused without asking runs an old client after an update.
-    for (const path of ["/", "/index.html", "/agents/aldric"]) {
+    // An extensionless path under /assets/ falls back to index.html too, so it is not a hashed asset.
+    for (const path of ["/", "/index.html", "/agents/aldric", "/assets/example"]) {
       const page = await get(path, { accept: "text/html" });
       expect(page.status).toBe(200);
       expect(page.headers.get("cache-control")).toBe("no-cache");
