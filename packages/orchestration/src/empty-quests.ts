@@ -116,6 +116,8 @@ export const flagIdleQuest = (deps: TurnEndDeps, taskId: TaskId, carried: Readon
     const tree = Option.getOrUndefined(yield* deps.tasks.readTree(taskId));
     const task = tree?.tasks[0];
     if (tree === undefined || task === undefined) return;
+    // Only a Task that leads an active Quest can be left idle so: any other reads nothing more.
+    if (!tree.quests.some((each) => each.taskId === task.id && each.state === "active")) return;
     const ledger = yield* deps.tasks.readLedger(task.id);
     if (Option.isNone(ledger)) return;
     const idle = idleQuestOf(task, tree, ledger.value.open, carried, at);
