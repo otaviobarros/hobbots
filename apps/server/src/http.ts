@@ -40,6 +40,7 @@ import { PermissionsHandlers } from "./permissions.ts";
 import { RemoteAccessHandlers } from "./remote-access.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
+import { SkillsHandlers } from "./skills.ts";
 import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
 import { UsageHandlers } from "./usage.ts";
 import { DeviceSessionLive } from "./user-session.ts";
@@ -231,6 +232,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     MemoryPagesHandlers,
     MemorySharesHandlers,
     HobMemoryHandlers,
+    SkillsHandlers,
   ]),
   Layer.provide(DeviceSessionLive),
 );

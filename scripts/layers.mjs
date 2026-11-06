@@ -28,10 +28,13 @@ export const layers = {
     may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"],
   },
   // The Workbench's records (ADR 023): the scanner of a hob's folders and the store of logs and contents.
-  "@hobbots/workbench": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents"] },
+  "@hobbots/workbench": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"] },
   // Memory (ADR 028): the bundled ai-memory engine and the only code that knows it, behind `MemoryStore`, its
   // fake, and the memory tools, which ask the policy engine before each call as every hub tool does.
   "@hobbots/memory": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"] },
+  // Skills (ADR 029): the object store, import from a folder, an archive or Git with its checks, and
+  // `~/.agents/skills`. No other package imports it, and it imports no runtime and no Charm.
+  "@hobbots/skills": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"] },
   // Pixel art that the app and the site both draw. Plain data and pure functions.
   "@hobbots/art": { layer: "adapter", may: ["@hobbots/domain"] },
   "@hobbots/ui": { layer: "adapter", may: ["@hobbots/art"] },
@@ -48,6 +51,7 @@ export const layers = {
       "@hobbots/permissions",
       "@hobbots/persistence",
       "@hobbots/runtimes",
+      "@hobbots/skills",
       "@hobbots/workbench",
     ],
   },
