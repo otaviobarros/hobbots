@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import type { SDKMessage, SDKUsageReport } from "@anthropic-ai/claude-agent-sdk";
-import { RuntimeLimitReached } from "@hobbots/agents";
+import { type RuntimeEvent, RuntimeLimitReached } from "@hobbots/agents";
 import { hobAppCommitIdentity, policySandbox } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
@@ -39,6 +39,7 @@ import {
   turnEvents,
   turnInstructions,
   turnPrompt,
+  wholeTurn,
 } from "../src/claude-code.ts";
 import { ProcessSandbox } from "../src/sandbox.ts";
 
@@ -476,6 +477,25 @@ describe("a Claude Code turn that fails", () => {
 
     expect(tail.length).toBeLessThanOrEqual(100);
     expect(tail.endsWith("x\nthe end")).toBe(true);
+  });
+});
+
+describe("one turn over several runs of Claude Code", () => {
+  const started: RuntimeEvent = { _tag: "SessionStarted", sessionId: "s", billing: null };
+  const completed = (text: string): RuntimeEvent => ({ _tag: "Completed", sessionId: "s", text });
+
+  // regression: a background command woke the session after it replied, and the second `init` broke the turn
+  // covers EX-001
+  it("[TC-RT-507] starts once, and completes when Claude Code stops, with what each run replied", () => {
+    const whole = wholeTurn();
+    expect([started, completed("Waiting."), started, completed("Done.")].flatMap(whole.read)).toEqual([started]);
+    expect(whole.end()).toEqual([completed("Waiting.\n\nDone.")]);
+  });
+
+  it("completes nothing when no run finished", () => {
+    const whole = wholeTurn();
+    whole.read(started);
+    expect(whole.end()).toEqual([]);
   });
 });
 

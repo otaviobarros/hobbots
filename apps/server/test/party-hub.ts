@@ -15,6 +15,7 @@ import {
   type PromptRequest,
   QuestionService,
   RuntimeAdapter,
+  type RuntimeEvent,
   TaskControls,
   TaskRepository,
 } from "@hobbots/agents";
@@ -44,7 +45,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { DispatcherHostLive } from "../src/backpack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
 import { EventBus } from "../src/event-bus.ts";
@@ -122,7 +123,13 @@ const reacted = (prompt: string, reactions: Array<Reaction>) => {
  * The hub's services, a temporary project folder, and what each scripted call was answered. With
  * `memory`, the hub's hobs remember through it (ADR 028).
  */
-export const partyHub = (options: { readonly memory?: MemoryStoreShape } = {}) => {
+export const partyHub = (
+  options: {
+    readonly memory?: MemoryStoreShape;
+    /** Which turns announce their session twice, as a runtime bug would. */
+    readonly announcesTwice?: (prompt: string) => boolean;
+  } = {},
+) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
   const project = join(temp, "project");
   mkdirSync(project, { recursive: true });
@@ -160,7 +167,14 @@ export const partyHub = (options: { readonly memory?: MemoryStoreShape } = {}) =
         sendPrompt: (sent) => {
           const request = answering({ ...sent, prompt: reacted(sent.prompt, reactions) }, answers, gates);
           requests.push(request);
-          return fake.sendPrompt(request);
+          const events = fake.sendPrompt(request);
+          return options.announcesTwice?.(request.prompt)
+            ? events.pipe(
+                Stream.flatMap((event) =>
+                  Stream.fromIterable<RuntimeEvent>(event._tag === "SessionStarted" ? [event, event] : [event]),
+                ),
+              )
+            : events;
         },
       });
     }),

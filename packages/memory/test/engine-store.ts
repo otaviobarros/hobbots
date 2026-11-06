@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
@@ -6,16 +6,15 @@ import { MemoryStore } from "@hobbots/agents";
 import { Context, Effect, Exit, Layer, Option, Schedule, Scope } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { afterAll } from "vitest";
-import { defaultEngineFolder, ENGINE_BINARY } from "../src/engine/binary.ts";
 import { MemoryEngine } from "../src/engine/engine.ts";
 import { loadOrCreateMemoryKeys, type MemoryKeys } from "../src/engine/keys.ts";
 import { MemoryStoreAiMemory } from "../src/store/ai-memory.ts";
+import { testEngine } from "../src/testing.ts";
 
 // The bundled ai-memory for tests (ADR 028), as the engine's contract tests run it: skipped without
 // the engine, and failed for its absence in CI (HOBBOTS_MEMORY_CONTRACT=1).
-const folder = process.env.HOBBOTS_MEMORY_ENGINE_DIR ?? defaultEngineFolder();
-const fetched = folder !== undefined && existsSync(join(folder, ENGINE_BINARY));
-export const engineEnabled = fetched || process.env.HOBBOTS_MEMORY_CONTRACT === "1";
+const { folder, fetched } = testEngine;
+export const engineEnabled = testEngine.enabled;
 
 const scopes: Array<Scope.Closeable> = [];
 const dataDirs: Array<string> = [];
