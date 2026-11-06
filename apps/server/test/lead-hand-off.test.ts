@@ -86,12 +86,12 @@ describe("a lead that follows the hand-off rule", () => {
     const leadAt = requests.findIndex((each) => each.prompt.includes("(Write the backend) finished"));
     const leadSession = requests[leadAt]?.sessionId;
     expect(leadAt).toBeGreaterThanOrEqual(0);
-    expect(
-      requests
-        .slice(0, leadAt + 1)
-        .filter((each) => each.sessionId === leadSession || each.sessionId === null)
-        .some((each) => `${each.briefing ?? ""}\n${each.prompt}`.includes(RULE)),
-    ).toBe(true);
+    expect(leadSession).not.toBeNull();
+    // Only Aldric's chat turns on the Task are briefed "for this conversation"; members' prompts are not.
+    const leadTurns = requests
+      .slice(0, leadAt + 1)
+      .filter((each) => each.sessionId === leadSession && (each.briefing ?? "").includes("for this conversation:"));
+    expect(leadTurns.some((each) => (each.briefing ?? "").includes(RULE))).toBe(true);
     const rook = taskOf(done, ROOK);
     const [first, resumed] = promptsTo(requests, rook);
     expect(first?.prompt).toContain(RULE);

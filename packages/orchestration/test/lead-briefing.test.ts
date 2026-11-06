@@ -15,7 +15,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { renderBrief, SINCE_LAST_TURN } from "../src/brief-parts.ts";
+import { type BriefPart, fixed, renderBrief, rule, SINCE_LAST_TURN } from "../src/brief-parts.ts";
 import { ownerBriefing, ownerBriefingParts } from "../src/briefs.ts";
 import { reportingRules } from "../src/reporting.ts";
 
@@ -162,6 +162,27 @@ describe("a lead's briefing on a resumed session", () => {
     };
     const resent = renderBrief(lead(tree).id, parts(tree), older);
     for (const told of RULES) expect(resent.text).toContain(told);
+  });
+
+  // covers OR-004
+  it("[TC-OR-607] a rule whose text changes, or that stops applying and applies again, is told again once", () => {
+    const id = lead(finishedBy(0)).id;
+    const briefed = (...rules: ReadonlyArray<BriefPart>) => [fixed("You are working on it."), ...rules];
+    const first = renderBrief(id, briefed(rule("chat", "Write only the plan.")), null);
+    const same = renderBrief(id, briefed(rule("chat", "Write only the plan.")), first.told);
+    expect(same.text).not.toContain("Write only the plan.");
+    // Its text changes: told again, then kept.
+    const changed = renderBrief(id, briefed(rule("chat", "Write only the plan and the finish.")), same.told);
+    expect(changed.text).toContain("Write only the plan and the finish.");
+    expect(
+      renderBrief(id, briefed(rule("chat", "Write only the plan and the finish.")), changed.told).text,
+    ).not.toContain("Write only the plan");
+    // It stops applying, then applies again: told again on its return.
+    const gone = renderBrief(id, briefed(rule("chat")), changed.told);
+    expect(gone.text).not.toContain("Write only the plan");
+    expect(renderBrief(id, briefed(rule("chat", "Write only the plan and the finish.")), gone.told).text).toContain(
+      "Write only the plan and the finish.",
+    );
   });
 
   // covers OR-004, IN-004
