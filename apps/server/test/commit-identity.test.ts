@@ -20,15 +20,7 @@ import {
   UserGitIdentity,
 } from "@hobbots/agents";
 import { HubQuestionsRead } from "@hobbots/api";
-import {
-  Agent,
-  AgentId,
-  type GitHubUser,
-  type GitIdentity,
-  type HubQuestion,
-  Thread,
-  ThreadId,
-} from "@hobbots/domain";
+import { Agent, AgentId, type GitHubUser, type GitIdentity, type HubQuestion, Thread, ThreadId } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
