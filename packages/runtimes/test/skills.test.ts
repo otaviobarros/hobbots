@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -39,6 +41,19 @@ const revision = (name: string, body = `Use ${name}.`, extra: Record<string, str
     mkdirSync(join(folder, path, ".."), { recursive: true });
     writeFileSync(join(folder, path), text);
   }
+  return folder;
+};
+
+/** Seals a revision as the library keeps it: nothing writable, its scripts still runnable. */
+const sealed = (folder: string): string => {
+  for (const entry of readdirSync(folder, { withFileTypes: true, recursive: true })) {
+    const path = join(entry.parentPath, entry.name);
+    if (entry.isFile()) chmodSync(path, statSync(path).mode & 0o111 ? 0o555 : 0o444);
+  }
+  for (const entry of readdirSync(folder, { withFileTypes: true, recursive: true }).reverse()) {
+    if (entry.isDirectory()) chmodSync(join(entry.parentPath, entry.name), 0o555);
+  }
+  chmodSync(folder, 0o555);
   return folder;
 };
 
@@ -111,6 +126,30 @@ describe("a turn's skill folder (ADR 029)", () => {
     expect(() => writeSkillFolder(base, [mount("../escape", revision("escape"))])).toThrow(/not a skill name/);
     // Nothing half written is left.
     expect(readdirSync(join(base, SKILL_MOUNTS))).toEqual([]);
+  });
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-524] marks a read-only revision Only when asked, and its scripts still run from the folder", () => {
+    const base = mkdtempSync(join(temp, "base-"));
+    const stored = revision("release", "Release steps.", {
+      "scripts/run.sh": "#!/bin/sh\necho released\n",
+      "agents/openai.yaml": "interface:\n  display_name: Release\n",
+    });
+    chmodSync(join(stored, "scripts", "run.sh"), 0o755);
+    const written = writeSkillFolder(base, [mount("release", sealed(stored), false)]);
+    const copy = join(written.skills, "release");
+    expect(readFileSync(join(copy, "SKILL.md"), "utf8")).toContain("disable-model-invocation: true");
+    expect(readFileSync(join(copy, "agents", "openai.yaml"), "utf8")).toContain("allow_implicit_invocation: false");
+    // A script the policy lets run is run straight from the folder, which stays read-only.
+    const script = join(copy, "scripts", "run.sh");
+    expect(execFileSync(script, { encoding: "utf8" })).toBe("released\n");
+    expect(statSync(script).mode & 0o222).toBe(0);
+    expect(statSync(join(copy, "SKILL.md")).mode & 0o111).toBe(0);
+    // A revision without Codex's file gets one, inside a read-only revision too.
+    const plain = writeSkillFolder(base, [mount("plain", sealed(revision("plain")), false)]);
+    expect(readFileSync(join(plain.skills, "plain", "agents", "openai.yaml"), "utf8")).toBe(
+      "policy:\n  allow_implicit_invocation: false\n",
+    );
   });
 
   // covers RT-001, ADR 029

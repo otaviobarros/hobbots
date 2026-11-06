@@ -94,6 +94,8 @@ const copyMount = (skills: string, mount: SkillMount) => {
   const target = join(skills, mount.name);
   cpSync(mount.folder, target, { recursive: true });
   if (mount.implicit) return;
+  // The copy keeps the revision's modes, which are read-only, so only the copy is opened to be marked.
+  setWritable(target, true);
   const skillFile = join(target, "SKILL.md");
   writeFileSync(skillFile, onlyWhenAskedSkillFile(readFileSync(skillFile, "utf8")));
   const codexFile = join(target, "agents", "openai.yaml");
@@ -102,7 +104,10 @@ const copyMount = (skills: string, mount: SkillMount) => {
   writeFileSync(codexFile, onlyWhenAskedCodexFile(stored));
 };
 
-/** Makes every file and folder under `path` read-only, or writable again to remove it. */
+/**
+ * Makes every file and folder under `path` read-only, or writable again to change or remove it. A
+ * file that can be run, such as a skill's script, stays one: only its write bits change.
+ */
 const setWritable = (path: string, writable: boolean) => {
   const stat = lstatSync(path);
   if (stat.isDirectory()) {
@@ -110,7 +115,8 @@ const setWritable = (path: string, writable: boolean) => {
     for (const entry of readdirSync(path)) setWritable(join(path, entry), writable);
     if (!writable) chmodSync(path, 0o500);
   } else if (stat.isFile()) {
-    chmodSync(path, writable ? 0o600 : 0o400);
+    const runnable = (stat.mode & 0o111) !== 0;
+    chmodSync(path, (writable ? 0o600 : 0o400) | (runnable ? 0o100 : 0));
   }
 };
 
