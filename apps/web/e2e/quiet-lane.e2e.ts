@@ -52,3 +52,39 @@ test("[TC-UX-1004-02] a running lane that goes quiet says when its hob's last st
   await page.getByRole("button", { name: "Show technical steps" }).click();
   await expect(now).toHaveText("Running sleep 600");
 });
+
+// covers UX-004, OR-001
+test("[TC-UX-1004-04] a lane names the background command its hob's turn waits on, then moves on once it ends", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);
+  for (const member of members) await api("PATCH", `/agents/${member}/permissions`, { ownFolders: [folder] });
+
+  // Quill starts the tests in the background, checks something else, and her turn then waits for them.
+  const tests = { command: "pnpm test", background: true, runsFor: "20 seconds", output: "7 passed\n", exitCode: 0 };
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill(
+    [
+      TITLE,
+      script("delegate_task", {
+        key: "ship",
+        hob: "Quill",
+        brief: ["Check the copy", `fake:run ${JSON.stringify(tests)}`, "fake:tool Bash echo checked"].join("\n"),
+      }),
+    ].join("\n"),
+  );
+  await composer.press("Enter");
+  await openRoom(page, TITLE);
+
+  const did = lane(page, "Quill").getByRole("list", { name: "What Quill did" });
+  const now = did.getByRole("listitem").last();
+  await expect(now).toHaveText("Waiting for the tests to finish", { timeout: 30_000 });
+  await page.getByRole("button", { name: "Show technical steps" }).click();
+  await expect(now).toHaveText("Waiting on pnpm test");
+
+  // Once the tests end, the turn finishes and the wait is gone.
+  await expect(did).not.toContainText("Waiting on", { timeout: 40_000 });
+  await expect(lane(page, "Quill")).toContainText("Done", { timeout: 20_000 });
+});
