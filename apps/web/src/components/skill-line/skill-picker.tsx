@@ -1,6 +1,7 @@
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { type KeyboardEvent, useState } from "react";
+import { MemoryIcon } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
 import { matchingSkills, type PickerSkill, pickedDraft, slashQuery } from "./skill-picker-model.ts";
 
@@ -113,22 +114,7 @@ export function SkillPickerList({
 
 /** The wand and sparkles the screens use for skills. */
 export function SkillIcon({ size = 14 }: { size?: number }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      width={size}
-      height={size}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="shrink-0"
-    >
-      <path d="M2.5 13.5 9 7M10 2.5l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6zM12.5 8.5l.4 1 1 .4-1 .4-.4 1-.4-1-1-.4 1-.4z" />
-    </svg>
-  );
+  return <MemoryIcon name="skill" size={size} />;
 }
 
 /** The composer's button that starts a `/`, as typing it does; none while there is nothing to pick from. */
