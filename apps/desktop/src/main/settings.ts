@@ -46,6 +46,8 @@ interface DesktopSettings {
   readonly leftHub?: boolean | undefined;
   /** The theme's ground the page last reported, which a new window opens with. */
   readonly windowBackground?: string | undefined;
+  /** The app version that last ran; another one drops the cached web client (see client-cache.ts). */
+  readonly appVersion?: string | undefined;
 }
 
 export interface SettingsStore {
@@ -101,6 +103,7 @@ const parse = (raw: string): DesktopSettings => {
     ...((record.mode === "hub" || record.mode === "connected") && { mode: record.mode }),
     ...(connection !== undefined && { connection }),
     ...(typeof record.windowBackground === "string" && { windowBackground: record.windowBackground }),
+    ...(typeof record.appVersion === "string" && { appVersion: record.appVersion }),
   };
 };
 

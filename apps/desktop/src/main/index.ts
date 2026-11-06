@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { readInstallationId } from "@hobbots/server/installation";
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 import { startMode } from "./app-mode.ts";
+import { dropCachedClientOnUpdate } from "./client-cache.ts";
 import { startConnected } from "./connected-mode.ts";
 import { startHub } from "./hub-mode.ts";
 import { handleKeepRunningIpc } from "./keep-running.ts";
@@ -102,6 +103,9 @@ app.whenReady().then(async () => {
   // This computer's Tailscale and keychain, read only once the app is or becomes a connected desktop.
   let tailnet: ReturnType<typeof thisComputer> | undefined;
   const computer = () => (tailnet ??= thisComputer({ dataDir, env: process.env, platform: process.platform }));
+
+  // Before any window loads, so the first one after an update runs the new web client.
+  await dropCachedClientOnUpdate(app.getVersion(), settings, () => session.defaultSession.clearCache());
 
   const start = startMode(settings, {
     installationId: readInstallationId(dataDir),
