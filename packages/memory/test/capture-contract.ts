@@ -7,6 +7,7 @@ import {
   type MemoryStoreShape,
   makeRedactor,
   SecretRedaction,
+  TaskRepository,
 } from "@hobbots/agents";
 import {
   AgentId,
@@ -23,11 +24,13 @@ import {
   EVENT_SCHEMA_VERSIONS,
   EventEnvelope,
   type JournaledEvent,
+  MEMORY_SAVE_TOOL,
   MemoryPath,
   MemorySave,
   type MemorySaveState,
   Message,
   MessageId,
+  memoryKeptText,
   Quest,
   QuestId,
   Question,
@@ -36,10 +39,11 @@ import {
   Task,
   TaskId,
   type TaskState,
+  TaskTree,
   Thread,
   ThreadId,
 } from "@hobbots/domain";
-import { Context, DateTime, Duration, Effect, Layer, Logger, type Scope } from "effect";
+import { Context, DateTime, Duration, Effect, Layer, Logger, Option, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
 import { makeMemorySavesFake } from "../src/testing.ts";
@@ -58,6 +62,11 @@ export interface CaptureUnderTest {
   readonly store: MemoryStoreShape;
   /** How many observations memory keeps of a session, a thread's or an Attempt's, in a hob's memory. */
   readonly observations: (agentId: AgentId, sessionId: string) => Effect.Effect<number>;
+  /** The title and time (ISO 8601) of each observation memory keeps of a session, its ends left out. */
+  readonly observed: (
+    agentId: AgentId,
+    sessionId: string,
+  ) => Effect.Effect<ReadonlyArray<{ readonly title: string; readonly at: string }>>;
   /** Takes memory down: the fake stops answering, and ai-memory's engine stops. */
   readonly down: Effect.Effect<void>;
   /** Brings it back on the same data. */
@@ -74,11 +83,17 @@ const you = { _tag: "You" } as const;
 const asPip = { _tag: "Hob", agentId: pip, projects: [] } as const;
 
 /** A `memory_save` of Pip's as the hub records it, made at the test clock's time. */
-const recordedSave = (path: MemoryPath, markdown: string, state: MemorySaveState, at: string) =>
+const recordedSave = (
+  path: MemoryPath,
+  markdown: string,
+  state: MemorySaveState,
+  at: string,
+  origin: { readonly work: string; readonly threadId: ThreadId | null } = { work: "thread:tests", threadId: null },
+) =>
   new MemorySave({
     id: crypto.randomUUID(),
     agentId: pip,
-    work: "thread:tests",
+    work: origin.work,
     key: crypto.randomUUID(),
     input: "input",
     scope: pipsOwn,
@@ -87,11 +102,28 @@ const recordedSave = (path: MemoryPath, markdown: string, state: MemorySaveState
     tags: ["release"],
     state,
     version: null,
-    threadId: null,
+    threadId: origin.threadId,
     messageId: null,
     createdAt: at,
     updatedAt: at,
   });
+
+/** A `memory_save` step memory did not take at once, as its reply shows it: kept, to be sent later. */
+const keptSaveStep = (id: string, path: MemoryPath, startedAt: string): ReplyStep => ({
+  id,
+  kind: "tool",
+  label: "Save to memory",
+  state: "done",
+  startedAt,
+  call: { tool: MEMORY_SAVE_TOOL, operation: "save-memory", targets: [path] },
+  output: {
+    head: memoryKeptText(path),
+    tail: "",
+    omittedBytes: 0,
+    totalBytes: memoryKeptText(path).length,
+    logged: false,
+  },
+});
 
 /** The journal and the worker's record of it, kept in the test. */
 const makeJournal = (start: string) => {
@@ -372,8 +404,26 @@ const taskWork = (journal: Journal, threadId: ThreadId, owner: AgentId, brief: s
       changed("failed", null);
     },
     taskId: task.id,
+    /** The Task as it stands now. */
+    task: () => task,
   };
 };
+
+/** A Task's tree as the hub reads it, with only the Task itself. */
+const treeOf = (task: Task) =>
+  new TaskTree({
+    tasks: [task],
+    quests: [],
+    delegations: [],
+    attempts: [],
+    milestones: [],
+    checkpoints: [],
+    questions: [],
+    artifacts: [],
+    handOffs: [],
+    notes: [],
+    waits: [],
+  });
 
 export const captureContract = (name: string, open: () => Effect.Effect<CaptureUnderTest>) => {
   /**
@@ -386,6 +436,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       journal: Journal;
       capture: MemoryCapture["Service"];
       saves: ReturnType<typeof makeMemorySavesFake>;
+      /** The Tasks the worker reads a save's Attempt from, as the hub's Task record holds them. */
+      tasks: Map<TaskId, () => Task>;
     }) => Effect.Effect<A, unknown, Scope.Scope>,
     clock: "journal" | "now" = "journal",
   ) => {
@@ -396,6 +448,12 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       yield* TestClock.setTime(clock === "now" ? Date.now() : Date.parse(start));
       const journal = makeJournal(start);
       const saves = makeMemorySavesFake();
+      const tasks = new Map<TaskId, () => Task>();
+      // The worker reads only a Task's tree, for the Attempt a save outside any chat was made in.
+      const taskRecord = {
+        readTree: (taskId: TaskId) =>
+          Effect.sync(() => Option.map(Option.fromNullishOr(tasks.get(taskId)), (task) => treeOf(task()))),
+      } as unknown as TaskRepository["Service"];
       const context = yield* Layer.build(
         MemoryCapture.make.pipe(
           Layer.provide(
@@ -403,12 +461,13 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
               Layer.succeed(MemoryStore, memory.store),
               Layer.succeed(MemoryCaptureLog, journal.log),
               Layer.succeed(MemorySaves, saves.service),
+              Layer.succeed(TaskRepository, taskRecord),
               Layer.succeed(SecretRedaction, makeRedactor([{ value: SECRET, kind: "TEST_TOKEN" }])),
             ),
           ),
         ),
       );
-      return yield* body({ memory, journal, saves, capture: Context.get(context, MemoryCapture) });
+      return yield* body({ memory, journal, saves, tasks, capture: Context.get(context, MemoryCapture) });
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer()), Effect.runPromise) as Promise<A>;
   };
 
@@ -948,6 +1007,102 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
             expect(yield* memory.store.history(you, pipsOwn, path)).toHaveLength(1);
           }),
         "now",
+      ));
+    // covers ADR 028 (When memory is down), #1049
+    it("[TC-GEN-400] tells a thread's session that a save kept through an outage landed, on Claude Code and Codex", () =>
+      run(
+        ({ memory, journal, saves, capture }) =>
+          Effect.gen(function* () {
+            for (const runtime of ["claude-code", "codex"] as const) {
+              const threadId = ThreadId.make(crypto.randomUUID());
+              const path = MemoryPath.make(`notes/${runtime}-release.md`);
+              const at = DateTime.formatIso(yield* DateTime.now);
+              // Memory is down: the save is kept, and the reply tells the hob so.
+              const save = recordedSave(path, "# Release\n\nTag from main.", "queued", at, {
+                work: `reply:${crypto.randomUUID()}`,
+                threadId,
+              });
+              yield* saves.service.begin(save);
+              exchange(journal, threadId, "Save how releases tag.", "Kept it for when memory is back.", {
+                runtime,
+                steps: [keptSaveStep("s1", path, at)],
+              });
+              // Memory is back: the worker writes the save, and the hub journals that it settled.
+              yield* capture.runOnce;
+              const settled = saves.journaled().filter((entry) => entry.type === "MemorySaveChanged");
+              for (const entry of settled) journal.append(entry.payload, threadId);
+              expect(saves.saves().find((stored) => stored.id === save.id)?.state).toBe("saved");
+              yield* capture.runOnce;
+              const titles = (yield* memory.observed(pip, threadId)).map((observation) => observation.title);
+              expect(titles.some((title) => title.includes(`${path} is saved in memory`))).toBe(true);
+              archive(journal, threadId);
+              yield* capture.runOnce;
+              expect(yield* memory.store.page(you, pipsOwn, sessionPage(threadId))).not.toBeNull();
+              // A replay of the same entries writes it once.
+              for (const entry of settled) journal.append(entry.payload, threadId);
+              yield* capture.runOnce;
+              const again = (yield* memory.observed(pip, threadId)).map((observation) => observation.title);
+              expect(again.filter((title) => title.includes(`${path} is saved in memory`))).toHaveLength(1);
+            }
+          }),
+        "now",
+      ));
+
+    // covers ADR 028 (When memory is down), #1049
+    it("[TC-GEN-401] tells an Attempt's session outside any chat that its kept save landed", () =>
+      run(
+        ({ memory, journal, saves, tasks, capture }) =>
+          Effect.gen(function* () {
+            const threadId = ThreadId.make(crypto.randomUUID());
+            const work = taskWork(journal, threadId, pip, "Write down the release steps.");
+            tasks.set(work.taskId, work.task);
+            const attemptId = work.start();
+            const path = MemoryPath.make("notes/steps.md");
+            const at = DateTime.formatIso(yield* DateTime.now);
+            const save = recordedSave(path, "# Steps\n\nTag, then publish.", "queued", at, {
+              work: `task:${work.taskId}`,
+              threadId: null,
+            });
+            yield* saves.service.begin(save);
+            work.steps([keptSaveStep("s1", path, at)]);
+            yield* capture.runOnce;
+            for (const entry of saves.journaled().filter((entry) => entry.type === "MemorySaveChanged")) {
+              journal.append(entry.payload, null);
+            }
+            yield* capture.runOnce;
+            const titles = (yield* memory.observed(pip, attemptId)).map((observation) => observation.title);
+            expect(titles.some((title) => title.includes(`${path} is saved in memory`))).toBe(true);
+            // The thread the Task's Quest started in hears nothing of it: the save was the Attempt's.
+            expect(yield* memory.observations(pip, threadId)).toBe(0);
+          }),
+        "now",
+      ));
+
+    // covers ADR 028 (When memory is down), #1049
+    it("[TC-GEN-402] keeps the time each thing happened when it reaches memory after an outage", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          yield* memory.down;
+          const ranAt = "2026-11-05T12:00:00.500Z";
+          exchange(journal, threadId, "How do the tests run?", "With pnpm test.", {
+            steps: [{ ...step("s1", "Running pnpm test", "42 tests passed"), startedAt: ranAt }],
+          });
+          expect(yield* capture.runOnce).toBe(false);
+          yield* memory.up;
+          // Memory is back three minutes later, and gets what happened before it.
+          yield* TestClock.adjust(Duration.minutes(3));
+          expect(yield* capture.runOnce).toBe(true);
+          const observed = yield* memory.observed(pip, threadId);
+          const first = Date.parse("2026-11-05T12:00:00.000Z");
+          expect(observed.length).toBeGreaterThan(0);
+          // Every item is stamped within the seconds the thread ran, none at the time it arrived.
+          for (const observation of observed) {
+            expect(Date.parse(observation.at) - first).toBeLessThan(10_000);
+          }
+          const tool = observed.find((observation) => observation.title.startsWith("Bash: Running pnpm test"));
+          expect(tool === undefined ? null : Date.parse(tool.at)).toBe(Date.parse(ranAt));
+        }),
       ));
   });
 };
