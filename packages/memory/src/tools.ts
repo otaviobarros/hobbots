@@ -271,6 +271,7 @@ export const MemoryToolsLive = Layer.effect(
           version: null,
           threadId: turn.threadId,
           messageId: turn.messageId,
+          ...(turn.attemptId === undefined ? {} : { attemptId: turn.attemptId }),
           createdAt: at,
           updatedAt: at,
         });

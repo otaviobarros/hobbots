@@ -161,7 +161,7 @@ describe("backup and restore in the database", () => {
   // covers OP-003
   it("[TC-OP-020] knows the schema version it applied and the highest one it can open", async () => {
     const applied = await run(schemaVersion);
-    expect(knownSchemaVersion()).toBe(63);
+    expect(knownSchemaVersion()).toBe(64);
     expect(applied).toBe(knownSchemaVersion(migrations));
     expect(knownSchemaVersion({ "0002_two": 0, "0011_eleven": 0 })).toBe(11);
     expect(knownSchemaVersion({})).toBe(0);

@@ -7,7 +7,6 @@ import {
   type MemoryStoreShape,
   makeRedactor,
   SecretRedaction,
-  TaskRepository,
 } from "@hobbots/agents";
 import {
   AgentId,
@@ -39,11 +38,10 @@ import {
   Task,
   TaskId,
   type TaskState,
-  TaskTree,
   Thread,
   ThreadId,
 } from "@hobbots/domain";
-import { Context, DateTime, Duration, Effect, Layer, Logger, Option, type Scope } from "effect";
+import { Context, DateTime, Duration, Effect, Layer, Logger, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
 import { makeMemorySavesFake } from "../src/testing.ts";
@@ -88,7 +86,11 @@ const recordedSave = (
   markdown: string,
   state: MemorySaveState,
   at: string,
-  origin: { readonly work: string; readonly threadId: ThreadId | null } = { work: "thread:tests", threadId: null },
+  origin: {
+    readonly work: string;
+    readonly threadId: ThreadId | null;
+    readonly attemptId?: AttemptId;
+  } = { work: "thread:tests", threadId: null },
 ) =>
   new MemorySave({
     id: crypto.randomUUID(),
@@ -104,6 +106,7 @@ const recordedSave = (
     version: null,
     threadId: origin.threadId,
     messageId: null,
+    ...(origin.attemptId === undefined ? {} : { attemptId: origin.attemptId }),
     createdAt: at,
     updatedAt: at,
   });
@@ -404,26 +407,8 @@ const taskWork = (journal: Journal, threadId: ThreadId, owner: AgentId, brief: s
       changed("failed", null);
     },
     taskId: task.id,
-    /** The Task as it stands now. */
-    task: () => task,
   };
 };
-
-/** A Task's tree as the hub reads it, with only the Task itself. */
-const treeOf = (task: Task) =>
-  new TaskTree({
-    tasks: [task],
-    quests: [],
-    delegations: [],
-    attempts: [],
-    milestones: [],
-    checkpoints: [],
-    questions: [],
-    artifacts: [],
-    handOffs: [],
-    notes: [],
-    waits: [],
-  });
 
 export const captureContract = (name: string, open: () => Effect.Effect<CaptureUnderTest>) => {
   /**
@@ -436,8 +421,6 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       journal: Journal;
       capture: MemoryCapture["Service"];
       saves: ReturnType<typeof makeMemorySavesFake>;
-      /** The Tasks the worker reads a save's Attempt from, as the hub's Task record holds them. */
-      tasks: Map<TaskId, () => Task>;
     }) => Effect.Effect<A, unknown, Scope.Scope>,
     clock: "journal" | "now" = "journal",
   ) => {
@@ -448,12 +431,6 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       yield* TestClock.setTime(clock === "now" ? Date.now() : Date.parse(start));
       const journal = makeJournal(start);
       const saves = makeMemorySavesFake();
-      const tasks = new Map<TaskId, () => Task>();
-      // The worker reads only a Task's tree, for the Attempt a save outside any chat was made in.
-      const taskRecord = {
-        readTree: (taskId: TaskId) =>
-          Effect.sync(() => Option.map(Option.fromNullishOr(tasks.get(taskId)), (task) => treeOf(task()))),
-      } as unknown as TaskRepository["Service"];
       const context = yield* Layer.build(
         MemoryCapture.make.pipe(
           Layer.provide(
@@ -461,13 +438,12 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
               Layer.succeed(MemoryStore, memory.store),
               Layer.succeed(MemoryCaptureLog, journal.log),
               Layer.succeed(MemorySaves, saves.service),
-              Layer.succeed(TaskRepository, taskRecord),
               Layer.succeed(SecretRedaction, makeRedactor([{ value: SECRET, kind: "TEST_TOKEN" }])),
             ),
           ),
         ),
       );
-      return yield* body({ memory, journal, saves, tasks, capture: Context.get(context, MemoryCapture) });
+      return yield* body({ memory, journal, saves, capture: Context.get(context, MemoryCapture) });
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer()), Effect.runPromise) as Promise<A>;
   };
 
@@ -1037,7 +1013,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
               expect(titles.some((title) => title.includes(`${path} is saved in memory`))).toBe(true);
               archive(journal, threadId);
               yield* capture.runOnce;
-              expect(yield* memory.store.page(you, pipsOwn, sessionPage(threadId))).not.toBeNull();
+              const page = yield* memory.store.page(you, pipsOwn, sessionPage(threadId));
+              expect(page?.markdown).toContain(`${path} is saved in memory`);
               // A replay of the same entries writes it once.
               for (const entry of settled) journal.append(entry.payload, threadId);
               yield* capture.runOnce;
@@ -1049,31 +1026,43 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (When memory is down), #1049
-    it("[TC-GEN-401] tells an Attempt's session outside any chat that its kept save landed", () =>
+    it("[TC-GEN-401] tells the Attempt outside any chat that made a kept save that it landed, after a retry too", () =>
       run(
-        ({ memory, journal, saves, tasks, capture }) =>
+        ({ memory, journal, saves, capture }) =>
           Effect.gen(function* () {
             const threadId = ThreadId.make(crypto.randomUUID());
             const work = taskWork(journal, threadId, pip, "Write down the release steps.");
-            tasks.set(work.taskId, work.task);
-            const attemptId = work.start();
+            const first = work.start();
             const path = MemoryPath.make("notes/steps.md");
             const at = DateTime.formatIso(yield* DateTime.now);
+            // Memory is down: the first Attempt's save is kept, then the Attempt fails and a retry starts.
+            yield* memory.down;
             const save = recordedSave(path, "# Steps\n\nTag, then publish.", "queued", at, {
               work: `task:${work.taskId}`,
               threadId: null,
+              attemptId: first,
             });
             yield* saves.service.begin(save);
             work.steps([keptSaveStep("s1", path, at)]);
+            work.failed();
+            const retry = work.start();
+            expect(yield* capture.runOnce).toBe(false);
+            yield* memory.up;
+            // Memory is back: the worker writes the save, and the hub journals that it settled.
             yield* capture.runOnce;
-            for (const entry of saves.journaled().filter((entry) => entry.type === "MemorySaveChanged")) {
-              journal.append(entry.payload, null);
-            }
+            const settled = saves.journaled().filter((entry) => entry.type === "MemorySaveChanged");
+            for (const entry of settled) journal.append(entry.payload, null);
             yield* capture.runOnce;
-            const titles = (yield* memory.observed(pip, attemptId)).map((observation) => observation.title);
-            expect(titles.some((title) => title.includes(`${path} is saved in memory`))).toBe(true);
+            const landed = (titles: ReadonlyArray<{ readonly title: string }>) =>
+              titles.filter((observation) => observation.title.includes(`${path} is saved in memory`)).length;
+            expect(landed(yield* memory.observed(pip, first))).toBe(1);
+            expect(landed(yield* memory.observed(pip, retry))).toBe(0);
             // The thread the Task's Quest started in hears nothing of it: the save was the Attempt's.
             expect(yield* memory.observations(pip, threadId)).toBe(0);
+            // A replay of the same entries writes it once.
+            for (const entry of settled) journal.append(entry.payload, null);
+            yield* capture.runOnce;
+            expect(landed(yield* memory.observed(pip, first))).toBe(1);
           }),
         "now",
       ));

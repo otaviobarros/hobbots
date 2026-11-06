@@ -331,7 +331,12 @@ export const makeMemberRunner = (deps: MemberDeps) => {
             recordToolStart: deps.recordToolStart(task),
             hubTools: deps.tools.forSession(
               { agentId: agent.id, taskId: task.id, carried: work.holding },
-              { currentAccess: currentAccessOf(run), redactor: deps.redactor, approvals: handle?.approvals ?? null },
+              {
+                attemptId,
+                currentAccess: currentAccessOf(run),
+                redactor: deps.redactor,
+                approvals: handle?.approvals ?? null,
+              },
             ),
             started: (session) =>
               work.accepted(session.sessionId).pipe(

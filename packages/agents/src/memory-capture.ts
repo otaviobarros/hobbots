@@ -35,7 +35,6 @@ import {
 } from "./memory.ts";
 import { EventPublisher } from "./ports.ts";
 import { makeRedactor, type Redactor, SecretRedaction } from "./secrets.ts";
-import { TaskRepository } from "./tasks.ts";
 
 /**
  * Memory capture (ADR 028, Capture and summaries, When memory is down). The event journal is the
@@ -297,15 +296,9 @@ const messageOf = (entry: EventEnvelope, message: Message, redacted: Redacting):
       };
 };
 
-/**
- * The Attempt each `memory_save` made outside any chat was made in, by the save's id, as the worker
- * looks it up for a page of the journal: such a save names its Task, not its Attempt.
- */
-export type SaveAttempts = ReadonlyMap<string, AttemptId>;
-
 /** The Task a save made outside any chat keys its call under (`task:<id>`), or null for one made in a chat. */
-export const saveTaskOf = (save: MemorySave): TaskId | null =>
-  save.threadId === null && save.work.startsWith("task:") ? (save.work.slice("task:".length) as TaskId) : null;
+const saveTaskOf = (save: MemorySave): TaskId | null =>
+  save.work.startsWith("task:") ? (save.work.slice("task:".length) as TaskId) : null;
 
 /** What a save that settled tells its session: that memory has the page now, or that it does not. */
 const settledSaveText = (save: MemorySave): string =>
@@ -316,13 +309,13 @@ const settledSaveText = (save: MemorySave): string =>
 /**
  * What a `memory_save` that settled adds to the session of the turn that made it (#1049): whether
  * memory has the page. A save memory could not take at once is kept and sent later, after its reply
- * told the hob so, and only this item tells the session page it landed. Kept by the save's own id,
- * so it is written once; an Undo of it later adds nothing.
+ * told the hob so, and only this item tells the session page it landed. A save outside any chat goes
+ * to the Attempt it was made in, as its tool step did, even when a retry moved its Task on since.
+ * Kept by the save's own id, so it is written once; an Undo of it later adds nothing.
  */
 const settledSaveOf = (
   event: Extract<EventEnvelope["payload"], { readonly _tag: "MemorySaveChanged" }>,
   redacted: Redacting,
-  attempts: SaveAttempts,
 ): CapturedEntry | null => {
   const { save } = event;
   if ((save.state !== "saved" && save.state !== "refused") || save.undoneAt !== undefined) return null;
@@ -337,7 +330,7 @@ const settledSaveOf = (
     };
   }
   const taskId = saveTaskOf(save);
-  const attemptId = attempts.get(save.id);
+  const { attemptId } = save;
   if (taskId === null || attemptId === undefined) return null;
   return {
     sessionId: attemptId,
@@ -353,13 +346,9 @@ const settledSaveOf = (
  * nothing of. A message of yours is kept once it is no longer queued, by its own id, so saving it
  * again sends nothing new; a reply once its turn ends. An Attempt outside any chat keeps its Task's
  * goal, its finished tool steps and each turn's reply. Either keeps the work that woke a turn, and
- * whether a `memory_save` it made landed, a save made outside any chat in the Attempt `attempts` names.
+ * whether a `memory_save` it made landed.
  */
-export const capturedEntryOf = (
-  entry: EventEnvelope,
-  redactor: Redactor,
-  attempts: SaveAttempts = new Map(),
-): CapturedEntry | null => {
+export const capturedEntryOf = (entry: EventEnvelope, redactor: Redactor): CapturedEntry | null => {
   const event = entry.payload;
   const redacted: Redacting = (items) => items.map((item) => ({ ...item, text: cut(redactor.text(item.text)) }));
   switch (event._tag) {
@@ -392,7 +381,7 @@ export const capturedEntryOf = (
     case "AttemptStepsRecorded":
       return attemptStepsOf(entry, event, redacted);
     case "MemorySaveChanged":
-      return settledSaveOf(event, redacted, attempts);
+      return settledSaveOf(event, redacted);
     default:
       return null;
   }
@@ -432,7 +421,6 @@ export const planRound = (
   redactor: Redactor,
   staleBefore: string,
   sent: SentKeys = new Map(),
-  attempts: SaveAttempts = new Map(),
 ): Round => {
   const sessions = new Map(open.map((session) => [session.sessionId, session]));
   const groups = new Map<MemorySessionId, { readonly agentId: AgentId; readonly items: Array<MemoryCaptureItem> }>();
@@ -461,7 +449,7 @@ export const planRound = (
     return true;
   };
   for (const entry of entries) {
-    const found = capturedEntryOf(entry, redactor, attempts);
+    const found = capturedEntryOf(entry, redactor);
     if (found === null) continue;
     const { sessionId } = found;
     const opened = sessions.has(sessionId);
@@ -502,7 +490,6 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
       const log = yield* MemoryCaptureLog;
       const saves = yield* Effect.serviceOption(MemorySaves);
       const publisher = yield* Effect.serviceOption(EventPublisher);
-      const tasks = yield* Effect.serviceOption(TaskRepository);
       const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
       let state: MemoryCaptureState | null = null;
       // What each open session was sent, so an Attempt's steps, which every change carries again, go
@@ -573,39 +560,12 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
       const endSession = (session: MemoryCaptureSession) =>
         store.endSession(hobActor(session.agentId), ownScope(session.agentId), session.sessionId, endKey(session));
 
-      /**
-       * The Attempt each save outside any chat that settled in `entries` was made in: its Task's
-       * current one, whose session its tool step went to. A save whose Task is gone is left out.
-       */
-      const attemptsOf = (entries: ReadonlyArray<EventEnvelope>) =>
-        Effect.gen(function* () {
-          const attempts = new Map<string, AttemptId>();
-          if (Option.isNone(tasks)) return attempts;
-          for (const entry of entries) {
-            if (entry.payload._tag !== "MemorySaveChanged") continue;
-            const { save } = entry.payload;
-            const taskId = saveTaskOf(save);
-            if (taskId === null || (save.state !== "saved" && save.state !== "refused")) continue;
-            const tree = yield* tasks.value.readTree(taskId);
-            const attemptId = Option.getOrNull(tree)?.tasks[0]?.currentAttemptId ?? null;
-            if (attemptId !== null) attempts.set(save.id, attemptId);
-          }
-          return attempts;
-        });
-
       /** Sends one page of the journal; answers whether the journal had nothing more. */
       const sendPage = (current: MemoryCaptureState) =>
         Effect.gen(function* () {
           const entries = yield* log.readAfter(current.sequence, PAGE);
           if (entries.length === 0) return true;
-          const round = planRound(
-            entries,
-            current.sessions,
-            redactor,
-            yield* before(MEMORY_KEY_WINDOW),
-            sent,
-            yield* attemptsOf(entries),
-          );
+          const round = planRound(entries, current.sessions, redactor, yield* before(MEMORY_KEY_WINDOW), sent);
           if (round.stale > 0) {
             yield* Effect.logWarning(
               `Memory capture is sending ${round.stale} journal entries older than memory's 30-day replay window; if any reached memory before, it may keep them twice.`,
