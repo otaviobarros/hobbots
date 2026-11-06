@@ -14,7 +14,7 @@ import {
   TaskReadiness,
   type TaskTree,
 } from "@hobbots/domain";
-import { type BriefPart, fixed, renderBrief } from "./brief-parts.ts";
+import { type BriefPart, fixed, renderBrief, rule } from "./brief-parts.ts";
 
 /**
  * What a step's fresh session and its owner's chat are told (ADR 018). A step sees only its brief
@@ -314,7 +314,7 @@ const STOPPED_STEP =
  * Quest, how results move between its members, then what it writes in the chat: the plan, a
  * question no lead can answer and the finish, nothing between (#901). Transcripts never reach it.
  * The answers and the work under it are lists, so a resumed session is told only what changed in
- * them (#1027).
+ * them (#1027). The rules are told once a session, and again only once they change (#1039).
  */
 export const ownerBriefingParts = (task: Task, tree: TaskTree): ReadonlyArray<BriefPart> => {
   const under = briefedUnder(task, tree);
@@ -328,8 +328,8 @@ export const ownerBriefingParts = (task: Task, tree: TaskTree): ReadonlyArray<Br
   return [
     fixed(
       `You are working on Task ${task.id} (${task.state}) for this conversation${above === 0 ? "" : ", under another Task"}: ${firstLine(task.brief)}`,
-      ...leadGuidance(task, tree),
     ),
+    rule("lead", ...leadGuidance(task, tree)),
     { _tag: "Listed", group: "answer", heading: ["Answers to the questions you asked about it:"], entries: answers },
     ...(under.length === 0
       ? []
@@ -343,14 +343,15 @@ export const ownerBriefingParts = (task: Task, tree: TaskTree): ReadonlyArray<Br
               lines: childLine(child, tree, place),
             })),
           } satisfies BriefPart,
-          fixed(
+          rule(
+            "stopped-step",
             ...(under.some(({ task: child }) => child.state === "blocked" && isStep(child, tree.tasks))
               ? [STOPPED_STEP]
               : []),
-            "Call complete_task with the Task's result once everything under it has ended.",
           ),
+          rule("complete", "Call complete_task with the Task's result once everything under it has ended."),
         ]),
-    fixed(LEAN_CHAT_RULE, FINISH_RULE),
+    rule("chat", LEAN_CHAT_RULE, FINISH_RULE),
   ];
 };
 

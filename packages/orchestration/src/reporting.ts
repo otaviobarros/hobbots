@@ -1,12 +1,16 @@
 import { clip } from "@hobbots/agents";
 import { descendantsOf, type Question, type Task, type TaskTree } from "@hobbots/domain";
-import { type BriefPart, fixed } from "./brief-parts.ts";
+import { type BriefPart, fixed, rule } from "./brief-parts.ts";
 
 /** How much of a question its line in the briefing shows. */
 const QUESTION_LIMIT = 300;
 
 /** How many of the answered questions a lead passed up its briefing lists, the latest. */
 const PASSED_UP_LIMIT = 10;
+
+/** How a lead reports to the user (#569). */
+const REPORT_RULE =
+  "Tell the user only what your Task tools did in this turn: never say you sent, passed on, answered or started something unless a tool call here did it. Where the work stands, read it with read_tasks instead of guessing, or say you cannot see it.";
 
 /** Who answered a question, as its line says. */
 const answeredBy = (question: Question) =>
@@ -19,7 +23,8 @@ const answeredBy = (question: Question) =>
  * not an answer, and asks the lead to report only what its Task tools did and to read the work
  * instead of guessing. It also lists the questions the lead passed up that are answered since, so
  * it never reasons from one it believes still waits (#659). The questions passed up are a list, so a
- * resumed session is told only those answered since it was last told (#1027).
+ * resumed session is told only those answered since it was last told (#1027), and the rule on
+ * reporting once, while no question waits for the user (#1039).
  */
 export const reportingRules = (task: Task, tree: TaskTree): ReadonlyArray<BriefPart> => {
   const under = new Set<string>([task.id, ...descendantsOf(task, tree.tasks).map((each) => each.id)]);
@@ -53,8 +58,8 @@ export const reportingRules = (task: Task, tree: TaskTree): ReadonlyArray<BriefP
         ],
       })),
     },
-    fixed(
-      "Tell the user only what your Task tools did in this turn: never say you sent, passed on, answered or started something unless a tool call here did it. Where the work stands, read it with read_tasks instead of guessing, or say you cannot see it.",
-    ),
+    // A rule a resumed session told it before keeps (#1039), unless a question waits for the user:
+    // then it comes with them on every turn, where a lead most needs it (#569).
+    forTheUser.length === 0 ? rule("report", REPORT_RULE) : fixed(REPORT_RULE),
   ];
 };

@@ -2,9 +2,9 @@ import { memoryBriefDigest } from "@hobbots/agents";
 import type { TaskBriefMark, TaskId } from "@hobbots/domain";
 
 /**
- * A lead's briefing as parts (#1027): lines it is told on every turn, and lists whose entries a
- * resumed session is told again only once they change. A lead's chat resumes the same session, so
- * it already holds what earlier turns told it.
+ * A lead's briefing as parts (#1027): lines it is told on every turn, and lists and rules whose
+ * entries a resumed session is told again only once they change. A lead's chat resumes the same
+ * session, so it already holds what earlier turns told it.
  */
 
 /** One entry of a list, by a key that names it across turns, such as the Task or question it shows. */
@@ -26,9 +26,20 @@ export type BriefPart =
 
 export const fixed = (...lines: ReadonlyArray<string>): BriefPart => ({ _tag: "Fixed", lines });
 
+/**
+ * A rule the session keeps once told (#1039), under `key`: told again only once its text changes,
+ * or once it stops applying and applies again. No lines, no rule.
+ */
+export const rule = (key: string, ...lines: ReadonlyArray<string>): BriefPart => ({
+  _tag: "Listed",
+  group: "rule",
+  heading: [],
+  entries: lines.length === 0 ? [] : [{ key, lines }],
+});
+
 /** What a resumed session is told first, so it reads the rest as changes. */
 export const SINCE_LAST_TURN =
-  "Only what changed since your last turn is listed below; everything else stands as you were last told. read_tasks shows it all.";
+  "Only what changed since your last turn is listed below; everything else, your rules included, stands as you were last told. read_tasks shows it all.";
 
 /** What a briefing tells its session, and what the session will then have been told. */
 export interface Briefed {
