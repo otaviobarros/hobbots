@@ -21,8 +21,9 @@ import {
   RuntimeModels,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { Clock, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
+import { type Cause, Clock, Duration, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
 import { decideCall, startCall } from "./approval.ts";
+import { backgroundFinished } from "./background-commands.ts";
 import { sessionPolicy, toolTurn } from "./claude-code.ts";
 import { type HookEnd, toolFinished } from "./command-exit.ts";
 import { applyScriptedWrites } from "./fake-writes.ts";
@@ -188,6 +189,10 @@ interface ScriptedEffect {
   readonly output?: string;
   readonly exitCode?: number;
   readonly live?: boolean;
+  /** It runs in the background, as `run_in_background` does: its call returns at once. */
+  readonly background?: boolean;
+  /** How long a background command runs, such as "2 seconds"; without it, it runs until its turn ends. */
+  readonly runsFor?: Duration.Input;
 }
 
 interface ScriptedCall {
@@ -202,6 +207,9 @@ interface ScriptedCall {
  * "old.ts": null}, "output": "…", "exitCode": 0, "live": true}`. Its writes are made, its output is
  * reported (as it comes when `live`), and a non-zero exit code fails it. Nothing else runs. A
  * command that starts with `sleep ` prints its `live` output and keeps running until its turn ends.
+ * With `"background": true` the call returns at once and the command ends `runsFor` after it
+ * started, reported as Claude Code reports a background task's end, before the turn completes; with
+ * no `runsFor` it is still running when the turn ends (#1018).
  */
 export const FAKE_RUN_DIRECTIVE = "fake:run";
 
@@ -218,7 +226,11 @@ const afterDirective = (line: string, directive: string) =>
 const scriptedRun = (text: string): ScriptedCall | undefined => {
   const run = parsedInput(text) as (ScriptedEffect & { readonly command?: unknown }) | string;
   if (typeof run !== "object" || run === null || typeof run.command !== "string") return undefined;
-  return { tool: "Bash", input: { command: run.command }, effect: run };
+  return {
+    tool: "Bash",
+    input: { command: run.command, ...(run.background === true ? { run_in_background: true } : {}) },
+    effect: run,
+  };
 };
 
 /** The scripted write a `fake:write` line describes. */
@@ -265,6 +277,41 @@ const finishScripted = (
   return [...liveScripted(call), toolFinished(call.id, ...hookEnd(call.tool, output, call.effect?.exitCode))];
 };
 
+/** A scripted command running in the background, and when it ends (null: not before its turn does). */
+interface BackgroundRun {
+  readonly call: ScriptedCall & { readonly id: string };
+  readonly folders: ReadonlyArray<string>;
+  readonly endsAt: number | null;
+}
+
+/**
+ * The ends of a turn's background commands, each when it is due, as Claude Code reports a background
+ * task's end: by its status and a summary that states the exit code.
+ */
+const backgroundEnds = (runs: ReadonlyArray<BackgroundRun>): Stream.Stream<RuntimeEvent> =>
+  Stream.fromIterable(
+    [...runs].filter((run) => run.endsAt !== null).sort((a, b) => (a.endsAt ?? 0) - (b.endsAt ?? 0)),
+  ).pipe(
+    Stream.mapEffect((run) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        yield* Effect.sleep(Math.max(0, (run.endsAt ?? now) - now));
+        const folder = run.folders[0];
+        const effect = run.call.effect;
+        if (effect?.writes !== undefined && folder !== undefined) applyScriptedWrites(effect.writes, folder);
+        const code = effect?.exitCode ?? 0;
+        const name = `Background command "${String(run.call.input.command)}"`;
+        return backgroundFinished(
+          run.call.id,
+          code === 0
+            ? { status: "completed", summary: `${name} completed (exit code 0)` }
+            : { status: "failed", summary: `${name} failed with exit code ${code}` },
+          effect?.output ?? scriptedOutput(run.call.tool, run.call.input),
+        );
+      }),
+    ),
+  );
+
 /**
  * How Claude Code's hooks would report the call's end, so the fake's events take the real runtime's
  * path: a command that exits non-zero fails with an `Exit code N` error, and one that exits 0 succeeds
@@ -291,6 +338,35 @@ const scriptedCommand = (
 ) => commandOf(call.tool, call.input, targets[0] ?? call.cwd, sandbox === "on", call.effect?.live === true);
 
 /**
+ * What a scripted call that ran does. A `sleep` command prints what it has so far as it comes and
+ * keeps running; a background one returns at once, its end due before the turn completes, if at all;
+ * any other ends now.
+ */
+const ranScripted = (
+  call: ScriptedCall & { readonly id: string },
+  folders: ReadonlyArray<string>,
+  background: Array<BackgroundRun>,
+  queue: Queue.Queue<RuntimeEvent, Cause.Done>,
+) =>
+  Effect.gen(function* () {
+    if (call.tool === "Bash" && String(call.input.command).startsWith("sleep ")) {
+      yield* Effect.forEach(liveScripted(call), (event) => Queue.offer(queue, event), { discard: true });
+      return yield* Effect.never;
+    }
+    if (call.effect?.background === true) {
+      const now = yield* Clock.currentTimeMillis;
+      const runsFor = call.effect.runsFor;
+      background.push({
+        call,
+        folders,
+        endsAt: runsFor === undefined ? null : now + Duration.toMillis(Duration.fromInputUnsafe(runsFor)),
+      });
+      return;
+    }
+    yield* Effect.forEach(finishScripted(call, folders), (event) => Queue.offer(queue, event), { discard: true });
+  });
+
+/**
  * The tool calls a prompt scripts, decided as Claude Code's would be: by the policy engine, and for
  * Ask by the user through the turn's approvals. Each is reported as started and finished, or denied.
  * Only `fake:run` and `fake:write` change files, and only in the hob's first folder; nothing is run.
@@ -299,6 +375,7 @@ export const scriptedToolEvents = (
   request: PromptRequest,
   engine: PolicyEngine["Service"] | undefined,
   sandbox: "on" | "unavailable" = "on",
+  background: Array<BackgroundRun> = [],
 ): Stream.Stream<RuntimeEvent> => {
   // Commands are decided as on a hub where the sandbox started, or where it cannot start.
   const turn = engine ? toolTurn(request.tools, sandbox, request.hubTools) : null;
@@ -344,14 +421,7 @@ export const scriptedToolEvents = (
               ...(command === undefined ? {} : { command }),
             }));
           if (ran) {
-            if (call.tool === "Bash" && String(call.input.command).startsWith("sleep ")) {
-              // A long command prints what it has so far as it comes, then keeps running.
-              yield* Effect.forEach(liveScripted(call), (event) => Queue.offer(queue, event), { discard: true });
-              return yield* Effect.never;
-            }
-            yield* Effect.forEach(finishScripted(call, turn.folders), (event) => Queue.offer(queue, event), {
-              discard: true,
-            });
+            yield* ranScripted(call, turn.folders, background, queue);
           } else {
             yield* Queue.offer(queue, {
               _tag: "ToolDenied",
@@ -598,6 +668,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
       ]);
     });
     const failure = fakeFailure(ending);
+    const background: Array<BackgroundRun> = [];
     // Tool calls come after the thinking step, before the reply is written.
     const stream = Stream.fromIterable<RuntimeEvent>([
       {
@@ -610,8 +681,10 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
       { _tag: "StepStarted", id: "thinking-1", kind: "thinking", label: "Thinking" },
       { _tag: "StepEnded", id: "thinking-1" },
     ]).pipe(
-      Stream.concat(scriptedToolEvents({ ...request, prompt: scripted }, options.engine, sandbox)),
+      Stream.concat(scriptedToolEvents({ ...request, prompt: scripted }, options.engine, sandbox, background)),
       Stream.concat(scriptedHubEvents({ ...request, prompt: scripted }, answers, details)),
+      // Like Claude Code, the turn completes once its background commands that end have ended.
+      Stream.concat(Stream.suspend(() => backgroundEnds(background))),
       Stream.concat(written),
       Stream.concat(failure),
     );
