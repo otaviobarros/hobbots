@@ -62,10 +62,11 @@ describe("a question's choices", () => {
     expect(html).toContain('title="Matches the brand guide."');
     // Named by the label each shows, then the rest, so speech input can say what it sees (WCAG 2.5.3).
     expect(html).not.toMatch(/<button[^>]*aria-label=/);
+    // Said inline after the label, so the name reads "Light, recommended." with no space before the comma.
     expect(html).toMatch(
-      /Light<span[^>]*>★<\/span><span class="sr-only">, recommended\. Matches the brand guide\.<\/span>/,
+      /<span>Light<span[^>]*>, recommended\. Matches the brand guide\.<\/span><\/span><span[^>]*>★<\/span>/,
     );
-    expect(html).toMatch(/Both, with a switch<\/button>/);
+    expect(html).toMatch(/<span>Both, with a switch<\/span><\/button>/);
   });
 
   it("[TC-UX-906] keeps today's box and primary Send answer for a question without choices", () => {

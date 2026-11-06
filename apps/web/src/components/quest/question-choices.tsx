@@ -1,6 +1,7 @@
 import type { Question } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { formatList } from "../../lib/format.ts";
+import { Said } from "../said/said.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.question;
@@ -93,14 +94,16 @@ function ChoiceList({
                 </span>
               ) : (
                 <>
-                  {option.label}
+                  {/* A chip shows only its label, so its name says the rest after it (#740, WCAG 2.5.3). */}
+                  <span>
+                    {option.label}
+                    <ChipSaid recommended={recommended} consequence={option.consequence} />
+                  </span>
                   {recommended && (
                     <span aria-hidden className="text-mint">
                       {copy.recommendedMark}
                     </span>
                   )}
-                  {/* A chip shows only its label, so its name says the rest after it (#740, WCAG 2.5.3). */}
-                  <ChipSaid recommended={recommended} consequence={option.consequence} />
                 </>
               )}
             </Button>
@@ -114,7 +117,7 @@ function ChoiceList({
 /** What a chip's name says after the label it shows: whether it is recommended and what it does. */
 function ChipSaid({ recommended, consequence }: { recommended: boolean; consequence: string }) {
   const said = copy.chipSaid({ recommended, consequence });
-  return said === "" ? null : <span className="sr-only">{said}</span>;
+  return said === "" ? null : <Said>{said}</Said>;
 }
 
 function Recommended() {

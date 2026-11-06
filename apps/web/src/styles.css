@@ -963,6 +963,17 @@ body {
   }
 }
 
+/*
+ * Words only a screen reader says, between the parts of a name (WCAG 2.5.3). Unlike sr-only it stays
+ * in the line, so a browser joins it to the text before it rather than reading it as a part of its
+ * own with a space before each comma. It takes no room: no one reads it on screen, so the 12px floor
+ * for text does not apply.
+ */
+@utility said {
+  font-size: 0;
+  clip-path: inset(50%);
+}
+
 @utility focus-inset {
   --focus-offset: calc(-1 * var(--focus-width));
 }

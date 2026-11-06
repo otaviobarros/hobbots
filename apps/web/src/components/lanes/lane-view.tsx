@@ -8,6 +8,7 @@ import { HubWait } from "../loading/hub-wait.tsx";
 import { type RoomStatus, roomStatusLabel, roomTone } from "../quest/control-room.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
+import { Said } from "../said/said.tsx";
 import { LANE, LANE_HEAD } from "./lane-focus.ts";
 import { LaneItemRow } from "./lane-items.tsx";
 import { type Lane, type LaneRole, laneDomId } from "./lane-model.ts";
@@ -120,16 +121,17 @@ export function LaneView({
             <span className="truncate font-heading text-body font-(--heading-weight)">
               {hob.name}
               {role !== null && <RoleTag role={role} />}
+              <Said>{messages.said.title}</Said>
             </span>
             <span className="line-clamp-2 text-detail text-text-secondary" title={lane.title}>
-              <Said>{messages.said.title}</Said>
               {lane.title}
+              <Said>{messages.said.state}</Said>
             </span>
           </span>
-          <Said>{messages.said.state}</Said>
-          <StatusTag status={roomTone(lane.status)}>{roomStatusLabel(lane.status)}</StatusTag>
           {/* Named by what it shows, then what it does, so speech input can say what it sees (WCAG 2.5.3). */}
-          <Said>{messages.said.show({ name: hob.name })}</Said>
+          <StatusTag status={roomTone(lane.status)} said={messages.said.show({ name: hob.name })}>
+            {roomStatusLabel(lane.status)}
+          </StatusTag>
         </button>
         {slots.actions}
       </div>
@@ -173,9 +175,4 @@ function RoleTag({ role }: { role: string }) {
       {role}
     </span>
   );
-}
-
-/** Words a screen reader says between the parts of a name, which the eye gets from the layout. */
-function Said({ children }: { children: ReactNode }) {
-  return <span className="sr-only">{children}</span>;
 }

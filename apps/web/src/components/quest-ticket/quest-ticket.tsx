@@ -7,6 +7,7 @@ import { roomTone } from "../quest/control-room.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import type { RowStatus } from "../quest/work-model.ts";
+import { Said } from "../said/said.tsx";
 import { messages } from "./messages.ts";
 import { questTicket } from "./ticket-model.ts";
 
@@ -52,6 +53,8 @@ export function QuestTicket({
   const progress = messages.progress(ticket.progress);
   const needs = ticket.needsYou > 0 ? messages.needsYou(ticket.needsYou) : null;
   const sprites = ticket.party.slice(0, WIDE_SPRITES);
+  // A screen reader hears a comma between the parts of the state, and a stop after the last one.
+  const after = (more: boolean) => (more ? messages.said.part : messages.said.open);
   return (
     <button
       type="button"
@@ -78,25 +81,25 @@ export function QuestTicket({
         </span>
         <span className="min-w-0 flex-1 truncate font-heading text-body font-(--heading-weight) @max-sm/ticket:order-1 @max-sm/ticket:basis-[calc(100%-2rem)] @sm/ticket:flex-initial">
           {ticket.title}
-          <span className="sr-only">{messages.said.title}</span>
+          <Said>{messages.said.title}</Said>
         </span>
         <span className="flex min-w-0 items-center gap-2 @max-sm/ticket:order-4 @max-sm/ticket:flex-1">
-          <span className="min-w-0 truncate text-detail text-text-secondary">{progress}</span>
+          <span className="min-w-0 truncate text-detail text-text-secondary">
+            {progress}
+            <Said>{after(needs !== null || stuck)}</Said>
+          </span>
           {needs !== null && (
-            <>
-              <span className="sr-only">{messages.said.part}</span>
-              <StatusTag status="needs-you">{needs}</StatusTag>
-            </>
+            <StatusTag status="needs-you" said={after(stuck)}>
+              {needs}
+            </StatusTag>
           )}
           {stuck && (
-            <>
-              <span className="sr-only">{messages.said.part}</span>
-              <StatusTag status="blocked">{messages.stuck}</StatusTag>
-            </>
+            <StatusTag status="blocked" said={messages.said.open}>
+              {messages.stuck}
+            </StatusTag>
           )}
         </span>
         <span className="ms-auto shrink-0 text-ui font-bold whitespace-nowrap text-lantern @max-sm/ticket:order-2">
-          <span className="sr-only">{messages.said.open}</span>
           <span className="@max-sm/ticket:sr-only">{messages.openRoom} </span>
           <span aria-hidden>→</span>
         </span>
