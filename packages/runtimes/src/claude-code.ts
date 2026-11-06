@@ -665,6 +665,31 @@ export const turnEvents = (tools: ToolTurn | null = null) => {
 };
 
 /**
+ * One turn as the hub sees it, however many runs Claude Code makes of it. A background command that
+ * finishes wakes the session after it replied: Claude Code starts another run in the same process,
+ * announced as `init` again, with its own `result`. So the session starts once, and the turn
+ * completes when Claude Code stops, with what each run replied. Usage is the last run's.
+ */
+export const wholeTurn = () => {
+  let started = false;
+  let completed: Extract<RuntimeEvent, { _tag: "Completed" }> | null = null;
+  return {
+    read: (event: RuntimeEvent): ReadonlyArray<RuntimeEvent> => {
+      if (event._tag === "SessionStarted") {
+        if (started) return [];
+        started = true;
+      }
+      if (event._tag !== "Completed") return [event];
+      const earlier = completed?.text ?? "";
+      const text = earlier !== "" && event.text !== "" ? `${earlier}\n\n${event.text}` : earlier + event.text;
+      completed = { ...event, text };
+      return [];
+    },
+    end: (): ReadonlyArray<RuntimeEvent> => (completed === null ? [] : [completed]),
+  };
+};
+
+/**
  * The prompt Claude Code receives. On resume Claude Code keeps the system prompt the session started
  * with, so instructions it may not follow come first in the turn itself. The block may repeat on
  * later turns, so it states the current instructions rather than announcing a change. A briefing on
@@ -1162,9 +1187,12 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               ),
           );
           const toEvents = turnEvents(tools);
+          const whole = wholeTurn();
           // Tool events arrive from the hooks while the turn runs, so the turn's own events share their queue.
           yield* Stream.fromAsyncIterable(turn, errorMessage).pipe(
-            Stream.mapEffect((message) => Effect.try({ try: () => toEvents(message), catch: errorMessage })),
+            Stream.mapEffect((message) =>
+              Effect.try({ try: () => toEvents(message).flatMap(whole.read), catch: errorMessage }),
+            ),
             Stream.flattenIterable,
             Stream.catch((error) =>
               Stream.unwrap(
@@ -1175,6 +1203,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
             ),
             Stream.runForEach((event) => Queue.offer(queue, event)),
           );
+          yield* Queue.offerAll(queue, whole.end());
           yield* Queue.end(queue);
         }),
       );

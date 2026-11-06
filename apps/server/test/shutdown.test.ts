@@ -1,76 +1,29 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { Agent, get, request } from "node:http";
-import { connect, createServer } from "node:net";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { waitFor } from "@hobbots/domain/testing";
-import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { hubPresenceFile, readHubPresence } from "../src/hub-presence.ts";
+import { type HubProcess, killHubProcesses, startHubProcess } from "./hub-process.ts";
 
 const server = resolve(import.meta.dirname, "..");
 
-const freePort = () =>
-  new Promise<number>((done, fail) => {
-    const probe = createServer().once("error", fail);
-    probe.listen(0, "127.0.0.1", () => {
-      const address = probe.address();
-      probe.close(() => (typeof address === "object" && address ? done(address.port) : fail(new Error("No port"))));
-    });
-  });
-
-const waitForHealth = async (url: string, hub: ChildProcess) => {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    if (hub.exitCode !== null) throw new Error(`The hub exited with ${hub.exitCode}`);
-    const ok = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1000) }).then(
-      (response) => response.ok,
-      () => false,
-    );
-    if (ok) return;
-    await new Promise((done) => setTimeout(done, 100));
-  }
-  throw new Error(`The hub did not answer on ${url} within 30s`);
-};
-
-let hub: ChildProcess | undefined;
+let hub: HubProcess | undefined;
 let dataDir: string | undefined;
 
 /** Starts the hub from source on a free port and an empty data folder. */
 const startHub = async () => {
-  const port = await freePort();
   dataDir = mkdtempSync(join(tmpdir(), "hobbots-shutdown-"));
-  const child = spawn(join(server, "node_modules", ".bin", "tsx"), ["src/main.ts"], {
-    cwd: server,
-    env: {
-      ...process.env,
-      HOBBOTS_PORT: String(port),
-      HOBBOTS_DATA_DIR: dataDir,
-      HOBBOTS_RUNTIME: "fake",
-      // The hub's Debug lines say when it has a request and when it starts to stop.
-      HOBBOTS_LOG_LEVEL: "Debug",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  hub = child;
-  let output = "";
-  const collect = (chunk: Buffer) => {
-    output += chunk.toString("utf8");
-  };
-  child.stdout?.on("data", collect);
-  child.stderr?.on("data", collect);
-  /** Waits until the hub has written a line that matches `line`. */
-  const logged = (what: string, line: RegExp) => Effect.runPromise(waitFor(what, () => line.test(output)));
-  const url = `http://127.0.0.1:${port}`;
-  await waitForHealth(url, child);
+  // The hub's Debug lines say when it has a request and when it starts to stop.
+  hub = await startHubProcess(dataDir, { HOBBOTS_LOG_LEVEL: "Debug" });
   // As the hub's window, with the key this start of the hub wrote (ADR 021).
-  const key = readFileSync(join(dataDir, "window-key"), "utf8").trim();
-  return { port, url, child, logged, asWindow: { authorization: `Bearer ${key}` } };
+  return { ...hub, asWindow: hub.asWindow() };
 };
 
-afterEach(() => {
-  hub?.kill("SIGKILL");
+afterEach(async () => {
+  await killHubProcesses();
   if (dataDir) rmSync(dataDir, { recursive: true, force: true });
   hub = dataDir = undefined;
 });
@@ -210,26 +163,13 @@ describe("the command-line tools and a running hub", () => {
     const { port } = await startHub();
     const folder = dataDir as string;
     const first = readHubPresence(folder);
-    const second = spawn(join(server, "node_modules", ".bin", "tsx"), ["src/main.ts"], {
-      cwd: server,
-      env: {
-        ...process.env,
-        HOBBOTS_PORT: String(await freePort()),
-        HOBBOTS_DATA_DIR: folder,
-        HOBBOTS_RUNTIME: "fake",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let output = "";
-    second.stdout?.on("data", (chunk: Buffer) => {
-      output += chunk.toString("utf8");
-    });
-    second.stderr?.on("data", (chunk: Buffer) => {
-      output += chunk.toString("utf8");
-    });
-    const code = await new Promise((done) => second.once("exit", done));
-    expect(code).not.toBe(0);
-    expect(output).toContain(`Another hub (process ${first?.pid}, port ${port}) is using ${folder}`);
+    // The second hub stops before it ever answers, and says why.
+    const refused = await startHubProcess(folder).then(
+      () => "",
+      (error: unknown) => String(error),
+    );
+    expect(refused).toContain("The hub exited with 1");
+    expect(refused).toContain(`Another hub (process ${first?.pid}, port ${port}) is using ${folder}`);
     expect(readHubPresence(folder)).toEqual(first);
     const reset = await command("reset-command", folder, ["--yes"]);
     expect(reset.code).toBe(1);
