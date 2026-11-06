@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-05
 - **Issue:** [#1011](https://github.com/otaviobarros/hobbots/issues/1011), [#1012](https://github.com/otaviobarros/hobbots/issues/1012)
-- **Pull request:** PR_LINK
+- **Pull request:** [#1025](https://github.com/otaviobarros/hobbots/pull/1025)
 - **Commit:** `da6501f` on `main`, which holds `e1cf987` ([#1017](https://github.com/otaviobarros/hobbots/pull/1017)), `c99ca96` ([#1019](https://github.com/otaviobarros/hobbots/pull/1019)) and `2e1f63d` ([#1022](https://github.com/otaviobarros/hobbots/pull/1022))
 - **Setup:** Apple silicon Mac, arm64, an ad hoc signed `pnpm package:mac` build started with a new data folder (`--user-data-dir`) and `HOBBOTS_MODE=hub`, never the Mac's Hobbots data, with opening at login off. Claude Code 2.1.316 on a signed-in subscription. Five hobs, all on Claude Code with the `haiku` model, under the Balanced preset, with one approved folder. ai-memory as bundled, with the default memory model. The run was driven through the app's own window.
 - **Result:** Passed with gaps. Usage counts every member's turns under its own name, a turn woken again by a background command counts both runs, and every token figure matches the Claude Code transcripts. Each member's Attempt became a session page in its own memory. The Quest's commit step did not finish, because the Mac has no Git identity and a hob cannot set one.
