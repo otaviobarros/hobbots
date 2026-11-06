@@ -115,6 +115,10 @@ const continuePrompt = (reply: Message) => {
   ].join("\n");
 };
 
+/** The message of yours a turn answers, as a Task turn is told it: what you wrote and when (#1005). */
+const yoursIn = (message: Message | undefined) =>
+  message === undefined ? {} : { yours: { text: message.content, sentAt: message.createdAt } };
+
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
 /** How a turn ended, for the Attempt it may have started on a Task: a reply still running was stopped. */
@@ -490,6 +494,7 @@ export class ChatService extends Context.Service<
         reply: Reply,
         changed: boolean,
         carry: Carry,
+        yours: Message | undefined,
       ) =>
         Effect.gen(function* () {
           const adapter = adapters(brain.runtime);
@@ -672,6 +677,7 @@ export class ChatService extends Context.Service<
                   threadId: thread.id,
                   messageId: (yield* Ref.get(reply.current)).id,
                   promptId: (yield* Ref.get(reply.current)).promptId,
+                  ...yoursIn(yours),
                   prompt,
                   runtime: brain.runtime,
                   configVersion: config.version,
@@ -868,6 +874,8 @@ export class ChatService extends Context.Service<
               reply,
               changed,
               start.carry ?? NOTHING_CARRIED,
+              // The message of yours the reply answers, as you wrote it, which Continue keeps (#1005).
+              saved.promptId === null ? undefined : transcript.find((m) => m.id === saved.promptId),
             ).pipe(Effect.ensuring(start.drain === false ? Effect.void : Effect.forkIn(drain(thread.id), scope))),
           );
           yield* announceTurn(thread.id, agent.id, turn);

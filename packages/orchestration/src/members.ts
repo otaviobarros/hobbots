@@ -343,6 +343,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 ),
                 Effect.asVoid,
               ),
+            turns: tasks,
           },
           deps.recorder,
         ).pipe(Effect.ensuring(handle === null ? Effect.void : handle.close));
