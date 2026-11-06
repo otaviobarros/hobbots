@@ -141,7 +141,7 @@ describe("a lead's briefing on a resumed session", () => {
   });
 
   // covers OR-004, OR-005
-  it("[TC-OR-605] a rule that comes to apply, or changes, partway is told on the next wake, and once", () => {
+  it("[TC-OR-620] a rule that comes to apply, or changes, partway is told on the next wake, and once", () => {
     const tree = finishedBy(1);
     const noQuest = new TaskTree({ ...tree, quests: [] });
     // Before the Quest starts on the Task, there is no lead guidance to tell.
@@ -165,7 +165,7 @@ describe("a lead's briefing on a resumed session", () => {
   });
 
   // covers OR-004
-  it("[TC-OR-607] a rule whose text changes, or that stops applying and applies again, is told again once", () => {
+  it("[TC-OR-621] a rule whose text changes, or that stops applying and applies again, is told again once", () => {
     const id = lead(finishedBy(0)).id;
     const briefed = (...rules: ReadonlyArray<BriefPart>) => [fixed("You are working on it."), ...rules];
     const first = renderBrief(id, briefed(rule("chat", "Write only the plan.")), null);
