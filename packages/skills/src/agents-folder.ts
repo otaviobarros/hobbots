@@ -1,5 +1,5 @@
-import { watch } from "node:fs";
-import { lstat } from "node:fs/promises";
+import { type FSWatcher, watch } from "node:fs";
+import { lstat, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { announcer, EventPublisher, SkillLibrary } from "@hobbots/agents";
@@ -50,6 +50,12 @@ const skillFoldersOf = (tree: SkillTree): ReadonlyArray<string> =>
     .map((entry) => entry.path.slice(0, -"/SKILL.md".length))
     .sort();
 
+/** The folders under the folder, "" for the folder itself, as the read listed them. */
+const foldersOf = (tree: SkillTree): ReadonlyArray<string> => [
+  "",
+  ...tree.entries.filter((entry) => entry.kind === "directory").map((entry) => entry.path),
+];
+
 /** Whether nothing is at `path`: the one case read as an empty folder. */
 const isMissing = (path: string) =>
   lstat(path).then(
@@ -65,12 +71,12 @@ const isMissing = (path: string) =>
 const readFolder = (path: string) =>
   Effect.tryPromise({
     try: async () => {
-      if (await isMissing(path)) return [];
+      if (await isMissing(path)) return { skills: [], folders: [] };
       const tree = await folderTree(path);
-      const results = [];
+      const skills = [];
       for (const folder of skillFoldersOf(tree))
-        results.push(await checkSkill(tree, { folder, dropped: [], plugin: null }));
-      return results;
+        skills.push(await checkSkill(tree, { folder, dropped: [], plugin: null }));
+      return { skills, folders: foldersOf(tree) };
     },
     catch: (error) => (error instanceof Error ? error.message : String(error)),
   });
@@ -82,6 +88,64 @@ const problemOf = (folder: string, fields: Partial<AgentsFolderProblem>): Agents
   unreadable: null,
   ...fields,
 });
+
+/**
+ * One plain watch on each folder under `path`, never a recursive one: on Linux, Node's recursive
+ * watch reads the tree itself on each event and throws, out of reach, when a folder in it is
+ * replaced by a file. A plain watch only reports, and its errors arrive as its `error` event. Each
+ * read re-arms the watches from what it listed; a folder replaced since gets a new one.
+ */
+const folderWatches = (path: string, changed: () => void) => {
+  const watches = new Map<string, { readonly watcher: FSWatcher; readonly ino: number }>();
+  let armed = false;
+
+  const drop = (folder: string) => {
+    watches.get(folder)?.watcher.close();
+    watches.delete(folder);
+  };
+
+  const arm = (folder: string, ino: number) => {
+    try {
+      const watcher = watch(join(path, folder), () => changed());
+      // The folder went or changed under the watch: let it go, and read again to see what is there.
+      watcher.on("error", () => {
+        if (watches.get(folder)?.watcher === watcher) drop(folder);
+        changed();
+      });
+      watches.set(folder, { watcher, ino });
+      return true;
+    } catch {
+      // Gone since the read; the read it set off will see that.
+      return false;
+    }
+  };
+
+  /** Watches exactly `folders`; one new since the last read sets off another, for what it got before its watch. */
+  const rewatch = async (folders: ReadonlyArray<string>) => {
+    const wanted = new Set(folders);
+    for (const folder of [...watches.keys()]) if (!wanted.has(folder)) drop(folder);
+    let added = false;
+    for (const folder of folders) {
+      const stats = await stat(join(path, folder)).catch(() => null);
+      const known = watches.get(folder);
+      if (stats === null || !stats.isDirectory()) {
+        drop(folder);
+        continue;
+      }
+      if (known?.ino === Number(stats.ino)) continue;
+      drop(folder);
+      added = arm(folder, Number(stats.ino)) || added;
+    }
+    if (added && armed) changed();
+    armed = true;
+  };
+
+  const close = () => {
+    for (const folder of [...watches.keys()]) drop(folder);
+  };
+
+  return { rewatch, close };
+};
 
 /** Syncs `~/.agents/skills` at `path` now, then whenever it changes and every five minutes. */
 export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
@@ -151,7 +215,7 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
         });
 
       /** Brings the library in line with a full read of the folder. */
-      const reconcile = (results: Effect.Success<ReturnType<typeof readFolder>>) =>
+      const reconcile = (results: Effect.Success<ReturnType<typeof readFolder>>["skills"]) =>
         Effect.gen(function* () {
           const found: Array<AgentsFolderProblem> = [];
           const present = new Set<SkillName>();
@@ -181,10 +245,21 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
           return found;
         });
 
+      // A change in the folder asks for a sync; several in a row make one, a second later.
+      const changes = yield* Queue.sliding<void>(1);
+      const watches = yield* Effect.acquireRelease(
+        Effect.sync(() => folderWatches(path, () => Queue.offerUnsafe(changes, undefined))),
+        (watching) => Effect.sync(watching.close),
+      );
+
       const once = yield* Semaphore.make(1);
       const sync = readFolder(path).pipe(
         Effect.matchEffect({
-          onSuccess: reconcile,
+          onSuccess: ({ skills, folders }) =>
+            Effect.andThen(
+              Effect.promise(() => watches.rewatch(folders)),
+              reconcile(skills),
+            ),
           onFailure: (message) =>
             Effect.as(Effect.logWarning("Could not read ~/.agents/skills", message), [
               problemOf("", { unreadable: message }),
@@ -195,18 +270,6 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
         once.withPermits(1),
       );
 
-      // A change in the folder asks for a sync; several in a row make one, a second later.
-      const changes = yield* Queue.sliding<void>(1);
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          try {
-            return watch(path, { recursive: true }, () => Queue.offerUnsafe(changes, undefined));
-          } catch {
-            return null;
-          }
-        }),
-        (watcher) => Effect.sync(() => watcher?.close()),
-      );
       yield* sync;
       yield* Queue.take(changes).pipe(
         Effect.andThen(Effect.sleep(Duration.seconds(1))),
