@@ -114,7 +114,8 @@ const setWritable = (path: string, writable: boolean) => {
   }
 };
 
-const removeFolder = (path: string) => {
+/** Removes a skill folder, or anything under it, read-only files included. */
+export const removeFolder = (path: string) => {
   if (!existsSync(path)) return;
   setWritable(path, true);
   rmSync(path, { recursive: true, force: true });

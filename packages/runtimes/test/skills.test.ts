@@ -19,6 +19,7 @@ import {
   holdSkillFolder,
   onlyWhenAskedCodexFile,
   onlyWhenAskedSkillFile,
+  removeFolder,
   SKILL_MOUNTS,
   skillMountsHash,
   writeSkillFolder,
@@ -26,8 +27,8 @@ import {
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-skills-"));
 afterAll(() => {
-  // The folders are read-only; the test's own runs leave none behind, but a failed one might.
-  rmSync(temp, { recursive: true, force: true });
+  // Some tests leave read-only skill folders behind, which only a writable tree lets go.
+  removeFolder(temp);
 });
 
 /** A revision's files, as the library keeps them. */
