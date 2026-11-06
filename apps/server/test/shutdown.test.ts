@@ -181,7 +181,7 @@ describe("the command-line tools and a running hub", () => {
     // tsx runs the hub in a child process of its own, so the record names that process.
     const presence = readHubPresence(folder);
     expect(presence?.port).toBe(port);
-    const before = readdirSync(folder).sort();
+    const before = readdirSync(folder);
 
     const reset = await command("reset-command", folder, ["--yes"]);
     expect(reset.code).toBe(1);
@@ -190,7 +190,8 @@ describe("the command-line tools and a running hub", () => {
     const restore = await command("restore-command", folder, [join(folder, "no-backup"), "--yes"]);
     expect(restore.code).toBe(1);
     expect(restore.output).toContain(`A hub is using ${folder}`);
-    expect(readdirSync(folder).sort()).toEqual(before);
+    // The running hub may add files of its own meanwhile, but nothing it had is gone.
+    expect(readdirSync(folder)).toEqual(expect.arrayContaining(before));
 
     const exited = new Promise((done) => child.once("exit", done));
     child.kill("SIGTERM");
