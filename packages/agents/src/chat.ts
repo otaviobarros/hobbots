@@ -611,8 +611,15 @@ export class ChatService extends Context.Service<
                       delta: event.text,
                     }),
                 );
+              // A lead's routine progress is kept out of the chat as it completes, so it never shows (#1006).
               case "Completed":
-                return update((m) => MessageTransitions.complete(m, reply.prefix + event.text, event.usage));
+                return Effect.gen(function* () {
+                  const quiet = onTask === null ? false : yield* onTask.quiet;
+                  return yield* update((m) => {
+                    const done = MessageTransitions.complete(m, reply.prefix + event.text, event.usage);
+                    return quiet && done instanceof Message ? new Message({ ...done, quiet }) : done;
+                  });
+                });
               // What the call printed is cut to its start and end before the step is saved; a long
               // output is kept whole in the step's log.
               case "ToolFinished":

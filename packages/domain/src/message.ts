@@ -164,6 +164,16 @@ export class Message extends Schema.Class<Message>("Message")({
     Schema.withDecodingDefaultKey(Effect.succeed([])),
     Schema.withConstructorDefault(Effect.succeed([])),
   ),
+  /**
+   * For a lead's reply to work that arrived while its Quest runs (ADR 027): true when the reply
+   * neither finished the work nor brought you a question, so it is routine progress the room already
+   * shows. The chat leaves it out, and it makes no thread unread (#1006). Kept, so its hob's history
+   * and an export still hold it.
+   */
+  quiet: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(false)),
+    Schema.withConstructorDefault(Effect.succeed(false)),
+  ),
   createdAt: Schema.String,
   revision: Revision,
 }) {}

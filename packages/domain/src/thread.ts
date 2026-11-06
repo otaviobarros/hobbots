@@ -66,8 +66,11 @@ export const leavesUnread = (message: {
   readonly role: string;
   readonly status: string;
   readonly content: string;
+  /** A lead's routine progress, which the chat leaves out (#1006). */
+  readonly quiet?: boolean;
 }): boolean =>
   message.role === "assistant" &&
+  message.quiet !== true &&
   message.status !== "queued" &&
   message.status !== "streaming" &&
   message.status !== "stopping" &&
@@ -85,10 +88,14 @@ export const previewLine = (content: string): string | null => {
 
 /**
  * The line a message gives its thread's preview: null for a queued message, which the transcript
- * does not show yet, and for one with no text, such as a reply made only of tool calls.
+ * does not show yet, for a lead's routine progress, which it leaves out (#1006), and for one with
+ * no text, such as a reply made only of tool calls.
  */
-export const messagePreview = (message: { readonly content: string; readonly status: string }): string | null =>
-  message.status === "queued" ? null : previewLine(message.content);
+export const messagePreview = (message: {
+  readonly content: string;
+  readonly status: string;
+  readonly quiet?: boolean;
+}): string | null => (message.status === "queued" || message.quiet === true ? null : previewLine(message.content));
 
 export const DEFAULT_THREAD_TITLE = "New thread";
 /** The longest title a thread takes. */

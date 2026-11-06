@@ -47,7 +47,7 @@ export const CHECKPOINT_RULE = `Keep each checkpoint's summary to about ${CHECKP
 export const planNote = (task: Task): string =>
   task.parentId !== null || task.threadId === null
     ? ""
-    : " Tell the user the plan in a line or two, who does what, then stay quiet until a question no lead can answer, or the finish.";
+    : " Tell the user the plan in a line or two, who does what, as the last thing you write this turn, after your tool calls, so the chat shows it. Then stay quiet until a question no lead can answer, or the finish.";
 
 /** `text` trimmed and cut to `limit` characters, marked when it was cut. */
 export const cut = (text: string, limit: number): string => clip(text.trim(), limit);

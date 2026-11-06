@@ -47,7 +47,8 @@ export function ChatColumn({
   const replies = useQuery({
     ...messagesQuery(threadId ?? ("" as ThreadId)),
     enabled: threadId !== undefined,
-    select: (all) => all.filter((message) => message.role === "assistant").length,
+    // A lead's routine progress, which the chat leaves out, leaves no dot either (#1006).
+    select: (all) => all.filter((message) => message.role === "assistant" && !message.quiet).length,
   }).data;
   const hidden = room && folded;
   // How many replies this thread held while the chat was last in view; a reply after that leaves the
