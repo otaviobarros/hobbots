@@ -380,4 +380,13 @@ test("[TC-UX-998] the Terminal fits the docked Workbench at any height, and read
   await expect.poll(shownRows).toBeGreaterThan(docked);
   await fits();
   await expect.poll(() => scrolledAround(panel)).toEqual({ panel: 0, boxes: 0, window: 0 });
+
+  // A height this device kept while the dock could be shorter opens at today's least, and fits.
+  await page.evaluate(() => localStorage.setItem("room.dock", JSON.stringify({ v: 1, height: 180 })));
+  await page.reload();
+  await expect(rows(terminal)).toContainText("300");
+  await expect(bench.getByRole("separator", { name: "Resize the Workbench" })).toHaveAttribute("aria-valuenow", "288");
+  await expect.poll(shownRows).toBeGreaterThanOrEqual(2);
+  await fits();
+  await expect.poll(() => scrolledAround(panel)).toEqual({ panel: 0, boxes: 0, window: 0 });
 });

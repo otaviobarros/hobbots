@@ -23,7 +23,9 @@ const KEY_STEP = 32;
 export const clampHeight = (height: number, room: number): number =>
   Math.round(Math.min(Math.max(height, DOCK_MIN), Math.max(DOCK_MIN, room * DOCK_MAX_SHARE)));
 
-export const parseHeight = (stored: unknown): number => (Schema.is(StoredHeight)(stored) ? stored.height : DOCK_HEIGHT);
+/** The height the device kept, raised to the least the dock takes now, or the design's height. */
+export const parseHeight = (stored: unknown): number =>
+  Schema.is(StoredHeight)(stored) ? Math.max(stored.height, DOCK_MIN) : DOCK_HEIGHT;
 
 /** The height a key on the dock's edge moves it to, or null for a key that does not move it. */
 export const keyedHeight = (key: string, height: number, room: number): number | null => {
