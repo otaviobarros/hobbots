@@ -39,11 +39,9 @@ export interface Ticket {
 const endOf = (task: Task): TicketEnd | null =>
   task.state === "completed" || task.state === "failed" || task.state === "cancelled" ? task.state : null;
 
-const progressOf = (top: Task, done: number, total: number): TicketProgress => {
+const progressOf = (top: Task, done: number, total: number, took: number | null): TicketProgress => {
   const end = endOf(top);
-  if (end !== null) {
-    return { kind: "ended", end, took: Math.max(0, Date.parse(top.updatedAt) - Date.parse(top.createdAt)) };
-  }
+  if (end !== null) return { kind: "ended", end, took: took ?? 0 };
   return total === 0 ? { kind: "started", at: top.createdAt } : { kind: "count", done, total };
 };
 
@@ -68,7 +66,7 @@ export const questTicket = (tree: TaskTree): Ticket | null => {
     title: taskTitle(top),
     leadId: card.leadId,
     party,
-    progress: progressOf(top, card.progress.done, card.progress.total),
+    progress: progressOf(top, card.progress.done, card.progress.total, card.took),
     needsYou: needsYouOf(tree, top),
   };
 };

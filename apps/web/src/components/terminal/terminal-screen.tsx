@@ -133,5 +133,11 @@ export function TerminalScreen({ label, content, onLink, onFind, onResults, ref 
     current.shown = content;
   });
 
-  return <div ref={host} data-slot="terminal-screen" className="min-h-0 min-w-0 flex-1 py-2 ps-2.5" />;
+  // The fit addon sizes the terminal to its parent's height padding included, so the padding sits
+  // on a frame around that parent, and the rows never run past the bottom.
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 py-2 ps-2.5">
+      <div ref={host} data-slot="terminal-screen" className="min-h-0 min-w-0 flex-1" />
+    </div>
+  );
 }

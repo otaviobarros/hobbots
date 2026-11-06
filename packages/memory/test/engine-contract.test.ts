@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -7,20 +7,17 @@ import { Context, Effect, Exit, Layer, Option, Redacted, Schedule, Scope } from 
 import { FetchHttpClient } from "effect/http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { restoreMemoryArchive } from "../src/engine/backup.ts";
-import { defaultEngineFolder, ENGINE_BINARY } from "../src/engine/binary.ts";
 import { configHoldsCredential, ROOT_USERNAME } from "../src/engine/config.ts";
 import { MEMORY_WORKSPACE, type MemoryEndpoint, MemoryEngine, memoryFolder } from "../src/engine/engine.ts";
 import { loadOrCreateMemoryKeys, type MemoryKeys, replaceMemoryKeys } from "../src/engine/keys.ts";
 import { AI_MEMORY_VERSION } from "../src/engine/release.ts";
+import { testEngine } from "../src/testing.ts";
 
 // Contract tests against the bundled ai-memory release (ADR 028): every route and setting Hobbots
 // relies on, run on the real binary, so an upstream release that changes one fails here before a
 // user finds it. They need the engine fetched (`pnpm --filter @hobbots/memory fetch-engine`). CI
 // sets HOBBOTS_MEMORY_CONTRACT=1, which fails them when it is not; elsewhere they are skipped.
-const folder = process.env.HOBBOTS_MEMORY_ENGINE_DIR ?? defaultEngineFolder();
-const fetched = folder !== undefined && existsSync(join(folder, ENGINE_BINARY));
-const required = process.env.HOBBOTS_MEMORY_CONTRACT === "1";
-const enabled = fetched || required;
+const { folder, fetched, enabled } = testEngine;
 
 const dataDir = mkdtempSync(join(tmpdir(), "hobbots-memory-contract-"));
 /** Where a backup of `dataDir`'s memory is restored. */
