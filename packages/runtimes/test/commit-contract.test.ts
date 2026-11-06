@@ -168,11 +168,15 @@ const fake: Runtime = {
 /** Every runtime Hobbots supports. */
 const RUNTIMES: ReadonlyArray<Runtime> = [claudeCode, codex, fake];
 
-/** Commits as a command of the turn would, with its environment, and returns the author or Git's error. */
-const commitWith = (env: NodeJS.ProcessEnv) => {
+/**
+ * Commits as a command of the turn would, with its environment, in a repository that sets its own
+ * `repoEmail` when given, and returns the author or Git's error.
+ */
+const commitWith = (env: NodeJS.ProcessEnv, repoEmail?: string) => {
   const repo = mkdtempSync(join(temp, "repo-"));
   const run = { ...env, HOME: home, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: join(home, ".gitconfig") };
   execFileSync("git", ["init", "-q"], { cwd: repo, env: run });
+  if (repoEmail !== undefined) execFileSync("git", ["config", "user.email", repoEmail], { cwd: repo, env: run });
   try {
     execFileSync("git", ["commit", "-q", "--allow-empty", "-m", "one"], { cwd: repo, env: run, stdio: "pipe" });
     return execFileSync("git", ["log", "-1", "--format=%an <%ae>"], { cwd: repo, env: run }).toString().trim();
@@ -188,6 +192,8 @@ const CASES: ReadonlyArray<{
   readonly as: CommitsAs;
   /** The user's Git config under the turn's home. */
   readonly config: string;
+  /** The email the repository's own config sets, if any. */
+  readonly repoEmail?: string;
   readonly commits: RegExp | string;
 }> = [
   {
@@ -201,6 +207,19 @@ const CASES: ReadonlyArray<{
     as: settleCommitsAs(null, NONE, GIVEN),
     config: "",
     commits: `${GIVEN.name} <${GIVEN.email}>`,
+  },
+  {
+    why: "the identity the user gave Hobbots, though their Git config takes an email from config only",
+    as: settleCommitsAs(null, NONE, GIVEN),
+    config: "[user]\n\tuseConfigOnly = true\n",
+    commits: `${GIVEN.name} <${GIVEN.email}>`,
+  },
+  {
+    why: "a repository's own email over the identity the user gave Hobbots",
+    as: settleCommitsAs(null, NONE, GIVEN),
+    config: "[user]\n\tuseConfigOnly = true\n",
+    repoEmail: "site@example.com",
+    commits: `${GIVEN.name} <site@example.com>`,
   },
   {
     why: "the user's own Git config",
@@ -218,7 +237,7 @@ describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
       if (runtime.start === null) throw new Error("skipped");
       writeFileSync(join(home, ".gitconfig"), each.config);
       const fresh = await runtime.start(request(each.as));
-      const commit = commitWith(fresh.env);
+      const commit = commitWith(fresh.env, each.repoEmail);
       if (typeof each.commits === "string") expect(commit).toBe(each.commits);
       else expect(commit).toMatch(each.commits);
       if (each.as._tag === "Missing") expect(fresh.instructions).toContain(NO_GIT_IDENTITY_NOTE);

@@ -291,6 +291,8 @@ const withGitSettings = (env: NodeJS.ProcessEnv, settings: ReadonlyArray<readonl
  * - With no email in the user's config, the identity the user gave Hobbots (`given`, #741) is used:
  *   its email in `EMAIL`, and its name as `user.name` when the user's config sets no name either.
  *   That name then wins over a repository's own, which is the price of a user with no Git identity.
+ *   `user.useConfigOnly` is turned off, since Git refuses `EMAIL` when the user's config turns it on;
+ *   a repository's own `user.email` still wins.
  * - With neither, Git is told to take an email from config only, so a commit without one fails
  *   rather than go out under a made-up address.
  *
@@ -303,8 +305,13 @@ export const withUserIdentity = (
 ): NodeJS.ProcessEnv => {
   if (identity.email !== null) return { ...env, EMAIL: identity.email };
   if (given === null) return withGitSettings(env, [["user.useConfigOnly", "true"]]);
-  const named = identity.name === null ? withGitSettings(env, [["user.name", given.name]]) : env;
-  return { ...named, EMAIL: given.email };
+  // `user.useConfigOnly` from the user's config would make Git refuse `EMAIL`; turning it off still
+  // lets a repository's own `user.email` win.
+  const settings: ReadonlyArray<readonly [string, string]> = [
+    ...(identity.name === null ? [["user.name", given.name] as const] : []),
+    ["user.useConfigOnly", "false"],
+  ];
+  return { ...withGitSettings(env, settings), EMAIL: given.email };
 };
 
 /**
