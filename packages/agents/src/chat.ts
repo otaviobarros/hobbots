@@ -30,6 +30,7 @@ import {
   sameBrain,
   stripEscapes,
   systemInstructions,
+  type TaskBriefMark,
   type TaskId,
   Thread,
   ThreadCheckpoint,
@@ -133,6 +134,27 @@ const turnEnding = (message: Message): TurnEnding =>
 /** How a turn that carried work ended early, as a code: a reply still running was interrupted. */
 const turnEnd = (status: MessageStatus): BackpackTurnEnd =>
   status === "failed" || status === "stopped" || status === "limited" ? status : "interrupted";
+
+/**
+ * `latest` with its session on `runtime` changed by `change`, or null when that session is no longer
+ * `sessionId` or `change` leaves it as it is.
+ */
+const withSession = (
+  latest: Thread,
+  runtime: RuntimeKind,
+  sessionId: string | null,
+  updatedAt: string,
+  change: (known: RuntimeSession) => RuntimeSession | null,
+): Thread | null => {
+  const known = latest.sessions.find((s) => s.runtime === runtime);
+  const next = known === undefined || known.sessionId !== sessionId ? null : change(known);
+  if (next === null) return null;
+  return new Thread({ ...latest, sessions: latest.sessions.map((s) => (s === known ? next : s)), updatedAt });
+};
+
+/** What the thread's session on `runtime` was last told of the Task its hob works on (#1027). */
+const taskBriefIn = (thread: Thread, runtime: RuntimeKind): TaskBriefMark | null =>
+  thread.sessions.find((s) => s.runtime === runtime)?.taskBrief ?? null;
 
 /** The brain a thread's turn thinks with: the thread's own, else the hob's configuration's. */
 const brainFor = (thread: Thread, config: AgentConfiguration): Brain =>
@@ -542,21 +564,42 @@ export class ChatService extends Context.Service<
           // The brief the turn sent counts as received only once the runtime answers the prompt that
           // carried it: anything it reports after starting the session. A runtime that starts the
           // session and then refuses the prompt leaves it unknown, so the next turn sends it again.
+          // So is what the turn told it of its Task (#1027), unless the runtime compacted the session
+          // during the turn, which leaves it holding a summary instead: the next turn tells it all.
+          // Changes the thread's session the turn ran in, unless another has taken its place.
+          const changeSession = (sessionId: string | null, change: (known: RuntimeSession) => RuntimeSession | null) =>
+            Effect.gen(function* () {
+              const updatedAt = yield* nowIso;
+              yield* changeThread(thread.id, (latest) =>
+                withSession(latest, brain.runtime, sessionId, updatedAt, change),
+              );
+            });
           let briefDelivered = false;
+          let compacted = false;
+          let toldBefore: RuntimeSession | undefined;
           const confirmBrief = Effect.suspend(() => {
             const digest = memory === null ? null : deliveredMemoryBrief(memory);
-            if (briefDelivered || digest === null || turnSession === null) return Effect.void;
+            // A briefing of only what changed reached a session that holds the rest only if it is the
+            // one that was told the rest; a new session in its place is told it all next turn.
+            const resumedTold = toldBefore?.taskBrief == null || toldBefore.sessionId === turnSession;
+            const told = compacted || !resumedTold ? null : (onTask?.told ?? null);
+            if (briefDelivered || (digest === null && told === null) || turnSession === null) return Effect.void;
             briefDelivered = true;
-            const sessionId = turnSession;
-            return Effect.gen(function* () {
-              const updatedAt = yield* nowIso;
-              yield* changeThread(thread.id, (latest) => {
-                const known = latest.sessions.find((s) => s.runtime === brain.runtime);
-                if (known?.sessionId !== sessionId || known.memoryBrief === digest) return null;
-                const sessions = latest.sessions.map((s) => (s === known ? { ...known, memoryBrief: digest } : s));
-                return new Thread({ ...latest, sessions, updatedAt });
-              });
+            return changeSession(turnSession, (known) => {
+              const next = {
+                ...known,
+                ...(digest === null ? {} : { memoryBrief: digest }),
+                ...(told === null ? {} : { taskBrief: told }),
+              };
+              return next.memoryBrief === known.memoryBrief && next.taskBrief === known.taskBrief ? null : next;
             });
+          });
+          // A compacted session keeps a summary of what it was told, not the briefing itself (#1027).
+          const forgetTaskBrief = Effect.suspend(() => {
+            compacted = true;
+            return changeSession(turnSession, (known) =>
+              known.taskBrief == null ? null : { ...known, taskBrief: null },
+            );
           });
 
           // Secrets are redacted before a tool call's step is saved, journaled or announced, so a client
@@ -580,11 +623,14 @@ export class ChatService extends Context.Service<
                     // Without memory, a session keeps whatever brief it was last told of.
                     const memoryBrief =
                       memory === null ? known?.memoryBrief : startedMemoryBrief(memory, expected, event.sessionId);
+                    // What it was told of its Task holds only for the session that was told it (#1027).
+                    const taskBrief = known?.sessionId === event.sessionId ? known.taskBrief : undefined;
                     const session: RuntimeSession = {
                       runtime: brain.runtime,
                       sessionId: event.sessionId,
                       seenThrough,
                       ...(memoryBrief === undefined ? {} : { memoryBrief }),
+                      ...(taskBrief === undefined ? {} : { taskBrief }),
                     };
                     if (
                       known?.sessionId === session.sessionId &&
@@ -652,6 +698,8 @@ export class ChatService extends Context.Service<
               // A command's output as it comes is the Workbench's, recorded with the turn's activity.
               case "ToolOutput":
                 return Effect.void;
+              case "SessionCompacted":
+                return forgetTaskBrief;
               // Steps, a tool call's included, are saved with the reply, so they replay on reconnect.
               default:
                 return saveStep(event);
@@ -672,6 +720,8 @@ export class ChatService extends Context.Service<
                 (handle) => handle.close,
               )
             : null;
+          // The session the turn expects to resume, and what it was last told of its Task (#1027).
+          toldBefore = thread.sessions.find((s) => s.runtime === brain.runtime);
           // The Task the hob works on in this thread, if any: its tools, and what its steps returned.
           // The turn's Attempt on it ends with the turn.
           const taskTurn = Option.isSome(taskTurns)
@@ -686,6 +736,7 @@ export class ChatService extends Context.Service<
                   runtime: brain.runtime,
                   configVersion: config.version,
                   holding: carry.holding,
+                  told: taskBriefIn(thread, brain.runtime),
                 }),
                 (turn) =>
                   Ref.get(reply.current).pipe(Effect.flatMap((m) => turn.end(turnEnding(m), turnSession, turnPolicy))),

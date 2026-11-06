@@ -117,6 +117,11 @@ export type RuntimeEvent =
    * run again until it is settled (ADR 020). Hub tools report it; `reason` says what is known.
    */
   | { readonly _tag: "ToolUncertain"; readonly id: string; readonly reason: string }
+  /**
+   * The runtime compacted the session: it now holds a summary of what came before, not what it was
+   * told, so Hobbots tells it again what it relies on the session to hold (#1027).
+   */
+  | { readonly _tag: "SessionCompacted" }
   | {
       readonly _tag: "Completed";
       readonly sessionId: string;

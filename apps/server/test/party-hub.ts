@@ -134,6 +134,8 @@ export const partyHub = (
     readonly activity?: boolean;
     /** Which turns announce their session twice, as a runtime bug would. */
     readonly announcesTwice?: (prompt: string) => boolean;
+    /** Which turns' sessions the runtime compacts, as Claude Code does once a session grows long. */
+    readonly compacts?: (prompt: string) => boolean;
   } = {},
 ) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -173,7 +175,16 @@ export const partyHub = (
         sendPrompt: (sent) => {
           const request = answering({ ...sent, prompt: reacted(sent.prompt, reactions) }, answers, gates);
           requests.push(request);
-          const events = fake.sendPrompt(request);
+          const streamed = fake.sendPrompt(request);
+          const events = options.compacts?.(request.prompt)
+            ? streamed.pipe(
+                Stream.flatMap((event) =>
+                  Stream.fromIterable<RuntimeEvent>(
+                    event._tag === "SessionStarted" ? [event, { _tag: "SessionCompacted" }] : [event],
+                  ),
+                ),
+              )
+            : streamed;
           return options.announcesTwice?.(request.prompt)
             ? events.pipe(
                 Stream.flatMap((event) =>
