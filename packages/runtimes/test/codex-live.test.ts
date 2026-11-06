@@ -605,4 +605,33 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex under the hob'
     expect(readFileSync(join(root, "project", "notes.txt"), "utf8")).toBe("hello\n");
     expect(events.at(-1)).toMatchObject({ _tag: "Completed", text: "Done." });
   });
+
+  // regression for #1048
+  it("[TC-RT-1048-03] waits for a command that outlives Codex's turn, records how it really ended and tells the hob", {
+    timeout: 60_000,
+  }, async () => {
+    // Codex answers the call once its wait ends while the command goes on, and the model replies.
+    model.moves.push(
+      functionCall("exec_command", { cmd: "sleep 3; echo slept; exit 3", yield_time_ms: 500 }, "c-long"),
+      { say: "Done." },
+      { say: "It failed with exit code 3." },
+    );
+    const before = model.requests.length;
+    const { asked, events } = await policyTurn(config, access, "Run the slow one.", null);
+    expect(asked).toEqual([expect.objectContaining({ stepId: "c-long", tool: "Bash" })]);
+    // Codex's own answer to the call says the command still runs.
+    expect(textOf(model.requests[before + 1])).toContain("Process running with session ID");
+    // Hobbots kept the App Server until the command ended, so its end carries the real exit code.
+    expect(events.find((event) => event._tag === "ToolFinished" && event.id === "c-long")).toMatchObject({
+      failed: true,
+      exitCode: 3,
+      output: expect.stringContaining("slept"),
+    });
+    // The hob was told in a follow-up turn, and the reply holds what both turns said.
+    const followUp = textOf(model.requests[before + 2]);
+    expect(followUp).toContain("<commands-ended>");
+    expect(followUp).toContain("sleep 3; echo slept; exit 3");
+    expect(followUp).toContain("exited with code 3");
+    expect(events.at(-1)).toMatchObject({ _tag: "Completed", text: "Done.\n\nIt failed with exit code 3." });
+  });
 });

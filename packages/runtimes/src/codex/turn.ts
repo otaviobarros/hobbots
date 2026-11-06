@@ -337,23 +337,71 @@ const openThread = (server: AppServer, request: PromptRequest, cwd: string, inst
       });
 };
 
-/** Reads the turn's notifications into events, until the turn ends or the App Server exits. */
+/**
+ * What the turn's notifications signal: a Codex turn's end, the App Server's exit, or the end of a
+ * command that outlived its Codex turn (#1048).
+ */
+type TurnSignal = TurnEnd | "lost" | "commandEnded";
+
+/** Reads the turn's notifications into events and signals, until the App Server exits. */
 const follow = (
   notifications: Stream.Stream<{ readonly method: string; readonly params: unknown }>,
   mapper: CodexTurnEvents,
   report: (event: RuntimeEvent) => void,
-  ended: Deferred.Deferred<TurnEnd | "lost">,
+  signals: Queue.Queue<TurnSignal>,
+  now: CodexTurnNow,
 ) =>
   notifications.pipe(
     Stream.runForEach((notification) =>
       Effect.gen(function* () {
         const step = mapper.map(notification);
         for (const event of step.events) report(event);
-        if (step.end) yield* Deferred.succeed(ended, step.end);
+        if (step.end) {
+          yield* Deferred.succeed(now.ended, undefined);
+          yield* Queue.offer(signals, step.end);
+        } else if (step.commandEnded) {
+          yield* Queue.offer(signals, "commandEnded");
+        }
       }),
     ),
-    Effect.andThen(Deferred.succeed(ended, "lost")),
+    Effect.andThen(Deferred.succeed(now.ended, undefined)),
+    Effect.andThen(Queue.offer(signals, "lost")),
   );
+
+/**
+ * The Codex turn running now, or null while Hobbots waits for a command that outlived one, and
+ * whether it has ended, which the reply's wait and its cancelling each hear of.
+ */
+interface CodexTurnNow {
+  turnId: string | null;
+  ended: Deferred.Deferred<void>;
+}
+
+/**
+ * Waits for the end of the hob's reply (#1048). A Codex turn that completes while a command it
+ * started still runs has not ended it: Codex keeps the command running, so Hobbots waits for it and
+ * then tells the hob in a follow-up turn how it ended, as Claude Code wakes the session when a
+ * background command ends (#1018). The reply ends once a Codex turn completes with none left.
+ */
+const settle = <E>(
+  signals: Queue.Queue<TurnSignal>,
+  mapper: CodexTurnEvents,
+  now: CodexTurnNow,
+  followUp: (notice: string) => Effect.Effect<void, E>,
+) =>
+  Effect.gen(function* () {
+    while (true) {
+      const signal = yield* Queue.take(signals);
+      // A Codex turn that is running hears of a command's end once it completes.
+      if (signal === "commandEnded" && now.turnId !== null) continue;
+      // No Codex turn runs from here, so cancelling has none to interrupt.
+      now.turnId = null;
+      if (signal === "lost" || (signal !== "commandEnded" && signal._tag !== "Completed")) return signal;
+      const after = mapper.afterTurn();
+      if (after.notice !== null) yield* followUp(after.notice);
+      else if (!after.waiting) return { _tag: "Completed" } as const;
+    }
+  });
 
 /** Ends the stream as the turn ended. */
 const finish = (
@@ -369,7 +417,7 @@ const finish = (
   }
   switch (end._tag) {
     case "Completed":
-      report(end.event);
+      report(mapper.reply());
       return done;
     case "Failed":
       return Effect.fail(end.error);
@@ -616,39 +664,48 @@ const turnEvents = (
 
       // Subscribed before the turn starts, so its first notifications are not missed.
       const notifications = yield* server.subscribe;
-      const ended = yield* Deferred.make<TurnEnd | "lost">();
-      yield* Effect.forkScoped(follow(notifications, mapper, report, ended));
+      const signals = yield* Queue.unbounded<TurnSignal>();
+      const now: CodexTurnNow = { turnId: null, ended: yield* Deferred.make<void>() };
+      yield* Effect.forkScoped(follow(notifications, mapper, report, signals, now));
 
-      const started: TurnStartResponse = yield* server
-        .request("turn/start", {
-          threadId,
-          input: [{ type: "text", text: turnPrompt(request, launch.instructions, launch.commits), text_elements: [] }],
-          ...TURN_SETTINGS,
-          ...(request.model ? { model: request.model } : {}),
-          ...(request.effort ? { effort: request.effort } : {}),
-        })
-        .pipe(Effect.mapError(failed));
-      mapper.follow(started.turn.id);
+      const startTurn = (text: string) =>
+        Effect.gen(function* () {
+          mapper.expect();
+          now.ended = yield* Deferred.make<void>();
+          const started: TurnStartResponse = yield* server
+            .request("turn/start", {
+              threadId,
+              input: [{ type: "text", text, text_elements: [] }],
+              ...TURN_SETTINGS,
+              ...(request.model ? { model: request.model } : {}),
+              ...(request.effort ? { effort: request.effort } : {}),
+            })
+            .pipe(Effect.mapError(failed));
+          mapper.follow(started.turn.id);
+          now.turnId = started.turn.id;
+        });
 
       // Cancelling the turn asks Codex to stop it and waits for the acknowledgement, so the process
-      // ends only once what it ran has stopped (ADR 024). It runs before the reader stops.
+      // ends only once what it ran has stopped (ADR 024). It runs before the reader stops. While no
+      // Codex turn runs, closing the App Server stops what is left.
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
-          if (yield* Deferred.isDone(ended)) return;
+          if (now.turnId === null) return;
           // One deadline covers the request and its acknowledgement, so a Codex that stops answering
           // still has its process ended.
           yield* server
-            .request("turn/interrupt", { threadId, turnId: started.turn.id })
+            .request("turn/interrupt", { threadId, turnId: now.turnId })
             .pipe(
               Effect.ignore,
-              Effect.andThen(Deferred.await(ended)),
+              Effect.andThen(Deferred.await(now.ended)),
               Effect.timeout(config.interruptGrace ?? "10 seconds"),
               Effect.ignore,
             );
         }),
       );
 
-      return yield* finish(yield* Deferred.await(ended), mapper, report, Queue.end(queue));
+      yield* startTurn(turnPrompt(request, launch.instructions, launch.commits));
+      return yield* finish(yield* settle(signals, mapper, now, startTurn), mapper, report, Queue.end(queue));
     }),
   );
 
