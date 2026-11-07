@@ -63,6 +63,8 @@ type TurnSignIn = (binary: string) => Effect.Effect<ChatGptTokens | null, Runtim
 interface CodexToolTurn {
   readonly events: CodexTurnEvents;
   readonly report: (event: RuntimeEvent) => void;
+  /** Records a hub tool call before it runs, as the turn's own calls are. */
+  readonly record: PromptRequest["recordToolStart"];
   readonly redact: (text: string) => string;
   /** Adds a note to a running turn, which the model reads with its next request (#1082). */
   readonly tell: (turnId: string, text: string) => Effect.Effect<void>;
@@ -714,6 +716,7 @@ const turnEvents = (
       turn = {
         events: mapper,
         report,
+        record: request.recordToolStart,
         redact: request.redaction?.text ?? ((text) => text),
         tell: tellTurn(server, threadId),
         gate: launch.gate,

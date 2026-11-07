@@ -17,6 +17,7 @@ export * from "./export.ts";
 export * from "./grants.ts";
 export * from "./hob-memory.ts";
 export * from "./hobs.ts";
+export * from "./hub-actions.ts";
 export * from "./hub-questions.ts";
 export * from "./lifecycle.ts";
 export * from "./memory.ts";

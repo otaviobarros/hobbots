@@ -7,6 +7,7 @@ import {
   type ApprovalAction,
   type ApprovalOutcome,
   actionDigest,
+  hubCallStep,
   LocalGitTools,
   makeRedactor,
   type RuntimeEvent,
@@ -113,7 +114,11 @@ const callInitIn = (
     });
     if (tools === null) return { offered: false, answer: null, events: [] };
     const events: Array<RuntimeEvent> = [];
-    const answer = yield* tools.call(GIT_INIT_TOOL, input, { id: "step-1", report: (event) => events.push(event) });
+    const answer = yield* tools.call(
+      GIT_INIT_TOOL,
+      input,
+      hubCallStep("step-1", (event) => events.push(event)),
+    );
     return { offered: true, names: tools.tools.map((tool) => tool.name), answer, events };
   }).pipe(Effect.provide(layer), Effect.runPromise);
 

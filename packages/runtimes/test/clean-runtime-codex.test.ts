@@ -26,16 +26,18 @@ import {
   AGENTS_SKILL,
   ASKED_SKILL,
   type CleanRuntimeFixture,
+  CONTRACT_HUB_TOOL,
   cleanRuntimeFixture,
   FOREIGN_MARKERS,
   LIBRARY_SKILL,
   SET_RULES,
   SET_SIBLING,
   SET_SKILL,
+  stepRecordingContract,
   TEAM_SET,
 } from "./clean-runtime.ts";
 import { approvalsAnswering, approve } from "./codex-fixture.ts";
-import { type Move, runs, standIn } from "./responses-stand-in.ts";
+import { functionCall, type Move, runs, standIn } from "./responses-stand-in.ts";
 
 /**
  * The clean-runtime contract test on an installed Codex (ADR 029), with a stand-in model that records
@@ -190,6 +192,21 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     expectClean(offered, Exit.isSuccess(exit) ? exit.value : []);
     // The turn's skill folder is gone once the turn ends.
     expect(readdirSync(join(access.runtimeFolder, "skill-mounts"))).toEqual([]);
+  });
+
+  // covers EX-004, ADR 031
+  it("[TC-PE-472] records a hub tool call's step with the turn's recorder before the hub runs it", {
+    timeout: 60_000,
+  }, async () => {
+    for (const records of [true, false]) {
+      const contract = stepRecordingContract(records);
+      const { exit } = await turn({ hubTools: contract.hubTools, recordToolStart: contract.recordToolStart }, [
+        functionCall(CONTRACT_HUB_TOOL, {}, `call-${records}`),
+        { say: "Done." },
+      ]);
+      expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+      expect(contract.order).toEqual([`recorded ${CONTRACT_HUB_TOOL} as call-${records}`, records ? "ran" : "not run"]);
+    }
   });
 
   // covers RT-001, ADR 029

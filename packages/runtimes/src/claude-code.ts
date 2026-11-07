@@ -1264,6 +1264,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   ),
                   request.hubTools,
                   report,
+                  request.recordToolStart,
                 ),
               }),
             ),

@@ -1,6 +1,7 @@
 import { isAbsolute, join, relative, sep } from "node:path";
 import {
   AdditionalRuntimes,
+  hubCallStep,
   type PromptRequest,
   RuntimeAdapter,
   RuntimeError,
@@ -577,7 +578,11 @@ export const scriptedHubEvents = (
             label: hub.tools.find((tool) => tool.name === call.name)?.label ?? call.name,
           });
           // Resolved when the call is made, so it can name what an earlier call answered.
-          const answer = yield* hub.call(call.name, resolveReferences(call.input, details), { id: call.id, report });
+          const answer = yield* hub.call(
+            call.name,
+            resolveReferences(call.input, details),
+            hubCallStep(call.id, report, request.recordToolStart),
+          );
           answers.push(`${call.name}: ${answer.text}`);
           const key = (call.input as { readonly key?: unknown } | null)?.key;
           if (typeof key === "string" && !answer.refused) details.set(key, answerDetails(answer.text));

@@ -8,6 +8,7 @@ import {
   actionDigest,
   CharmTools,
   type HubToolAnswer,
+  hubCallStep,
   makeRedactor,
   type RuntimeEvent,
   type ToolAccess,
@@ -273,10 +274,11 @@ const makeHub = (
       });
       if (tools === null) throw new Error("The turn was offered no GitHub tools");
       const events = turn.events ?? [];
-      const answer: HubToolAnswer = yield* tools.call(tool, input, {
-        id: turn.step ?? "toolu_1",
-        report: (event: RuntimeEvent) => events.push(event),
-      });
+      const answer: HubToolAnswer = yield* tools.call(
+        tool,
+        input,
+        hubCallStep(turn.step ?? "toolu_1", (event: RuntimeEvent) => events.push(event)),
+      );
       return answer;
     }).pipe(Effect.provide(layer), Effect.runPromise);
   return { github, rows, credential, call };

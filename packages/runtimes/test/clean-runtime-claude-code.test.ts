@@ -15,6 +15,7 @@ import {
   AGENTS_SKILL,
   ASKED_SKILL,
   type CleanRuntimeFixture,
+  CONTRACT_HUB_TOOL,
   cleanRuntimeFixture,
   FOREIGN_MARKERS,
   FOREIGN_SKILLS,
@@ -23,6 +24,7 @@ import {
   SET_SIBLING,
   SET_SKILL,
   SET_SKIPPED,
+  stepRecordingContract,
   TEAM_SET,
 } from "./clean-runtime.ts";
 import { type MessagesMove, messagesStandIn } from "./messages-stand-in.ts";
@@ -254,5 +256,23 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
       expect(offered, marker).not.toContain(marker);
     }
     expect(toolsOf(requests)).toEqual([]);
+  });
+
+  // covers EX-004, ADR 031
+  it("[TC-PE-471] records a hub tool call's step with the turn's recorder before the hub runs it", {
+    timeout: 120_000,
+  }, async () => {
+    for (const records of [true, false]) {
+      const contract = stepRecordingContract(records);
+      const { exit } = await turn({ hubTools: contract.hubTools, recordToolStart: contract.recordToolStart }, [
+        { tool: `mcp__hobbots__${CONTRACT_HUB_TOOL}`, input: {} },
+        { say: "Done." },
+      ]);
+      expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+      expect(contract.order).toEqual([
+        expect.stringMatching(new RegExp(`^recorded ${CONTRACT_HUB_TOOL} as `)),
+        records ? "ran" : "not run",
+      ]);
+    }
   });
 });

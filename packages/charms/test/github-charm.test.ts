@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { CharmTools, makeRedactor, type ToolAccess } from "@hobbots/agents";
+import { CharmTools, hubCallStep, makeRedactor, type ToolAccess, UNASKABLE } from "@hobbots/agents";
 import { AgentId, EMPTY_HOB_POLICY, type GitHubRepository, type PolicyDecision } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Redacted } from "effect";
@@ -11,7 +11,6 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   GITHUB_CHARM,
-  GITHUB_UNASKABLE,
   GitHubApi,
   GitHubApiLive,
   GitHubCharmTools,
@@ -20,7 +19,7 @@ import {
   GitPushLive,
   GitRemotes,
 } from "../src/index.ts";
-import { directSandbox, memoryCharmCalls } from "./support.ts";
+import { approvingUser, directSandbox, memoryCharmCalls } from "./support.ts";
 
 let root = "";
 let project = "";
@@ -194,7 +193,13 @@ const callWith = (
     now = current;
     const steered: Array<string | null> = [];
     for (const cwd of steerFrom) steered.push(tools.steersPush ? yield* tools.steersPush(cwd) : null);
-    return { names: tools.tools.map((tool) => tool.name), answer: yield* tools.call(name, input), steered };
+    // Every call shows as a step, which records it before it runs (ADR 031).
+    const answer = yield* tools.call(
+      name,
+      input,
+      hubCallStep("toolu_1", () => {}),
+    );
+    return { names: tools.tools.map((tool) => tool.name), answer, steered };
   }).pipe(Effect.provide(charmLayer(layers)), Effect.runPromise);
 
 describe("GitHub Charm", () => {
@@ -256,10 +261,11 @@ describe("GitHub Charm", () => {
 
     const never = await callWith({ asked }, access([project], "deny"), "github_repository", {});
     expect(never.answer).toEqual({ refused: true, text: "This hob's own permissions never allows reading GitHub." });
+    // Under Ask, a turn with nobody to ask refuses the read (ADR 031); one that can ask asks (TC-PE-466).
     const ask = await callWith({ asked }, access([project], "ask"), "github_repository", {});
     expect(ask.answer).toEqual({
       refused: true,
-      text: `This hob's own permissions asks before reading GitHub. ${GITHUB_UNASKABLE}`,
+      text: `This hob's own permissions asks before reading GitHub. ${UNASKABLE}`,
     });
     // Input that could widen the search is refused before anything is read.
     const injected = await callWith({ asked }, access([project]), "github_search", {
@@ -281,6 +287,70 @@ describe("GitHub Charm", () => {
     expect(undeclared.answer).toMatchObject({ refused: true });
     expect(undeclared.answer.text).toContain("No Charm on this hub declares github.read");
     expect(asked).toEqual([]);
+  });
+
+  // covers PE-003, PE-007, EX-004, ADR 015, ADR 031
+  it("[TC-PE-468] asks before a read the hob's override sets to Ask, Once only, and again on the next read", async () => {
+    const asked: Array<string> = [];
+    const now = access([project], "ask");
+    // Even a user who would save the approval for always is offered no rule for an Ask they narrowed.
+    const user = approvingUser(now, "always");
+    const recorded: Array<string> = [];
+    const answers = await Effect.gen(function* () {
+      const tools = yield* (yield* CharmTools).forTurn({
+        agentId: AgentId.make("hob"),
+        threadId: null,
+        messageId: null,
+        scope: () => "",
+        currentAccess: Effect.succeed(now),
+        redactor: makeRedactor(),
+        approvals: user.approvals,
+      });
+      if (tools === null) throw new Error("The turn was offered no GitHub tools");
+      const read = (id: string) =>
+        tools.call(
+          "github_repository",
+          {},
+          hubCallStep(
+            id,
+            () => {},
+            (event) =>
+              Effect.sync(() => {
+                recorded.push(`${event.id} ${event.operation} ${event.targets.join(" ")} after ${asked.length} reads`);
+                return true;
+              }),
+          ),
+        );
+      return [yield* read("toolu_1"), yield* read("toolu_2")];
+    }).pipe(Effect.provide(charmLayer({ asked })), Effect.runPromise);
+    for (const answer of answers) {
+      expect(answer.refused).toBe(false);
+      expect(answer.text).toContain("otaviobarros/hobbots (public), default branch main");
+      expect(answer.text).toContain("They approved it just this once, so a call like it asks again.");
+    }
+    expect(user.asked).toEqual([
+      expect.objectContaining({
+        stepId: "toolu_1",
+        tool: "github_repository",
+        operation: "github.read",
+        grantable: false,
+      }),
+      expect.objectContaining({
+        stepId: "toolu_2",
+        tool: "github_repository",
+        operation: "github.read",
+        grantable: false,
+      }),
+    ]);
+    expect(user.asked[0]?.arguments).toEqual({ repository: "otaviobarros/hobbots" });
+    expect(user.asked[0]?.targets).toEqual(["otaviobarros/hobbots"]);
+    expect(user.grants).toEqual([]);
+    // Each read's step is recorded before GitHub is read.
+    expect(recorded).toEqual([
+      "toolu_1 github.read otaviobarros/hobbots after 0 reads",
+      "toolu_2 github.read otaviobarros/hobbots after 1 reads",
+    ]);
+    expect(asked).toEqual(["repository otaviobarros/hobbots", "repository otaviobarros/hobbots"]);
   });
 
   it("[TC-PE-140] offers its actions only to a hob with the Charm while GitHub is connected", async () => {

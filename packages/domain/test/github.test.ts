@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   commentMarker,
   GITHUB_TOOLS,
-  GITHUB_UNTRUSTED,
   GitHubToolInputs,
   githubActorLogin,
   githubActorText,
@@ -111,9 +110,9 @@ describe("GitHub tools", () => {
       { number: 315, title: "Stop refetching", state: "merged", author: "otaviobarros", updatedAt: "2026-11-01" },
     ];
     expect(githubSearchText({ query: "repo:o/r is:pr", total: 12, items })).toBe(
-      `${GITHUB_UNTRUSTED}\n12 matches for \`repo:o/r is:pr\`.\n#315 [merged] Stop refetching by @otaviobarros, updated 2026-11-01\nShowing the 1 most recently updated.`,
+      `12 matches for \`repo:o/r is:pr\`.\n#315 [merged] Stop refetching by @otaviobarros, updated 2026-11-01\nShowing the 1 most recently updated.`,
     );
-    expect(githubSearchText({ query: "q", total: 1, items: [] })).toBe(`${GITHUB_UNTRUSTED}\n1 match for \`q\`.`);
+    expect(githubSearchText({ query: "q", total: 1, items: [] })).toBe("1 match for `q`.");
     const text = githubItemText({
       ...(items[0] as (typeof items)[number]),
       pullRequest: true,
@@ -123,8 +122,7 @@ describe("GitHub tools", () => {
       commentCount: 3,
       comments: [{ author: null, createdAt: "2026-11-01", body: "Looks good." }],
     });
-    expect(text.startsWith(GITHUB_UNTRUSTED)).toBe(true);
-    expect(text).toContain("Pull request #315 [merged]");
+    expect(text.startsWith("Pull request #315 [merged]")).toBe(true);
     expect(text).toContain("No description.");
     expect(text).toContain("3 comments, the first 1 below.");
     expect(text).toContain("Comment on 2026-11-01:\nLooks good.");
