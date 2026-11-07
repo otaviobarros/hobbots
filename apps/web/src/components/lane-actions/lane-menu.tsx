@@ -1,4 +1,4 @@
-import type { Agent, BackpackItem, Task, TaskTree } from "@hobbots/domain";
+import type { Agent, Task, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import {
   DropdownMenu,
@@ -17,7 +17,7 @@ import type { HobLookup, Pins } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { laneMenu } from "./lane-actions-model.ts";
 import { messages } from "./messages.ts";
-import { StuckRetryItem, useStuckRetry } from "./stuck-retry-item.tsx";
+import { type StuckRetry, StuckRetryItems, useStuckRetries } from "./stuck-retry-item.tsx";
 import type { LaneActions } from "./use-lane-actions.ts";
 
 type LaneMenuItems = ReturnType<typeof laneMenu>;
@@ -58,7 +58,7 @@ export function LaneMenu({
   // Reassign… on one of the hob's other failed Tasks gives that Task, not the header's.
   const target = tree.tasks.find((each) => each.id === open?.taskId) ?? task;
   const menu = laneMenu(tree, task);
-  const stuck = useStuckRetry(task, hobs);
+  const stuck = useStuckRetries(tree, task, hobs);
   // Cancel… opens its question in the lane, which takes focus, so the menu does not hand it back.
   const asked = useRef(false);
   const ask = (which: Task) => {
@@ -117,8 +117,8 @@ function MenuItems({
   onWorkbench,
 }: {
   task: Task;
-  /** The Task's stuck work, while Retry can send it again. */
-  stuck: BackpackItem | undefined;
+  /** The stuck work on the hob's Tasks that Retry can send again. */
+  stuck: ReadonlyArray<StuckRetry>;
   owner: string;
   menu: LaneMenuItems;
   pins: Pins;
@@ -144,7 +144,7 @@ function MenuItems({
           {messages.retry}
         </DropdownMenuItem>
       )}
-      {stuck !== undefined && <StuckRetryItem item={stuck} />}
+      <StuckRetryItems stuck={stuck} actions={actions} />
       {menu.reassign && (
         <DropdownMenuItem onSelect={stayOpen(() => actions.openMenu(task.id, "reassign"))}>
           {messages.reassign}

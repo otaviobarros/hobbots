@@ -31,15 +31,22 @@ export const withBlocker = (
   item: BackpackItem,
 ): ReadonlyArray<BackpackItem> | undefined => withNewer(old, item, (kept) => openBlocker(kept) !== undefined);
 
+/** A choice for the blocker you saw on an item: the item, the blocker's number, and Retry or Dismiss. */
+export interface BlockerDecision {
+  readonly item: BackpackItem;
+  readonly blocker: number;
+  readonly action: "retry" | "dismiss";
+}
+
 /**
  * Retry or Dismiss the blocker you saw, by its number, so the choice never reaches a newer one. A
  * refused choice, most likely made elsewhere first or overtaken by a newer blocker, reads the list again.
  */
-export const useDecideBlocker = (item: BackpackItem) => {
+export const useDecideBlocker = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (choice: { readonly blocker: number; readonly action: "retry" | "dismiss" }) =>
-      call((c) => c.blockers.decide({ params: { itemId: item.id }, payload: choice })),
+    mutationFn: ({ item, blocker, action }: BlockerDecision) =>
+      call((c) => c.blockers.decide({ params: { itemId: item.id }, payload: { blocker, action } })),
     onSuccess: (decided) => storeBlocker(queryClient, decided),
     onError: () => queryClient.invalidateQueries({ queryKey: blockersKey, exact: true }),
   });

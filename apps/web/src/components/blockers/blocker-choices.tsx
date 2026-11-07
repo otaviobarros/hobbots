@@ -13,6 +13,10 @@ const copy = messages;
 
 type Hob = ReturnType<HobLookup>;
 
+/** Why a choice on stuck work was not saved, in the card's words: the hob retired, or it did not reach the hub. */
+export const blockerError = (error: unknown, name: string): string =>
+  error instanceof ApiError && error.tag === "HobUnavailable" ? copy.retired({ name }) : copy.failed;
+
 /** An item's open blocker, whether its hob retired, and so the action it suggests next. */
 export const blockerChoice = (
   item: BackpackItem,
@@ -49,7 +53,7 @@ export function BlockerChoices({
   targets?: FocusTargets;
   children?: ReactNode;
 }) {
-  const decide = useDecideBlocker(item);
+  const decide = useDecideBlocker();
   const area = useRef<HTMLDivElement>(null);
   const moveOn = useMoveOn();
   const choice = blockerChoice(item, hob);
@@ -60,7 +64,7 @@ export function BlockerChoices({
     else moveOn({ from: area.current, targets, sent, say });
   };
   const choose = (action: "retry" | "dismiss") =>
-    follow(decide.mutateAsync({ blocker: blocker.number, action }), copy.decided[action]({ name: hob.name }));
+    follow(decide.mutateAsync({ item, blocker: blocker.number, action }), copy.decided[action]({ name: hob.name }));
   return (
     <div ref={area} className="contents">
       <div className="flex flex-wrap items-center gap-2">
@@ -95,9 +99,7 @@ export function BlockerChoices({
       </div>
       {decide.isError && (
         <p role="alert" className="m-0 text-meta text-rose">
-          {decide.error instanceof ApiError && decide.error.tag === "HobUnavailable"
-            ? copy.retired({ name: hob.name })
-            : copy.failed}
+          {blockerError(decide.error, hob.name)}
         </p>
       )}
     </div>

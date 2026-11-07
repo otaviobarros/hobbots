@@ -1,6 +1,7 @@
 import type { AgentId, Task, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { type ReactNode, useEffect, useRef } from "react";
+import { blockerError } from "../blockers/blocker-choices.tsx";
 import { WAITS } from "../move-on/places.ts";
 import { controlError } from "../quest/control-room.ts";
 import { messages as questCopy } from "../quest/messages.ts";
@@ -120,7 +121,8 @@ function FailCard({
 
 /**
  * A Task's cancel question while it waits for Yes, then where the Task stands after a control:
- * queued for the new Attempt, or what a cancel came to, and why the hub refused one.
+ * queued for the new Attempt, or what a cancel came to, and why the hub refused one or did not
+ * save Retry on its stuck work.
  */
 function TaskOutcome({
   tree,
@@ -137,6 +139,7 @@ function TaskOutcome({
   const top = task.id === tree.tasks[0]?.id;
   const quest = top ? tree.quests.find((each) => each.taskId === task.id) : undefined;
   const refusal = actions.refusal(task.id);
+  const stuck = actions.stuckRefusal(task.id);
   return (
     <>
       {actions.asking(task.id) && (
@@ -164,6 +167,7 @@ function TaskOutcome({
       <Refusal>
         {refusal === null ? null : controlError(refusal.error, { owner, target: refusal.target?.name ?? owner })}
       </Refusal>
+      <Refusal>{stuck === null ? null : blockerError(stuck, owner)}</Refusal>
     </>
   );
 }

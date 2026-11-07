@@ -1,4 +1,4 @@
-import type { Agent, BackpackItem, TaskTree, ThreadId } from "@hobbots/domain";
+import type { Agent, BackpackItem, Task, TaskTree, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import {
   DropdownMenu,
@@ -13,15 +13,13 @@ import { agentsQuery } from "../../api/queries.ts";
 import { useTaskControl } from "../../api/task-controls.ts";
 import { threadTasksQuery } from "../../api/tasks.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { HubWait } from "../loading/hub-wait.tsx";
 import { controlError, reassignTargets } from "../quest/control-room.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { reassignable } from "./blocker-model.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages;
-
-const NO_HOBS: ReadonlyArray<Agent> = [];
-const NO_TREES: ReadonlyArray<TaskTree> = [];
 
 /**
  * Reassign… on a stuck card: the hobs the hub would give the item's Task to, each with its sprite.
@@ -45,17 +43,24 @@ export function BlockerReassign({
   onSent: (sent: Promise<unknown>, to: Agent) => void;
 }) {
   const read = useQuery(threadTasksQuery(threadId));
-  const hobs = useQuery(agentsQuery).data ?? NO_HOBS;
   const control = useTaskControl();
   const [target, setTarget] = useState<Agent | null>(null);
-  const found = reassignable(read.data?.trees ?? NO_TREES, item);
+  // Whether the Task can change hands is unknown until its tree is read: the card says so, never
+  // that it cannot (STD-REACT-015).
+  if (read.isError) return <ReadFailed text={copy.reassignUnread} onRetry={() => void read.refetch()} />;
+  if (read.isPending) {
+    return (
+      <>
+        <Button size="xs" variant="outline" disabled aria-busy>
+          {copy.reassign}
+        </Button>
+        <HubWait pending onRetry={() => void read.refetch()} />
+      </>
+    );
+  }
+  const found = reassignable(read.data.trees, item);
   if (found === null) return null;
   const { tree, task } = found;
-  const targets = reassignTargets(
-    tree,
-    task,
-    hobs.filter((hob) => hob.status !== "retired"),
-  );
   const give = (to: Agent) => {
     setTarget(to);
     onSent(control.mutateAsync({ kind: "reassign", taskId: task.id, agentId: to.id }), to);
@@ -65,18 +70,12 @@ export function BlockerReassign({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button size="xs" variant="outline" disabled={disabled || control.isPending}>
-            {copy.reassign}
+            {control.isPending ? copy.reassigning : copy.reassign}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>{copy.reassignTo({ title: taskTitle(task) })}</DropdownMenuLabel>
-          {targets.length === 0 && <DropdownMenuLabel>{copy.noOneElse}</DropdownMenuLabel>}
-          {targets.map((hob) => (
-            <DropdownMenuItem key={hob.id} inset onSelect={() => give(hob)}>
-              <HobSprite hob={hob} size={16} />
-              {hob.name}
-            </DropdownMenuItem>
-          ))}
+          <ReassignTargets tree={tree} task={task} onPick={give} />
         </DropdownMenuContent>
       </DropdownMenu>
       {control.isError && (
@@ -85,5 +84,51 @@ export function BlockerReassign({
         </p>
       )}
     </>
+  );
+}
+
+/** The hobs the Task can go to, once your hobs are read: a wait while they are, Try again if they could not be. */
+function ReassignTargets({ tree, task, onPick }: { tree: TaskTree; task: Task; onPick: (to: Agent) => void }) {
+  const read = useQuery(agentsQuery);
+  if (read.isPending) return <DropdownMenuLabel aria-busy>{copy.readingHobs}</DropdownMenuLabel>;
+  if (read.isError) {
+    return (
+      <>
+        <DropdownMenuLabel>{copy.hobsUnread}</DropdownMenuLabel>
+        <DropdownMenuItem
+          onSelect={(event) => {
+            // Stays open on the hobs once they are read.
+            event.preventDefault();
+            void read.refetch();
+          }}
+        >
+          {copy.tryAgain}
+        </DropdownMenuItem>
+      </>
+    );
+  }
+  const targets = reassignTargets(
+    tree,
+    task,
+    read.data.filter((hob) => hob.status !== "retired"),
+  );
+  if (targets.length === 0) return <DropdownMenuLabel>{copy.noOneElse}</DropdownMenuLabel>;
+  return targets.map((hob) => (
+    <DropdownMenuItem key={hob.id} inset onSelect={() => onPick(hob)}>
+      <HobSprite hob={hob} size={16} />
+      {hob.name}
+    </DropdownMenuItem>
+  ));
+}
+
+/** A read the card needs failed: what could not be read, and Try again. */
+function ReadFailed({ text, onRetry }: { text: string; onRetry: () => void }) {
+  return (
+    <p role="alert" className="m-0 flex basis-full flex-wrap items-center gap-x-2 text-meta text-rose">
+      {text}
+      <Button variant="ghost" size="xs" onClick={onRetry}>
+        {copy.tryAgain}
+      </Button>
+    </p>
   );
 }

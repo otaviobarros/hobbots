@@ -49,7 +49,13 @@ export const messages = {
   /** Opens the hobs the stuck work's Task can go to, as the lane's menu lists them (#1087). */
   reassign: "Reassign…",
   reassignTo: ({ title }: { title: string }) => `Reassign “${title}” to`,
+  reassigning: "Reassigning…",
   noOneElse: "No other hob can take this task.",
+  readingHobs: "Reading your hobs…",
+  hobsUnread: "Hobbots could not read your hobs.",
+  /** The work's Task tree could not be read, so whether another hob can take it is unknown. */
+  reassignUnread: "Hobbots could not read whether another hob can take this.",
+  tryAgain: "Try again",
   dismiss: "Dismiss",
   openChat: "Open in the chat",
   failed: "Hobbots could not save that. The blocker is read again.",
