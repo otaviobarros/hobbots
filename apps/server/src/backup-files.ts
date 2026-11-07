@@ -238,7 +238,7 @@ export const copySkillObjects = async (
   return entries;
 };
 
-/** Makes every folder under `path` writable again, so a read-only tree such as a skill revision can be removed. */
+/** Makes every folder under `path` writable again, so a read-only tree, such as a revision an earlier hub sealed, can be removed. */
 const openFolders = async (path: string): Promise<void> => {
   const stat = await lstat(path).catch(() => undefined);
   if (stat === undefined || !stat.isDirectory()) return;
@@ -247,27 +247,30 @@ const openFolders = async (path: string): Promise<void> => {
 };
 
 /**
- * Removes `path` and everything under it, read-only folders included: the skills object store keeps
- * each revision read-only (ADR 029), which `rm` alone cannot delete. A missing path is no error.
+ * Removes `path` and everything under it, read-only folders included: a hub before #1196 sealed each
+ * skill revision's folders read-only (ADR 029), which `rm` alone cannot delete. A missing path is no error.
  */
 export const removeTree = async (path: string) => {
   await openFolders(path);
   await rm(path, { recursive: true, force: true });
 };
 
-/** Makes a restored revision read-only, as the hub wrote it: files `0444`, or `0555` for one that runs, then folders `0555`. */
+/**
+ * Makes a restored revision's files read-only, as the hub wrote them: `0444`, or `0555` for one that
+ * runs. Its folders are `0755`, writable to their owner, so the data folder can be removed (#1196).
+ */
 const sealRevision = async (folder: string): Promise<void> => {
+  await chmod(folder, 0o755);
   for (const entry of await readdir(folder, { withFileTypes: true })) {
     const path = join(folder, entry.name);
     if (entry.isDirectory()) await sealRevision(path);
     else await chmod(path, ((await lstat(path)).mode & 0o100) === 0 ? 0o444 : 0o555);
   }
-  await chmod(folder, 0o555);
 };
 
 /**
  * Restores the skills object store from a backup's `skills/` files into `<dataDir>/skills/objects`:
- * each file keeps whether it runs, and each revision's folder is read-only again.
+ * each file keeps whether it runs and is read-only again.
  */
 const restoreSkillObjects = async (dataDir: string, backup: string, manifest: BackupManifest) => {
   const objects = join(dataDir, SKILLS_PART.data);

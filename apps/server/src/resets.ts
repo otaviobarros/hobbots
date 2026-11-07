@@ -46,7 +46,7 @@ const setAsideFolders = async (dataDir: string) => {
 export const wipeHubData = async (dataDir: string) => {
   const marker = resetMarkerFile(dataDir);
   await writeFile(marker, `${JSON.stringify({ startedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
-  // The skills library and each turn's skill folder are read-only (ADR 029): `removeTree` opens them first.
+  // An earlier hub sealed skill folders read-only (ADR 029): `removeTree` opens them first.
   for (const entry of [...HUB_ENTRIES, ...MEMORY_ENTRIES]) await removeTree(join(dataDir, entry));
   await removeTree(runtimeFolders(dataDir));
   for (const folder of await setAsideFolders(dataDir)) await removeTree(folder);
