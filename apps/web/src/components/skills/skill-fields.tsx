@@ -64,11 +64,14 @@ export function EditorFooter({
   saveLabel,
   disabled,
   back,
+  hint = copy.editor.checked,
 }: {
   failure: string | null;
   saveLabel: string;
   disabled: boolean;
   back: SkillsView;
+  /** Said beside Save: what is checked, or why there is nothing to save yet. */
+  hint?: string | undefined;
 }) {
   return (
     <>
@@ -86,7 +89,7 @@ export function EditorFooter({
             {copy.editor.cancel}
           </Link>
         </Button>
-        <span className="ms-auto text-meta text-label">{copy.editor.checked}</span>
+        <span className="ms-auto text-meta text-label">{hint}</span>
       </div>
     </>
   );

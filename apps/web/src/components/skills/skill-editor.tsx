@@ -39,6 +39,11 @@ const savedLine = (saved: { added: boolean; revision: { number: number }; rolled
     : copy.editor.same({ rev });
 };
 
+const saveLabelOf = (save: { pending: boolean; finishing: boolean; moving: number; next: string }) => {
+  if (save.pending) return copy.editor.saving;
+  return save.finishing ? copy.editor.finish : copy.rollout.save({ count: save.moving, rev: save.next });
+};
+
 /**
  * The edit of `base`, held for as long as the editor is open: the library changing under it, here or
  * elsewhere, never replaces your text or the revision it is made from. A newer revision shows as a
@@ -62,6 +67,8 @@ function EditForm({
   const { skill } = detail;
   const [description, setDescription] = useState(skill.description);
   const [body, setBody] = useState(() => instructionsOf(instructions));
+  // What the editor opened with: the same text makes no revision, so its rollout switches would do nothing.
+  const [opened] = useState(() => ({ description: skill.description.trim(), body }));
   const [choice, setChoice] = useState<RollOutChoice>(new Map());
   const [failure, setFailure] = useState<string | null>(null);
   // A save whose answer never came: it may have reached the hub, so it is sent again as it was.
@@ -76,6 +83,7 @@ function EditForm({
   const moves = movesWith(choice);
   const moving = detail.assignments.filter(moves).length;
   const valid = descriptionState(description) !== "long" && description.trim() !== "";
+  const unchanged = description.trim() === opened.description && body === opened.body;
   const pending = writes.busy;
 
   return (
@@ -84,7 +92,7 @@ function EditForm({
       className="flex max-w-[760px] flex-col gap-4.5"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!valid || pending) return;
+        if (pending || (!finishing && (!valid || unchanged))) return;
         setFailure(null);
         // One request: the hub saves the revision, and its rollout sets the holds you switched.
         const input = finishing
@@ -99,6 +107,12 @@ function EditForm({
         writes.edit
           .mutateAsync(input)
           .then((saved) => {
+            // Text that is an older revision again makes nothing and moves no place: say so, and stay.
+            if (saved.revision.number < baseNumber) {
+              setSent(null);
+              setFailure(copy.editor.older({ rev: skillRevisionLabel(saved.revision) }));
+              return;
+            }
             say({ tone: "done", message: savedLine(saved) }, back);
             void navigate({ to: "/skills", search: skillsSearchOf(back) });
           })
@@ -135,14 +149,9 @@ function EditForm({
       )}
       <EditorFooter
         failure={failure}
-        saveLabel={
-          pending
-            ? copy.editor.saving
-            : finishing
-              ? copy.editor.finish
-              : copy.rollout.save({ count: moving, rev: next })
-        }
-        disabled={pending || (finishing ? false : !valid || newer !== null)}
+        saveLabel={saveLabelOf({ pending, finishing, moving, next })}
+        disabled={pending || (finishing ? false : !valid || unchanged || newer !== null)}
+        hint={unchanged && !finishing ? copy.editor.unchanged : undefined}
         back={back}
       />
     </form>

@@ -190,3 +190,43 @@ test("[TC-UX-1062-03] a save whose answer is lost is finished from the editor, n
   await expect(main.getByRole("heading", { name: "Review checklist", level: 2 })).toBeVisible();
   await expect(main).toContainText("Read the diff three times.");
 });
+
+// covers ADR 029 (Editing), #1062
+test("[TC-UX-1062-04] rollout switches alone save nothing, and text that is an older revision again moves no place", async ({
+  page,
+}) => {
+  const { url, folder, api } = await hubWithHobs();
+  const imported = (await api("POST", "/skills", { source: { _tag: "Folder", path: folder } })) as unknown as {
+    imported: ReadonlyArray<{ skill: { id: string }; revision: { hash: string } }>;
+  };
+  const first = imported.imported[0];
+  if (first === undefined) throw new Error("Nothing was imported.");
+  const { skill } = first;
+  await api("POST", `/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+  const description = "Use when reviewing a pull request before it merges.";
+  const edit = async (base: string, instructions: string) =>
+    (await api("POST", `/skills/${skill.id}/edits`, { base, description, instructions })) as unknown as {
+      revision: { hash: string };
+    };
+  const r2 = await edit(first.revision.hash, "Read the diff once.");
+  await edit(r2.revision.hash, "Read the diff twice, then the tests.");
+
+  // Only a switch changed: Save stays off, and says where holding a place back is done.
+  await page.goto(`${url}/#/skills?skill=${skill.id}&edit=skill`);
+  const main = page.getByRole("main", { name: "Skills" });
+  await expect(main.getByRole("heading", { name: "Edit Review checklist" })).toBeVisible();
+  await main.getByRole("switch", { name: "Everyone moves to r4" }).click();
+  await expect(main.getByRole("button", { name: /Save/ })).toBeDisabled();
+  await expect(main).toContainText("Nothing to save yet");
+  await expectAccessible(page, main);
+
+  // The text of r2 again is r2: nothing is saved, Everyone stays on r3, and the page says how to go back.
+  await main.getByRole("switch", { name: "Everyone moves to r4" }).click();
+  await main.getByLabel("Instructions").fill("Read the diff once.");
+  await main.getByRole("button", { name: /Save/ }).click();
+  await expect(main.getByRole("alert")).toContainText("That is r2 again, so nothing was saved and no place moved.");
+  await expect(main.getByLabel("Instructions")).toHaveValue("Read the diff once.");
+  await main.getByRole("link", { name: "Cancel" }).click();
+  await main.getByRole("tab", { name: /Who uses it/ }).click();
+  await expect(main.getByRole("listitem").filter({ hasText: "Everyone" })).toContainText("r3");
+});

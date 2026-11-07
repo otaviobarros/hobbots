@@ -258,7 +258,10 @@ export const messages = {
     save: ({ rev }: { rev: string }) => `Save as ${rev}`,
     saving: "Saving…",
     cancel: "Cancel",
-    unchanged: "Nothing changed yet.",
+    unchanged:
+      "Nothing to save yet: change the description or instructions to make a new revision. To keep a place on its revision now, use Who uses it.",
+    older: ({ rev }: { rev: string }) =>
+      `That is ${rev} again, so nothing was saved and no place moved. To go back to it, use Roll back to ${rev} in History.`,
     added: ({ name }: { name: string }) => `Added ${name} as r1. No hob has it yet.`,
     notGiven: ({ name, who }: { name: string; who: string }) =>
       `Added ${name} as r1, but it was not given to ${who} yet. Save again to give it: it is not added twice.`,
