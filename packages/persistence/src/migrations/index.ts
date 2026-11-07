@@ -73,6 +73,7 @@ import skillProposals from "./0070_skill_proposals.ts";
 import charmOperations from "./0071_charm_operations.ts";
 import restoreSkillMoves from "./0072_restore_skill_moves.ts";
 import skillSets from "./0073_skill_sets.ts";
+import charmCallValues from "./0074_charm_call_values.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -153,4 +154,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0071_charm_operations": charmOperations,
   "0072_restore_skill_moves": restoreSkillMoves,
   "0073_skill_sets": skillSets,
+  "0074_charm_call_values": charmCallValues,
 };

@@ -2,8 +2,9 @@ import { Schema } from "effect";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 
 /**
- * A Charm's write, recorded with its key before anything is sent (ADR 020), so a retried call is
- * never sent twice and a call that ended without a clear result is read back before anything else.
+ * A Charm's write, recorded with its key before anything is sent (ADR 020, ADR 031), so a retried
+ * call is never sent twice and a call that ended without a clear result is read back before anything
+ * else. The states name GitHub, the first Charm; every Charm's calls move through them the same way.
  *
  * - `sending`: recorded, and being sent or about to be. Found so when the hub starts, the hub stopped
  *   mid-call, so it is uncertain.
@@ -31,9 +32,14 @@ export class CharmCall extends Schema.Class<CharmCall>("CharmCall")({
    * of an earlier sending never settles a later one.
    */
   attempt: Schema.String,
+  /** The Charm's name as the hub words it, such as `GitHub`, so what the hob and the user are told names it. */
+  charm: Schema.String,
   /** The hub tool, such as `github_push`. */
   tool: Schema.String,
-  /** The call's input as stable JSON without its key, so a key sent again with another call is told apart. */
+  /**
+   * The call's input as stable JSON without its key, redacted, so a key sent again with another call
+   * is told apart and no secret the hob wrote is stored.
+   */
   input: Schema.String,
   /**
    * Where it acts, such as `github.com/owner/name refs/heads/main` for a push. Two writes of the same
@@ -42,6 +48,8 @@ export class CharmCall extends Schema.Class<CharmCall>("CharmCall")({
   site: Schema.String,
   /** What the hub fixed when it decided, as JSON text: what it sends, and what reading back compares against. */
   plan: Schema.String,
+  /** What the hob is told when reading the Charm back finds the call took effect. */
+  appliedText: Schema.String,
   state: CharmCallState,
   /** What the hob was or will be told, once there is a result. */
   result: Schema.NullOr(Schema.String),
@@ -52,3 +60,12 @@ export class CharmCall extends Schema.Class<CharmCall>("CharmCall")({
   createdAt: Schema.String,
   updatedAt: Schema.String,
 }) {}
+
+/**
+ * The key every Charm write carries (ADR 020, ADR 031), which the hub action pipeline adds to the
+ * write's input: a retried call returns the first result and is sent once.
+ */
+export const CharmWriteKey = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(200)).annotate({
+  description:
+    "A key you choose for this call, unique among your calls for this Task. Send the same key when you retry the same call, so it is sent once. A key you used for earlier work is free to use again.",
+});

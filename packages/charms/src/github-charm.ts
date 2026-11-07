@@ -8,7 +8,9 @@ import {
   HubRefusal,
   type HubTools,
   hubAction,
+  makeCharmCallRunner,
   makeHubActions,
+  readBacksOf,
   redactedAnswer,
   type ToolAccess,
 } from "@hobbots/agents";
@@ -22,27 +24,24 @@ import {
   GitHubToolInputs,
   type GitHubToolName,
   GitHubWriteInputs,
-  type GitHubWriteToolName,
   githubItemText,
   githubRepositoryText,
   githubSearchQuery,
   githubSearchText,
   githubToolJsonSchema,
   githubWriteToolJsonSchema,
-  isGitHubWriteToolName,
   repositorySlug,
   trimTrailingSlashes,
 } from "@hobbots/domain";
 import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
 import { Effect, Layer, Schema } from "effect";
-import { makeCharmCallRunner } from "./charm-calls.ts";
 import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { GitHubApi } from "./github-api.ts";
 import type { GitHubError } from "./github-error.ts";
 import { GITHUB_CHARM } from "./github-operations.ts";
 import { makeGitHubPush, pushReadBack } from "./github-push.ts";
-import { commentReadBack, makeGitHubWrites, pullRequestReadBack } from "./github-writes.ts";
+import { makeGitHubWrites } from "./github-writes.ts";
 import { GitRemotes } from "./remotes.ts";
 
 /**
@@ -50,7 +49,8 @@ import { GitRemotes } from "./remotes.ts";
  * the user gave the Charm, while GitHub is connected on the hub (#322). Each call is decided by the
  * policy engine on the repository the hub found from the hob's own folder, then read on the hub with
  * the connected account. Nothing a hob writes names the repository, and no credential reaches it.
- * The reads run through the hub action pipeline (ADR 031), which decides, asks and records them.
+ * The reads, opening pull requests and commenting run through the hub action pipeline (ADR 031),
+ * which decides, asks, records and sends them; Push follows (#619).
  */
 
 const describe = (error: Schema.SchemaError) => error.message.split("\n").slice(0, 6).join("\n");
@@ -81,17 +81,6 @@ export const GitHubCharmTools = Layer.effect(
     const credential = yield* GitHubCredential;
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
-    const runner = yield* makeCharmCallRunner({
-      github_push: pushReadBack(api, yield* GitPush),
-      github_open_pull_request: pullRequestReadBack(api),
-      github_comment: commentReadBack(api),
-    });
-    const github = yield* makeGitHubPush(runner);
-    const writes = yield* makeGitHubWrites(runner);
-    const tools = [
-      ...GITHUB_TOOLS.map((tool) => ({ ...tool, inputSchema: githubToolJsonSchema(tool.name) })),
-      ...GITHUB_WRITE_TOOLS.map((tool) => ({ ...tool, inputSchema: githubWriteToolJsonSchema(tool.name) })),
-    ];
 
     /** The folder to read and its repository: the one named, which must be the hob's, or the first that has one. */
     const repositoryFor = (access: ToolAccess, named: string | undefined) =>
@@ -124,6 +113,15 @@ export const GitHubCharmTools = Layer.effect(
           message: "None of your folders is the top of a Git repository whose origin remote is on github.com.",
         });
       });
+
+    const writes = yield* makeGitHubWrites(repositoryFor);
+    const runner = yield* makeCharmCallRunner("GitHub", {
+      github_push: pushReadBack(api, yield* GitPush),
+      ...readBacksOf(writes),
+    });
+    const github = yield* makeGitHubPush(runner);
+    const pushTool = GITHUB_WRITE_TOOLS.find((tool) => tool.name === GITHUB_PUSH_TOOL);
+    if (pushTool === undefined) throw new Error("The GitHub Charm has no github_push tool.");
 
     const read = (
       agentId: AgentId,
@@ -172,25 +170,11 @@ export const GitHubCharmTools = Layer.effect(
         return { access, ...(yield* repositoryFor(access, named)) };
       });
 
-    const write = (turn: CharmTurn, name: GitHubWriteToolName, raw: unknown, step: HubCallStep | undefined) =>
+    const push = (turn: CharmTurn, raw: unknown, step: HubCallStep | undefined) =>
       Effect.gen(function* () {
-        switch (name) {
-          case "github_push": {
-            const input = yield* decoded(GitHubWriteInputs[name], raw);
-            const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be pushed");
-            return yield* github.push(turn, access, folder, repository, input, step);
-          }
-          case "github_open_pull_request": {
-            const input = yield* decoded(GitHubWriteInputs[name], raw);
-            const { access, folder, repository } = yield* resolved(turn, input.folder, "no pull request can be opened");
-            return yield* writes.openPullRequest(turn, access, folder, repository, input, step);
-          }
-          case "github_comment": {
-            const input = yield* decoded(GitHubWriteInputs[name], raw);
-            const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be commented");
-            return yield* writes.comment(turn, access, folder, repository, input, step);
-          }
-        }
+        const input = yield* decoded(GitHubWriteInputs.github_push, raw);
+        const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be pushed");
+        return yield* github.push(turn, access, folder, repository, input, step);
       });
 
     /**
@@ -230,31 +214,41 @@ export const GitHubCharmTools = Layer.effect(
           };
         });
 
-    const reads = makeHubActions({
+    const actions = makeHubActions({
       owner: { _tag: "Charm", declaration: GITHUB_CHARM, name: "GitHub", holds: holdsGitHub },
-      actions: GITHUB_TOOLS.map((tool) =>
-        hubAction({
-          tool: { ...tool, inputSchema: githubToolJsonSchema(tool.name) },
-          input: GitHubToolInputs[tool.name],
-          effect: "read",
-          otherwise: "GitHub cannot be read",
-          plan: planRead(tool.name),
-        }),
-      ),
+      actions: [
+        ...GITHUB_TOOLS.map((tool) =>
+          hubAction({
+            tool: { ...tool, inputSchema: githubToolJsonSchema(tool.name) },
+            input: GitHubToolInputs[tool.name],
+            effect: "read",
+            otherwise: "GitHub cannot be read",
+            plan: planRead(tool.name),
+          }),
+        ),
+        ...writes,
+      ],
       decide: (approvals, base, request: PolicyRequest) => decideHubCall(engine, approvals, base, request),
+      calls: runner,
     });
 
-    /** A write, decided and sent by its own call code until it moves onto the pipeline (#618, #619). */
-    const callWrite = (turn: CharmTurn, name: GitHubWriteToolName, raw: unknown, step: HubCallStep | undefined) =>
-      redactedAnswer(turn.redactor, write(turn, name, raw, step), {
+    /** A push, decided and sent by its own call code until it moves onto the pipeline (#619). */
+    const callPush = (turn: CharmTurn, raw: unknown, step: HubCallStep | undefined) =>
+      redactedAnswer(turn.redactor, push(turn, raw, step), {
         log: "A GitHub Charm call failed",
         text: "Hobbots could not reach GitHub this time. Try again.",
       });
 
-    const call = (turn: CharmTurn, readTools: HubTools, name: string, raw: unknown, step: HubCallStep | undefined) =>
-      (isGitHubWriteToolName(name) ? callWrite(turn, name, raw, step) : readTools.call(name, raw, step)).pipe(
+    const call = (turn: CharmTurn, pipeline: HubTools, name: string, raw: unknown, step: HubCallStep | undefined) =>
+      (name === GITHUB_PUSH_TOOL ? callPush(turn, raw, step) : pipeline.call(name, raw, step)).pipe(
         Effect.provideContext(context),
       );
+
+    /** The tools in the order the hob has always been offered them: the reads, Push, then the other writes. */
+    const offered = (pipeline: HubTools) => {
+      const [reads, rest] = [pipeline.tools.slice(0, GITHUB_TOOLS.length), pipeline.tools.slice(GITHUB_TOOLS.length)];
+      return [...reads, { ...pushTool, inputSchema: githubWriteToolJsonSchema(GITHUB_PUSH_TOOL) }, ...rest];
+    };
 
     /**
      * A `git push` in one of the hob's folders whose origin is on GitHub is made with `github_push`
@@ -282,10 +276,10 @@ export const GitHubCharmTools = Layer.effect(
           const app = yield* credential.hobApp(turn.agentId).pipe(Effect.orElseSucceed(() => null));
           const reachable = (yield* credential.connected) || app !== null;
           if (!reachable) return null;
-          const readTools = reads(turn);
+          const pipeline = actions(turn);
           return {
-            tools,
-            call: (name: string, input: unknown, step?: HubCallStep) => call(turn, readTools, name, input, step),
+            tools: offered(pipeline),
+            call: (name: string, input: unknown, step?: HubCallStep) => call(turn, pipeline, name, input, step),
             steersPush: (cwd: string) => steersPush(turn, cwd),
           };
         }).pipe(Effect.provideContext(context)),

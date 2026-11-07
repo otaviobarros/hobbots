@@ -3,7 +3,7 @@ import { Deferred, Effect, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
 import { type CharmWrite, makeCharmCallRunner, type WriteOutcome } from "../src/index.ts";
-import { memoryCharmCalls } from "./support.ts";
+import { memoryCharmCalls } from "../src/testing.ts";
 
 const write = (key: string): CharmWrite => ({
   agentId: AgentId.make("hob"),
@@ -32,7 +32,7 @@ describe("Charm call runner", () => {
       const secondSent = yield* Deferred.make<WriteOutcome>();
       // The first read-back waits on GitHub until the test lets it find the push; later ones find nothing.
       let reads = 0;
-      const runner = yield* makeCharmCallRunner({
+      const runner = yield* makeCharmCallRunner("GitHub", {
         github_push: () =>
           Effect.gen(function* () {
             reads += 1;
@@ -82,7 +82,7 @@ describe("Charm call runner", () => {
     const final = await Effect.gen(function* () {
       // GitHub shows the push only after the reply has started its Task.
       let onGitHub = false;
-      const runner = yield* makeCharmCallRunner({ github_push: () => Effect.succeed(onGitHub) });
+      const runner = yield* makeCharmCallRunner("GitHub", { github_push: () => Effect.succeed(onGitHub) });
       // The runner's startup read-back of calls left unsettled finds none yet.
       yield* Effect.yieldNow;
       const outcome = yield* runner
