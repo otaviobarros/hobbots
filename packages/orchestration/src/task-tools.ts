@@ -160,7 +160,7 @@ export class TaskTools extends Context.Service<
         const wrapUp = yield* makeWrapUp;
         const settle = yield* makeSettle;
         // A lead's commit of a member's open work is held, whichever runtime makes it (#742).
-        const heldCommit = yield* makeHeldCommits(separator);
+        const heldCommit = yield* makeHeldCommits;
         const handlers: Record<TaskToolName, ToolHandler> = {
           ...makePlanning({ tasks, capacity, limits, wrapUp, folderChecks, authority: authority.of, separator }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitWorkspace } from "@hobbots/agents";
@@ -91,5 +91,32 @@ describe("Uncommitted files", () => {
     write(join(repo, "a.md"), "a\n");
     gitIn(repo, "init", "-q");
     expect(await uncommitted([{ folder: repo, path: "a.md" }])).toEqual([{ repository: repo, paths: ["a.md"] }]);
+  });
+});
+
+describe("The repository Git finds from a folder (#742)", () => {
+  const repositoryFrom = (folder: string) =>
+    Effect.runPromise(
+      Effect.flatMap(Effect.service(GitWorkspace), (git) => git.repository(folder)).pipe(
+        Effect.provide(GitWorkspaceLive),
+      ),
+    );
+
+  // covers OR-004, PE-005
+  it("[TC-OR-742-04] names one repository however its folder is spelled, a nested one as its own, and none outside any", async () => {
+    const ledger = join(work, "ledger");
+    const notes = join(work, "notes");
+    const vendor = join(ledger, "vendor");
+    for (const dir of [join(ledger, "src"), notes, vendor]) mkdirSync(dir, { recursive: true });
+    gitIn(ledger, "init", "-q");
+    gitIn(vendor, "init", "-q");
+    symlinkSync(ledger, join(work, "ledger-link"));
+    for (const spelling of [ledger, join(ledger, "src"), `${notes}/../ledger`, join(work, "ledger-link", "src")]) {
+      expect(await repositoryFrom(spelling), spelling).toBe(ledger);
+    }
+    // A repository nested in another is its own; a folder in none, or missing, has none.
+    expect(await repositoryFrom(vendor)).toBe(vendor);
+    expect(await repositoryFrom(notes)).toBeNull();
+    expect(await repositoryFrom(join(work, "missing"))).toBeNull();
   });
 });

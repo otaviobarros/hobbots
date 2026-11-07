@@ -647,7 +647,28 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         ),
       });
       expect(git("log", "--format=%s").trim()).toBe("chore: start");
-      expect(git("status", "--porcelain").trim()).toBe("?? LEDGER.md");
+      // However the command spells the repository, it is the same one, and a repository nested in it is its own.
+      mkdirSync(join(ledgerProject, "src"));
+      execFileSync("git", ["init", "--quiet", join(ledgerProject, "vendor")]);
+      const spelled = await exchange(
+        thread,
+        "Commit from src",
+        "fake:tool Bash git -C src/.. commit -m 'chore: ledger'",
+      );
+      expect(spelled.steps.find((step) => step.kind === "tool" && step.label.includes("git commit"))).toMatchObject({
+        state: "denied",
+        reason: expect.stringContaining("They are Bracken's to commit"),
+      });
+      const nested = await exchange(
+        thread,
+        "Commit the vendored copy",
+        "fake:tool Bash git -C vendor commit -m 'chore: vendor'",
+      );
+      expect(nested.steps.find((step) => step.kind === "tool" && step.label.includes("git commit"))).toMatchObject({
+        state: "done",
+      });
+      expect(git("log", "--format=%s").trim()).toBe("chore: start");
+      expect(git("status", "--porcelain").trim()).toBe("?? LEDGER.md\n?? vendor/");
 
       // Once the member's changes are committed, the lead's own commit there runs.
       git("add", "LEDGER.md");

@@ -1,7 +1,6 @@
 import { ActivityRepository, GitWorkspace, HobbotsRepository, TaskRepository } from "@hobbots/agents";
-import { isTerminalTask, type Task, type TaskId } from "@hobbots/domain";
+import { type AttemptActivity, isTerminalTask, type Task, type TaskId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import type { PathSeparator } from "./authority.ts";
 
 /**
  * A lead's commit of a member's open work (#742). A member commits its own Task's work, as itself:
@@ -10,10 +9,6 @@ import type { PathSeparator } from "./authority.ts";
  * not ended and has changes left uncommitted in a repository, the hub holds the lead's `git commit`
  * there and says whose work it is, from its own turns and its steps' alike. Commits elsewhere run.
  */
-
-/** Whether `folder` is `repository` or inside it. */
-const within = (folder: string, repository: string, separator: PathSeparator) =>
-  folder === repository || folder.startsWith(repository.endsWith(separator) ? repository : `${repository}${separator}`);
 
 /**
  * The open Tasks another hob owns under the work `caller`'s hob does on its Task: under the highest
@@ -41,49 +36,60 @@ const heldCommitReason = (
   return `${repository} holds changes a member has not committed: ${whose.join("; ")}. They are ${hobs}'s to commit, as ${held.length === 1 ? "itself" : "themselves"}, so Hobbots does not let you commit there while ${held.length === 1 ? "that Task is" : "those Tasks are"} open, even when one is blocked. Never commit a member's work yourself: wait for its Task to end, then commit what is your own.`;
 };
 
+/** The files the Attempts in `records` of `task` changed, each as a folder and a path, a move's source too. */
+const changedBy = (task: Task, records: ReadonlyArray<AttemptActivity>) =>
+  records
+    .filter((record) => record.attempt.taskId === task.id)
+    .flatMap((record) => record.changes)
+    .flatMap((change) =>
+      (change.movedFrom === null ? [change.path] : [change.path, change.movedFrom]).map((path) => ({
+        folder: change.folder,
+        path,
+      })),
+    );
+
 /**
  * Why a commit the caller makes in the repository Git finds from `cwd`, working on `taskId`, is held,
  * or null. A hub that keeps no Workbench records or reads no Git state holds nothing.
  */
-export const makeHeldCommits = (separator: PathSeparator) =>
-  Effect.gen(function* () {
-    const tasks = yield* TaskRepository;
-    const hobs = yield* HobbotsRepository;
-    const activity = yield* Effect.serviceOption(ActivityRepository);
-    const workspace = yield* Effect.serviceOption(GitWorkspace);
-    return (taskId: TaskId | null, cwd: string): Effect.Effect<string | null> =>
-      Effect.gen(function* () {
-        if (taskId === null || Option.isNone(activity) || Option.isNone(workspace)) return null;
-        const own = yield* tasks.readTree(taskId);
-        const caller = Option.isSome(own) ? own.value.tasks[0] : undefined;
-        if (caller === undefined) return null;
-        const tree = caller.parentId === null ? own : yield* tasks.readTree(caller.rootId);
-        if (Option.isNone(tree)) return null;
-        const open = membersOpen(tree.value.tasks, caller);
-        const attempts = tree.value.attempts.filter((attempt) => open.some((task) => task.id === attempt.taskId));
-        if (attempts.length === 0) return null;
-        const records = yield* activity.value.readMany(attempts.map((attempt) => attempt.id));
-        const held: Array<{ task: TaskId; hob: string; paths: ReadonlyArray<string> }> = [];
-        let repository: string | null = null;
-        for (const task of open) {
-          const files = records
-            .filter((record) => record.attempt.taskId === task.id)
-            .flatMap((record) => record.changes)
-            .flatMap((change) =>
-              (change.movedFrom === null ? [change.path] : [change.path, change.movedFrom]).map((path) => ({
-                folder: change.folder,
-                path,
-              })),
-            );
-          if (files.length === 0) continue;
-          const left = (yield* workspace.value.uncommitted(files)).find((each) =>
-            within(cwd, each.repository, separator),
-          );
-          if (left === undefined || left.paths.length === 0) continue;
-          const hob = yield* hobs.findAgent(task.ownerId);
-          repository = left.repository;
-          held.push({ task: task.id, hob: Option.isSome(hob) ? hob.value.name : task.ownerId, paths: left.paths });
-        }
-        return repository === null ? null : heldCommitReason(repository, held);
-      });
-  });
+export const makeHeldCommits = Effect.gen(function* () {
+  const tasks = yield* TaskRepository;
+  const hobs = yield* HobbotsRepository;
+  const activity = yield* Effect.serviceOption(ActivityRepository);
+  const workspace = yield* Effect.serviceOption(GitWorkspace);
+
+  /** The open Tasks of other hobs under the caller's work on `taskId`, with the Workbench records of their Attempts. */
+  const openWork = (taskId: TaskId, read: ActivityRepository["Service"]) =>
+    Effect.gen(function* () {
+      const own = yield* tasks.readTree(taskId);
+      const caller = Option.isSome(own) ? own.value.tasks[0] : undefined;
+      if (caller === undefined) return null;
+      const tree = caller.parentId === null ? own : yield* tasks.readTree(caller.rootId);
+      if (Option.isNone(tree)) return null;
+      const open = membersOpen(tree.value.tasks, caller);
+      const attempts = tree.value.attempts.filter((attempt) => open.some((task) => task.id === attempt.taskId));
+      if (attempts.length === 0) return null;
+      return { open, records: yield* read.readMany(attempts.map((attempt) => attempt.id)) };
+    });
+
+  return (taskId: TaskId | null, cwd: string): Effect.Effect<string | null> =>
+    Effect.gen(function* () {
+      if (taskId === null || Option.isNone(activity) || Option.isNone(workspace)) return null;
+      const git = workspace.value;
+      // The repository the commit is made in, by identity, never by how the command spells it.
+      const target = yield* git.repository(cwd);
+      const work = target === null ? null : yield* openWork(taskId, activity.value);
+      if (target === null || work === null) return null;
+      const held: Array<{ task: TaskId; hob: string; paths: ReadonlyArray<string> }> = [];
+      for (const task of work.open) {
+        const files = changedBy(task, work.records);
+        const found = files.length === 0 ? [] : yield* git.uncommitted(files);
+        const paths: Array<string> = [];
+        for (const each of found) if ((yield* git.repository(each.repository)) === target) paths.push(...each.paths);
+        if (paths.length === 0) continue;
+        const hob = yield* hobs.findAgent(task.ownerId);
+        held.push({ task: task.id, hob: Option.isSome(hob) ? hob.value.name : task.ownerId, paths });
+      }
+      return held.length === 0 ? null : heldCommitReason(target, held);
+    });
+});

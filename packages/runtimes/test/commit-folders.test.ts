@@ -11,7 +11,7 @@ const folders = (command: string) => commitFolders("Bash", { command }, project,
 
 describe("the repositories a command line commits in (#742)", () => {
   // covers PE-005, OR-004
-  it("[TC-RT-742-01] finds each one after cd, git -C, wrappers, eval and sh -c, and nothing for any other command", () => {
+  it("[TC-RT-742-01] finds each one after cd, git -C, wrappers that move it, eval and sh -c, and nothing for any other command", () => {
     expect(folders("git commit -m 'chore: pocket ledger v0.1'")).toEqual([project]);
     expect(folders("git add -A && git commit -am x")).toEqual([project]);
     expect(folders(`cd ${other} && git commit -m x`)).toEqual([other]);
@@ -19,6 +19,12 @@ describe("the repositories a command line commits in (#742)", () => {
     expect(folders("env GIT_PAGER=cat git commit -m x")).toEqual([project]);
     expect(folders(`sh -c 'cd ${other} && git commit -m x'`)).toEqual([other]);
     expect(folders("eval git commit -m x")).toEqual([project]);
+    // A wrapper that moves the command it runs moves its commit, also into another shell.
+    expect(folders(`env -C ${other} git commit -m x`)).toEqual([other]);
+    expect(folders(`env --chdir=${other} git commit -m x`)).toEqual([other]);
+    expect(folders(`env -C ${other} sh -c 'git commit -m x'`)).toEqual([other]);
+    // A relative folder is kept as the line spells it; which repository it is in is the hub's to find.
+    expect(folders("git -C ../ledger commit -m x")).toEqual(["/work/ledger/../ledger"]);
     expect(folders(`git commit -m one && cd ${other} && git commit -m two`)).toEqual([project, other]);
     for (const command of ["git status", "git log -1", "git add .", "git push origin main", "echo git commit"]) {
       expect(folders(command), command).toEqual([]);

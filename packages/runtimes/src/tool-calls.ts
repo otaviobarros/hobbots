@@ -660,9 +660,10 @@ export const initsRepository = (
   );
 
 /**
- * The repositories a tool call's command line runs `git commit` in, each as the folder Git finds it
- * from, after any `cd`, `git -C` or wrapper, and inside `eval` or `sh -c` (#742). Only what the line
- * says is read: an alias or a script that commits is not seen.
+ * The folders a tool call's command line runs `git commit` from, as the line spells them, after any
+ * `cd`, `git -C` or wrapper such as `env -C`, and inside `eval` or `sh -c` (#742). Which repository
+ * each is in is the hub's to find. Only what the line says is read: an alias or a script that
+ * commits is not seen.
  */
 export const commitFolders = (
   tool: string,
@@ -679,8 +680,10 @@ export const commitFolders = (
         folders.separator(token.separator);
         return;
       }
-      const folder = folders.command(unwrap(token.words, at, home).words, separatorOf(tokens[index + 1]));
-      const [name, ...args] = unwrap(token.words, folder, home).words;
+      // A wrapper such as `env -C` moves the command it runs, so the folder is the unwrapped one.
+      const shell = folders.command(unwrap(token.words, at, home).words, separatorOf(tokens[index + 1]));
+      const { words, folder } = unwrap(token.words, shell, home);
+      const [name, ...args] = words;
       const program = basename(name ?? "");
       if (program === "git") {
         const git = gitFolders(args, folder, home);

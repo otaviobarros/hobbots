@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { GitWorkspace, type UncommittedFiles } from "@hobbots/agents";
 import { Effect, Layer } from "effect";
@@ -88,11 +88,11 @@ const gitdirIn = async (dir: string): Promise<string | null> => {
   return target === "" ? null : isAbsolute(target) ? target : resolve(dir, target);
 };
 
-/** The nearest repository holding `file`, looking up from its folder, or null. */
-const repositoryOf = async (file: string, known: Map<string, Repository | null>): Promise<Repository | null> => {
+/** The nearest repository holding `folder`, looking up from the folder itself, or null. */
+const repositoryOf = async (folder: string, known: Map<string, Repository | null>): Promise<Repository | null> => {
   const visited: Array<string> = [];
   let found: Repository | null = null;
-  for (let at = dirname(file); ; at = dirname(at)) {
+  for (let at = folder; ; at = dirname(at)) {
     const cached = known.get(at);
     if (cached !== undefined) {
       found = cached;
@@ -143,7 +143,7 @@ const uncommitted = async (
   const byRepository = new Map<string, { repository: Repository; paths: Set<string> }>();
   for (const { folder, path } of files) {
     const file = join(folder, ...path.split("/"));
-    const repository = await repositoryOf(file, known);
+    const repository = await repositoryOf(dirname(file), known);
     const inside = repository === null ? null : insideOf(repository.dir, file);
     if (repository === null || inside === null) continue;
     const entry = byRepository.get(repository.dir) ?? { repository, paths: new Set<string>() };
@@ -159,10 +159,22 @@ const uncommitted = async (
   return found.sort((a, b) => (a.repository < b.repository ? -1 : a.repository > b.repository ? 1 : 0));
 };
 
+/**
+ * The repository Git finds from `folder`, by the real path of its top folder, so two spellings of
+ * one repository, through `..` or a link, are the same one, and a repository nested in another is
+ * its own (#742). Null when the folder is in none or cannot be read.
+ */
+const repositoryFrom = async (folder: string): Promise<string | null> => {
+  const real = await realpath(resolve(folder));
+  const found = await repositoryOf(real, new Map());
+  return found === null ? null : realpath(found.dir);
+};
+
 /** The hub's reader of Git state. */
 export const GitWorkspaceLive = Layer.succeed(
   GitWorkspace,
   GitWorkspace.of({
     uncommitted: (files) => Effect.promise(() => uncommitted(files).catch(() => [])),
+    repository: (folder) => Effect.promise(() => repositoryFrom(folder).catch(() => null)),
   }),
 );
