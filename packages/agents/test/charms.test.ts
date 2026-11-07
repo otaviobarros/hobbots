@@ -7,11 +7,13 @@ import {
   HUB_TOOL_NAME_MAX,
   type HubTools,
   hubCallStep,
+  hubToolOffer,
   joinHubTools,
   makeRedactor,
+  type Takeover,
   type ToolAccess,
 } from "../src/index.ts";
-import { charmToolsFor, fakeCharm, memoryCharmCalls } from "../src/testing.ts";
+import { charmTakeoversFor, charmToolsFor, fakeCharm, memoryCharmCalls } from "../src/testing.ts";
 
 // The Charm registry (ADR 031), with two fake Charms, Pip and Rook, each with a read and a write.
 
@@ -178,6 +180,61 @@ describe("the Charm registry (ADR 031)", () => {
     const over = `${longest}x`;
     const long = await registering([fakeCharm({ id: "pip", name: "Pip", read: over })]);
     expect(long).toContain(`The hub tool name ${over}, from the Pip Charm, is longer than 64 characters.`);
+  });
+
+  // covers PE-005, ADR 031
+  it("[TC-PE-512] steers the built-in requests a held Charm takes over, from its declaration alone", async () => {
+    const pushing = fakeCharm({ id: "rook", name: "Rook", pushesFrom: ["/work/site"] });
+    const takeovers = (granted: ReadonlyArray<string> | null, connected = true) =>
+      Effect.gen(function* () {
+        const found = yield* charmTakeoversFor(turn(granted));
+        const offer = yield* (yield* hubToolOffer)(turn(granted));
+        // The offer a runtime gets steers exactly what the registry exposes.
+        const named = (each: Takeover) => [each.operation, each.charm, each.tool];
+        expect((offer.steering?.takeovers ?? []).map(named)).toEqual(found.map(named));
+        return yield* Effect.forEach(found, (each) =>
+          Effect.map(
+            Effect.all([
+              each.appliesIn("/work/site"),
+              each.appliesIn("/work/site/docs"),
+              each.appliesIn("/work/other"),
+            ]),
+            (applies) => ({ operation: each.operation, charm: each.charm, tool: each.tool, applies }),
+          ),
+        );
+      }).pipe(
+        Effect.provide(
+          Charms.layer([
+            PIP,
+            connected ? pushing : fakeCharm({ id: "rook", name: "Rook", connected: false, pushesFrom: [] }),
+          ]).pipe(Layer.provide(memoryCharmCalls())),
+        ),
+        Effect.runPromise,
+      );
+
+    expect(await takeovers(["pip", "rook"])).toEqual([
+      { operation: "push", charm: "Rook", tool: "rook_write", applies: [true, true, false] },
+    ]);
+    // A Charm the hob does not hold, or that is not connected, steers nothing, nor does a Charm that takes nothing over.
+    expect(await takeovers(["pip"])).toEqual([]);
+    expect(await takeovers(["pip", "rook"], false)).toEqual([]);
+    expect(await takeovers(null)).toEqual([]);
+
+    // A takeover the declaration does not name, a second of one request, or one to a tool the Charm
+    // does not offer stops the hub.
+    const steering = (takeovers: Charm["takeovers"]) =>
+      registering([Effect.map(PIP, (charm): Charm => ({ ...charm, takeovers }))]);
+    const push = { operation: "push", tool: "pip_write", appliesIn: () => Effect.succeed(true) } as const;
+    expect(await steering([push])).toContain("The Pip Charm steers push, which it does not take over.");
+    const declared = (takeovers: Charm["takeovers"]) =>
+      registering([
+        Effect.map(fakeCharm({ id: "pip", name: "Pip", pushesFrom: [] }), (charm): Charm => ({ ...charm, takeovers })),
+      ]);
+    expect(await declared([push])).toBeNull();
+    expect(await declared([push, push])).toContain("The Pip Charm steers push twice.");
+    expect(await declared([{ ...push, tool: "github_push" }])).toContain(
+      "The Pip Charm steers push to github_push, which it does not offer.",
+    );
   });
 
   // covers EX-003, EX-004, ADR 031

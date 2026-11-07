@@ -1,7 +1,7 @@
 import {
   type ActivityRecorder,
   deliveredMemoryBrief,
-  type HubTools,
+  type HubOffer,
   nextSteps,
   type Redactor,
   type RuntimeEvent,
@@ -53,8 +53,8 @@ export interface SessionTurn {
   /** Asks you about calls the policy answers Ask for; null, those calls are refused. */
   readonly approvals: TurnApprovals | null;
   readonly recordToolStart: (event: ToolStartedEvent) => Effect.Effect<boolean>;
-  /** The hub tools the turn offers, read at its start. */
-  readonly hubTools: Effect.Effect<HubTools>;
+  /** The hub tools the turn offers, and how the hub steers its runtime's own calls, read at its start. */
+  readonly offer: Effect.Effect<HubOffer>;
   /** Records the runtime's evidence that it took the turn: its session, and the policy version its tools run under. */
   readonly started: (session: { readonly sessionId: string; readonly policyVersion?: string }) => Effect.Effect<void>;
   /** Records the turn under its hob, runtime and model once the runtime takes it, and what it used once it ends (#1011). */
@@ -177,7 +177,7 @@ export const runSessionTurn = (
           recordToolStart: (event) =>
             turn.recordToolStart(event).pipe(Effect.tap((recorded) => (recorded ? stepOf(event) : Effect.void))),
           // A hub tool reads the revisions this turn mounted, not what a rollout moved since.
-          hubTools: yield* Effect.provideService(turn.hubTools, TurnSkillsInUse, given),
+          ...(yield* Effect.provideService(turn.offer, TurnSkillsInUse, given)),
         },
         adapter.sendPrompt,
       )

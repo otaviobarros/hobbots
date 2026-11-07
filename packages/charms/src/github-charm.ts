@@ -178,20 +178,21 @@ export const GitHubCharm = Effect.gen(function* () {
   ];
 
   /**
-   * A `git push` in one of the hob's folders whose origin is on GitHub is made with `github_push`
-   * (ADR 020): Git in the sandbox cannot sign in. A push anywhere else is decided as a push.
+   * Whether a `git push` from `cwd` is in one of the hob's folders whose origin is on GitHub, where
+   * the Charm makes it with `github_push` (ADR 020, ADR 031): Git in the sandbox cannot sign in. A push
+   * anywhere else is decided as a push.
    */
-  const steersPush = (turn: CharmTurn, cwd: string) =>
+  const pushesFromGitHub = (turn: CharmTurn, cwd: string) =>
     Effect.gen(function* () {
       const access = yield* turn.currentAccess;
-      if (access === null) return null;
+      if (access === null) return false;
       const at = canonical(cwd);
       for (const folder of access.folders) {
         const from = relative(canonical(folder), at);
         if (from.startsWith("..") || isAbsolute(from)) continue;
-        if ((yield* remotes.repositoryOf(folder)) !== null) return GITHUB_PUSH_TOOL;
+        if ((yield* remotes.repositoryOf(folder)) !== null) return true;
       }
-      return null;
+      return false;
     });
 
   return defineCharm({
@@ -205,7 +206,8 @@ export const GitHubCharm = Effect.gen(function* () {
         const app = yield* credential.hobApp(agentId).pipe(Effect.orElseSucceed(() => null));
         return (yield* credential.connected) || app !== null;
       }),
-    steersPush,
+    // The Push it takes over is steered to github_push from a folder whose origin is on GitHub.
+    takeovers: [{ operation: "push", tool: GITHUB_PUSH_TOOL, appliesIn: pushesFromGitHub }],
     context,
   });
 });

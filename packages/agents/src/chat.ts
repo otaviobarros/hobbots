@@ -54,6 +54,7 @@ import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief, turnMem
 import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import {
+  type CallSteering,
   type HubTools,
   type RuntimeEvent,
   runtimeAdapters,
@@ -882,7 +883,7 @@ export class ChatService extends Context.Service<
                 redaction: redactor,
                 recordToolStart,
                 // Its hub tools read the revisions this turn mounted, not what a rollout moved since.
-                hubTools: yield* Effect.gen(function* () {
+                ...(yield* Effect.gen(function* () {
                   const messageId = (yield* Ref.get(reply.current)).id;
                   const charmTurn: CharmTurn = {
                     agentId: agent.id,
@@ -896,11 +897,20 @@ export class ChatService extends Context.Service<
                   };
                   // A Charm call's refusal is recorded as a Task tool's is, when the turn has Task tools.
                   const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);
-                  return joinHubTools([
-                    { owner: "the Task tools", tools: taskTurn?.hubTools ?? null },
-                    { owner: "the hub's other tools", tools: recorded(yield* charmsFor(charmTurn)) },
-                  ]);
-                }).pipe(Effect.provideService(TurnSkillsInUse, skills.recorded)),
+                  const offer = yield* charmsFor(charmTurn);
+                  const holdsCommit = taskTurn?.holdsCommit;
+                  const steering: CallSteering = {
+                    takeovers: offer.steering?.takeovers ?? [],
+                    ...(holdsCommit === undefined ? {} : { holdsCommit }),
+                  };
+                  return {
+                    hubTools: joinHubTools([
+                      { owner: "the Task tools", tools: taskTurn?.hubTools ?? null },
+                      { owner: "the hub's other tools", tools: recorded(offer.hubTools) },
+                    ]),
+                    steering,
+                  };
+                }).pipe(Effect.provideService(TurnSkillsInUse, skills.recorded))),
               },
               // Stop waiting ends the runtime's stream inside the activity's, so the Workbench hears which
               // commands were stopped (#1056).

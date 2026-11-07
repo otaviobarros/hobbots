@@ -3,10 +3,11 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { HubTools, PromptRequest, ToolAccess } from "@hobbots/agents";
-import { type CommitsAs, EMPTY_HOB_POLICY, settleCommitsAs } from "@hobbots/domain";
+import { type CallSteering, Charms, makeRedactor, type PromptRequest, type ToolAccess } from "@hobbots/agents";
+import { charmTakeoversFor, fakeCharm, memoryCharmCalls } from "@hobbots/agents/testing";
+import { AgentId, type CommitsAs, EMPTY_HOB_POLICY, settleCommitsAs } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { Effect, Stream } from "effect";
+import { Effect, Layer, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { claudeTurnStart, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { codexTurnEvents } from "../src/codex/events.ts";
@@ -66,9 +67,9 @@ interface Runtime {
   readonly start: ((request: PromptRequest) => Promise<Started>) | null;
   /**
    * What the hob is told when the runtime refuses `command`, which sets its own commit identity or
-   * makes a commit the turn's `hubTools` hold, or nothing when it does not refuse it.
+   * makes a commit the turn's `steering` holds, or nothing when it does not refuse it.
    */
-  readonly refusal: (tools: ToolAccess, command: string, hubTools?: HubTools) => Promise<string>;
+  readonly refusal: (tools: ToolAccess, command: string, steering?: CallSteering) => Promise<string>;
 }
 
 const BASE_ENV = { PATH: process.env.PATH } satisfies NodeJS.ProcessEnv;
@@ -79,8 +80,8 @@ const claudeCode: Runtime = {
     const started = claudeTurnStart(turn, "on", true);
     return { env: started.commits.env(BASE_ENV), instructions: started.instructions, prompt: started.prompt };
   },
-  refusal: async (tools, command, hubTools) => {
-    const turn = toolTurn(tools, "on", hubTools);
+  refusal: async (tools, command, steering) => {
+    const turn = toolTurn(tools, "on", { steering: steering ?? null });
     if (turn === null) throw new Error("expected a tool turn");
     const { hooks } = policyHooks(engine, turn, () => undefined);
     const [pre] = hooks.PreToolUse?.[0]?.hooks ?? [];
@@ -139,8 +140,8 @@ const codex: Runtime = {
       prompt: input.map((part) => part.text ?? "").join("\n"),
     };
   },
-  refusal: async (tools, command, hubTools) => {
-    const turn = toolTurn(tools, "on", hubTools, CODEX_MODEL_HOSTS);
+  refusal: async (tools, command, steering) => {
+    const turn = toolTurn(tools, "on", { steering: steering ?? null }, CODEX_MODEL_HOSTS);
     if (turn === null) throw new Error("expected a tool turn");
     // What the hob reads is the note told to its turn: Codex's own answer to a declined call has no text (#1082).
     const told: Array<string> = [];
@@ -166,11 +167,11 @@ const codex: Runtime = {
 const fake: Runtime = {
   name: "the fake runtime",
   start: null,
-  refusal: async (tools, command, hubTools) => {
+  refusal: async (tools, command, steering) => {
     const turn = {
       ...request(tools.commitsAs),
       tools,
-      ...(hubTools === undefined ? {} : { hubTools }),
+      ...(steering === undefined ? {} : { steering }),
       prompt: `fake:run ${JSON.stringify({ command, exitCode: 0 })}`,
     };
     const events = await Effect.runPromise(Stream.runCollect(scriptedToolEvents(turn, engine)));
@@ -274,9 +275,8 @@ describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
   it("[TC-OR-742-02] refuses a commit the hub holds, as a lead's of a member's open work, with whose work it is", async () => {
     const held = `${project} holds changes a member has not committed: LEDGER.md of Task build, which Nettle works on.`;
     const asked: Array<string> = [];
-    const lead: HubTools = {
-      tools: [],
-      call: () => Effect.succeed({ text: "", refused: false }),
+    const lead: CallSteering = {
+      takeovers: [],
       holdsCommit: (cwd) =>
         Effect.sync(() => {
           asked.push(cwd);
@@ -291,5 +291,51 @@ describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
     // A command that commits nothing is never held, and the hub is not asked about it.
     expect(await runtime.refusal(access(as), "git status", lead)).not.toContain(held);
     expect(asked).toEqual([project]);
+  });
+});
+
+/**
+ * How the hub steers a `git push` for a hob that holds a fake Charm, Acme, which takes Push over from
+ * `pushesFrom` (ADR 031): what the registry exposes, as the hub hands it to every runtime.
+ */
+const acmeSteering = (pushesFrom: ReadonlyArray<string>): Promise<CallSteering> => {
+  const tools: ToolAccess = {
+    ...access(settleCommitsAs(null, NONE, null)),
+    policy: {
+      ...access(settleCommitsAs(null, NONE, null)).policy,
+      hob: { ...EMPTY_HOB_POLICY, charms: { granted: ["acme"] } },
+    },
+  };
+  return charmTakeoversFor({
+    agentId: AgentId.make("hob-1"),
+    threadId: null,
+    messageId: null,
+    scope: () => "",
+    currentAccess: Effect.succeed(tools),
+    redactor: makeRedactor(),
+    approvals: null,
+  }).pipe(
+    Effect.map((takeovers) => ({ takeovers })),
+    Effect.provide(
+      Charms.layer([fakeCharm({ id: "acme", name: "Acme", pushesFrom })]).pipe(Layer.provide(memoryCharmCalls())),
+    ),
+    Effect.runPromise,
+  );
+};
+
+describe.each(RUNTIMES)("how $name steers a git push a Charm takes over (ADR 031)", (runtime) => {
+  // covers PE-005, ADR 031
+  it("[TC-PE-513] points a git push to the tool a fake Charm declares, only where its declaration applies", async () => {
+    const tools = access(settleCommitsAs(null, NONE, null));
+    const command = "pnpm test && git push origin feature";
+    expect(await runtime.refusal(tools, command, await acmeSteering([project]))).toContain(
+      "Push with the acme_write tool instead of git push: Hobbots pushes your branch to Acme for you, as the user and under your policy.",
+    );
+    // Where the declaration does not apply, or without the Charm, the push is decided as a push.
+    for (const steering of [await acmeSteering([join(temp, "elsewhere")]), undefined]) {
+      const refused = await runtime.refusal(tools, command, steering);
+      expect(refused).not.toContain("instead of git push");
+      expect(refused).toContain("push");
+    }
   });
 });

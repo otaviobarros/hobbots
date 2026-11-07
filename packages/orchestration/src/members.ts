@@ -348,7 +348,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               access: run.access,
               approvals: handle?.approvals ?? null,
               recordToolStart: deps.recordToolStart(task),
-              hubTools: deps.tools.forSession(
+              offer: deps.tools.forSession(
                 { agentId: agent.id, taskId: task.id, carried: work.holding },
                 {
                   attemptId,

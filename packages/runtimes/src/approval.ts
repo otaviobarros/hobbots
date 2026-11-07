@@ -6,6 +6,7 @@ import {
   type Redactor,
   type RuntimeEvent,
   refusal,
+  type Takeover,
   type ToolStartedEvent,
   type TurnApprovals,
 } from "@hobbots/agents";
@@ -52,14 +53,28 @@ export interface ToolCall {
   readonly cwd: string;
 }
 
-/** The folders a call pushes from with Git, as the hub reads its command. */
-const pushesFrom = (call: ToolCall) => [
+/** The folders a call makes requests of `operation` from, as the hub reads its command. */
+const requestsFrom = (call: ToolCall, operation: Takeover["operation"]) => [
   ...new Set(
     (toolRequests(call.tool, call.input, call.cwd) ?? []).flatMap((request) =>
-      request._tag === "Push" && request.cwd !== undefined ? [request.cwd] : [],
+      request._tag === "Push" && operation === "push" && request.cwd !== undefined ? [request.cwd] : [],
     ),
   ),
 ];
+
+/**
+ * The first takeover, of the Charms the hob holds, that applies to one of the call's requests, or
+ * null (ADR 031). Every runtime's calls are steered here, from the Charms' declarations alone.
+ */
+const takenOver = (call: ToolCall, takeovers: ReadonlyArray<Takeover>): Effect.Effect<Takeover | null> =>
+  Effect.gen(function* () {
+    for (const takeover of takeovers) {
+      for (const cwd of requestsFrom(call, takeover.operation)) {
+        if (yield* takeover.appliesIn(cwd)) return takeover;
+      }
+    }
+    return null;
+  });
 
 /** The first answer `answer` gives for one of `folders` that is not null, or null. */
 const firstAnswer = (
@@ -77,13 +92,13 @@ const firstAnswer = (
 
 /**
  * What the hub points a turn's calls to, or holds them for, before the policy decides them: the
- * same for every runtime, which takes it from the turn's tools.
+ * same for every runtime, which takes it from the turn's steering and tools.
  */
 export interface CallSteers {
   /** Who the turn's commits are made as (#586, #741), which a refused identity override names. */
   readonly commitsAs: CommitsAs;
-  /** The hub tool a `git push` in a folder is pointed to, when the turn offers one (ADR 020). */
-  readonly steersPush?: ((cwd: string) => Effect.Effect<string | null>) | undefined;
+  /** The built-in requests the Charms the hob holds take over, as they declare them (ADR 031). */
+  readonly takeovers?: ReadonlyArray<Takeover> | undefined;
   /** The hub tool a `git init` command is pointed to, when the turn offers it (ADR 014). */
   readonly initTool?: string | undefined;
   /** Why a `git commit` in a folder is held, when the hub holds it (#742). */
@@ -91,12 +106,12 @@ export interface CallSteers {
 }
 
 /**
- * Why a `git push` command is refused when the turn offers the GitHub Charm's push for its folder (ADR 020): in any
- * preset, since the Charm pushes with the user's sign-in under the hob's policy, and Git in the
- * sandbox cannot.
+ * Why a `git push` command is refused when a Charm the hob holds takes Push over for its folder, as
+ * the GitHub Charm does (ADR 020, ADR 031): in any preset, since the Charm pushes with the user's
+ * sign-in under the hob's policy, and Git in the sandbox cannot.
  */
-export const steerPush = (tool: string) =>
-  `Push with the ${tool} tool instead of git push: Hobbots pushes your branch to GitHub for you, as the user and under your policy. A git push from your sandbox cannot sign in.`;
+export const steerPush = (takeover: Pick<Takeover, "charm" | "tool">) =>
+  `Push with the ${takeover.tool} tool instead of git push: Hobbots pushes your branch to ${takeover.charm} for you, as the user and under your policy. A git push from your sandbox cannot sign in.`;
 
 /**
  * Why a command that sets its own commit identity is refused (#700), naming the one the hub sets:
@@ -178,15 +193,15 @@ export const decideCall = (
 
 /**
  * Why a call is refused before the policy decides it, pointing the hob to what works from its
- * sandbox, or null: a `git push` the GitHub Charm makes (ADR 020), a commit identity of the
- * command's own, since the hub sets it (#700), a commit the hub holds, as a lead's of a member's
- * open work (#742), a `git init`, which the hub makes (ADR 014), and a write in a shared temporary
- * folder, for which the turn has its own (#578).
+ * sandbox, or null: a `git push` a Charm takes over, as the GitHub Charm does (ADR 020, ADR 031),
+ * a commit identity of the command's own, since the hub sets it (#700), a commit the hub holds, as
+ * a lead's of a member's open work (#742), a `git init`, which the hub makes (ADR 014), and a write
+ * in a shared temporary folder, for which the turn has its own (#578).
  */
 const steeredAway = (context: PolicyContext, call: ToolCall, steers: CallSteers): Effect.Effect<string | null> =>
   Effect.gen(function* () {
-    const pushTool = yield* firstAnswer(pushesFrom(call), steers.steersPush);
-    if (pushTool !== null) return steerPush(pushTool);
+    const takeover = yield* takenOver(call, steers.takeovers ?? []);
+    if (takeover !== null) return steerPush(takeover);
     if (overridesCommitIdentity(call.tool, call.input, call.cwd)) return steerCommitIdentity(steers.commitsAs);
     const held = yield* firstAnswer(commitFolders(call.tool, call.input, call.cwd), steers.holdsCommit);
     if (held !== null) return held;

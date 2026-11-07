@@ -342,16 +342,43 @@ export interface HubTools {
    * runtime knows it; without one, a call that needs the user's approval is refused.
    */
   readonly call: (name: string, input: unknown, step?: HubCallStep) => Effect.Effect<HubToolAnswer>;
-  /**
-   * The hub tool a `git push` run in `cwd` is made with instead, such as the GitHub Charm's push for a
-   * folder whose origin is on GitHub (ADR 020), or null when the push is decided as a push.
-   */
-  readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
+}
+
+/**
+ * A built-in request that a Charm the hob holds takes over (ADR 031), as the Charm declares it: a
+ * request of `operation` from a folder where `appliesIn` holds is refused before the policy decides
+ * it, pointing the hob to the Charm's `tool`, such as the GitHub Charm's `github_push` for a `git push`
+ * in a folder whose origin is on GitHub. The runtimes decide it in one place, from this alone.
+ */
+export interface Takeover {
+  /** The built-in operation taken over. Push is the only one a command can be steered from today. */
+  readonly operation: "push";
+  /** The Charm's name as the hob reads it, such as "GitHub". */
+  readonly charm: string;
+  /** The hub tool the request is made with instead. */
+  readonly tool: string;
+  /** Whether the takeover applies to a request from `cwd`. */
+  readonly appliesIn: (cwd: string) => Effect.Effect<boolean>;
+}
+
+/**
+ * How the hub points a turn's own tool calls elsewhere, or holds them, before the policy decides
+ * them (ADR 031): the same for every runtime, which hands it to the shared approval module.
+ */
+export interface CallSteering {
+  /** The built-in requests the Charms the hob holds take over, in their order. */
+  readonly takeovers: ReadonlyArray<Takeover>;
   /**
    * Why a `git commit` in the repository Git finds from `cwd` is held, or null when it may run: a
    * lead's commit where a member's open Task left changes, which are that member's to commit (#742).
    */
-  readonly holdsCommit?: (cwd: string) => Effect.Effect<string | null>;
+  readonly holdsCommit?: ((cwd: string) => Effect.Effect<string | null>) | undefined;
+}
+
+/** What a turn is offered of the hub: the tools it serves, and how it steers the runtime's own calls. */
+export interface HubOffer {
+  readonly hubTools: HubTools | null;
+  readonly steering: CallSteering | null;
 }
 
 /**
@@ -415,6 +442,11 @@ export interface PromptRequest {
    * Task (ADR 018). Absent or null, it offers none. The hub decides each call, not the policy hook.
    */
   readonly hubTools?: HubTools | null;
+  /**
+   * How the hub steers the runtime's own tool calls before the policy decides them (ADR 031). Absent
+   * or null, it steers none.
+   */
+  readonly steering?: CallSteering | null;
   /**
    * A turn that belongs to no hob or thread, such as a memory task (ADR 028): the runtime keeps no
    * session of it, so it can never be resumed or listed. It starts a new session (`sessionId` null).

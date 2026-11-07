@@ -257,14 +257,24 @@ describe("Claude Code tool calls under the policy hook", () => {
   // covers PE-003, PE-005
   it("[TC-PE-158] points a git push in a folder the GitHub Charm pushes from to github_push, in any preset", async () => {
     const steered: Array<string> = [];
+    const push = { operation: "push", charm: "GitHub", tool: "github_push" } as const;
     const hubTools = {
-      tools: [{ name: "github_push", description: "", inputSchema: {}, label: "Pushing to GitHub" }],
-      call: () => Effect.succeed({ text: "", refused: false }),
-      steersPush: (cwd: string) =>
-        Effect.sync(() => {
-          steered.push(cwd);
-          return cwd === project ? "github_push" : null;
-        }),
+      hubTools: {
+        tools: [{ name: "github_push", description: "", inputSchema: {}, label: "Pushing to GitHub" }],
+        call: () => Effect.succeed({ text: "", refused: false }),
+      },
+      steering: {
+        takeovers: [
+          {
+            ...push,
+            appliesIn: (cwd: string) =>
+              Effect.sync(() => {
+                steered.push(cwd);
+                return cwd === project;
+              }),
+          },
+        ],
+      },
     };
     const hook = async (turn: NonNullable<ReturnType<typeof toolTurn>>, command: string, cwd: string) => {
       const events: Array<RuntimeEvent> = [];
@@ -293,14 +303,17 @@ describe("Claude Code tool calls under the policy hook", () => {
     }
     expect(steered).toContain(project);
     // A push the Charm does not make, such as from a folder whose origin is not on GitHub, is decided as Push.
-    const turn = toolTurn(access(), "on", { ...hubTools, steersPush: () => Effect.succeed(null) });
+    const turn = toolTurn(access(), "on", {
+      ...hubTools,
+      steering: { takeovers: [{ ...push, appliesIn: () => Effect.succeed(false) }] },
+    });
     if (turn === null) throw new Error("expected a tool turn");
     expect((await hook(turn, "git push origin feature", project))[0]).toMatchObject({
       _tag: "ToolDenied",
       operation: "push",
     });
     // Without the Charm, a push is decided as Push, as before.
-    expect(toolTurn(access(), "on")?.steersPush).toBeUndefined();
+    expect(toolTurn(access(), "on")?.takeovers).toBeUndefined();
     const plain = await call("Bash", { command: "git push origin feature" });
     expect(plain.events[0]).toMatchObject({ _tag: "ToolDenied", operation: "push" });
   });

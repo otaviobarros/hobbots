@@ -3,7 +3,7 @@ import { AgentId, ApprovalId, type ApprovalLifetime, Grant, GrantId, ruleOperati
 import { Context, Effect, Layer, Redacted } from "effect";
 import { GitHubCredential, GitHubError } from "../src/index.ts";
 
-export { charmToolsFor, memoryCharmCalls } from "@hobbots/agents/testing";
+export { charmTakeoversFor, charmToolsFor, memoryCharmCalls } from "@hobbots/agents/testing";
 
 const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 
