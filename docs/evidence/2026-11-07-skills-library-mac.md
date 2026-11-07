@@ -34,15 +34,15 @@ Replies came from real turns, each in a new thread. Chats, scopes, edits, rollou
 
 ## Findings
 
-- [#1197](https://github.com/otaviobarros/hobbots/issues/1197): the use line leaves out the set. The reply's `skillsUsed` records `set: agent-engineering`, but the line reads "Used Deliver change (r1)". The issue asks for the revision, which it shows.
-- [#1198](https://github.com/otaviobarros/hobbots/issues/1198): What changed reads "Agent engineering is off for Quill" after only `plan-change` was turned off, and the change it records names the set, not the skill.
-- [#1199](https://github.com/otaviobarros/hobbots/issues/1199): a skill's Activity says the line shows "with Open beside it". The line in a chat has no Open.
-- [#1200](https://github.com/otaviobarros/hobbots/issues/1200): a set from Git took more than three seconds to import, with the add form still on screen. Adding it again meanwhile left one assignment and two Given rows in What changed.
+- [#1192](https://github.com/otaviobarros/hobbots/issues/1192): the use line leaves out the set. The reply's `skillsUsed` records `set: agent-engineering`, but the line reads "Used Deliver change (r1)". The issue asks for the revision, which it shows.
+- [#1193](https://github.com/otaviobarros/hobbots/issues/1193): What changed reads "Agent engineering is off for Quill" after only `plan-change` was turned off, and the change it records names the set, not the skill.
+- [#1194](https://github.com/otaviobarros/hobbots/issues/1194): a skill's Activity says the line shows "with Open beside it". The line in a chat has no Open.
+- [#1195](https://github.com/otaviobarros/hobbots/issues/1195): a set from Git took more than three seconds to import, with the add form still on screen. Adding it again meanwhile left one assignment and two Given rows in What changed.
 - `gpt-6-luna` on low effort made two weak turns, and Hobbots did nothing wrong in either. In C it ran no command, cited the file's path, and offered a "quote" that is not in that file. The closest text is in `deliver-change`'s own `SKILL.md`. In E one turn ended on "I'll check the project's release instructions, then walk you through the steps." with no step and no skill used, and Codex's own log ends the turn there. A new thread answered HERON, and a prompt that asked for a command read the file.
-- The plain request is a miss with no issue yet. `qa-house-style` reached both hobs, and they listed it, but `haiku` and `gpt-6-luna` on low effort each answered without loading it, twice. A runtime picks a skill from its description, and the replies were numbered with or without it. Whether a stronger model or a sharper description changes this was not tested.
+- [#1201](https://github.com/otaviobarros/hobbots/issues/1201): the plain request is a miss. `qa-house-style` reached both hobs, and they listed it, but `haiku` and `gpt-6-luna` on low effort each answered without loading it, twice. A runtime picks a skill from its description, and the replies were numbered with or without it. Whether a stronger model or a sharper description changes this was not tested.
 - The folder held two skills Hobbots refused. `react-native-best-practices` is larger than 5 MB, and `upgrading-react-native` links outside its folder. The Skills page says each was not added, as designed.
 - Each hob listed 25 of the 39 skills it was given. The other 14 set `disable-model-invocation: true`, so the runtimes keep them out of a model's list.
-- A data folder's skill objects are read-only, so a plain `rm -rf` of it fails until they are made writable.
+- [#1196](https://github.com/otaviobarros/hobbots/issues/1196): a data folder's skill objects are read-only, so a plain `rm -rf` of it fails until they are made writable.
 
 ## Gaps
 
