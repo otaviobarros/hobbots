@@ -78,3 +78,4 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-07 A hob's skills, What changed, To review and a skill's Activity, in the browser](2026-11-07-skills-screens.md)
 - [2026-11-07 How Claude Code and Codex load a set of skills that share files](2026-11-07-skill-sets-probe.md)
 - [2026-11-07 Skill sets through the Hobbots adapters, on Claude Code and Codex](2026-11-07-skill-sets-delivery.md)
+- [2026-11-07 The skills library on the packaged Mac app with real Claude Code and Codex hobs](2026-11-07-skills-library-mac.md)
