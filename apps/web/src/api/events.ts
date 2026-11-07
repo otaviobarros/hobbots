@@ -37,6 +37,7 @@ import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertM
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
+import { refreshSkills } from "./skills.ts";
 import {
   newer,
   recordAgent,
@@ -193,8 +194,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     return;
   }
   if (isUnapplied(event)) return;
-  // What a hob's next turn gets may have changed, which the composer's `/` list shows (ADR 029).
+  // A skill changed here, on another device or in `~/.agents/skills`: the Skills page reads it again,
+  // and what a hob's next turn gets may have changed, which the composer's `/` list shows (ADR 029).
   if (isSkillLibraryChange(event)) {
+    void refreshSkills(queryClient);
     void hobSkillsChanged(queryClient);
     return;
   }
@@ -380,6 +383,8 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         if (!ready.resumed) startGeneration(queryClient);
         void refreshMemory(queryClient);
         void refreshMemorySaves(queryClient);
+        // What changed while the stream was down is not replayed into the Skills page's reads.
+        void refreshSkills(queryClient);
         setDeviceAccess(queryClient, "approved");
         report("live");
       } catch (error) {

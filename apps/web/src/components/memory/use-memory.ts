@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, MemoryPath, type MemoryScope } from "@hobbots/domain";
+import { MemoryPath, type MemoryScope } from "@hobbots/domain";
 import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   memoryChangesQuery,
@@ -9,11 +9,10 @@ import {
   memoryScopesQuery,
   memorySearchQuery,
 } from "../../api/memory-pages.ts";
-import { agentsQuery, archivedAgentsQuery } from "../../api/queries.ts";
-import type { HobDirectory, MemoryView } from "./memory-model.ts";
+import { useHobDirectory } from "../../lib/use-hob-directory.ts";
+import type { MemoryView } from "./memory-model.ts";
 
 const EVERYONE: MemoryScope = { _tag: "Everyone" };
-const NO_HOBS: ReadonlyArray<Agent> = [];
 /** The key a page read keeps while no page is open; it is never read. */
 const NO_PAGE = MemoryPath.make("none.md");
 
@@ -37,8 +36,7 @@ const openedPage = (view: MemoryView) =>
  */
 export const useMemory = (view: MemoryView) => {
   const queryClient = useQueryClient();
-  const agents = useQuery(agentsQuery);
-  const archived = useQuery(archivedAgentsQuery);
+  const { active, hobs } = useHobDirectory();
   const overview = useQuery(memoryScopesQuery);
   const changes = useQuery(memoryChangesQuery);
   const scope = pagesScope(view);
@@ -50,10 +48,6 @@ export const useMemory = (view: MemoryView) => {
   );
   const fetching = useIsFetching({ queryKey: memoryKeys.all }) > 0;
 
-  const active = agents.data ?? NO_HOBS;
-  const hobs: HobDirectory = new Map<AgentId, Agent>(
-    [...(archived.data ?? NO_HOBS), ...active].map((hob) => [hob.id, hob]),
-  );
   const viewRead = opened.open ? page : view._tag === "Search" ? search : scope === null ? changes : pages;
   const offline = [overview, changes, viewRead].some((read) => read.isError && memoryNotAnswering(read.error));
 

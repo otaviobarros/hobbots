@@ -11,6 +11,7 @@ import {
   SkillFlag,
   SkillId,
   SkillInUse,
+  SkillMovedOn,
   type SkillName,
   SkillNameChanged,
   SkillNameTaken,
@@ -271,6 +272,10 @@ export const SkillLibraryLive = Layer.effect(
         }
         const skill = yield* skillRow(skillId);
         if (skill === null) return yield* new SkillNotFound({ id: skillId });
+        // The same content as the newest is this edit saved before, sent again to finish its rollout.
+        if (input.after !== undefined && skill.latest !== input.after && skill.latest !== input.hash) {
+          return yield* new SkillMovedOn({ skillId: skill.id, latest: skill.latest });
+        }
         const same = yield* revisionRow(skill.id, input.hash);
         if (same !== null) return { _tag: "Same" as const, skill, revision: same };
         if (skill.name !== input.name) {
@@ -282,7 +287,7 @@ export const SkillLibraryLive = Layer.effect(
     const addRevision = (skillId: SkillId | null, input: SkillRevisionInput) =>
       change<
         { skill: Skill; revision: SkillRevision; added: boolean },
-        SkillNotFound | SkillNameTaken | SkillNameChanged | SqlError.SqlError
+        SkillNotFound | SkillNameTaken | SkillNameChanged | SkillMovedOn | SqlError.SqlError
       >((first) =>
         Effect.gen(function* () {
           const target = yield* targetOf(skillId, input);
@@ -428,7 +433,7 @@ export const SkillLibraryLive = Layer.effect(
             return { value: assignment, events: [{ _tag: "SkillRolledOut", assignment, from: before.pin }] };
           }),
         ),
-      rollOutRevision: (skillId, pin, by, when) =>
+      rollOutRevision: (skillId, pin, by, when, holds = []) =>
         change<ReadonlyArray<SkillAssignment>, SkillNotFound | SqlError.SqlError>((first) =>
           Effect.gen(function* () {
             yield* knownPin(skillId, pin);
@@ -442,6 +447,13 @@ export const SkillLibraryLive = Layer.effect(
             if (when === "pending" && claimed.length === 0) return { value: [], events: [] };
             const moved: Array<SkillAssignment> = [];
             const events: Array<JournaledEvent> = [];
+            // The save that claimed it sets its holds first, so what it keeps back is not moved.
+            for (const hold of when === "pending" ? holds : []) {
+              const [row] = yield* sql<AssignmentRow>`UPDATE skill_assignments
+                SET held = ${hold.held ? 1 : 0}, revision = ${first}
+                WHERE id = ${hold.assignmentId} AND skill_id = ${skillId} AND held = ${hold.held ? 0 : 1} RETURNING *`;
+              if (row !== undefined) events.push({ _tag: "SkillHeld", assignment: yield* assignmentOf(row) });
+            }
             for (const before of yield* assignmentsOf(skillId)) {
               if (before.held || before.pin === pin) continue;
               // Moved only while it is still not held and still on the pin it was read with, so a

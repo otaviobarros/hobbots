@@ -7,23 +7,30 @@ import {
   HobbotsRepository,
   hobSkills,
   MemoryProjects,
+  memoryActorFor,
   PermissionSummary,
   SkillFiles,
+  type SkillHoldChange,
   SkillLibrary,
   type SkillLibraryShape,
 } from "@hobbots/agents";
 import {
   HobbotsApi,
+  SKILL_FILE_SHOWN_MAX,
+  SkillEditStale,
   SkillImportRefused,
   SkillMissing,
   SkillNameConflict,
+  SkillScanOutdated,
   SkillSourceNotRead,
   type SkillSourcePayload,
   SkillStillAssigned,
 } from "@hobbots/api";
 import {
+  type Agent,
   type AgentId,
   type Committed,
+  type SkillAssignment,
   type SkillBy,
   type SkillId,
   type SkillNotFound,
@@ -68,15 +75,38 @@ const importError = (error: SkillImportError) => {
       return new SkillNameConflict({ name: error.name, skillId: error.skillId });
     case "SkillNameChanged":
       return new SkillNameConflict({ name: error.given, skillId: error.skillId });
+    case "SkillMovedOn":
+      return new SkillEditStale({ skillId: error.skillId, latest: error.latest });
+    case "SkillSourceChanged":
+      return new SkillScanOutdated({ folder: error.folder });
   }
 };
 
 const NO_LIBRARY = "This hub has no skills library.";
 
+const textDecoder = new TextDecoder("utf-8", { fatal: true });
+
+/** A file's bytes as text, or null when they are not UTF-8 or hold a NUL, as a binary file does. */
+const textOf = (bytes: Uint8Array): string | null => {
+  try {
+    const text = textDecoder.decode(bytes);
+    return text.includes("\u0000") ? null : text;
+  } catch {
+    return null;
+  }
+};
+
 /** How many skills a hob's view lists as last used. */
 const LAST_USED = 20;
 
-const NO_SKILLS = { skills: [], sources: [], agentsFolder: { path: null, problems: [] }, usesThisWeek: [] };
+const NO_SKILLS = {
+  skills: [],
+  sources: [],
+  assignments: [],
+  projects: [],
+  agentsFolder: { path: null, problems: [] },
+  usesThisWeek: [],
+};
 
 /** A hub built without the library, as most of the server's tests are: no skills, and nothing to import into. */
 const libraryOff = {
@@ -85,9 +115,12 @@ const libraryOff = {
     Effect.fail(new SkillMissing({ id: params.skillId })),
   revision: ({ params }: { readonly params: { readonly hash: string } }) =>
     Effect.fail(new SkillMissing({ id: params.hash })),
+  file: ({ params }: { readonly params: { readonly hash: string } }) =>
+    Effect.fail(new SkillMissing({ id: params.hash })),
   scan: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   import: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   revise: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
+  edit: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   syncAgentsFolder: () => Effect.succeed(NO_SKILLS),
   remove: ({ params }: { readonly params: { readonly skillId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.skillId })),
@@ -119,8 +152,9 @@ const rollOutAll = (
   skillId: SkillId,
   pin: SkillRevisionHash,
   when: "pending" | "always",
+  holds: ReadonlyArray<SkillHoldChange> = [],
 ) =>
-  library.rollOutRevision(skillId, pin, YOU, when).pipe(
+  library.rollOutRevision(skillId, pin, YOU, when, holds).pipe(
     Effect.tap((committed) => announce(committed.entries)),
     Effect.map((committed) => committed.value),
   );
@@ -137,11 +171,62 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
     const agentsFolder = yield* Effect.serviceOption(AgentsFolder);
     const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a skill change");
 
+    const repo = yield* Effect.serviceOption(HobbotsRepository);
+    const permissions = yield* Effect.serviceOption(PermissionSummary);
+    const projects = yield* Effect.serviceOption(MemoryProjects);
+    const hobOf = (agentId: AgentId) =>
+      Option.isNone(repo) ? Effect.succeed(Option.none()) : repo.value.findAgent(agentId);
+    const missing = <A, R>(effect: Effect.Effect<A, SkillNotFound, R>) =>
+      Effect.mapError(effect, (error) => new SkillMissing({ id: error.id }));
+    const committedValue = <A>(change: Effect.Effect<Committed<A>, SkillNotFound>) =>
+      missing(
+        change.pipe(
+          Effect.tap((committed) => announce(committed.entries)),
+          Effect.map((committed) => committed.value),
+        ),
+      );
+    /** The folders a hob works in now. */
+    const foldersOf = (agent: Agent) =>
+      Option.isSome(permissions)
+        ? Effect.map(permissions.value.of(agent), (summary) => summary.folders)
+        : Effect.succeed(agent.policy.ownFolders);
+    // A hob's skills as its next turn would get them, in the folders it works in now.
+    const hobView = (agentId: AgentId) =>
+      Effect.gen(function* () {
+        const found = yield* hobOf(agentId);
+        if (Option.isNone(found)) return yield* new SkillMissing({ id: agentId });
+        const agent = found.value;
+        const folders = yield* foldersOf(agent);
+        const resolved = yield* hobSkills(library, projects, { agentId, policy: agent.policy, folders });
+        return {
+          agentId,
+          ...resolved,
+          optedOut: (yield* library.optOuts(agentId)).map((one) => one.skillId),
+          lastUsed: yield* library.lastUses(agentId, LAST_USED),
+        };
+      });
+
+    /** The projects hobs that are not retired work in now, as their turns resolve them, and those `assignments` reach. */
+    const projectsNow = (assignments: ReadonlyArray<SkillAssignment>) =>
+      Effect.gen(function* () {
+        const hobs = Option.isSome(repo) ? yield* repo.value.listAgentsWithStatus(["active", "paused"]) : [];
+        const reached = yield* Effect.forEach(hobs, (agent) =>
+          Effect.gen(function* () {
+            return (yield* memoryActorFor(projects, agent.id, yield* foldersOf(agent))).projects;
+          }),
+        );
+        const given = assignments.flatMap((one) => (one.scope._tag === "Project" ? [one.scope.identity] : []));
+        return [...new Set([...reached.flat(), ...given])].sort();
+      });
+
     const list = Effect.gen(function* () {
       const problems = Option.isSome(agentsFolder) ? yield* agentsFolder.value.problems : [];
+      const assignments = yield* library.assignments();
       return {
         skills: yield* library.list,
         sources: yield* library.sources,
+        assignments,
+        projects: yield* projectsNow(assignments),
         agentsFolder: {
           path: Option.isSome(agentsFolder) ? agentsFolder.value.path : null,
           problems: problems.map((problem) => ({
@@ -157,42 +242,30 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
       };
     });
 
-    const repo = yield* Effect.serviceOption(HobbotsRepository);
-    const permissions = yield* Effect.serviceOption(PermissionSummary);
-    const projects = yield* Effect.serviceOption(MemoryProjects);
-    const hobOf = (agentId: AgentId) =>
-      Option.isNone(repo) ? Effect.succeed(Option.none()) : repo.value.findAgent(agentId);
-    const missing = <A, R>(effect: Effect.Effect<A, SkillNotFound, R>) =>
-      Effect.mapError(effect, (error) => new SkillMissing({ id: error.id }));
-    const committedValue = <A>(change: Effect.Effect<Committed<A>, SkillNotFound>) =>
-      missing(
-        change.pipe(
-          Effect.tap((committed) => announce(committed.entries)),
-          Effect.map((committed) => committed.value),
-        ),
-      );
-    // A hob's skills as its next turn would get them, in the folders it works in now.
-    const hobView = (agentId: AgentId) =>
-      Effect.gen(function* () {
-        const found = yield* hobOf(agentId);
-        if (Option.isNone(found)) return yield* new SkillMissing({ id: agentId });
-        const agent = found.value;
-        const folders = Option.isSome(permissions)
-          ? (yield* permissions.value.of(agent)).folders
-          : agent.policy.ownFolders;
-        const resolved = yield* hobSkills(library, projects, { agentId, policy: agent.policy, folders });
-        return {
-          agentId,
-          ...resolved,
-          optedOut: (yield* library.optOuts(agentId)).map((one) => one.skillId),
-          lastUsed: yield* library.lastUses(agentId, LAST_USED),
-        };
-      });
-
     const skillOf = (skillId: Parameters<typeof library.get>[0]) =>
       Effect.flatMap(library.get(skillId), (skill) =>
         skill === null ? Effect.fail(new SkillMissing({ id: skillId })) : Effect.succeed(skill),
       );
+
+    /**
+     * Adds a revision you made, and rolls it out to every assignment that is not held. Whether it still
+     * may is decided inside the rollout's transaction: saving it again finishes a rollout the hub stopped
+     * in the middle of, and content already rolled out, or no longer the newest, moves none, so a
+     * rollback stays.
+     */
+    const revised = (
+      skillId: SkillId,
+      source: SkillImportSource,
+      options: { readonly folders?: Array<string>; readonly after?: SkillRevisionHash },
+      // The holds the save changes, set by its own rollout (`rollOutRevision`).
+      holds: ReadonlyArray<SkillHoldChange> = [],
+    ) =>
+      Effect.gen(function* () {
+        const [one] = yield* importer.add(source, { by: YOU, skillId, ...options }).pipe(Effect.mapError(importError));
+        if (one === undefined) return yield* new SkillMissing({ id: skillId });
+        const rolledOut = yield* missing(rollOutAll(library, announce, skillId, one.revision.hash, "pending", holds));
+        return { ...one, rolledOut };
+      });
 
     return handlers.handleAll({
       list: () => list,
@@ -216,6 +289,19 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           if (instructions === null) return yield* new SkillMissing({ id: params.hash });
           return { revision, instructions };
         }),
+      // Only a path the revision lists is read, so nothing outside its folder can be named.
+      file: ({ params, query }) =>
+        Effect.gen(function* () {
+          const revision = yield* library.revision(params.skillId, params.hash);
+          const file = revision?.files.find((one) => one.path === query.path);
+          const folder = yield* files.folder(params.hash);
+          if (file === undefined || folder === null) return yield* new SkillMissing({ id: query.path });
+          const bytes =
+            file.size > SKILL_FILE_SHOWN_MAX
+              ? null
+              : yield* Effect.promise(() => readFile(join(folder, file.path)).catch(() => null));
+          return { path: file.path, mode: file.mode, size: file.size, text: bytes === null ? null : textOf(bytes) };
+        }),
       scan: ({ payload }) =>
         importer
           .scan(sourceOf(payload.source))
@@ -225,6 +311,9 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           .add(sourceOf(payload.source), {
             by: YOU,
             ...(payload.folders === undefined ? {} : { folders: payload.folders }),
+            ...(payload.scanned === undefined
+              ? {}
+              : { scanned: new Map(payload.scanned.map((one) => [one.folder, one.hash])) }),
           })
           .pipe(
             Effect.map((imported) => ({ imported })),
@@ -233,20 +322,8 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
       revise: ({ params, payload }) =>
         Effect.gen(function* () {
           const skill = yield* skillOf(params.skillId);
-          const added = yield* importer
-            .add(sourceOf(payload.source), {
-              by: YOU,
-              skillId: skill.id,
-              ...(payload.folder === undefined ? {} : { folders: [payload.folder] }),
-            })
-            .pipe(Effect.mapError(importError));
-          const [one] = added;
-          if (one === undefined) return yield* new SkillMissing({ id: skill.id });
-          // Your edit rolls out to every assignment that is not held. Whether it still may is decided inside
-          // the rollout's transaction: saving it again finishes a rollout the hub stopped in the middle of,
-          // and content already rolled out, or no longer the newest, moves none, so a rollback stays.
-          const rolledOut = yield* missing(rollOutAll(library, announce, skill.id, one.revision.hash, "pending"));
-          return { ...one, rolledOut };
+          const folders = payload.folder === undefined ? {} : { folders: [payload.folder] };
+          return yield* revised(skill.id, sourceOf(payload.source), folders);
         }),
       rollOut: ({ params, payload }) =>
         Effect.gen(function* () {
@@ -302,6 +379,19 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           const changed = yield* library.setOptOut(params.agentId, params.skillId, payload.optedOut).pipe(missing);
           if (changed !== null) yield* announce(changed.entries);
           return yield* hobView(params.agentId);
+        }),
+      // An edit in Hobbots: `base`'s files with another description and instructions, rolled out like any
+      // revision. It is saved only while `base` is still the newest, checked as the revision is written.
+      edit: ({ params, payload }) =>
+        Effect.gen(function* () {
+          const skill = yield* skillOf(params.skillId);
+          const base = yield* library.revision(skill.id, payload.base);
+          const folder = yield* files.folder(payload.base);
+          if (base === null || folder === null) return yield* new SkillMissing({ id: payload.base });
+          const { description, instructions } = payload;
+          const carried = { charms: base.charms, dropped: base.dropped };
+          const source = { _tag: "Edited", folder, description, instructions, carried } as const;
+          return yield* revised(skill.id, source, { after: payload.base }, payload.holds);
         }),
       syncAgentsFolder: () =>
         Effect.gen(function* () {

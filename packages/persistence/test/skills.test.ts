@@ -197,6 +197,50 @@ describe("skills library", () => {
       }),
     ));
 
+  // covers ADR 029 (Pins and rollout), #1062
+  it("[TC-DP-282] refuses a revision made from an older one, but takes the same edit again so it can finish its rollout, whose holds only its claim sets", () =>
+    run(
+      Effect.gen(function* () {
+        const library = yield* SkillLibrary;
+        const { skill } = (yield* library.addRevision(null, input(H1))).value;
+        const everyone = { _tag: "Everyone" } as const;
+        yield* library.assign({
+          skillId: skill.id,
+          scope: everyone,
+          pin: H1,
+          held: false,
+          onlyWhenAsked: false,
+          by: { _tag: "You" },
+        });
+        const saved = (yield* library.addRevision(skill.id, input(H2, { after: H1 }))).value;
+        expect(saved).toMatchObject({ added: true, revision: { number: 2 } });
+        // The hub stopped here, before the rollout. The same edit sent again is r2, and its rollout runs.
+        const again = (yield* library.addRevision(skill.id, input(H2, { after: H1 }))).value;
+        expect(again).toMatchObject({ added: false, revision: { hash: H2 } });
+        const rolled = yield* library.rollOutRevision(skill.id, H2, { _tag: "You" }, "pending");
+        expect(rolled.value.map((one) => one.pin)).toEqual([H2]);
+        // A save's holds are set only by the rollout that claims its revision, before anything moves,
+        // and a save sent again claims nothing, so it leaves holds as they are now.
+        const [place] = yield* library.assignments(skill.id);
+        if (place === undefined) return expect.unreachable();
+        yield* library.addRevision(skill.id, input(H3, { after: H2 }));
+        const kept = yield* library.rollOutRevision(skill.id, H3, { _tag: "You" }, "pending", [
+          { assignmentId: place.id, held: true },
+        ]);
+        expect(kept.value).toEqual([]);
+        expect(kept.entries.map((entry) => entry.type)).toEqual(["SkillHeld"]);
+        yield* library.hold(place.id, false);
+        const replay = [{ assignmentId: place.id, held: true }];
+        expect((yield* library.rollOutRevision(skill.id, H3, { _tag: "You" }, "pending", replay)).entries).toEqual([]);
+        expect((yield* library.assignments(skill.id))[0]).toMatchObject({ pin: H2, held: false });
+        // Other content made from r1 is refused, and writes nothing.
+        const H4 = SkillRevisionHash.make("d".repeat(64));
+        const stale = yield* Effect.flip(library.addRevision(skill.id, input(H4, { after: H1 })));
+        expect(stale).toMatchObject({ _tag: "SkillMovedOn", latest: H3 });
+        expect((yield* library.get(skill.id))?.revisions).toBe(3);
+      }),
+    ));
+
   it("[TC-DP-279] keeps a hob's opt-outs, journaling only a change", () =>
     run(
       Effect.gen(function* () {

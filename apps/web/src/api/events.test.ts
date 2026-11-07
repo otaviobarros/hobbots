@@ -6,6 +6,11 @@ import {
   Message,
   MessageId,
   type RemoteAccessStatus,
+  Revision,
+  Skill,
+  SkillId,
+  SkillName,
+  SkillRevisionHash,
   Thread,
   ThreadId,
 } from "@hobbots/domain";
@@ -16,6 +21,7 @@ import { approvalsKey } from "./approvals.ts";
 import { applyEvent, remoteAccessChanged } from "./events.ts";
 import { queryKeys } from "./queries.ts";
 import { remoteAccessQuery } from "./remote-access.ts";
+import { skillQuery, skillRevisionQuery, skillsListQuery } from "./skills.ts";
 
 const threadId = ThreadId.make("t1");
 const now = "2026-10-28T12:00:00.000Z";
@@ -32,6 +38,30 @@ const reply = (status: Message["status"], content: string) =>
   });
 
 describe("applyEvent", () => {
+  it("[TC-UX-1062-01] reads the Skills page again when a skill changes elsewhere, but not a revision, which never changes", async () => {
+    const client = new QueryClient();
+    const hash = SkillRevisionHash.make("a".repeat(64));
+    const skill = new Skill({
+      id: SkillId.make("s1"),
+      name: SkillName.make("release"),
+      description: "Use when releasing.",
+      latest: hash,
+      revisions: 1,
+      sourceId: null,
+      createdAt: now,
+      updatedAt: now,
+      revision: Revision.make(1),
+    });
+    const list = skillsListQuery.queryKey;
+    const detail = skillQuery(skill.id).queryKey;
+    const revision = skillRevisionQuery(skill.id, hash).queryKey;
+    for (const key of [list, detail, revision]) client.setQueryData(key, {} as never);
+    applyEvent(client, { _tag: "SkillRemoved", skill });
+    await vi.waitFor(() => expect(client.getQueryState(list)?.isInvalidated).toBe(true));
+    expect(client.getQueryState(detail)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(revision)?.isInvalidated).toBe(false);
+  });
+
   it("makes a reply that lands its thread's last line in the hob's thread list", () => {
     const client = new QueryClient();
     const agentId = AgentId.make("aldric");

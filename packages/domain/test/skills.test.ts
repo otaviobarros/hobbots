@@ -1,6 +1,13 @@
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { SkillFilePath, SkillFrontMatter, SkillName, skillCharmsOf, skillRevisionLabel } from "../src/index.ts";
+import {
+  SkillFilePath,
+  SkillFrontMatter,
+  SkillName,
+  savedSkillInstructions,
+  skillCharmsOf,
+  skillRevisionLabel,
+} from "../src/index.ts";
 
 const valid = (schema: Schema.Codec<unknown, unknown>, value: unknown) => Schema.is(schema)(value);
 
@@ -46,6 +53,13 @@ describe("skill front matter", () => {
     expect(skillCharmsOf(needs)).toEqual(["github", "linear"]);
     expect(skillCharmsOf(decode({ name: "pr", description: "d", metadata: { hobbots: "x" } }))).toEqual([]);
     expect(skillCharmsOf(decode({ name: "pr", description: "d" }))).toEqual([]);
+  });
+
+  it("saves instructions without opening line breaks and ending in one, keeping indentation", () => {
+    expect(savedSkillInstructions("\n\nRead the diff.")).toBe("Read the diff.\n");
+    expect(savedSkillInstructions("Read the diff.\n")).toBe("Read the diff.\n");
+    expect(savedSkillInstructions("    code\n")).toBe("    code\n");
+    expect(savedSkillInstructions("")).toBe("");
   });
 
   it("labels a revision by its number", () => {

@@ -429,11 +429,31 @@ export class SkillNameChanged extends Schema.TaggedError<SkillNameChanged>()("Sk
   given: SkillName,
 }) {}
 
+/** A source no longer holds what a scan of it found in `folder`, such as a branch that moved on since. */
+export class SkillSourceChanged extends Schema.TaggedError<SkillSourceChanged>()("SkillSourceChanged", {
+  folder: Schema.String,
+}) {}
+
+/** A revision made from one that is no longer the skill's newest: `latest` is, now. */
+export class SkillMovedOn extends Schema.TaggedError<SkillMovedOn>()("SkillMovedOn", {
+  skillId: SkillId,
+  latest: SkillRevisionHash,
+}) {}
+
 /** A skill something still assigns cannot be removed; `assignments` says who uses it. */
 export class SkillInUse extends Schema.TaggedError<SkillInUse>()("SkillInUse", {
   skillId: SkillId,
   assignments: Schema.Array(SkillAssignment),
 }) {}
+
+/**
+ * Instructions as an edit saves them after the front matter: without the line breaks that open
+ * them, and ending in one. Two texts that save the same make the same revision.
+ */
+export const savedSkillInstructions = (instructions: string): string => {
+  const body = instructions.replace(/^(?:\r?\n)+/, "");
+  return body === "" || body.endsWith("\n") ? body : `${body}\n`;
+};
 
 /** The number a revision shows as, such as `r4`. */
 export const skillRevisionLabel = (revision: { readonly number: number }): string => `r${revision.number}`;

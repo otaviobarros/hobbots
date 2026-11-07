@@ -4,6 +4,7 @@ import {
   type SkillDropped,
   type SkillFlag,
   type SkillId,
+  type SkillMovedOn,
   type SkillName,
   SkillNameChanged,
   SkillNameTaken,
@@ -11,10 +12,12 @@ import {
   type SkillOrigin,
   type SkillRefused,
   type SkillRevisionHash,
+  SkillSourceChanged,
   SkillSourceUnreadable,
 } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
 import { type CheckedSkill, type CheckResult, checkSkill } from "./check.ts";
+import { editedTree, type SkillEdit } from "./edit.ts";
 import { findSkills } from "./find.ts";
 import { type LockedSkill, readLock } from "./lock.ts";
 import { archiveTree } from "./sources/archive.ts";
@@ -29,7 +32,17 @@ export type SkillImportSource =
   | { readonly _tag: "Archive"; readonly fileName: string; readonly bytes: Uint8Array }
   | { readonly _tag: "Git"; readonly url: string; readonly ref: string | null }
   /** Written in Hobbots: each file's path in the skill and its text. */
-  | { readonly _tag: "Written"; readonly files: ReadonlyArray<{ readonly path: string; readonly text: string }> };
+  | { readonly _tag: "Written"; readonly files: ReadonlyArray<{ readonly path: string; readonly text: string }> }
+  /** A revision's folder, edited in Hobbots: its other files are kept as they are. */
+  | ({
+      readonly _tag: "Edited";
+      readonly folder: string;
+      /**
+       * What the base revision recorded that its stored files no longer show, such as a Charm named in
+       * an `agents/openai.yaml` the import left out: the edit keeps it.
+       */
+      readonly carried: { readonly charms: ReadonlyArray<string>; readonly dropped: ReadonlyArray<SkillDropped> };
+    } & SkillEdit);
 
 /** One skill a source holds, as import would take it, or the rule it broke. */
 export interface SkillCandidate {
@@ -61,12 +74,26 @@ export interface SkillScan {
 export interface SkillImportOptions {
   /** The folders to take, from a scan; all of them when absent. */
   readonly folders?: ReadonlyArray<string>;
+  /**
+   * What a scan found in each folder taken, by content hash: the import fails with `SkillSourceChanged`
+   * when the source now holds anything else, so only what you looked at is added.
+   */
+  readonly scanned?: ReadonlyMap<string, SkillRevisionHash>;
   /** The skill the one folder taken is a new revision of; a new skill when absent. */
   readonly skillId?: SkillId;
+  /** The revision of `skillId` the new one was made from; the import fails once the skill's newest is another. */
+  readonly after?: SkillRevisionHash;
   readonly by: SkillBy;
 }
 
-export type SkillImportError = SkillSourceUnreadable | SkillRefused | SkillNotFound | SkillNameTaken | SkillNameChanged;
+export type SkillImportError =
+  | SkillSourceUnreadable
+  | SkillRefused
+  | SkillNotFound
+  | SkillNameTaken
+  | SkillNameChanged
+  | SkillMovedOn
+  | SkillSourceChanged;
 
 export interface SkillImporterShape {
   /** Lists the skills a source holds, checked, writing nothing. */
@@ -116,6 +143,8 @@ const openTree = (source: SkillImportSource) => {
         return gitTree(source.url, source.ref);
       case "Written":
         return Promise.resolve(writtenTree(source.files));
+      case "Edited":
+        return editedTree(source.folder, source);
     }
   };
   return Effect.acquireRelease(
@@ -155,8 +184,21 @@ const originOf = (source: SkillImportSource, locked: LockedSkill | null): SkillO
     case "Git":
       return { _tag: "Git", url: source.url, ref: source.ref };
     case "Written":
+    case "Edited":
       return null;
   }
+};
+
+type Carried = Extract<SkillImportSource, { readonly _tag: "Edited" }>["carried"];
+
+/** An edit's Charms: what its files name now, and what its base recorded from files it left out. */
+const carriedCharms = (skill: CheckedSkill, carried: Carried) =>
+  [...new Set([...skill.charms, ...carried.charms])].sort();
+
+/** An edit's left-out content: its own, and its base's, once each. */
+const carriedDropped = (skill: CheckedSkill, carried: Carried) => {
+  const seen = new Set(skill.dropped.map((one) => `${one.kind}\u0000${one.path}`));
+  return [...skill.dropped, ...carried.dropped.filter((one) => !seen.has(`${one.kind}\u0000${one.path}`))];
 };
 
 const lockedOf = (skill: CheckedSkill, locked: LockedSkill | null) =>
@@ -255,6 +297,11 @@ export const SkillImporterLive = Layer.effect(
         Effect.gen(function* () {
           const tree = yield* openTree(source);
           const chosen = yield* picked(yield* checkAll(tree), options);
+          if (options.scanned !== undefined) {
+            const scanned = options.scanned;
+            const moved = chosen.find(({ skill }) => scanned.get(skill.folder) !== skill.hash);
+            if (moved !== undefined) return yield* new SkillSourceChanged({ folder: moved.skill.folder });
+          }
           yield* Effect.forEach(chosen, ({ skill }) => checkName(skill, options.skillId), { discard: true });
           return yield* Effect.forEach(chosen, ({ skill, locked }) =>
             Effect.gen(function* () {
@@ -263,15 +310,16 @@ export const SkillImporterLive = Layer.effect(
                 hash: skill.hash,
                 name: skill.name,
                 description: skill.description,
-                charms: skill.charms,
+                charms: source._tag === "Edited" ? carriedCharms(skill, source.carried) : skill.charms,
                 files: skill.files,
                 flags: skill.flags,
-                dropped: skill.dropped,
+                dropped: source._tag === "Edited" ? carriedDropped(skill, source.carried) : skill.dropped,
                 origin: originOf(source, locked),
                 commit: locked?.url != null ? null : tree.commit,
                 path: locked?.url != null ? locked.path : skill.folder === "" ? null : skill.folder,
                 label: skill.label,
                 addedBy: options.by,
+                ...(options.after === undefined ? {} : { after: options.after }),
               });
               yield* announce(committed.entries);
               return committed.value;

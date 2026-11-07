@@ -1,0 +1,140 @@
+import type { SkillsList } from "@hobbots/api";
+import { Link } from "@tanstack/react-router";
+import { formatAgo, formatCount } from "../../lib/format.ts";
+import { RowList } from "../memory/memory-overview.tsx";
+import { GroupLabel, MemoryCard } from "../memory/memory-parts.tsx";
+import { messages } from "./messages.ts";
+import {
+  type HobDirectory,
+  libraryGroups,
+  originText,
+  type SkillGroup,
+  type SkillRow,
+  scopeName,
+  skillsSearchOf,
+  skillTitle,
+  skillView,
+} from "./skills-model.ts";
+import { RevTag, ScopeTag, SkillChip, SkillsIcon } from "./skills-parts.tsx";
+
+const copy = messages;
+
+const rowLink =
+  "flex w-full items-start gap-2.5 bg-card px-3.5 py-3 text-start text-text-strong no-underline transition-colors duration-(--dur-fade) hover:bg-hover";
+
+function RowChips({ row }: { row: SkillRow }) {
+  const { assignment, origin } = row;
+  return (
+    <>
+      {origin?._tag === "AgentsFolder" && <SkillChip tone="later">{copy.chips.agents}</SkillChip>}
+      {assignment?.held === true && (
+        <SkillChip tone="waiting">
+          {row.number === null ? copy.chips.heldOld : copy.chips.held({ rev: copy.revision({ number: row.number }) })}
+        </SkillChip>
+      )}
+      {assignment?.held === false && row.number === null && <SkillChip tone="needs">{copy.chips.older}</SkillChip>}
+      {assignment?.onlyWhenAsked === true && <SkillChip tone="waiting">{copy.chips.onlyWhenAsked}</SkillChip>}
+    </>
+  );
+}
+
+/** One skill in a scope's list: its title, revision and what it is for, and where it came from. */
+export function SkillRowLink({ row, now }: { row: SkillRow; now: Date }) {
+  const { skill } = row;
+  return (
+    <li>
+      <Link to="/skills" search={skillsSearchOf(skillView(skill.id))} className={rowLink}>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-body font-semibold">{skillTitle(skill.name)}</span>
+            {row.number !== null && <RevTag label={copy.revision({ number: row.number })} />}
+            <RowChips row={row} />
+          </span>
+          <span className="truncate text-detail text-text-secondary">{skill.description}</span>
+        </span>
+        <span className="flex flex-none flex-col items-end gap-1 pt-0.5 text-meta whitespace-nowrap text-label">
+          <span>{copy.overview.updated({ when: formatAgo(skill.updatedAt, now) })}</span>
+          <span className="max-w-[220px] truncate">{originText(row.origin)}</span>
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+const hintOf = (group: SkillGroup) => {
+  if (group.scope === null) return copy.scopes.noneHint;
+  if (group.scope._tag === "Everyone") return copy.scopes.everyoneHint;
+  return group.scope._tag === "Project" ? copy.scopes.projectHint : copy.scopes.hobHint;
+};
+
+function Group({ group, hobs, now }: { group: SkillGroup; hobs: HobDirectory; now: Date }) {
+  const label = group.scope === null ? copy.scopes.none : scopeName(group.scope, hobs);
+  return (
+    <section aria-label={label} className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-2 px-0.5 pt-1">
+        <ScopeTag scope={group.scope} label={label} />
+        <span className="text-meta text-label">{hintOf(group)}</span>
+      </div>
+      <RowList>
+        {group.rows.map((row) => (
+          <SkillRowLink key={`${group.key}:${row.skill.id}`} row={row} now={now} />
+        ))}
+      </RowList>
+    </section>
+  );
+}
+
+/** What deserves a look: skills in `~/.agents/skills` the hub did not take, and why. */
+/** What `~/.agents/skills` held that was not added, and why: shown on an empty library too. */
+export function WorthALook({ list }: { list: SkillsList }) {
+  const problems = list.agentsFolder.problems;
+  if (problems.length === 0) return null;
+  return (
+    <MemoryCard label={copy.overview.worth}>
+      <h3 className="lbl m-0 text-label">{copy.overview.worth}</h3>
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        {problems.map((problem) => (
+          <li key={problem.folder} className="flex items-start gap-2.5">
+            <span aria-hidden className="mt-1.5 size-2 flex-none rounded-dot bg-lantern" />
+            <span className="flex min-w-0 flex-col">
+              <span className="text-ui text-text-strong">
+                {problem.folder === ""
+                  ? copy.overview.agentsUnreadable
+                  : copy.overview.agentsProblem({ folder: problem.folder })}
+              </span>
+              <span className="text-meta text-label">
+                {problem.check === null ? problem.message : copy.checks[problem.check]}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </MemoryCard>
+  );
+}
+
+/** The overview: the library by scope, then what deserves a look. */
+export function SkillsOverview({ list, hobs, now }: { list: SkillsList; hobs: HobDirectory; now: Date }) {
+  const groups = libraryGroups(list, hobs);
+  return (
+    <div className="flex max-w-[920px] flex-col gap-7">
+      <section aria-label={copy.overview.library} className="flex flex-col gap-2.5">
+        <GroupLabel>
+          <h2 className="lbl m-0 text-label">{copy.overview.library}</h2>
+          <span className="text-meta text-label tabular-nums">{formatCount(list.skills.length)}</span>
+          <span className="ms-auto text-meta text-label">{copy.overview.libraryHint}</span>
+        </GroupLabel>
+        {groups.map((group) => (
+          <Group key={group.key} group={group} hobs={hobs} now={now} />
+        ))}
+        <p className="m-0 flex items-start gap-2.5 rounded-card bg-deep px-3.5 py-2.5 text-ui text-text-secondary">
+          <span className="mt-0.5">
+            <SkillsIcon name="notice" />
+          </span>
+          <span>{copy.overview.note}</span>
+        </p>
+      </section>
+      <WorthALook list={list} />
+    </div>
+  );
+}

@@ -12,6 +12,7 @@ import type {
   SkillFlag,
   SkillId,
   SkillInUse,
+  SkillMovedOn,
   SkillName,
   SkillNameChanged,
   SkillNameTaken,
@@ -34,6 +35,12 @@ import { Context, type Effect } from "effect";
  * (`resolveSkills`), never inside it.
  */
 
+/** A hold a save changes: keep the assignment on its revision, or let it follow edits again. */
+export interface SkillHoldChange {
+  readonly assignmentId: SkillAssignmentId;
+  readonly held: boolean;
+}
+
 /** A revision to add, already checked: its hash is the content's, and its files are in `SkillFiles`. */
 export interface SkillRevisionInput {
   readonly hash: SkillRevisionHash;
@@ -49,6 +56,11 @@ export interface SkillRevisionInput {
   readonly path: string | null;
   readonly label: string | null;
   readonly addedBy: SkillBy;
+  /**
+   * The revision this one was made from: adding it fails with `SkillMovedOn` once the skill's newest
+   * is another, unless the newest is this very content, added before by the same edit sent again.
+   */
+  readonly after?: SkillRevisionHash;
 }
 
 /**
@@ -87,12 +99,13 @@ export interface SkillLibraryShape {
    * Adds `input` as the newest revision of skill `skillId`, or as the first of a new skill when null.
    * Content the skill already has answers that revision, unchanged, and a new skill whose content a
    * skill of that name already has answers that one. Otherwise a new skill fails on a name the
-   * library has (`SkillNameTaken`), and a revision on a name that is not its skill's (`SkillNameChanged`).
+   * library has (`SkillNameTaken`), and a revision on a name that is not its skill's (`SkillNameChanged`)
+   * or made from a revision that is no longer the newest (`SkillMovedOn`), checked as it is written.
    */
   readonly addRevision: (
     skillId: SkillId | null,
     input: SkillRevisionInput,
-  ) => Library<Committed<SkillRevisionAdded>, SkillNotFound | SkillNameTaken | SkillNameChanged>;
+  ) => Library<Committed<SkillRevisionAdded>, SkillNotFound | SkillNameTaken | SkillNameChanged | SkillMovedOn>;
   /** Every assignment, or a skill's. */
   readonly assignments: (skillId?: SkillId) => Library<ReadonlyArray<SkillAssignment>>;
   /** Assigns a skill to a scope, or changes its assignment there; a skill has one per scope. */
@@ -114,12 +127,17 @@ export interface SkillLibraryShape {
    * out only a revision that is still its skill's newest and was never rolled out, so two saves of
    * one content roll it out once and a rollback made between them stays. `always` is a rollout you
    * ask for, such as Roll back, which goes ahead whatever the revision's past.
+   *
+   * `holds` are the holds a save changed along with its edit: applied only by the `pending` rollout
+   * that claims the revision, in its transaction and before anything moves. A save sent again after
+   * its rollout ran claims nothing, so it never replays them over a Keep on made since.
    */
   readonly rollOutRevision: (
     skillId: SkillId,
     pin: SkillRevisionHash,
     by: SkillBy,
     when: "pending" | "always",
+    holds?: ReadonlyArray<SkillHoldChange>,
   ) => Library<Committed<ReadonlyArray<SkillAssignment>>, SkillNotFound>;
   /** Holds an assignment on its revision, or lets it follow rollouts again. */
   readonly hold: (id: SkillAssignmentId, held: boolean) => Library<Committed<SkillAssignment>, SkillNotFound>;
