@@ -2,8 +2,8 @@
 
 - **Date:** 2026-11-07
 - **Issue:** [#1135](https://github.com/otaviobarros/hobbots/issues/1135)
-- **Pull request:** to be opened from `claude/project-thread-iikuyt`
-- **Commit:** the branch head, with a clean tree
+- **Pull request:** [#1176](https://github.com/otaviobarros/hobbots/pull/1176)
+- **Commit:** `88414a8` on `claude/project-thread-iikuyt`, with a clean tree
 - **Setup:** Linux x86_64 container, Node 22.23.4, SQLite through `node:sqlite`. The Memory and Skills suites ran with the in-memory memory store, the real policy engine and, through the hub, the fake runtime. The clean-runtime contract suites ran against an installed Claude Code 2.1.319 (`HOBBOTS_CLAUDE_CODE`) and an installed Codex 0.167.0 from npm (`HOBBOTS_CODEX`), each with its stand-in model, so no account or real model was used.
 - **Result:** Passed: every Memory and Skill call is decided, asked and recorded by the pipeline before memory or the library is reached, and nothing is reached when its step cannot be recorded; the tools keep their names, inputs, answers and cards; and Claude Code, Codex and the fake runtime each hand a hub call a step that records it with the turn's `recordToolStart`.
 
