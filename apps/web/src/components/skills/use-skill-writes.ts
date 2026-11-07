@@ -1,5 +1,5 @@
 import type { SkillId, SkillScope } from "@hobbots/domain";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   assignSkill,
   copySkill,
@@ -35,6 +35,12 @@ export const useSkillWrites = () => {
 };
 
 export type SkillWrites = ReturnType<typeof useSkillWrites>;
+
+/** The key of one import from a scan, from adding its skills to giving the last one out. */
+export const importRunKey = ["skills", "import-run"] as const;
+
+/** Whether an import is running, wherever on the page it was started. */
+export const useImporting = () => useIsMutating({ mutationKey: importRunKey }) > 0;
 
 /**
  * Gives each skill to `scope`, true once every one has it. A skill has one assignment per scope, so

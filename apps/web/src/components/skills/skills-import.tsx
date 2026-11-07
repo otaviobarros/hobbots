@@ -3,7 +3,7 @@ import type { Agent, MemoryProjectIdentity, SkillId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { scanSkills, skillsErrorTag } from "../../api/skills.ts";
 import { WriteOne } from "./draft-with-hob.tsx";
 import { GiveChoice, type GiveTo } from "./give-choice.tsx";
@@ -13,7 +13,7 @@ import { FileSource, GitSource, SourceTabs } from "./import-sources.tsx";
 import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
 import { type HobDirectory, type ImportFrom, importable, scopeName, skillsSearchOf } from "./skills-model.ts";
-import { giveAll, useSkillWrites } from "./use-skill-writes.ts";
+import { giveAll, importRunKey, useImporting, useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
 
@@ -25,7 +25,6 @@ function ScanResult({
   projects,
   hobs,
   say,
-  onRunning,
 }: {
   source: SkillSourcePayload;
   scan: SkillScan;
@@ -33,8 +32,6 @@ function ScanResult({
   projects: ReadonlyArray<MemoryProjectIdentity>;
   hobs: HobDirectory;
   say: Say;
-  /** Told when an import starts and ends, so the source above can't send the same import again meanwhile. */
-  onRunning: (running: boolean) => void;
 }) {
   const navigate = useNavigate();
   const writes = useSkillWrites();
@@ -46,9 +43,9 @@ function ScanResult({
   const [added, setAdded] = useState<ReadonlyArray<SkillId> | null>(null);
   // What importing an export gave out, kept for when giving out fails and Import runs again.
   const [given, setGiven] = useState<{ readonly assigned: number; readonly leftOut: number } | null>(null);
-  // One import at a time, from the first press to its last save: a second press before the page redraws is ignored.
-  const [running, setRunning] = useState(false);
-  const runningRef = useRef(false);
+  // One import is one mutation, from adding the skills to giving the last one out, so Import and the source
+  // above stay busy until all of it ends.
+  const importing = useMutation({ mutationKey: importRunKey, mutationFn: () => run() });
   if (scan.candidates.length === 0) return <p className="m-0 text-ui text-text-secondary">{copy.import.none}</p>;
   if (scan.candidates.every((candidate) => candidate.refusal !== null))
     return <ImportRefused candidates={scan.candidates} />;
@@ -77,20 +74,6 @@ function ScanResult({
   };
 
   // Two saves, each kept once made: the import, then giving each skill out. What failed is said as such.
-  const runOnce = async () => {
-    if (runningRef.current) return;
-    runningRef.current = true;
-    setRunning(true);
-    onRunning(true);
-    try {
-      await run();
-    } finally {
-      runningRef.current = false;
-      setRunning(false);
-      onRunning(false);
-    }
-  };
-
   const run = async () => {
     setFailure(null);
     let ids = added;
@@ -116,7 +99,7 @@ function ScanResult({
   };
 
   return (
-    <div aria-busy={running} className="flex flex-col gap-3.5">
+    <div aria-busy={importing.isPending} className="flex flex-col gap-3.5">
       <p className="m-0 text-detail text-text-secondary">{foundLine(scan)}</p>
       <ImportCandidates
         candidates={scan.candidates}
@@ -153,10 +136,12 @@ function ScanResult({
       )}
       <div className="flex gap-2">
         <Button
-          disabled={(added === null && folders.length === 0) || running || writes.busy}
-          onClick={() => void runOnce()}
+          disabled={(added === null && folders.length === 0) || importing.isPending || writes.busy}
+          onClick={() => importing.mutate()}
         >
-          {running || writes.busy ? copy.import.importing : importLabel(added !== null, onlySet, folders.length)}
+          {importing.isPending || writes.busy
+            ? copy.import.importing
+            : importLabel(added !== null, onlySet, folders.length)}
         </Button>
         <Button asChild variant="quiet">
           <Link to="/skills" search={{}}>
@@ -185,7 +170,7 @@ export function SkillsImport({
   const [source, setSource] = useState<SkillSourcePayload | null>(null);
   const scan = useMutation({ mutationFn: scanSkills });
   // While an import runs, the source can't be read again: a new scan would offer the same import a second time.
-  const [importing, setImporting] = useState(false);
+  const importing = useImporting();
   const look = (next: SkillSourcePayload) => {
     setSource(next);
     scan.mutate(next);
@@ -215,7 +200,6 @@ export function SkillsImport({
           projects={projects}
           hobs={hobs}
           say={say}
-          onRunning={setImporting}
         />
       )}
     </div>
