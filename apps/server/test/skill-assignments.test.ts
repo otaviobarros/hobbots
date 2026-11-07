@@ -649,6 +649,14 @@ describe("skill uses", () => {
       optedOut: [],
       optedOutOfSets: [{ skillId: set.skill.id, name: "plan-change" }],
     });
+    // What changed names the one skill turned off, not the whole set.
+    const changed = (await request("GET", "/api/skills/changes")).body.changes;
+    expect(changed[0]).toMatchObject({
+      kind: "optedOut",
+      skillId: set.skill.id,
+      agentId: wren.id,
+      member: "plan-change",
+    });
     const wrenThread: Thread = (await request("POST", `/api/agents/${wren.id}/threads`)).body;
     await send(wrenThread, "/skills");
     await replies(wrenThread, 1);
