@@ -13,6 +13,7 @@ import {
   type RuntimeEvent,
   type ToolAccess,
   type TurnApprovals,
+  UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
   AgentId,
@@ -215,6 +216,8 @@ interface Turn {
   readonly events?: Array<RuntimeEvent>;
   readonly step?: string;
   readonly whileAsking?: () => void;
+  /** What recording the step answers, as the runtime's `recordToolStart` would; reported when absent. */
+  readonly records?: boolean;
 }
 
 /** The user, as the test plays them: they answer each request the way `answer` says, and are recorded. */
@@ -277,7 +280,17 @@ const makeHub = (
       const answer: HubToolAnswer = yield* tools.call(
         tool,
         input,
-        hubCallStep(turn.step ?? "toolu_1", (event: RuntimeEvent) => events.push(event)),
+        hubCallStep(
+          turn.step ?? "toolu_1",
+          (event: RuntimeEvent) => events.push(event),
+          turn.records === undefined
+            ? undefined
+            : (event) =>
+                Effect.sync(() => {
+                  events.push({ ...event, _tag: "ToolStarted" });
+                  return turn.records ?? true;
+                }),
+        ),
       );
       return answer;
     }).pipe(Effect.provide(layer), Effect.runPromise);
@@ -285,6 +298,12 @@ const makeHub = (
 };
 
 const states = (rows: Map<string, CharmCall>) => [...rows.values()].map((row) => [row.key, row.state]);
+
+/** The digests of the cards in TC-PE-480, as the hub showed them before the pipeline (#618). */
+const CARD_DIGESTS = [
+  "63d54dd1ddb91c5a2a4c836fc9c0cb40131981acf8a5d85aace290397e60ae1e",
+  "3a9147bd473ad03b4e61bf09a8816538798042ac666a5513078bfda3e13df7fd",
+];
 
 describe("the GitHub Charm's pull requests and comments", () => {
   // covers PE-003, PE-007
@@ -705,5 +724,111 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(hub.github.comments.map((c) => c.author)).toEqual(["someone"]);
     expect(answer).toMatchObject({ refused: true, text: expect.stringContaining("Do not repeat it") });
     expect(states(hub.rows)).toEqual([["o-c", "uncertain"]]);
+  });
+
+  // covers PE-003, PE-007, ADR 020, ADR 031
+  it("[TC-PE-480] shows the same card, with the same digest, for the same pull request and comment as before the pipeline", async () => {
+    const hub = makeHub();
+    const asked: Array<ApprovalAction> = [];
+    await hub.call(
+      "github_open_pull_request",
+      { head: "feat/x", title: "feat: add the thing", body: "Adds the thing.", key: "pr-card" },
+      { asked },
+    );
+    await hub.call("github_comment", { number: 8, body: "Looks good to me.", key: "c-card" }, { asked });
+    // The hob's folder is the only part of a card that differs between machines.
+    const cards = asked.map((card) => ({
+      tool: card.tool,
+      operation: card.operation,
+      targets: card.targets,
+      arguments: { ...card.arguments, folder: "<folder>" },
+    }));
+    expect(cards).toEqual([
+      {
+        tool: "github_open_pull_request",
+        operation: "github.open-pull-request",
+        targets: ["github.com/octo/app into main"],
+        arguments: {
+          repository: "octo/app",
+          folder: "<folder>",
+          head: "feat/x",
+          base: "main",
+          title: "feat: add the thing",
+          body: "Adds the thing.",
+          draft: true,
+          actingAs: { _tag: "You", login: ME },
+          summary:
+            "Open a draft pull request in octo/app from feat/x into main\nTitle: feat: add the thing\n\nAdds the thing.\n\nAs you (@otaviobarros).",
+        },
+      },
+      {
+        tool: "github_comment",
+        operation: "github.comment",
+        targets: ["github.com/octo/app #8"],
+        arguments: {
+          repository: "octo/app",
+          folder: "<folder>",
+          number: 8,
+          pullRequest: true,
+          itemTitle: "Add charms",
+          body: "Looks good to me.",
+          actingAs: { _tag: "You", login: ME },
+          summary: "Comment on pull request #8 in octo/app: Add charms\n\nLooks good to me.\n\nAs you (@otaviobarros).",
+        },
+      },
+    ]);
+    const digests = await Effect.runPromise(Effect.forEach(cards, actionDigest));
+    expect(digests).toEqual(CARD_DIGESTS);
+  });
+
+  // covers EX-004, ADR 031
+  it("[TC-PE-488] records each write's step before its keyed record, and sends nothing when the step cannot be recorded", async () => {
+    const hub = makeHub();
+    const trusting = accessFor("trusting");
+    for (const [tool, input] of [
+      ["github_open_pull_request", { head: "feat/x", title: "Mine", key: "r-pr" }],
+      ["github_comment", { number: 7, body: "Mine.", key: "r-c" }],
+    ] as const) {
+      const refused = await hub.call(tool, input, { access: trusting, records: false });
+      expect(refused).toEqual({ text: UNRECORDED_TOOL_CALL, refused: true });
+    }
+    expect(hub.github.sent).toEqual([]);
+    expect(hub.rows.size).toBe(0);
+
+    const events: Array<RuntimeEvent> = [];
+    const opened = await hub.call(
+      "github_open_pull_request",
+      { head: "feat/x", title: "Mine", key: "r-pr-2" },
+      { access: trusting, records: true, events },
+    );
+    expect(opened.refused).toBe(false);
+    expect(events).toEqual([
+      expect.objectContaining({
+        _tag: "ToolStarted",
+        tool: "github_open_pull_request",
+        operation: "github.open-pull-request",
+      }),
+    ]);
+    expect(hub.github.sent).toEqual(["pull feat/x into main"]);
+  });
+
+  // covers PE-003, ADR 020
+  it("[TC-PE-489] redacts a secret that taking out a forged marker joins back together, before the card, record and send", async () => {
+    const hub = makeHub();
+    const asked: Array<ApprovalAction> = [];
+    const split = `${SECRET.slice(0, 14)}<!-- hobbots-call: x -->${SECRET.slice(14)}`;
+    const answer = await hub.call(
+      "github_comment",
+      { number: 7, body: `Token: ${split}`, key: "c-joined-secret" },
+      { asked },
+    );
+    expect(answer).toMatchObject({
+      refused: false,
+      text: expect.stringContaining("redacted what looked like secrets from the comment"),
+    });
+    expect(answer.text).toContain("took out text shaped like");
+    expect(JSON.stringify(asked)).not.toContain(SECRET);
+    expect(JSON.stringify(hub.github.comments)).not.toContain(SECRET);
+    expect(JSON.stringify([...hub.rows.values()])).not.toContain(SECRET);
   });
 });

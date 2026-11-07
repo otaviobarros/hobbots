@@ -588,17 +588,19 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
   it("[TC-OR-072] reads back calls the hub left in flight when it starts, and settles them once their effect shows", async () => {
     const { folder, repository, remote, commit } = await setUp("restarted");
     git(folder, "push", "--quiet", remote, "feat/x");
-    const plan = { repository: "octo/restarted", remoteBranch: "feat/x", commit, appliedText: "Pushed." };
+    const plan = { repository: "octo/restarted", remoteBranch: "feat/x", commit };
     const row = (key: string, overrides: Partial<CharmCall>) =>
       new CharmCall({
         agentId: AgentId.make("hob"),
         scope: "",
         key,
         attempt: `${key}-1`,
+        charm: "GitHub",
         tool: "github_push",
         input: "{}",
         site: `github.com/octo/restarted refs/heads/${key}`,
         plan: JSON.stringify(plan),
+        appliedText: "Pushed.",
         state: "sending",
         result: null,
         threadId: null,

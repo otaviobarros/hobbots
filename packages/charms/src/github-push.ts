@@ -1,4 +1,14 @@
-import { approvalNote, askUntilDecided, type CharmTurn, type HubCallStep, type ToolAccess } from "@hobbots/agents";
+import {
+  approvalNote,
+  askUntilDecided,
+  type CharmCallRunner,
+  type CharmTurn,
+  type HubCallStep,
+  type ReadBack,
+  scopesOf,
+  type ToolAccess,
+  type WriteOutcome,
+} from "@hobbots/agents";
 import {
   type AgentId,
   type GitHubPushPlan,
@@ -7,14 +17,13 @@ import {
   githubPushSummary,
   repositorySlug,
 } from "@hobbots/domain";
-import { PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
+import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
 import { Context, Data, Effect, Option, Redacted, Result } from "effect";
-import { type CharmCallRunner, type ReadBack, scopesOf, type WriteOutcome } from "./charm-calls.ts";
 import { GitPush, type PushTransport, type StagedBranch } from "./git-push.ts";
 import { GitHubCredential, type GitHubTokenScope, refusedTwice } from "./github-account.ts";
 import { githubActor } from "./github-actor.ts";
 import { GitHubApi, type GitHubError } from "./github-api.ts";
-import { branchNameCheck, decideCharmWrite } from "./github-writes.ts";
+import { branchNameCheck } from "./github-writes.ts";
 import { recreateOnGitHub } from "./hob-app-push.ts";
 
 /**
@@ -293,7 +302,7 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
               label,
             },
             approvals: step === undefined ? null : turn.approvals,
-            decide: decideCharmWrite(engine, turn, access, request),
+            decide: decideHubCall(engine, turn.approvals, access, request),
             report: step?.report ?? (() => {}),
             unknown: "Hobbots cannot decide this push.",
           });

@@ -13,6 +13,7 @@ import {
   type RuntimeEvent,
   type ToolAccess,
   type TurnApprovals,
+  UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
   AgentId,
@@ -96,6 +97,8 @@ const callInitIn = (
   access: ToolAccess | null,
   input: unknown,
   user?: { readonly asked: Array<ApprovalAction>; readonly answer: "approve" | "deny" },
+  /** What recording the step answers, as the runtime's `recordToolStart` would; reported when absent. */
+  records?: boolean,
 ) =>
   Effect.gen(function* () {
     let started = false;
@@ -114,10 +117,21 @@ const callInitIn = (
     });
     if (tools === null) return { offered: false, answer: null, events: [] };
     const events: Array<RuntimeEvent> = [];
+    const report = (event: RuntimeEvent) => events.push(event);
     const answer = yield* tools.call(
       GIT_INIT_TOOL,
       input,
-      hubCallStep("step-1", (event) => events.push(event)),
+      hubCallStep(
+        "step-1",
+        report,
+        records === undefined
+          ? undefined
+          : (event) =>
+              Effect.sync(() => {
+                events.push({ ...event, _tag: "ToolStarted" });
+                return records;
+              }),
+      ),
     );
     return { offered: true, names: tools.tools.map((tool) => tool.name), answer, events };
   }).pipe(Effect.provide(layer), Effect.runPromise);
@@ -373,5 +387,19 @@ describe("replacing what a deleted repository leaves", () => {
     fs.symlinkSync(outside, path.join(project, ".git"));
     expect(publish()).toMatchObject({ code: 4, out: expect.stringContaining("already has a .git") });
     expect(fs.readdirSync(outside)).toEqual(["kept.txt"]);
+  });
+
+  // covers EX-004, ADR 031
+  it("[TC-PE-487] records its step before it creates anything, and creates nothing when the step cannot be recorded", async () => {
+    const refused = await callInitIn(accessFor(project), accessFor(project), { folder: project }, undefined, false);
+    expect(refused.answer).toEqual({ text: UNRECORDED_TOOL_CALL, refused: true });
+    expect(fs.existsSync(path.join(project, ".git"))).toBe(false);
+
+    const recorded = await callInitIn(accessFor(project), accessFor(project), { folder: project }, undefined, true);
+    expect(recorded.answer).toMatchObject({ refused: false });
+    expect(recorded.events).toEqual([
+      expect.objectContaining({ _tag: "ToolStarted", id: "step-1", tool: GIT_INIT_TOOL, operation: "local-git" }),
+    ]);
+    expect(fs.existsSync(path.join(project, ".git", "HEAD"))).toBe(true);
   });
 });
