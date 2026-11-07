@@ -402,7 +402,7 @@ const twoProjects = (winners: ReadonlyArray<Offered>): boolean => {
  * narrowest one alone brings its skills, all on that one revision, and the wider ones are replaced
  * by it. When two projects both assign the set, its names are blocked as a Project clash instead.
  */
-const wholeSets = (reached: ReadonlyArray<PinnedSkill>) => {
+const wholeSets = (reached: ReadonlyArray<PinnedSkill>, turn: SkillTurn) => {
   const winning = new Set<PinnedSkill>();
   const replaced: Array<ResolvedSkills["replaced"][number]> = [];
   /** Each name of a set that two projects assign, with those assignments. */
@@ -418,7 +418,12 @@ const wholeSets = (reached: ReadonlyArray<PinnedSkill>) => {
     if (winner === undefined) continue;
     if (winners.length > 1) {
       const assignments = winners.map((one) => one.assignment);
-      const names = new Set(winners.flatMap((one) => (one.set?.skills ?? []).map((skill) => skill.name)));
+      // A skill of the set the hob turned off blocks nothing, as an opted-out skill replaces nothing.
+      const names = new Set(
+        winners.flatMap((one) =>
+          (one.set?.skills ?? []).filter((skill) => !optedOutOfSet(one, skill.name, turn)).map((skill) => skill.name),
+        ),
+      );
       for (const name of names) blocked.set(name, [...(blocked.get(name) ?? []), ...assignments]);
       continue;
     }
@@ -456,7 +461,7 @@ const winnersOf = (group: ReadonlyArray<Offered>, blocked: ReadonlyArray<SkillAs
  */
 export const resolveSkills = (pinned: ReadonlyArray<PinnedSkill>, turn: SkillTurn): ResolvedSkills => {
   const reached = pinned.filter((one) => reaches(one.assignment.scope, turn) && !optedOut(one, turn));
-  const sets = wholeSets(reached);
+  const sets = wholeSets(reached, turn);
   const replaced: Array<ResolvedSkills["replaced"][number]> = [...sets.replaced];
   const clashes: Array<ResolvedSkills["clashes"][number]> = [];
   const groups = new Map<SkillName, Array<Offered>>();

@@ -192,6 +192,13 @@ describe("resolveSkills with sets (ADR 029, Skill sets)", () => {
     const blocked = resolveSkills([web, api, everyonePlan], turn({ projects: [WEB, API] }));
     expect(blocked.skills).toEqual([]);
     expect(blocked.clashes.map((one) => one.name)).toEqual(["plan-change", "ship-change"]);
+    // A skill of the set the hob opted out of blocks nothing: the wider one loads.
+    const optedOutOfSets = [{ skillId, name: SkillName.make("plan-change") }];
+    const unblocked = resolveSkills([web, api, everyonePlan], turn({ projects: [WEB, API], optedOutOfSets }));
+    expect(unblocked.skills.map((one) => [one.name, one.skillId])).toEqual([
+      ["plan-change", everyonePlan.assignment.skillId],
+    ]);
+    expect(unblocked.clashes.map((one) => one.name)).toEqual(["ship-change"]);
     const pipPlan = pinned("plan-change", { _tag: "Hob", agentId: PIP });
     const passed = resolveSkills([web, api, everyonePlan, pipPlan], turn({ projects: [WEB, API] }));
     expect(passed.skills.map((one) => [one.name, one.skillId])).toEqual([["plan-change", pipPlan.assignment.skillId]]);
