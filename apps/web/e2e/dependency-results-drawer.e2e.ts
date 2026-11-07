@@ -1,4 +1,5 @@
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 import { laneHead, openRoom, taskDetails } from "./quest-room.ts";
 
@@ -13,6 +14,8 @@ let shared = "";
 test.beforeEach(() => {
   dataDir = emptyDataDir();
   shared = realpathSync(mkdtempSync(`${dataDir}-shared-`));
+  // Quill returns core.py, which a Task completes with only once it is in its folders (#1180).
+  writeFileSync(join(shared, "core.py"), 'AMOUNT_UNIT = "cents"\n');
 });
 
 test.afterEach(async () => {
@@ -80,7 +83,7 @@ test("[TC-OR-215] Rook's Task drawer shows Quill's result and core.py under Hand
           script("complete_task", {
             key: "backend-done",
             summary: "Stores amounts as integer cents.",
-            artifacts: [{ kind: "file", label: "core.py", value: "/project/core.py" }],
+            artifacts: [{ kind: "file", label: "core.py", value: join(shared, "core.py") }],
           }),
         ].join("\n"),
       }),
@@ -106,5 +109,5 @@ test("[TC-OR-215] Rook's Task drawer shows Quill's result and core.py under Hand
   await expect(drawer.getByRole("heading", { name: "Handed to it" })).toBeVisible();
   await expect(drawer).toContainText("Quill's result: Stores amounts as integer cents.");
   await expect(drawer).toContainText("core.py");
-  await expect(drawer).toContainText("/project/core.py");
+  await expect(drawer).toContainText(join(shared, "core.py"));
 });

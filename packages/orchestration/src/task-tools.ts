@@ -52,6 +52,7 @@ import {
 import { makeCharmRecords } from "./charm-records.ts";
 import { makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeDelegating } from "./delegating.ts";
+import { makeDeliveryCheck } from "./delivery.ts";
 import { flagIdleQuest } from "./empty-quests.ts";
 import { makeHeldCommits } from "./held-commits.ts";
 import { makeLeading } from "./leading.ts";
@@ -158,11 +159,21 @@ export class TaskTools extends Context.Service<
         const folderChecks = yield* FolderChecks;
         const hobs = yield* HobbotsRepository;
         const wrapUp = yield* makeWrapUp;
+        const delivered = yield* makeDeliveryCheck;
         const settle = yield* makeSettle;
         // A lead's commit of a member's open work is held, whichever runtime makes it (#742).
         const heldCommit = yield* makeHeldCommits;
         const handlers: Record<TaskToolName, ToolHandler> = {
-          ...makePlanning({ tasks, capacity, limits, wrapUp, folderChecks, authority: authority.of, separator }),
+          ...makePlanning({
+            tasks,
+            capacity,
+            limits,
+            wrapUp,
+            delivered,
+            folderChecks,
+            authority: authority.of,
+            separator,
+          }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
           ...makeAsking({ tasks, hobs }),
           ...makeLeading({ tasks }),

@@ -47,6 +47,18 @@ describe("A member's default folders", () => {
     expect(await defaults("Make the badge", [])).toEqual([]);
   });
 
+  it("add the folder a file the brief names sits in, when no folder it names holds it (#1181)", async () => {
+    expect(await defaults("Read /work/test/site, then save the page as /work/other/page.html.")).toEqual([
+      "/work/test/site",
+      "/work/other",
+    ]);
+    // Already held by the folder the brief names, or by the lead's own, so nothing more.
+    expect(await defaults("Edit /work/test/site/README.md in /work/test/site.")).toEqual(["/work/test/site"]);
+    expect(await defaults("Edit /work/test/notes.md.")).toEqual(["/work/test"]);
+    // Only the folder right above it, and only when it exists inside the lead's.
+    expect(await defaults("Save it as /work/other/new/page.html and /elsewhere/page.html.")).toEqual(["/work/test"]);
+  });
+
   it("are within the lead's, so the authority given is narrowed to them", async () => {
     const folders = await defaults("Work in /work/test/site.");
     const given = delegatedAuthority({ decisions: {} as never, fixed: [], folders: lead }, { folders }, "/");

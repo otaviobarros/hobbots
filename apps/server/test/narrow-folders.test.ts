@@ -39,19 +39,22 @@ let test: string;
 let hobbots: string;
 let other: string;
 
-/** Every hob works in the three folders under the Balanced preset. */
+/** Quill's own folders when a test narrows them; the three otherwise. */
+let quillFolders: ReadonlyArray<string> | null = null;
+
+/** Every hob works in the three folders under the Balanced preset, Quill in `quillFolders` when set. */
 const ThreeFolders = Layer.sync(HobTools, () =>
   HobTools.of({
     access: (agent) =>
       Effect.succeed({
         policy: {
           preset: "balanced",
-          sharedFolders: [test, hobbots, other],
+          sharedFolders: agent.id === QUILL && quillFolders !== null ? quillFolders : [test, hobbots, other],
           hob: EMPTY_HOB_POLICY,
           dataFolder: join(work, "data"),
           restrictions: [],
         },
-        folders: [test, hobbots, other],
+        folders: agent.id === QUILL && quillFolders !== null ? quillFolders : [test, hobbots, other],
         runtimeFolder: join(work, "runtime", agent.id),
         commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
       }),
@@ -86,6 +89,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  quillFolders = null;
   await runtime.dispose();
   rmSync(work, { recursive: true, force: true });
 });
@@ -223,5 +227,64 @@ describe("A member its lead names no folders for", () => {
     );
     expect(result.all).toEqual([test, hobbots, other]);
     expect(result.wider).toMatchObject({ reason: "authority-wider" });
+  });
+});
+
+// Issue #1181: a lead briefed its member to write a page into a folder of the lead's that the brief
+// named only by the page's own path. The member got the repository the brief also named, and not
+// that folder, so its write was refused and the page never got there. The folder a named file sits
+// in now goes with the brief, and a lead whose member cannot reach it hears so when it delegates.
+describe("A member briefed to write a file into a folder of its lead's", () => {
+  // covers PE-002, OR-003
+  it("[TC-PE-475] works in the folder the file sits in, beside the folders its brief names", async () => {
+    const site = join(test, "site");
+    const docs = join(other, "docs");
+    mkdirSync(docs, { recursive: true });
+    const page = join(docs, "skills-explained.html");
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const done = yield* delegate("page", `Read the code in ${site}.\nSave the page as ${page}.`);
+        const quill = yield* quillOn(done);
+        return { done, ...quill, write: yield* quill.decide("edit-files", page) };
+      }),
+    );
+    expect(result.folders).toEqual([site, docs]);
+    expect(result.write.decision).toBe("allow");
+    expect(result.done.message).not.toContain("Warning: the brief names");
+  });
+
+  // covers PE-002, OR-003
+  it("[TC-PE-476] tells the lead when the member's own folders leave that folder out, naming it", async () => {
+    const docs = join(other, "docs");
+    mkdirSync(docs, { recursive: true });
+    quillFolders = [test, hobbots];
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const done = yield* delegate(
+          "page",
+          `Read the code in ${hobbots}.\nSave the page as ${join(docs, "page.html")}.`,
+        );
+        return { done, ...(yield* quillOn(done)) };
+      }),
+    );
+    expect(result.folders).toEqual([hobbots]);
+    expect(result.done.message).toContain(
+      `Warning: the brief names ${docs}, outside Quill's folders, so Quill cannot work there.`,
+    );
+  });
+
+  // covers PE-002
+  it("[TC-PE-477] does not widen to a folder far above a file whose own folder does not exist", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const done = yield* delegate("page", `Save the page as ${join(other, "new", "deep", "page.html")}.`);
+        return { done, ...(yield* quillOn(done)) };
+      }),
+    );
+    expect(result.folders).toEqual([test]);
+    expect(result.done.message).not.toContain("Warning: the brief names");
   });
 });
