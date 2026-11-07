@@ -12,21 +12,24 @@ import {
   type ResolvedScope,
 } from "../src/index.ts";
 import {
+  comment,
   contextFor,
   decide,
   engineAhead,
   engineListingWith,
   engineWithLimit,
   files,
+  githubRead,
   type Home,
   lastingEngine,
+  pullRequest,
   useHome,
 } from "./fixture.ts";
 
 const home: Home = useHome();
 
 /** One request per operation, all inside the shared folder except the last. */
-const requests = (h: Home): Record<PolicyOperation, PolicyRequest> => ({
+const requests = (h: Home): Record<PolicyOperation | GitHubOperation, PolicyRequest> => ({
   "read-files": files("read-files", h.project, "src/index.ts"),
   "edit-files": files("edit-files", h.project, "src/new-file.ts"),
   "delete-files": files("delete-files", h.project, "src/index.ts"),
@@ -34,9 +37,9 @@ const requests = (h: Home): Record<PolicyOperation, PolicyRequest> => ({
   "local-git": { _tag: "Command", operation: "local-git", cwd: path.join(h.project, "src") },
   push: { _tag: "Push", remote: "origin", branch: "feature", force: false, toDefaultBranch: false },
   "use-web": { _tag: "Web", host: "registry.npmjs.org", addresses: [] },
-  "read-github": { _tag: "GitHub", folder: h.project, repository: "otaviobarros/hobbots" },
-  "open-pull-request": { _tag: "PullRequest", folder: h.project, repository: "otaviobarros/hobbots", base: "main" },
-  "comment-github": { _tag: "GitHubComment", folder: h.project, repository: "otaviobarros/hobbots", number: 324 },
+  "github.read": githubRead(h.project),
+  "github.open-pull-request": pullRequest(h.project),
+  "github.comment": comment(h.project),
   "outside-folders": files("read-files", h.project, "../secret.txt"),
   "search-memory": { _tag: "Memory", operation: "search-memory", scope: "your memory" },
   "save-memory": { _tag: "Memory", operation: "save-memory", scope: "your memory" },
@@ -46,8 +49,10 @@ const requests = (h: Home): Record<PolicyOperation, PolicyRequest> => ({
   "skill-feedback": { _tag: "Skills", operation: "skill-feedback", skill: "release-steps" },
 });
 
+type GitHubOperation = "github.read" | "github.open-pull-request" | "github.comment";
+
 /** ADR 014's preset table, written out again so the engine is checked against the decision, not itself. */
-const ADR_014: Record<PolicyOperation, readonly [PolicyDecision, PolicyDecision, PolicyDecision]> = {
+const ADR_014: Record<PolicyOperation | GitHubOperation, readonly [PolicyDecision, PolicyDecision, PolicyDecision]> = {
   "read-files": ["allow", "allow", "allow"],
   "edit-files": ["ask", "allow", "allow"],
   "delete-files": ["ask", "ask", "allow"],
@@ -55,10 +60,10 @@ const ADR_014: Record<PolicyOperation, readonly [PolicyDecision, PolicyDecision,
   "local-git": ["ask", "allow", "allow"],
   push: ["ask", "ask", "allow"],
   "use-web": ["ask", "allow", "allow"],
-  "read-github": ["allow", "allow", "allow"],
-  // ADR 020's rows for the GitHub Charm's writes.
-  "open-pull-request": ["ask", "ask", "allow"],
-  "comment-github": ["ask", "ask", "allow"],
+  // ADR 020's rows for the GitHub Charm, which ADR 031 has it declare.
+  "github.read": ["allow", "allow", "allow"],
+  "github.open-pull-request": ["ask", "ask", "allow"],
+  "github.comment": ["ask", "ask", "allow"],
   "outside-folders": ["deny", "deny", "deny"],
   // ADR 028's Memory group.
   "search-memory": ["allow", "allow", "allow"],
@@ -103,7 +108,7 @@ describe("policy engine", () => {
         expect({ preset, operation, decision: verdict.decision }).toEqual({
           preset,
           operation,
-          decision: ADR_014[operation as PolicyOperation][i],
+          decision: ADR_014[operation as PolicyOperation | GitHubOperation][i],
         });
         expect(verdict.operation).toBe(operation);
         expect(verdict.policyVersion).toBe(policyVersion(contextFor(home, preset)));
@@ -645,13 +650,13 @@ describe("policy engine", () => {
 });
 
 describe("GitHub reads", () => {
-  const read = (folder: string): PolicyRequest => ({ _tag: "GitHub", folder, repository: "otaviobarros/hobbots" });
+  const read = (folder: string): PolicyRequest => githubRead(folder);
 
   it("[TC-PE-130] reads a repository only from the hob's own folders, and never under Ask or Never", async () => {
     const allowed = await decide(contextFor(home, "careful"), read(home.project));
     expect(allowed).toMatchObject({
       decision: "allow",
-      operation: "read-github",
+      operation: "github.read",
       targets: ["otaviobarros/hobbots"],
       enforcement: "enforced",
       grantable: false,
@@ -667,7 +672,12 @@ describe("GitHub reads", () => {
     expect((await decide(unsandboxed, read(home.project))).decision).toBe("allow");
     for (const answer of ["ask", "deny"] as const) {
       const narrowed = contextFor(home, "trusting", {
-        hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { "read-github": answer } },
+        hob: {
+          ownFolders: [],
+          hiddenSharedFolders: [],
+          overrides: {},
+          charms: { overrides: { "github.read": answer } },
+        },
       });
       expect(await decide(narrowed, read(home.project))).toMatchObject({
         decision: answer,

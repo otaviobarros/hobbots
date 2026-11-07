@@ -11,6 +11,7 @@ import {
   SandboxUnavailable,
 } from "@hobbots/agents";
 import {
+  GITHUB_CHARM,
   GitHubAccountLive,
   GitHubApi,
   GitHubCharmTools,
@@ -103,6 +104,8 @@ describe("The GitHub Charm on a hub", () => {
               hob: { ...EMPTY_HOB_POLICY, ...(githubCharm ? {} : { githubCharm: false }) },
               dataFolder: join(root, "data"),
               restrictions: [],
+              // What the hub's tools give a turn: the operations its Charms declare (ADR 031).
+              charmOperations: GITHUB_CHARM.operations,
             },
             folders: [folder],
             runtimeFolder: join(root, "runtimes", HOB_ID),

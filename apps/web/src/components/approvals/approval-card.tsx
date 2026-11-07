@@ -13,6 +13,7 @@ import { messages } from "../messages.ts";
 import { messages as plainCopy } from "../plain-words/messages.ts";
 import { approvalAction, capitalized } from "../plain-words/plain-words.ts";
 import { ApprovalActions } from "./approval-actions.tsx";
+import { riskOf } from "./approval-rules.ts";
 import { decisionErrorText, expiryText, resultText } from "./approval-text.ts";
 
 const copy = messages.approval;
@@ -145,7 +146,7 @@ function ApprovalDetails({ approval, hob }: { approval: ApprovalRequest; hob: Ag
       <dt className="text-label">{copy.risk}</dt>
       <dd className="m-0 flex flex-col gap-0.5">
         {approval.onceOnly && <span className="font-bold text-rose">{copy.highRisk}</span>}
-        <span>{copy.riskOf[approval.operation]}</span>
+        <span>{riskOf(approval.operation)}</span>
       </dd>
     </dl>
   );

@@ -1,9 +1,31 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { AgentId, Grant, GrantId, type GrantRule, ruleOperation, TaskId } from "@hobbots/domain";
+import {
+  AgentId,
+  type CharmOperation,
+  type CharmOperationId,
+  Grant,
+  GrantId,
+  GrantRule,
+  HobPolicy,
+  ruleOperation,
+  StoredPolicyLayer,
+  TaskId,
+} from "@hobbots/domain";
+import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { type PolicyContext, type PolicyRequest, readCommandLine } from "../src/index.ts";
-import { contextFor, decide, files, type Home, useHome } from "./fixture.ts";
+import {
+  comment,
+  contextFor,
+  decide,
+  files,
+  GITHUB_OPERATIONS,
+  githubRead,
+  type Home,
+  pullRequest,
+  useHome,
+} from "./fixture.ts";
 
 const home: Home = useHome();
 
@@ -276,10 +298,6 @@ describe("standing grants", () => {
 
 describe("the GitHub Charm's writes", () => {
   const repository = "otaviobarros/hobbots";
-  const pullRequest = (folder: string, base = "main") =>
-    ({ _tag: "PullRequest", folder, repository, base }) satisfies PolicyRequest;
-  const comment = (folder: string, number = 324) =>
-    ({ _tag: "GitHubComment", folder, repository, number }) satisfies PolicyRequest;
 
   // covers PE-001, PE-003, PE-007
   it("[TC-PE-200] asks before opening a pull request or commenting, and a rule names only the repository and base", async () => {
@@ -287,18 +305,26 @@ describe("the GitHub Charm's writes", () => {
     const project = await fs.realpath(home.project);
     expect(await decide(balanced, pullRequest(home.project))).toMatchObject({
       decision: "ask",
-      operation: "open-pull-request",
+      operation: "github.open-pull-request",
       targets: ["github.com/otaviobarros/hobbots into main"],
       onceOnly: false,
       grantable: true,
-      rules: [{ _tag: "PullRequest", cwd: project, repository, base: "main" }],
+      rules: [
+        {
+          _tag: "CharmSite",
+          charm: "github",
+          operation: "github.open-pull-request",
+          cwd: project,
+          site: { repository, base: "main" },
+        },
+      ],
     });
     expect(await decide(balanced, comment(home.project))).toMatchObject({
       decision: "ask",
-      operation: "comment-github",
+      operation: "github.comment",
       targets: ["github.com/otaviobarros/hobbots #324"],
       grantable: true,
-      rules: [{ _tag: "GitHubComment", cwd: project, repository }],
+      rules: [{ _tag: "CharmSite", charm: "github", operation: "github.comment", cwd: project, site: { repository } }],
     });
     expect((await decide(contextFor(home, "trusting"), pullRequest(home.project))).decision).toBe("allow");
     expect((await decide(contextFor(home, "trusting"), comment(home.project))).decision).toBe("allow");
@@ -327,10 +353,223 @@ describe("the GitHub Charm's writes", () => {
     for (const answer of ["ask", "deny"] as const) {
       const narrowed = {
         ...granted,
-        hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { "comment-github": answer } },
+        hob: {
+          ownFolders: [],
+          hiddenSharedFolders: [],
+          overrides: {},
+          charms: { overrides: { "github.comment": answer } },
+        },
       };
       // The hob's own Ask or Never is never answered by a rule saved under the preset's Ask.
       expect(await decide(narrowed, comment(home.project))).toMatchObject({ decision: answer, grantable: false });
     }
+  });
+});
+
+describe("a Charm request", () => {
+  /** A second Charm, as an MCP server might declare one: a read with no site, and a once-only send. */
+  const MAIL: ReadonlyArray<CharmOperation> = [
+    {
+      id: "mail.search",
+      words: "searching mail",
+      presets: { careful: "ask", balanced: "allow", trusting: "allow" },
+      site: [],
+      onceOnly: false,
+      actsAsIdentity: false,
+    },
+    {
+      id: "mail.send",
+      words: "sending mail",
+      presets: { careful: "ask", balanced: "ask", trusting: "allow" },
+      site: ["to"],
+      onceOnly: true,
+      actsAsIdentity: true,
+    },
+    {
+      id: "mail.label",
+      words: "labelling mail",
+      presets: { careful: "ask", balanced: "ask", trusting: "allow" },
+      site: ["label"],
+      onceOnly: false,
+      actsAsIdentity: false,
+    },
+  ];
+  const withMail = (preset: "careful" | "balanced" | "trusting", extra: Partial<PolicyContext> = {}) =>
+    contextFor(home, preset, { charmOperations: [...GITHUB_OPERATIONS, ...MAIL], ...extra });
+  const mail = (operation: CharmOperationId, site: Record<string, string> = {}, folder?: string): PolicyRequest => ({
+    _tag: "Charm",
+    charm: "mail",
+    operation,
+    site,
+    ...(folder === undefined ? {} : { folder }),
+  });
+
+  // covers PE-001, PE-002
+  it("[TC-PE-456] is decided on the answers its Charm declares, and refused when no Charm declares it", async () => {
+    expect(await decide(withMail("careful"), mail("mail.search"))).toMatchObject({
+      decision: "ask",
+      operation: "mail.search",
+      reason: { code: "preset", message: "The safety preset asks before searching mail." },
+      enforcement: "enforced",
+      targets: [],
+    });
+    expect((await decide(withMail("balanced"), mail("mail.search"))).decision).toBe("allow");
+    expect((await decide(withMail("trusting"), mail("mail.label", { label: "done" }))).decision).toBe("allow");
+    // Without its declaration, or claimed by another Charm, the operation stays closed.
+    expect(await decide(contextFor(home, "trusting"), mail("mail.search"))).toMatchObject({
+      decision: "deny",
+      reason: { code: "undeclared-operation" },
+    });
+    expect(
+      await decide(withMail("trusting"), { _tag: "Charm", charm: "github", operation: "mail.search", site: {} }),
+    ).toMatchObject({ decision: "deny", reason: { code: "undeclared-operation" } });
+  });
+
+  // covers PE-004
+  it("[TC-PE-457] is narrowed by the hob's override and by a restriction, and neither is answered by a grant", async () => {
+    const overridden = withMail("trusting", {
+      hob: { ownFolders: [], hiddenSharedFolders: [], overrides: {}, charms: { overrides: { "mail.label": "deny" } } },
+    });
+    expect(await decide(overridden, mail("mail.label", { label: "done" }))).toMatchObject({
+      decision: "deny",
+      reason: { code: "override" },
+    });
+    const restricted = withMail("trusting", { restrictions: [{ "mail.label": "ask" }] });
+    expect(await decide(restricted, mail("mail.label", { label: "done" }))).toMatchObject({
+      decision: "ask",
+      reason: { code: "restriction" },
+      grantable: false,
+    });
+    const granted = await approveAlways(withMail("balanced"), mail("mail.label", { label: "done" }));
+    const both = { ...granted, restrictions: [{ "mail.label": "ask" as const }] };
+    expect(await decide(both, mail("mail.label", { label: "done" }))).toMatchObject({
+      decision: "ask",
+      grantable: false,
+    });
+  });
+
+  // covers PE-007
+  it("[TC-PE-458] is answered by a CharmSite grant only when every declared site field and the folder match", async () => {
+    const balanced = withMail("balanced");
+    const asked = await decide(balanced, mail("mail.label", { label: "done", subject: "ignored" }));
+    // The rule names only the declared site fields, never free text such as a subject.
+    expect(asked).toMatchObject({
+      decision: "ask",
+      grantable: true,
+      rules: [{ _tag: "CharmSite", charm: "mail", operation: "mail.label", site: { label: "done" } }],
+    });
+    expect(asked.rules[0]).not.toHaveProperty("cwd");
+    const granted = await approveAlways(balanced, mail("mail.label", { label: "done" }));
+    expect(await decide(granted, mail("mail.label", { label: "done", subject: "other" }))).toMatchObject({
+      decision: "allow",
+      reason: { code: "grant" },
+    });
+    expect((await decide(granted, mail("mail.label", { label: "later" }))).decision).toBe("ask");
+    // A grant from a folder answers only calls from that folder.
+    const fromFolder = await approveAlways(balanced, mail("mail.label", { label: "done" }, home.project));
+    expect((await decide(fromFolder, mail("mail.label", { label: "done" }, home.project))).decision).toBe("allow");
+    expect((await decide(fromFolder, mail("mail.label", { label: "done" }))).decision).toBe("ask");
+    const both = { ...fromFolder, hob: { ...fromFolder.hob, ownFolders: [home.notes] } };
+    expect((await decide(both, mail("mail.label", { label: "done" }, home.notes))).decision).toBe("ask");
+    // A call missing a declared site field, or for an operation that declares none, is approved once only.
+    expect(await decide(balanced, mail("mail.label"))).toMatchObject({ decision: "ask", grantable: false });
+    expect(await decide(withMail("careful"), mail("mail.search"))).toMatchObject({
+      decision: "ask",
+      grantable: false,
+      rules: [],
+    });
+  });
+
+  // covers PE-007
+  it("[TC-PE-459] asks before a once-only operation, once only, even where its preset allows it, and Never still wins", async () => {
+    // Trusting allows sending mail, but a once-only operation is high risk and always waits for you (ADR 015).
+    const asked = await decide(withMail("trusting"), mail("mail.send", { to: "ada@example.com" }));
+    expect(asked).toMatchObject({
+      decision: "ask",
+      onceOnly: true,
+      grantable: false,
+      rules: [],
+      reason: { code: "once-only-operation", message: "Sending mail always waits for you, once only." },
+    });
+    expect(await decide(withMail("balanced"), mail("mail.send", { to: "ada@example.com" }))).toMatchObject({
+      decision: "ask",
+      onceOnly: true,
+      grantable: false,
+    });
+    const refused = withMail("trusting", {
+      hob: { ownFolders: [], hiddenSharedFolders: [], overrides: {}, charms: { overrides: { "mail.send": "deny" } } },
+    });
+    expect(await decide(refused, mail("mail.send", { to: "ada@example.com" }))).toMatchObject({
+      decision: "deny",
+      reason: { code: "override" },
+    });
+    expect(
+      await decide(withMail("trusting", { restrictions: [{ "mail.send": "deny" }] }), mail("mail.send", { to: "x" })),
+    ).toMatchObject({ decision: "deny", reason: { code: "restriction" } });
+    const saved = {
+      ...withMail("trusting"),
+      grants: [grantOf({ _tag: "CharmSite", charm: "mail", operation: "mail.send", site: { to: "ada@example.com" } })],
+    };
+    expect(await decide(saved, mail("mail.send", { to: "ada@example.com" }))).toMatchObject({
+      decision: "ask",
+      onceOnly: true,
+    });
+  });
+
+  // covers PE-001
+  it("[TC-PE-460] refuses a call found from a folder outside the hob's folders", async () => {
+    for (const folder of [home.root, path.join(home.project, "private-link"), "relative/folder"]) {
+      expect(await decide(withMail("trusting"), mail("mail.search", {}, folder))).toMatchObject({
+        decision: "deny",
+        operation: "outside-folders",
+      });
+    }
+  });
+});
+
+describe("GitHub answers saved before the Charm operations", () => {
+  // covers PE-007, DP-003
+  it("[TC-PE-462] answer the same calls whether read in their old form or as 0071 rewrites them", async () => {
+    const repository = "otaviobarros/hobbots";
+    // The stored forms before and after 0071, as [TC-DP-285] writes and checks them.
+    const stored = {
+      before: {
+        hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { push: "ask", "read-github": "deny" } },
+        rule: { _tag: "GitHubComment", cwd: home.project, repository },
+        delegation: { "open-pull-request": "deny", "edit-files": "ask" },
+      },
+      after: {
+        hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { push: "ask", "github.read": "deny" } },
+        rule: {
+          _tag: "CharmSite",
+          charm: "github",
+          operation: "github.comment",
+          cwd: home.project,
+          site: { repository },
+        },
+        delegation: { "github.open-pull-request": "deny", "edit-files": "ask" },
+      },
+    };
+    const contextOf = (form: (typeof stored)["before" | "after"]) =>
+      contextFor(home, "balanced", {
+        hob: Schema.decodeUnknownSync(HobPolicy)(form.hob),
+        grants: [grantOf(Schema.decodeUnknownSync(GrantRule)(form.rule))],
+        restrictions: [Schema.decodeUnknownSync(StoredPolicyLayer)(form.delegation)],
+      });
+    const calls = [githubRead(home.project), comment(home.project), pullRequest(home.project)];
+    const answers = async (context: PolicyContext) =>
+      Promise.all(
+        calls.map(async (call) => {
+          const { decision, operation, reason } = await decide(context, call);
+          return { decision, operation, code: reason.code };
+        }),
+      );
+    const before = await answers(contextOf(stored.before));
+    expect(before).toEqual([
+      { decision: "deny", operation: "github.read", code: "override" },
+      { decision: "allow", operation: "github.comment", code: "grant" },
+      { decision: "deny", operation: "github.open-pull-request", code: "restriction" },
+    ]);
+    expect(await answers(contextOf(stored.after))).toEqual(before);
   });
 });

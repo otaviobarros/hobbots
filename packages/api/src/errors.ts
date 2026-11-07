@@ -1,6 +1,7 @@
 import {
   AgentId,
   AgentStatus,
+  AnyOperation,
   ApprovalId,
   ApprovalLifetime,
   ApprovalState,
@@ -8,7 +9,6 @@ import {
   GrantId,
   HubQuestionId,
   MessageId,
-  PolicyOperation,
   QuestId,
   QuestionId,
   SafetyPreset,
@@ -108,7 +108,14 @@ export class InvalidFolder extends Schema.TaggedError<InvalidFolder>()(
  */
 export class OverrideWidens extends Schema.TaggedError<OverrideWidens>()(
   "OverrideWidens",
-  { preset: SafetyPreset, operations: Schema.Array(PolicyOperation), message: Schema.String },
+  { preset: SafetyPreset, operations: Schema.Array(AnyOperation), message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
+
+/** An override for a Charm operation no Charm the hub holds declares (ADR 031). */
+export class UndeclaredOperation extends Schema.TaggedError<UndeclaredOperation>()(
+  "UndeclaredOperation",
+  { operations: Schema.Array(Schema.String), message: Schema.String },
   { httpApiStatus: 400 },
 ) {}
 

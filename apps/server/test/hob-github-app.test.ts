@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
+  CharmDeclarations,
   ChatService,
   GrantService,
   HobAdmission,
@@ -15,6 +16,7 @@ import {
   type ToolAccess,
 } from "@hobbots/agents";
 import {
+  GITHUB_CHARM,
   GitHubConnection,
   GitHubCredential,
   GitHubCredentialPerHob,
@@ -152,6 +154,7 @@ beforeAll(async () => {
           ).pipe(Layer.provideMerge(TestDatabase)),
           EventBus.layer,
           HobAdmission.layer,
+          Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
           NodeFolderChecks,
           FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),

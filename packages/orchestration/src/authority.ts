@@ -1,21 +1,24 @@
 import {
+  type AnyOperation,
   type DelegationAuthority,
   isNarrowerOrEqual,
   narrowest,
   POLICY_OPERATIONS,
   type PolicyDecision,
-  type PolicyOperation,
-  type PolicyOverrides,
+  type PolicyLayer,
 } from "@hobbots/domain";
 
-/** What a hob may do on a Task: an answer for every operation, and the folders it may use. */
+/**
+ * What a hob may do on a Task: an answer for every operation, built-in or declared by a Charm the hub
+ * holds (ADR 031), and the folders it may use. An operation it has no answer for it may not do.
+ */
 export interface Authority {
-  readonly decisions: Record<PolicyOperation, PolicyDecision>;
+  readonly decisions: Readonly<Record<AnyOperation, PolicyDecision>>;
   /**
    * The operations whose answer someone gave on purpose: a hob's override, a restriction or a
    * Delegation that asks or refuses. The rest follow the safety preset, which every hob shares.
    */
-  readonly fixed: ReadonlyArray<PolicyOperation>;
+  readonly fixed: ReadonlyArray<AnyOperation>;
   readonly folders: ReadonlyArray<string>;
 }
 
@@ -51,6 +54,10 @@ export const sharedFolders = (
   ),
 ];
 
+/** The operations an authority answers. */
+export const operationsOf = (authority: Authority): ReadonlyArray<AnyOperation> =>
+  Object.keys(authority.decisions) as ReadonlyArray<AnyOperation>;
+
 /** `authority` narrowed by a Delegation above it: the narrower answer and only the folders both allow. */
 export const narrowBy = (
   authority: Authority,
@@ -58,13 +65,13 @@ export const narrowBy = (
   separator: PathSeparator,
 ): Authority => ({
   decisions: Object.fromEntries(
-    POLICY_OPERATIONS.map((operation) => {
-      const own = authority.decisions[operation];
+    operationsOf(authority).map((operation) => {
+      const own = authority.decisions[operation] ?? "deny";
       const given = delegation.overrides[operation];
       return [operation, given === undefined ? own : narrowest(own, given)];
     }),
   ) as Authority["decisions"],
-  fixed: POLICY_OPERATIONS.filter(
+  fixed: operationsOf(authority).filter(
     (operation) => authority.fixed.includes(operation) || (delegation.overrides[operation] ?? "allow") !== "allow",
   ),
   folders:
@@ -88,13 +95,18 @@ export type Narrowed =
  */
 export const delegatedAuthority = (
   lead: Authority,
-  requested: { readonly decisions?: PolicyOverrides; readonly folders?: ReadonlyArray<string> } | undefined,
+  requested: { readonly decisions?: PolicyLayer; readonly folders?: ReadonlyArray<string> } | undefined,
   separator: PathSeparator,
 ): Narrowed => {
-  const asked = requested?.decisions ?? {};
-  const wider = POLICY_OPERATIONS.filter((operation) => {
+  const asked: Readonly<Record<string, PolicyDecision | undefined>> = requested?.decisions ?? {};
+  // An operation the lead has no answer for, such as one no Charm on the hub declares, is never given.
+  const unknown = Object.keys(asked).filter((operation) => !(operation in lead.decisions));
+  if (unknown.length > 0) {
+    return { _tag: "Wider", message: `You cannot give what you do not have: ${unknown.join(", ")}.` };
+  }
+  const wider = operationsOf(lead).filter((operation) => {
     const want = asked[operation];
-    return want !== undefined && !isNarrowerOrEqual(want, lead.decisions[operation]);
+    return want !== undefined && !isNarrowerOrEqual(want, lead.decisions[operation] ?? "deny");
   });
   if (wider.length > 0) {
     const list = wider.map((operation) => `${operation} (yours is ${lead.decisions[operation]})`).join(", ");
@@ -110,9 +122,9 @@ export const delegatedAuthority = (
     _tag: "Narrowed",
     authority: {
       overrides: Object.fromEntries(
-        POLICY_OPERATIONS.flatMap((operation) => {
+        operationsOf(lead).flatMap((operation) => {
           const want = asked[operation];
-          const own = lead.decisions[operation];
+          const own = lead.decisions[operation] ?? "deny";
           if (want === undefined) return lead.fixed.includes(operation) ? [[operation, own]] : [];
           return [[operation, narrowest(own, want)]];
         }),

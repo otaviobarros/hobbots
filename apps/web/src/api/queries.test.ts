@@ -23,6 +23,7 @@ const version = (configVersion: number): HobPermissions => ({
   policy: { ownFolders: [], hiddenSharedFolders: [], overrides: configVersion > 2 ? { "run-commands": "ask" } : {} },
   folders: [],
   decisions: PRESET_DECISIONS.balanced,
+  presets: PRESET_DECISIONS.balanced,
   enforcement: enforcementFixture(),
 });
 

@@ -1,6 +1,14 @@
-import { explicitlyNarrowed, HobbotsRepository, HobTools, operationDecision, TaskRepository } from "@hobbots/agents";
+import {
+  explicitlyNarrowed,
+  HobbotsRepository,
+  HobTools,
+  operationDecision,
+  TaskRepository,
+  type ToolPolicy,
+} from "@hobbots/agents";
 import {
   type AgentId,
+  type AnyOperation,
   type ApprovalRequest,
   ancestorsOf,
   type CarriedItem,
@@ -288,6 +296,12 @@ export const makeCapacity = (limits: TaskToolLimits) =>
  * What the caller may do on `task`: its own policy now, narrowed by every Delegation on the way
  * down to the Task, so a member never passes on more than it was given (STD-SEC-003).
  */
+/** Every operation a policy answers: the built-in ones and those the hub's Charms declare (ADR 031). */
+const answered = (policy: ToolPolicy): ReadonlyArray<AnyOperation> => [
+  ...POLICY_OPERATIONS,
+  ...(policy.charmOperations ?? []).map((operation) => operation.id),
+];
+
 export const makeAuthorityOf = (separator: PathSeparator) =>
   Effect.gen(function* () {
     const hobs = yield* HobbotsRepository;
@@ -302,9 +316,9 @@ export const makeAuthorityOf = (separator: PathSeparator) =>
             ? NO_AUTHORITY
             : {
                 decisions: Object.fromEntries(
-                  POLICY_OPERATIONS.map((operation) => [operation, operationDecision(access.policy, operation)]),
+                  answered(access.policy).map((operation) => [operation, operationDecision(access.policy, operation)]),
                 ) as Authority["decisions"],
-                fixed: POLICY_OPERATIONS.filter((operation) => explicitlyNarrowed(access.policy, operation)),
+                fixed: answered(access.policy).filter((operation) => explicitlyNarrowed(access.policy, operation)),
                 folders: access.folders,
               };
         return own;
