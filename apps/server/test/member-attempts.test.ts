@@ -60,7 +60,7 @@ describe("a member's Attempts", () => {
                 finding("first", "core.py has an unused import"),
                 finding("second", "app.py has a long line"),
                 finding("third", "tests.py has a typo"),
-                hub("complete_task", { key: "done", summary: "Three lint findings" }),
+                hub("complete_task", { delivered: true, key: "done", summary: "Three lint findings" }),
               ].join("\n"),
             }),
           ].join("\n"),

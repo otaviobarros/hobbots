@@ -149,7 +149,7 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on the q
         brief: [
           "Remove the notes",
           `fake:tool Bash rm ${shared}/tmp-notes.txt`,
-          script("complete_task", { key: "tidied", summary: "Notes removed" }),
+          script("complete_task", { delivered: true, key: "tidied", summary: "Notes removed" }),
         ].join("\n"),
       }),
     ].join("\n"),

@@ -77,7 +77,7 @@ test("[TC-IN-150] Aldric's card and his Task's backpack show Quill's result as a
         brief: [
           "Draft the landing copy",
           "fake:tool Bash git push origin feature",
-          script("complete_task", { key: "copy-done", summary: "Three headlines." }),
+          script("complete_task", { delivered: true, key: "copy-done", summary: "Three headlines." }),
         ].join("\n"),
       }),
     ].join("\n"),

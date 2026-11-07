@@ -42,7 +42,7 @@ const questToCommit = [
     brief: [
       TITLE,
       run({ command: COMMIT, output: "[main 1a2b3c4] Save the notes\n", exitCode: 0 }),
-      script("complete_task", { key: "saved", summary: "Notes committed." }),
+      script("complete_task", { delivered: true, key: "saved", summary: "Notes committed." }),
     ].join("\n"),
   }),
   script("wait_for", { key: "wait", tasks: ["$save.task_id"] }),

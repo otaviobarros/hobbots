@@ -80,13 +80,13 @@ test("[TC-OR-245] a question from a Task the lead waits for reaches the lead and
         brief: [
           "Draft the release notes",
           hubCall("ask", { key: "tone", question: "Playful or formal?" }),
-          `fake:then ${hubCall("complete_task", { key: "copy-done", summary: "Playful notes drafted" })}`,
+          `fake:then ${hubCall("complete_task", { delivered: true, key: "copy-done", summary: "Playful notes drafted" })}`,
         ].join("\n"),
       }),
       hubCall("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
       `fake:then ${hubCall("wait_for", { key: "wait-again", tasks: ["$copy.task_id"] })}`,
       `fake:then ${hubCall("answer", { key: "reply", question_id: "$tone.question_id", answer: "Playful" })}`,
-      `fake:then fake:then ${hubCall("complete_task", { key: "wrap", summary: "Release shipped" })}`,
+      `fake:then fake:then ${hubCall("complete_task", { delivered: true, key: "wrap", summary: "Release shipped" })}`,
     ].join("\n"),
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();

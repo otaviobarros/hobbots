@@ -60,7 +60,7 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
       "old.txt": null,
     }),
     script("start_quest", { key: "quest", goal: "Tidy the project" }),
-    script("complete_task", { key: "done", summary: "Tidied." }),
+    script("complete_task", { delivered: true, key: "done", summary: "Tidied." }),
   ]);
   const { bench, panel } = await openChanges(page, "Tidy the project");
   await expect(bench.locator("header").first()).toContainText("History");
@@ -184,7 +184,7 @@ test("[TC-UX-037] an image the Task deleted shows its earlier version, and one p
     "Clear out the images",
     run("npm run clean", { "logo.png": null, "poster.png": null }),
     script("start_quest", { key: "quest", goal: "Clear out the images" }),
-    script("complete_task", { key: "done", summary: "Cleared." }),
+    script("complete_task", { delivered: true, key: "done", summary: "Cleared." }),
   ]);
   const { panel } = await openChanges(page, "Clear out the images");
   const files = panel.getByRole("navigation", { name: "Changed files" });
@@ -210,7 +210,7 @@ test("[TC-UX-038] past the retention window a Task's Changes keep their list and
     "Tidy the notes",
     'fake:write notes.md "# Notes\\n\\nTidied.\\n"',
     script("start_quest", { key: "quest", goal: "Tidy the notes" }),
-    script("complete_task", { key: "done", summary: "Tidied." }),
+    script("complete_task", { delivered: true, key: "done", summary: "Tidied." }),
   ]);
   const thread = new URL(page.url()).hash;
 
@@ -249,7 +249,7 @@ test("[TC-UX-148] in the room at 1024, with the chat column beside it, Changes a
     "Touch two files",
     run("npm run touch", { "a.txt": "one!\n", "b.txt": "two!\n", "c.txt": "three\n" }),
     script("start_quest", { key: "quest", goal: "Touch two files" }),
-    script("complete_task", { key: "done", summary: "Touched." }),
+    script("complete_task", { delivered: true, key: "done", summary: "Touched." }),
   ]);
   const { bench, panel } = await openChanges(page, "Touch two files");
 

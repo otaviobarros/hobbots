@@ -450,7 +450,7 @@ describe("the Black Friday Quest end to end", () => {
       // Ada finishes once your answer reaches her, Quill's copy already in hand through Aldric.
       {
         on: 'was answered by the user: "Yes, Dec 12"',
-        lines: [hub("complete_task", { key: "build-done", summary: "Campaign built for Dec 12" })],
+        lines: [hub("complete_task", { delivered: true, key: "build-done", summary: "Campaign built for Dec 12" })],
       },
     ]);
     const steps = ["Outline the campaign", "Set the prices", "Pick the images", "Proofread everything"];
@@ -460,9 +460,10 @@ describe("the Black Friday Quest end to end", () => {
         hub("plan_steps", {
           key: "plan",
           steps: steps.map((name, index) => {
-            const brief = [name, hub("complete_task", { key: `step-${index + 1}`, summary: `${name}: done` })].join(
-              "\n",
-            );
+            const brief = [
+              name,
+              hub("complete_task", { delivered: true, key: `step-${index + 1}`, summary: `${name}: done` }),
+            ].join("\n");
             return index === 0 ? { brief } : { brief, after: [index] };
           }),
         }),
@@ -473,6 +474,7 @@ describe("the Black Friday Quest end to end", () => {
             "Draft the landing copy",
             hub("ask", { key: "tone", question: "Playful or formal?" }),
             `fake:then ${hub("complete_task", {
+              delivered: true,
               key: "copy-done",
               summary: "Playful landing copy",
               artifacts: [{ kind: "text", label: "Landing copy", value: "Black Friday: 20% off everything" }],
@@ -501,11 +503,15 @@ describe("the Black Friday Quest end to end", () => {
                 // Pip tries to hand the work back up, and to go one level deeper: both are stopped.
                 hub("delegate_task", { key: "pip-to-aldric", hob: "Aldric", brief: "Your turn" }),
                 hub("delegate_task", { key: "pip-deeper", hob: "Quill", brief: "Research some more" }),
-                hub("complete_task", { key: "keywords-done", summary: "Twelve keywords, led by 'doorbuster'" }),
+                hub("complete_task", {
+                  delivered: true,
+                  key: "keywords-done",
+                  summary: "Twelve keywords, led by 'doorbuster'",
+                }),
               ].join("\n"),
             }),
             hub("wait_for", { key: "rook-wait", tasks: ["$keywords.task_id"] }),
-            `fake:then ${hub("complete_task", { key: "ads-done", summary: "Ads ready around 'doorbuster'" })}`,
+            `fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Ads ready around 'doorbuster'" })}`,
           ].join("\n"),
         }),
       ]),
@@ -557,7 +563,12 @@ describe("the Black Friday Quest end to end", () => {
     await run(
       settledTree((tree) => tree.tasks.length > 1 && tree.tasks.slice(1).every((task) => task.state === "completed")),
     );
-    await run(send(["Wrap up", hub("complete_task", { key: "wrap", summary: "The Black Friday campaign is ready" })]));
+    await run(
+      send([
+        "Wrap up",
+        hub("complete_task", { delivered: true, key: "wrap", summary: "The Black Friday campaign is ready" }),
+      ]),
+    );
     const done = await run(settledTree((tree) => tree.tasks[0]?.state === "completed"));
 
     // The tree: your request, four steps of Aldric's, three members and Pip under Rook; the refused calls wrote nothing.
@@ -641,7 +652,7 @@ describe("the Black Friday Quest end to end", () => {
               brief: [
                 "Set the prices",
                 `${BROKEN} prices`,
-                hub("complete_task", { key: "prices-done", summary: "Prices set" }),
+                hub("complete_task", { delivered: true, key: "prices-done", summary: "Prices set" }),
               ].join("\n"),
             },
           ],
@@ -652,7 +663,7 @@ describe("the Black Friday Quest end to end", () => {
           brief: [
             "Build the campaign",
             HOLD,
-            hub("complete_task", { key: "build-done", summary: "Campaign built" }),
+            hub("complete_task", { delivered: true, key: "build-done", summary: "Campaign built" }),
           ].join("\n"),
         }),
         hub("delegate_task", {
@@ -780,6 +791,7 @@ describe("a hub that stops mid-Quest", () => {
           brief: [
             "Draft the landing copy",
             hub("complete_task", {
+              delivered: true,
               key: "copy-done",
               summary: "Landing copy ready",
               artifacts: [{ kind: "text", label: "Landing copy", value: "Black Friday: 20% off everything" }],
@@ -832,7 +844,7 @@ describe("a hub that stops mid-Quest", () => {
       { on: `You work on Task ${build.id} `, lines: [HOLD] },
       {
         on: 'was answered by the user: "Yes, Dec 12"',
-        lines: [hub("complete_task", { key: "build-done", summary: "Campaign built for Dec 12" })],
+        lines: [hub("complete_task", { delivered: true, key: "build-done", summary: "Campaign built for Dec 12" })],
       },
     ]);
     const [adaTurn] = await second.run(
@@ -863,7 +875,10 @@ describe("a hub that stops mid-Quest", () => {
     await second.release();
     await second.run(settledTree((tree) => memberTask(tree, ADA)?.state === "completed"));
     await second.run(
-      send(["Wrap up", hub("complete_task", { key: "wrap", summary: "The Black Friday campaign is ready" })]),
+      send([
+        "Wrap up",
+        hub("complete_task", { delivered: true, key: "wrap", summary: "The Black Friday campaign is ready" }),
+      ]),
     );
     const done = await second.run(settledTree((tree) => tree.tasks[0]?.state === "completed"));
 

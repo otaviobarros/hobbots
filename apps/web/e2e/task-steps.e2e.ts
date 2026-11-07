@@ -58,7 +58,7 @@ test("[TC-OR-034] a Task split into four steps shows step 2 of 4 in the chat and
   // Steps 1, 3 and 4 return their own result at once. Step 2 writes a long reply, which the fake
   // streams word by word, so it runs long enough to be seen; its reply becomes its result.
   const step = (brief: string, result: string, after: ReadonlyArray<number>) => ({
-    brief: `${brief}\n${script("complete_task", { key: brief, summary: result })}`,
+    brief: `${brief}\n${script("complete_task", { delivered: true, key: brief, summary: result })}`,
     ...(after.length === 0 ? {} : { after }),
   });
   const steps = [
@@ -77,7 +77,9 @@ test("[TC-OR-034] a Task split into four steps shows step 2 of 4 in the chat and
   await expect(questTicket).toContainText("4 of 4 done", { timeout: 30_000 });
 
   // Once every step is done, Aldric hears their results, not their sessions, and returns one result.
-  await composer.fill(script("complete_task", { key: "done", summary: "The spring launch is planned." }));
+  await composer.fill(
+    script("complete_task", { delivered: true, key: "done", summary: "The spring launch is planned." }),
+  );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });

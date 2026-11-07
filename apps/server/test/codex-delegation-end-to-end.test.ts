@@ -244,7 +244,7 @@ describe("delegating between Codex and Claude hobs", () => {
           hob: "Pip",
           brief: [
             "Check the copy",
-            hubLine("complete_task", { key: "pip-done", summary: "Pip checked the copy" }),
+            hubLine("complete_task", { delivered: true, key: "pip-done", summary: "Pip checked the copy" }),
           ].join("\n"),
         }),
       ]),
@@ -278,7 +278,7 @@ describe("delegating between Codex and Claude hobs", () => {
           hob: "Quill",
           brief: [
             "Draft the copy",
-            hubLine("complete_task", { key: "quill-done", summary: "Quill drafted the copy" }),
+            hubLine("complete_task", { delivered: true, key: "quill-done", summary: "Quill drafted the copy" }),
           ].join("\n"),
         }),
       ]),

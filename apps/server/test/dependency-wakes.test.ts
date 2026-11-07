@@ -30,6 +30,7 @@ const backend = hub("delegate_task", {
     "Write the backend",
     hold("quill"),
     hub("complete_task", {
+      delivered: true,
       key: "backend-done",
       summary: "Stores amounts as integer cents",
       artifacts: [{ kind: "text", label: "core.py", value: "def total(cents): return sum(cents)" }],
@@ -43,7 +44,7 @@ const frontend = hub("delegate_task", {
   hob: "Rook",
   brief: [
     "Write the frontend",
-    hub("complete_task", { key: "frontend-done", summary: "The frontend is written" }),
+    hub("complete_task", { delivered: true, key: "frontend-done", summary: "The frontend is written" }),
   ].join("\n"),
   depends_on: ["$backend.task_id"],
 });
@@ -51,7 +52,7 @@ const frontend = hub("delegate_task", {
 /** Aldric wraps up once Rook's result reaches him. */
 const wrapUp = {
   on: "(Write the frontend) finished",
-  lines: [hub("complete_task", { key: "wrap", summary: "The app is built" })],
+  lines: [hub("complete_task", { delivered: true, key: "wrap", summary: "The app is built" })],
 };
 
 /** A reply with no message of yours before it: a continuation Hobbots started. */

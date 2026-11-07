@@ -111,7 +111,7 @@ describe("a lead's routine progress", () => {
         "Write the launch post",
         hub("delegate_task", { key: "copy", hob: "Quill", brief: "Write the copy" }),
         hub("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
-        `fake:then ${hub("complete_task", { key: "done", summary: "The launch post is written." })}`,
+        `fake:then ${hub("complete_task", { delivered: true, key: "done", summary: "The launch post is written." })}`,
       ]),
     );
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));

@@ -133,7 +133,7 @@ const reacted = (prompt: string, reactions: Array<Reaction>) => {
 export const SENT_BACK = "ended without complete_task, so the Task is not done yet.";
 const finishedWhenSentBack = (prompt: string) =>
   prompt.includes(SENT_BACK)
-    ? [prompt, hub("complete_task", { key: "sent-back", summary: "Done as briefed" })].join("\n")
+    ? [prompt, hub("complete_task", { delivered: true, key: "sent-back", summary: "Done as briefed" })].join("\n")
     : prompt;
 
 /**
@@ -149,8 +149,10 @@ export const partyHub = (
     readonly announcesTwice?: (prompt: string) => boolean;
     /** Whether a member sent back to finish only replies again, rather than returning its result (#1086). */
     readonly repliesWhenSentBack?: boolean;
-    /** The runtime the party's members run on; Frodo always runs on Claude Code. */
+    /** The runtime the party's members run on. */
     readonly members?: RuntimeKind;
+    /** The runtime Frodo, the lead, runs on: Claude Code unless said. */
+    readonly lead?: RuntimeKind;
     /** Whether the hub reads the hob's folders, as `complete_task` does to check the files a Task returns. */
     readonly files?: boolean;
   } = {},
@@ -220,7 +222,9 @@ export const partyHub = (
         [PIP, "Pip"],
         [NETTLE, "Nettle"],
       ] as const) {
-        yield* repo.insertAgent(hob(id, name, id === FRODO ? "claude-code" : (options.members ?? "claude-code")));
+        yield* repo.insertAgent(
+          hob(id, name, id === FRODO ? (options.lead ?? "claude-code") : (options.members ?? "claude-code")),
+        );
       }
       yield* repo.upsertThread(
         new Thread({ id: threadId, agentId: FRODO, title: "First run", createdAt: now, updatedAt: now }),

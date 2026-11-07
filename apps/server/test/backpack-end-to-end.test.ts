@@ -287,9 +287,9 @@ const plan = (brief: ReadonlyArray<string>) =>
   ].join("\n");
 
 /** Quill finishes her Task. */
-const quillDone = hub("complete_task", { key: "copy-done", summary: "The launch copy is ready" });
+const quillDone = hub("complete_task", { delivered: true, key: "copy-done", summary: "The launch copy is ready" });
 /** Aldric wraps the launch up. */
-const wrapUp = (key = "wrap") => hub("complete_task", { key, summary: "The launch is ready" });
+const wrapUp = (key = "wrap") => hub("complete_task", { delivered: true, key, summary: "The launch is ready" });
 
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 800 }));
@@ -469,7 +469,7 @@ describe("the backpack end to end", () => {
       hob: "Ada",
       brief: [
         "Review the launch copy",
-        hub("complete_task", { key: "review-done", summary: "The copy reads well" }),
+        hub("complete_task", { delivered: true, key: "review-done", summary: "The copy reads well" }),
       ].join("\n"),
     });
     const { run, requests } = await start(

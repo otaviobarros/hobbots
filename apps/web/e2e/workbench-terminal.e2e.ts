@@ -45,7 +45,7 @@ test("[TC-UX-045] a finished Task's Terminal replays its commands in a read-only
     run({ command: "echo deploy", output: "using ghp_0123456789abcdefghijklmnopqrstuvwxyzAB\n", exitCode: 0 }),
     "fake:tool Bash seq 30000",
     script("start_quest", { key: "quest", goal: "Check the notes" }),
-    script("complete_task", { key: "done", summary: "Checked." }),
+    script("complete_task", { delivered: true, key: "done", summary: "Checked." }),
   ]);
   const questTicket = ticket(page, "Check the notes");
   await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
@@ -227,7 +227,7 @@ test("[TC-UX-184] a Quest's Terminal has a tab per hob, the Task's own first, an
       brief: [
         "Check the copy",
         run({ command: "pnpm copy:check", output: "\u001b[32mno issues found\u001b[0m\n", exitCode: 0 }),
-        script("complete_task", { key: "checked", summary: "No issues." }),
+        script("complete_task", { delivered: true, key: "checked", summary: "No issues." }),
       ].join("\n"),
     }),
   ]);
@@ -284,7 +284,7 @@ test("[TC-UX-186] a Quest's Terminal says when its Workbench could not be read, 
       brief: [
         "Check the copy",
         run({ command: "pnpm copy:check", output: "no issues found\n", exitCode: 0 }),
-        script("complete_task", { key: "checked", summary: "No issues." }),
+        script("complete_task", { delivered: true, key: "checked", summary: "No issues." }),
       ].join("\n"),
     }),
   ]);
@@ -315,7 +315,7 @@ test("[TC-UX-185] the terminal stays dark, with its own palette, in the light th
     "List the notes",
     run({ command: "ls", output: "notes.md\n", exitCode: 0 }),
     script("start_quest", { key: "quest", goal: "List the notes" }),
-    script("complete_task", { key: "done", summary: "Listed." }),
+    script("complete_task", { delivered: true, key: "done", summary: "Listed." }),
   ]);
   await settled(page);
   const { bench, panel } = await openTerminal(page, "List the notes");
@@ -378,7 +378,7 @@ test("[TC-UX-998] the Terminal fits the docked Workbench at any height, and read
     "Count the lines",
     "fake:tool Bash seq 300",
     script("start_quest", { key: "quest", goal: "Count the lines" }),
-    script("complete_task", { key: "done", summary: "Counted." }),
+    script("complete_task", { delivered: true, key: "done", summary: "Counted." }),
   ]);
   await settled(page);
   const { bench, panel } = await openTerminal(page, "Count the lines");

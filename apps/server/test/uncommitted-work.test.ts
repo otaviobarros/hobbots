@@ -175,7 +175,12 @@ const seed = (paths: ReadonlyArray<string>) =>
 
 const complete = (summary: string) =>
   Effect.flatMap(Effect.service(TaskTools), (tools) =>
-    tools.call({ agentId: FRODO, taskId: TASK }, "complete_task", { key: "done-1", task_id: TASK, summary }),
+    tools.call({ agentId: FRODO, taskId: TASK }, "complete_task", {
+      delivered: true,
+      key: "done-1",
+      task_id: TASK,
+      summary,
+    }),
   ) as Effect.Effect<TaskToolDone, unknown, Layer.Success<typeof App>>;
 
 const checkpoints = Effect.gen(function* () {
@@ -221,8 +226,8 @@ describe("Completing a Task that changed a Git repository", () => {
     // One turn of the fake runtime: the lead completes, is told which file, and leaves it on purpose.
     const prompt = [
       "Wrap up the Quest",
-      'fake:hub complete_task {"key":"done-1","summary":"Spec wrapped up"}',
-      'fake:hub complete_task {"key":"done-2","summary":"Spec wrapped up","leave_uncommitted":"You asked to review the spec before it is committed."}',
+      'fake:hub complete_task {"delivered":true,"key":"done-1","summary":"Spec wrapped up"}',
+      'fake:hub complete_task {"delivered":true,"key":"done-2","summary":"Spec wrapped up","leave_uncommitted":"You asked to review the spec before it is committed."}',
     ].join("\n");
     const result = await run(
       Effect.gen(function* () {
@@ -269,7 +274,12 @@ describe("Completing a Task that changed a Git repository", () => {
         const tools = yield* TaskTools;
         const repo = yield* TaskRepository;
         const call = (key: string, extra: object = {}) =>
-          tools.call({ agentId: FRODO, taskId: TASK }, "complete_task", { key, summary: "Spec wrapped up", ...extra });
+          tools.call({ agentId: FRODO, taskId: TASK }, "complete_task", {
+            delivered: true,
+            key,
+            summary: "Spec wrapped up",
+            ...extra,
+          });
         yield* tools.call({ agentId: FRODO, taskId: TASK }, "start_quest", { key: "quest", goal: "Wrap up the spec" });
         const first = yield* Effect.flip(call("done-1"));
         // The turn ends, and the next one runs on another configuration: a new Attempt that changes nothing.

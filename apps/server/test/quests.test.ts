@@ -339,6 +339,7 @@ describe("leading a party on a Quest", () => {
           "Draft the landing copy",
           HOLD,
           hub("complete_task", {
+            delivered: true,
             key: "copy-done",
             summary: "Landing copy ready",
             artifacts: [{ kind: "text", label: "Landing copy", value: "Black Friday: 20% off everything" }],
@@ -352,15 +353,15 @@ describe("leading a party on a Quest", () => {
         brief: [
           "Build the campaign once the copy exists",
           hub("report_checkpoint", { key: "research", kind: "progress", summary: "Keyword research done" }),
-          hub("complete_task", { key: "build-done", summary: "The campaign is built" }),
+          hub("complete_task", { delivered: true, key: "build-done", summary: "The campaign is built" }),
         ].join("\n"),
         depends_on: ["$copy.task_id"],
       }),
       hub("wait_for", { key: "wait", tasks: ["$copy.task_id", "$build.task_id"] }),
       // Aldric's next turn answers you; the two after it are the continuations that each result
       // starts. He wraps up once both are in: before then the wrap-up is refused.
-      `fake:then fake:then ${hub("complete_task", { key: "early", summary: "Too early" })}`,
-      `fake:then fake:then fake:then ${hub("complete_task", { key: "wrap", summary: "The Black Friday campaign is ready" })}`,
+      `fake:then fake:then ${hub("complete_task", { delivered: true, key: "early", summary: "Too early" })}`,
+      `fake:then fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "The Black Friday campaign is ready" })}`,
     ].join("\n");
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
 
@@ -666,7 +667,7 @@ describe("a party member's authority", () => {
         brief: [
           "Write the copy to a file",
           `fake:tool Write ${file}`,
-          hub("complete_task", { key: "copy-done", summary: "Copy written" }),
+          hub("complete_task", { delivered: true, key: "copy-done", summary: "Copy written" }),
         ].join("\n"),
         authority: { decisions: { "edit-files": "ask" } },
       }),
@@ -722,7 +723,7 @@ describe("a party member's authority", () => {
           "Write the copy",
           `fake:tool Write ${inside}`,
           `fake:tool Write ${outside}`,
-          hub("complete_task", { key: "copy-done", summary: "Copy written" }),
+          hub("complete_task", { delivered: true, key: "copy-done", summary: "Copy written" }),
         ].join("\n"),
         authority: { folders: [given] },
       }),
@@ -799,13 +800,13 @@ describe("questions in a party", () => {
         brief: [
           "Draft the copy",
           hub("ask", { key: "tone", question: "Playful or formal?" }),
-          `fake:then ${hub("complete_task", { key: "copy-done", summary: "Playful copy drafted" })}`,
+          `fake:then ${hub("complete_task", { delivered: true, key: "copy-done", summary: "Playful copy drafted" })}`,
         ].join("\n"),
       }),
       hub("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
       // Aldric's next turn is the one Quill's question starts; the one after it, Quill's result.
       `fake:then ${hub("answer", { key: "reply", question_id: "$tone.question_id", answer: "Playful" })}`,
-      `fake:then fake:then ${hub("complete_task", { key: "wrap", summary: "Campaign planned" })}`,
+      `fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "Campaign planned" })}`,
     ].join("\n");
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
 
@@ -843,12 +844,12 @@ describe("questions in a party", () => {
         brief: [
           "Build the campaign",
           hub("ask", { key: "date", question: "Dec 12 for international?" }),
-          `fake:then ${hub("complete_task", { key: "build-done", summary: "Built for Dec 12" })}`,
+          `fake:then ${hub("complete_task", { delivered: true, key: "build-done", summary: "Built for Dec 12" })}`,
         ].join("\n"),
       }),
       hub("wait_for", { key: "wait", tasks: ["$build.task_id"] }),
       `fake:then ${hub("escalate", { key: "up", question_id: "$date.question_id" })}`,
-      `fake:then fake:then ${hub("complete_task", { key: "wrap", summary: "Campaign built" })}`,
+      `fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "Campaign built" })}`,
     ].join("\n");
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
 
@@ -934,13 +935,13 @@ describe("what reaches a lead", () => {
           progress(2),
           progress(3),
           hub("report_checkpoint", { key: "found", kind: "finding", summary: "The brand voice changed last week" }),
-          hub("complete_task", { key: "copy-done", summary: "Copy drafted" }),
+          hub("complete_task", { delivered: true, key: "copy-done", summary: "Copy drafted" }),
         ].join("\n"),
       }),
       hub("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
       // The finding and the result may arrive in one continuation or two: Aldric wraps up in whichever has both.
-      `fake:then ${hub("complete_task", { key: "wrap", summary: "Campaign planned" })}`,
-      `fake:then fake:then ${hub("complete_task", { key: "wrap-later", summary: "Campaign planned" })}`,
+      `fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "Campaign planned" })}`,
+      `fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap-later", summary: "Campaign planned" })}`,
     ].join("\n");
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
 
@@ -980,8 +981,8 @@ const aldricLeads = (rookBrief: ReadonlyArray<string>, after: ReadonlyArray<stri
     hub("wait_for", { key: "wait", tasks: ["$ads.task_id"] }),
     ...after,
     // Rook's result may arrive with his routine progress or after it: Aldric wraps up in whichever turn has it.
-    `fake:then ${hub("complete_task", { key: "wrap", summary: "The Black Friday campaign is ready" })}`,
-    `fake:then fake:then ${hub("complete_task", { key: "wrap-later", summary: "The Black Friday campaign is ready" })}`,
+    `fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "The Black Friday campaign is ready" })}`,
+    `fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap-later", summary: "The Black Friday campaign is ready" })}`,
   ].join("\n");
 
 /** Rook brings in Pip with `pipBrief`, waits on her, and returns his result once hers is in. */
@@ -1014,9 +1015,11 @@ describe("a nested Quest", () => {
   // covers OR-002, OR-004
   it("[TC-OR-160] Rook brings in Pip under Aldric's Quest and leads her: her result reaches Rook, and the tree holds all three", async () => {
     const { run, requests } = setUp();
-    const pipBrief = [hub("complete_task", { key: "keywords-done", summary: "Twelve keywords, led by 'doorbuster'" })];
+    const pipBrief = [
+      hub("complete_task", { delivered: true, key: "keywords-done", summary: "Twelve keywords, led by 'doorbuster'" }),
+    ];
     const rookBrief = rookLeads(pipBrief, [
-      `fake:then ${hub("complete_task", { key: "ads-done", summary: "Ads ready around 'doorbuster'" })}`,
+      `fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Ads ready around 'doorbuster'" })}`,
     ]);
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
 
@@ -1053,11 +1056,11 @@ describe("a nested Quest", () => {
       hub("start_quest", { key: "own-quest", goal: "Bring in more hobs", max_depth: 3 }),
       hub("delegate_task", { key: "to-rook", hob: "Rook", brief: "Your turn" }),
       hub("delegate_task", { key: "to-aldric", hob: "Aldric", brief: "Your turn" }),
-      hub("complete_task", { key: "keywords-done", summary: "Researched the keywords myself" }),
+      hub("complete_task", { delivered: true, key: "keywords-done", summary: "Researched the keywords myself" }),
     ];
     const rookBrief = rookLeads(pipBrief, [
       hub("delegate_task", { key: "rook-to-aldric", hob: "Aldric", brief: "Back to you" }),
-      `fake:then ${hub("complete_task", { key: "ads-done", summary: "Ads ready" })}`,
+      `fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Ads ready" })}`,
     ]);
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
 
@@ -1086,15 +1089,15 @@ describe("a nested Quest", () => {
       hub("delegate_task", { key: "q-pip", hob: "Pip", brief: "Your turn" }),
       hub("delegate_task", { key: "q-aldric", hob: "Aldric", brief: "Your turn" }),
       hub("delegate_task", { key: "q-ada", hob: "Ada", brief: "One more level" }),
-      hub("complete_task", { key: "copy-done", summary: "Wrote the copy myself" }),
+      hub("complete_task", { delivered: true, key: "copy-done", summary: "Wrote the copy myself" }),
     ].join("\n");
     const pipBrief = [
       hub("delegate_task", { key: "copy", hob: "Quill", brief: quillBrief }),
       hub("wait_for", { key: "pip-wait", tasks: ["$copy.task_id"] }),
-      `fake:then ${hub("complete_task", { key: "keywords-done", summary: "Keywords from the copy" })}`,
+      `fake:then ${hub("complete_task", { delivered: true, key: "keywords-done", summary: "Keywords from the copy" })}`,
     ];
     const rookBrief = rookLeads(pipBrief, [
-      `fake:then ${hub("complete_task", { key: "ads-done", summary: "Ads from the keywords" })}`,
+      `fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Ads from the keywords" })}`,
     ]);
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
 
@@ -1122,12 +1125,12 @@ describe("a nested Quest", () => {
     const { run, requests } = setUp();
     const pipBrief = [
       hub("ask", { key: "tone", question: "Playful or formal?" }),
-      `fake:then ${hub("complete_task", { key: "keywords-done", summary: "Playful keywords" })}`,
+      `fake:then ${hub("complete_task", { delivered: true, key: "keywords-done", summary: "Playful keywords" })}`,
     ];
     // Rook's next turn is the one Pip's question starts; the one after it, Pip's result.
     const rookBrief = rookLeads(pipBrief, [
       `fake:then ${hub("escalate", { key: "rook-up", question_id: "$tone.question_id" })}`,
-      `fake:then fake:then ${hub("complete_task", { key: "ads-done", summary: "Playful ads" })}`,
+      `fake:then fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Playful ads" })}`,
     ]);
     const aldricUp = [`fake:then ${hub("escalate", { key: "aldric-up", question_id: "$tone.question_id" })}`];
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief, aldricUp))));
@@ -1164,10 +1167,10 @@ describe("a nested Quest", () => {
     const pipBrief = [
       HOLD,
       hub("report_checkpoint", { key: "half", kind: "progress", summary: "Half the keywords" }),
-      hub("complete_task", { key: "keywords-done", summary: "Twelve keywords, led by 'doorbuster'" }),
+      hub("complete_task", { delivered: true, key: "keywords-done", summary: "Twelve keywords, led by 'doorbuster'" }),
     ];
     const rookBrief = rookLeads(pipBrief, [
-      `fake:then ${hub("complete_task", { key: "ads-done", summary: "Ads ready around 'doorbuster'" })}`,
+      `fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Ads ready around 'doorbuster'" })}`,
     ]);
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
 

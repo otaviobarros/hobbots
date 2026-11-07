@@ -40,11 +40,11 @@ describe("a lead that follows the hand-off rule", () => {
       },
       {
         on: "was answered by hob aldric",
-        lines: [hub("complete_task", { key: "frontend-done", summary: "Frontend reads core.py" })],
+        lines: [hub("complete_task", { delivered: true, key: "frontend-done", summary: "Frontend reads core.py" })],
       },
       {
         on: "(Write the frontend) finished",
-        lines: [hub("complete_task", { key: "wrap", summary: "The app is built" })],
+        lines: [hub("complete_task", { delivered: true, key: "wrap", summary: "The app is built" })],
       },
     ]);
     await run(
@@ -57,6 +57,7 @@ describe("a lead that follows the hand-off rule", () => {
             "Write the backend",
             hold("quill"),
             hub("complete_task", {
+              delivered: true,
               key: "backend-done",
               summary: "Stores amounts as integer cents",
               artifacts: [{ kind: "file", label: "core.py", value: "/project/core.py" }],
@@ -121,16 +122,16 @@ describe("a lead that follows the hand-off rule", () => {
               hob: "Pip",
               brief: [
                 "Write the styles",
-                hub("complete_task", { key: "styles-done", summary: "Styles in theme.css" }),
+                hub("complete_task", { delivered: true, key: "styles-done", summary: "Styles in theme.css" }),
               ].join("\n"),
             }),
             hub("wait_for", { key: "rook-wait", tasks: ["$styles.task_id"] }),
-            `fake:then ${hub("complete_task", { key: "frontend-done", summary: "Frontend uses theme.css" })}`,
+            `fake:then ${hub("complete_task", { delivered: true, key: "frontend-done", summary: "Frontend uses theme.css" })}`,
           ].join("\n"),
         }),
         hub("wait_for", { key: "wait", tasks: ["$frontend.task_id"] }),
-        `fake:then ${hub("complete_task", { key: "wrap", summary: "The app is built" })}`,
-        `fake:then fake:then ${hub("complete_task", { key: "wrap-later", summary: "The app is built" })}`,
+        `fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "The app is built" })}`,
+        `fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap-later", summary: "The app is built" })}`,
       ]),
     );
     const done = await run(settledTree((tree) => tree.tasks[0]?.state === "completed"));

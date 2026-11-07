@@ -55,6 +55,7 @@ const finishedTask = async (page: Page) => {
       })}`,
       script("start_quest", { key: "quest", goal: "Write the launch report" }),
       script("complete_task", {
+        delivered: true,
         key: "done",
         summary: "The report is written.",
         artifacts: [

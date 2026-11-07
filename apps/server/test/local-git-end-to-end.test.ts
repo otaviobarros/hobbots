@@ -594,7 +594,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
             writes: { "README.md": "# Thistle's project\n" },
             output: "[main (root-commit) 1a2b3c4] First\n",
           })}`,
-          hub("complete_task", { key: "repo-done", summary: "The repository has its first commit" }),
+          hub("complete_task", { delivered: true, key: "repo-done", summary: "The repository has its first commit" }),
         ].join("\n"),
         authority: { decisions: { "local-git": "allow", "edit-files": "allow" } },
       }),

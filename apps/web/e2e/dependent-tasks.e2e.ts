@@ -79,7 +79,7 @@ test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill
         brief: [
           "Write the backend",
           "fake:tool Bash git push origin feature",
-          script("complete_task", { key: "backend-done", summary: "Backend ready." }),
+          script("complete_task", { delivered: true, key: "backend-done", summary: "Backend ready." }),
         ].join("\n"),
       }),
       script("delegate_task", {
@@ -87,7 +87,7 @@ test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill
         hob: "Rook",
         brief: [
           "Write the frontend",
-          script("complete_task", { key: "frontend-done", summary: "Frontend ready." }),
+          script("complete_task", { delivered: true, key: "frontend-done", summary: "Frontend ready." }),
         ].join("\n"),
         depends_on: ["$backend.task_id"],
       }),

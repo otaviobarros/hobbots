@@ -144,7 +144,7 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
         "Draft the landing copy",
         'fake:once fake:write copy.md "# Copy\\n\\n20% off everything.\\n"',
         "fake:fail",
-        `fake:then ${script("complete_task", { key: "copy-done", summary: "The landing copy is drafted." })}`,
+        `fake:then ${script("complete_task", { delivered: true, key: "copy-done", summary: "The landing copy is drafted." })}`,
       ].join("\n"),
     }),
     script("delegate_task", {

@@ -32,7 +32,7 @@ const backend = (name = "quill") =>
     brief: [
       "Write the backend",
       hold(name),
-      hub("complete_task", { key: "backend-done", summary: "Backend ready" }),
+      hub("complete_task", { delivered: true, key: "backend-done", summary: "Backend ready" }),
     ].join("\n"),
   });
 
@@ -41,7 +41,10 @@ const frontend = (after: ReadonlyArray<string>) =>
   hub("delegate_task", {
     key: "frontend",
     hob: "Rook",
-    brief: ["Write the frontend", hub("complete_task", { key: "frontend-done", summary: "Frontend ready" })].join("\n"),
+    brief: [
+      "Write the frontend",
+      hub("complete_task", { delivered: true, key: "frontend-done", summary: "Frontend ready" }),
+    ].join("\n"),
     depends_on: after,
   });
 
@@ -125,7 +128,7 @@ describe("a dependent Task waits for its dependencies", () => {
     await run(TaskControls.use((controls) => controls.cancel(taskOf(running, ROOK).id)));
     const done = await run(settledTree((tree) => memberTask(tree, ROOK)?.state === "cancelled"));
     expect(attemptsOf(done, taskOf(done, ROOK))).toEqual([]);
-    await run(send(["Wrap up", hub("complete_task", { key: "wrap", summary: "Nothing was built" })]));
+    await run(send(["Wrap up", hub("complete_task", { delivered: true, key: "wrap", summary: "Nothing was built" })]));
     await run(settledTree((tree) => tree.tasks[0]?.state === "completed"));
     await run(nothingOpen);
   }, 30_000);
@@ -143,7 +146,7 @@ describe("a dependent Task waits for its dependencies", () => {
           brief: [
             "Write the docs",
             hold("pip"),
-            hub("complete_task", { key: "docs-done", summary: "Docs ready" }),
+            hub("complete_task", { delivered: true, key: "docs-done", summary: "Docs ready" }),
           ].join("\n"),
         }),
         frontend(["$backend.task_id", "$docs.task_id"]),

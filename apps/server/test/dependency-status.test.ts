@@ -26,7 +26,9 @@ describe("a resumed member hears where its inputs stand", () => {
     const { run, requests, release } = await startHub(await sharedDatabase(), [
       {
         on: "was answered by hob aldric",
-        lines: [hub("complete_task", { key: "frontend-done", summary: "Frontend renders integer cents" })],
+        lines: [
+          hub("complete_task", { delivered: true, key: "frontend-done", summary: "Frontend renders integer cents" }),
+        ],
       },
     ]);
     await run(
@@ -39,6 +41,7 @@ describe("a resumed member hears where its inputs stand", () => {
             "Write the backend",
             hold("quill"),
             hub("complete_task", {
+              delivered: true,
               key: "backend-done",
               summary: "Stores amounts as integer cents",
               artifacts: [{ kind: "file", label: "core.py", value: "/project/core.py" }],

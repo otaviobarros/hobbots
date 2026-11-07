@@ -55,7 +55,9 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck in the chat's Needs-
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // One step that returns at once; the turn its result starts is cut off, which uses its one delivery.
   const steps = [
-    { brief: `Outline the launch\n${script("complete_task", { key: "outline", summary: "Three channels." })}` },
+    {
+      brief: `Outline the launch\n${script("complete_task", { delivered: true, key: "outline", summary: "Three channels." })}`,
+    },
   ];
   await composer.fill(
     ["Plan the spring launch", "fake:then fake:cut-off", script("plan_steps", { key: "plan", steps })].join("\n"),
@@ -102,7 +104,9 @@ test("[TC-IN-097] Dismiss takes stuck work out of the chat's tray and out of Nee
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   const steps = [
-    { brief: `Outline the launch\n${script("complete_task", { key: "outline", summary: "Three channels." })}` },
+    {
+      brief: `Outline the launch\n${script("complete_task", { delivered: true, key: "outline", summary: "Three channels." })}`,
+    },
   ];
   await composer.fill(
     ["Plan the spring launch", "fake:then fake:cut-off", script("plan_steps", { key: "plan", steps })].join("\n"),

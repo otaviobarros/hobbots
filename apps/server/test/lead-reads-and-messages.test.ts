@@ -154,7 +154,7 @@ describe("a lead reads its subtree and messages its members", () => {
       },
       {
         on: "One local commit",
-        lines: [hub("complete_task", { key: "review-done", summary: "Reviewed and committed" })],
+        lines: [hub("complete_task", { delivered: true, key: "review-done", summary: "Reviewed and committed" })],
       },
       {
         on: "Hob pip sent you a message",
@@ -165,12 +165,12 @@ describe("a lead reads its subtree and messages its members", () => {
             summary: "Committed",
             milestone_id: "$commit.milestones.0",
           }),
-          hub("complete_task", { key: "commit-done", summary: "One local commit" }),
+          hub("complete_task", { delivered: true, key: "commit-done", summary: "One local commit" }),
         ],
       },
       {
         on: "(Review and commit) finished.",
-        lines: [hub("complete_task", { key: "wrap", summary: "Built and committed" })],
+        lines: [hub("complete_task", { delivered: true, key: "wrap", summary: "Built and committed" })],
       },
     );
     await run(
@@ -229,7 +229,7 @@ describe("a message to a member waiting on an approval", () => {
     const { run, requests, answers, reactions } = hubbed;
     reactions.push({
       on: "Hob frodo sent you a message",
-      lines: [hub("complete_task", { key: "ship-done", summary: "Shipped with the new name" })],
+      lines: [hub("complete_task", { delivered: true, key: "ship-done", summary: "Shipped with the new name" })],
     });
     await run(
       send([
@@ -296,7 +296,7 @@ describe("a lead reads its Quest after it ends", () => {
     const { run, answers, reactions } = hubbed;
     reactions.push({
       on: "(Build the frontend) finished.",
-      lines: [hub("complete_task", { key: "wrap", summary: "The app is built" })],
+      lines: [hub("complete_task", { delivered: true, key: "wrap", summary: "The app is built" })],
     });
     await run(
       send([
@@ -304,9 +304,10 @@ describe("a lead reads its Quest after it ends", () => {
         hub("delegate_task", {
           key: "frontend",
           hob: "Rook",
-          brief: ["Build the frontend", hub("complete_task", { key: "rook-done", summary: "Frontend built" })].join(
-            "\n",
-          ),
+          brief: [
+            "Build the frontend",
+            hub("complete_task", { delivered: true, key: "rook-done", summary: "Frontend built" }),
+          ].join("\n"),
         }),
         hub("wait_for", { key: "wait", tasks: ["$frontend.task_id"] }),
       ]),
@@ -323,7 +324,7 @@ describe("a lead reads its Quest after it ends", () => {
         "Why does the Quest say 1 of 1?",
         hub("read_tasks", { key: "after" }),
         hub("message_task", { key: "poke", task_id: rook.id, text: "Anything left?" }),
-        hub("complete_task", { key: "again", summary: "Built again" }),
+        hub("complete_task", { delivered: true, key: "again", summary: "Built again" }),
       ]),
     );
     await run(messagesWhen(() => answers.has("again")));

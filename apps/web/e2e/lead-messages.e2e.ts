@@ -83,7 +83,7 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
           "Make the commit",
           hubCall("report_checkpoint", { key: "denied", kind: "blocker", summary: "git init is denied" }),
           `fake:then ${hubCall("report_checkpoint", { key: "committed", kind: "milestone", summary: "Committed", milestone_id: "$commit.milestones.0" })}`,
-          `fake:then ${hubCall("complete_task", { key: "commit-done", summary: "One local commit" })}`,
+          `fake:then ${hubCall("complete_task", { delivered: true, key: "commit-done", summary: "One local commit" })}`,
         ].join("\n"),
       }),
       hubCall("wait_for", { key: "wait", tasks: ["$commit.task_id"] }),
@@ -149,7 +149,7 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
         brief: [
           "Push the copy",
           "fake:tool Bash git push origin feature",
-          `fake:then ${hubCall("complete_task", { key: "ship-done", summary: "Pushed under the new name" })}`,
+          `fake:then ${hubCall("complete_task", { delivered: true, key: "ship-done", summary: "Pushed under the new name" })}`,
         ].join("\n"),
       }),
       hubCall("wait_for", { key: "wait", tasks: ["$ship.task_id"] }),

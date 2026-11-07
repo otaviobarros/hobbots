@@ -59,7 +59,7 @@ test("[TC-UX-160] the room opened from the ticket by keyboard takes focus, and C
       "Tidy the notes",
       'fake:write notes.md "# Notes\\n\\nTidied.\\n"',
       script("start_quest", { key: "quest", goal: "Tidy the notes" }),
-      script("complete_task", { key: "done", summary: "The notes are tidy." }),
+      script("complete_task", { delivered: true, key: "done", summary: "The notes are tidy." }),
     ].join("\n"),
   );
   await composer.press("Enter");

@@ -199,6 +199,7 @@ const editThenComplete = Effect.scoped(
               Stream.fromEffect(
                 Effect.map(
                   tools.call({ agentId: FRODO, taskId: TASK }, "complete_task", {
+                    delivered: true,
                     key: "done",
                     task_id: TASK,
                     summary: "Spec wrapped up",
