@@ -385,7 +385,12 @@ describe("a Task's steps in fresh sessions", () => {
     );
     const { run, control, stepsAsked } = setUp({ skills });
     const thread = await run(seed);
-    await run(send(thread.id, `Ship it\n${hub("plan_steps", { key: "plan", steps: chain(["Cut the release"]) })}`));
+    await run(
+      send(
+        thread.id,
+        `Ship it\n${hub("plan_steps", { key: "plan", steps: chain(["Cut the release\nfake:skill release"]) })}`,
+      ),
+    );
     await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
     await run(control.open("Cut the release"));
     await run(treeWhen(thread.id, (tree) => states(tree)[0] === "completed"));
@@ -393,6 +398,9 @@ describe("a Task's steps in fresh sessions", () => {
     expect(stepsAsked()[0]?.skills).toEqual([mount]);
     // The chat turn that planned the step had them too.
     expect(control.requests[0]?.skills).toEqual([mount]);
+    // The step used it, counted for its hob with no reply of yours to show it under (#1096).
+    const uses = await Effect.runPromise(library.uses({ agentId: ALDRIC }));
+    expect(uses).toMatchObject([{ name: "release", pin: hash, number: 1, threadId: null, messageId: null }]);
   });
 
   it("[TC-OR-026] the owner's session holds the steps' checkpoints and results, not their transcripts", async () => {

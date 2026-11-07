@@ -707,6 +707,64 @@ describe("reading a Codex turn", () => {
   });
 });
 
+describe("a Codex turn's skill uses (ADR 029, #1096)", () => {
+  const ROOT = "/hub/runtimes/hob-1/skill-mounts/abc/skills";
+  const read = (id: string, path: string, status = "completed", cwd = "/repo") =>
+    item("item/completed", {
+      type: "commandExecution",
+      id,
+      command: `cat ${path}`,
+      cwd,
+      status,
+      aggregatedOutput: "",
+      exitCode: 0,
+      commandActions: [{ type: "read", command: `cat ${path}`, name: "SKILL.md", path }],
+    });
+
+  it("[TC-RT-528] counts a finished read of a mounted SKILL.md as a use, and nothing else", () => {
+    const events = codexTurnEvents(THREAD, [ROOT]);
+    expect(events.map(read("c1", `${ROOT}/release-steps/SKILL.md`)).events).toEqual([
+      { _tag: "SkillUsed", source: "library", name: "release-steps", explicit: false },
+    ]);
+    // A relative path is read from the command's folder.
+    expect(events.map(read("c2", "../commit-style/SKILL.md", "completed", `${ROOT}/release-steps`)).events).toEqual([
+      { _tag: "SkillUsed", source: "library", name: "commit-style", explicit: false },
+    ]);
+    // Another of the skill's files, a SKILL.md outside the turn's folder, and a declined read are no use.
+    expect(events.map(read("c3", `${ROOT}/release-steps/references/notes.md`)).events).toEqual([]);
+    expect(events.map(read("c4", "/repo/.agents/skills/other/SKILL.md")).events).toEqual([]);
+    expect(events.map(read("c5", `${ROOT}/release-steps/SKILL.md`, "declined")).events).toEqual([]);
+    // A turn without skills counts none.
+    expect(codexTurnEvents(THREAD).map(read("c6", `${ROOT}/release-steps/SKILL.md`)).events).toEqual([]);
+  });
+
+  // covers ADR 029 (The use line)
+  it("[TC-RT-531] counts a read of an organization skill Codex was let load, and no other file beside it", () => {
+    const org = { name: "org-steps", path: "/etc/codex/skills/org-steps/SKILL.md" };
+    const events = codexTurnEvents(THREAD, [], [org]);
+    expect(events.map(read("o1", org.path)).events).toEqual([
+      { _tag: "SkillUsed", source: "organization", name: "org-steps", explicit: false },
+    ]);
+    expect(events.map(read("o2", "/etc/codex/skills/other/SKILL.md")).events).toEqual([]);
+    expect(events.map(read("o3", "/etc/codex/skills/org-steps/notes.md")).events).toEqual([]);
+  });
+
+  // covers ADR 029 (Admin policy still applies)
+  it("[TC-RT-534] names where each skill of the same name was read from, the turn's folder or an administrator's", () => {
+    const events = codexTurnEvents(
+      THREAD,
+      [ROOT],
+      [{ name: "release-steps", path: "/etc/codex/skills/release-steps/SKILL.md" }],
+    );
+    expect(events.map(read("s1", "/etc/codex/skills/release-steps/SKILL.md")).events).toEqual([
+      { _tag: "SkillUsed", source: "organization", name: "release-steps", explicit: false },
+    ]);
+    expect(events.map(read("s2", `${ROOT}/release-steps/SKILL.md`)).events).toEqual([
+      { _tag: "SkillUsed", source: "library", name: "release-steps", explicit: false },
+    ]);
+  });
+});
+
 describe("a Codex command that outlives its turn (#1048)", () => {
   const TURN_2 = "turn-2";
   const inTurn = (turnId: string, method: string, params: Record<string, unknown>) =>
@@ -1098,5 +1156,57 @@ describe("a Codex turn's skills (ADR 029)", () => {
     });
     // A turn without skills sets no root.
     expect(admitted.skillRequests[0]?.params).toEqual({ extraRoots: [] });
+  });
+
+  // covers ADR 029 (The use line)
+  it("[TC-RT-532] reports an administrator's skill the model reads as used, from your organization", async () => {
+    const orgPath = "/etc/codex/skills/org-steps/SKILL.md";
+    const server = fakeServer({
+      script: [
+        item("item/completed", {
+          type: "commandExecution",
+          id: "c1",
+          command: `cat ${orgPath}`,
+          cwd: "/repo",
+          status: "completed",
+          aggregatedOutput: "",
+          exitCode: 0,
+          commandActions: [{ type: "read", command: `cat ${orgPath}`, name: "SKILL.md", path: orgPath }],
+        }),
+        message("m1", "Hi."),
+        completed("completed"),
+      ],
+      skills: [{ name: "org-steps", path: orgPath, scope: "admin", enabled: true }],
+    });
+    const ran = await run(config(server.start));
+    expect(events(ran).filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "organization", name: "org-steps", explicit: false },
+    ]);
+  });
+
+  // covers ADR 029 (Explicit use)
+  it("[TC-RT-533] reports the skill you picked as used only once Codex takes the turn with it", async () => {
+    const asked = { ...prompt({ skills: mounted() }), askedSkill: "release" };
+    const taken = scripted([]);
+    const ran = await run(config(taken.start), asked);
+    expect(Exit.isSuccess(ran), String(ran)).toBe(true);
+    expect(events(ran).filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: "release", explicit: true },
+    ]);
+    expect(taken.requests.find((request) => request.method === "turn/start")?.params).toMatchObject({
+      input: [{ type: "text" }, { type: "skill", name: "release" }],
+    });
+
+    const refused = fakeServer({ refusesTurn: true });
+    const seen: Array<RuntimeEvent> = [];
+    const exit = await Effect.runPromise(
+      runCodexTurn(config(refused.start), asked).pipe(
+        Stream.runForEach((event) => Effect.sync(() => seen.push(event))),
+        Effect.exit,
+      ),
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(seen.map((event) => event._tag)).toContain("SessionStarted");
+    expect(seen.filter((event) => event._tag === "SkillUsed")).toEqual([]);
   });
 });

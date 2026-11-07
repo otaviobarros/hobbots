@@ -23,7 +23,15 @@ import {
   TaskWait,
 } from "./quest.ts";
 import { SkillFeedback, SkillProposal } from "./skill-proposals.ts";
-import { Skill, SkillAssignment, SkillOptOut, SkillRevision, SkillRevisionHash, SkillSource } from "./skills.ts";
+import {
+  Skill,
+  SkillAssignment,
+  SkillOptOut,
+  SkillRevision,
+  SkillRevisionHash,
+  SkillSource,
+  SkillUse,
+} from "./skills.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { Thread } from "./thread.ts";
 
@@ -184,6 +192,8 @@ const SkillProposalRequested = Schema.TaggedStruct("SkillProposalRequested", { p
 const SkillProposalChanged = Schema.TaggedStruct("SkillProposalChanged", { proposal: SkillProposal });
 /** A hob noted that a skill is wrong, outdated or unclear. */
 const SkillFeedbackLeft = Schema.TaggedStruct("SkillFeedbackLeft", { feedback: SkillFeedback });
+/** A hob used a skill in a turn (ADR 029, The use line): the revision the turn mounted, or an organization's skill. */
+const SkillUsed = Schema.TaggedStruct("SkillUsed", { use: SkillUse });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
 const FolderScanned = Schema.TaggedStruct("FolderScanned", { scan: FolderScan });
 /**
@@ -281,6 +291,7 @@ export const JournaledEvent = Schema.Union([
   SkillProposalRequested,
   SkillProposalChanged,
   SkillFeedbackLeft,
+  SkillUsed,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -357,6 +368,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   SkillProposalRequested: 1,
   SkillProposalChanged: 1,
   SkillFeedbackLeft: 1,
+  SkillUsed: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

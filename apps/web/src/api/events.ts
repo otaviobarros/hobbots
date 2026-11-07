@@ -24,6 +24,7 @@ import { devicesChanged } from "./devices.ts";
 import { failedTaskChanged } from "./failed-tasks.ts";
 import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
+import { hobSkillsChanged } from "./hob-skills.ts";
 import { hubQuestionChanged } from "./hub-questions.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
@@ -134,15 +135,8 @@ const WORKBENCH_RECORDS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
 ]);
 const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent => WORKBENCH_RECORDS.has(event._tag);
 
-/** Events the cache takes nothing from. */
-const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
-  // The reply's own upsert, sent just before, already carries its stopping or stopped status.
-  "TurnStopRequested",
-  "TurnStopped",
-  // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
-  "TurnStarted",
-  "TurnEnded",
-  // No screen shows the skills library yet (ADR 029, #1062); a proposal's review reads it again.
+/** Changes to the skills library, after which a hob's next turn may get other skills. */
+const SKILL_LIBRARY_CHANGES: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "SkillRevisionAdded",
   "SkillAssigned",
   "SkillUnassigned",
@@ -151,6 +145,21 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "SkillOptOutChanged",
   "SkillRemoved",
 ]);
+type SkillLibraryChange = Extract<
+  HobbotsEvent,
+  {
+    readonly _tag:
+      | "SkillRevisionAdded"
+      | "SkillAssigned"
+      | "SkillUnassigned"
+      | "SkillRolledOut"
+      | "SkillHeld"
+      | "SkillOptOutChanged"
+      | "SkillRemoved";
+  }
+>;
+const isSkillLibraryChange = (event: HobbotsEvent): event is SkillLibraryChange =>
+  SKILL_LIBRARY_CHANGES.has(event._tag);
 
 /**
  * Library changes a proposal's review is drawn from: the newest revision it is shown against, and
@@ -164,21 +173,22 @@ const REVIEWED_LIBRARY: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "SkillHeld",
   "SkillRemoved",
 ]);
+
+/** Events the cache takes nothing from. */
+const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  // The reply's own upsert, sent just before, already carries its stopping or stopped status.
+  "TurnStopRequested",
+  "TurnStopped",
+  // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
+  "TurnStarted",
+  "TurnEnded",
+  // A reply's use line comes with the reply; no screen counts uses yet (ADR 029, #1062).
+  "SkillUsed",
+]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
   {
-    readonly _tag:
-      | "TurnStopRequested"
-      | "TurnStopped"
-      | "TurnStarted"
-      | "TurnEnded"
-      | "SkillRevisionAdded"
-      | "SkillAssigned"
-      | "SkillUnassigned"
-      | "SkillRolledOut"
-      | "SkillHeld"
-      | "SkillOptOutChanged"
-      | "SkillRemoved";
+    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded" | "SkillUsed";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -196,7 +206,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     if (event._tag === "CommandOutput") applyCommandOutput(queryClient, event);
     return;
   }
-  if (applySkillEvent(queryClient, event) || isUnapplied(event)) return;
+  if (isUnapplied(event) || applySkillEvent(queryClient, event)) return;
   if (isMemoryEvent(event)) {
     applyMemoryEvent(queryClient, event);
     return;
@@ -264,12 +274,21 @@ const PROPOSAL_EVENTS = new Set<HobbotsEvent["_tag"]>([
 const isProposalEvent = (event: HobbotsEvent): event is ProposalEvent => PROPOSAL_EVENTS.has(event._tag);
 
 /**
- * A proposal's event, or a library change its review is drawn from: the Inbox reads the proposals
- * again, so a review waiting there shows the library as Add would find it. A note on a skill shows
- * on its page, which #1062 builds. Whether the event was one of these.
+ * A proposal's event, or a change to the skills library: the Inbox reads the proposals again, so a
+ * review waiting there shows the library as Add would find it, and a hob's next turn may get other
+ * skills, which the composer's `/` list shows (ADR 029). A note on a skill shows on its page, which
+ * #1062 builds. Whether the event was one of these.
  */
-const applySkillEvent = (queryClient: QueryClient, event: HobbotsEvent): event is ProposalEvent | UnappliedEvent => {
-  if (!isProposalEvent(event) && !REVIEWED_LIBRARY.has(event._tag)) return false;
+const applySkillEvent = (
+  queryClient: QueryClient,
+  event: HobbotsEvent,
+): event is ProposalEvent | SkillLibraryChange => {
+  if (isSkillLibraryChange(event)) {
+    void hobSkillsChanged(queryClient);
+    if (REVIEWED_LIBRARY.has(event._tag)) void skillProposalsChanged(queryClient);
+    return true;
+  }
+  if (!isProposalEvent(event)) return false;
   if (event._tag !== "SkillFeedbackLeft") void skillProposalsChanged(queryClient);
   return true;
 };

@@ -27,6 +27,7 @@ import {
 import { DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
+import { skillUses } from "./skill-uses.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
 interface SkillRow {
@@ -552,6 +553,7 @@ export const SkillLibraryLive = Layer.effect(
             return { value: skill, events: [{ _tag: "SkillRemoved", skill }] };
           }),
         ),
+      ...skillUses(sql, change),
     });
   }),
 );

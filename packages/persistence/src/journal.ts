@@ -122,8 +122,11 @@ const hubQuestionCorrelation = (question: HubQuestion): RowCorrelation =>
 type SkillEvent = Extract<JournaledEventType, { readonly _tag: `Skill${string}` }>;
 const isSkillEvent = (event: JournaledEventType): event is SkillEvent => event._tag.startsWith("Skill");
 
-/** The library belongs to no hob; a hob's own assignment, its opt-outs, proposals and notes name it (ADR 029). */
+/** The library belongs to no hob; a hob's own assignment, its opt-outs, uses, proposals and notes name it (ADR 029). */
 const skillCorrelationOf = (event: SkillEvent): RowCorrelation => {
+  // A use names the hob that used it, and its thread and reply when it came from one.
+  if ("use" in event)
+    return { ...NONE, agentId: event.use.agentId, threadId: event.use.threadId, messageId: event.use.messageId };
   if ("optOut" in event) return { ...NONE, agentId: event.optOut.agentId };
   // A proposal and a note name the hob, and the reply they came from.
   const call = "proposal" in event ? event.proposal : "feedback" in event ? event.feedback : null;

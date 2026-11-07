@@ -57,17 +57,19 @@ const gitHome = (dataDir: string) => {
   return home;
 };
 
-/** Makes every folder under `folder` writable again, since the skills store keeps its revisions read-only. */
-const unlock = (folder: string): void => {
-  if (!existsSync(folder)) return;
+/**
+ * Lets every folder under `folder` be written again: the skills library keeps each revision's
+ * folders read-only (ADR 029), which a user who is not root cannot remove until they are.
+ */
+const writableFolders = (folder: string) => {
   chmodSync(folder, 0o755);
   for (const entry of readdirSync(folder, { withFileTypes: true })) {
-    if (entry.isDirectory()) unlock(join(folder, entry.name));
+    if (entry.isDirectory()) writableFolders(join(folder, entry.name));
   }
 };
 
 export const removeDataDir = (dataDir: string) => {
-  if (dataDir !== "") unlock(dataDir);
+  if (existsSync(dataDir)) writableFolders(dataDir);
   rmSync(dataDir, { recursive: true, force: true });
   rmSync(`${dataDir}-git-home`, { recursive: true, force: true });
 };

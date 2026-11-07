@@ -123,7 +123,7 @@ const OPEN: ReadonlyArray<SkillProposalState> = ["waiting", "adding"];
 const DECIDED: ReadonlyArray<SkillProposalState> = ["added", "declined"];
 
 /**
- * The SQL record of skill proposals and feedback (migration 0068). A proposal is recorded and
+ * The SQL record of skill proposals and feedback (migration 0070). A proposal is recorded and
  * journaled in one transaction, with the journal's head taken first, so two calls with one key, or
  * two proposals that would pass the limits only one at a time, take turns on PostgreSQL and only the
  * first is recorded. Every later change is one conditional update, so of two decisions racing for a

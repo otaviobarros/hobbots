@@ -27,6 +27,7 @@ import {
   RUNTIME_NAMES,
   type RuntimeKind,
   type RuntimeSession,
+  type SkillName,
   sameBrain,
   stripEscapes,
   systemInstructions,
@@ -58,7 +59,15 @@ import {
   type ToolStartedEvent,
 } from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
-import { skillMounter, TurnSkillsInUse } from "./skill-turn.ts";
+import {
+  askedSkillOf,
+  mentionedSkill,
+  skillMounter,
+  skillUseRecorder,
+  TurnSkillsInUse,
+  withoutMention,
+  withUsedSkill,
+} from "./skill-turn.ts";
 import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
 import { callScope } from "./tasks.ts";
@@ -183,6 +192,8 @@ export class ChatService extends Context.Service<
     readonly sendPrompt: (
       threadId: ThreadId,
       content: string,
+      /** The skill you picked for the message with `/` (ADR 029, Explicit use), if any. */
+      askedSkill?: SkillName | null,
     ) => Effect.Effect<
       { userMessage: Message; assistantMessage: Message | null },
       ThreadNotFound | HobUnavailable | ThreadArchived
@@ -452,22 +463,39 @@ export class ChatService extends Context.Service<
         );
       });
 
-      // Applies a domain transition to a running reply and runs `after` with the result. The lock keeps
+      // Applies a domain transition to a running reply, `apply` taking the result in. The lock keeps
       // the turn and a stop request from saving out of order. Finished replies reject changes, so late
       // runtime events and repeated stops are ignored.
-      const transition = <A>(
+      const changeReply = <A>(
         reply: Reply,
         f: (message: Message) => Message | unknown,
-        after: (next: Message) => Effect.Effect<A>,
+        apply: (next: Message) => Effect.Effect<A>,
       ) =>
         Semaphore.withPermit(
           reply.lock,
           Effect.gen(function* () {
             const next = f(yield* Ref.get(reply.current));
-            if (!(next instanceof Message)) return Option.none<A>();
-            yield* Ref.set(reply.current, next);
-            return Option.some(yield* after(next));
+            return next instanceof Message ? Option.some(yield* apply(next)) : Option.none<A>();
           }),
+        );
+
+      // The reply in memory takes the result, then `after` runs with it.
+      const transition = <A>(
+        reply: Reply,
+        f: (message: Message) => Message | unknown,
+        after: (next: Message) => Effect.Effect<A>,
+      ) => changeReply(reply, f, (next) => Effect.andThen(Ref.set(reply.current, next), after(next)));
+
+      // The reply in memory takes the result only once `save` has committed it, and the save is not cut
+      // short: a stop that comes while it runs waits for it. So a stop's own save, which starts from the
+      // reply in memory, never writes what was not committed, nor drops what was.
+      const committedTransition = <A>(
+        reply: Reply,
+        f: (message: Message) => Message | unknown,
+        save: (next: Message) => Effect.Effect<A>,
+      ) =>
+        changeReply(reply, f, (next) =>
+          Effect.uninterruptible(Effect.tap(save(next), () => Ref.set(reply.current, next))),
         );
 
       // Claude Code keeps a resumed session's first instructions, so a turn whose session may follow
@@ -569,6 +597,12 @@ export class ChatService extends Context.Service<
           // The session the turn ran in, and the policy version its tools ran under, for the Attempt it may start on a Task.
           let turnSession: string | null = null;
           let turnPolicy: string | null = null;
+          // The skills the turn uses, mapped to the revisions it was given (ADR 029, The use line).
+          const skillUses = yield* skillUseRecorder({
+            agentId: agent.id,
+            threadId: thread.id,
+            messageId: (yield* Ref.get(reply.current)).id,
+          });
 
           // Saves a step's change with the reply. A tool call that starts is stamped with when.
           const saveStep = (event: RuntimeEvent) =>
@@ -637,6 +671,7 @@ export class ChatService extends Context.Service<
                 return Effect.gen(function* () {
                   turnSession = event.sessionId;
                   turnPolicy = event.policyVersion ?? null;
+                  skillUses.organization(event.organizationSkills);
                   // The runtime accepted the turn: the work it carries is now being processed.
                   yield* carry.accepted(event.sessionId);
                   const seenThrough = (yield* Ref.get(reply.current)).id;
@@ -723,6 +758,22 @@ export class ChatService extends Context.Service<
                 return Effect.void;
               case "SessionCompacted":
                 return forgetTaskBrief;
+              // The reply shows each skill it used once, under it.
+              // Its use is saved with the reply's line, in one transaction, so neither outlives the other,
+              // and the reply in memory takes the line only once both are committed.
+              case "SkillUsed":
+                return Effect.flatMap(skillUses.resolve(event), (resolved) =>
+                  resolved === null
+                    ? Effect.void
+                    : committedTransition(
+                        reply,
+                        (m) => new Message({ ...m, skillsUsed: withUsedSkill(m.skillsUsed, resolved.used) }),
+                        (next) =>
+                          repo
+                            .upsertMessage(next, resolved.use === null ? [] : [resolved.use])
+                            .pipe(Effect.flatMap(announce)),
+                      ),
+                );
               // Steps, a tool call's included, are saved with the reply, so they replay on reconnect.
               default:
                 return saveStep(event);
@@ -782,13 +833,16 @@ export class ChatService extends Context.Service<
           const memory = yield* memoryBriefFor(agent, tools, expected);
           const skills = yield* skillsFor(agent, config, tools, yours);
           yield* update(withSkills(skills.recorded));
+          skillUses.given(skills.recorded);
+          // The skill you picked goes to the runtime as its own mention, so the prompt drops your `/name`.
+          const asked = askedSkillOf(yours, skills.recorded);
           // What the turn runs and changes, recorded for the Workbench on the Attempt it works on (ADR 023).
           // Acquired after the Task's turn, so the end-of-turn compare lands before its Attempt ends.
           const activity = yield* activityOf(tools, taskTurn);
           yield* activity
             .run(
               {
-                prompt,
+                prompt: withoutMention(prompt, asked),
                 briefing:
                   [memory?.text ?? null, briefing, taskTurn?.briefing ?? null]
                     .filter((part) => part !== null)
@@ -800,6 +854,7 @@ export class ChatService extends Context.Service<
                 effort: brain.effort,
                 tools,
                 skills: skills.mounts,
+                askedSkill: asked,
                 approvals: turnApprovals?.approvals ?? null,
                 redaction: redactor,
                 recordToolStart,
@@ -1175,7 +1230,11 @@ export class ChatService extends Context.Service<
           return yield* service.progressWaits(threadId, agentId);
         });
 
-      const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (threadId: ThreadId, content: string) {
+      const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (
+        threadId: ThreadId,
+        content: string,
+        askedSkill: SkillName | null = null,
+      ) {
         // The status check and the turn's registration happen under the hob's lock, so a turn is
         // either admitted before a retirement (which then sees and stops it) or refused after it.
         return yield* withThreadHob(threadId, (thread, agent) =>
@@ -1190,6 +1249,7 @@ export class ChatService extends Context.Service<
             // Work you stopped here, and routine progress, ride along: the message starts through the
             // dispatcher, under their claims.
             const carries = !waits && (yield* workRidesAlong(threadId, agent.id));
+            const accepted = yield* acceptedSkills(agent);
             const userMessage = new Message({
               id: MessageId.make(crypto.randomUUID()),
               threadId,
@@ -1198,7 +1258,8 @@ export class ChatService extends Context.Service<
               status: waits || carries ? "queued" : "complete",
               error: null,
               configVersion: null,
-              skills: yield* acceptedSkills(agent),
+              skills: accepted,
+              askedSkill: askedSkill ?? mentionedSkill(content, accepted),
               createdAt: yield* nowIso,
             });
             const saved = yield* saveMessage(userMessage);

@@ -21,6 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startAppServer } from "../src/codex/app-server.ts";
 import { unexpectedSkillsMessage } from "../src/codex/skills.ts";
 import { type CodexTurnConfig, runCodexTurn } from "../src/codex/turn.ts";
+import { SKILL_MOUNTS, skillMountsHash } from "../src/skills.ts";
 import {
   AGENTS_SKILL,
   ASKED_SKILL,
@@ -30,7 +31,7 @@ import {
   LIBRARY_SKILL,
 } from "./clean-runtime.ts";
 import { approvalsAnswering, approve } from "./codex-fixture.ts";
-import { standIn } from "./responses-stand-in.ts";
+import { type Move, runs, standIn } from "./responses-stand-in.ts";
 
 /**
  * The clean-runtime contract test on an installed Codex (ADR 029), with a stand-in model that records
@@ -122,10 +123,10 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  const turn = async (overrides: Partial<PromptRequest>) => {
+  const turn = async (overrides: Partial<PromptRequest>, moves: ReadonlyArray<Move> = [{ say: "Hello." }]) => {
     const { approvals } = approvalsAnswering(approve, access);
     const asked = model.requests.length;
-    model.moves.push({ say: "Hello." });
+    model.moves.push(...moves);
     const exit = await Effect.runPromise(
       Stream.runCollect(
         runCodexTurn(config, {
@@ -182,6 +183,36 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     expectClean(offered, Exit.isSuccess(exit) ? exit.value : []);
     // The turn's skill folder is gone once the turn ends.
     expect(readdirSync(join(access.runtimeFolder, "skill-mounts"))).toEqual([]);
+  });
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-526] a skill you picked loads as Codex's skill item, even Only when asked, and counts as used", {
+    timeout: 60_000,
+  }, async () => {
+    const { exit, offered } = await turn({ prompt: "Release it.", askedSkill: ASKED_SKILL });
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(offered).toContain(`Use ${ASKED_SKILL}.`);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: ASKED_SKILL, explicit: true },
+    ]);
+  });
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-527] the model reading a mounted skill's SKILL.md counts as using it, and reading another file does not", {
+    timeout: 60_000,
+  }, async () => {
+    const skills = join(access.runtimeFolder, SKILL_MOUNTS, skillMountsHash(fixture.mounts), "skills");
+    const { exit } = await turn({ tools: access }, [
+      runs("read-skill", `cat ${join(skills, LIBRARY_SKILL, "SKILL.md")}`),
+      runs("read-other", `cat ${join(fixture.repo, ".agents", "skills", "repo-agents-skill", "SKILL.md")}`),
+      { say: "Done." },
+    ]);
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: LIBRARY_SKILL, explicit: false },
+    ]);
   });
 
   // covers RT-001, ADR 029

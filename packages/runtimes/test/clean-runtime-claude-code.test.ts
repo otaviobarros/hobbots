@@ -151,6 +151,10 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     expect(events).toContainEqual(
       expect.objectContaining({ _tag: "StepStarted", label: "Reading the library-skill skill" }),
     );
+    // The use line: the mounted skill was used, the refused one never (#1096).
+    expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: LIBRARY_SKILL, explicit: false },
+    ]);
     // The mounted skill's instructions reached the model; the home folder's was refused.
     expect(JSON.stringify(requests[1])).toContain(`Use ${LIBRARY_SKILL}.`);
     expect(JSON.stringify(requests[2])).toMatch(/Unknown skill/);
@@ -161,6 +165,19 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     const { exit, offered } = await turn({ prompt: `/${pluginSkill(ASKED_SKILL)}` });
     expect(Exit.isSuccess(exit), String(exit)).toBe(true);
     expect(offered).toContain(`Use ${ASKED_SKILL}.`);
+  });
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-525] a skill you picked loads with the prompt, as Claude Code's own mention, and counts as used", {
+    timeout: 120_000,
+  }, async () => {
+    const { exit, offered } = await turn({ prompt: "Release it.", askedSkill: ASKED_SKILL });
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(offered).toContain(`Use ${ASKED_SKILL}.`);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: ASKED_SKILL, explicit: true },
+    ]);
   });
 
   // covers RT-001, ADR 029

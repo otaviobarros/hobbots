@@ -16,6 +16,7 @@ import {
   RuntimeHealth,
   RuntimeKind,
   RuntimeModels,
+  SkillName,
   THREAD_TITLE_MAX,
   Thread,
   ThreadId,
@@ -129,6 +130,8 @@ export type RetireAgentPayload = typeof RetireAgentPayload.Type;
 
 export const SendPromptPayload = Schema.Struct({
   content: Schema.NonEmptyString,
+  /** A skill of the hob's you picked for the message with `/` (ADR 029, Explicit use). */
+  skill: Schema.optionalKey(Schema.NullOr(SkillName)),
 });
 
 /** A message sent while the thread's reply runs is queued: it has no reply yet (CH-008). */

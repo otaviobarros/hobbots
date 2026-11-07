@@ -1,5 +1,10 @@
 import { Effect, PubSub, Stream } from "effect";
-import type { AppServer, AppServerCommand, AppServerNotification } from "../src/codex/app-server.ts";
+import {
+  type AppServer,
+  type AppServerCommand,
+  AppServerError,
+  type AppServerNotification,
+} from "../src/codex/app-server.ts";
 import type { StartAppServer } from "../src/codex/turn.ts";
 
 // A scripted Codex App Server for turn tests: what Hobbots asks it, and what it answers.
@@ -32,6 +37,8 @@ export const fakeServer = (options: {
   readonly dies?: boolean;
   /** Never answers `turn/interrupt`, as a Codex that stopped answering. */
   readonly deaf?: boolean;
+  /** Refuses `turn/start`, as a Codex that will not take the turn's input. */
+  readonly refusesTurn?: boolean;
   /** What `skills/list` answers: the skills Codex would load (ADR 029). */
   readonly skills?: ReadonlyArray<{
     readonly name: string;
@@ -71,6 +78,7 @@ export const fakeServer = (options: {
             case "thread/resume":
               return { thread: { id: THREAD }, model: "m" };
             case "turn/start": {
+              if (options.refusesTurn) return yield* Effect.fail(new AppServerError({ message: "turn refused" }));
               turns += 1;
               if (turns === 1) {
                 yield* Effect.forkDetach(run);
