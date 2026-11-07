@@ -29,6 +29,10 @@ import {
   cleanRuntimeFixture,
   FOREIGN_MARKERS,
   LIBRARY_SKILL,
+  SET_RULES,
+  SET_SIBLING,
+  SET_SKILL,
+  TEAM_SET,
 } from "./clean-runtime.ts";
 import { approvalsAnswering, approve } from "./codex-fixture.ts";
 import { type Move, runs, standIn } from "./responses-stand-in.ts";
@@ -150,6 +154,9 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     // The mounted skills, the `~/.agents` one among them, reach the turn through Hobbots.
     expect(offered).toContain(`${LIBRARY_SKILL}-offered`);
     expect(offered).toContain(`${AGENTS_SKILL}-offered`);
+    // A mounted set's skills, less the one the hob turned off (ADR 029, Skill sets).
+    expect(offered).toContain(`${SET_SKILL}-offered`);
+    expect(offered).toContain(`${SET_SIBLING}-offered`);
     // Only when asked: listed to no model.
     expect(offered).not.toContain(`${ASKED_SKILL}-offered`);
     // No bundled skill: Codex's own are off.
@@ -212,6 +219,51 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     const events = Exit.isSuccess(exit) ? exit.value : [];
     expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
       { _tag: "SkillUsed", source: "library", name: LIBRARY_SKILL, explicit: false },
+    ]);
+  });
+
+  /** Where a skill of the mounted set is in the turn's folder. */
+  const setSkillFolder = (name: string) =>
+    join(access.runtimeFolder, SKILL_MOUNTS, skillMountsHash(fixture.mounts), "sets", TEAM_SET, "skills", name);
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-1143-04] a skill of a set you picked loads from its set's folder and follows its links", {
+    timeout: 60_000,
+  }, async () => {
+    const base = setSkillFolder(SET_SKILL);
+    const { exit, offered } = await turn(
+      { prompt: "Plan it.", askedSkill: `${TEAM_SET}:${SET_SKILL}`, tools: access },
+      [
+        runs("read-rules", `cat '${join(base, "..", "..", "references", "rules.md")}'`),
+        runs("read-sibling", `cat '${join(base, "..", SET_SIBLING, "SKILL.md")}'`),
+        { say: "Done." },
+      ],
+    );
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(offered).toContain(`Use ${SET_SKILL}.`);
+    expect(offered).toContain(join(base, "SKILL.md"));
+    expect(offered).toContain(SET_RULES);
+    expect(offered).toContain(`name: ${SET_SIBLING}`);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: SET_SKILL, explicit: true, set: TEAM_SET },
+      // Following the link to the other skill's SKILL.md reads that skill.
+      { _tag: "SkillUsed", source: "library", name: SET_SIBLING, explicit: false, set: TEAM_SET },
+    ]);
+  });
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-1143-05] reading a set's skill's SKILL.md counts as using it, with its set", {
+    timeout: 60_000,
+  }, async () => {
+    const { exit } = await turn({ tools: access }, [
+      runs("read-set-skill", `cat '${join(setSkillFolder(SET_SIBLING), "SKILL.md")}'`),
+      { say: "Done." },
+    ]);
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: SET_SIBLING, explicit: false, set: TEAM_SET },
     ]);
   });
 

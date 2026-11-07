@@ -24,6 +24,7 @@ import type {
   SkillRevision,
   SkillRevisionHash,
   SkillScope,
+  SkillSetContent,
   SkillSource,
   SkillSourceChanged,
   SkillSourceUnreadable,
@@ -60,6 +61,8 @@ export interface SkillRevisionInput {
   readonly path: string | null;
   readonly label: string | null;
   readonly addedBy: SkillBy;
+  /** For a set (ADR 029, Skill sets), the skills it holds; absent or null for a skill. */
+  readonly set?: SkillSetContent | null;
   /**
    * The revision this one was made from: adding it fails with `SkillMovedOn` once the skill's newest
    * is another, unless the newest is this very content, added before by the same edit sent again.
@@ -174,11 +177,15 @@ export interface SkillLibraryShape {
   readonly hold: (id: SkillAssignmentId, held: boolean) => Library<Committed<SkillAssignment>, SkillNotFound>;
   /** Every hob's opt-outs, or one hob's. */
   readonly optOuts: (agentId?: AgentId) => Library<ReadonlyArray<SkillOptOut>>;
-  /** Turns a skill off for one hob, or on again. Null when it already was. */
+  /**
+   * Turns a skill off for one hob, or on again, or with `member` one skill of a set (ADR 029, Skill
+   * sets). Null when it already was.
+   */
   readonly setOptOut: (
     agentId: AgentId,
     skillId: SkillId,
     optedOut: boolean,
+    member?: SkillName | null,
   ) => Library<Committed<SkillOptOut> | null, SkillNotFound>;
   /** Removes a skill with no assignment left; one that something still assigns is refused with them. */
   readonly remove: (id: SkillId) => Library<Committed<Skill>, SkillNotFound | SkillInUse>;
@@ -272,8 +279,13 @@ export class SkillWriter extends Context.Service<SkillWriter, SkillWriterShape>(
 /** An assignment with what `resolveSkills` reads of the revision it pins. */
 export interface PinnedSkill {
   readonly assignment: SkillAssignment;
+  /** The skill's name, or the set's. */
   readonly name: SkillName;
   readonly charms: ReadonlyArray<string>;
+  /** For a set (ADR 029, Skill sets), its skills: each resolves as a skill of its own, with the set's pin. */
+  readonly set?: {
+    readonly skills: ReadonlyArray<{ readonly name: SkillName; readonly charms: ReadonlyArray<string> }>;
+  } | null;
 }
 
 /** The hob a turn is for, and what decides its skills. */
@@ -283,27 +295,39 @@ export interface SkillTurn {
   readonly projects: ReadonlyArray<MemoryProjectIdentity>;
   /** The Charm ids in the hob's configuration. */
   readonly charms: ReadonlyArray<string>;
-  /** The skills this hob turned off for itself. */
+  /** The skills, and sets, this hob turned off for itself. */
   readonly optedOut: ReadonlyArray<SkillId>;
+  /** Single skills of a set this hob turned off for itself (ADR 029, Skill sets). */
+  readonly optedOutOfSets?: ReadonlyArray<{ readonly skillId: SkillId; readonly name: SkillName }>;
 }
 
 /** A skill a turn loads. */
 export interface ResolvedSkill {
   readonly skillId: SkillId;
+  /** The skill's own name, inside its set for a skill of a set. */
   readonly name: SkillName;
   readonly pin: SkillRevisionHash;
   readonly scope: SkillScope;
   readonly onlyWhenAsked: boolean;
   /** The Charms it names that the hob does not have: a warning on its profile, never a refusal. */
   readonly missingCharms: ReadonlyArray<string>;
+  /** The set it comes from, or null for a skill of its own. */
+  readonly set: SkillName | null;
 }
 
 /** What a turn's skills came to (ADR 029, Scopes). */
 export interface ResolvedSkills {
   /** The skills it loads, by name. */
   readonly skills: ReadonlyArray<ResolvedSkill>;
-  /** Wider assignments a narrower one of the same name replaced: struck through on the profile. */
-  readonly replaced: ReadonlyArray<{ readonly assignment: SkillAssignment; readonly by: SkillAssignment }>;
+  /**
+   * Wider assignments a narrower one of the same name replaced: struck through on the profile. `name`
+   * is the skill's, which for a set is one of its skills.
+   */
+  readonly replaced: ReadonlyArray<{
+    readonly assignment: SkillAssignment;
+    readonly by: SkillAssignment;
+    readonly name: SkillName;
+  }>;
   /** Names two projects of the turn both define, so neither loads until you pick one. */
   readonly clashes: ReadonlyArray<{ readonly name: SkillName; readonly assignments: ReadonlyArray<SkillAssignment> }>;
 }
@@ -327,44 +351,85 @@ const reaches = (scope: SkillScope, turn: SkillTurn): boolean => {
 const optedOut = (pinned: PinnedSkill, turn: SkillTurn): boolean =>
   pinned.assignment.scope._tag !== "Hob" && turn.optedOut.includes(pinned.assignment.skillId);
 
+/** One skill of a set turned off for the hob; a set of the hob's own is changed, not opted out of. */
+const optedOutOfSet = (pinned: PinnedSkill, name: SkillName, turn: SkillTurn): boolean =>
+  pinned.assignment.scope._tag !== "Hob" &&
+  (turn.optedOutOfSets ?? []).some((one) => one.skillId === pinned.assignment.skillId && one.name === name);
+
+/** A skill an assignment brings: the skill itself, or one skill of a set. */
+interface Offered {
+  readonly pinned: PinnedSkill;
+  readonly name: SkillName;
+  readonly charms: ReadonlyArray<string>;
+  readonly set: SkillName | null;
+}
+
+/** The skills an assignment brings the turn: its own, or each of its set's that the hob did not turn off. */
+const offeredOf = (pinned: PinnedSkill, turn: SkillTurn): ReadonlyArray<Offered> =>
+  pinned.set
+    ? pinned.set.skills
+        .filter((skill) => !optedOutOfSet(pinned, skill.name, turn))
+        .map((skill) => ({ pinned, name: skill.name, charms: skill.charms, set: pinned.name }))
+    : [{ pinned, name: pinned.name, charms: pinned.charms, set: null }];
+
 const byName = (a: { readonly name: string }, b: { readonly name: string }) => (a.name < b.name ? -1 : 1);
 
-const resolvedOf = (pinned: PinnedSkill, turn: SkillTurn): ResolvedSkill => ({
-  skillId: pinned.assignment.skillId,
-  name: pinned.name,
-  pin: pinned.assignment.pin,
-  scope: pinned.assignment.scope,
-  onlyWhenAsked: pinned.assignment.onlyWhenAsked,
-  missingCharms: pinned.charms.filter((charm) => !turn.charms.includes(charm)),
+const bySetAndName = (a: ResolvedSkill, b: ResolvedSkill) =>
+  a.name !== b.name ? byName(a, b) : (a.set ?? "") < (b.set ?? "") ? -1 : 1;
+
+const resolvedOf = (offered: Offered, turn: SkillTurn): ResolvedSkill => ({
+  skillId: offered.pinned.assignment.skillId,
+  name: offered.name,
+  pin: offered.pinned.assignment.pin,
+  scope: offered.pinned.assignment.scope,
+  onlyWhenAsked: offered.pinned.assignment.onlyWhenAsked,
+  missingCharms: offered.charms.filter((charm) => !turn.charms.includes(charm)),
+  set: offered.set,
 });
+
+/** Whether the narrowest assignments of one name come from two projects of the turn: then neither loads. */
+const twoProjects = (winners: ReadonlyArray<Offered>): boolean => {
+  const identities = new Set(
+    winners.flatMap((one) =>
+      one.pinned.assignment.scope._tag === "Project" ? [one.pinned.assignment.scope.identity] : [],
+    ),
+  );
+  return identities.size > 1;
+};
 
 /**
  * A hob's skills for a turn: Everyone's, plus each project's of the folders it works in, plus its
- * own. The narrower scope wins a name, two projects that define one name load neither, and an
- * Everyone or Project skill the hob opted out of is left out.
+ * own, a set's skills each counted on its own (ADR 029, Skill sets). The narrower scope wins a name,
+ * two projects that define one name load neither, and an Everyone or Project skill the hob opted out
+ * of is left out. Two skills of one name in the same scope, from two sets or a set and a skill, both
+ * load: their set tells them apart.
  */
 export const resolveSkills = (pinned: ReadonlyArray<PinnedSkill>, turn: SkillTurn): ResolvedSkills => {
-  const groups = new Map<SkillName, Array<PinnedSkill>>();
+  const groups = new Map<SkillName, Array<Offered>>();
   for (const one of pinned) {
     if (!reaches(one.assignment.scope, turn) || optedOut(one, turn)) continue;
-    groups.set(one.name, [...(groups.get(one.name) ?? []), one]);
+    for (const offered of offeredOf(one, turn))
+      groups.set(offered.name, [...(groups.get(offered.name) ?? []), offered]);
   }
   const skills: Array<ResolvedSkill> = [];
   const replaced: Array<ResolvedSkills["replaced"][number]> = [];
   const clashes: Array<ResolvedSkills["clashes"][number]> = [];
   for (const [name, group] of groups) {
-    const narrowest = Math.max(...group.map((one) => NARROWNESS[one.assignment.scope._tag]));
-    const winners = group.filter((one) => NARROWNESS[one.assignment.scope._tag] === narrowest);
+    const narrowest = Math.max(...group.map((one) => NARROWNESS[one.pinned.assignment.scope._tag]));
+    const winners = group.filter((one) => NARROWNESS[one.pinned.assignment.scope._tag] === narrowest);
     const [winner] = winners;
     if (winner === undefined) continue;
-    if (winners.length > 1) {
-      clashes.push({ name, assignments: winners.map((one) => one.assignment) });
+    if (twoProjects(winners)) {
+      clashes.push({ name, assignments: winners.map((one) => one.pinned.assignment) });
       continue;
     }
-    skills.push(resolvedOf(winner, turn));
-    for (const one of group) if (one !== winner) replaced.push({ assignment: one.assignment, by: winner.assignment });
+    for (const one of winners) skills.push(resolvedOf(one, turn));
+    for (const one of group) {
+      if (!winners.includes(one))
+        replaced.push({ assignment: one.pinned.assignment, by: winner.pinned.assignment, name });
+    }
   }
-  return { skills: skills.sort(byName), replaced, clashes: clashes.sort(byName) };
+  return { skills: skills.sort(bySetAndName), replaced, clashes: clashes.sort(byName) };
 };
 
 /**

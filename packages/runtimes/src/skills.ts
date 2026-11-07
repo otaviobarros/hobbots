@@ -11,7 +11,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, posix, relative, sep } from "node:path";
 import { RuntimeError, type SkillMount } from "@hobbots/agents";
 import { Effect, type Scope } from "effect";
 import { Document, isMap, parseDocument } from "yaml";
@@ -26,12 +26,25 @@ export const SKILLS_PLUGIN = "hobbots-skills";
 export const askedMount = (
   asked: string | null | undefined,
   mounts: ReadonlyArray<SkillMount> | null | undefined,
-): SkillMount | null => (asked ? ((mounts ?? []).find((mount) => mount.name === asked) ?? null) : null);
+): SkillMount | null => (asked ? ((mounts ?? []).find((mount) => mountName(mount) === asked) ?? null) : null);
+
+/** A mount's full name: `<set>:<name>` for a skill of a set (ADR 029, Skill sets), its name otherwise. */
+export const mountName = (mount: SkillMount): string => (mount.set ? `${mount.set.name}:${mount.name}` : mount.name);
 
 /** The folder, inside a runtime folder, that holds the turns' skill folders (ADR 029). */
 export const SKILL_MOUNTS = "skill-mounts";
 
-/** A turn's skill folder: the plugin folder, and the `skills/` inside it that holds one folder per skill. */
+/** A set a turn's folder holds (ADR 029, Skill sets): its name, and its folder, laid out as it was imported. */
+interface MountedSet {
+  readonly name: string;
+  /** The set's folder, which Claude Code loads as a plugin of that name and Codex reads as an extra root. */
+  readonly folder: string;
+}
+
+/**
+ * A turn's skill folder: the plugin folder, the `skills/` inside it that holds one folder per skill,
+ * and each set it mounts, in `sets/<set>/`.
+ */
 export interface SkillFolder {
   /** The SHA-256 of the mounts, which names the folder. */
   readonly hash: string;
@@ -39,7 +52,18 @@ export interface SkillFolder {
   readonly folder: string;
   /** Its `skills/` folder, which Codex reads as an extra root. */
   readonly skills: string;
+  /** The sets it holds, by name. */
+  readonly sets: ReadonlyArray<MountedSet>;
 }
+
+/** Where a mounted skill's `SKILL.md` is in a turn's folder: in `skills/<name>/`, or in its set's folder. */
+export const mountedSkillFile = (folder: SkillFolder, mount: SkillMount): string =>
+  mount.set
+    ? join(folder.folder, SETS, mount.set.name, ...mount.set.path.split("/"), "SKILL.md")
+    : join(folder.skills, mount.name, "SKILL.md");
+
+/** The folder, inside a turn's folder, that holds the sets it mounts. */
+const SETS = "sets";
 
 /**
  * The SHA-256 of a set of mounts (ADR 029): each name, revision and whether the hob may pick it on its
@@ -51,8 +75,12 @@ export const skillMountsHash = (mounts: ReadonlyArray<SkillMount>): string =>
     .update(
       JSON.stringify(
         [...mounts]
-          .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-          .map((mount) => [mount.name, mount.revision, mount.implicit]),
+          .sort((a, b) => (mountName(a) < mountName(b) ? -1 : mountName(a) > mountName(b) ? 1 : 0))
+          .map((mount) =>
+            mount.set
+              ? [mount.name, mount.revision, mount.implicit, mount.set.name, mount.set.path]
+              : [mount.name, mount.revision, mount.implicit],
+          ),
       ),
     )
     .digest("hex");
@@ -95,6 +123,16 @@ const assertNoLinks = (folder: string, name: string) => {
 
 const SKILL_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
+/** Marks a copied skill Only when asked, for Claude Code and for Codex, in the copy only. */
+const markOnlyWhenAsked = (target: string) => {
+  const skillFile = join(target, "SKILL.md");
+  writeFileSync(skillFile, onlyWhenAskedSkillFile(readFileSync(skillFile, "utf8")));
+  const codexFile = join(target, "agents", "openai.yaml");
+  const stored = existsSync(codexFile) ? readFileSync(codexFile, "utf8") : null;
+  mkdirSync(join(target, "agents"), { recursive: true });
+  writeFileSync(codexFile, onlyWhenAskedCodexFile(stored));
+};
+
 /** Copies one mount into the folder's `skills/<name>/`, marked Only when asked where it is. */
 const copyMount = (skills: string, mount: SkillMount) => {
   // The name becomes a folder and a plugin skill's name, so it must be one the library allows.
@@ -105,12 +143,66 @@ const copyMount = (skills: string, mount: SkillMount) => {
   if (mount.implicit) return;
   // The copy keeps the revision's modes, which are read-only, so only the copy is opened to be marked.
   setWritable(target, true);
-  const skillFile = join(target, "SKILL.md");
-  writeFileSync(skillFile, onlyWhenAskedSkillFile(readFileSync(skillFile, "utf8")));
-  const codexFile = join(target, "agents", "openai.yaml");
-  const stored = existsSync(codexFile) ? readFileSync(codexFile, "utf8") : null;
-  mkdirSync(join(target, "agents"), { recursive: true });
-  writeFileSync(codexFile, onlyWhenAskedCodexFile(stored));
+  markOnlyWhenAsked(target);
+};
+
+/** Every `SKILL.md` under `folder`, as paths relative to it with `/` between folders. */
+const skillFilesIn = (folder: string): ReadonlyArray<string> =>
+  readdirSync(folder, { withFileTypes: true, recursive: true })
+    .filter((entry) => entry.isFile() && entry.name === "SKILL.md")
+    .map((entry) => relative(folder, join(entry.parentPath, entry.name)).split(sep).join("/"));
+
+/**
+ * Copies one set into `sets/<set>/` as it is stored (ADR 029, Skill sets), so its skills' links to
+ * its other files resolve, with a plugin manifest that names it and the folders its skills are in.
+ * Only the mounted skills keep their `SKILL.md`, so a skill the hob turned off is listed by no runtime,
+ * and each Only when asked one is marked in the copy.
+ */
+const copySet = (sets: string, name: string, mounts: ReadonlyArray<SkillMount>): MountedSet => {
+  if (!SKILL_NAME.test(name) || name === SKILLS_PLUGIN) throw new Error(`${JSON.stringify(name)} is not a set name.`);
+  const [first] = mounts;
+  if (first === undefined) throw new Error(`The set ${name} has no skill to mount.`);
+  if (mounts.some((mount) => mount.folder !== first.folder || mount.revision !== first.revision))
+    throw new Error(`The skills of the set ${name} come from different revisions.`);
+  const paths = mounts.map((mount) => {
+    const path = mount.set?.path ?? "";
+    if (!isSetPath(path)) throw new Error(`${JSON.stringify(path)} is not a folder inside the set ${name}.`);
+    if (!SKILL_NAME.test(mount.name)) throw new Error(`${JSON.stringify(mount.name)} is not a skill name.`);
+    return path;
+  });
+  assertNoLinks(first.folder, name);
+  const target = join(sets, name);
+  cpSync(first.folder, target, { recursive: true });
+  setWritable(target, true);
+  const kept = new Set(paths.map((path) => `${path}/SKILL.md`));
+  for (const file of skillFilesIn(target)) if (!kept.has(file)) rmSync(join(target, ...file.split("/")));
+  for (const mount of mounts) {
+    if (!mount.implicit) markOnlyWhenAsked(join(target, ...(mount.set?.path ?? "").split("/")));
+  }
+  const folders = [...new Set(paths.map((path) => posix.dirname(path)))].sort();
+  mkdirSync(join(target, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(target, ".claude-plugin", "plugin.json"),
+    `${JSON.stringify({ name, description: `The ${name} skills Hobbots gives this hob for this turn.`, skills: folders.map((folder) => (folder === "." ? "./" : `./${folder}`)) }, null, 2)}\n`,
+  );
+  return { name, folder: target };
+};
+
+/** A skill's folder inside its set: relative, with no `.` or `..` part. */
+const isSetPath = (path: string): boolean =>
+  path !== "" &&
+  path.split("/").every((part) => part !== "" && part !== "." && part !== ".." && ![...part].some(isUnsafeChar));
+
+/** A backslash or a control character, which no folder of a set may hold. */
+const isUnsafeChar = (char: string) => char === "\\" || (char.codePointAt(0) ?? 0) < 0x20;
+
+/** The mounts of each set, by the set's name. */
+const setsOf = (mounts: ReadonlyArray<SkillMount>): ReadonlyMap<string, ReadonlyArray<SkillMount>> => {
+  const sets = new Map<string, Array<SkillMount>>();
+  for (const mount of mounts) {
+    if (mount.set) sets.set(mount.set.name, [...(sets.get(mount.set.name) ?? []), mount]);
+  }
+  return sets;
 };
 
 /**
@@ -150,14 +242,17 @@ const PLUGIN_MANIFEST = {
 export const writeSkillFolder = (base: string, mounts: ReadonlyArray<SkillMount>): SkillFolder => {
   const hash = skillMountsHash(mounts);
   const folder = join(base, SKILL_MOUNTS, hash);
-  const result = { hash, folder, skills: join(folder, "skills") };
+  const sets = [...setsOf(mounts).keys()].sort().map((name) => ({ name, folder: join(folder, SETS, name) }));
+  const result = { hash, folder, skills: join(folder, "skills"), sets };
   if (existsSync(folder)) return result;
   const draft = join(base, SKILL_MOUNTS, `.draft-${randomUUID()}`);
   try {
     mkdirSync(join(draft, ".claude-plugin"), { recursive: true, mode: 0o700 });
     writeFileSync(join(draft, ".claude-plugin", "plugin.json"), `${JSON.stringify(PLUGIN_MANIFEST, null, 2)}\n`);
     mkdirSync(join(draft, "skills"), { mode: 0o700 });
-    for (const mount of mounts) copyMount(join(draft, "skills"), mount);
+    for (const mount of mounts) if (!mount.set) copyMount(join(draft, "skills"), mount);
+    if (sets.length > 0) mkdirSync(join(draft, SETS), { mode: 0o700 });
+    for (const [name, members] of setsOf(mounts)) copySet(join(draft, SETS), name, members);
     setWritable(draft, false);
     // Read-only folders can still be renamed: only their parent must be writable.
     if (!existsSync(folder)) renameSync(draft, folder);

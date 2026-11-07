@@ -12,6 +12,7 @@ describe("the line for a skill a reply used (ADR 029)", () => {
       pin: SkillRevisionHash.make("a".repeat(64)),
       number: 4,
       explicit: false,
+      set: null,
     };
     expect(usedLine(library)).toEqual({ title: "Release steps", detail: "(r4)" });
     expect(

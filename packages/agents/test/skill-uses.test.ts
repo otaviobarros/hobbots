@@ -4,7 +4,13 @@ import { describe, expect, it } from "vitest";
 import { skillUseRecorder } from "../src/skill-turn.ts";
 
 const R4 = SkillRevisionHash.make("4".repeat(64));
-const RELEASE = { skillId: SkillId.make("release"), name: SkillName.make("release"), pin: R4, onlyWhenAsked: false };
+const RELEASE = {
+  skillId: SkillId.make("release"),
+  name: SkillName.make("release"),
+  pin: R4,
+  onlyWhenAsked: false,
+  set: null,
+};
 
 describe("a turn's skill uses (ADR 029, The use line)", () => {
   // covers ADR 029 (Admin policy still applies, The use line)
@@ -24,8 +30,16 @@ describe("a turn's skill uses (ADR 029, The use line)", () => {
       }),
     );
     expect(recorded).toEqual([
-      { source: "organization", skillId: null, name: "release", pin: null, number: null, explicit: false },
-      { source: "library", skillId: RELEASE.skillId, name: "release", pin: R4, number: null, explicit: false },
+      { source: "organization", skillId: null, name: "release", pin: null, number: null, explicit: false, set: null },
+      {
+        source: "library",
+        skillId: RELEASE.skillId,
+        name: "release",
+        pin: R4,
+        number: null,
+        explicit: false,
+        set: null,
+      },
       null,
       null,
     ]);

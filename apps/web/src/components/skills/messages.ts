@@ -568,7 +568,8 @@ export const messages = {
   },
   checks: {
     "front-matter": "SKILL.md needs front matter with a name and a description between --- lines.",
-    "outside-path": "A link or a path points outside the skill folder. Links must stay inside it.",
+    "outside-path": "A link or a path points outside the skill folder, or outside its set. Links must stay inside.",
+    set: "A skill in a set changes only with a new version of the set. Make a copy to change it.",
     symlink: "It holds a symbolic link. A skill's files must be plain files.",
     "too-large": "It is over 5 MB.",
     "too-many-files": "It has more than 200 files.",

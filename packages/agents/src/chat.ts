@@ -27,7 +27,7 @@ import {
   RUNTIME_NAMES,
   type RuntimeKind,
   type RuntimeSession,
-  type SkillName,
+  type SkillMention,
   sameBrain,
   stripEscapes,
   systemInstructions,
@@ -193,7 +193,7 @@ export class ChatService extends Context.Service<
       threadId: ThreadId,
       content: string,
       /** The skill you picked for the message with `/` (ADR 029, Explicit use), if any. */
-      askedSkill?: SkillName | null,
+      askedSkill?: SkillMention | null,
     ) => Effect.Effect<
       { userMessage: Message; assistantMessage: Message | null },
       ThreadNotFound | HobUnavailable | ThreadArchived
@@ -1233,7 +1233,7 @@ export class ChatService extends Context.Service<
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (
         threadId: ThreadId,
         content: string,
-        askedSkill: SkillName | null = null,
+        askedSkill: SkillMention | null = null,
       ) {
         // The status check and the turn's registration happen under the hob's lock, so a turn is
         // either admitted before a retirement (which then sees and stops it) or refused after it.
@@ -1259,7 +1259,11 @@ export class ChatService extends Context.Service<
               error: null,
               configVersion: null,
               skills: accepted,
-              askedSkill: askedSkill ?? mentionedSkill(content, accepted),
+              // A skill of a set picked by its name alone is recorded with its set, when that names one.
+              askedSkill:
+                askedSkill === null
+                  ? mentionedSkill(content, accepted)
+                  : (mentionedSkill(`/${askedSkill}`, accepted) ?? askedSkill),
               createdAt: yield* nowIso,
             });
             const saved = yield* saveMessage(userMessage);

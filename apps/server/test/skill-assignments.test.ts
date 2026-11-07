@@ -454,6 +454,7 @@ describe("skill uses", () => {
         pin: second.hash,
         number: 2,
         explicit: false,
+        set: null,
       },
     ]);
     // A reply that used none says so with an empty list.
@@ -553,5 +554,108 @@ describe("skill uses", () => {
     expect(stopped.status).toBe("interrupted");
     expect(stopped.skillsUsed).toMatchObject([{ name: "release-steps", number: 1 }]);
     expect((await request("GET", `/api/skills/${skill.skill.id}/uses`)).body).toMatchObject({ total: 1 });
+  });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-07] a set's new version is one update for all its skills, a held hob stays on the old one, and both mention forms pick a skill", async () => {
+    const pip = await summon("Pip", 970);
+    const quill = await summon("Quill", 971);
+    const plugin = join(root, "agent-engineering");
+    const version = async (label: string) => {
+      const manifest = JSON.stringify({ name: "agent-engineering", version: label, description: "A playbook." });
+      await mkdir(join(plugin, ".claude-plugin"), { recursive: true });
+      await writeFile(join(plugin, ".claude-plugin", "plugin.json"), manifest);
+      for (const [name, sibling] of [
+        ["deliver-change", "plan-change"],
+        ["plan-change", "deliver-change"],
+      ] as const) {
+        await mkdir(join(plugin, "skills", name), { recursive: true });
+        const steps = `Read [the contract](../../references/workflow-contract.md) and [${sibling}](../${sibling}/SKILL.md).`;
+        await writeFile(join(plugin, "skills", name, "SKILL.md"), `${skillMd(name)}\n${steps}\n`);
+      }
+      await mkdir(join(plugin, "references"), { recursive: true });
+      await writeFile(join(plugin, "references", "workflow-contract.md"), `# Contract ${label}\n`);
+    };
+    await version("0.5.0");
+    const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: plugin } });
+    expect(imported.status).toBe(200);
+    const [set] = imported.body.imported;
+    expect(set.revision).toMatchObject({ name: "agent-engineering", label: "0.5.0" });
+    expect(set.revision.set.skills.map((one: { name: string }) => one.name)).toEqual(["deliver-change", "plan-change"]);
+    const assign = async (agentId: string) =>
+      (await request("POST", `/api/skills/${set.skill.id}/assignments`, { scope: { _tag: "Hob", agentId } })).body;
+    const toPip = await assign(pip.id);
+    const toQuill = await assign(quill.id);
+    await request("POST", `/api/skills/assignments/${toQuill.id}/hold`, { held: true });
+
+    // Each of the set's skills reaches the turn on the set's revision, named with the set.
+    const pipThread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    await send(pipThread, "/agent-engineering:deliver-change go");
+    const first = await replies(pipThread, 1);
+    const setMounts = (mounts: ReadonlyArray<SkillMount> | undefined) =>
+      (mounts ?? [])
+        .filter((mount) => mount.set?.name === "agent-engineering")
+        .map((mount) => [mount.name, mount.revision]);
+    expect(setMounts(given.at(-1))).toEqual([
+      ["deliver-change", set.revision.hash],
+      ["plan-change", set.revision.hash],
+    ]);
+    expect(first.skillsUsed).toMatchObject([{ name: "deliver-change", set: "agent-engineering", explicit: true }]);
+    expect(first.content).toBe("Echo: go");
+    // A bare name picks the set's skill while no other skill has that name.
+    await send(pipThread, "/plan-change go");
+    expect((await replies(pipThread, 2)).skillsUsed).toMatchObject([
+      { name: "plan-change", set: "agent-engineering", explicit: true },
+    ]);
+    expect((await messages(pipThread)).filter((m) => m.role === "user").map((m) => m.askedSkill)).toEqual([
+      "agent-engineering:deliver-change",
+      "agent-engineering:plan-change",
+    ]);
+
+    // A new version of the plugin is one revision of the set, rolled out to every assignment but the held one.
+    await version("0.6.0");
+    const revised = await request("POST", `/api/skills/${set.skill.id}/revisions`, {
+      source: { _tag: "Folder", path: plugin },
+    });
+    expect(revised.status).toBe(200);
+    expect(revised.body.revision).toMatchObject({ number: 2, label: "0.6.0" });
+    expect(revised.body.rolledOut.map((one: { id: string }) => one.id)).toEqual([toPip.id]);
+    await send(pipThread, "/skills");
+    await replies(pipThread, 3);
+    expect(setMounts(given.at(-1))).toEqual([
+      ["deliver-change", revised.body.revision.hash],
+      ["plan-change", revised.body.revision.hash],
+    ]);
+    const quillThread: Thread = (await request("POST", `/api/agents/${quill.id}/threads`)).body;
+    await send(quillThread, "/skills");
+    await replies(quillThread, 1);
+    expect(setMounts(given.at(-1))).toEqual([
+      ["deliver-change", set.revision.hash],
+      ["plan-change", set.revision.hash],
+    ]);
+
+    // A hob can opt out of one skill of a set Everyone has, and keep the rest.
+    await request("POST", `/api/skills/${set.skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+    const wren = await summon("Wren", 972);
+    const optOut = await request("PUT", `/api/skills/hobs/${wren.id}/opt-outs/${set.skill.id}`, {
+      optedOut: true,
+      member: "plan-change",
+    });
+    expect(optOut.body).toMatchObject({
+      optedOut: [],
+      optedOutOfSets: [{ skillId: set.skill.id, name: "plan-change" }],
+    });
+    const wrenThread: Thread = (await request("POST", `/api/agents/${wren.id}/threads`)).body;
+    await send(wrenThread, "/skills");
+    await replies(wrenThread, 1);
+    expect(setMounts(given.at(-1))).toEqual([["deliver-change", revised.body.revision.hash]]);
+
+    // An edit in Hobbots never changes a set.
+    const edit = await request("POST", `/api/skills/${set.skill.id}/edits`, {
+      base: revised.body.revision.hash,
+      description: "Other.",
+      instructions: "Other.",
+    });
+    expect(edit).toMatchObject({ status: 422, body: { _tag: "SkillImportRefused", check: "set" } });
   });
 });

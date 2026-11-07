@@ -3,7 +3,7 @@ import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
 import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
-import { SkillName, TurnSkill, UsedSkill } from "./skills.ts";
+import { SkillMention, TurnSkill, UsedSkill } from "./skills.ts";
 import { ToolOutput } from "./tool-output.ts";
 
 export const MessageRole = Schema.Literals(["user", "assistant"]);
@@ -188,7 +188,7 @@ export class Message extends Schema.Class<Message>("Message")({
    * On your message, the skill you picked for it with `/` (ADR 029, Explicit use), which its turn
    * hands the runtime as the runtime's own mention. Null when you picked none.
    */
-  askedSkill: Schema.NullOr(SkillName).pipe(
+  askedSkill: Schema.NullOr(SkillMention).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),

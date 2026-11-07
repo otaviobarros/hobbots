@@ -3,9 +3,10 @@ import {
   type HobPolicy,
   type MessageId,
   type SkillAssignment,
-  type SkillName,
+  type SkillMention,
   SkillUse,
   SkillUseId,
+  skillMentionOf,
   type ThreadId,
   type TurnSkill,
   type UsedSkill,
@@ -50,7 +51,16 @@ export const pinnedSkills = (
 ): Effect.Effect<ReadonlyArray<PinnedSkill>> =>
   Effect.forEach(assignments, (assignment) =>
     Effect.map(library.revision(assignment.skillId, assignment.pin), (revision) =>
-      revision === null ? [] : [{ assignment, name: revision.name, charms: revision.charms }],
+      revision === null
+        ? []
+        : [
+            {
+              assignment,
+              name: revision.name,
+              charms: revision.charms,
+              set: revision.set === null ? null : { skills: revision.set.skills },
+            },
+          ],
     ),
   ).pipe(Effect.map((each) => each.flat()));
 
@@ -73,12 +83,15 @@ export const hobSkills = (
   Effect.gen(function* () {
     const actor = yield* memoryActorFor(projects, hob.agentId, hob.folders);
     const pinned = yield* pinnedSkills(library, yield* library.assignments());
-    const optedOut = (yield* library.optOuts(hob.agentId)).map((one) => one.skillId);
+    const optOuts = yield* library.optOuts(hob.agentId);
     return resolveSkills(pinned, {
       agentId: hob.agentId,
       projects: actor.projects,
       charms: hobCharms(hob.policy),
-      optedOut,
+      optedOut: optOuts.flatMap((one) => (one.member === null ? [one.skillId] : [])),
+      optedOutOfSets: optOuts.flatMap((one) =>
+        one.member === null ? [] : [{ skillId: one.skillId, name: one.member }],
+      ),
     });
   });
 
@@ -105,6 +118,18 @@ export const skillMounter = Effect.gen(function* () {
   const library = yield* Effect.serviceOption(SkillLibrary);
   const files = yield* Effect.serviceOption(SkillFiles);
   const projects = yield* Effect.serviceOption(MemoryProjects);
+  /**
+   * Where a skill of a set is inside its set's folder (ADR 029, Skill sets), null for a skill of its
+   * own, or undefined when the set's revision no longer holds it.
+   */
+  const setOf = (skill: TurnSkill) =>
+    Effect.gen(function* () {
+      if (skill.set === null) return null;
+      if (Option.isNone(library)) return undefined;
+      const revision = yield* library.value.revision(skill.skillId, skill.pin);
+      const path = revision?.set?.skills.find((one) => one.name === skill.name)?.path;
+      return path === undefined ? undefined : { name: skill.set, path };
+    });
   const shape: SkillMounterShape = {
     enabled: Option.isSome(library) && Option.isSome(files),
     resolve: (hob) =>
@@ -116,6 +141,7 @@ export const skillMounter = Effect.gen(function* () {
               name: skill.name,
               pin: skill.pin,
               onlyWhenAsked: skill.onlyWhenAsked,
+              set: skill.set,
             })),
           ),
     mounts: (skills) =>
@@ -124,8 +150,9 @@ export const skillMounter = Effect.gen(function* () {
         : Effect.forEach(skills, (skill) =>
             Effect.gen(function* () {
               const folder = yield* files.value.folder(skill.pin);
-              if (folder !== null) {
-                return [{ name: skill.name, revision: skill.pin, folder, implicit: !skill.onlyWhenAsked }];
+              const set = yield* setOf(skill);
+              if (folder !== null && set !== undefined) {
+                return [{ name: skill.name, revision: skill.pin, folder, implicit: !skill.onlyWhenAsked, set }];
               }
               // The database names a revision whose files the hub lost: the turn goes on without it.
               yield* Effect.logWarning(`No files for ${skill.name} at ${skill.pin}; the turn goes on without it.`);
@@ -148,6 +175,8 @@ interface ReportedUse {
   readonly source: "library" | "organization";
   readonly name: string;
   readonly explicit: boolean;
+  /** The set of the mount it used, for a skill of a set. */
+  readonly set?: string | null;
 }
 
 /** Records the skills a turn uses (ADR 029, The use line), each once per turn. */
@@ -180,14 +209,22 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
     let skills: ReadonlyArray<TurnSkill> = [];
     let organization: ReadonlyArray<string> = [];
     const recorded = new Set<string>();
-    const usedOf = (source: "library" | "organization", name: string, explicit: boolean) =>
+    const usedOf = (source: "library" | "organization", name: string, explicit: boolean, set: string | null) =>
       Effect.gen(function* () {
         if (source === "organization") {
           if (!organization.includes(name)) return null;
-          const used: UsedSkill = { source: "organization", skillId: null, name, pin: null, number: null, explicit };
+          const used: UsedSkill = {
+            source: "organization",
+            skillId: null,
+            name,
+            pin: null,
+            number: null,
+            explicit,
+            set: null,
+          };
           return used;
         }
-        const mounted = skills.find((skill) => skill.name === name);
+        const mounted = skills.find((skill) => skill.name === name && (skill.set ?? null) === set);
         if (mounted === undefined) return null;
         const revision = Option.isSome(library) ? yield* library.value.revision(mounted.skillId, mounted.pin) : null;
         const used: UsedSkill = {
@@ -197,15 +234,16 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
           pin: mounted.pin,
           number: revision?.number ?? null,
           explicit,
+          set: mounted.set ?? null,
         };
         return used;
       });
-    const resolve = ({ source, name, explicit }: ReportedUse) =>
+    const resolve = ({ source, name, explicit, set }: ReportedUse) =>
       Effect.gen(function* () {
-        // A library skill and an organization one may share a name; each counts on its own.
-        const key = `${source}:${name}`;
+        // A library skill and an organization one may share a name, and so may two sets; each counts on its own.
+        const key = `${source}:${skillMentionOf({ name, set: source === "library" ? (set ?? null) : null })}`;
         if (recorded.has(key)) return null;
-        const used = yield* usedOf(source, name, explicit);
+        const used = yield* usedOf(source, name, explicit, source === "library" ? (set ?? null) : null);
         if (used === null) return null;
         recorded.add(key);
         if (Option.isNone(library)) return { used, use: null };
@@ -233,37 +271,54 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
 
 /** `skills` with `used` added, unless it already holds that skill: a reply records each skill once. */
 export const withUsedSkill = (skills: ReadonlyArray<UsedSkill>, used: UsedSkill): ReadonlyArray<UsedSkill> =>
-  skills.some((one) => one.source === used.source && one.name === used.name && one.pin === used.pin)
+  skills.some(
+    (one) => one.source === used.source && one.name === used.name && one.set === used.set && one.pin === used.pin,
+  )
     ? skills
     : [...skills, used];
 
 /**
  * The skill you picked for your message, if the turn was given it (ADR 029, Explicit use): one you
  * since lost, as after an unassign while the message waited, is dropped, and the turn runs without it.
+ * A skill of a set is named `<set>:<name>` (ADR 029, Skill sets).
  */
 export const askedSkillOf = (
   yours: { readonly askedSkill: string | null } | undefined,
   given: ReadonlyArray<TurnSkill> | null,
 ): string | null => {
   const asked = yours?.askedSkill ?? null;
-  return asked !== null && (given ?? []).some((skill) => skill.name === asked) ? asked : null;
+  return asked !== null && (given ?? []).some((skill) => skillMentionOf(skill) === asked) ? asked : null;
 };
 
-/** A `/name` at the start of a message, as the composer writes a skill you picked. */
-const MENTION = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/;
+const NAME = "[a-z0-9]+(?:-[a-z0-9]+)*";
+
+/** A `/name`, or `/set:name`, at the start of a message, as the composer writes a skill you picked. */
+const MENTION = new RegExp(`^\\/((?:${NAME}:)?${NAME})(?=\\s|$)`);
 
 /**
  * The skill a message names at its start with `/` (ADR 029, Explicit use), when the hob has a skill
- * of that name; null otherwise, so a `/` that names no skill of the hob's stays plain text.
+ * of that name; null otherwise, so a `/` that names no skill of the hob's stays plain text. A skill
+ * of a set can be named with its set, `/agent-engineering:deliver-change`, or alone, `/deliver-change`,
+ * when the hob has no other skill of that name (ADR 029, Skill sets). Answers the full name.
  */
-export const mentionedSkill = (content: string, given: ReadonlyArray<TurnSkill> | null): SkillName | null => {
-  const name = MENTION.exec(content)?.[1];
-  return (given ?? []).find((skill) => skill.name === name)?.name ?? null;
+export const mentionedSkill = (content: string, given: ReadonlyArray<TurnSkill> | null): SkillMention | null => {
+  const typed = MENTION.exec(content)?.[1];
+  if (typed === undefined) return null;
+  const named = (given ?? []).filter((skill) =>
+    typed.includes(":") ? skillMentionOf(skill) === typed : skill.name === typed,
+  );
+  const [only] = named;
+  return only !== undefined && named.length === 1 ? (skillMentionOf(only) as SkillMention) : null;
 };
 
 /**
  * The prompt without its leading `/name` for the skill you picked, which the runtime gets as its own
- * mention instead; as it is when you picked none.
+ * mention instead; as it is when you picked none. A skill of a set may have been typed with its set
+ * or without it.
  */
-export const withoutMention = (prompt: string, name: string | null): string =>
-  name !== null && MENTION.exec(prompt)?.[1] === name ? prompt.slice(name.length + 1).trimStart() : prompt;
+export const withoutMention = (prompt: string, mention: string | null): string => {
+  if (mention === null) return prompt;
+  const typed = MENTION.exec(prompt)?.[1];
+  const bare = mention.includes(":") ? mention.slice(mention.indexOf(":") + 1) : mention;
+  return typed === mention || typed === bare ? prompt.slice(typed.length + 1).trimStart() : prompt;
+};
