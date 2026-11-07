@@ -7,7 +7,8 @@ const copy = messages;
 
 /**
  * The quiet lines under a reply for the skills it used (ADR 029, The use line, #1096): "Used Release
- * steps (r4)", one line a skill, like the line for a memory save. No badge: it is a notice only.
+ * steps (r4)", or "Used Deliver change from agent-engineering (r1)" for a set's skill, one line a skill,
+ * like the line for a memory save. No badge: it is a notice only.
  */
 export function SkillUsedLines({ message, hob }: { message: Message; hob: Agent }) {
   if (message.role !== "assistant" || message.skillsUsed.length === 0) return null;
