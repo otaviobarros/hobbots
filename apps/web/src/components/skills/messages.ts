@@ -139,6 +139,8 @@ export const messages = {
     optedOutLine: ({ name, hob }: { name: string; hob: string }) => `${name} is off for ${hob}`,
     optedIn: "Turned on",
     optedInLine: ({ name, hob }: { name: string; hob: string }) => `${name} is on for ${hob} again`,
+    /** One skill of a set, named with the set it comes from. */
+    memberOf: ({ member, set }: { member: string; set: string }) => `${member} from ${set}`,
     removed: "Removed",
     removedLine: ({ name }: { name: string }) => `${name} left the library`,
     rollBack: ({ rev }: { rev: string }) => `Roll back to ${rev}`,
