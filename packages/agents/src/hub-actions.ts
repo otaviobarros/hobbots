@@ -1,6 +1,7 @@
-import type { AnyOperation, CharmDeclaration } from "@hobbots/domain";
-import { Effect, Schema } from "effect";
+import { type AnyOperation, type CharmDeclaration, CharmWriteKey, toolInputJsonSchema } from "@hobbots/domain";
+import { Effect, Option, Schema } from "effect";
 import { type AskableVerdict, approvalNote, askOnStep } from "./asking.ts";
+import { type CharmCallRunner, type ReadBack, scopesOf, type WriteOutcome } from "./charm-calls.ts";
 import type { CharmTurn } from "./charms.ts";
 import {
   type HubCallStep,
@@ -45,22 +46,39 @@ export interface HubRequest {
 export interface HubPlanContext {
   readonly turn: Pick<CharmTurn, "agentId" | "threadId" | "messageId" | "attemptId" | "scope" | "also">;
   readonly access: ToolAccess;
+  /**
+   * For a Charm write, whose input is planned redacted (ADR 031): the fields of the input redaction
+   * changed, so the hob can be told what the user approved and the Charm got.
+   */
+  readonly redacted?: ReadonlyArray<string>;
+  /**
+   * For a Charm write: redacts text the plan builds from its input, such as a body it normalized,
+   * since a change to redacted text can join a secret back together. It holds only the turn's
+   * redactor's text function, never what it learned.
+   */
+  readonly redact?: (text: string) => string;
 }
 
-/**
- * A planned call: the request the policy decides, what the approval card shows and its digest covers,
- * and `send`, which does exactly what was approved and gives what the hob is told.
- */
-export interface HubPlan<R extends HubRequest> {
+/** What the policy decided for a call: its targets as the engine resolved them, such as a folder with its links followed. */
+export interface HubDecided {
+  readonly targets: ReadonlyArray<string>;
+}
+
+interface HubPlanBase<R extends HubRequest> {
   readonly request: R;
   readonly card: {
     /** The call's arguments as the card shows them. */
     readonly arguments: Readonly<Record<string, unknown>>;
     /** A sentence that says what the call does, for the card. */
     readonly summary?: string;
+    /** What the card and the call's step are labeled, when it says more than the tool's label. */
+    readonly label?: string;
   };
-  /** What the hob is told: the text, or an answer of its own, such as a retried key refused by its store. */
-  readonly send: Effect.Effect<string | HubToolAnswer, HubRefusal>;
+  /**
+   * Runs the rest of the call, from deciding to sending, under what planning was pinned to, such as
+   * the sign-in the card names (ADR 020, ADR 022), so the call never asks or acts as anyone else.
+   */
+  readonly pinned?: <A, E>(rest: Effect.Effect<A, E>) => Effect.Effect<A, E>;
 }
 
 /**
@@ -71,6 +89,40 @@ export interface HubNoCall {
   readonly _tag: "NoCall";
   readonly text: string;
 }
+
+/**
+ * A planned call: the request the policy decides, what the approval card shows and its digest covers,
+ * and `send`, which does exactly what was approved and gives what the hob is told. A `send` that
+ * needs what the policy resolved, such as the folder a link leads to, is given it.
+ */
+export interface HubSendPlan<R extends HubRequest> extends HubPlanBase<R> {
+  /** What the hob is told: the text, or an answer of its own, such as a retried key refused by its store. */
+  readonly send:
+    | Effect.Effect<string | HubToolAnswer, HubRefusal>
+    | ((decided: HubDecided) => Effect.Effect<string | HubToolAnswer, HubRefusal>);
+}
+
+/**
+ * A Charm write's plan (ADR 020, ADR 031): what its never-twice record keeps, and `send`, which does
+ * exactly what was approved and says how it ended.
+ */
+export interface HubWritePlan<R extends HubRequest> extends HubPlanBase<R> {
+  readonly write: {
+    /** Where it acts: two writes of the same tool on one site never overlap while one is uncertain. */
+    readonly site: string;
+    /** What the hub fixed when it decided, which reading back compares against. */
+    readonly recorded: object;
+    /** What the hob is told when reading the Charm back finds the call took effect. */
+    readonly appliedText: string;
+    /** What the hob is also told once the call ran or was not sent, such as what was redacted. */
+    readonly note?: string;
+    readonly send: Effect.Effect<WriteOutcome>;
+  };
+}
+
+export type HubPlan<R extends HubRequest> = HubSendPlan<R> | HubWritePlan<R>;
+
+type Decode = (raw: unknown) => Effect.Effect<unknown, Schema.SchemaError>;
 
 /** A hub tool and how a call to it is planned. */
 export interface HubAction<R extends HubRequest> {
@@ -85,9 +137,22 @@ export interface HubAction<R extends HubRequest> {
   readonly operation?: AnyOperation;
   /** What the hob is told when its input cannot be decoded; the decode error's first lines otherwise. */
   readonly unreadable?: (error: Schema.SchemaError) => string;
-  readonly decode: (raw: unknown) => Effect.Effect<unknown, Schema.SchemaError>;
+  readonly decode: Decode;
+  /**
+   * The input with the `key` a Charm write carries (ADR 031): its decoder and its JSON Schema. Only
+   * an action whose input is a struct has it, and the pipeline uses it for a Charm write alone.
+   */
+  readonly keyed: { readonly decode: Decode; readonly inputSchema: Record<string, unknown> } | null;
+  /** For a Charm write, how the Charm is read back for one of its calls that ended uncertain. */
+  readonly readBack?: ReadBack;
   readonly plan: (input: unknown, context: HubPlanContext) => Effect.Effect<HubPlan<R> | HubNoCall, HubRefusal>;
 }
+
+/** The fields of `schema` when it is a struct. */
+const fieldsOf = (schema: Schema.Top): Schema.Struct.Fields | null =>
+  "fields" in schema && typeof schema.fields === "object" && schema.fields !== null
+    ? (schema.fields as Schema.Struct.Fields)
+    : null;
 
 /** An action whose input is decoded with `input` before `plan` sees it. */
 export const hubAction = <S extends Schema.Top & { readonly DecodingServices: never }, R extends HubRequest>(action: {
@@ -97,16 +162,34 @@ export const hubAction = <S extends Schema.Top & { readonly DecodingServices: ne
   readonly otherwise: string;
   readonly operation?: AnyOperation;
   readonly unreadable?: (error: Schema.SchemaError) => string;
+  readonly readBack?: ReadBack;
   readonly plan: (input: S["Type"], context: HubPlanContext) => Effect.Effect<HubPlan<R> | HubNoCall, HubRefusal>;
-}): HubAction<R> => ({
-  tool: action.tool,
-  effect: action.effect,
-  otherwise: action.otherwise,
-  ...(action.operation === undefined ? {} : { operation: action.operation }),
-  ...(action.unreadable === undefined ? {} : { unreadable: action.unreadable }),
-  decode: Schema.decodeUnknownEffect(action.input),
-  plan: (input, context) => action.plan(input as S["Type"], context),
-});
+}): HubAction<R> => {
+  const fields = fieldsOf(action.input);
+  const withKey = fields === null ? null : Schema.Struct({ ...fields, key: CharmWriteKey });
+  return {
+    tool: action.tool,
+    effect: action.effect,
+    otherwise: action.otherwise,
+    ...(action.operation === undefined ? {} : { operation: action.operation }),
+    ...(action.unreadable === undefined ? {} : { unreadable: action.unreadable }),
+    decode: Schema.decodeUnknownEffect(action.input),
+    keyed:
+      withKey === null
+        ? null
+        : { decode: Schema.decodeUnknownEffect(withKey), inputSchema: toolInputJsonSchema(withKey) },
+    ...(action.readBack === undefined ? {} : { readBack: action.readBack }),
+    plan: (input, context) => action.plan(input as S["Type"], context),
+  };
+};
+
+/** The read-backs of a Charm's write actions, by tool, for its never-twice runner. */
+export const readBacksOf = <R extends HubRequest>(
+  actions: ReadonlyArray<HubAction<R>>,
+): Readonly<Record<string, ReadBack>> =>
+  Object.fromEntries(
+    actions.flatMap((action) => (action.readBack === undefined ? [] : [[action.tool.name, action.readBack] as const])),
+  );
 
 /**
  * Who offers a set of actions. A Charm plans its own `Charm` requests, and the built-in ones it
@@ -146,6 +229,11 @@ export interface HubActionsOptions<R extends HubRequest, V extends AskableVerdic
   readonly owner: HubActionOwner;
   readonly actions: ReadonlyArray<HubAction<R>>;
   /**
+   * The Charm's never-twice runner (ADR 020, ADR 031), made with `makeCharmCallRunner` and the
+   * read-backs of its write actions. A Charm that offers a write must give it.
+   */
+  readonly calls?: CharmCallRunner;
+  /**
    * Decides a request with the hob's live grants, read again each time, as `decideHubCall` does.
    * `fresh` is the hob's access after an approval, or null for `base`.
    */
@@ -158,9 +246,10 @@ export interface HubActionsOptions<R extends HubRequest, V extends AskableVerdic
 
 /**
  * What an action is given to plan, built afresh for each call: only the turn's ids and the access,
- * so the turn's approvals, grants and redactor never reach an action, whatever it reads at run time.
+ * so the turn's approvals and grants never reach an action, whatever it reads at run time. A Charm
+ * write is also told which fields were redacted, and may redact text it builds.
  */
-const planContext = (turn: CharmTurn, access: ToolAccess): HubPlanContext => ({
+const planContext = (turn: CharmTurn, access: ToolAccess, redacted?: ReadonlyArray<string>): HubPlanContext => ({
   turn: {
     agentId: turn.agentId,
     threadId: turn.threadId,
@@ -170,7 +259,17 @@ const planContext = (turn: CharmTurn, access: ToolAccess): HubPlanContext => ({
     ...(turn.also === undefined ? {} : { also: turn.also }),
   },
   access,
+  ...(redacted === undefined ? {} : { redacted, redact: (text: string) => turn.redactor.text(text) }),
 });
+
+/** The fields of `input` whose values redaction changed in `redacted`. */
+const changedFields = (input: unknown, redacted: unknown): ReadonlyArray<string> => {
+  if (typeof input !== "object" || input === null) return [];
+  const after = redacted as Readonly<Record<string, unknown>>;
+  return Object.entries(input).flatMap(([field, value]) =>
+    JSON.stringify(value) === JSON.stringify(after[field]) ? [] : [field],
+  );
+};
 
 /** Refuses with `message`. */
 const refuse = (message: string) => Effect.fail(new HubRefusal({ message }));
@@ -205,8 +304,11 @@ export const redactedAnswer = (
 export const makeHubActions =
   <R extends HubRequest, V extends AskableVerdict>(options: HubActionsOptions<R, V>) =>
   (turn: CharmTurn): HubTools => {
-    const { owner } = options;
-    const byName = new Map(options.actions.map((action) => [action.tool.name, action]));
+    const { owner, calls } = options;
+    const actions = options.actions.map((action) =>
+      isCharmWrite(owner, action) ? keyedAction(action, calls) : action,
+    );
+    const byName = new Map(actions.map((action) => [action.tool.name, action]));
 
     /** The hob's access now, or a refusal when it has no tools or no longer holds the Charm (PE-008). */
     const accessNow = (action: HubAction<R>) =>
@@ -225,7 +327,7 @@ export const makeHubActions =
      */
     const deny = (
       step: HubCallStep | undefined,
-      tool: HubTool,
+      tool: HubTool & { readonly label: string },
       verdict: Pick<AskableVerdict, "operation" | "targets"> | undefined,
       reason: string,
       decidedBy: "policy" | "user" = "policy",
@@ -247,7 +349,7 @@ export const makeHubActions =
       });
 
     /** Records the call's step before anything is sent (EX-004); a call that cannot be recorded never runs. */
-    const record = (step: HubCallStep | undefined, tool: HubTool, verdict: V) =>
+    const record = (step: HubCallStep | undefined, tool: HubTool & { readonly label: string }, verdict: V) =>
       Effect.gen(function* () {
         const recorded =
           step === undefined
@@ -265,60 +367,147 @@ export const makeHubActions =
         if (!recorded) return yield* deny(step, tool, verdict, UNRECORDED_TOOL_CALL);
       });
 
-    /** The decoded input and its plan, refused when the owner may not plan its request. */
-    const planned = (action: HubAction<R>, raw: unknown) =>
+    /** The decoded input, without the key a Charm write carries, and that key. */
+    const decoded = (action: HubAction<R>, raw: unknown) =>
       Effect.gen(function* () {
-        const input = yield* action
-          .decode(raw)
-          .pipe(Effect.mapError((error) => new HubRefusal({ message: (action.unreadable ?? describe)(error) })));
-        const access = yield* accessNow(action);
-        const plan = yield* action.plan(input, planContext(turn, access));
+        const charmWrite = isCharmWrite(owner, action);
+        const decode = charmWrite && action.keyed !== null ? action.keyed.decode : action.decode;
+        const input = yield* decode(raw).pipe(
+          Effect.mapError((error) => new HubRefusal({ message: (action.unreadable ?? describe)(error) })),
+        );
+        if (!charmWrite) return { input, key: null };
+        const { key, ...rest } = input as { readonly key: string };
+        return { input: rest as unknown, key };
+      });
+
+    /**
+     * The plan, or the answer of a call with nothing to decide, refused as a defect when the owner
+     * may not plan its request, or it is not the kind its action makes.
+     */
+    const planned = (action: HubAction<R>, input: unknown, context: HubPlanContext) =>
+      Effect.gen(function* () {
+        const plan = yield* action.plan(input, context);
         if ("_tag" in plan) return plan;
         if (!mayPlan(owner, plan.request)) {
           return yield* Effect.die(
             new Error(`${action.tool.name} planned a ${plan.request._tag} request its owner does not declare.`),
           );
         }
-        // The never-twice record of a Charm write (ADR 031) comes with the first Charm write moved here (#618).
-        if (owner._tag === "Charm" && action.effect === "write") {
-          return yield* Effect.die(new Error(`${action.tool.name} is a Charm write, which needs its keyed record.`));
+        if ("write" in plan !== isCharmWrite(owner, action)) {
+          return yield* Effect.die(
+            new Error(
+              `${action.tool.name} planned a ${"write" in plan ? "keyed write" : "call"} its action does not make.`,
+            ),
+          );
         }
-        return { access, plan };
+        return plan;
       });
 
-    const run = (action: HubAction<R>, raw: unknown, step: HubCallStep | undefined) =>
+    /**
+     * Sends a Charm write as its keyed record (ADR 020): a key used before answers as it did, a call
+     * that ended uncertain is read back, and what the hob is told says how it ended.
+     */
+    const sendWrite = (
+      action: HubAction<R>,
+      write: HubWritePlan<R>["write"],
+      keyed: { readonly key: string; readonly input: unknown },
+      step: HubCallStep | undefined,
+      approved: string,
+    ) =>
       Effect.gen(function* () {
-        const planning = yield* planned(action, raw);
-        if ("_tag" in planning) return planning.text;
-        const { access, plan } = planning;
+        const runner = calls as CharmCallRunner;
+        const outcome = yield* runner
+          .run(
+            {
+              agentId: turn.agentId,
+              scope: turn.scope(),
+              also: turn.also,
+              tool: action.tool.name,
+              key: keyed.key,
+              input: keyed.input,
+              site: write.site,
+              plan: write.recorded,
+              appliedText: write.appliedText,
+              step,
+              threadId: turn.threadId,
+              messageId: turn.messageId,
+            },
+            write.send,
+          )
+          .pipe(Effect.scoped);
+        const note = write.note ?? "";
+        if (outcome._tag === "Applied") return `${outcome.text}${note}${approved}`;
+        if (outcome._tag === "Uncertain") return yield* refuse(outcome.text);
+        return yield* refuse(`${outcome.text}${note}${approved}`);
+      });
+
+    /** Decides, asks, records and sends a planned call. */
+    const decideAndSend = (
+      action: HubAction<R>,
+      plan: HubPlan<R>,
+      access: ToolAccess,
+      keyed: { readonly key: string; readonly input: unknown } | null,
+      step: HubCallStep | undefined,
+    ) =>
+      Effect.gen(function* () {
         const { summary } = plan.card;
+        const tool = { ...action.tool, label: plan.card.label ?? action.tool.label };
         const decision = yield* askOnStep({
           call: {
-            id: step?.id ?? action.tool.name,
-            tool: action.tool.name,
+            id: step?.id ?? tool.name,
+            tool: tool.name,
             arguments: summary === undefined ? plan.card.arguments : { ...plan.card.arguments, summary },
-            label: action.tool.label,
+            label: tool.label,
           },
           step,
           approvals: turn.approvals,
           decide: options.decide(turn.approvals, access, plan.request),
         });
         if (decision._tag === "Refuse") {
-          return yield* deny(step, action.tool, decision.verdict, decision.reason, decision.decidedBy);
+          return yield* deny(step, tool, decision.verdict, decision.reason, decision.decidedBy);
         }
         // The hob's access is read again once the call may run, so a Charm taken away while you
         // decided stops it, whatever the policy says (PE-008).
-        yield* accessNow(action).pipe(
-          Effect.catch((refused) => deny(step, action.tool, decision.verdict, refused.message)),
-        );
-        yield* record(step, action.tool, decision.verdict);
-        const sent = yield* plan.send;
+        yield* accessNow(action).pipe(Effect.catch((refused) => deny(step, tool, decision.verdict, refused.message)));
+        yield* record(step, tool, decision.verdict);
+        const approved = decision.approval === undefined ? "" : ` ${approvalNote(decision.approval)}`;
+        if ("write" in plan && keyed !== null) return yield* sendWrite(action, plan.write, keyed, step, approved);
+        if ("write" in plan) return yield* Effect.die(new Error(`${tool.name} planned a write without its key.`));
+        const sent = yield* Effect.isEffect(plan.send) ? plan.send : plan.send({ targets: decision.verdict.targets });
         const answer: HubToolAnswer = typeof sent === "string" ? { text: sent, refused: false } : sent;
-        const text = owner._tag === "Charm" ? `${outsideDataLine(owner.name)}\n${answer.text}` : answer.text;
-        return {
-          ...answer,
-          text: decision.approval === undefined ? text : `${text} ${approvalNote(decision.approval)}`,
-        };
+        // A Charm's read returns other people's text; what a write returns is the hub's own words.
+        const text =
+          owner._tag === "Charm" && action.effect === "read"
+            ? `${outsideDataLine(owner.name)}\n${answer.text}`
+            : answer.text;
+        return { ...answer, text: `${text}${approved}` };
+      });
+
+    const run = (action: HubAction<R>, raw: unknown, step: HubCallStep | undefined) =>
+      Effect.gen(function* () {
+        const { input, key } = yield* decoded(action, raw);
+        const access = yield* accessNow(action);
+        // A Charm write is planned, sent and stored redacted, so the card shows, and the Charm gets,
+        // no secret the hob wrote, and none is stored (ADR 031).
+        const keyed = key === null ? null : { key, input: turn.redactor.value(input) };
+        if (keyed !== null) {
+          // A retried key answers as it did before anything is planned, so it never asks the user again.
+          const earlier = yield* (calls as CharmCallRunner).earlier(
+            turn.agentId,
+            scopesOf(turn),
+            keyed.key,
+            keyed.input,
+          );
+          if (Option.isSome(earlier)) return earlier.value;
+        }
+        const plan = yield* planned(
+          action,
+          keyed?.input ?? input,
+          keyed === null ? planContext(turn, access) : planContext(turn, access, changedFields(input, keyed.input)),
+        );
+        if ("_tag" in plan) return plan.text;
+        const rest = decideAndSend(action, plan, access, keyed, step);
+        return yield* plan.pinned === undefined ? rest : plan.pinned(rest);
       });
 
     const call = (name: string, raw: unknown, step?: HubCallStep): Effect.Effect<HubToolAnswer> => {
@@ -330,8 +519,23 @@ export const makeHubActions =
       });
     };
 
-    return { tools: options.actions.map((action) => action.tool), call };
+    return { tools: actions.map((action) => action.tool), call };
   };
+
+/** Whether `action` is a Charm write, which carries a key and runs as a recorded call (ADR 020, ADR 031). */
+const isCharmWrite = <R extends HubRequest>(owner: HubActionOwner, action: HubAction<R>) =>
+  owner._tag === "Charm" && action.effect === "write";
+
+/**
+ * A Charm write as the hob is offered it: its input with the `key` the pipeline adds. A Charm write
+ * whose input has no fields, or a Charm without a runner, is a defect in the Charm, found when its
+ * tools are first offered, before any call.
+ */
+const keyedAction = <R extends HubRequest>(action: HubAction<R>, calls: CharmCallRunner | undefined): HubAction<R> => {
+  if (action.keyed === null) throw new Error(`${action.tool.name} is a Charm write whose input is not a struct.`);
+  if (calls === undefined) throw new Error(`${action.tool.name} is a Charm write, and its Charm gave no runner.`);
+  return { ...action, tool: { ...action.tool, inputSchema: action.keyed.inputSchema } };
+};
 
 /**
  * The hub tools a turn is offered for `actions`, as `makeHubActions` runs them, read under the turn's

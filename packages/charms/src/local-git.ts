@@ -2,16 +2,12 @@ import { lstatSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync } 
 import { isAbsolute, join, relative, sep } from "node:path";
 import {
   type AskableVerdict,
-  approvalNote,
-  askOnStep,
-  type CharmTurn,
-  type HubCallStep,
-  type HubToolAnswer,
-  hubAnswer,
+  HubRefusal,
+  hubAction,
   LocalGitTools,
+  makeHubActions,
   openTools,
   operationDecision,
-  showStarted,
   type ToolAccess,
 } from "@hobbots/agents";
 import {
@@ -23,10 +19,9 @@ import {
   narrowest,
 } from "@hobbots/domain";
 
-import { PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
-import { Data, Effect, Layer, Schema } from "effect";
+import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
+import { Effect, Layer } from "effect";
 import { ChildProcessSpawner } from "effect/process";
-import { decideCharmWrite } from "./github-writes.ts";
 import { runTool, toolEnv } from "./run-tool.ts";
 
 /**
@@ -38,10 +33,17 @@ import { runTool, toolEnv } from "./run-tool.ts";
  * reaches, and copies it to the folder's `.git` without following links (`PUBLISH_SCRIPT`). The
  * repository starts with Git's own config and no hooks, and the hob commits in it as usual. A `.git`
  * that holds only a config and hooks, which the sandbox keeps when a hob deletes a repository, is
- * replaced (#663).
+ * replaced (#663). It runs through the hub action pipeline (ADR 031), which decides, asks, records
+ * and runs it; it takes no key, since it refuses a folder that already holds a repository, so a
+ * retried call never creates a second.
  */
 
-class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> {}
+/** What a `git_init` decides, both together: Local Git on the folder, and Edit files on it. */
+interface GitInitRequest {
+  readonly _tag: "GitInit";
+  readonly command: PolicyRequest;
+  readonly files: PolicyRequest;
+}
 
 /** What the hob is told once the repository is there. */
 export const initializedText = (folder: string) =>
@@ -55,14 +57,13 @@ export const NEXT_TURN =
   "On this hub your commands see a new repository at the top of a folder from your next turn: finish this turn and continue in the next.";
 
 /** What the hob is told once the repository is at `target`, the top of its folder when `atTop`. */
-const createdText = (target: string, replace: boolean, atTop: boolean, note: string | undefined) =>
+const createdText = (target: string, replace: boolean, atTop: boolean) =>
   [
     initializedText(target),
     ...(replace ? [REPLACED] : []),
     // Bubblewrap fixes a turn's mounts when it starts, and holds a missing `.git` at the top of a folder;
     // a stub's `.git` is there, so its replacement shows at once.
     ...(process.platform === "linux" && atTop && !replace ? [NEXT_TURN] : []),
-    ...(note === undefined ? [] : [note]),
   ].join(" ");
 
 /** Whether `path` names something inside a Git directory, where a new repository has no place. */
@@ -230,14 +231,12 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       // The hub's own Git, outside any sandbox, only to read the user's `init.defaultBranch`.
       const git = runTool(spawner, toolEnv(process.env));
-      const tools = [
-        {
-          name: GIT_INIT_TOOL,
-          description: GIT_INIT_DESCRIPTION,
-          label: GIT_INIT_LABEL,
-          inputSchema: gitInitToolJsonSchema(),
-        },
-      ];
+      const tool = {
+        name: GIT_INIT_TOOL,
+        description: GIT_INIT_DESCRIPTION,
+        label: GIT_INIT_LABEL,
+        inputSchema: gitInitToolJsonSchema(),
+      };
 
       /**
        * Refuses a folder that is, or lies in, a Git directory, or already holds a `.git` other than a
@@ -246,26 +245,26 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
       const checkPlace = (folder: string) =>
         Effect.gen(function* () {
           if (insideGitDirectory(folder)) {
-            return yield* new Refused({
+            return yield* new HubRefusal({
               message: `${folder} is inside a Git directory, so it cannot hold a repository.`,
             });
           }
           const git = yield* Effect.try({
             try: () => gitDirectory(folder),
             catch: (error) =>
-              new Refused({
+              new HubRefusal({
                 message: `Hobbots could not read ${folder}, so nothing was created: ${(error as NodeJS.ErrnoException).code ?? String(error)}`,
               }),
           });
           if (git._tag === "Repository") {
-            return yield* new Refused({
+            return yield* new HubRefusal({
               message: `${folder} is already a Git repository, so nothing was created. Commit in it with git as usual.`,
             });
           }
           if (git._tag === "Other") {
             const named = git.other.slice(0, 5).map((path) => `.git/${path.split(sep).join("/")}`);
             const more = git.other.length > named.length ? " and the rest of it" : "";
-            return yield* new Refused({
+            return yield* new HubRefusal({
               message: `${folder} holds a .git that is not a repository, so nothing was created. Delete ${named.join(", ")}${more}, then call ${GIT_INIT_TOOL} again: it replaces a .git that holds only a config and hooks.`,
             });
           }
@@ -273,32 +272,22 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
         });
 
       /**
-       * The call's verdict: Local Git on the folder, and Edit files on it, since the hub writes the
-       * repository's files there for the hob (STD-SEC-002). The narrower answer stands, on the folder.
-       * Edit files is decided on the folder, not its `.git`, which the policy keeps from every hob's
-       * own writes. In place of a stub, it is decided on the new `HEAD`, since the folder holds the
-       * stub's config and hooks, which no hob may change and which only the hub removes.
+       * The call's requests: Local Git on the folder, and Edit files on it, since the hub writes the
+       * repository's files there for the hob (STD-SEC-002). Edit files is decided on the folder, not
+       * its `.git`, which the policy keeps from every hob's own writes. In place of a stub, it is
+       * decided on the new `HEAD`, since the folder holds the stub's config and hooks, which no hob
+       * may change and which only the hub removes.
        */
-      const decideBoth =
-        (turn: CharmTurn, access: ToolAccess, folder: string, replace: boolean) =>
-        (fresh: ToolAccess | null): Effect.Effect<AskableVerdict> =>
-          Effect.gen(function* () {
-            const command: PolicyRequest = {
-              _tag: "Command",
-              operation: "local-git",
-              cwd: folder,
-              words: ["git", "init"],
-            };
-            const files: PolicyRequest = {
-              _tag: "Files",
-              operation: "edit-files",
-              paths: [replace ? join(folder, ".git", "HEAD") : folder],
-              cwd: folder,
-            };
-            const git = yield* decideCharmWrite(engine, turn, access, command)(fresh);
-            const edit = yield* decideCharmWrite(engine, turn, access, files)(fresh);
-            return narrowerOf(git, edit);
-          });
+      const requestFor = (folder: string, replace: boolean): GitInitRequest => ({
+        _tag: "GitInit",
+        command: { _tag: "Command", operation: "local-git", cwd: folder, words: ["git", "init"] },
+        files: {
+          _tag: "Files",
+          operation: "edit-files",
+          paths: [replace ? join(folder, ".git", "HEAD") : folder],
+          cwd: folder,
+        },
+      });
 
       /** The canonical hob folder that holds `target`, which the sandboxed `git init` may write below. */
       const holder = (access: ToolAccess, target: string) =>
@@ -339,73 +328,73 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
               staging,
             ]);
             if (made.code !== 0) {
-              return yield* new Refused({ message: `Git could not create the repository: ${made.out.trim()}` });
+              return yield* new HubRefusal({ message: `Git could not create the repository: ${made.out.trim()}` });
             }
             const published = yield* node(process.execPath, [
               "-e",
               PUBLISH_SCRIPT,
               JSON.stringify([writable, levels, join(staging, ".git"), replace ? KEPT.source : null]),
             ]);
-            if (published.code !== 0) return yield* new Refused({ message: published.out.trim() });
+            if (published.code !== 0) return yield* new HubRefusal({ message: published.out.trim() });
           }).pipe(
             Effect.mapError((error) =>
               error === "unavailable"
-                ? new Refused({ message: "Git did not finish on the hub, so no repository was created." })
+                ? new HubRefusal({ message: "Git did not finish on the hub, so no repository was created." })
                 : error,
             ),
             Effect.ensuring(Effect.sync(() => rmSync(staging, { recursive: true, force: true }))),
           );
         });
 
-      const init = (turn: CharmTurn, access: ToolAccess, folder: string, step: HubCallStep | undefined) =>
-        Effect.gen(function* () {
-          if (!isAbsolute(folder)) {
-            return yield* new Refused({ message: `Give the folder as an absolute path, not ${folder}.` });
-          }
-          const stub = yield* checkPlace(folder);
-          const decision = yield* askOnStep({
-            call: { id: step?.id ?? GIT_INIT_TOOL, tool: GIT_INIT_TOOL, arguments: { folder }, label: GIT_INIT_LABEL },
-            step,
-            approvals: turn.approvals,
-            decide: decideBoth(turn, access, folder, stub),
-          });
-          if (decision._tag === "Refuse") return yield* new Refused({ message: decision.reason });
-          // The folder as the engine resolved it, links followed, so the repository goes where it was decided.
-          const target = decision.verdict.targets[0] ?? folder;
-          const replace = target === folder ? stub : yield* checkPlace(target);
-          const writable = holder(access, target);
-          if (writable === undefined) {
-            return yield* new Refused({ message: `${target} is outside this hob's folders, so nothing was created.` });
-          }
-          showStarted(step, GIT_INIT_TOOL, GIT_INIT_LABEL, decision.verdict);
-          yield* create(writable, target, replace);
-          return createdText(
-            target,
-            replace,
-            writable === target,
-            decision.approval === undefined ? undefined : approvalNote(decision.approval),
-          );
-        });
-
-      const call = (turn: CharmTurn, name: string, input: unknown, step?: HubCallStep) =>
-        hubAnswer(
-          turn.redactor,
+      const actions = makeHubActions({
+        owner: { _tag: "BuiltIn" },
+        actions: [
+          hubAction({
+            tool,
+            input: GitInitInput,
+            effect: "write",
+            otherwise: "there is nowhere to create a repository",
+            unreadable: () => "Give the folder to make a repository, as an absolute path.",
+            plan: ({ folder }, { access }) =>
+              Effect.gen(function* () {
+                if (access.folders.length === 0) {
+                  return yield* new HubRefusal({
+                    message: "You have no folders this turn, so there is nowhere to create a repository.",
+                  });
+                }
+                if (!isAbsolute(folder)) {
+                  return yield* new HubRefusal({ message: `Give the folder as an absolute path, not ${folder}.` });
+                }
+                const stub = yield* checkPlace(folder);
+                return {
+                  request: requestFor(folder, stub),
+                  card: { arguments: { folder } },
+                  send: ({ targets }) =>
+                    Effect.gen(function* () {
+                      // The folder as the engine resolved it, links followed, so the repository goes where it was decided.
+                      const target = targets[0] ?? folder;
+                      const replace = target === folder ? stub : yield* checkPlace(target);
+                      const writable = holder(access, target);
+                      if (writable === undefined) {
+                        return yield* new HubRefusal({
+                          message: `${target} is outside this hob's folders, so nothing was created.`,
+                        });
+                      }
+                      yield* create(writable, target, replace);
+                      return createdText(target, replace, writable === target);
+                    }),
+                };
+              }),
+          }),
+        ],
+        // The narrower answer of the two stands, on the folder.
+        decide: (approvals, base, request: GitInitRequest) => (fresh) =>
           Effect.gen(function* () {
-            if (name !== GIT_INIT_TOOL) return yield* new Refused({ message: `Hobbots has no tool named ${name}.` });
-            const decoded = yield* Schema.decodeUnknownEffect(GitInitInput)(input).pipe(
-              Effect.mapError(
-                () => new Refused({ message: "Give the folder to make a repository, as an absolute path." }),
-              ),
-            );
-            const access = yield* turn.currentAccess;
-            if (access === null || access.folders.length === 0) {
-              return yield* new Refused({
-                message: "You have no folders this turn, so there is nowhere to create a repository.",
-              });
-            }
-            return yield* init(turn, access, decoded.folder, step);
-          }).pipe(Effect.map((text): HubToolAnswer => ({ text, refused: false }))),
-        );
+            const git = yield* decideHubCall(engine, approvals, base, request.command)(fresh);
+            const edit = yield* decideHubCall(engine, approvals, base, request.files)(fresh);
+            return narrowerOf(git, edit);
+          }),
+      });
 
       return LocalGitTools.of({
         // Offered only where its access opens it, by the rule a delegation announces it by (#699).
@@ -415,7 +404,7 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
             access.folders.length === 0 ||
             !openTools((operation) => operationDecision(access.policy, operation)).gitInit
               ? null
-              : { tools, call: (name: string, input: unknown, step?: HubCallStep) => call(turn, name, input, step) },
+              : actions(turn),
           ),
       });
     }),

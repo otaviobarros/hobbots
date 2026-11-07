@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { CharmWriteKey } from "./charm-call.ts";
 import { toolInputJsonSchema } from "./task-tools.ts";
 
 /**
@@ -115,12 +116,6 @@ const branchName = (description: string) =>
     Schema.makeFilter((name: string) => branchNameProblem(name) ?? undefined),
   ).annotate({ description });
 
-/** Every write carries a key, so a retried call returns the first result and is sent once (ADR 020). */
-const writeKey = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(200)).annotate({
-  description:
-    "A key you choose for this call, unique among your calls for this Task. Send the same key when you retry the same call, so it is sent once. A key you used for earlier work is free to use again.",
-});
-
 /** The folder a write acts from, whose repository the hub resolves. */
 const writeFolder = (what: string) =>
   Schema.optionalKey(
@@ -135,6 +130,10 @@ export const MAX_GITHUB_BODY = 60_000;
 const githubBody = (description: string) =>
   Schema.String.check(Schema.isMaxLength(MAX_GITHUB_BODY)).annotate({ description });
 
+/**
+ * The GitHub writes' inputs. Opening a pull request and commenting run through the hub action
+ * pipeline, which adds their `key` (ADR 031); a push carries its own until it moves there (#619).
+ */
 export const GitHubWriteInputs = {
   github_push: Schema.Struct({
     folder: writeFolder("push"),
@@ -146,7 +145,7 @@ export const GitHubWriteInputs = {
           "Replace the branch on GitHub even when your branch does not build on it. Always asks the user, once only.",
       }),
     ),
-    key: writeKey,
+    key: CharmWriteKey,
   }),
   github_open_pull_request: Schema.Struct({
     folder: writeFolder("open the pull request in"),
@@ -159,7 +158,6 @@ export const GitHubWriteInputs = {
     draft: Schema.optionalKey(
       Schema.Boolean.annotate({ description: "Open it as a draft (the default), or ready for review." }),
     ),
-    key: writeKey,
   }),
   github_comment: Schema.Struct({
     folder: writeFolder("comment in"),
@@ -167,7 +165,6 @@ export const GitHubWriteInputs = {
       description: "The issue or pull request number to comment on.",
     }),
     body: githubBody("The comment, in GitHub Markdown.").check(Schema.isNonEmpty()),
-    key: writeKey,
   }),
 } as const;
 

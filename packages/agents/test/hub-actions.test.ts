@@ -1,34 +1,49 @@
+import { UserSession } from "@hobbots/api";
 import {
   AgentId,
   ApprovalId,
+  type CharmCall,
   type CharmDeclaration,
+  CharmWriteKey,
   EMPTY_HOB_POLICY,
+  MessageId,
   type PolicyDecision,
   type ReplyStep,
+  ThreadId,
+  toolInputJsonSchema,
+  WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
-import { Effect, Schema } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   type ApprovalAction,
   type ApprovalOutcome,
   type AskableVerdict,
   actionDigest,
+  CharmCallService,
+  CharmCalls,
   type HubActionOwner,
   HubRefusal,
   type HubRequest,
   hubAction,
   hubCallStep,
+  makeCharmCallRunner,
   makeHubActions,
   makeRedactor,
   nextSteps,
   offerHubActions,
   outsideDataLine,
+  type ReadBack,
   type RuntimeEvent,
+  readBacksOf,
   type ToolAccess,
   type TurnApprovals,
   UNASKABLE,
   UNRECORDED_TOOL_CALL,
+  uncertainNote,
+  type WriteOutcome,
 } from "../src/index.ts";
+import { memoryCharmCalls } from "../src/testing.ts";
 
 // The hub action pipeline (ADR 031), driven through a fake Charm, Pip, whose read is planned by the
 // action and decided, asked, recorded, sent and redacted by the pipeline alone.
@@ -47,6 +62,15 @@ const PIP: CharmDeclaration = {
   ],
   takesOver: ["push"],
 };
+
+const PIP_SHELVE = {
+  id: "pip.shelve",
+  words: "shelving with Pip",
+  presets: { careful: "ask", balanced: "ask", trusting: "allow" },
+  site: ["shelf"],
+  onceOnly: false,
+  actsAsIdentity: false,
+} as const;
 
 const SECRET = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -346,10 +370,9 @@ describe("the hub action pipeline (ADR 031)", () => {
     const builtInCharm = await callPip({ shelf: "top" }, { owner: { _tag: "BuiltIn" } });
     expect(builtInCharm.happened).not.toContain("sent");
 
-    // A Charm write waits for its keyed record (#618), so none runs through the pipeline yet.
-    const write = await callPip({ shelf: "top" }, { effect: "write" });
-    expect(write.answer.refused).toBe(true);
-    expect(write.happened).toEqual(["planned top for hob"]);
+    // A Charm write runs only as its keyed record (#618): a Charm that gives no runner is refused as
+    // soon as its tools are made, before any call.
+    expect(() => callPip({ shelf: "top" }, { effect: "write" })).toThrow("gave no runner");
   });
 
   // covers PE-008, ADR 031
@@ -365,6 +388,246 @@ describe("the hub action pipeline (ADR 031)", () => {
     const [context] = contexts as Array<Record<string, Record<string, unknown>>>;
     expect(Object.keys(context ?? {}).sort()).toEqual(["access", "turn"]);
     expect(Object.keys(context?.turn ?? {}).sort()).toEqual(["agentId", "messageId", "scope", "threadId"]);
+  });
+});
+
+interface WriteScenario {
+  /** How each send ends, in order; the call is applied when none is left. */
+  readonly outcomes?: Array<WriteOutcome>;
+  /** What reading Pip back finds; no read-back when absent. */
+  readonly readBack?: () => boolean;
+  /** What recording the step answers. */
+  readonly records?: boolean;
+}
+
+const SHELVE_INPUT = Schema.Struct({ shelf: Schema.String, note: Schema.optionalKey(Schema.String) });
+
+/**
+ * A hub with Pip's write, `pip_shelve`, whose call records live in `rows`; each call says what
+ * happened, in order, and what the plan was given.
+ */
+const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCall>()) => {
+  const happened: Array<string> = [];
+  const planned: Array<{ readonly input: unknown; readonly redacted: unknown }> = [];
+  const outcomes = [...(scenario.outcomes ?? [])];
+  const readBack: ReadBack | undefined =
+    scenario.readBack === undefined
+      ? undefined
+      : () =>
+          Effect.sync(() => {
+            happened.push("read back");
+            return scenario.readBack?.() ?? false;
+          });
+  const action = hubAction({
+    tool: { name: "pip_shelve", description: "Shelves a book.", inputSchema: {}, label: "Shelving with Pip" },
+    input: SHELVE_INPUT,
+    effect: "write",
+    otherwise: "nothing can be shelved",
+    ...(readBack === undefined ? {} : { readBack }),
+    plan: (input, context) =>
+      Effect.sync(() => {
+        planned.push({ input, redacted: context.redacted });
+        happened.push(`planned ${input.shelf}`);
+        return {
+          request: { _tag: "Charm", charm: "pip", operation: "pip.shelve", site: { shelf: input.shelf } },
+          card: { arguments: { ...input }, label: `Shelving on ${input.shelf}` },
+          write: {
+            site: `pip ${input.shelf}`,
+            recorded: { shelf: input.shelf },
+            appliedText: `Shelved on ${input.shelf}.`,
+            send: Effect.sync(() => {
+              happened.push("sent");
+              return outcomes.shift() ?? ({ _tag: "Applied", text: `Shelved on ${input.shelf} at once.` } as const);
+            }),
+          },
+        };
+      }),
+  });
+  // Recording a call's key is seen in `happened`, so it can be told apart from recording its step.
+  const calls = Layer.effect(
+    CharmCalls,
+    Effect.gen(function* () {
+      const inner = yield* CharmCalls;
+      return CharmCalls.of({
+        ...inner,
+        begin: (call, also) =>
+          Effect.sync(() => happened.push(`began ${call.key}`)).pipe(Effect.andThen(inner.begin(call, also))),
+      });
+    }),
+  ).pipe(Layer.provide(memoryCharmCalls(rows)));
+  const declared = { ...PIP, operations: [...PIP.operations, PIP_SHELVE] };
+  const call = (input: unknown, answer: "approve" | "deny" = "approve") =>
+    Effect.gen(function* () {
+      const runner = yield* makeCharmCallRunner("Pip", readBacksOf([action]));
+      const asked: Array<ApprovalAction> = [];
+      const events: Array<RuntimeEvent> = [];
+      const tools = makeHubActions({
+        owner: { _tag: "Charm", declaration: declared, name: "Pip", holds: () => true },
+        actions: [action],
+        decide: () => () => Effect.succeed({ ...verdict("ask"), operation: "pip.shelve" }),
+        calls: runner,
+      })({
+        agentId: AgentId.make("hob"),
+        threadId: ThreadId.make("t1"),
+        messageId: MessageId.make("m1"),
+        scope: () => "reply:m1",
+        currentAccess: Effect.succeed(access()),
+        redactor: makeRedactor(),
+        approvals: {
+          request: (asking) =>
+            Effect.gen(function* () {
+              asked.push(asking);
+              happened.push("asked");
+              const decision: ApprovalOutcome =
+                answer === "approve"
+                  ? {
+                      _tag: "Approved",
+                      actionDigest: yield* actionDigest(asking),
+                      policyVersion: asking.policyVersion,
+                      lifetime: "once",
+                    }
+                  : { _tag: "Denied", reason: "Not now." };
+              return { approvalId: ApprovalId.make(`approval-${asked.length}`), decision: Effect.succeed(decision) };
+            }),
+          currentAccess: Effect.succeed(access()),
+          grants: Effect.succeed([]),
+          used: () => Effect.void,
+        },
+      });
+      const step = hubCallStep(
+        "toolu_1",
+        (event) => events.push(event),
+        (event) =>
+          Effect.sync(() => {
+            happened.push(`recorded ${event.tool} ${event.label}`);
+            return scenario.records ?? true;
+          }),
+      );
+      const result = yield* tools.call("pip_shelve", input, step);
+      return { answer: result, asked, events, offered: tools.tools };
+    }).pipe(Effect.scoped, Effect.provide(calls), Effect.runPromise);
+  return { call, happened, planned, rows, calls };
+};
+
+const states = (rows: Map<string, CharmCall>) => [...rows.values()].map((row) => [row.key, row.state, row.result]);
+
+describe("Charm writes in the hub action pipeline (ADR 031)", () => {
+  // covers IN-003, ADR 020, ADR 031
+  it("[TC-PE-481] adds a required key to a Charm write's input, and refuses a call without one", async () => {
+    const hub = pipWrites();
+    const missing = await hub.call({ shelf: "top" });
+    expect(missing.answer.refused).toBe(true);
+    expect(missing.answer.text).toContain("key");
+    const [tool] = missing.offered;
+    expect(tool?.inputSchema).toEqual(
+      toolInputJsonSchema(Schema.Struct({ ...SHELVE_INPUT.fields, key: CharmWriteKey })),
+    );
+    expect(tool?.inputSchema).toMatchObject({ required: expect.arrayContaining(["shelf", "key"]) });
+    expect(hub.happened).toEqual([]);
+
+    // The plan never sees the key: it is the record's, not the call's.
+    const keyed = await hub.call({ shelf: "top", key: "s-1" });
+    expect(keyed.answer).toMatchObject({ refused: false, text: expect.stringContaining("Shelved on top at once.") });
+    expect(hub.planned.map((each) => each.input)).toEqual([{ shelf: "top" }]);
+    // A write's answer is the hub's own words, so it carries no outside-data line.
+    expect(keyed.answer.text).not.toContain(outsideDataLine("Pip"));
+    expect(keyed.asked).toEqual([expect.objectContaining({ tool: "pip_shelve", label: "Shelving on top" })]);
+  });
+
+  // covers IN-003, EX-003, ADR 020
+  it("[TC-PE-482] sends a key used twice once, answering the second call as the first ended, without asking again", async () => {
+    const hub = pipWrites();
+    const first = await hub.call({ shelf: "top", key: "s-1" });
+    const second = await hub.call({ shelf: "top", key: "s-1" });
+    expect(first.answer.refused).toBe(false);
+    expect(second.answer).toEqual({
+      text: "You made this call before, so it was not sent again. Its result then: Shelved on top at once.",
+      refused: false,
+    });
+    expect(second.asked).toEqual([]);
+    expect(hub.happened.filter((each) => each === "sent")).toHaveLength(1);
+    const other = await hub.call({ shelf: "low", key: "s-1" });
+    expect(other.answer.text).toContain("You already used the key s-1 for another call.");
+    expect(hub.happened.filter((each) => each === "sent")).toHaveLength(1);
+  });
+
+  // covers EX-003, EX-004, ADR 020
+  it("[TC-PE-483] reads an uncertain write back and answers it as applied when the change is there", async () => {
+    const hub = pipWrites({ outcomes: [{ _tag: "Uncertain", text: "Pip did not answer." }], readBack: () => true });
+    const { answer, events } = await hub.call({ shelf: "top", key: "s-1" });
+    expect(answer).toMatchObject({
+      refused: false,
+      text: expect.stringMatching(/^Shelved on top\. Hobbots showed the user/),
+    });
+    expect(hub.happened.slice(-2)).toEqual(["sent", "read back"]);
+    expect(states(hub.rows)).toEqual([["s-1", "applied", "Shelved on top."]]);
+    // The step was recorded as started, and ends applied: it never shows as uncertain.
+    expect(events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval"]);
+  });
+
+  // covers EX-003, PE-006, ADR 020, ADR 031
+  it("[TC-PE-484] keeps an uncertain write without a read-back waiting until the user settles it from its step", async () => {
+    const rows = new Map<string, CharmCall>();
+    const hub = pipWrites({ outcomes: [{ _tag: "Uncertain", text: "Pip did not answer." }] }, rows);
+    const { answer, events } = await hub.call({ shelf: "top", key: "s-1" });
+    expect(answer).toEqual({ text: `Pip did not answer. ${uncertainNote("Pip", false)}`, refused: true });
+    expect(events.at(-1)).toEqual({ _tag: "ToolUncertain", id: "toolu_1", reason: "Pip did not answer." });
+    expect(states(rows)).toEqual([["s-1", "uncertain", "Pip did not answer."]]);
+    // Calling again names the Charm and does not send it again.
+    const again = await hub.call({ shelf: "top", key: "s-1" });
+    expect(again.answer.text).toBe(`Pip did not answer. ${uncertainNote("Pip", false)}`);
+    expect(hub.happened.filter((each) => each === "sent")).toHaveLength(1);
+
+    // Only the user settles it, in the Charm's words.
+    const user = Layer.succeed(UserSession, {
+      deviceId: WINDOW_DEVICE_ID,
+      name: "This computer's Hobbots window",
+      kind: "window",
+      whileApproved: (write) => write,
+    });
+    const settled = await Effect.gen(function* () {
+      const service = yield* CharmCallService;
+      return yield* service.settle(ThreadId.make("t1"), MessageId.make("m1"), "toolu_1", "not-sent");
+    }).pipe(
+      Effect.provide(Layer.mergeAll(CharmCallService.layer.pipe(Layer.provide(memoryCharmCalls(rows))), user)),
+      Effect.runPromise,
+    );
+    expect(settled).toMatchObject({
+      state: "not-sent",
+      result: "The user looked on Pip and settled this call as not sent, so it may be made again.",
+    });
+    // Settled as not sent, the same key may be made again, and is decided again.
+    const retried = await hub.call({ shelf: "top", key: "s-1" });
+    expect(retried.answer.refused).toBe(false);
+    expect(retried.asked).toHaveLength(1);
+  });
+
+  // covers PE-003, ADR 031
+  it("[TC-PE-485] plans and stores a Charm write's input redacted, and says which fields were", async () => {
+    const hub = pipWrites();
+    const { answer, asked } = await hub.call({ shelf: "top", note: `Use ${SECRET}`, key: "s-1" });
+    expect(answer.refused).toBe(false);
+    expect(hub.planned).toEqual([
+      { input: { shelf: "top", note: expect.not.stringContaining(SECRET) }, redacted: ["note"] },
+    ]);
+    expect(JSON.stringify(asked)).not.toContain(SECRET);
+    const [row] = [...hub.rows.values()];
+    expect(row?.input).not.toContain(SECRET);
+    expect(row).toMatchObject({ charm: "Pip", tool: "pip_shelve", site: "pip top", appliedText: "Shelved on top." });
+    expect(JSON.parse(row?.plan ?? "{}")).toEqual({ shelf: "top" });
+  });
+
+  // covers EX-004, ADR 031
+  it("[TC-PE-486] records the call's step before its never-twice record, and records neither when the step cannot be", async () => {
+    const hub = pipWrites();
+    await hub.call({ shelf: "top", key: "s-1" });
+    expect(hub.happened).toEqual(["planned top", "asked", "recorded pip_shelve Shelving on top", "began s-1", "sent"]);
+
+    const unrecorded = pipWrites({ records: false });
+    const { answer } = await unrecorded.call({ shelf: "top", key: "s-1" });
+    expect(answer).toEqual({ text: UNRECORDED_TOOL_CALL, refused: true });
+    expect(unrecorded.happened).toEqual(["planned top", "asked", "recorded pip_shelve Shelving on top"]);
+    expect(unrecorded.rows.size).toBe(0);
   });
 });
 
