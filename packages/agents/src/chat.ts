@@ -462,22 +462,39 @@ export class ChatService extends Context.Service<
         );
       });
 
-      // Applies a domain transition to a running reply and runs `after` with the result. The lock keeps
+      // Applies a domain transition to a running reply, `apply` taking the result in. The lock keeps
       // the turn and a stop request from saving out of order. Finished replies reject changes, so late
       // runtime events and repeated stops are ignored.
-      const transition = <A>(
+      const changeReply = <A>(
         reply: Reply,
         f: (message: Message) => Message | unknown,
-        after: (next: Message) => Effect.Effect<A>,
+        apply: (next: Message) => Effect.Effect<A>,
       ) =>
         Semaphore.withPermit(
           reply.lock,
           Effect.gen(function* () {
             const next = f(yield* Ref.get(reply.current));
-            if (!(next instanceof Message)) return Option.none<A>();
-            yield* Ref.set(reply.current, next);
-            return Option.some(yield* after(next));
+            return next instanceof Message ? Option.some(yield* apply(next)) : Option.none<A>();
           }),
+        );
+
+      // The reply in memory takes the result, then `after` runs with it.
+      const transition = <A>(
+        reply: Reply,
+        f: (message: Message) => Message | unknown,
+        after: (next: Message) => Effect.Effect<A>,
+      ) => changeReply(reply, f, (next) => Effect.andThen(Ref.set(reply.current, next), after(next)));
+
+      // The reply in memory takes the result only once `save` has committed it, and the save is not cut
+      // short: a stop that comes while it runs waits for it. So a stop's own save, which starts from the
+      // reply in memory, never writes what was not committed, nor drops what was.
+      const committedTransition = <A>(
+        reply: Reply,
+        f: (message: Message) => Message | unknown,
+        save: (next: Message) => Effect.Effect<A>,
+      ) =>
+        changeReply(reply, f, (next) =>
+          Effect.uninterruptible(Effect.tap(save(next), () => Ref.set(reply.current, next))),
         );
 
       // Claude Code keeps a resumed session's first instructions, so a turn whose session may follow
@@ -741,12 +758,13 @@ export class ChatService extends Context.Service<
               case "SessionCompacted":
                 return forgetTaskBrief;
               // The reply shows each skill it used once, under it.
-              // Its use is saved with the reply's line, in one transaction, so neither outlives the other.
+              // Its use is saved with the reply's line, in one transaction, so neither outlives the other,
+              // and the reply in memory takes the line only once both are committed.
               case "SkillUsed":
                 return Effect.flatMap(skillUses.resolve(event), (resolved) =>
                   resolved === null
                     ? Effect.void
-                    : transition(
+                    : committedTransition(
                         reply,
                         (m) => new Message({ ...m, skillsUsed: withUsedSkill(m.skillsUsed, resolved.used) }),
                         (next) =>

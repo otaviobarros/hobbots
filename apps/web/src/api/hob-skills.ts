@@ -2,7 +2,7 @@ import type { HobSkills } from "@hobbots/api";
 import type { AgentId } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
 import { call } from "./client.ts";
-import { setupQuery } from "./setup.ts";
+import { watchedSetupQuery } from "./setup.ts";
 
 /** Every hob's skills, the key the reads below share. */
 const hobSkillsKey = ["skills", "hob"] as const;
@@ -23,10 +23,11 @@ export const hobSkillsQuery = (agentId: AgentId, basis: ReadonlyArray<unknown> =
 
 /**
  * The hob's skills, read again when its configuration version changes, as a change to its folders
- * from another window makes it, or when the shared folders the setup holds do.
+ * from another window makes it, or when the shared folders the setup holds do. The setup is watched,
+ * since no event tells this window that another changed the shared folders.
  */
 export const useHobSkills = (agentId: AgentId, configVersion: number | undefined) => {
-  const setup = useQuery(setupQuery);
+  const setup = useQuery(watchedSetupQuery);
   const basis = [configVersion, ...(setup.data?.approvedFolders ?? [])];
   return useQuery(hobSkillsQuery(agentId, basis));
 };

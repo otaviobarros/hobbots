@@ -68,6 +68,13 @@ A third review found four more problems, fixed with these checks:
 | TC-UI-1096-13 | Another window moves the hob from one folder to another, each with its own project's skill | ✅ The list swaps the skills without a reload. Fails without the fix |
 | TC-DP-283 | A skill's total, week, hobs and threads | ✅ Counted in one statement, so a use recorded meanwhile is in all of them or none. No test runs a concurrent writer |
 
+A fourth review found two of those fixes incomplete, fixed with these checks:
+
+| Case | Check | Result |
+|---|---|---|
+| TC-AG-150 | The hob is retired with Stop while a reply's save with its skill use is held | ✅ The reply ends interrupted with its line, and the use counted once. Without the fix the line was kept and the use lost |
+| TC-UI-1096-13 | Another window also adds and removes a shared folder in the setup | ✅ The list adds the shared folder's project skill and drops it again without a reload. Fails without the fix |
+
 ## Gaps
 
 - No real model ran, so whether a real model picks a skill, and how often, was not observed.

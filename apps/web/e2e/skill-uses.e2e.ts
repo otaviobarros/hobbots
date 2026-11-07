@@ -188,7 +188,7 @@ test("[TC-UI-1096-12] with the list open, Shift+Enter adds a line, Shift+Tab mov
 });
 
 // covers ADR 029 (Scopes, Explicit use), STD-REACT-012
-test("[TC-UI-1096-13] the list follows the hob's folders when another window changes them", async ({ page }) => {
+test("[TC-UI-1096-13] the list follows the hob's own and shared folders when another window changes them", async ({ page }) => {
   const { url, pip, api, addSkill } = await hubWithSkill();
   const siteA = join(dataDir, "folders", "site-a");
   const siteB = join(dataDir, "folders", "site-b");
@@ -205,5 +205,12 @@ test("[TC-UI-1096-13] the list follows the hob's folders when another window cha
 
   await api("PATCH", `/agents/${pip.id}/permissions`, { ownFolders: [siteB] });
   await expect(pickerOf(page)).toContainText("/site-b-deploy");
+  await expect(pickerOf(page)).not.toContainText("/site-a-deploy");
+
+  // A folder every hob shares, changed in the setup from another window, counts as the hob's too.
+  await api("PATCH", "/setup", { approvedFolders: [siteA] });
+  await expect(pickerOf(page)).toContainText("/site-a-deploy");
+  await expect(pickerOf(page)).toContainText("/site-b-deploy");
+  await api("PATCH", "/setup", { approvedFolders: [] });
   await expect(pickerOf(page)).not.toContainText("/site-a-deploy");
 });

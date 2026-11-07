@@ -7,6 +7,7 @@ import {
   ChatService,
   GrantService,
   HobAdmission,
+  HobbotsRepository,
   HobLifecycle,
   HobService,
   HobTools,
@@ -50,6 +51,8 @@ let given: Array<ReadonlyArray<SkillMount>>;
 /** A turn whose prompt holds `hold` waits here before the runtime answers it. */
 let release: () => void;
 let held: Promise<void>;
+/** When set, the next save of a reply with a skill use waits for `saving.release` before it writes. */
+let saving: { reached: () => void; release: Promise<void> } | undefined;
 
 const skillMd = (name: string, description = `What ${name} is for.`, extra = "") =>
   `---\nname: ${name}\ndescription: ${description}\n${extra}---\n\n# ${name}\n`;
@@ -93,8 +96,26 @@ beforeEach(async () => {
         : answer;
     },
   };
+  saving = undefined;
+  // The repository, holding a reply's save with its skill use while `saving` asks it to.
+  const Repository = Layer.effect(
+    HobbotsRepository,
+    Effect.gen(function* () {
+      const base = yield* HobbotsRepository;
+      return HobbotsRepository.of({
+        ...base,
+        upsertMessage: (message, uses) => {
+          const gate = saving;
+          if (gate === undefined || uses === undefined || uses.length === 0) return base.upsertMessage(message, uses);
+          saving = undefined;
+          gate.reached();
+          return Effect.promise(() => gate.release).pipe(Effect.andThen(base.upsertMessage(message, uses)));
+        },
+      });
+    }),
+  ).pipe(Layer.provide(HobbotsRepositoryLive));
   const Persistence = Layer.mergeAll(
-    HobbotsRepositoryLive,
+    Repository,
     ApprovalRepositoryLive,
     GrantRepositoryLive,
     TaskRepositoryLive,
@@ -445,6 +466,30 @@ describe("skill uses", () => {
     expect((await request("POST", `/api/threads/${thread.id}/interrupt`)).status).toBe(204);
     const stopped = await replies(thread, 1);
     expect(stopped.status).toBe("stopped");
+    expect(stopped.skillsUsed).toMatchObject([{ name: "release-steps", number: 1 }]);
+    expect((await request("GET", `/api/skills/${skill.skill.id}/uses`)).body).toMatchObject({ total: 1 });
+  });
+
+  // covers ADR 029 (Uses), #1096
+  it("[TC-AG-150] a reply cut off while its skill use is being saved keeps both the line and the use, never one alone", async () => {
+    const pip = await summon("Pip", 969);
+    const skill = await importSkill("release-steps");
+    await request("POST", `/api/skills/${skill.skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+    const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    let open = () => {};
+    const reached = new Promise<void>((resolve) => {
+      saving = { reached: resolve, release: new Promise((release) => (open = release)) };
+    });
+    await send(thread, "stuck\nfake:skill release-steps");
+    await reached;
+    // Retiring the hob with "stop" ends its turn at once, with no stop request first, while the save
+    // is held; the save is let through only after.
+    const stopping = request("POST", `/api/agents/${pip.id}/retire`, { activeWork: "stop" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    open();
+    expect((await stopping).status).toBe(200);
+    const stopped = await replies(thread, 1);
+    expect(stopped.status).toBe("interrupted");
     expect(stopped.skillsUsed).toMatchObject([{ name: "release-steps", number: 1 }]);
     expect((await request("GET", `/api/skills/${skill.skill.id}/uses`)).body).toMatchObject({ total: 1 });
   });
