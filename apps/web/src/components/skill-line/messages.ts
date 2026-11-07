@@ -5,6 +5,8 @@ export const messages = {
   /** After the skill's name: its revision, such as "(r4)", or that it came from your organization. */
   revision: ({ number }: { number: number }) => `(r${number})`,
   organization: "(from your organization)",
+  open: "Open",
+  openLabel: ({ title }: { title: string }) => `Open ${title}`,
   picker: {
     /** The `/` list's name and its heading. */
     label: ({ name }: { name: string }) => `${name}'s skills`,
