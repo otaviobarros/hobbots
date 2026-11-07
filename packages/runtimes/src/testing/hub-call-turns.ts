@@ -3,7 +3,15 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import type { HubTools, PromptRequest, RuntimeEvent, ToolStartedEvent, TurnApprovals } from "@hobbots/agents";
+import type {
+  HubTools,
+  PromptRequest,
+  RuntimeError,
+  RuntimeEvent,
+  RuntimeLimitReached,
+  ToolStartedEvent,
+  TurnApprovals,
+} from "@hobbots/agents";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, type Exit, Layer, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/process";
@@ -40,43 +48,72 @@ export interface HubCallRuntime {
   readonly name: "fake" | "claude-code" | "codex";
   /** Runs one turn that makes `calls`, then ends. */
   readonly turn: (turn: HubCallTurn) => Promise<{ readonly exit: Exit.Exit<unknown, unknown> }>;
+  /**
+   * The events of one turn that makes `calls` with what a hub hands `request`: its hub tools, its
+   * step recorder, its approvals and its redactor. So a whole hub can run its turns on this runtime.
+   */
+  readonly events: (
+    request: PromptRequest,
+    calls: ReadonlyArray<ScriptedHubCall>,
+  ) => Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached>;
   readonly close: () => void;
 }
 
 /** Marks the turn's own model requests, apart from a runtime's side questions. */
 const INSTRUCTIONS = "You are Pip, a hob making scripted hub calls.";
 
-const base = (turn: HubCallTurn): PromptRequest => ({
-  prompt: "Make the scripted calls.",
-  sessionId: null,
-  instructions: INSTRUCTIONS,
-  instructionsChanged: false,
-  model: null,
-  effort: null,
-  ephemeral: true,
-  hubTools: turn.hubTools,
-  recordToolStart: turn.recordToolStart,
-  ...(turn.approvals === undefined ? {} : { approvals: turn.approvals }),
-});
+/**
+ * The turn's own request: only what a hub hands it for hub calls, so a runtime starts no sandbox,
+ * resumes no session and reaches only its stand-in model.
+ */
+const scripted = (request: Pick<PromptRequest, "hubTools" | "recordToolStart" | "approvals" | "redaction">) =>
+  ({
+    prompt: "Make the scripted calls.",
+    sessionId: null,
+    instructions: INSTRUCTIONS,
+    instructionsChanged: false,
+    model: null,
+    effort: null,
+    ephemeral: true,
+    hubTools: request.hubTools ?? null,
+    recordToolStart: request.recordToolStart ?? null,
+    ...(request.approvals == null ? {} : { approvals: request.approvals }),
+    ...(request.redaction == null ? {} : { redaction: request.redaction }),
+  }) satisfies PromptRequest;
+
+const base = (turn: HubCallTurn): PromptRequest =>
+  scripted({
+    hubTools: turn.hubTools,
+    recordToolStart: turn.recordToolStart,
+    ...(turn.approvals === undefined ? {} : { approvals: turn.approvals }),
+  });
 
 const collect = (events: Stream.Stream<RuntimeEvent, unknown>) =>
   Effect.runPromise(Stream.runCollect(events).pipe(Effect.exit)).then((exit) => ({ exit }));
 
+/** A runtime whose `events` makes the calls, with `turn` running them to the end. */
+const hubCallRuntime = (
+  name: HubCallRuntime["name"],
+  events: HubCallRuntime["events"],
+  close: () => void,
+): HubCallRuntime => ({
+  name,
+  events,
+  turn: (turn) => collect(events(base(turn), turn.calls)),
+  close,
+});
+
 const fakeRuntime = (): HubCallRuntime => {
   const runtime = makeFakeRuntime();
-  return {
-    name: "fake",
-    turn: (turn) =>
-      collect(
-        runtime.sendPrompt({
-          ...base(turn),
-          prompt: turn.calls
-            .map((call) => `${FAKE_HUB_DIRECTIVE} ${call.tool} ${JSON.stringify(call.input)}`)
-            .join("\n"),
-        }),
-      ),
-    close: () => {},
-  };
+  return hubCallRuntime(
+    "fake",
+    (request, calls) =>
+      runtime.sendPrompt({
+        ...scripted(request),
+        prompt: calls.map((call) => `${FAKE_HUB_DIRECTIVE} ${call.tool} ${JSON.stringify(call.input)}`).join("\n"),
+      }),
+    () => {},
+  );
 };
 
 const listen = async (server: import("node:http").Server) => {
@@ -102,22 +139,21 @@ const claudeCodeRuntime = async (executable: string, root: string): Promise<HubC
       Effect.provide(Layer.mergeAll(PolicyEngine.node, ProcessSandbox.unavailable("not needed for hub calls"))),
     ),
   );
-  return {
-    name: "claude-code",
-    turn: async (turn) => {
-      model.moves.push(...turn.calls.map((call) => ({ tool: `mcp__hobbots__${call.tool}`, input: call.input })), {
-        say: "Done.",
-      });
-      const result = await collect(adapter.sendPrompt(base(turn)));
-      model.moves.length = 0;
-      return result;
-    },
-    close: () => {
+  return hubCallRuntime(
+    "claude-code",
+    (request, calls) =>
+      Stream.suspend(() => {
+        model.moves.push(...calls.map((call) => ({ tool: `mcp__hobbots__${call.tool}`, input: call.input })), {
+          say: "Done.",
+        });
+        return adapter.sendPrompt(scripted(request));
+      }).pipe(Stream.ensuring(Effect.sync(() => (model.moves.length = 0)))),
+    () => {
       for (const key of Object.keys(process.env)) delete process.env[key];
       Object.assign(process.env, saved);
       model.server.close();
     },
-  };
+  );
 };
 
 const codexRuntime = async (binary: string, root: string): Promise<HubCallRuntime> => {
@@ -154,22 +190,21 @@ const codexRuntime = async (binary: string, root: string): Promise<HubCallRuntim
     ],
   };
   let count = 0;
-  return {
-    name: "codex",
-    turn: async (turn) => {
-      model.moves.push(
-        ...turn.calls.map((call) => {
-          count += 1;
-          return functionCall(call.tool, call.input, `call-${count}`);
-        }),
-        { say: "Done." },
-      );
-      const result = await collect(runCodexTurn(config, base(turn)));
-      model.moves.length = 0;
-      return result;
-    },
-    close: () => model.server.close(),
-  };
+  return hubCallRuntime(
+    "codex",
+    (request, calls) =>
+      Stream.suspend(() => {
+        model.moves.push(
+          ...calls.map((call) => {
+            count += 1;
+            return functionCall(call.tool, call.input, `call-${count}`);
+          }),
+          { say: "Done." },
+        );
+        return runCodexTurn(config, scripted(request));
+      }).pipe(Stream.ensuring(Effect.sync(() => (model.moves.length = 0)))),
+    () => model.server.close(),
+  );
 };
 
 /**
