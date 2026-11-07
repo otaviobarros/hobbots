@@ -157,6 +157,10 @@ describe("skills library", () => {
         const own = yield* library.assign({ ...base, scope: { _tag: "Hob", agentId: pip }, pin: H1 });
         expect(own.entries[0]?.correlation.agentId).toBe(pip);
         yield* library.assign({ ...base, scope: project, pin: H1 });
+        // The same assignment again, as a retried import gives it, journals nothing (#1195).
+        const again = yield* library.assign({ ...base, scope: project, pin: H1 });
+        expect(again.entries).toEqual([]);
+        expect(again.value.pin).toBe(H1);
         // Assigning again in a scope changes that assignment.
         const changed = (yield* library.assign({ ...base, scope: { _tag: "Everyone" }, pin: H1, onlyWhenAsked: true }))
           .value;

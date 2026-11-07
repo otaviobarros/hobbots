@@ -1,57 +1,21 @@
 import type { SkillScan, SkillSourcePayload } from "@hobbots/api";
 import type { Agent, MemoryProjectIdentity, SkillId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { cn } from "@hobbots/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { scanSkills, skillsErrorTag } from "../../api/skills.ts";
 import { WriteOne } from "./draft-with-hob.tsx";
 import { GiveChoice, type GiveTo } from "./give-choice.tsx";
 import { ImportCandidates, ImportRefused } from "./import-candidates.tsx";
 import { doneOf, foundLine, importLabel } from "./import-result.ts";
-import { FileSource, GitSource } from "./import-sources.tsx";
+import { FileSource, GitSource, SourceTabs } from "./import-sources.tsx";
 import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
 import { type HobDirectory, type ImportFrom, importable, scopeName, skillsSearchOf } from "./skills-model.ts";
-import { SkillsIcon } from "./skills-parts.tsx";
 import { giveAll, useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
-
-const TABS: ReadonlyArray<{ from: ImportFrom; icon: "git" | "file" | "write" }> = [
-  { from: "git", icon: "git" },
-  { from: "file", icon: "file" },
-  { from: "write", icon: "write" },
-];
-
-function SourceTabs({ from }: { from: ImportFrom }) {
-  return (
-    <nav aria-label={copy.import.from} className="grid grid-cols-3 gap-2.5 max-[900px]:grid-cols-1">
-      {TABS.map((tab) => {
-        const on = tab.from === from;
-        return (
-          <Link
-            key={tab.from}
-            to="/skills"
-            search={skillsSearchOf({ _tag: "Add", from: tab.from })}
-            aria-current={on ? "page" : undefined}
-            className={cn(
-              "flex flex-col items-start gap-1 rounded-card border-(length:--edge) border-solid border-line-2 bg-card p-3.5 text-start text-text-strong no-underline hover:border-control",
-              on && "border-focus-ring shadow-[0_0_0_1px_var(--color-focus-ring)]",
-            )}
-          >
-            <span className="text-text-secondary">
-              <SkillsIcon name={tab.icon} size={18} />
-            </span>
-            <span className="text-ui font-semibold">{copy.import.tabs[tab.from].label}</span>
-            <span className="text-meta text-label">{copy.import.tabs[tab.from].sub}</span>
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
 
 /** What a scan found: the skills to pick, who gets them, and Import. */
 function ScanResult({
@@ -61,6 +25,7 @@ function ScanResult({
   projects,
   hobs,
   say,
+  onRunning,
 }: {
   source: SkillSourcePayload;
   scan: SkillScan;
@@ -68,6 +33,8 @@ function ScanResult({
   projects: ReadonlyArray<MemoryProjectIdentity>;
   hobs: HobDirectory;
   say: Say;
+  /** Told when an import starts and ends, so the source above can't send the same import again meanwhile. */
+  onRunning: (running: boolean) => void;
 }) {
   const navigate = useNavigate();
   const writes = useSkillWrites();
@@ -79,6 +46,9 @@ function ScanResult({
   const [added, setAdded] = useState<ReadonlyArray<SkillId> | null>(null);
   // What importing an export gave out, kept for when giving out fails and Import runs again.
   const [given, setGiven] = useState<{ readonly assigned: number; readonly leftOut: number } | null>(null);
+  // One import at a time, from the first press to its last save: a second press before the page redraws is ignored.
+  const [running, setRunning] = useState(false);
+  const runningRef = useRef(false);
   if (scan.candidates.length === 0) return <p className="m-0 text-ui text-text-secondary">{copy.import.none}</p>;
   if (scan.candidates.every((candidate) => candidate.refusal !== null))
     return <ImportRefused candidates={scan.candidates} />;
@@ -107,6 +77,20 @@ function ScanResult({
   };
 
   // Two saves, each kept once made: the import, then giving each skill out. What failed is said as such.
+  const runOnce = async () => {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    setRunning(true);
+    onRunning(true);
+    try {
+      await run();
+    } finally {
+      runningRef.current = false;
+      setRunning(false);
+      onRunning(false);
+    }
+  };
+
   const run = async () => {
     setFailure(null);
     let ids = added;
@@ -132,7 +116,7 @@ function ScanResult({
   };
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div aria-busy={running} className="flex flex-col gap-3.5">
       <p className="m-0 text-detail text-text-secondary">{foundLine(scan)}</p>
       <ImportCandidates
         candidates={scan.candidates}
@@ -168,8 +152,11 @@ function ScanResult({
         </p>
       )}
       <div className="flex gap-2">
-        <Button disabled={(added === null && folders.length === 0) || writes.busy} onClick={() => void run()}>
-          {writes.busy ? copy.import.importing : importLabel(added !== null, onlySet, folders.length)}
+        <Button
+          disabled={(added === null && folders.length === 0) || running || writes.busy}
+          onClick={() => void runOnce()}
+        >
+          {running || writes.busy ? copy.import.importing : importLabel(added !== null, onlySet, folders.length)}
         </Button>
         <Button asChild variant="quiet">
           <Link to="/skills" search={{}}>
@@ -197,6 +184,8 @@ export function SkillsImport({
 }) {
   const [source, setSource] = useState<SkillSourcePayload | null>(null);
   const scan = useMutation({ mutationFn: scanSkills });
+  // While an import runs, the source can't be read again: a new scan would offer the same import a second time.
+  const [importing, setImporting] = useState(false);
   const look = (next: SkillSourcePayload) => {
     setSource(next);
     scan.mutate(next);
@@ -209,8 +198,8 @@ export function SkillsImport({
         <p className="m-0 text-body text-text-secondary">{copy.import.intro}</p>
       </header>
       <SourceTabs from={from} />
-      {from === "git" && <GitSource looking={scan.isPending} onLook={look} />}
-      {from === "file" && <FileSource looking={scan.isPending} onLook={look} />}
+      {from === "git" && <GitSource looking={scan.isPending} locked={importing} onLook={look} />}
+      {from === "file" && <FileSource looking={scan.isPending} locked={importing} onLook={look} />}
       {from === "write" && <WriteOne />}
       {scan.isError && from !== "write" && (
         <p role="alert" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
@@ -226,6 +215,7 @@ export function SkillsImport({
           projects={projects}
           hobs={hobs}
           say={say}
+          onRunning={setImporting}
         />
       )}
     </div>
