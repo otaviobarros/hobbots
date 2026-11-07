@@ -124,7 +124,7 @@ describe("how results move in a Quest", () => {
       leading.split("\n").find((line) => line.startsWith(guidance)),
     );
     // The finishing line still ends the reminder.
-    expect(leading.endsWith("your final reply becomes its result.")).toBe(true);
+    expect(leading.endsWith("A final reply alone does not complete it.")).toBe(true);
     expect(memberReminder(read.tasks[2] as Task, read, "Frodo")).not.toContain(RESULTS_RULE);
   });
 });

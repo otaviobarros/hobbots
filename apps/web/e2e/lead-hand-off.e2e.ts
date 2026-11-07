@@ -94,6 +94,8 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
           "Write the frontend",
           script("ask", { key: "need", question: "Will you hand me Quill's core.py?" }),
           `fake:then ${script("complete_task", { key: "frontend-done", summary: "Frontend reads core.py." })}`,
+          // The hand-off and the answer may reach Rook in separate turns: he finishes in whichever comes last.
+          `fake:then fake:then ${script("complete_task", { key: "frontend-done-later", summary: "Frontend reads core.py." })}`,
         ].join("\n"),
       })}`,
       `fake:then fake:then ${script("hand_off", { key: "hand", artifact_id: "$backend-done.artifacts.0", to_task_id: "$frontend.task_id" })}`,

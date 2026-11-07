@@ -86,13 +86,19 @@ test("[TC-OR-209] a three-member Quest with a dependency chain runs to finished 
       script("delegate_task", {
         key: "frontend",
         hob: "Rook",
-        brief: "Write the frontend",
+        brief: [
+          "Write the frontend",
+          script("complete_task", { key: "frontend-done", summary: "Frontend ready." }),
+        ].join("\n"),
         depends_on: ["$backend.task_id"],
       }),
       script("delegate_task", {
         key: "review",
         hob: "Pip",
-        brief: "Review the backend and the frontend",
+        brief: [
+          "Review the backend and the frontend",
+          script("complete_task", { key: "review-done", summary: "Both reviewed." }),
+        ].join("\n"),
         depends_on: ["$backend.task_id", "$frontend.task_id"],
       }),
       script("wait_for", { key: "wait", tasks: ["$backend.task_id", "$frontend.task_id", "$review.task_id"] }),

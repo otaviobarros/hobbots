@@ -111,7 +111,12 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and ev
   page,
 }) => {
   // Quill writes the copy and fails; on her second try she changes nothing and finishes with a result.
-  await startParty(page, ["Draft the copy", 'fake:once fake:write copy.md "# Copy\\n\\nHello.\\n"', "fake:fail"]);
+  await startParty(page, [
+    "Draft the copy",
+    'fake:once fake:write copy.md "# Copy\\n\\nHello.\\n"',
+    "fake:fail",
+    `fake:then ${script("complete_task", { key: "copy-done", summary: "The copy is drafted." })}`,
+  ]);
   // A member's failed turn is handed to her again as a second try, which no longer carries the
   // brief's once-only write or its failure.
   const sheet = laneTask(page, "Draft the copy");

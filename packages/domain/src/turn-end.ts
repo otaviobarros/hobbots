@@ -31,6 +31,12 @@ export type TurnEnding =
 export type TaskMove =
   | { readonly _tag: "Stay" }
   /**
+   * A member's turn ended in prose with nothing open and without `complete_task`: its session goes
+   * on once in the same Attempt, told to call `complete_task` or report a blocker, since a reply
+   * alone cannot tell "done" from "I am stuck" (#1086).
+   */
+  | { readonly _tag: "SendBack" }
+  /**
    * The final reply becomes its result; when the records refuse it, the Task does `otherwise`, and
    * with `explainRefusal` the refusal is recorded as why.
    */
@@ -67,6 +73,8 @@ export interface TurnEndInput {
   readonly was?: TaskState;
   /** What the turn last reported in its Attempt, other than progress: a step that stopped on a finding or blocker is held (#667). */
   readonly lastReport?: CheckpointKind;
+  /** A member's turn that ran because its last one was sent back to finish properly (#1086). */
+  readonly sentBack?: boolean;
 }
 
 /** What each runner's Attempt says when its session ran to its end. */
@@ -76,11 +84,8 @@ const FINISHED: Record<TurnRunner, string> = {
   root: "The turn finished.",
 };
 
-/** What a Task's result says when the reply that becomes it was empty. */
-const NO_REPLY: Record<Exclude<TurnRunner, "root">, string> = {
-  step: "The step finished without a reply.",
-  member: "The Task finished without a reply.",
-};
+/** What a step's result says when the reply that becomes it was empty. */
+const NO_STEP_REPLY = "The step finished without a reply.";
 
 /**
  * Why a member's Task is blocked when its turn ended with only its own `milestones` unreported, in
@@ -94,7 +99,19 @@ export const stoppedShort = (milestones: ReadonlyArray<string>): string =>
     "Hand it what it needs, or cancel or reassign it; delegating the same work again leaves this Task open.",
   ].join(" ");
 
+/**
+ * Why a member's Task is blocked when it was sent back to finish and its turn again ended without
+ * `complete_task` or a blocker (#1086): its reply, which its lead reads to decide what comes next.
+ */
+export const endedUnfinished = (reply: string): string =>
+  [
+    "Its member ended its turn without completing it, twice, and reported no blocker.",
+    "It was not marked done, since its reply does not say whether the work is finished.",
+    reply === "" ? "Its member gave no reply." : `Its member's last reply: ${reply}`,
+  ].join(" ");
+
 const STAY: TaskMove = { _tag: "Stay" };
+const SEND_BACK: TaskMove = { _tag: "SendBack" };
 const move = (to: TaskTarget, reason?: string): TaskMove =>
   reason === undefined ? { _tag: "Move", to } : { _tag: "Move", to, reason };
 
@@ -109,13 +126,18 @@ const heldOpen = (task: Task, open: ReadonlyArray<LedgerEntry>): TaskMove => {
   return task.state === "active" ? move("waiting") : STAY;
 };
 
-/** A member's Task after its turn: a failed turn leaves its work to be delivered again; a stopped one waits for it. */
-const memberAfter = (task: Task, ending: TurnEnding, open: ReadonlyArray<LedgerEntry>): TaskMove => {
+/**
+ * A member's Task after its turn: a failed turn leaves its work to be delivered again; a stopped one
+ * waits for it. A Task completes only by `complete_task` (#1086): a reply with nothing open sends its
+ * member back once to call it or report a blocker, and a second such reply blocks the Task with the
+ * reply as why, so its lead reads what the member said rather than a Task shown done.
+ */
+const memberAfter = (task: Task, ending: TurnEnding, open: ReadonlyArray<LedgerEntry>, sentBack: boolean): TaskMove => {
   if (ending._tag === "Failed") return STAY;
   if (ending._tag === "Stopped") return task.state === "active" ? move("waiting") : STAY;
-  const held = heldOpen(task, open);
-  if (open.length > 0) return held;
-  return { _tag: "Complete", summary: ending.text.trim() || NO_REPLY.member, otherwise: held, explainRefusal: false };
+  if (open.length > 0) return heldOpen(task, open);
+  if (!sentBack) return SEND_BACK;
+  return task.state === "blocked" ? STAY : move("blocked", endedUnfinished(ending.text.trim()));
 };
 
 /**
@@ -147,13 +169,13 @@ const taskAfter = (input: TurnEndInput): TaskMove => {
       return ending._tag === "Replied"
         ? {
             _tag: "Complete",
-            summary: ending.text.trim() || NO_REPLY.step,
+            summary: ending.text.trim() || NO_STEP_REPLY,
             otherwise: move("failed"),
             explainRefusal: true,
           }
         : move("failed");
     case "member":
-      return memberAfter(task, ending, open);
+      return memberAfter(task, ending, open, input.sentBack === true);
     case "root":
       return rootAfter(task, open, input.was);
   }
