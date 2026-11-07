@@ -166,6 +166,8 @@ export type ReadBack = (call: CharmCall) => Effect.Effect<boolean | string, unkn
 export const READ_BACK_AFTER: ReadonlyArray<Duration.Input> = ["20 seconds", "1 minute", "3 minutes", "10 minutes"];
 
 export interface CharmWrite {
+  /** The Charm's name as the hob and the user read it, such as "GitHub", which the call's words name. */
+  readonly charm: string;
   readonly agentId: AgentId;
   /** The work the key belongs to (#660): the turn's `CharmTurn.scope`. */
   readonly scope: string;
@@ -192,16 +194,17 @@ export const scopesOf = (turn: { readonly scope: () => string; readonly also?: s
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
 /**
- * Runs `charm`'s writes under the call records, and reads uncertain ones back with each tool's
- * `readBack`. `charm` is the Charm's name as the hob and the user read it, such as "GitHub".
+ * The hub's one never-twice runner (ADR 031): runs every Charm's writes under the call records, and
+ * reads uncertain ones back with each tool's `readBack`, keyed by its tool name, which no two Charms
+ * share.
  */
-export const makeCharmCallRunner = (charm: string, readBacks: Readonly<Record<string, ReadBack>>) =>
+export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>>) =>
   Effect.gen(function* () {
     const calls = yield* CharmCalls;
     // Read-backs run in the Charm's scope, so they stop with the hub.
     const scope = yield* Effect.scope;
 
-    /** What the hob is told for a call of this Charm's that is still uncertain. */
+    /** What the hob is told for a call that is still uncertain. */
     const noteFor = (call: Pick<CharmCall, "charm" | "tool">) =>
       uncertainNote(call.charm, Object.hasOwn(readBacks, call.tool));
 
@@ -247,10 +250,9 @@ export const makeCharmCallRunner = (charm: string, readBacks: Readonly<Record<st
       }).pipe(Effect.forkIn(scope), Effect.asVoid);
 
     // Calls the hub left in flight when it stopped are uncertain now, and are read back like any
-    // other. Each Charm's runner takes its own calls only.
+    // other, whichever Charm made them. A call whose tool no Charm reads back waits for the user.
     const startup = Effect.gen(function* () {
       for (const call of yield* calls.unsettled) {
-        if (call.charm !== charm) continue;
         const at = yield* nowIso;
         const uncertain =
           call.state === "sending"
@@ -295,7 +297,7 @@ export const makeCharmCallRunner = (charm: string, readBacks: Readonly<Record<st
           scope: write.scope,
           key: write.key,
           attempt: crypto.randomUUID(),
-          charm,
+          charm: write.charm,
           tool: write.tool,
           input: stableJson(write.input),
           site: write.site,

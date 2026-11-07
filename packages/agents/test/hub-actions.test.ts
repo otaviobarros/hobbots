@@ -6,6 +6,7 @@ import {
   type CharmDeclaration,
   CharmWriteKey,
   EMPTY_HOB_POLICY,
+  holdsCharm,
   MessageId,
   type PolicyDecision,
   type ReplyStep,
@@ -78,7 +79,7 @@ const access = (pip = true): ToolAccess => ({
   policy: {
     preset: "balanced",
     sharedFolders: ["/work"],
-    hob: { ...EMPTY_HOB_POLICY, ...(pip ? {} : { githubCharm: false }) },
+    hob: { ...EMPTY_HOB_POLICY, charms: { granted: pip ? ["pip"] : [] } },
     dataFolder: "/data",
     restrictions: [],
     charmOperations: PIP.operations,
@@ -156,7 +157,7 @@ const callPip = (input: unknown, scenario: Scenario = {}) => {
       _tag: "Charm",
       declaration: PIP,
       name: "Pip",
-      holds: (now) => now.policy.hob.githubCharm !== false,
+      holds: (now) => holdsCharm(now.policy.hob, "pip"),
     },
     actions: [
       hubAction({
@@ -458,7 +459,7 @@ const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCal
   const declared = { ...PIP, operations: [...PIP.operations, PIP_SHELVE] };
   const call = (input: unknown, answer: "approve" | "deny" = "approve") =>
     Effect.gen(function* () {
-      const runner = yield* makeCharmCallRunner("Pip", readBacksOf([action]));
+      const runner = yield* makeCharmCallRunner(readBacksOf([action]));
       const asked: Array<ApprovalAction> = [];
       const events: Array<RuntimeEvent> = [];
       const tools = makeHubActions({

@@ -7,7 +7,7 @@ import {
   type ApprovalAction,
   type ApprovalOutcome,
   actionDigest,
-  CharmTools,
+  Charms,
   type HubToolAnswer,
   hubCallStep,
   makeRedactor,
@@ -32,7 +32,7 @@ import { Effect, Layer, Redacted } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   GitHubApi,
-  GitHubCharmTools,
+  GitHubCharm,
   GitHubCredential,
   GitHubError,
   GitHubPushSettings,
@@ -42,7 +42,7 @@ import {
   type PushTransport,
 } from "../src/index.ts";
 import { type FakeGitHub, startFakeGitHub } from "../src/testing.ts";
-import { directSandbox, fixedCredential, memoryCharmCalls } from "./support.ts";
+import { charmToolsFor, directSandbox, fixedCredential, memoryCharmCalls } from "./support.ts";
 
 const TOKEN = "ghu_pushtoken0123456789abcdefghijklmnopqrstuv";
 /** Shaped like a GitHub token, so the turn's redactor takes it out wherever it appears. */
@@ -185,7 +185,7 @@ const charmLayer = (
   rows: Map<string, CharmCall>,
   credential: ReturnType<typeof fixedCredential>,
 ) =>
-  GitHubCharmTools.pipe(
+  Charms.layer([GitHubCharm]).pipe(
     Layer.provide(
       Layer.mergeAll(
         fakeApi,
@@ -205,9 +205,8 @@ const charmLayer = (
 
 const pushIn = (folder: string, repository: GitHubRepository, turn: Turn, input: Record<string, unknown>) =>
   Effect.gen(function* () {
-    const charms = yield* CharmTools;
     const events = turn.events ?? [];
-    const tools = yield* charms.forTurn({
+    const tools = yield* charmToolsFor({
       agentId: AgentId.make("hob"),
       threadId: ThreadId.make("t1"),
       messageId: MessageId.make("m1"),
@@ -480,7 +479,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
         ),
       ),
     );
-    const layer = GitHubCharmTools.pipe(
+    const layer = Charms.layer([GitHubCharm]).pipe(
       Layer.provide(
         Layer.mergeAll(
           fakeApi,
@@ -498,7 +497,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     const access = accessFor(folder, "trusting");
     const answer = await Effect.runPromise(
       Effect.gen(function* () {
-        const tools = yield* (yield* CharmTools).forTurn({
+        const tools = yield* charmToolsFor({
           agentId: AgentId.make("hob"),
           threadId: ThreadId.make("t1"),
           messageId: MessageId.make("m1"),
@@ -646,7 +645,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     ]);
     // The read-back runs in the background as the Charm starts.
     await Effect.gen(function* () {
-      yield* CharmTools;
+      yield* Charms;
       yield* Effect.sleep("500 millis");
     }).pipe(Effect.provide(charmLayer(folder, repository, rows, fixedCredential(TOKEN))), Effect.runPromise);
     expect([...rows.values()].map((r) => [r.key, r.state, r.result])).toEqual([

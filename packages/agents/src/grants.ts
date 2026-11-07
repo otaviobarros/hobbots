@@ -12,6 +12,7 @@ import {
   type GrantRevokeReason,
   type GrantRule,
   type HobPolicy,
+  heldCharms,
   hobAnswers,
   isCharmOperation,
   isLiveGrant,
@@ -145,15 +146,29 @@ export const ruleHolds = (access: ToolAccess | null, rule: GrantRule): boolean =
   return rulePaths(rule).every((path) => access.folders.some((folder) => within(path, folder)));
 };
 
-/** What a change took away: folders that left the hob's folders, and operations narrowed to Ask or Never. */
+/**
+ * What a change took away: folders that left the hob's folders, operations narrowed to Ask or Never,
+ * and Charms the hob no longer holds, with the built-in operations each takes over.
+ */
 export interface AuthorityLoss {
   readonly folders: ReadonlyArray<string>;
   readonly operations: ReadonlyArray<AnyOperation>;
+  readonly charms?: ReadonlyArray<Pick<CharmDeclaration, "id" | "takesOver">>;
 }
+
+/**
+ * Whether a rule relies on `charm` (ADR 031): a site of one of its operations, or a built-in
+ * operation it takes over, such as Push for the GitHub Charm, which it makes in its own way.
+ */
+const reliesOn = (charm: Pick<CharmDeclaration, "id" | "takesOver">, rule: GrantRule): boolean =>
+  rule._tag === "CharmSite"
+    ? rule.charm === charm.id
+    : charm.takesOver.some((operation) => operation === ruleOperation(rule));
 
 /** Why a grant no longer holds after the change, or null when it still does (ADR 015). */
 export const lostAuthority = (grant: Grant, loss: AuthorityLoss): GrantRevokeReason | null => {
   if (loss.operations.includes(grant.operation)) return "narrowed";
+  if (loss.charms?.some((charm) => reliesOn(charm, grant.rule))) return "narrowed";
   const paths = rulePaths(grant.rule);
   return paths.some((path) => loss.folders.some((folder) => within(path, folder))) ? "folder-removed" : null;
 };
@@ -171,11 +186,22 @@ const charmOverridden = (before: HobPolicy, after: HobPolicy): ReadonlyArray<Any
     (operation): operation is AnyOperation => isCharmOperation(operation as AnyOperation),
   );
 
-/** What a hob's policy change takes away: folders removed or hidden, and overrides narrowed to Ask or Never. */
-export const policyLoss = (before: HobPolicy, after: HobPolicy): AuthorityLoss => {
+/**
+ * What a hob's policy change takes away: folders removed or hidden, overrides narrowed to Ask or
+ * Never, and Charms taken away, each as `charms` declares it, so the grants that relied on one go
+ * with it, for any Charm (ADR 031).
+ */
+export const policyLoss = (
+  before: HobPolicy,
+  after: HobPolicy,
+  charms: ReadonlyArray<CharmDeclaration> = [],
+): AuthorityLoss => {
   const was = hobAnswers(before);
   const is = hobAnswers(after);
+  const kept = heldCharms(after);
+  const taken = heldCharms(before).filter((id) => !kept.includes(id));
   return {
+    charms: taken.map((id) => charms.find((charm) => charm.id === id) ?? { id, takesOver: [] }),
     folders: [
       ...before.ownFolders.filter((folder) => !after.ownFolders.includes(folder)),
       ...after.hiddenSharedFolders.filter((folder) => !before.hiddenSharedFolders.includes(folder)),
@@ -326,7 +352,7 @@ export class GrantService extends Context.Service<
             return Option.isSome(revoked) ? revoked.value : Option.getOrElse(yield* repo.find(id), () => found.value);
           }),
         revokeLost: (agentId, loss) =>
-          loss.folders.length === 0 && loss.operations.length === 0
+          loss.folders.length === 0 && loss.operations.length === 0 && (loss.charms ?? []).length === 0
             ? Effect.void
             : revokeWhere(agentId, (grant) => lostAuthority(grant, loss)),
         revokeForAgent: (agentId, reason) => revokeWhere(agentId, () => reason),

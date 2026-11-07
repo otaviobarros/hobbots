@@ -20,6 +20,7 @@ const change = (overrides: Partial<SkillChange>): SkillChange => ({
   previous: null,
   previousNumber: null,
   agentId: null,
+  member: null,
   by: { _tag: "You" },
   ...overrides,
 });
@@ -56,5 +57,20 @@ describe("What changed (ADR 029, The Skills page)", () => {
       ["Today", 2],
       ["Yesterday", 1],
     ]);
+  });
+
+  // covers ADR 029 (Skill sets, The Skills page), #1193
+  it("[TC-UI-1193-01] names the one skill of a set a hob turned off or on, with its set, never the whole set", () => {
+    const set = { skillId: SkillId.make("set"), name: SkillName.make("agent-engineering"), agentId: bram };
+    const member = SkillName.make("plan-change");
+    expect(changeText(change({ ...set, kind: "optedOut", member }), hobs)).toEqual({
+      kind: "Turned off",
+      line: "Plan change from Agent engineering is off for Bram",
+      note: null,
+    });
+    expect(changeText(change({ ...set, kind: "optedIn", member }), hobs).line).toBe(
+      "Plan change from Agent engineering is on for Bram again",
+    );
+    expect(changeText(change({ ...set, kind: "optedOut" }), hobs).line).toBe("Agent engineering is off for Bram");
   });
 });

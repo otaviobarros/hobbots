@@ -52,7 +52,7 @@ export const codexEnforcement = (sandbox: Pick<ProcessSandboxShape, "state" | "e
   hubTools: {
     status: "verified",
     evidence:
-      "Charms and coordination tools are Codex dynamic tools, answered on the App Server's channel and decided by the hub.",
+      "Each Charm the hob holds, Local Git, Memory, Skills and the Task tools are Codex dynamic tools, answered on the App Server's channel and decided by the hub.",
   },
   toolEvents: {
     status: "verified",

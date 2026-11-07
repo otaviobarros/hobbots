@@ -283,63 +283,100 @@ export const StoredPolicyLayer = Schema.Record(Schema.String, PolicyDecision).pi
 );
 
 /**
+ * What a hob holds of the Charms (ADR 031): `granted`, the ids of the Charms you gave it, and its
+ * overrides for their operations, keyed by id. Without `granted`, the hob holds the Charms every hob
+ * starts with (`DEFAULT_HOB_CHARMS`).
+ */
+export const HobCharms = Schema.Struct({
+  granted: Schema.optionalKey(Schema.Array(CharmId)),
+  overrides: Schema.optionalKey(CharmOverrides),
+});
+export type HobCharms = typeof HobCharms.Type;
+
+/**
  * A hob's own policy configuration. Folders are stored canonical. `hiddenSharedFolders` hides
  * shared folders from this hob only; a hob cannot add a folder to itself. `signCommits` lets the
  * hob's commands sign Git commits with the user's 1Password SSH key, which opens 1Password's SSH
  * agent to them: the agent cannot be limited to signing, so it also lets them log in over SSH with
- * the user's keys. Off unless the user turns it on. `githubCharm` is the hob's grant of the GitHub Charm
- * (ADR 014, ADR 020): granted unless it is `false`, and without it the hob is offered none of the
- * Charm's actions. `charms` holds the hob's overrides for Charm operations (ADR 031); the built-in
- * `overrides` stay a closed record.
+ * the user's keys. Off unless the user turns it on. `charms` holds the Charms the hob is granted and
+ * its overrides for their operations (ADR 031); without a Charm, the hob is offered none of its
+ * actions. The built-in `overrides` stay a closed record.
  */
 const HobPolicyFields = {
   ownFolders: Schema.Array(Schema.String),
   hiddenSharedFolders: Schema.Array(Schema.String),
   overrides: PolicyOverrides,
   signCommits: Schema.optionalKey(Schema.Boolean),
-  githubCharm: Schema.optionalKey(Schema.Boolean),
-  charms: Schema.optionalKey(Schema.Struct({ overrides: CharmOverrides })),
+  charms: Schema.optionalKey(HobCharms),
 };
 const CurrentHobPolicy = Schema.Struct(HobPolicyFields);
 type CurrentHobPolicy = typeof CurrentHobPolicy.Type;
 
 /**
- * A policy's overrides as stored in one record: a Charm operation's override goes to `charms`, under
- * its current id when it was stored before ADR 031 under its old name.
+ * A policy as stored or journaled, in its current shape: a Charm operation's override goes to
+ * `charms`, under its current id when it was stored before ADR 031 under its old name, and the
+ * `githubCharm` flag of a policy saved before the Charm-id grant becomes the set it meant: off holds
+ * no Charm, on the GitHub Charm, as every hob started with it.
  */
-const splitOverrides = (stored: StoredHobPolicy): CurrentHobPolicy => {
-  const { overrides, charms, ...rest } = stored;
+const currentPolicy = (stored: StoredHobPolicy): CurrentHobPolicy => {
+  const { overrides, charms, githubCharm, ...rest } = stored;
   const renamed = renamedAnswers(overrides);
   const builtIn = Object.fromEntries(Object.entries(renamed).filter(([name]) => !name.includes(".")));
   const charm = {
     ...Object.fromEntries(Object.entries(renamed).filter(([name]) => name.includes("."))),
     ...charms?.overrides,
   };
-  return {
-    ...rest,
-    overrides: builtIn,
-    ...(Object.keys(charm).length === 0 ? {} : { charms: { overrides: charm as CharmOverrides } }),
+  const granted = charms?.granted ?? (githubCharm === false ? [] : undefined);
+  const held: HobCharms = {
+    ...(granted === undefined ? {} : { granted }),
+    ...(Object.keys(charm).length === 0 ? {} : { overrides: charm as CharmOverrides }),
   };
+  return { ...rest, overrides: builtIn, ...(Object.keys(held).length === 0 ? {} : { charms: held }) };
 };
 
-const StoredHobPolicyFields = { ...HobPolicyFields, overrides: Schema.Record(Schema.String, PolicyDecision) };
+const StoredHobPolicyFields = {
+  ...HobPolicyFields,
+  overrides: Schema.Record(Schema.String, PolicyDecision),
+  /** The GitHub Charm's grant before ADR 031 made it a Charm id in `charms.granted`. */
+  githubCharm: Schema.optionalKey(Schema.Boolean),
+};
 type StoredHobPolicy = Schema.Struct<typeof StoredHobPolicyFields>["Type"];
 
 export const HobPolicy = Schema.Struct(StoredHobPolicyFields).pipe(
   Schema.decodeTo(
     CurrentHobPolicy,
     SchemaTransformation.transform({
-      decode: splitOverrides,
+      decode: currentPolicy,
       encode: (policy: CurrentHobPolicy): StoredHobPolicy => policy,
     }),
   ),
 );
 export type HobPolicy = typeof HobPolicy.Type;
 
-export const EMPTY_HOB_POLICY: HobPolicy = { ownFolders: [], hiddenSharedFolders: [], overrides: {} };
-
 /** The hob's own answers for every operation: its built-in overrides and its Charm overrides. */
 export const hobAnswers = (hob: HobPolicy): PolicyLayer => ({ ...hob.charms?.overrides, ...hob.overrides });
+
+/**
+ * The Charms a hob holds when you never chose them: the GitHub Charm, which every hob has had unless
+ * you took it away (ADR 020).
+ */
+export const DEFAULT_HOB_CHARMS: ReadonlyArray<CharmId> = ["github"];
+
+/** The ids of the Charms a hob holds (ADR 031), each once. */
+export const heldCharms = (hob: HobPolicy): ReadonlyArray<CharmId> => [
+  ...new Set(hob.charms?.granted ?? DEFAULT_HOB_CHARMS),
+];
+
+/** Whether a hob holds the Charm `charm`. */
+export const holdsCharm = (hob: HobPolicy, charm: CharmId): boolean => heldCharms(hob).includes(charm);
+
+/** A new hob's policy: no folders of its own, no overrides, and the Charms every hob starts with. */
+export const EMPTY_HOB_POLICY: HobPolicy = {
+  ownFolders: [],
+  hiddenSharedFolders: [],
+  overrides: {},
+  charms: { granted: DEFAULT_HOB_CHARMS },
+};
 
 /**
  * The answer a hob gets for one operation, built-in or declared by a Charm in `declared`: the

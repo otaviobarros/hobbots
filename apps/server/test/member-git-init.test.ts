@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { CharmTools, type PromptRequest } from "@hobbots/agents";
+import { Charms, type PromptRequest } from "@hobbots/agents";
 import { GIT_INIT_TOOL, GITHUB_PUSH_TOOL, type Task, type TaskTree } from "@hobbots/domain";
 import { waitToFind } from "@hobbots/domain/testing";
 import { Effect, Layer } from "effect";
@@ -124,18 +124,25 @@ describe("member and step sessions offer git_init", () => {
   it("[TC-OR-497] a member is offered the GitHub Charm's reads but not its writes, which have no reply to be settled on", async () => {
     const called: Array<string> = [];
     const tool = (name: string) => ({ name, description: name, inputSchema: { type: "object" }, label: name });
+    // The registry leaves a Charm's writes out of a turn that has no reply to settle them on.
     const charms = Layer.succeed(
-      CharmTools,
-      CharmTools.of({
-        forTurn: () =>
-          Effect.succeed({
-            tools: [tool("github_item"), tool(GITHUB_PUSH_TOOL)],
-            call: (name) =>
-              Effect.sync(() => {
-                called.push(name);
-                return { text: "Done.", refused: false };
-              }),
-          }),
+      Charms,
+      Charms.of({
+        charms: [],
+        forTurn: (_turn, offer) =>
+          Effect.succeed([
+            {
+              owner: "the GitHub Charm",
+              tools: {
+                tools: offer?.writes === false ? [tool("github_item")] : [tool("github_item"), tool(GITHUB_PUSH_TOOL)],
+                call: (name) =>
+                  Effect.sync(() => {
+                    called.push(name);
+                    return { text: "Done.", refused: false };
+                  }),
+              },
+            },
+          ]),
       }),
     );
     const { run, requests } = await startHub(await sharedDatabase(), [], charms);

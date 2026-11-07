@@ -5,6 +5,7 @@ import {
   AgentStatus,
   type Committed,
   type HobPolicy,
+  heldCharms,
   type JournaledEvent,
   Message,
   type MessageId,
@@ -31,14 +32,14 @@ interface AgentRow {
   readonly hiddenSharedFolders?: unknown;
   readonly policyOverrides?: unknown;
   readonly signCommits?: unknown;
-  readonly githubCharm?: unknown;
+  readonly charms?: unknown;
 }
 
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every look seed and revision fits a number.
-// The policy's three JSON text columns (migration 0015), its signing flag (0021) and its GitHub Charm
-// flag (0027) become the hob's one `policy` field.
+// The policy's three JSON text columns (migration 0015), its signing flag (0021) and the ids of its
+// Charms (0076) become the hob's one `policy` field.
 const agentRows = (rows: ReadonlyArray<AgentRow>) =>
-  rows.map(({ ownFolders, hiddenSharedFolders, policyOverrides, signCommits, githubCharm, ...row }) => ({
+  rows.map(({ ownFolders, hiddenSharedFolders, policyOverrides, signCommits, charms, ...row }) => ({
     ...row,
     lookSeed: Number(row.lookSeed),
     ...(row.revision === undefined ? {} : { revision: Number(row.revision) }),
@@ -47,7 +48,7 @@ const agentRows = (rows: ReadonlyArray<AgentRow>) =>
       hiddenSharedFolders: JSON.parse(String(hiddenSharedFolders)),
       overrides: JSON.parse(String(policyOverrides)),
       ...(Number(signCommits) === 1 ? { signCommits: true } : {}),
-      ...(Number(githubCharm) === 0 ? { githubCharm: false } : {}),
+      charms: { granted: JSON.parse(String(charms)) },
     },
   }));
 
@@ -58,7 +59,7 @@ const policyColumns = (policy: HobPolicy) => ({
   // Built-in and Charm overrides share the column; decoding the policy splits them again (ADR 031).
   policy_overrides: JSON.stringify({ ...policy.overrides, ...policy.charms?.overrides }),
   sign_commits: policy.signCommits === true ? 1 : 0,
-  github_charm: policy.githubCharm === false ? 0 : 1,
+  charms: JSON.stringify(heldCharms(policy)),
 });
 // The columns one configuration version sets, on the hob and in its history.
 const configColumns = (agent: Agent) => ({

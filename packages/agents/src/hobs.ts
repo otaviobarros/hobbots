@@ -5,12 +5,15 @@ import {
   InvalidHob,
   OverrideWidens,
   UndeclaredOperation,
+  UnknownCharm,
   type UpdateAgentPayload,
   type UpdateHobPermissionsPayload,
 } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  type CharmDeclaration,
+  type CharmId,
   type CharmOperation,
   type CharmOverrides,
   DEFAULT_LENGTH,
@@ -18,6 +21,7 @@ import {
   declaredOperations,
   type Effort,
   type HobPolicy,
+  heldCharms,
   hobAnswers,
   isNarrowerOrEqual,
   POLICY_OPERATIONS,
@@ -114,7 +118,7 @@ const checkOverrides = (
     }),
     ...charmOperations
       .filter((operation) => {
-        const override = policy.charms?.overrides[operation.id];
+        const override = policy.charms?.overrides?.[operation.id];
         return override !== undefined && !isNarrowerOrEqual(override, operation.presets[preset]);
       })
       .map((operation) => operation.id),
@@ -142,35 +146,73 @@ const checkDeclared = (
       });
 };
 
+/** A Charm granted to the hob that the hub does not hold, which is never stored (ADR 031). */
+const checkHeld = (
+  granted: ReadonlyArray<CharmId>,
+  charms: ReadonlyArray<CharmDeclaration>,
+): UnknownCharm | undefined => {
+  const unknown = granted.filter((id) => !charms.some((charm) => charm.id === id));
+  return unknown.length === 0
+    ? undefined
+    : new UnknownCharm({ charms: unknown, message: `This hub holds no Charm called ${unknown.join(", ")}` });
+};
+
 /**
- * The answers a change gives checked, when it gives any: a Charm override no Charm declares is
- * refused first, then any override that widens its preset.
+ * The answers a change gives checked, when it gives any: a Charm the hub does not hold is refused
+ * first, then a Charm override no Charm declares, then any override that widens its preset.
  */
 const checkAnswers = (
   payload: UpdateHobPermissionsPayload,
   preset: SafetyPreset,
   policy: HobPolicy,
-  charmOperations: ReadonlyArray<CharmOperation>,
-): UndeclaredOperation | OverrideWidens | undefined => {
-  if (payload.overrides === undefined && payload.charms === undefined) return undefined;
+  charms: ReadonlyArray<CharmDeclaration>,
+): UnknownCharm | UndeclaredOperation | OverrideWidens | undefined => {
+  const granted = payload.charms?.granted;
+  if (granted !== undefined) {
+    const unknown = checkHeld(granted, charms);
+    if (unknown !== undefined) return unknown;
+  }
+  const charmOverrides = payload.charms?.overrides;
+  if (payload.overrides === undefined && charmOverrides === undefined) return undefined;
+  const charmOperations = declaredOperations(charms);
   return (
-    (payload.charms && checkDeclared(payload.charms.overrides, charmOperations)) ??
+    (charmOverrides && checkDeclared(charmOverrides, charmOperations)) ??
     checkOverrides(preset, policy, charmOperations)
   );
+};
+
+/**
+ * The Charms a change grants the hob: the set it gives, or the hob's own with the GitHub Charm added
+ * or taken away when it asks as clients did before ADR 031, or the hob's own unchanged. Left
+ * unchanged, a hob that never chose its Charms keeps holding those every hob starts with.
+ */
+const changedCharms = (before: HobPolicy, change: UpdateHobPermissionsPayload): ReadonlyArray<CharmId> | undefined => {
+  if (change.charms?.granted !== undefined) return [...new Set(change.charms.granted)];
+  if (change.githubCharm === undefined) return before.charms?.granted;
+  const others = heldCharms(before).filter((id) => id !== "github");
+  return change.githubCharm ? [...others, "github"] : others;
 };
 
 /** `before` with each field the change gives replaced; Charm overrides are left out when there are none. */
 const changedPolicy = (before: HobPolicy, change: UpdateHobPermissionsPayload): HobPolicy => {
   const charmOverrides = change.charms?.overrides ?? before.charms?.overrides ?? {};
+  const granted = changedCharms(before, change);
+  const charms = {
+    ...(granted === undefined ? {} : { granted }),
+    ...(Object.keys(charmOverrides).length === 0 ? {} : { overrides: charmOverrides }),
+  };
   return {
     ownFolders: change.ownFolders ?? before.ownFolders,
     hiddenSharedFolders: change.hiddenSharedFolders ?? before.hiddenSharedFolders,
     overrides: change.overrides ?? before.overrides,
-    ...(Object.keys(charmOverrides).length === 0 ? {} : { charms: { overrides: charmOverrides } }),
+    ...(Object.keys(charms).length === 0 ? {} : { charms }),
     ...((change.signCommits ?? before.signCommits) === true ? { signCommits: true } : {}),
-    ...((change.githubCharm ?? before.githubCharm) === false ? { githubCharm: false } : {}),
   };
 };
+
+/** Two sets of Charm ids hold the same Charms. */
+const sameCharms = (a: ReadonlyArray<CharmId>, b: ReadonlyArray<CharmId>) =>
+  a.length === b.length && a.every((id) => b.includes(id));
 
 /** Two answer records give the same answer for every operation either names. */
 const sameAnswers = (a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>) =>
@@ -179,7 +221,7 @@ const sameAnswers = (a: Readonly<Record<string, unknown>>, b: Readonly<Record<st
 /** Two policies hold the same folders, in the same order, the same overrides, signing and Charms. */
 const samePolicy = (a: HobPolicy, b: HobPolicy) =>
   (a.signCommits === true) === (b.signCommits === true) &&
-  (a.githubCharm !== false) === (b.githubCharm !== false) &&
+  sameCharms(heldCharms(a), heldCharms(b)) &&
   a.ownFolders.join("\0") === b.ownFolders.join("\0") &&
   a.hiddenSharedFolders.join("\0") === b.hiddenSharedFolders.join("\0") &&
   sameAnswers(hobAnswers(a), hobAnswers(b));
@@ -243,7 +285,7 @@ export class HobService extends Context.Service<
     readonly updatePolicy: (
       id: AgentId,
       payload: UpdateHobPermissionsPayload,
-    ) => Effect.Effect<Agent, AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation>;
+    ) => Effect.Effect<Agent, AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm>;
   }
 >()("@hobbots/agents/HobService") {
   static readonly layer = Layer.effect(
@@ -252,7 +294,7 @@ export class HobService extends Context.Service<
       const repo = yield* HobbotsRepository;
       const bus = yield* EventPublisher;
       // Read once: the Charms a hub holds are fixed when it starts (ADR 031).
-      const charmOperations = declaredOperations(yield* CharmDeclarations);
+      const charms = yield* CharmDeclarations;
       const adapters = yield* runtimeAdapters;
       const admission = yield* HobAdmission;
       const setup = yield* InstallationSettings;
@@ -396,7 +438,7 @@ export class HobService extends Context.Service<
                 return yield* new InvalidFolder({ folder: unknown, message: `${unknown} is not a shared folder` });
               }
             }
-            const refused = checkAnswers(payload, safetyPreset, policy, charmOperations);
+            const refused = checkAnswers(payload, safetyPreset, policy, charms);
             if (refused !== undefined) return yield* refused;
             return new Agent({ ...agent, policy });
           }),

@@ -787,13 +787,15 @@ describe("backup and restore", () => {
     for (const revision of after.folders) {
       if (revision === null) throw new Error("a revision's files did not come back");
       expect(await readFile(join(revision, "scripts", "tag.sh"), "utf8")).toBe("git tag v1\n");
-      // Still runnable, as its hash says, and read-only, as the hub writes every revision.
+      // Still runnable, as its hash says, and read-only, as the hub writes every revision, in folders
+      // its owner can remove (#1196).
       expect((await lstat(join(revision, "scripts", "tag.sh"))).mode & 0o777).toBe(0o555);
       expect((await lstat(join(revision, "SKILL.md"))).mode & 0o777).toBe(0o444);
-      expect((await lstat(revision)).mode & 0o777).toBe(0o555);
+      expect((await lstat(revision)).mode & 0o777).toBe(0o755);
+      expect((await lstat(join(revision, "scripts"))).mode & 0o777).toBe(0o755);
     }
 
-    // Start over deletes the library too, read-only revisions and all.
+    // Start over deletes the library too, read-only files and all.
     await wipeHubData(dataDir);
     await expect(lstat(join(dataDir, "skills"))).rejects.toThrow();
   });

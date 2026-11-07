@@ -304,6 +304,8 @@ export const SkillChange = Schema.Struct({
   previousNumber: Schema.NullOr(Schema.Int),
   /** The hob that turned a skill off or on for itself. */
   agentId: Schema.NullOr(AgentId),
+  /** For a set, the one skill of it the hob turned off or on; null when it was the whole skill or set. */
+  member: Schema.NullOr(SkillName),
   by: Schema.NullOr(SkillBy),
 });
 export type SkillChange = typeof SkillChange.Type;

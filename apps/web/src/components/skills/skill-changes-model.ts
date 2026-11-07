@@ -62,6 +62,10 @@ const rolledOutText = (change: SkillChange, name: string, who: string) => {
   };
 };
 
+/** What a hob turned off or on: the skill, or for one skill of a set, that skill and its set. */
+const optedName = (change: SkillChange, name: string) =>
+  change.member === null ? name : copy.memberOf({ member: skillTitle(change.member), set: name });
+
 /** A change's kind line, its sentence, and the note under it. */
 export const changeText = (change: SkillChange, hobs: HobDirectory) => {
   const name = skillTitle(change.name);
@@ -81,9 +85,9 @@ export const changeText = (change: SkillChange, hobs: HobDirectory) => {
     case "followed":
       return { kind: copy.followed, line: copy.followedLine({ name, who }), note: null };
     case "optedOut":
-      return { kind: copy.optedOut, line: copy.optedOutLine({ name, hob }), note: null };
+      return { kind: copy.optedOut, line: copy.optedOutLine({ name: optedName(change, name), hob }), note: null };
     case "optedIn":
-      return { kind: copy.optedIn, line: copy.optedInLine({ name, hob }), note: null };
+      return { kind: copy.optedIn, line: copy.optedInLine({ name: optedName(change, name), hob }), note: null };
     case "removed":
       return { kind: copy.removed, line: copy.removedLine({ name }), note: null };
   }

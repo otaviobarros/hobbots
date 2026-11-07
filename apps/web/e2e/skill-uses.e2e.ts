@@ -101,6 +101,10 @@ test("[TC-UI-1096-06] Use a skill keeps the draft, the keyboard picks a skill, a
 
   await page.reload();
   await expect(usedLines(page)).toContainText("Used Release steps (r1)");
+
+  // Open, beside the line, reads the skill's page, as its Activity says (#1194).
+  await usedLines(page).getByRole("link", { name: "Open Release steps" }).click();
+  await expect(page.getByRole("heading", { name: "Release steps", level: 2 })).toBeVisible();
 });
 
 // covers ADR 029 (Explicit use), STD-REACT-015

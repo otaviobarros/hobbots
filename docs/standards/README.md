@@ -120,6 +120,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-REACT-024 | Long lists render only what is on screen | Active |
 | STD-REACT-025 | Slow updates never block typing | Active |
 | STD-REACT-026 | Stored data is versioned and parsed | Active |
+| STD-REACT-027 | Query hooks own an async call's lifecycle | Active |
 | STD-UI-001 | Styles use theme tokens only | Active |
 | STD-UI-002 | Build on the shared primitives | Active |
 | STD-UI-003 | Every control works by keyboard and has a name | Active |
@@ -131,6 +132,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-UI-009 | Every failure says what went wrong and how to recover | Active |
 | STD-UI-010 | Only primitives take a className, and only for layout | Active |
 | STD-UI-011 | Visual variants come from cva | Active |
+| STD-UI-012 | Conditional and joined classes go through cn | Active |
 | STD-I18N-001 | User-facing copy lives in message modules | Active |
 | STD-I18N-002 | Messages are whole sentences with placeholders | Active |
 | STD-I18N-003 | Dates and numbers use shared locale formatters | Active |

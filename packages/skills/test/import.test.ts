@@ -1,10 +1,10 @@
-import { lstat, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SkillFiles, SkillLibrary } from "@hobbots/agents";
 import { SkillName } from "@hobbots/domain";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import { SkillImporter } from "../src/index.ts";
+import { SkillImporter, SkillObjects, SkillObjectsLive } from "../src/index.ts";
 import { archiveOf, folderOf, importerLayer, repositoryOf, runWith, skillMd } from "./fixtures.ts";
 
 // #1060: importing skills safely (ADR 029, Import), into the library and the object store.
@@ -44,9 +44,44 @@ describe("skill import", () => {
         expect(yield* Effect.promise(() => objectFiles(object ?? ""))).toEqual(["SKILL.md", "notes/steps.md"]);
         const mode = (yield* Effect.promise(() => stat(join(object ?? "", "SKILL.md")))).mode & 0o777;
         expect(mode).toBe(0o444);
+        // Its folder stays writable to its owner, so the data folder can be removed (#1196).
+        expect((yield* Effect.promise(() => stat(object ?? ""))).mode & 0o777).toBe(0o755);
         expect(first?.revision.files.map((file) => file.path)).toEqual(["SKILL.md", "notes/steps.md"]);
       }),
     );
+  });
+
+  // covers ADR 029 (Storage and revisions), #1196
+  it("[TC-AG-1196-01] leaves a data folder with skills removable with a plain rm -rf, read-only files and all", async () => {
+    const { layer, data } = await importerLayer();
+    const folder = await folderOf({ "SKILL.md": skillMd("release"), "notes/steps.md": "Tag, then push." });
+    await runWith(layer)(
+      Effect.gen(function* () {
+        yield* (yield* SkillImporter).add({ _tag: "Folder", path: folder }, you);
+      }),
+    );
+    // As `rm -rf` does: no folder is opened first, so a read-only folder would refuse it.
+    await rm(join(data, "skills"), { recursive: true });
+    await expect(lstat(join(data, "skills"))).rejects.toThrow();
+  });
+
+  // covers ADR 029 (Storage and revisions), #1196
+  it("[TC-AG-1196-02] opens the folders of revisions an earlier hub sealed, and keeps their files read-only", async () => {
+    const { data } = await importerLayer();
+    const sealed = join(data, "skills", "objects", "a".repeat(64));
+    await mkdir(join(sealed, "notes"), { recursive: true });
+    await writeFile(join(sealed, "SKILL.md"), skillMd("release"), { mode: 0o444 });
+    await chmod(join(sealed, "notes"), 0o555);
+    await chmod(sealed, 0o555);
+    // A hub starting on the data folder opens them.
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* SkillObjects;
+      }).pipe(Effect.provide(SkillObjectsLive(data))),
+    );
+    expect((await stat(sealed)).mode & 0o777).toBe(0o755);
+    expect((await stat(join(sealed, "notes"))).mode & 0o777).toBe(0o755);
+    expect((await stat(join(sealed, "SKILL.md"))).mode & 0o777).toBe(0o444);
   });
 
   it("[TC-AG-122] makes a new revision for new content of a skill, and refuses a new skill of a name the library has", async () => {

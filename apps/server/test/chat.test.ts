@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CharmTools, ChatService, HobAdmission, HobbotsRepository, HobTools, type ToolAccess } from "@hobbots/agents";
+import { Charms, ChatService, HobAdmission, HobbotsRepository, HobTools, type ToolAccess } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
@@ -352,26 +352,32 @@ describe("tool calls in a reply", () => {
   it("[TC-PE-134] offers the hub's Charm tools beside the Task tools, with the hob's access read at each call", async () => {
     const seen: Array<ReadonlyArray<string> | null> = [];
     const charms = Layer.succeed(
-      CharmTools,
-      CharmTools.of({
+      Charms,
+      Charms.of({
+        charms: [],
         forTurn: (turn) =>
-          Effect.succeed({
-            tools: [
-              {
-                name: "github_search",
-                description: "Search",
-                inputSchema: { type: "object" },
-                label: "Searching GitHub",
+          Effect.succeed([
+            {
+              owner: "the GitHub Charm",
+              tools: {
+                tools: [
+                  {
+                    name: "github_search",
+                    description: "Search",
+                    inputSchema: { type: "object" },
+                    label: "Searching GitHub",
+                  },
+                ],
+                call: (name, input) =>
+                  turn.currentAccess.pipe(
+                    Effect.map((access) => {
+                      seen.push(access?.folders ?? null);
+                      return { text: `${name} read ${JSON.stringify(input)}`, refused: false };
+                    }),
+                  ),
               },
-            ],
-            call: (name, input) =>
-              turn.currentAccess.pipe(
-                Effect.map((access) => {
-                  seen.push(access?.folders ?? null);
-                  return { text: `${name} read ${JSON.stringify(input)}`, refused: false };
-                }),
-              ),
-          }),
+            },
+          ]),
       }),
     );
     const reply = await Effect.gen(function* () {
@@ -456,6 +462,52 @@ describe("tool calls in a reply", () => {
     // Given, it waits for the next turn.
     hob = EMPTY_HOB_POLICY;
     expect(await statusAfter(() => (hob = { ...EMPTY_HOB_POLICY, signCommits: true }))).toBe("streaming");
+  });
+
+  // covers PE-008, ADR 031
+  it("[TC-PE-508] stops a running turn once its hob loses a Charm, and keeps it when the hob gains one", async () => {
+    let hob: ToolAccess["policy"]["hob"] = { ...EMPTY_HOB_POLICY, charms: { granted: ["github"] } };
+    const changing = Layer.succeed(
+      HobTools,
+      HobTools.of({
+        access: () =>
+          Effect.sync(() => ({
+            policy: {
+              preset: "balanced" as const,
+              sharedFolders: [folder],
+              hob,
+              dataFolder: join(root, "data"),
+              restrictions: [],
+            },
+            folders: [folder],
+            runtimeFolder: join(root, "runtimes", HOB_ID),
+            commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
+          })),
+      }),
+    );
+    const statusAfter = (granted: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const thread = yield* chat.createThread(HOB_ID);
+        yield* chat.sendPrompt(thread.id, "one two three four five six seven eight nine ten");
+        yield* chat.streamingReplies.pipe(
+          Effect.flatMap((replies) => (replies.some((m) => m.content !== "") ? Effect.void : Effect.fail("waiting"))),
+          Effect.retry(Schedule.spaced("5 millis")),
+        );
+        hob = { ...EMPTY_HOB_POLICY, charms: { granted } };
+        yield* chat.reviewAuthority(HOB_ID);
+        return (yield* repo.listMessages(thread.id)).at(-1)?.status;
+      }).pipe(
+        Effect.provide(testLayer(FakeRuntimeLayer({ delay: "40 millis" }), changing)),
+        Effect.scoped,
+        Effect.runPromise,
+      );
+
+    // Taking the GitHub Charm away stops the turn, which may already hold its tools.
+    expect(await statusAfter([])).toBe("interrupted");
+    // Given a Charm, the turn goes on; it is offered from the next turn.
+    expect(await statusAfter(["github", "pip"])).toBe("streaming");
   });
 
   // covers PE-008

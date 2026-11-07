@@ -91,3 +91,15 @@ Give a primitive its visual variations through `cva` variants, named after the d
 - **Why:** every look the app can take is listed in one place, and the design system can review it.
 - **Enforced by:** review, and STD-UI-010 for looks passed in from outside.
 - **Applies to:** `packages/ui`.
+
+### STD-UI-012 Conditional and joined classes go through cn
+
+When an element's classes depend on a condition, or join a class list with another, build them with `cn` from `@hobbots/ui/lib/utils`. Do not write a ternary, a `&&`, a `+`, a `join` or a template with holes as the `className`. A fixed class list stays a plain string. Inside `cn`, pass the base classes first and each condition as its own argument.
+
+- ✅ `className={cn("rounded-card border px-3", open && "bg-hover")}`
+- ✅ `className="flex items-center gap-2"`
+- ❌ ``className={`rounded-card border ${open ? "bg-hover" : ""}`}``
+- ❌ `className={open ? "flex gap-2" : "flex gap-3"}`
+- **Why:** `cn` merges classes that conflict, so the class a condition adds wins over the base one, rather than whichever the stylesheet happens to list last. Hand-built strings also invite classes pieced together at run time, such as `bg-${tone}`, which Tailwind cannot find in the source and never generates. One way of composing keeps each condition readable as its own argument.
+- **Enforced by:** the frontend check in `pnpm check`. It fails on a `className` attribute whose value is a template with holes, a conditional, a `&&` or `||`, a `+` or a `.join(...)`. Code that broke the rule when the check was turned on sits in the frontend baseline until it moves to `cn`.
+- **Applies to:** `apps/web`, `packages/ui`.

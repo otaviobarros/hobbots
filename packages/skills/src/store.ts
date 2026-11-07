@@ -9,7 +9,9 @@ import type { SkillContent } from "./hash.ts";
 /**
  * The files of every revision, in `<data folder>/skills/objects/<hash>/` (ADR 029, Storage and
  * revisions): written once, read-only, and never changed. A revision is written into a folder of its
- * own and moved into place whole, so a hub that stops halfway leaves no half-written revision.
+ * own and moved into place whole, so a hub that stops halfway leaves no half-written revision. Its files
+ * are read-only and its folders stay writable to their owner, so the data folder can still be removed
+ * with a plain `rm -rf`; no turn writes here, since the store is outside every folder a hob may write.
  */
 export interface SkillObjectsShape {
   /** Writes a revision's files, unless its folder is there already; answers the folder. */
@@ -27,12 +29,27 @@ const exists = (path: string) =>
     () => false,
   );
 
-/** Makes every folder and file under `folder` read-only, folders last. */
-const seal = async (folder: string): Promise<void> => {
+/** A revision's folders: writable to their owner only, so they can be removed (#1196). */
+const FOLDER_MODE = 0o755;
+
+/** Sets every folder under `folder` to `FOLDER_MODE`, its files untouched. */
+const openFolders = async (folder: string): Promise<void> => {
+  await chmod(folder, FOLDER_MODE);
   for (const entry of await readdir(folder, { withFileTypes: true })) {
-    if (entry.isDirectory()) await seal(join(folder, entry.name));
+    if (entry.isDirectory()) await openFolders(join(folder, entry.name));
   }
-  await chmod(folder, 0o555);
+};
+
+/**
+ * Opens the folders of revisions an earlier hub sealed read-only, whose files stay read-only, so a
+ * data folder written before #1196 can be removed too. A folder already open is left as it is.
+ */
+const openSealedRevisions = async (root: string): Promise<void> => {
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const path = join(root, entry.name);
+    if (((await lstat(path)).mode & 0o200) === 0) await openFolders(path);
+  }
 };
 
 const write = async (objects: string, hash: string, contents: ReadonlyArray<SkillContent>): Promise<string> => {
@@ -46,25 +63,14 @@ const write = async (objects: string, hash: string, contents: ReadonlyArray<Skil
       await writeFile(path, file.bytes, { mode: file.mode === "executable" ? 0o555 : 0o444, flag: "wx" });
     }
     await mkdir(staging, { recursive: true });
-    await seal(staging);
+    await openFolders(staging);
     await rename(staging, target).catch(async (error: NodeJS.ErrnoException) => {
       // Another import of the same content won the race; its folder holds the same files.
       if (!(await exists(target))) throw error;
     });
     return target;
   } finally {
-    if (await exists(staging)) {
-      await chmodTree(staging);
-      await rm(staging, { recursive: true, force: true });
-    }
-  }
-};
-
-/** Lets a staging folder be removed again after `seal`. */
-const chmodTree = async (folder: string): Promise<void> => {
-  await chmod(folder, 0o755);
-  for (const entry of await readdir(folder, { withFileTypes: true })) {
-    if (entry.isDirectory()) await chmodTree(join(folder, entry.name));
+    await rm(staging, { recursive: true, force: true });
   }
 };
 
@@ -75,6 +81,7 @@ export const SkillObjectsLive = (dataFolder: string) => {
     SkillObjects,
     Effect.gen(function* () {
       yield* Effect.promise(() => mkdir(root, { recursive: true, mode: 0o700 }));
+      yield* Effect.promise(() => openSealedRevisions(root));
       const folder = (hash: SkillRevisionHash) =>
         Effect.promise(async () => ((await exists(join(root, hash))) ? join(root, hash) : null));
       return SkillObjects.of({

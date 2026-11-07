@@ -3,23 +3,32 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { CharmTools, hubCallStep, makeRedactor, type ToolAccess, UNASKABLE } from "@hobbots/agents";
+import {
+  type Charm,
+  Charms,
+  defineCharm,
+  hubAction,
+  hubCallStep,
+  makeRedactor,
+  type ToolAccess,
+  UNASKABLE,
+} from "@hobbots/agents";
 import { AgentId, EMPTY_HOB_POLICY, type GitHubRepository, type PolicyDecision } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Layer, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   GITHUB_CHARM,
   GitHubApi,
   GitHubApiLive,
-  GitHubCharmTools,
+  GitHubCharm,
   GitHubCredential,
   GitHubError,
   GitPushLive,
   GitRemotes,
 } from "../src/index.ts";
-import { approvingUser, directSandbox, memoryCharmCalls } from "./support.ts";
+import { approvingUser, charmToolsFor, directSandbox, memoryCharmCalls } from "./support.ts";
 
 let root = "";
 let project = "";
@@ -101,8 +110,10 @@ const access = (folders: ReadonlyArray<string>, readGitHub?: PolicyDecision, git
     sharedFolders: [project],
     hob: {
       ...EMPTY_HOB_POLICY,
-      ...(readGitHub === undefined ? {} : { charms: { overrides: { "github.read": readGitHub } } }),
-      ...(githubCharm ? {} : { githubCharm: false }),
+      charms: {
+        ...(githubCharm ? {} : { granted: [] }),
+        ...(readGitHub === undefined ? {} : { overrides: { "github.read": readGitHub } }),
+      },
     },
     dataFolder: path.join(root, "data"),
     restrictions: [],
@@ -139,8 +150,10 @@ const charmLayer = (layers: {
   readonly asked: Array<string>;
   readonly failWith?: GitHubError;
   readonly connected?: boolean;
+  /** Charms registered beside GitHub's. */
+  readonly beside?: ReadonlyArray<Effect.Effect<Charm>>;
 }) =>
-  GitHubCharmTools.pipe(
+  Charms.layer([GitHubCharm, ...(layers.beside ?? [])]).pipe(
     Layer.provide(
       Layer.mergeAll(
         fakeApi(layers.asked, layers.failWith),
@@ -156,9 +169,16 @@ const charmLayer = (layers: {
   );
 
 /** The tools a turn starts with when the hob's access is `atStart`, or null when it is offered none. */
-const offered = (layers: { readonly asked: Array<string>; readonly connected?: boolean }, atStart: ToolAccess | null) =>
+const offered = (
+  layers: {
+    readonly asked: Array<string>;
+    readonly connected?: boolean;
+    readonly beside?: ReadonlyArray<Effect.Effect<Charm>>;
+  },
+  atStart: ToolAccess | null,
+) =>
   Effect.gen(function* () {
-    return yield* (yield* CharmTools).forTurn({
+    return yield* charmToolsFor({
       agentId: AgentId.make("hob"),
       threadId: null,
       messageId: null,
@@ -178,9 +198,8 @@ const callWith = (
   steerFrom: ReadonlyArray<string> = [],
 ) =>
   Effect.gen(function* () {
-    const charms = yield* CharmTools;
     let now: ToolAccess | null = access([project]);
-    const tools = yield* charms.forTurn({
+    const tools = yield* charmToolsFor({
       agentId: AgentId.make("hob"),
       threadId: null,
       messageId: null,
@@ -297,7 +316,7 @@ describe("GitHub Charm", () => {
     const user = approvingUser(now, "always");
     const recorded: Array<string> = [];
     const answers = await Effect.gen(function* () {
-      const tools = yield* (yield* CharmTools).forTurn({
+      const tools = yield* charmToolsFor({
         agentId: AgentId.make("hob"),
         threadId: null,
         messageId: null,
@@ -392,6 +411,64 @@ describe("GitHub Charm", () => {
     const failWith = new GitHubError({ reason: "signed-out", message: "The hub is not signed in to GitHub." });
     const { answer } = await callWith({ asked: [], failWith }, access([project]), "github_repository", {});
     expect(answer).toEqual({ refused: true, text: "The hub is not signed in to GitHub." });
+  });
+
+  // covers PE-002, PE-005, ADR 031
+  it("[TC-PE-509] is registered beside a second Charm: a hob holding both is offered both, one holding one only that one", async () => {
+    // A fake Charm with one read, its only change beside GitHub's.
+    const lark = Effect.succeed(
+      defineCharm({
+        declaration: {
+          id: "lark",
+          operations: [
+            {
+              id: "lark.read",
+              words: "reading Lark",
+              presets: { careful: "allow", balanced: "allow", trusting: "allow" },
+              site: [],
+              onceOnly: false,
+              actsAsIdentity: false,
+            },
+          ],
+          takesOver: [],
+        },
+        name: "Lark",
+        actions: [
+          hubAction({
+            tool: { name: "lark_read", description: "Reads Lark.", inputSchema: {}, label: "Reading Lark" },
+            input: Schema.Struct({}),
+            effect: "read",
+            otherwise: "Lark cannot be read",
+            plan: () =>
+              Effect.succeed({
+                request: { _tag: "Charm", charm: "lark", operation: "lark.read", site: {} },
+                card: { arguments: {} },
+                send: Effect.succeed("Lark read."),
+              }),
+          }),
+        ],
+        decide: () => () => Effect.die("not called"),
+        connected: () => Effect.succeed(true),
+      }),
+    );
+    const holding = (granted: ReadonlyArray<string>): ToolAccess => {
+      const base = access([project]);
+      return { ...base, policy: { ...base.policy, hob: { ...base.policy.hob, charms: { granted } } } };
+    };
+    const names = async (granted: ReadonlyArray<string>) =>
+      (await offered({ asked: [], beside: [lark] }, holding(granted)))?.tools.map((tool) => tool.name) ?? [];
+    const github = [
+      "github_repository",
+      "github_search",
+      "github_item",
+      "github_push",
+      "github_open_pull_request",
+      "github_comment",
+    ];
+    expect(await names(["github", "lark"])).toEqual([...github, "lark_read"]);
+    expect(await names(["github"])).toEqual(github);
+    expect(await names(["lark"])).toEqual(["lark_read"]);
+    expect(await names([])).toEqual([]);
   });
 });
 

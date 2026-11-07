@@ -2,13 +2,13 @@ import {
   type ChatTaskTurn,
   type ChatTurn,
   callScope,
-  charmOffer,
-  combineHubTools,
   EventPublisher,
   FolderChecks,
   HobbotsRepository,
   type HubCallStep,
   type HubTools,
+  hubToolOffer,
+  joinHubTools,
   makeRedactor,
   type Redactor,
   SecretRedaction,
@@ -23,7 +23,6 @@ import {
   type CarriedItem,
   carriedWith,
   type EventEnvelope,
-  isGitHubWriteToolName,
   isTaskToolName,
   stableJson,
   TASK_TOOLS,
@@ -439,33 +438,38 @@ export class TaskTools extends Context.Service<
           });
 
         /**
-         * The Charms a session outside any chat offers: none of the GitHub writes. A write whose
-         * answer is lost waits for you to settle it on the reply step it showed as (ADR 020), and such
-         * a session has no reply, so its writes stay with the lead's chat until it does. A call to
-         * one is refused as a tool the session does not offer, and a `git push` is decided as a push.
+         * The Charms a session outside any chat offers: none of their writes. A write whose answer
+         * is lost waits for you to settle it on the reply step it showed as (ADR 020), and such a
+         * session has no reply, so its writes stay with the lead's chat until it does. A call to one
+         * is refused as a tool the session does not offer, and a `git push` is decided as a push.
          */
-        const withoutWrites = (charms: HubTools | null): HubTools | null => {
-          if (charms === null) return null;
-          const tools = charms.tools.filter((tool) => !isGitHubWriteToolName(tool.name));
-          return tools.length === 0 ? null : { tools, call: charms.call };
-        };
+        const withoutSteering = (charms: HubTools | null): HubTools | null =>
+          charms === null || charms.tools.length === 0 ? null : { tools: charms.tools, call: charms.call };
         // Without Charms or local Git tools, a session offers only its Task tools.
-        const charmsFor = yield* charmOffer;
+        const charmsFor = yield* hubToolOffer;
         const forSession = (caller: TaskToolCaller, turn: SessionCharms, only?: ReadonlyArray<TaskToolName>) =>
           Effect.gen(function* () {
             const scope = () => callScope.task(caller.taskId);
-            const charms = withoutWrites(
-              yield* charmsFor({
-                ...turn,
-                agentId: caller.agentId,
-                threadId: null,
-                messageId: null,
-                scope,
-              }),
+            const charms = withoutSteering(
+              yield* charmsFor(
+                {
+                  ...turn,
+                  agentId: caller.agentId,
+                  threadId: null,
+                  messageId: null,
+                  scope,
+                },
+                { writes: false },
+              ),
             );
             const recorded = charmRecords({ agentId: caller.agentId, scope, taskOf: () => caller.taskId })(charms);
             const tools = forTurn(caller, only);
-            return combineHubTools(tools, recorded) ?? tools;
+            return (
+              joinHubTools([
+                { owner: "the Task tools", tools },
+                { owner: "the hub's other tools", tools: recorded },
+              ]) ?? tools
+            );
           });
 
         return TaskTools.of({ call, forTurn, forSession, forChat });

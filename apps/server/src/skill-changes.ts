@@ -45,6 +45,7 @@ const blank = (at: string, skillId: SkillId, name: SkillName) => ({
   previous: null,
   previousNumber: null,
   agentId: null,
+  member: null,
   by: null,
   pin: null,
 });
@@ -130,6 +131,7 @@ const optedOut = (changes: Changes, event: Extract<JournaledEvent, { _tag: "Skil
     ...blank(at, event.optOut.skillId, name),
     kind: event.optedOut ? "optedOut" : "optedIn",
     agentId: event.optOut.agentId,
+    member: event.optOut.member,
   });
 };
 

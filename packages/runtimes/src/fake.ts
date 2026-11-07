@@ -102,7 +102,11 @@ export const fakeEnforcement = (sandbox: "on" | "unavailable"): RuntimeEnforceme
     sandbox === "on"
       ? { status: "verified", evidence: "The fake pretends its sandbox started." }
       : { status: "unsupported", evidence: "The fake pretends the sandbox cannot start on this hub." },
-  hubTools: { status: "unsupported", evidence: "Charms and coordination tools are not served yet." },
+  hubTools: {
+    status: "verified",
+    evidence:
+      "The fake calls the hub tools a scripted turn names: each Charm the hob holds, Local Git, Memory, Skills and the Task tools, decided by the hub.",
+  },
   toolEvents: { status: "verified", evidence: "The fake reports each scripted call's start, finish or denial." },
   toolInterruption: { status: "verified", evidence: "Cancelling the turn ends the fake's stream." },
 });
