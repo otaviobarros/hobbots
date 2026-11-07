@@ -29,8 +29,11 @@ export interface CheckLine {
 /** What the plain check reads; anything still loading is undefined. */
 export interface CheckInput {
   readonly runtimes: ReadonlyArray<RuntimeHealth> | undefined;
-  /** The memory engine's health; null on a hub that runs none. */
-  readonly memory: MemoryEngineHealth | null | undefined;
+  /**
+   * The memory engine's health; null on a hub that runs none, and "failed" when the hub could not be
+   * asked, even if an earlier answer is still at hand, so an old answer never passes for a new one.
+   */
+  readonly memory: MemoryEngineHealth | null | "failed" | undefined;
   readonly connected: ReadonlyArray<RuntimeKind> | undefined;
   readonly folders: number | undefined;
   readonly github: GitHubStatus | undefined;
@@ -64,8 +67,9 @@ const sandboxLine = (input: CheckInput): CheckLine => {
 };
 
 /** The memory engine (ADR 028): running, starting, off by choice, or unable to start in this copy. */
-const memoryLine = (health: MemoryEngineHealth): CheckLine => {
+const memoryLine = (health: MemoryEngineHealth | "failed"): CheckLine => {
   const base = { key: "memory", name: names.memory, source: "memory" } as const;
+  if (health === "failed") return { ...base, tone: "warn", text: copy.memoryUnread };
   switch (health.state) {
     case "running":
       return { ...base, tone: "ok", text: copy.memoryRunning };

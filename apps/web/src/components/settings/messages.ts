@@ -363,6 +363,7 @@ export const messages = {
       memoryStarting: "Memory is starting",
       memoryRestarting: "Memory stopped, and Hobbots is starting it again. Hobs keep working without it meanwhile.",
       memoryOff: "Memory is turned off (optional)",
+      memoryUnread: "Hobbots could not check memory. Check again in a moment.",
       memoryMissing:
         "Memory can't start: this copy of Hobbots has no memory engine. Reinstall Hobbots to bring it back.",
       memoryChecksum:

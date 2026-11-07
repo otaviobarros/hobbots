@@ -112,6 +112,11 @@ describe("the plain check", () => {
     expect(memory(engine({ state: "starting" }))).toMatchObject({ tone: "warn", text: "Memory is starting" });
     expect(memory(engine({ state: "off", offReason: "missing" }))).toMatchObject({ tone: "broken" });
     expect(memory(engine({ state: "off", offReason: "checksum" }))?.text).toContain("Reinstall Hobbots");
+    // A read that failed says so, and asks to check again, rather than leave the line out.
+    expect(line(checkLines(input({ memory: "failed" })), "memory")).toMatchObject({
+      tone: "warn",
+      text: "Hobbots could not check memory. Check again in a moment.",
+    });
     // A hub that runs no engine has no line for it.
     expect(line(checkLines(input({ memory: null })), "memory")).toBeUndefined();
   });

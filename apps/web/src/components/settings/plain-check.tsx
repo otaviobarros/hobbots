@@ -39,7 +39,8 @@ const useCheck = () => {
   const blockers = useBlockersQuery();
   const lines = checkLines({
     runtimes: runtimes.data,
-    memory: memory.data?.engine,
+    // A failed read, a first one or a refresh, says so rather than show an older answer.
+    memory: memory.isError ? "failed" : memory.data?.engine,
     connected: setup.data?.connectedProviders,
     folders: setup.data?.approvedFolders.length,
     github: github.data,
