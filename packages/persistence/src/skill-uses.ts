@@ -17,6 +17,7 @@ interface UseRow {
   readonly threadId: string | null;
   readonly messageId: string | null;
   readonly usedAt: string;
+  readonly setName?: string | null;
 }
 
 const decodeUse = Schema.decodeUnknownEffect(SkillUse);
@@ -48,6 +49,7 @@ const useOf = (row: UseRow) =>
     threadId: row.threadId,
     messageId: row.messageId,
     at: row.usedAt,
+    set: row.setName ?? null,
   }).pipe(Effect.orDie);
 
 /** Inserts one use; its caller journals it as `SkillUsed` in the same transaction. */
@@ -64,6 +66,7 @@ export const insertSkillUse = (sql: SqlClient.SqlClient, use: SkillUse) =>
     thread_id: use.threadId,
     message_id: use.messageId,
     used_at: use.at,
+    set_name: use.set,
   })}`;
 
 /** The uses of skills (migration 0069, ADR 029 The use line): each journaled as `SkillUsed`. */

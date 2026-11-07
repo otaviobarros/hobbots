@@ -107,11 +107,12 @@ describe("skillsText", () => {
       skillsText({
         ...hob,
         skills: [
-          { name: "release-steps", number: 5, revision, scope: "Project" },
-          { name: "commit-style", number: 3, revision, scope: "Everyone" },
+          { name: "release-steps", number: 5, revision, scope: "Project", set: null },
+          { name: "commit-style", number: 3, revision, scope: "Everyone", set: null },
+          { name: "plan-change", number: 2, revision, scope: "Everyone", set: "agent-engineering" },
         ],
       }),
-    ).toBe("Release steps r5 and Commit style r3");
+    ).toBe("Release steps r5, Commit style r3, and Plan change from agent-engineering r2");
   });
 });
 

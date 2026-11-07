@@ -179,6 +179,29 @@ export const SkillBy = Schema.Union([
 ]);
 export type SkillBy = typeof SkillBy.Type;
 
+/**
+ * A skill of a set (ADR 029, Skill sets): its own name and description, its folder inside the set,
+ * and the Charms it names. The set's revision holds every file; this says where each skill is.
+ */
+export const SkillSetSkill = Schema.Struct({
+  name: SkillName,
+  description: SkillDescription,
+  /** Its folder inside the set, such as `skills/deliver-change`. */
+  path: SkillFilePath,
+  charms: Schema.Array(Schema.String),
+});
+export type SkillSetSkill = typeof SkillSetSkill.Type;
+
+/** What a set's revision holds besides its files: its skills, by name. */
+export const SkillSetContent = Schema.Struct({ skills: Schema.Array(SkillSetSkill) });
+export type SkillSetContent = typeof SkillSetContent.Type;
+
+/**
+ * The name Claude Code's delivery gives the loose skills' plugin, which no set may take (ADR 029,
+ * Skill sets).
+ */
+export const RESERVED_SET_NAME = "hobbots-skills";
+
 /** One immutable revision of a skill. Its files live once per hash and never change. */
 export class SkillRevision extends Schema.Class<SkillRevision>("SkillRevision")({
   skillId: SkillId,
@@ -208,6 +231,14 @@ export class SkillRevision extends Schema.Class<SkillRevision>("SkillRevision")(
    * source that still holds it never rolls it out a second time, so a rollback stays.
    */
   rolledOutAt: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
+   * For a set (ADR 029, Skill sets), the skills it holds; null for a skill. A set's `name` is the
+   * set's, and its files are the whole set, laid out as it was imported.
+   */
+  set: Schema.NullOr(SkillSetContent).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
@@ -254,9 +285,15 @@ export class SkillAssignment extends Schema.Class<SkillAssignment>("SkillAssignm
  */
 export const TurnSkill = Schema.Struct({
   skillId: SkillId,
+  /** The skill's own name; for a skill of a set, its name inside the set. */
   name: SkillName,
   pin: SkillRevisionHash,
   onlyWhenAsked: Schema.Boolean,
+  /** The set it comes from, whose revision `pin` is, or null for a skill of its own (ADR 029, Skill sets). */
+  set: Schema.NullOr(SkillName).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
 });
 export type TurnSkill = typeof TurnSkill.Type;
 
@@ -281,6 +318,11 @@ export const UsedSkill = Schema.Struct({
   /** The revision's place in the skill's history, which the line shows as r4. */
   number: Schema.NullOr(Schema.Int),
   explicit: Schema.Boolean,
+  /** The set the skill comes from, whose revision `pin` is; null for a skill of its own or an organization's. */
+  set: Schema.NullOr(SkillName).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
 });
 export type UsedSkill = typeof UsedSkill.Type;
 
@@ -387,13 +429,23 @@ export const skillTitle = (name: string): string => {
 };
 
 /** A hob that turned off an Everyone or Project skill for itself. A hob setting, so it survives updates. */
-export const SkillOptOut = Schema.Struct({ agentId: AgentId, skillId: SkillId, at: Schema.String });
+export const SkillOptOut = Schema.Struct({
+  agentId: AgentId,
+  skillId: SkillId,
+  /** For a set, the one skill of it turned off; null when the whole skill or set is (ADR 029, Skill sets). */
+  member: Schema.NullOr(SkillName).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  at: Schema.String,
+});
 export type SkillOptOut = typeof SkillOptOut.Type;
 
 /** A check every skill passes before import writes anything (ADR 029, Import). */
 export const SkillCheck = Schema.Literals([
   "front-matter",
   "outside-path",
+  "set",
   "symlink",
   "too-large",
   "too-many-files",
@@ -475,6 +527,22 @@ export const savedSkillInstructions = (instructions: string): string => {
   const body = instructions.replace(/^(?:\r?\n)+/, "");
   return body === "" || body.endsWith("\n") ? body : `${body}\n`;
 };
+
+/**
+ * How you name a skill with `/` (ADR 029, Skill sets): its name, or a set's skill as `<set>:<name>`,
+ * the way Claude Code and Codex write a plugin's skill.
+ */
+export const SkillMention = Schema.String.check(
+  Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*(?::[a-z0-9]+(?:-[a-z0-9]+)*)?$/, {
+    message: "A skill is named by its name, or by its set's and its own as set:name.",
+  }),
+  Schema.isMaxLength(129),
+);
+export type SkillMention = typeof SkillMention.Type;
+
+/** How a turn's skill is named in full: `<set>:<name>` for a skill of a set, its name otherwise. */
+export const skillMentionOf = (skill: { readonly name: string; readonly set?: string | null }): string =>
+  skill.set ? `${skill.set}:${skill.name}` : skill.name;
 
 /** The number a revision shows as, such as `r4`. */
 export const skillRevisionLabel = (revision: { readonly number: number }): string => `r${revision.number}`;

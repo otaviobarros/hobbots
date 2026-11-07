@@ -79,6 +79,8 @@ export const DiagnosticsSkill = Schema.Struct({
   number: Schema.NullOr(Schema.Int),
   revision: SkillRevisionHash,
   scope: Schema.Literals(["Everyone", "Project", "Hob"]),
+  /** The set it comes from, whose revision it is (ADR 029, Skill sets); null for a skill of its own. */
+  set: Schema.NullOr(Schema.String),
 });
 export type DiagnosticsSkill = typeof DiagnosticsSkill.Type;
 

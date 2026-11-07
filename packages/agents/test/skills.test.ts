@@ -10,6 +10,7 @@ import {
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { type PinnedSkill, resolveSkills, rolloutTargets, type SkillTurn } from "../src/index.ts";
+import { mentionedSkill, runtimePrompt, withoutMention } from "../src/skill-turn.ts";
 
 const PIP = AgentId.make("pip");
 const QUILL = AgentId.make("quill");
@@ -104,6 +105,166 @@ describe("resolveSkills", () => {
       turn({ charms: ["github"] }),
     );
     expect(resolved.skills[0]?.missingCharms).toEqual(["linear"]);
+  });
+});
+
+/** A set assigned to `scope`, bringing `skills`. */
+const setOf = (
+  name: string,
+  skills: ReadonlyArray<string>,
+  scope: SkillScope,
+  more: Partial<SkillAssignment> = {},
+) => ({
+  ...pinned(name, scope, more),
+  set: { skills: skills.map((skill) => ({ name: SkillName.make(skill), charms: [] })) },
+});
+
+describe("resolveSkills with sets (ADR 029, Skill sets)", () => {
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-08] gives each skill of a set on the set's pin, named with its set", () => {
+    const set = setOf("agent-engineering", ["deliver-change", "plan-change"], { _tag: "Everyone" }, { pin: R2 });
+    const resolved = resolveSkills([set], turn());
+    expect(resolved.skills.map((one) => [one.name, one.set, one.pin, one.skillId])).toEqual([
+      ["deliver-change", "agent-engineering", R2, set.assignment.skillId],
+      ["plan-change", "agent-engineering", R2, set.assignment.skillId],
+    ]);
+  });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-09] loads two skills of one name in one scope, from two sets or a set and a skill", () => {
+    const one = setOf("agent-engineering", ["plan-change"], { _tag: "Everyone" });
+    const other = setOf("other-set", ["plan-change"], { _tag: "Everyone" });
+    const loose = pinned("plan-change", { _tag: "Everyone" });
+    const resolved = resolveSkills([one, other, loose], turn());
+    expect(resolved.skills.map((skill) => [skill.name, skill.set])).toEqual([
+      ["plan-change", null],
+      ["plan-change", "agent-engineering"],
+      ["plan-change", "other-set"],
+    ]);
+    expect(resolved.clashes).toEqual([]);
+  });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-10] a narrower skill replaces the set's of its name only; two projects' still load neither", () => {
+    const set = setOf("agent-engineering", ["deliver-change", "plan-change"], { _tag: "Everyone" });
+    const own = pinned("plan-change", { _tag: "Hob", agentId: PIP });
+    const replacedBy = resolveSkills([set, own], turn());
+    expect(replacedBy.skills.map((skill) => [skill.name, skill.set])).toEqual([
+      ["deliver-change", "agent-engineering"],
+      ["plan-change", null],
+    ]);
+    expect(replacedBy.replaced).toEqual([{ assignment: set.assignment, by: own.assignment, name: "plan-change" }]);
+    const web = setOf("agent-engineering", ["plan-change"], { _tag: "Project", identity: WEB });
+    const api = pinned("plan-change", { _tag: "Project", identity: API });
+    const clash = resolveSkills([web, api], turn({ projects: [WEB, API] }));
+    expect(clash.skills).toEqual([]);
+    expect(clash.clashes).toEqual([{ name: "plan-change", assignments: [web.assignment, api.assignment] }]);
+  });
+
+  // covers ADR 029 (Skill sets, Pins and rollout), #1143
+  it("[TC-AG-1143-13] takes a set whole from its narrowest assignment, so a held revision never mixes with a newer one", () => {
+    const own = setOf("agent-engineering", ["plan-change"], { _tag: "Hob", agentId: PIP }, { held: true });
+    const skillId = own.assignment.skillId;
+    const everyone = setOf(
+      "agent-engineering",
+      ["plan-change", "ship-change"],
+      { _tag: "Everyone" },
+      { skillId, pin: R2 },
+    );
+    const resolved = resolveSkills([everyone, own], turn());
+    expect(resolved.skills.map((one) => [one.name, one.pin])).toEqual([["plan-change", R1]]);
+    expect(resolved.replaced).toEqual([
+      { assignment: everyone.assignment, by: own.assignment, name: "agent-engineering" },
+    ]);
+    // Two projects that assign the set load none of it, whichever skills each revision holds.
+    const web = setOf("agent-engineering", ["plan-change"], { _tag: "Project", identity: WEB }, { skillId });
+    const api = setOf(
+      "agent-engineering",
+      ["plan-change", "ship-change"],
+      { _tag: "Project", identity: API },
+      { skillId, pin: R2 },
+    );
+    const clash = resolveSkills([web, api], turn({ projects: [WEB, API] }));
+    expect(clash.skills).toEqual([]);
+    expect(clash.clashes.map((one) => one.name)).toEqual(["plan-change", "ship-change"]);
+    // Their clash holds against a wider skill of one of its names; only a hob's own passes it.
+    const everyonePlan = pinned("plan-change", { _tag: "Everyone" });
+    const blocked = resolveSkills([web, api, everyonePlan], turn({ projects: [WEB, API] }));
+    expect(blocked.skills).toEqual([]);
+    expect(blocked.clashes.map((one) => one.name)).toEqual(["plan-change", "ship-change"]);
+    // A skill of the set the hob opted out of blocks nothing: the wider one loads.
+    const optedOutOfSets = [{ skillId, name: SkillName.make("plan-change") }];
+    const unblocked = resolveSkills([web, api, everyonePlan], turn({ projects: [WEB, API], optedOutOfSets }));
+    expect(unblocked.skills.map((one) => [one.name, one.skillId])).toEqual([
+      ["plan-change", everyonePlan.assignment.skillId],
+    ]);
+    expect(unblocked.clashes.map((one) => one.name)).toEqual(["ship-change"]);
+    const pipPlan = pinned("plan-change", { _tag: "Hob", agentId: PIP });
+    const passed = resolveSkills([web, api, everyonePlan, pipPlan], turn({ projects: [WEB, API] }));
+    expect(passed.skills.map((one) => [one.name, one.skillId])).toEqual([["plan-change", pipPlan.assignment.skillId]]);
+    expect(passed.clashes.map((one) => one.name)).toEqual(["ship-change"]);
+    expect(passed.replaced.map((one) => one.assignment.id).sort()).toEqual(
+      [everyonePlan.assignment.id, web.assignment.id, api.assignment.id].sort(),
+    );
+  });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-11] leaves out a skill of a set the hob opted out of, but never one of its own set", () => {
+    const everyone = setOf("agent-engineering", ["deliver-change", "plan-change"], { _tag: "Everyone" });
+    const own = setOf("pip-set", ["pip-notes", "pip-plan"], { _tag: "Hob", agentId: PIP });
+    const optedOutOfSets = [
+      { skillId: everyone.assignment.skillId, name: SkillName.make("plan-change") },
+      { skillId: own.assignment.skillId, name: SkillName.make("pip-plan") },
+    ];
+    expect(names(resolveSkills([everyone, own], turn({ optedOutOfSets })))).toEqual([
+      "deliver-change",
+      "pip-notes",
+      "pip-plan",
+    ]);
+  });
+});
+
+describe("skill mentions", () => {
+  const given = [
+    {
+      skillId: SkillId.make("s1"),
+      name: SkillName.make("deliver-change"),
+      pin: R1,
+      onlyWhenAsked: false,
+      set: SkillName.make("agent-engineering"),
+    },
+    {
+      skillId: SkillId.make("s1"),
+      name: SkillName.make("plan-change"),
+      pin: R1,
+      onlyWhenAsked: false,
+      set: SkillName.make("agent-engineering"),
+    },
+    {
+      skillId: SkillId.make("s2"),
+      name: SkillName.make("plan-change"),
+      pin: R1,
+      onlyWhenAsked: false,
+      set: SkillName.make("other-set"),
+    },
+    { skillId: SkillId.make("s3"), name: SkillName.make("release"), pin: R1, onlyWhenAsked: false, set: null },
+  ];
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-12] takes a set's skill by its set and name, or by its name while no other skill has it", () => {
+    expect(mentionedSkill("/agent-engineering:deliver-change go", given)).toBe("agent-engineering:deliver-change");
+    expect(mentionedSkill("/deliver-change go", given)).toBe("agent-engineering:deliver-change");
+    expect(mentionedSkill("/other-set:plan-change", given)).toBe("other-set:plan-change");
+    expect(mentionedSkill("/plan-change go", given)).toBeNull();
+    expect(mentionedSkill("/release now", given)).toBe("release");
+    expect(mentionedSkill("/agent-engineering:release", given)).toBeNull();
+    expect(withoutMention("/deliver-change go", "agent-engineering:deliver-change")).toBe("go");
+    expect(withoutMention("/agent-engineering:deliver-change go", "agent-engineering:deliver-change")).toBe("go");
+    expect(withoutMention("/plan-change go", "other-set:deliver-change")).toBe("/plan-change go");
+    // A bare name two sets share reaches the runtime as plain text, so no runtime picks one on its own.
+    expect(runtimePrompt("/plan-change go", null, given)).toBe("plan-change go");
+    expect(runtimePrompt("/release now", null, given)).toBe("/release now");
+    expect(runtimePrompt("/other-set:plan-change go", "other-set:plan-change", given)).toBe("go");
   });
 });
 

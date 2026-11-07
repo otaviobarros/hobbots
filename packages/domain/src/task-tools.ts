@@ -183,15 +183,18 @@ export const TaskToolInputs = {
   }),
   hand_off: Schema.Struct({
     key,
-    artifact_id: id("An artifact a Task in your Quest made."),
+    artifact_id: id(
+      'The id of an artifact a Task under you returned with complete_task, as your briefing ("artifact <id>") and read_tasks list it. Not a Task\'s id: a Task that returned no artifact has nothing to hand off.',
+    ),
     to_task_id: id("The Task in your Quest that receives it as context."),
   }),
   wait_for: Schema.Struct({
     key,
     task_id: taskId,
-    tasks: Schema.Array(Schema.String)
-      .check(Schema.isMinLength(1))
-      .annotate({ description: "Ids of Tasks under yours to wait for: steps or members' Tasks." }),
+    tasks: Schema.Array(Schema.String).check(Schema.isMinLength(1)).annotate({
+      description:
+        "Ids of Tasks under yours to wait for: the task_id plan_steps gave each step or delegate_task gave each member's Task. Never your own Task's id or a question's id: Hobbots wakes you with an answer without a wait.",
+    }),
     mode: Schema.optionalKey(
       WaitMode.annotate({
         description: "any: until one of them ends. all: until every one has ended (the default).",
@@ -299,7 +302,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "read_tasks",
     description:
-      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its questions with their state and answer, its latest checkpoints and its result. Read it instead of guessing, and before you tell anyone a question is unanswered; it changes nothing.",
+      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its questions with their state and answer, its latest checkpoints, its result and the artifacts it returned, by the id hand_off takes. Read it instead of guessing, and before you tell anyone a question is unanswered; it changes nothing.",
     label: "Reading the work",
   },
   {

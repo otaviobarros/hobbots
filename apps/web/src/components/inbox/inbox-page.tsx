@@ -327,7 +327,9 @@ function NeedsList({
           listRef={listRef}
         />
       </div>
-      {entries.length > 0 && <InboxKeyHints />}
+      {entries.length > 0 && (
+        <InboxKeyHints decides={entries.find((entry) => entry.key === selectedKey)?.kind === "approval"} />
+      )}
     </aside>
   );
 }

@@ -3,10 +3,10 @@ import { homedir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { RuntimeError, type SkillMount } from "@hobbots/agents";
 import { Effect } from "effect";
-import type { SkillFolder } from "../skills.ts";
+import { mountedSkillFile, type SkillFolder } from "../skills.ts";
 import type { AppServer } from "./app-server.ts";
 import type { SkillMetadata } from "./protocol.ts";
-import type { SkillFile } from "./skill-reads.ts";
+import type { SetSkillFile, SkillFile } from "./skill-reads.ts";
 
 /** How deep Hobbots looks for a `SKILL.md` under a root Codex scans; the check catches anything deeper. */
 const MAX_DEPTH = 6;
@@ -106,15 +106,13 @@ export const admitSkills = (
 ): Effect.Effect<AdmittedSkills, RuntimeError> =>
   Effect.gen(function* () {
     const fail = (error: { readonly message: string }) => new RuntimeError({ message: error.message });
-    yield* server
-      .request("skills/extraRoots/set", { extraRoots: folder ? [folder.skills] : [] })
-      .pipe(Effect.mapError(fail));
+    yield* server.request("skills/extraRoots/set", { extraRoots: mountedRootsOf(folder) }).pipe(Effect.mapError(fail));
     const listed = yield* server.request("skills/list", { cwds: [cwd], forceReload: true }).pipe(Effect.mapError(fail));
     // Without an answer Hobbots cannot tell what Codex would load, so the turn does not start.
     if (!Array.isArray(listed?.data)) {
       return yield* Effect.fail(new RuntimeError({ message: "Codex did not say which skills it would load." }));
     }
-    const mounted = folder ? [folder.skills, realOrSelf(folder.skills)] : [];
+    const mounted = mountedRootsOf(folder).flatMap((root) => [root, realOrSelf(root)]);
     const enabled = listed.data.flatMap((entry) => entry.skills).filter((skill) => skill.enabled);
     const organization = enabled.filter((skill) => skill.scope === "admin");
     const unexpected = enabled.filter(
@@ -132,6 +130,27 @@ export const admitSkills = (
     };
   });
 
+/** The roots a turn hands Codex: its loose skills' folder, and each set's folder (ADR 029, Skill sets). */
+const mountedRootsOf = (folder: SkillFolder | null): ReadonlyArray<string> =>
+  folder === null ? [] : [folder.skills, ...folder.sets.map((set) => set.folder)];
+
+/**
+ * The `SKILL.md` of each mounted skill of a set, as given and as resolved, so a read of one counts as
+ * its use (ADR 029, Skill sets).
+ */
+export const setSkillFilesOf = (
+  folder: SkillFolder | null,
+  mounts: ReadonlyArray<SkillMount> | null | undefined,
+): ReadonlyArray<SetSkillFile> =>
+  folder === null
+    ? []
+    : (mounts ?? []).flatMap((mount) => {
+        if (!mount.set) return [];
+        const path = mountedSkillFile(folder, mount);
+        const set = mount.set.name;
+        return [...new Set([path, realOrSelf(path)])].map((one) => ({ name: mount.name, set, path: one }));
+      });
+
 /** The turn's skill folder as given and as resolved, so a read through either path counts as a use. */
 export const skillRootsOf = (folder: SkillFolder | null): ReadonlyArray<string> =>
   folder === null ? [] : [...new Set([folder.skills, realOrSelf(folder.skills)])];
@@ -144,6 +163,5 @@ export const askedSkillInput = (
   folder: SkillFolder | null,
   asked: SkillMount | null,
 ): { readonly type: "skill"; readonly name: string; readonly path: string } | null =>
-  folder === null || asked === null
-    ? null
-    : { type: "skill", name: asked.name, path: join(folder.skills, asked.name, "SKILL.md") };
+  // A skill of a set is the `SKILL.md` in its set's folder, whose path picks it from another of one name.
+  folder === null || asked === null ? null : { type: "skill", name: asked.name, path: mountedSkillFile(folder, asked) };

@@ -6,7 +6,6 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -16,6 +15,9 @@ import { join } from "node:path";
 import type { SkillMount } from "@hobbots/agents";
 import { Effect, Exit, Scope } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
+import { readsSkillFile } from "../src/claude-code-skills.ts";
+import { skillReadsOf } from "../src/codex/skill-reads.ts";
+import { setSkillFilesOf } from "../src/codex/skills.ts";
 import { sandboxFilesystem } from "../src/sandbox.ts";
 import {
   holdSkillFolder,
@@ -129,6 +131,99 @@ describe("a turn's skill folder (ADR 029)", () => {
   });
 
   // covers RT-001, ADR 029
+  /** A set's revision, as the library keeps it: skills under `skills/`, and the rules they share. */
+  const setRevision = () => {
+    const folder = mkdtempSync(join(temp, "set-"));
+    for (const name of ["plan", "ship", "off"]) {
+      mkdirSync(join(folder, "skills", name), { recursive: true });
+      writeFileSync(
+        join(folder, "skills", name, "SKILL.md"),
+        `---\nname: ${name}\ndescription: About ${name}.\n---\n\nRead [the rules](../../references/rules.md).\n`,
+      );
+    }
+    mkdirSync(join(folder, "references"));
+    writeFileSync(join(folder, "references", "rules.md"), "The rules.\n");
+    return sealed(folder);
+  };
+  const member = (name: string, folder: string, implicit = true, set = "team"): SkillMount => ({
+    ...mount(name, folder, implicit, "s1"),
+    set: { name: set, path: `skills/${name}` },
+  });
+
+  // covers ADR 029
+  it("[TC-RT-1143-06] holds a set whole, as its own plugin, with only its mounted skills listed", () => {
+    const base = mkdtempSync(join(temp, "base-"));
+    const stored = setRevision();
+    const mounts = [member("plan", stored), member("ship", stored, false), mount("alpha", revision("alpha"))];
+    const written = writeSkillFolder(base, mounts);
+    const set = join(written.folder, "sets", "team");
+    expect(written.sets).toEqual([{ name: "team", folder: set }]);
+    expect(readdirSync(written.skills)).toEqual(["alpha"]);
+    // Laid out as stored, so the links resolve: the shared rules sit two folders above each skill.
+    expect(readFileSync(join(set, "skills", "plan", "..", "..", "references", "rules.md"), "utf8")).toBe(
+      "The rules.\n",
+    );
+    // The skill the hob turned off keeps its files but not its SKILL.md, so no runtime lists it.
+    expect(existsSync(join(set, "skills", "off"))).toBe(true);
+    expect(existsSync(join(set, "skills", "off", "SKILL.md"))).toBe(false);
+    expect(readFileSync(join(set, "skills", "ship", "SKILL.md"), "utf8")).toContain("disable-model-invocation: true");
+    expect(readFileSync(join(stored, "skills", "ship", "SKILL.md"), "utf8")).not.toContain("disable-model-invocation");
+    expect(JSON.parse(readFileSync(join(set, ".claude-plugin", "plugin.json"), "utf8"))).toMatchObject({
+      name: "team",
+      skills: ["./skills"],
+    });
+    expect(statSync(join(set, "references", "rules.md")).mode & 0o222).toBe(0);
+    // A set's mount is named by its set and its folder too.
+    expect(skillMountsHash(mounts)).not.toBe(
+      skillMountsHash([{ ...member("plan", stored), set: { name: "other", path: "skills/plan" } }, ...mounts.slice(1)]),
+    );
+  });
+
+  // covers ADR 029
+  it("[TC-RT-1143-07] refuses a set with Hobbots' own name, two revisions of one set, or a path outside it", () => {
+    const base = mkdtempSync(join(temp, "base-"));
+    const stored = setRevision();
+    expect(() => writeSkillFolder(base, [member("plan", stored, true, "hobbots-skills")])).toThrow(/not a set name/);
+    expect(() =>
+      writeSkillFolder(base, [member("plan", stored), { ...member("ship", stored), revision: "s2" }]),
+    ).toThrow(/different revisions/);
+    expect(() =>
+      writeSkillFolder(base, [{ ...member("plan", stored), set: { name: "team", path: "../plan" } }]),
+    ).toThrow(/not a folder inside/);
+    expect(readdirSync(join(base, SKILL_MOUNTS))).toEqual([]);
+  });
+
+  // covers ADR 029
+  it("[TC-RT-1143-08] counts a read inside the turn's folder as a skill's file, and a Codex read of a set's SKILL.md as its use", () => {
+    const base = mkdtempSync(join(temp, "base-"));
+    const stored = setRevision();
+    const mounts = [member("plan", stored), member("ship", stored)];
+    const written = writeSkillFolder(base, mounts);
+    const plan = join(written.folder, "sets", "team", "skills", "plan");
+    expect(readsSkillFile({ file_path: join(plan, "..", "..", "references", "rules.md") }, written.folder)).toBe(true);
+    // Out of the folder through `..`, a relative path, a file that is not there, or no folder: not a skill's file.
+    expect(readsSkillFile({ file_path: join(written.folder, "..", "..", "x") }, written.folder)).toBe(false);
+    expect(readsSkillFile({ file_path: "references/rules.md" }, written.folder)).toBe(false);
+    expect(readsSkillFile({ file_path: join(plan, "missing.md") }, written.folder)).toBe(false);
+    expect(readsSkillFile({ file_path: join(plan, "SKILL.md") }, null)).toBe(false);
+    const files = setSkillFilesOf(written, mounts);
+    const read = (path: string) =>
+      skillReadsOf(
+        {
+          type: "commandExecution",
+          id: "c1",
+          status: "completed",
+          cwd: base,
+          commandActions: [{ type: "read", path, command: `cat ${path}`, name: "SKILL.md" }],
+        } as never,
+        [written.skills],
+        [],
+        files,
+      );
+    expect(read(join(plan, "SKILL.md"))).toEqual([{ source: "library", name: "plan", set: "team" }]);
+    expect(read(join(plan, "..", "..", "references", "rules.md"))).toEqual([]);
+  });
+
   it("[TC-RT-524] marks a read-only revision Only when asked, and its scripts still run from the folder", () => {
     const base = mkdtempSync(join(temp, "base-"));
     const stored = revision("release", "Release steps.", {
