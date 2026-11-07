@@ -47,16 +47,18 @@ import { ProviderChoices } from "../providers/provider-choices.tsx";
 import { RoleSheet } from "../roles/role-sheet.tsx";
 import { RoleSigil } from "../roles/role-sigil.tsx";
 import { CharmsTab } from "./hob-charms.tsx";
+import { HobSkillsManage } from "../hob-skills/profile-skills.tsx";
 import { NameAndLook } from "./hob-name-look.tsx";
 import { PermissionsTab } from "./hob-permissions.tsx";
 import { TonePicker } from "./tone-picker.tsx";
 
 /** The profile's tabs; a link may open one other than Profile with `?tab=`. */
-export const ProfileTabName = Schema.Literals(["profile", "charms", "permissions"]);
+export const ProfileTabName = Schema.Literals(["profile", "charms", "skills", "permissions"]);
 type Tab = typeof ProfileTabName.Type;
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ["profile", "Profile"],
   ["charms", "Charms"],
+  ["skills", "Skills"],
   ["permissions", "Permissions"],
 ];
 
@@ -214,6 +216,9 @@ function Profile({
           </TabsContent>
           <TabsContent value="charms">
             <CharmsTab hob={hob} />
+          </TabsContent>
+          <TabsContent value="skills">
+            <HobSkillsManage hob={hob} />
           </TabsContent>
           <TabsContent value="permissions">
             <PermissionsTab hob={hob} />

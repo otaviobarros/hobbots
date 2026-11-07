@@ -422,6 +422,8 @@ export class EventJournal extends Context.Service<
     readonly oldest: Effect.Effect<number | null>;
     /** Committed entries after `sequence`, in sequence order, at most `limit` of them. */
     readonly readAfter: (sequence: number, limit?: number) => Effect.Effect<ReadonlyArray<EventEnvelope>>;
+    /** The latest committed entries of the given types, newest first, at most `limit` of them. */
+    readonly latestOf: (types: ReadonlyArray<string>, limit: number) => Effect.Effect<ReadonlyArray<EventEnvelope>>;
     /**
      * Deletes entries past retention: older than seven days and outside the latest 10,000, and none
      * that memory capture has still to send (ADR 028). Returns how many it deleted.
@@ -453,6 +455,12 @@ export class EventJournal extends Context.Service<
           Effect.flatMap((rows) => Effect.forEach(rows, toEnvelope)),
         );
 
+      const latestOf = (types: ReadonlyArray<string>, limit: number) =>
+        types.length === 0
+          ? Effect.succeed([])
+          : sql<JournalRow>`SELECT * FROM event_journal WHERE ${sql.in("type", types)}
+              ORDER BY sequence DESC LIMIT ${limit}`.pipe(Effect.flatMap((rows) => Effect.forEach(rows, toEnvelope)));
+
       const compact = Effect.gen(function* () {
         const now = yield* DateTime.now;
         const cutoff = DateTime.formatIso(DateTime.subtractDuration(now, JOURNAL_RETENTION.age));
@@ -469,6 +477,7 @@ export class EventJournal extends Context.Service<
         head: head.pipe(Effect.orDie),
         oldest: oldest.pipe(Effect.orDie),
         readAfter: (sequence, limit) => readAfter(sequence, limit).pipe(Effect.orDie),
+        latestOf: (types, limit) => latestOf(types, limit).pipe(Effect.orDie),
         compact: compact.pipe(Effect.orDie),
       });
     }),

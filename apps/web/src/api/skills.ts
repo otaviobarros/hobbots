@@ -17,6 +17,8 @@ const skillsKeys = {
   revision: (skillId: SkillId, hash: SkillRevisionHash) => [...skillsKey, "revision", skillId, hash] as const,
   file: (skillId: SkillId, hash: SkillRevisionHash, path: string) =>
     [...skillsKey, "file", skillId, hash, path] as const,
+  uses: (skillId: SkillId) => [...skillsKey, "uses", skillId] as const,
+  changes: [...skillsKey, "changes"] as const,
 };
 
 /** Every skill in the library, its sources, and what `~/.agents/skills` held that the hub did not take. */
@@ -30,6 +32,19 @@ export const skillQuery = (skillId: SkillId) =>
   queryOptions({
     queryKey: skillsKeys.detail(skillId),
     queryFn: () => call((c) => c.skills.get({ params: { skillId } })),
+  });
+
+/** What changed: the library's latest changes, newest first. */
+export const skillChangesQuery = queryOptions({
+  queryKey: skillsKeys.changes,
+  queryFn: () => call((c) => c.skills.changes()),
+});
+
+/** How often hobs used a skill, per hob and per thread, as its Activity tab counts them. */
+export const skillUsesQuery = (skillId: SkillId) =>
+  queryOptions({
+    queryKey: skillsKeys.uses(skillId),
+    queryFn: () => call((c) => c.skills.uses({ params: { skillId } })),
   });
 
 /** A revision never changes, so its `SKILL.md` is read once. */
@@ -110,6 +125,20 @@ export const unassignSkill = (assignmentId: SkillAssignmentId) =>
 
 /** Removes a skill nothing assigns. */
 export const removeSkill = (skillId: SkillId) => call((c) => c.skills.remove({ params: { skillId } }));
+
+/**
+ * A hob used a skill: its counts, the library's uses this week and the hob's Used lately are read
+ * again. A read in flight may have been taken before the use, so it is cancelled first (STD-REACT-012).
+ */
+export const refreshSkillUses = async (queryClient: QueryClient) => {
+  const counted = {
+    queryKey: skillsKey,
+    predicate: (query: { queryKey: ReadonlyArray<unknown> }) =>
+      query.queryKey[1] === "uses" || query.queryKey[1] === "list" || query.queryKey[1] === "hob",
+  };
+  await queryClient.cancelQueries(counted);
+  await queryClient.invalidateQueries(counted);
+};
 
 /** Reads the library again after a change: its list and every skill's page. Revisions and files never change. */
 export const refreshSkills = async (queryClient: QueryClient) => {

@@ -5,10 +5,11 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { skillQuery, skillsErrorTag } from "../../api/skills.ts";
+import { skillQuery, skillsErrorTag, skillUsesQuery } from "../../api/skills.ts";
 import { formatCount, formatDay } from "../../lib/format.ts";
 import { messages } from "./messages.ts";
 import { SkillAside } from "./skill-aside.tsx";
+import { SkillActivity } from "./skill-activity.tsx";
 import { SkillHistory } from "./skill-history.tsx";
 import { SkillInstructions } from "./skill-instructions.tsx";
 import { SkillWho } from "./skill-who.tsx";
@@ -39,10 +40,12 @@ function SkillTabs({
   say: Say;
 }) {
   const navigate = useNavigate();
+  const uses = useQuery(skillUsesQuery(detail.skill.id));
   const tabs: ReadonlyArray<{ id: SkillTab | "instructions"; label: string; count: number | null }> = [
     { id: "instructions", label: copy.skill.instructions, count: null },
     { id: "who", label: copy.skill.who, count: detail.assignments.length },
     { id: "history", label: copy.skill.history, count: detail.revisions.length },
+    { id: "activity", label: copy.skill.activity, count: uses.data?.total ?? null },
   ];
   return (
     <Tabs
@@ -88,6 +91,7 @@ function SkillBody({
 }) {
   if (view.tab === "who") return <SkillWho detail={detail} hobs={hobs} say={say} />;
   if (view.tab === "history") return <SkillHistory view={view} detail={detail} say={say} />;
+  if (view.tab === "activity") return <SkillActivity detail={detail} hobs={hobs} />;
   return <SkillInstructions view={view} detail={detail} />;
 }
 

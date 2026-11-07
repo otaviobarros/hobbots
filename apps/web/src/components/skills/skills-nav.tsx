@@ -57,6 +57,17 @@ export function SkillsNav({ view, reads }: { view: SkillsView; reads: SkillsRead
         </span>
         <span className="flex-1 text-ui">{copy.nav.overview}</span>
       </Link>
+      <Link
+        to="/skills"
+        search={{ view: "changes" }}
+        aria-current={view._tag === "Changes" ? "page" : undefined}
+        className={row}
+      >
+        <span className="text-text-secondary">
+          <SkillsIcon name="changes" />
+        </span>
+        <span className="flex-1 text-ui">{copy.nav.changes}</span>
+      </Link>
       <NavLabel>{copy.nav.shared}</NavLabel>
       {reads.list.isPending ? (
         <NavSkeleton />

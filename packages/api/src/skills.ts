@@ -4,6 +4,7 @@ import {
   Skill,
   SkillAssignment,
   SkillAssignmentId,
+  SkillBy,
   SkillCheck,
   SkillDescription,
   SkillDropped,
@@ -181,6 +182,7 @@ export const HobSkill = Schema.Struct({
   /** The Charms it names that the hob does not have: shown as "Needs the GitHub Charm". */
   missingCharms: Schema.Array(Schema.String),
 });
+export type HobSkill = typeof HobSkill.Type;
 
 /**
  * A hob's skills as its next turn would get them, in the folders it works in now: the ones it loads,
@@ -193,10 +195,55 @@ export const HobSkills = Schema.Struct({
   replaced: Schema.Array(Schema.Struct({ assignment: SkillAssignment, by: SkillAssignment })),
   clashes: Schema.Array(Schema.Struct({ name: SkillName, assignments: Schema.Array(SkillAssignment) })),
   optedOut: Schema.Array(SkillId),
+  /** The projects it works in now, whose skills it gets: an opted-out project skill shows under its project. */
+  projects: Schema.Array(MemoryProjectIdentity),
   /** The skills it used last, each once, the most recent first (ADR 029, The use line). */
   lastUsed: Schema.Array(SkillUse),
 });
 export type HobSkills = typeof HobSkills.Type;
+
+/** What a change in What changed was (ADR 029, The Skills page). */
+export const SkillChangeKind = Schema.Literals([
+  "saved",
+  "rolledOut",
+  "assigned",
+  "unassigned",
+  "held",
+  "followed",
+  "optedOut",
+  "optedIn",
+  "removed",
+]);
+export type SkillChangeKind = typeof SkillChangeKind.Type;
+
+/**
+ * One change to the library, as What changed lists it: a revision saved with the places its rollout
+ * moved and held, a rollout or rollback, a skill given or taken away, a place held or let follow again,
+ * a hob turning a shared skill off or on, or a skill removed.
+ */
+export const SkillChange = Schema.Struct({
+  at: Schema.String,
+  kind: SkillChangeKind,
+  skillId: SkillId,
+  name: SkillName,
+  /** The revision it is about, which the line shows as r4, when the hub still knows it. */
+  number: Schema.NullOr(Schema.Int),
+  /** The places it moved, gave, took or held: for a save, the ones its rollout moved. */
+  scopes: Schema.Array(SkillScope),
+  /** The places a save kept on their revision. */
+  held: Schema.Array(SkillScope),
+  /** The assignments a save or rollout moved, which Roll back moves back to `previous`. */
+  moved: Schema.Array(SkillAssignmentId),
+  /** Where Roll back goes: the revision the moved places were on, or null when there is no way back. */
+  previous: Schema.NullOr(SkillRevisionHash),
+  previousNumber: Schema.NullOr(Schema.Int),
+  /** The hob that turned a skill off or on for itself. */
+  agentId: Schema.NullOr(AgentId),
+  by: Schema.NullOr(SkillBy),
+});
+export type SkillChange = typeof SkillChange.Type;
+
+export const SkillChanges = Schema.Struct({ changes: Schema.Array(SkillChange) });
 
 export const ImportedSkills = Schema.Struct({ imported: Schema.Array(ImportedSkill) });
 
@@ -380,6 +427,10 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
       success: RevisedSkill,
       error: importErrors,
     }),
+  )
+  .add(
+    // What changed: the latest changes to the library, newest first, from the journal.
+    HttpApiEndpoint.get("changes", "/skills/changes", { success: SkillChanges }),
   )
   .add(
     // How often hobs used a skill, per hob and per thread, as its Activity counts them.

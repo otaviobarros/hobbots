@@ -37,7 +37,7 @@ import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertM
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
-import { refreshSkills } from "./skills.ts";
+import { refreshSkills, refreshSkillUses } from "./skills.ts";
 import {
   newer,
   recordAgent,
@@ -169,13 +169,11 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
-  // A reply's use line comes with the reply; no screen counts uses yet (ADR 029, #1062).
-  "SkillUsed",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
   {
-    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded" | "SkillUsed";
+    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -194,6 +192,11 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     return;
   }
   if (isUnapplied(event)) return;
+  // A reply's use line comes with the reply; the counts a skill's Activity and a hob's Used lately show are read again.
+  if (event._tag === "SkillUsed") {
+    void refreshSkillUses(queryClient);
+    return;
+  }
   // A skill changed here, on another device or in `~/.agents/skills`: the Skills page reads it again,
   // and what a hob's next turn gets may have changed, which the composer's `/` list shows (ADR 029).
   if (isSkillLibraryChange(event)) {
