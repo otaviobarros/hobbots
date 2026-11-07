@@ -411,7 +411,7 @@ describe("hob tools for Tasks and Quests", () => {
     const noArtifact = await refused(ADA, ada, "hand_off", { key: "k5", artifact_id: "nope", to_task_id: quill });
     expect(noArtifact.reason).toBe("artifact-missing");
     // With no artifact anywhere, it says there is nothing to hand off and what to use instead (#1088).
-    expect(noArtifact.message).toContain("No Task here has returned an artifact yet");
+    expect(noArtifact.message).toContain("No Task under yours has returned an artifact yet");
     expect(noArtifact.message).toContain("message_task");
     await onlyRefusalsSince(before);
   });
@@ -548,6 +548,13 @@ describe("hob tools for Tasks and Quests", () => {
     expect(byTask.reason).toBe("artifact-missing");
     expect(byTask.message).toContain(`${quill} is a Task's id`);
     expect(byTask.message).toContain(`Copy (artifact_id ${artifact}, from Task ${quill})`);
+    // A member never learns of a sibling's artifacts from the refusal, nor that its id is a Task's.
+    const sibling = await refused(ADA, ada, "hand_off", { key: "h1", artifact_id: quill, to_task_id: ada });
+    expect(sibling.reason).toBe("artifact-missing");
+    expect(sibling.message).not.toContain(artifact);
+    expect(sibling.message).not.toContain("Copy");
+    expect(sibling.message).not.toContain("is a Task's id");
+    expect(sibling.message).toContain("No Task under yours has returned an artifact yet");
     const read = await done(ALDRIC, TOP, "read_tasks", { key: "r-art" });
     expect(
       (read.details.tasks as ReadonlyArray<{ readonly task_id: string; readonly artifacts?: unknown }>).find(

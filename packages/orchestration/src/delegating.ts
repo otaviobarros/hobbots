@@ -26,6 +26,7 @@ import {
   depthWithin,
   fromRecords,
   journalOf,
+  leads,
   ledTask,
   newId,
   ownTask,
@@ -58,20 +59,25 @@ const LISTED_ARTIFACTS = 5;
 /**
  * Why `hand_off` refused an id, and what to pass instead (#1088): it takes the id of an artifact a Task
  * returned with complete_task, never a Task's id, and a Task that returned none has nothing to hand
- * off, since its result already reaches the Tasks that depend on it.
+ * off, since its result already reaches the Tasks that depend on it. It names only the Tasks the
+ * caller leads and their artifacts, the ones hand_off accepts, so a member never learns of a sibling
+ * branch's work (STD-SEC-003).
  */
-const missingArtifact = (tree: TaskTree, id: string): string => {
-  const asTask = tree.tasks.some((task) => task.id === id)
+const missingArtifact = (scope: CallScope, id: string): string => {
+  const led = scope.tree.tasks.filter((task) => leads(scope, task));
+  const ledIds = new Set<string>(led.map((task) => task.id));
+  const asTask = ledIds.has(id)
     ? ` ${id} is a Task's id: hand_off takes the id of an artifact a Task returned with complete_task.`
     : "";
-  if (tree.artifacts.length === 0) {
-    return `No artifact ${id} in the work you are on.${asTask} No Task here has returned an artifact yet, so there is nothing to hand off. A Task's result already reaches the Tasks that depend on it; to tell a running Task something, use message_task.`;
+  const artifacts = scope.tree.artifacts.filter((artifact) => ledIds.has(artifact.taskId));
+  if (artifacts.length === 0) {
+    return `No artifact ${id} in the work you lead.${asTask} No Task under yours has returned an artifact yet, so there is nothing to hand off. A Task's result already reaches the Tasks that depend on it; to tell a running Task something, use message_task.`;
   }
-  const listed = tree.artifacts
+  const listed = artifacts
     .slice(-LISTED_ARTIFACTS)
     .map((each) => `${each.label} (artifact_id ${each.id}, from Task ${each.taskId})`);
-  const more = tree.artifacts.length > LISTED_ARTIFACTS ? " read_tasks lists the rest." : "";
-  return `No artifact ${id} in the work you are on.${asTask} Its artifacts: ${listed.join("; ")}.${more}`;
+  const more = artifacts.length > LISTED_ARTIFACTS ? " read_tasks lists the rest." : "";
+  return `No artifact ${id} in the work you lead.${asTask} The artifacts you can hand off: ${listed.join("; ")}.${more}`;
 };
 
 /** Longest text of yours a delegated Task carries on as its lead's note. */
@@ -329,8 +335,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
     hand_off: (scope: CallScope, input: Omit<TaskToolInput<"hand_off">, "key">) =>
       Effect.gen(function* () {
         const artifact = scope.tree.artifacts.find((each) => each.id === input.artifact_id);
-        if (artifact === undefined)
-          return yield* refuse("artifact-missing", missingArtifact(scope.tree, input.artifact_id));
+        if (artifact === undefined) return yield* refuse("artifact-missing", missingArtifact(scope, input.artifact_id));
         yield* ledTask(scope, artifact.taskId);
         const to = yield* ledTask(scope, input.to_task_id);
         const journal = journalOf();
