@@ -45,6 +45,7 @@ export const messages = {
       "Quests, tasks and backpack history",
       "What hobs made, and the Workbench",
       "Hob settings, looks and permissions",
+      "Skills, their history and which hobs use them",
     ],
     left: ["Passwords, keys and tokens (they stay in the keychain)", "Your own folders the hobs worked in"],
   },
