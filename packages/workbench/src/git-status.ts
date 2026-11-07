@@ -162,10 +162,13 @@ const uncommitted = async (
 /**
  * The repository Git finds from `folder`, by the real path of its top folder, so two spellings of
  * one repository, through `..` or a link, are the same one, and a repository nested in another is
- * its own (#742). Null when the folder is in none or cannot be read.
+ * its own (#742). The folder is resolved as the kernel walks it, a link before the `..` after it,
+ * never by taking `..` off its spelling first. Null when the folder is in none, cannot be read, or
+ * is not an absolute path, which the command's own folder rules refuse.
  */
 const repositoryFrom = async (folder: string): Promise<string | null> => {
-  const real = await realpath(resolve(folder));
+  if (!isAbsolute(folder)) return null;
+  const real = await realpath(folder);
   const found = await repositoryOf(real, new Map());
   return found === null ? null : realpath(found.dir);
 };

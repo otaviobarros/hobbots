@@ -114,9 +114,15 @@ describe("The repository Git finds from a folder (#742)", () => {
     for (const spelling of [ledger, join(ledger, "src"), `${notes}/../ledger`, join(work, "ledger-link", "src")]) {
       expect(await repositoryFrom(spelling), spelling).toBe(ledger);
     }
+    // A link is followed before the `..` after it, as Git's own `-C` is: through a link to the
+    // ledger's src, `..` is the ledger, never the folder that holds the link, which is in none.
+    symlinkSync(join(ledger, "src"), join(work, "src-link"));
+    expect(await repositoryFrom(`${join(work, "src-link")}/..`)).toBe(ledger);
+    expect(await repositoryFrom(`${join(notes, "..", "src-link")}/..`)).toBe(ledger);
     // A repository nested in another is its own; a folder in none, or missing, has none.
     expect(await repositoryFrom(vendor)).toBe(vendor);
     expect(await repositoryFrom(notes)).toBeNull();
     expect(await repositoryFrom(join(work, "missing"))).toBeNull();
+    expect(await repositoryFrom("ledger")).toBeNull();
   });
 });
