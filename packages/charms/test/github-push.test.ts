@@ -14,6 +14,7 @@ import {
   type RuntimeEvent,
   type ToolAccess,
   type TurnApprovals,
+  UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
   AgentId,
@@ -44,6 +45,8 @@ import { type FakeGitHub, startFakeGitHub } from "../src/testing.ts";
 import { directSandbox, fixedCredential, memoryCharmCalls } from "./support.ts";
 
 const TOKEN = "ghu_pushtoken0123456789abcdefghijklmnopqrstuv";
+/** Shaped like a GitHub token, so the turn's redactor takes it out wherever it appears. */
+const SECRET = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
 
 let root = "";
 let github: FakeGitHub;
@@ -61,6 +64,9 @@ const git = (cwd: string, ...args: Array<string>) =>
       GIT_AUTHOR_EMAIL: "hob@example.com",
       GIT_COMMITTER_NAME: "Hob",
       GIT_COMMITTER_EMAIL: "hob@example.com",
+      // Fixed, so a commit, and the card that names it, is the same on every run.
+      GIT_AUTHOR_DATE: "2026-11-01T12:00:00Z",
+      GIT_COMMITTER_DATE: "2026-11-01T12:00:00Z",
     },
   }).trim();
 
@@ -169,6 +175,8 @@ interface Turn {
   readonly credential?: ReturnType<typeof fixedCredential>;
   /** What happens while the card waits, before the user answers. */
   readonly whileAsking?: () => void;
+  /** Records the step, as the runtime's `recordToolStart` would, and says whether it was; reported when absent. */
+  readonly records?: () => boolean;
 }
 
 const charmLayer = (
@@ -212,7 +220,17 @@ const pushIn = (folder: string, repository: GitHubRepository, turn: Turn, input:
     const answer: HubToolAnswer = yield* tools.call(
       "github_push",
       input,
-      hubCallStep(turn.step ?? "toolu_1", (event: RuntimeEvent) => events.push(event)),
+      hubCallStep(
+        turn.step ?? "toolu_1",
+        (event: RuntimeEvent) => events.push(event),
+        turn.records === undefined
+          ? undefined
+          : (event) =>
+              Effect.sync(() => {
+                events.push(event);
+                return turn.records?.() ?? true;
+              }),
+      ),
     );
     return answer;
   }).pipe(
@@ -239,6 +257,18 @@ afterAll(async () => {
  * them waits on a timer, so the budget is set for that load rather than for the work.
  */
 const REAL_GIT_TIMEOUT = 30_000;
+
+/** The commit `setUp` makes on `feat/x`, with its fixed dates. */
+const PUSHED_COMMIT = "b05beb9e959c75c153574049bc9c21b0ec56ac9e";
+/** The card's summary, and the digest of the card in TC-PE-497, as the hub showed them before the pipeline (#619). */
+const PUSH_SUMMARY = [
+  "Push b05beb9e959c from feat/x to octo/same-card branch feat/x",
+  "Creates the branch on GitHub.",
+  "1 commit GitHub's branches do not have:",
+  "  Add b",
+  "As you (@otaviobarros).",
+].join("\n");
+const PUSH_CARD_DIGEST = "060f28d191dcd7749c0e496684fbda186e0572e4189cfe9d4ec007a35c4e6ccb";
 
 describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
   // covers PE-003, PE-007
@@ -623,5 +653,109 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
       ["found", "applied", "Pushed."],
       ["missing", "uncertain", "The hub stopped while this call was being sent."],
     ]);
+  });
+  // covers PE-003, PE-007, ADR 020, ADR 031
+  it("[TC-PE-497] shows the same card, with the same digest, for the same push as before the pipeline", async () => {
+    const { folder, repository } = await setUp("same-card");
+    const asked: Array<ApprovalAction> = [];
+    await push(
+      folder,
+      repository,
+      { access: accessFor(folder), asked, answer: "deny" },
+      { branch: "feat/x", key: "card-1" },
+    );
+    // The hob's folder is the only part of a card that differs between machines.
+    const cards = asked.map((card) => ({
+      tool: card.tool,
+      operation: card.operation,
+      targets: card.targets,
+      arguments: { ...card.arguments, folder: "<folder>" },
+    }));
+    expect(cards).toEqual([
+      {
+        tool: "github_push",
+        operation: "push",
+        targets: ["github.com/octo/same-card feat/x"],
+        arguments: {
+          repository: "octo/same-card",
+          folder: "<folder>",
+          branch: "feat/x",
+          remoteBranch: "feat/x",
+          commit: PUSHED_COMMIT,
+          force: false,
+          replaces: null,
+          defaultBranch: "main",
+          toDefaultBranch: false,
+          commits: 1,
+          subjects: ["Add b"],
+          actingAs: { _tag: "You", login: "otaviobarros" },
+          over: "https",
+          summary: PUSH_SUMMARY,
+        },
+      },
+    ]);
+    const digests = await Effect.runPromise(Effect.forEach(cards, actionDigest));
+    expect(digests).toEqual([PUSH_CARD_DIGEST]);
+  });
+
+  // covers PE-003, ADR 020, ADR 031
+  it("[TC-PE-498] never stores or shows a secret the hob wrote in a push's input", async () => {
+    const { folder, repository, remote } = await setUp("secret-branch");
+    const branch = `feat/${SECRET}`;
+    git(folder, "branch", branch, "feat/x");
+    const rows = new Map<string, CharmCall>();
+    const asked: Array<ApprovalAction> = [];
+    const events: Array<RuntimeEvent> = [];
+    const answer = await push(
+      folder,
+      repository,
+      { access: accessFor(folder), asked, events, rows },
+      { branch, key: "secret-1" },
+    );
+    // The push is planned on the redacted branch name, which is no branch, so nothing is sent.
+    expect(answer.refused).toBe(true);
+    expect(JSON.stringify(answer)).not.toContain(SECRET);
+    expect(JSON.stringify(asked)).not.toContain(SECRET);
+    expect(JSON.stringify(events)).not.toContain(SECRET);
+    expect(JSON.stringify([...rows.values()])).not.toContain(SECRET);
+    expect(headOf(remote, branch)).toBeNull();
+  });
+
+  // covers EX-004, ADR 031
+  it("[TC-PE-499] records a push's step before it pushes, and pushes nothing when the step cannot be recorded", async () => {
+    const { folder, repository, remote, commit } = await setUp("recorded");
+    const rows = new Map<string, CharmCall>();
+    const unrecorded = await push(
+      folder,
+      repository,
+      { access: accessFor(folder, "trusting"), rows, records: () => false },
+      { branch: "feat/x", key: "rec-1" },
+    );
+    expect(unrecorded).toEqual({ text: UNRECORDED_TOOL_CALL, refused: true });
+    expect(headOf(remote, "feat/x")).toBeNull();
+    expect(rows.size).toBe(0);
+
+    // When the step is recorded, nothing has reached GitHub yet, and no call is on record.
+    const seen: Array<[string | null, number]> = [];
+    const events: Array<RuntimeEvent> = [];
+    const pushed = await push(
+      folder,
+      repository,
+      {
+        access: accessFor(folder, "trusting"),
+        rows,
+        events,
+        records: () => {
+          seen.push([headOf(remote, "feat/x"), rows.size]);
+          return true;
+        },
+      },
+      { branch: "feat/x", key: "rec-2" },
+    );
+    expect(pushed.refused).toBe(false);
+    expect(seen).toEqual([[null, 0]]);
+    expect(events).toEqual([expect.objectContaining({ _tag: "ToolStarted", tool: "github_push", operation: "push" })]);
+    expect(headOf(remote, "feat/x")).toBe(commit);
+    expect([...rows.values()].map((row) => row.state)).toEqual(["applied"]);
   });
 });

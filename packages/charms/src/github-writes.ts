@@ -145,6 +145,34 @@ const redactedNote = (parts: ReadonlyArray<string>) =>
     ? ""
     : ` Hobbots redacted what looked like secrets from the ${parts.join(" and ")} before deciding, so the user approved, and GitHub got, the redacted text.`;
 
+/**
+ * Plans under one sign-in (ADR 020): GitHub is read with it, the card names it, and the rest of the
+ * call, from deciding to sending, runs pinned to it, so another account never asks or sends it.
+ */
+export const pinnedPlan = <P extends object, R>(
+  credential: GitHubCredential["Service"],
+  agentId: AgentId,
+  repository: GitHubRepository,
+  plan: Effect.Effect<P, HubRefusal | GitHubError, R>,
+): Effect.Effect<P & Pick<HubWritePlan<PolicyRequest>, "pinned">, HubRefusal, R> =>
+  credential
+    .onRepository(
+      agentId,
+      repository,
+      Effect.gen(function* () {
+        const planned = yield* plan;
+        const pins = yield* Effect.context<never>();
+        return {
+          ...planned,
+          pinned: <A, E>(rest: Effect.Effect<A, E>) =>
+            Effect.updateContext(rest, (now: Context.Context<never>) => Context.merge(now, pins)),
+        };
+      }),
+    )
+    .pipe(
+      Effect.mapError((error) => (error instanceof HubRefusal ? error : new HubRefusal({ message: error.message }))),
+    );
+
 /** The folder a write acts from and its repository, resolved from the hob's own folders as for a read. */
 export type RepositoryFor = (
   access: ToolAccess,
@@ -175,31 +203,11 @@ export const makeGitHubWrites = (repositoryFor: RepositoryFor) =>
     const sendOnceMore = <A>(send: Effect.Effect<GitHubWrite<A>>) =>
       Effect.flatMap(send, (first) => (first._tag === "NotSent" ? send : Effect.succeed(first)));
 
-    /**
-     * Plans under one sign-in (ADR 020), as Push does: GitHub is read with it, the card names it, and
-     * the rest of the call, from deciding to sending, runs pinned to it, so another account never
-     * asks or sends it.
-     */
     const pinned = <R extends PolicyRequest>(
       agentId: AgentId,
       repository: GitHubRepository,
       plan: Effect.Effect<Omit<HubWritePlan<R>, "pinned">, HubRefusal | GitHubError>,
-    ): Effect.Effect<HubWritePlan<R>, HubRefusal> =>
-      credential
-        .onRepository(
-          agentId,
-          repository,
-          Effect.gen(function* () {
-            const planned = yield* plan;
-            const pins = yield* Effect.context<never>();
-            return {
-              ...planned,
-              pinned: <A, E>(rest: Effect.Effect<A, E>) =>
-                Effect.updateContext(rest, (now: Context.Context<never>) => Context.merge(now, pins)),
-            };
-          }),
-        )
-        .pipe(Effect.mapError((error) => (error instanceof HubRefusal ? error : refused(error))));
+    ) => pinnedPlan(credential, agentId, repository, plan);
 
     /** Sends under the sign-in the card named: another account never sends it (ADR 020). */
     const sendPinned = (agentId: AgentId, repository: GitHubRepository, send: Effect.Effect<WriteOutcome>) =>

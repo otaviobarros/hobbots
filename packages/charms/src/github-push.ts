@@ -1,36 +1,38 @@
 import {
-  approvalNote,
-  askUntilDecided,
-  type CharmCallRunner,
-  type CharmTurn,
-  type HubCallStep,
+  type HubAction,
+  type HubPlanContext,
+  HubRefusal,
+  hubAction,
   type ReadBack,
-  scopesOf,
-  type ToolAccess,
   type WriteOutcome,
 } from "@hobbots/agents";
 import {
   type AgentId,
+  GITHUB_WRITE_TOOLS,
   type GitHubPushPlan,
   type GitHubRepository,
   type GitHubWriteInput,
+  GitHubWriteInputs,
   githubPushSummary,
+  githubWriteToolJsonSchema,
   repositorySlug,
 } from "@hobbots/domain";
-import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
-import { Context, Data, Effect, Option, Redacted, Result } from "effect";
+import type { PolicyRequest } from "@hobbots/permissions";
+import { Context, Effect, Redacted, Result } from "effect";
 import { GitPush, type PushTransport, type StagedBranch } from "./git-push.ts";
 import { GitHubCredential, type GitHubTokenScope, refusedTwice } from "./github-account.ts";
 import { githubActor } from "./github-actor.ts";
 import { GitHubApi, type GitHubError } from "./github-api.ts";
-import { branchNameCheck } from "./github-writes.ts";
+import { branchNameCheck, pinnedPlan, type RepositoryFor } from "./github-writes.ts";
 import { recreateOnGitHub } from "./hob-app-push.ts";
 
 /**
- * The GitHub Charm's Push (ADR 020, #323). The hub fixes the commit the hob's branch points to and
- * reads GitHub's side before it decides, so the approval card shows, and its digest covers, exactly
- * what is sent. Under Balanced a push asks; a force push, or one to the default branch, asks once
- * only. The push is then a recorded Charm call, sent from the hub's staging repository.
+ * The GitHub Charm's Push (ADR 020, #323), as a hub action (ADR 031). Its plan fixes the commit the
+ * hob's branch points to and reads GitHub's side before the call is decided, so the approval card
+ * shows, and its digest covers, exactly what is sent. It plans the built-in `Push` request, which the
+ * GitHub Charm takes over, so under Balanced a push asks, and a force push, or one to the default
+ * branch, asks once only. The hub action pipeline decides, asks, records the step and the keyed call,
+ * and sends it from the hub's staging repository.
  */
 
 /** How the hub pushes: over HTTPS with the token, or over SSH with the user's agent (ADR 020). */
@@ -43,8 +45,6 @@ export interface GitHubPushSettings {
 export const GitHubPushSettings = Context.Reference<GitHubPushSettings>("@hobbots/charms/GitHubPushSettings", {
   defaultValue: () => ({ over: "https" }),
 });
-
-class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> {}
 
 /** The site a push acts on: the repository and branch, so two pushes there never overlap while one is uncertain. */
 const pushSite = (repository: GitHubRepository, branch: string) =>
@@ -93,17 +93,25 @@ export const pushReadBack =
       return head === sentAs && pushedText(plan, [[plan.commit, sentAs]]);
     });
 
-export const makeGitHubPush = (runner: CharmCallRunner) =>
+/** The push tool as the hob is offered it, before the pipeline adds its key. */
+const pushTool = () => {
+  const tool = GITHUB_WRITE_TOOLS.find((each) => each.name === "github_push");
+  if (tool === undefined) throw new Error("The GitHub Charm has no github_push tool.");
+  return { ...tool, inputSchema: githubWriteToolJsonSchema("github_push") };
+};
+
+/** The GitHub Charm's Push, for the pipeline to run. */
+export const makeGitHubPush = (repositoryFor: RepositoryFor) =>
   Effect.gen(function* () {
     const api = yield* GitHubApi;
     const credential = yield* GitHubCredential;
     const git = yield* GitPush;
-    const engine = yield* PolicyEngine;
 
-    const githubError = (error: GitHubError) => new Refused({ message: error.message });
+    const github = <A>(effect: Effect.Effect<A, GitHubError>) =>
+      effect.pipe(Effect.mapError((error) => new HubRefusal({ message: error.message })));
 
     const checkBranch = (name: string) =>
-      branchNameCheck(git, name).pipe(Effect.mapError((message) => new Refused({ message })));
+      branchNameCheck(git, name).pipe(Effect.mapError((message) => new HubRefusal({ message })));
 
     /**
      * One push attempt, then once more when nothing reached GitHub, or with a refreshed token when
@@ -223,130 +231,108 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
             sentAs: git.sentAs(app.folder, app.repository, staged.commit),
           });
 
-    /** Pushes a hob's branch: `folder` and `repository` are the hob's, resolved by the caller. */
-    const push = (
-      turn: CharmTurn,
-      access: ToolAccess,
-      folder: string,
-      repository: GitHubRepository,
-      input: GitHubWriteInput<"github_push">,
-      step: HubCallStep | undefined,
-    ): Effect.Effect<string, Refused> =>
+    /** Sends under the sign-in the card named: another account never pushes it (ADR 020). */
+    const sendPinned = (agentId: AgentId, repository: GitHubRepository, push: Effect.Effect<WriteOutcome>) =>
+      credential
+        .onRepository(agentId, repository, push)
+        .pipe(
+          Effect.catch((error) =>
+            Effect.succeed<WriteOutcome>({ _tag: "NotSent", text: `${error.message} Nothing was pushed.` }),
+          ),
+        );
+
+    /**
+     * Plans pushing a hob's branch from the hob's folder's repository. The branch is staged for the
+     * whole call, and its staging ref is removed once the call has ended.
+     */
+    const planPush = (input: GitHubWriteInput<"github_push">, { turn, access }: HubPlanContext) =>
       Effect.gen(function* () {
-        const { key, ...withoutKey } = input;
         const remoteBranch = input.remote_branch ?? input.branch;
         yield* checkBranch(input.branch);
         yield* checkBranch(remoteBranch);
-        // A retried call returns its first answer and never asks again.
-        const earlier = yield* runner.earlier(turn.agentId, scopesOf(turn), key, withoutKey);
-        if (Option.isSome(earlier)) return earlier.value;
-
+        const { folder, repository } = yield* repositoryFor(access, input.folder);
         const staged = yield* git
           .stage(access.folders, folder, input.branch)
-          .pipe(Effect.mapError((error) => new Refused({ message: error.message })));
+          .pipe(Effect.mapError((error) => new HubRefusal({ message: error.message })));
         const slug = repositorySlug(repository);
         const agentId = turn.agentId;
-        const github = <A>(effect: Effect.Effect<A, GitHubError>) => effect.pipe(Effect.mapError(githubError));
         // One sign-in from planning to sending (ADR 020): the card names the account that pushes, so
         // if the user connects another account while the card waits, the push does not run under it,
         // and calling again asks again. The app's sign-in also reads public repositories it is not
         // installed on, so the hub reads and pushes only where the hob's sign-in reaches.
-        const pinned = Effect.gen(function* () {
-          const info = yield* github(api.repository(agentId, repository));
-          const replaces = yield* github(api.branchHead(agentId, repository, remoteBranch));
-          const defaultHead =
-            info.defaultBranch === remoteBranch
-              ? replaces
-              : yield* github(api.branchHead(agentId, repository, info.defaultBranch));
-          const actingAs = yield* github(githubActor(credential, api, agentId));
-          const { commits, sentAs } = yield* newCommits(
-            staged,
-            [replaces, defaultHead],
-            actingAs._tag === "HobApp" ? { folder, repository } : null,
-          );
-          const settings = yield* GitHubPushSettings;
-          const plan: GitHubPushPlan = {
-            repository: slug,
-            folder,
-            branch: input.branch,
-            remoteBranch,
-            commit: staged.commit,
-            force: input.force === true,
-            replaces,
-            defaultBranch: info.defaultBranch,
-            toDefaultBranch: remoteBranch === info.defaultBranch,
-            commits: commits.count,
-            subjects: commits.subjects,
-            actingAs,
-            over: settings.over,
-          };
-          if (alreadyThere(replaces, staged.commit, sentAs)) {
-            return `${plan.repository} branch ${remoteBranch} is already at ${short(staged.commit)}, so there was nothing to push.`;
-          }
-          const request: PolicyRequest = {
-            _tag: "Push",
-            remote: `github.com/${slug}`,
-            branch: remoteBranch,
-            force: plan.force,
-            toDefaultBranch: plan.toDefaultBranch,
-            cwd: folder,
-            exact: true,
-          };
-          const label = `Pushing ${input.branch} to GitHub`;
-          // A call without a step has no card to show, so it cannot ask.
-          const decision = yield* askUntilDecided({
-            call: {
-              id: step?.id ?? key,
-              tool: "github_push",
-              arguments: { ...plan, summary: githubPushSummary(plan) },
-              label,
-            },
-            approvals: step === undefined ? null : turn.approvals,
-            decide: decideHubCall(engine, turn.approvals, access, request),
-            report: step?.report ?? (() => {}),
-            unknown: "Hobbots cannot decide this push.",
-          });
-          if (decision._tag === "Refuse") return yield* new Refused({ message: decision.reason });
-          step?.report({
-            _tag: "ToolStarted",
-            id: step.id,
-            tool: "github_push",
-            operation: decision.verdict.operation,
-            targets: decision.verdict.targets,
-            label,
-          });
-          const outcome = yield* runner.run(
-            {
-              agentId: turn.agentId,
-              scope: turn.scope(),
-              also: turn.also,
-              tool: "github_push",
-              key,
-              input: withoutKey,
-              site: pushSite(repository, remoteBranch),
-              plan,
-              appliedText: pushedText(plan),
-              step,
-              threadId: turn.threadId,
-              messageId: turn.messageId,
-            },
-            credential
-              .onRepository(agentId, repository, send(agentId, staged, plan, repository, [replaces, defaultHead]))
-              .pipe(
-                Effect.catch((error) =>
-                  Effect.succeed<WriteOutcome>({ _tag: "NotSent", text: `${error.message} Nothing was pushed.` }),
-                ),
-              ),
-          );
-          const note = decision.approval === undefined ? "" : ` ${approvalNote(decision.approval)}`;
-          if (outcome._tag === "Applied") return `${outcome.text}${note}`;
-          if (outcome._tag === "Uncertain") return yield* new Refused({ message: outcome.text });
-          return yield* new Refused({ message: `${outcome.text}${note}` });
-        });
-        return yield* credential
-          .onRepository(agentId, repository, pinned)
-          .pipe(Effect.mapError((error) => (error instanceof Refused ? error : githubError(error))));
-      }).pipe(Effect.scoped);
+        return yield* pinnedPlan(
+          credential,
+          agentId,
+          repository,
+          Effect.gen(function* () {
+            const info = yield* github(api.repository(agentId, repository));
+            const replaces = yield* github(api.branchHead(agentId, repository, remoteBranch));
+            const defaultHead =
+              info.defaultBranch === remoteBranch
+                ? replaces
+                : yield* github(api.branchHead(agentId, repository, info.defaultBranch));
+            const actingAs = yield* github(githubActor(credential, api, agentId));
+            const { commits, sentAs } = yield* newCommits(
+              staged,
+              [replaces, defaultHead],
+              actingAs._tag === "HobApp" ? { folder, repository } : null,
+            );
+            const settings = yield* GitHubPushSettings;
+            const plan: GitHubPushPlan = {
+              repository: slug,
+              folder,
+              branch: input.branch,
+              remoteBranch,
+              commit: staged.commit,
+              force: input.force === true,
+              replaces,
+              defaultBranch: info.defaultBranch,
+              toDefaultBranch: remoteBranch === info.defaultBranch,
+              commits: commits.count,
+              subjects: commits.subjects,
+              actingAs,
+              over: settings.over,
+            };
+            if (alreadyThere(replaces, staged.commit, sentAs)) {
+              return {
+                _tag: "NoCall",
+                text: `${plan.repository} branch ${remoteBranch} is already at ${short(staged.commit)}, so there was nothing to push.`,
+              } as const;
+            }
+            const request: PolicyRequest = {
+              _tag: "Push",
+              remote: `github.com/${slug}`,
+              branch: remoteBranch,
+              force: plan.force,
+              toDefaultBranch: plan.toDefaultBranch,
+              cwd: folder,
+              exact: true,
+            };
+            return {
+              request,
+              card: {
+                arguments: { ...plan },
+                summary: githubPushSummary(plan),
+                label: `Pushing ${input.branch} to GitHub`,
+              },
+              write: {
+                site: pushSite(repository, remoteBranch),
+                recorded: plan,
+                appliedText: pushedText(plan),
+                send: sendPinned(agentId, repository, send(agentId, staged, plan, repository, [replaces, defaultHead])),
+              },
+            };
+          }),
+        );
+      });
 
-    return { push, readBack: pushReadBack(api, git) };
+    const action: HubAction<PolicyRequest> = hubAction({
+      tool: pushTool(),
+      input: GitHubWriteInputs.github_push,
+      effect: "write",
+      otherwise: "nothing can be pushed",
+      readBack: pushReadBack(api, git),
+      plan: planPush,
+    });
+    return action;
   });
