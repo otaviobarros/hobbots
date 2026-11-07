@@ -19,6 +19,7 @@ import {
   descriptionState,
   exportRows,
   fileChanges,
+  importable,
   instructionsOf,
   libraryGroups,
   nameOf,
@@ -201,6 +202,18 @@ describe("skill names, descriptions and files", () => {
 });
 
 describe("Export skills", () => {
+  // covers ADR 029 (Backups, exports and Diagnostics), #1064
+  it("imports an exported skill only when each older revision it brings passed and is still that revision", () => {
+    const older = { matches: true, refusal: null };
+    const candidate = { refusal: null, existing: null, exported: { older: [older] } };
+    expect(importable(candidate)).toBe(true);
+    expect(importable({ ...candidate, exported: { older: [{ ...older, matches: false }] } })).toBe(false);
+    expect(importable({ ...candidate, exported: { older: [{ ...older, refusal: { check: "front-matter" } }] } })).toBe(
+      false,
+    );
+    expect(importable({ refusal: null, existing: null, exported: null })).toBe(true);
+  });
+
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
   it("opens from its own address and lists each skill once, under the first scope it has", () => {
     expect(skillsViewOf({ export: "skills" })).toEqual({ _tag: "Export" });

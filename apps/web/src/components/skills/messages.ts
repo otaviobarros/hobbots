@@ -398,6 +398,13 @@ export const messages = {
         ? "Exactly the exported revision"
         : `Exactly the exported revision, with ${formatCount(count)} older ${plural(count, { one: "one", other: "ones" })} an assignment keeps`,
     exportedChanged: "Changed since it was exported, so it comes in as a new skill of its own",
+    /** An older revision an export brings with a skill, and what import notes of it, as for the newest. */
+    olderNotes: ({ rev, notes }: { rev: string; notes: ReadonlyArray<string> }) =>
+      `${rev}, which an assignment keeps: ${notes.join(" ")}`,
+    olderRefused: ({ rev, rule }: { rev: string; rule: string }) =>
+      `${rev}, which an assignment keeps, cannot be imported: ${rule}`,
+    olderChanged: ({ rev }: { rev: string }) =>
+      `${rev}, which an assignment keeps, is no longer the exported revision, so this skill cannot be imported from here. Export it again.`,
     importedSet: ({ count, given, left }: { count: number; given: number; left: number }) => {
       const base = `Imported ${skills(count)} with the revisions the export names`;
       const assigned =

@@ -105,6 +105,27 @@ export const SkillSourcePayload = Schema.Union([
 ]);
 export type SkillSourcePayload = typeof SkillSourcePayload.Type;
 
+const CandidateRefusal = Schema.Struct({
+  check: SkillCheck,
+  path: Schema.NullOr(Schema.String),
+  message: Schema.String,
+});
+
+/**
+ * An older revision a Hobbots export brings with a skill new to this library (ADR 029): its number
+ * on the hub that exported it, and what import notes of it, as for the skill's newest revision.
+ * `matches` is false when its files are no longer that revision, and then the import is refused.
+ */
+export const ExportedOlderRevision = Schema.Struct({
+  number: Schema.Int,
+  hash: SkillRevisionHash,
+  matches: Schema.Boolean,
+  flags: Schema.Array(SkillFlag),
+  dropped: Schema.Array(SkillDropped),
+  refusal: Schema.NullOr(CandidateRefusal),
+});
+export type ExportedOlderRevision = typeof ExportedOlderRevision.Type;
+
 /** One skill a source holds, as import would take it, or the rule it broke. */
 export const SkillCandidate = Schema.Struct({
   folder: Schema.String,
@@ -115,15 +136,19 @@ export const SkillCandidate = Schema.Struct({
   dropped: Schema.Array(SkillDropped),
   charms: Schema.Array(Schema.String),
   label: Schema.NullOr(Schema.String),
-  refusal: Schema.NullOr(
-    Schema.Struct({ check: SkillCheck, path: Schema.NullOr(Schema.String), message: Schema.String }),
-  ),
+  refusal: Schema.NullOr(CandidateRefusal),
   locked: Schema.NullOr(Schema.Struct({ matches: Schema.Boolean, url: Schema.NullOr(Schema.String) })),
   /**
    * What a Hobbots export's `skills.lock.json` says of it (ADR 029): whether this copy is still the
-   * exported revision, and the older revisions and assignments that come with it.
+   * exported revision, the older revisions that come with it, oldest first, and its assignments.
    */
-  exported: Schema.NullOr(Schema.Struct({ matches: Schema.Boolean, revisions: Schema.Int, assignments: Schema.Int })),
+  exported: Schema.NullOr(
+    Schema.Struct({
+      matches: Schema.Boolean,
+      older: Schema.Array(ExportedOlderRevision),
+      assignments: Schema.Int,
+    }),
+  ),
   existing: Schema.NullOr(Schema.Struct({ skillId: SkillId, number: Schema.NullOr(Schema.Int) })),
 });
 export type SkillCandidate = typeof SkillCandidate.Type;
@@ -131,8 +156,13 @@ export type SkillCandidate = typeof SkillCandidate.Type;
 export const SkillScan = Schema.Struct({
   commit: Schema.NullOr(Schema.String),
   candidates: Schema.Array(SkillCandidate),
-  /** Set when the source is a Hobbots export: when it was made, and how many skills and assignments it keeps. */
-  exported: Schema.NullOr(Schema.Struct({ exportedAt: Schema.String, skills: Schema.Int, assignments: Schema.Int })),
+  /**
+   * Set when the source is a Hobbots export: when it was made, how many skills and assignments it
+   * keeps, and the SHA-256 of its `skills.lock.json`, which an import of this scan sends back.
+   */
+  exported: Schema.NullOr(
+    Schema.Struct({ exportedAt: Schema.String, skills: Schema.Int, assignments: Schema.Int, lock: Schema.String }),
+  ),
 });
 export type SkillScan = typeof SkillScan.Type;
 
@@ -145,6 +175,11 @@ export const ImportSkillsPayload = Schema.Struct({
    * now holds anything else, such as a branch that moved on since you looked.
    */
   scanned: Schema.optionalKey(Schema.Array(Schema.Struct({ folder: Schema.String, hash: SkillRevisionHash }))),
+  /**
+   * With `scanned`: the scan's `exported.lock`, or null when it found no export. An export's lock that
+   * is not the one scanned fails the import with `SkillScanOutdated` too, since it says who gets each skill.
+   */
+  scannedLock: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
 export const ReviseSkillPayload = Schema.Struct({

@@ -51,7 +51,15 @@ import { SkillImporter, SkillObjects } from "@hobbots/skills";
 import { Effect, Exit, Fiber, Latch, Layer, Option, Redacted, Ref, Stream } from "effect";
 import { SqlClient } from "effect/sql";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { fileStamp, listFiles, MEMORY_PART, readBackup, restoreInto, restoreMarkerFile } from "../src/backup-files.ts";
+import {
+  fileStamp,
+  listFiles,
+  MEMORY_PART,
+  readBackup,
+  removeTree,
+  restoreInto,
+  restoreMarkerFile,
+} from "../src/backup-files.ts";
 import { BackupHolds, HeldActivityStore } from "../src/backup-holds.ts";
 import { HubBackups, writeBackup } from "../src/backups.ts";
 import { checkDestination } from "../src/destination.ts";
@@ -96,7 +104,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.HOBBOTS_BACKUP_TEST_TOKEN;
-  await rm(root, { recursive: true, force: true });
+  // A skill revision's folders are read-only, so they are opened before they are deleted.
+  await removeTree(root);
 });
 
 const databaseOf = (dir: string) => join(dir, "hobbots.sqlite");
@@ -736,7 +745,7 @@ describe("backup and restore", () => {
       expect(paths).toContain(`skills/${hash}/scripts/tag.sh`);
     }
 
-    await rm(dataDir, { recursive: true, force: true });
+    await removeTree(dataDir);
     await Effect.runPromise(performRestore(dataDir, folder));
     const after = await onHub(
       dataDir,

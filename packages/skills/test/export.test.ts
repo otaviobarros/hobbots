@@ -1,7 +1,13 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SkillLibrary } from "@hobbots/agents";
-import { AgentId, MemoryProjectIdentity, type SkillId, type SkillRevisionHash } from "@hobbots/domain";
+import {
+  AgentId,
+  MemoryProjectIdentity,
+  type SkillId,
+  type SkillRevisionHash,
+  SkillSourceChanged,
+} from "@hobbots/domain";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { decodeSkillsLock, SKILLS_LOCK_FILE, SkillImporter, writeSkillExport } from "../src/index.ts";
@@ -143,14 +149,36 @@ describe("skill export", () => {
         const importer = yield* SkillImporter;
         const scan = yield* importer.scan({ _tag: "Folder", path: folder });
         // The older revision comes with its skill and is not offered on its own.
+        // It is shown with what import notes of it, here the script it holds, as the newest is.
+        const script = [{ _tag: "Script", path: "scripts/tag.sh" }];
         expect(scan.candidates.map((one) => [one.folder, one.exported])).toEqual([
-          ["commit-style", { matches: true, revisions: 0, assignments: 0 }],
-          ["release", { matches: true, revisions: 1, assignments: 3 }],
+          ["commit-style", { matches: true, older: [], assignments: 0 }],
+          [
+            "release",
+            {
+              matches: true,
+              older: [
+                { number: 1, hash: expect.any(String), matches: true, flags: script, dropped: [], refusal: null },
+              ],
+              assignments: 3,
+            },
+          ],
         ]);
-        expect(scan.exported).toEqual({ exportedAt: "2026-11-07T10:00:00.000Z", skills: 2, assignments: 3 });
+        expect(scan.exported).toEqual({
+          exportedAt: "2026-11-07T10:00:00.000Z",
+          skills: 2,
+          assignments: 3,
+          lock: expect.stringMatching(/^[0-9a-f]{64}$/),
+        });
         const set = yield* importer.addSet(
           { _tag: "Folder", path: folder },
-          { ...you, placeHob: (hob) => Effect.succeed(hob.name === "Pip" ? pipThere : null) },
+          {
+            ...you,
+            scanned: new Map(scan.candidates.flatMap((one) => (one.hash === null ? [] : [[one.folder, one.hash]]))),
+            scannedLock: scan.exported?.lock ?? null,
+            placeHob: (hob) => Effect.succeed(hob.name === "Pip" ? pipThere : null),
+            hasProject: (identity) => Effect.succeed(identity === site),
+          },
         );
         expect(set.assigned).toHaveLength(3);
         expect(set.leftOut).toBe(0);
@@ -162,7 +190,7 @@ describe("skill export", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("[TC-OP-118] imports a zipped export, and keeps in the library only what a hub without the hob can take", async () => {
+  it("[TC-OP-118] imports a zipped export, and keeps in the library only what a hub without the hob or the project can take", async () => {
     const { layer } = await importerLayer();
     const folder = await temp("export");
     const seeded = await runWith(layer)(Effect.flatMap(seedLibrary, (made) => Effect.as(exportTo(folder), made)));
@@ -177,17 +205,58 @@ describe("skill export", () => {
       Effect.gen(function* () {
         const set = yield* (yield* SkillImporter).addSet(
           { _tag: "Archive", fileName: "hobbots-skills-2026-11-07.zip", bytes },
-          { ...you, placeHob: () => Effect.succeed(null) },
+          { ...you, placeHob: () => Effect.succeed(null), hasProject: () => Effect.succeed(false) },
         );
-        // No Pip here: its held assignment is left out, and the skill stays in the library.
-        expect(set.leftOut).toBe(1);
-        expect(set.assigned.map((one) => one.scope._tag).sort()).toEqual(["Everyone", "Project"]);
+        // No Pip and no site project here: their assignments are left out, and the skill stays in the library.
+        expect(set.leftOut).toBe(2);
+        expect(set.assigned.map((one) => one.scope._tag)).toEqual(["Everyone"]);
         const library = yield* SkillLibrary;
         const release = (yield* library.list).find((skill) => skill.name === "release");
         const hashes: ReadonlyArray<SkillRevisionHash> = (yield* library.revisions(release?.id ?? ("" as SkillId)))
           .map((revision) => revision.hash)
           .reverse();
         expect(hashes).toEqual([seeded.r1, seeded.r2]);
+      }),
+    );
+  });
+
+  // covers ADR 029 (Backups, exports and Diagnostics), #1064
+  it("[TC-OP-121] imports only the export that was scanned: a changed lock or older revision is refused, writing nothing", async () => {
+    const { layer } = await importerLayer();
+    const folder = await temp("export");
+    await runWith(layer)(Effect.flatMap(seedLibrary, () => exportTo(folder)));
+    const lockFile = join(folder, SKILLS_LOCK_FILE);
+    const exported = await readFile(lockFile, "utf8");
+    const fresh = await importerLayer();
+    await runWith(fresh.layer)(
+      Effect.gen(function* () {
+        const importer = yield* SkillImporter;
+        const source = { _tag: "Folder", path: folder } as const;
+        const place = { placeHob: () => Effect.succeed(pip), hasProject: () => Effect.succeed(true) };
+        const scan = yield* importer.scan(source);
+        const scanned = {
+          scanned: new Map(scan.candidates.flatMap((one) => (one.hash === null ? [] : [[one.folder, one.hash]]))),
+          scannedLock: scan.exported?.lock ?? null,
+        };
+
+        // Pip's assignment now goes to Everyone: the skills' files are the same, but who gets them is not.
+        const toEveryone = exported.replace('"_tag": "Hob"', '"_tag": "Everyone"');
+        expect(toEveryone).not.toBe(exported);
+        yield* Effect.promise(() => writeFile(lockFile, toEveryone));
+        const changedLock = yield* Effect.flip(importer.addSet(source, { ...you, ...scanned, ...place }));
+        expect(changedLock).toBeInstanceOf(SkillSourceChanged);
+
+        // The lock is back as scanned, but an older revision's files changed: the lock names its hash,
+        // so new files would need a new lock, and that is refused as above.
+        yield* Effect.promise(() => writeFile(lockFile, exported));
+        const older = join(folder, ".revisions/release/r1/SKILL.md");
+        yield* Effect.promise(() => writeFile(older, skillMd("release", "Something else.")));
+        const changedOlder = yield* Effect.flip(importer.addSet(source, { ...you, ...scanned, ...place }));
+        expect(changedOlder).toBeInstanceOf(SkillSourceChanged);
+        const rescan = yield* importer.scan(source);
+        const release = rescan.candidates.find((one) => one.folder === "release");
+        expect(release?.exported?.older.map((one) => one.matches)).toEqual([false]);
+        expect(yield* (yield* SkillLibrary).list).toEqual([]);
       }),
     );
   });

@@ -33,6 +33,7 @@ import {
   type Agent,
   type AgentId,
   type Committed,
+  type MemoryProjectIdentity,
   type SkillAssignment,
   type SkillBy,
   type SkillId,
@@ -290,6 +291,13 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
         return named.length === 1 ? (named[0]?.id ?? null) : null;
       });
 
+    /**
+     * Whether this hub knows a project an exported assignment names: one its hobs work in now, or one
+     * the library already gives a skill to, as the Skills page lists them.
+     */
+    const hasProject = (identity: MemoryProjectIdentity) =>
+      Effect.map(Effect.flatMap(library.assignments(), projectsNow), (known) => known.includes(identity));
+
     const objects = yield* Effect.serviceOption(SkillObjects);
     const folders = yield* Effect.serviceOption(ExportFolders);
     const destinations = yield* Effect.serviceOption(SaveDestinations);
@@ -371,9 +379,13 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
             by: YOU,
             placeHob,
             ...(payload.folders === undefined ? {} : { folders: payload.folders }),
+            hasProject,
             ...(payload.scanned === undefined
               ? {}
-              : { scanned: new Map(payload.scanned.map((one) => [one.folder, one.hash])) }),
+              : {
+                  scanned: new Map(payload.scanned.map((one) => [one.folder, one.hash])),
+                  scannedLock: payload.scannedLock ?? null,
+                }),
           })
           .pipe(Effect.mapError(importError)),
       export: ({ payload }) => exportSkills(payload),

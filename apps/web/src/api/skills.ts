@@ -56,6 +56,7 @@ export const importSkills = (input: {
   source: SkillSourcePayload;
   folders?: ReadonlyArray<string>;
   scanned?: ReadonlyArray<{ folder: string; hash: SkillRevisionHash }>;
+  scannedLock?: string | null;
 }) => call((c) => c.skills.import({ payload: input }));
 
 /**

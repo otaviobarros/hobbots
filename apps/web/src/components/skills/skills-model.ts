@@ -390,8 +390,17 @@ export const fileChanges = (
   return { added, removed, changed };
 };
 
-/** Whether a scan's skill can be imported as a new skill: it passed, and the library has no skill of its name. */
+/**
+ * Whether a scan's skill can be imported as a new skill: it passed, the library has no skill of its
+ * name, and each older revision an export brings with it passed too and is still that revision.
+ */
 export const importable = (candidate: {
   readonly refusal: unknown;
   readonly existing: { readonly number: number | null } | null;
-}): boolean => candidate.refusal === null && candidate.existing === null;
+  readonly exported?: {
+    readonly older: ReadonlyArray<{ readonly matches: boolean; readonly refusal: unknown }>;
+  } | null;
+}): boolean =>
+  candidate.refusal === null &&
+  candidate.existing === null &&
+  (candidate.exported?.older ?? []).every((older) => older.matches && older.refusal === null);

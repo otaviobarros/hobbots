@@ -1,7 +1,7 @@
-import type { SkillCandidate } from "@hobbots/api";
+import type { ExportedOlderRevision, SkillCandidate } from "@hobbots/api";
 import { cn } from "@hobbots/ui/lib/utils";
 import { messages } from "./messages.ts";
-import { droppedLine } from "./skill-flags.tsx";
+import { droppedLine, flagLine } from "./skill-flags.tsx";
 import { importable, skillTitle } from "./skills-model.ts";
 import { SkillChip, SkillsIcon } from "./skills-parts.tsx";
 
@@ -15,7 +15,7 @@ const checkLine = (candidate: SkillCandidate): { readonly text: string; readonly
   }
   if (candidate.exported !== null && candidate.existing === null) {
     return candidate.exported.matches
-      ? { text: copy.import.exportedLine({ count: candidate.exported.revisions }), tone: "ok" }
+      ? { text: copy.import.exportedLine({ count: candidate.exported.older.length }), tone: "ok" }
       : { text: copy.import.exportedChanged, tone: "label" };
   }
   if (candidate.existing?.number != null) {
@@ -27,6 +27,36 @@ const checkLine = (candidate: SkillCandidate): { readonly text: string; readonly
   if (candidate.existing !== null) return { text: copy.import.newRevisionLine, tone: "label" };
   return { text: copy.import.passedNoSize, tone: "ok" };
 };
+
+/**
+ * What import notes of an older revision an export brings, as of the newest one: why it cannot come,
+ * or its flags and what it leaves out. Null when there is nothing to note.
+ */
+const olderLine = (older: ExportedOlderRevision): { readonly text: string; readonly tone: "label" | "bad" } | null => {
+  const rev = copy.revision({ number: older.number });
+  if (older.refusal !== null)
+    return { text: copy.import.olderRefused({ rev, rule: copy.checks[older.refusal.check] }), tone: "bad" };
+  if (!older.matches) return { text: copy.import.olderChanged({ rev }), tone: "bad" };
+  const dropped = droppedLine(older.dropped);
+  const notes = [...older.flags.map(flagLine), ...(dropped === null ? [] : [dropped])];
+  return notes.length === 0 ? null : { text: copy.import.olderNotes({ rev, notes }), tone: "label" };
+};
+
+/** Whether a skill, or an older revision an export brings with it, holds something worth a careful look. */
+const flaggedOf = (candidate: SkillCandidate) =>
+  candidate.flags.length > 0 || (candidate.exported?.older ?? []).some((one) => one.flags.length > 0);
+
+/** What import notes of each older revision an export brings with a skill. */
+function OlderNotes({ candidate }: { candidate: SkillCandidate }) {
+  return (candidate.exported?.older ?? []).map((one) => {
+    const note = olderLine(one);
+    return note === null ? null : (
+      <span key={one.hash} className={cn("text-meta", note.tone === "bad" ? "text-rose" : "text-label")}>
+        {note.text}
+      </span>
+    );
+  });
+}
 
 /** One skill a source holds: pick it to import, or see why it cannot be. */
 function Candidate({
@@ -59,7 +89,7 @@ function Candidate({
           {candidate.existing !== null && candidate.existing.number === null && (
             <SkillChip tone="waiting">{copy.import.newRevision}</SkillChip>
           )}
-          {candidate.flags.length > 0 && <SkillChip tone="needs">{copy.import.flagged}</SkillChip>}
+          {flaggedOf(candidate) && <SkillChip tone="needs">{copy.import.flagged}</SkillChip>}
         </span>
         {candidate.description !== null && (
           <span className="text-detail text-text-secondary">{candidate.description}</span>
@@ -75,6 +105,7 @@ function Candidate({
           {line.text}
         </span>
         {dropped !== null && <span className="text-meta text-label">{dropped}</span>}
+        <OlderNotes candidate={candidate} />
       </span>
     </li>
   );

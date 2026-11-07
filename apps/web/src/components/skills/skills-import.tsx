@@ -91,7 +91,8 @@ function ScanResult({
     const scanned = scan.candidates.flatMap((one) =>
       one.hash !== null && folders.includes(one.folder) ? [{ folder: one.folder, hash: one.hash }] : [],
     );
-    const result = await writes.add.mutateAsync({ source, folders, scanned });
+    // An export's lock is bound too: it says who gets each skill, and which older revisions come.
+    const result = await writes.add.mutateAsync({ source, folders, scanned, scannedLock: scan.exported?.lock ?? null });
     setGiven({ assigned: result.assigned.length, leftOut: result.leftOut });
     return {
       ids: result.imported.map((one) => one.skill.id),
