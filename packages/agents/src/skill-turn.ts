@@ -312,6 +312,19 @@ export const mentionedSkill = (content: string, given: ReadonlyArray<TurnSkill> 
 };
 
 /**
+ * The prompt a turn sends its runtime (ADR 029, Skill sets): without your `/name` when you picked a
+ * skill, and without the leading `/` of a bare name two of the turn's skills share, so no runtime
+ * picks one of them on its own; Claude Code would load the first plugin's.
+ */
+export const runtimePrompt = (prompt: string, asked: string | null, given: ReadonlyArray<TurnSkill> | null): string => {
+  if (asked !== null) return withoutMention(prompt, asked);
+  const typed = MENTION.exec(prompt)?.[1];
+  if (typed === undefined || typed.includes(":")) return prompt;
+  const named = (given ?? []).filter((skill) => skill.name === typed);
+  return named.length > 1 ? prompt.slice(1) : prompt;
+};
+
+/**
  * The prompt without its leading `/name` for the skill you picked, which the runtime gets as its own
  * mention instead; as it is when you picked none. A skill of a set may have been typed with its set
  * or without it.

@@ -48,6 +48,8 @@ let root: string;
 
 /** The skills each turn was given, in the order the turns started. */
 let given: Array<ReadonlyArray<SkillMount>>;
+/** What each turn sent its runtime: the prompt and the skill you picked. */
+let sent: Array<{ readonly prompt: string; readonly askedSkill: string | null }>;
 /** A turn whose prompt holds `hold` waits here before the runtime answers it. */
 let release: () => void;
 let held: Promise<void>;
@@ -69,6 +71,7 @@ beforeEach(async () => {
   await mkdir(join(agentsFolder, "shared"), { recursive: true });
   await writeFile(join(agentsFolder, "shared", "SKILL.md"), skillMd("shared"));
   given = [];
+  sent = [];
   held = new Promise((resolve) => {
     release = resolve;
   });
@@ -78,6 +81,7 @@ beforeEach(async () => {
     ...fake,
     sendPrompt: (request: PromptRequest) => {
       given.push(request.skills ?? []);
+      sent.push({ prompt: request.prompt, askedSkill: request.askedSkill ?? null });
       const answer = fake.sendPrompt({ ...request, prompt: request.prompt.replace(/^(hold|stuck)\n/, "") });
       // `stuck`: the turn uses its skill, then waits until it is stopped.
       if (request.prompt.startsWith("stuck\n")) {
@@ -649,6 +653,24 @@ describe("skill uses", () => {
     await send(wrenThread, "/skills");
     await replies(wrenThread, 1);
     expect(setMounts(given.at(-1))).toEqual([["deliver-change", revised.body.revision.hash]]);
+
+    // A bare name two sets share picks neither, and reaches the runtime without its `/`.
+    const other = join(root, "other-set");
+    await mkdir(join(other, ".claude-plugin"), { recursive: true });
+    await writeFile(join(other, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "other-set" }));
+    await mkdir(join(other, "skills", "plan-change"), { recursive: true });
+    await writeFile(join(other, "skills", "plan-change", "SKILL.md"), skillMd("plan-change"));
+    const otherSet = (await request("POST", "/api/skills", { source: { _tag: "Folder", path: other } })).body
+      .imported[0];
+    await request("POST", `/api/skills/${otherSet.skill.id}/assignments`, { scope: { _tag: "Hob", agentId: pip.id } });
+    await send(pipThread, "/plan-change go");
+    const ambiguous = await replies(pipThread, 4);
+    expect(sent.at(-1)).toEqual({ prompt: "plan-change go", askedSkill: null });
+    expect(ambiguous.skillsUsed).toEqual([]);
+    expect((await messages(pipThread)).filter((m) => m.role === "user").at(-1)?.askedSkill).toBeNull();
+    await send(pipThread, "/other-set:plan-change go");
+    expect((await replies(pipThread, 5)).skillsUsed).toMatchObject([{ name: "plan-change", set: "other-set" }]);
+    expect(sent.at(-1)).toEqual({ prompt: "go", askedSkill: "other-set:plan-change" });
 
     // An edit in Hobbots never changes a set.
     const edit = await request("POST", `/api/skills/${set.skill.id}/edits`, {

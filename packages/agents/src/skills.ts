@@ -398,6 +398,37 @@ const twoProjects = (winners: ReadonlyArray<Offered>): boolean => {
 };
 
 /**
+ * Each set as one unit (ADR 029, Skill sets): of a set's assignments that reach the turn, the
+ * narrowest one alone brings its skills, all on that one revision, and the wider ones are replaced
+ * by it. Two projects that both assign the set load none of its skills.
+ */
+const wholeSets = (reached: ReadonlyArray<PinnedSkill>) => {
+  const winning = new Set<PinnedSkill>();
+  const replaced: Array<ResolvedSkills["replaced"][number]> = [];
+  const clashes: Array<ResolvedSkills["clashes"][number]> = [];
+  const bySet = new Map<SkillId, Array<PinnedSkill>>();
+  for (const one of reached) {
+    if (one.set) bySet.set(one.assignment.skillId, [...(bySet.get(one.assignment.skillId) ?? []), one]);
+  }
+  for (const assigned of bySet.values()) {
+    const narrowest = Math.max(...assigned.map((one) => NARROWNESS[one.assignment.scope._tag]));
+    const winners = assigned.filter((one) => NARROWNESS[one.assignment.scope._tag] === narrowest);
+    const [winner] = winners;
+    if (winner === undefined) continue;
+    if (winners.length > 1) {
+      const assignments = winners.map((one) => one.assignment);
+      const names = new Set(winners.flatMap((one) => (one.set?.skills ?? []).map((skill) => skill.name)));
+      for (const name of names) clashes.push({ name, assignments });
+      continue;
+    }
+    winning.add(winner);
+    for (const one of assigned)
+      if (one !== winner) replaced.push({ assignment: one.assignment, by: winner.assignment, name: one.name });
+  }
+  return { kept: reached.filter((one) => !one.set || winning.has(one)), replaced, clashes };
+};
+
+/**
  * A hob's skills for a turn: Everyone's, plus each project's of the folders it works in, plus its
  * own, a set's skills each counted on its own (ADR 029, Skill sets). The narrower scope wins a name,
  * two projects that define one name load neither, and an Everyone or Project skill the hob opted out
@@ -405,15 +436,16 @@ const twoProjects = (winners: ReadonlyArray<Offered>): boolean => {
  * load: their set tells them apart.
  */
 export const resolveSkills = (pinned: ReadonlyArray<PinnedSkill>, turn: SkillTurn): ResolvedSkills => {
+  const reached = pinned.filter((one) => reaches(one.assignment.scope, turn) && !optedOut(one, turn));
+  const sets = wholeSets(reached);
+  const replaced: Array<ResolvedSkills["replaced"][number]> = [...sets.replaced];
+  const clashes: Array<ResolvedSkills["clashes"][number]> = [...sets.clashes];
   const groups = new Map<SkillName, Array<Offered>>();
-  for (const one of pinned) {
-    if (!reaches(one.assignment.scope, turn) || optedOut(one, turn)) continue;
+  for (const one of sets.kept) {
     for (const offered of offeredOf(one, turn))
       groups.set(offered.name, [...(groups.get(offered.name) ?? []), offered]);
   }
   const skills: Array<ResolvedSkill> = [];
-  const replaced: Array<ResolvedSkills["replaced"][number]> = [];
-  const clashes: Array<ResolvedSkills["clashes"][number]> = [];
   for (const [name, group] of groups) {
     const narrowest = Math.max(...group.map((one) => NARROWNESS[one.pinned.assignment.scope._tag]));
     const winners = group.filter((one) => NARROWNESS[one.pinned.assignment.scope._tag] === narrowest);

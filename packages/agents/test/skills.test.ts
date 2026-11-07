@@ -10,7 +10,7 @@ import {
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { type PinnedSkill, resolveSkills, rolloutTargets, type SkillTurn } from "../src/index.ts";
-import { mentionedSkill, withoutMention } from "../src/skill-turn.ts";
+import { mentionedSkill, runtimePrompt, withoutMention } from "../src/skill-turn.ts";
 
 const PIP = AgentId.make("pip");
 const QUILL = AgentId.make("quill");
@@ -161,6 +161,34 @@ describe("resolveSkills with sets (ADR 029, Skill sets)", () => {
     expect(clash.clashes).toEqual([{ name: "plan-change", assignments: [web.assignment, api.assignment] }]);
   });
 
+  // covers ADR 029 (Skill sets, Pins and rollout), #1143
+  it("[TC-AG-1143-13] takes a set whole from its narrowest assignment, so a held revision never mixes with a newer one", () => {
+    const own = setOf("agent-engineering", ["plan-change"], { _tag: "Hob", agentId: PIP }, { held: true });
+    const skillId = own.assignment.skillId;
+    const everyone = setOf(
+      "agent-engineering",
+      ["plan-change", "ship-change"],
+      { _tag: "Everyone" },
+      { skillId, pin: R2 },
+    );
+    const resolved = resolveSkills([everyone, own], turn());
+    expect(resolved.skills.map((one) => [one.name, one.pin])).toEqual([["plan-change", R1]]);
+    expect(resolved.replaced).toEqual([
+      { assignment: everyone.assignment, by: own.assignment, name: "agent-engineering" },
+    ]);
+    // Two projects that assign the set load none of it, whichever skills each revision holds.
+    const web = setOf("agent-engineering", ["plan-change"], { _tag: "Project", identity: WEB }, { skillId });
+    const api = setOf(
+      "agent-engineering",
+      ["plan-change", "ship-change"],
+      { _tag: "Project", identity: API },
+      { skillId, pin: R2 },
+    );
+    const clash = resolveSkills([web, api], turn({ projects: [WEB, API] }));
+    expect(clash.skills).toEqual([]);
+    expect(clash.clashes.map((one) => one.name)).toEqual(["plan-change", "ship-change"]);
+  });
+
   // covers ADR 029 (Skill sets), #1143
   it("[TC-AG-1143-11] leaves out a skill of a set the hob opted out of, but never one of its own set", () => {
     const everyone = setOf("agent-engineering", ["deliver-change", "plan-change"], { _tag: "Everyone" });
@@ -214,6 +242,10 @@ describe("skill mentions", () => {
     expect(withoutMention("/deliver-change go", "agent-engineering:deliver-change")).toBe("go");
     expect(withoutMention("/agent-engineering:deliver-change go", "agent-engineering:deliver-change")).toBe("go");
     expect(withoutMention("/plan-change go", "other-set:deliver-change")).toBe("/plan-change go");
+    // A bare name two sets share reaches the runtime as plain text, so no runtime picks one on its own.
+    expect(runtimePrompt("/plan-change go", null, given)).toBe("plan-change go");
+    expect(runtimePrompt("/release now", null, given)).toBe("/release now");
+    expect(runtimePrompt("/other-set:plan-change go", "other-set:plan-change", given)).toBe("go");
   });
 });
 

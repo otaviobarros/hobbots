@@ -62,10 +62,10 @@ import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
 import {
   askedSkillOf,
   mentionedSkill,
+  runtimePrompt,
   skillMounter,
   skillUseRecorder,
   TurnSkillsInUse,
-  withoutMention,
   withUsedSkill,
 } from "./skill-turn.ts";
 import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
@@ -842,7 +842,7 @@ export class ChatService extends Context.Service<
           yield* activity
             .run(
               {
-                prompt: withoutMention(prompt, asked),
+                prompt: runtimePrompt(prompt, asked, skills.recorded),
                 briefing:
                   [memory?.text ?? null, briefing, taskTurn?.briefing ?? null]
                     .filter((part) => part !== null)

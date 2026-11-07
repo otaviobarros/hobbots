@@ -357,12 +357,16 @@ const setFiles = async (tree: SkillTree, set: FoundSet, skillFolders: ReadonlyAr
   }
   const kept = new Map<string, SetEntry>();
   const queue: Array<string> = [];
+  let size = 0;
+  // The limits count each file as it is kept, before it is read, as a loose skill's do.
   const keep = (entry: SetEntry) => {
     if (entry.kind === "symlink") refuse("symlink", entry.source, `${entry.source} is a link; a set holds only files.`);
     if (entry.kind === "other") refuse("unreadable", entry.source, `${entry.source} is not a file or a folder.`);
     if (!isFilePath(entry.path)) refuse("outside-path", entry.source, `${entry.source} reaches outside the set.`);
     if (entry.kind !== "file" || kept.has(entry.path)) return;
     kept.set(entry.path, entry);
+    size += entry.size;
+    checkSetLimits(kept.size, size);
     queue.push(entry.path);
   };
   const keepFolder = (folder: string) => {
@@ -392,20 +396,17 @@ const setFiles = async (tree: SkillTree, set: FoundSet, skillFolders: ReadonlyAr
     }
   }
   const files = [...kept.values()];
-  checkSetLimits(files);
   return files
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
     .map((file) => ({ ...file, bytes: bytes.get(file.path) as Uint8Array }));
 };
 
 /** Refuses a set over the limits a skill has, which count the whole set. */
-const checkSetLimits = (files: ReadonlyArray<SetEntry>) => {
-  if (files.length > SKILL_LIMITS.files) {
-    refuse("too-many-files", null, `The set holds ${files.length} files; the most is ${SKILL_LIMITS.files}.`);
+const checkSetLimits = (files: number, bytes: number) => {
+  if (files > SKILL_LIMITS.files) {
+    refuse("too-many-files", null, `The set holds more than ${SKILL_LIMITS.files} files.`);
   }
-  if (files.reduce((total, file) => total + file.size, 0) > SKILL_LIMITS.bytes) {
-    refuse("too-large", null, "The set is larger than 5 MB.");
-  }
+  if (bytes > SKILL_LIMITS.bytes) refuse("too-large", null, "The set is larger than 5 MB.");
 };
 
 /** What a plugin's manifest says of it: its name, version and description, each when it is text. */

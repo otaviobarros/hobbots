@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { SkillFiles, SkillLibrary } from "@hobbots/agents";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
+import { checkSet } from "../src/check.ts";
 import { decodeSkillsLock, SKILLS_LOCK_FILE, SkillImporter, writeSkillExport } from "../src/index.ts";
+import { folderTree } from "../src/sources/folder.ts";
 import { type Fixture, folderOf, importerLayer, repositoryOf, runWith, skillMd, temp } from "./fixtures.ts";
 
 // #1143: importing a plugin, or a repository's folder of skills that share files, as one set (ADR 029, Skill sets).
@@ -312,5 +314,23 @@ describe("skill sets", () => {
         );
       }),
     );
+  });
+
+  // covers ADR 029 (Import checks, Skill sets), #1143
+  it("[TC-AG-1143-14] refuses a set over the limits before reading the files that take it over", async () => {
+    const big = "x".repeat(6 * 1024 * 1024);
+    const folder = await folderOf({
+      ".claude-plugin/plugin.json": JSON.stringify({ name: "heavy" }),
+      "skills/one/SKILL.md": skillMd("one"),
+      "skills/one/assets/huge.bin": big,
+    });
+    const tree = await folderTree(folder);
+    const read: Array<string> = [];
+    const watched = { ...tree, read: (path: string) => (read.push(path), tree.read(path)) };
+    const set = { folder: "", skills: ["skills/one"], manifest: ".claude-plugin/plugin.json", dropped: [] };
+    const result = await checkSet(watched, set, null);
+    expect(result).toMatchObject({ _tag: "Refused", refusal: { check: "too-large", path: null } });
+    expect(read).not.toContain("skills/one/assets/huge.bin");
+    await (tree as { close?: () => Promise<void> }).close?.();
   });
 });
