@@ -1,4 +1,4 @@
-import type { CharmDeclaration } from "@hobbots/domain";
+import type { AnyOperation, CharmDeclaration } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import { type AskableVerdict, approvalNote, askOnStep } from "./asking.ts";
 import type { CharmTurn } from "./charms.ts";
@@ -12,6 +12,7 @@ import {
   UNRECORDED_TOOL_CALL,
 } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
+import { operationDecision } from "./tools.ts";
 
 /**
  * The hub action pipeline (ADR 031): one way for every hub tool call the policy decides to be
@@ -58,7 +59,17 @@ export interface HubPlan<R extends HubRequest> {
     /** A sentence that says what the call does, for the card. */
     readonly summary?: string;
   };
-  readonly send: Effect.Effect<string, HubRefusal>;
+  /** What the hob is told: the text, or an answer of its own, such as a retried key refused by its store. */
+  readonly send: Effect.Effect<string | HubToolAnswer, HubRefusal>;
+}
+
+/**
+ * A call that has nothing to decide or send, such as asking for a skill the hob already has: the
+ * pipeline answers it with `text` and runs nothing.
+ */
+export interface HubNoCall {
+  readonly _tag: "NoCall";
+  readonly text: string;
 }
 
 /** A hub tool and how a call to it is planned. */
@@ -67,8 +78,15 @@ export interface HubAction<R extends HubRequest> {
   readonly effect: HubActionEffect;
   /** What does not happen when the call is refused before it is planned, such as "GitHub cannot be read". */
   readonly otherwise: string;
+  /**
+   * The operation the tool is offered under, when the set offers it with `offerHubActions`: a tool
+   * whose operation the hob's policy answers Never for is not offered.
+   */
+  readonly operation?: AnyOperation;
+  /** What the hob is told when its input cannot be decoded; the decode error's first lines otherwise. */
+  readonly unreadable?: (error: Schema.SchemaError) => string;
   readonly decode: (raw: unknown) => Effect.Effect<unknown, Schema.SchemaError>;
-  readonly plan: (input: unknown, context: HubPlanContext) => Effect.Effect<HubPlan<R>, HubRefusal>;
+  readonly plan: (input: unknown, context: HubPlanContext) => Effect.Effect<HubPlan<R> | HubNoCall, HubRefusal>;
 }
 
 /** An action whose input is decoded with `input` before `plan` sees it. */
@@ -77,11 +95,15 @@ export const hubAction = <S extends Schema.Top & { readonly DecodingServices: ne
   readonly input: S;
   readonly effect: HubActionEffect;
   readonly otherwise: string;
-  readonly plan: (input: S["Type"], context: HubPlanContext) => Effect.Effect<HubPlan<R>, HubRefusal>;
+  readonly operation?: AnyOperation;
+  readonly unreadable?: (error: Schema.SchemaError) => string;
+  readonly plan: (input: S["Type"], context: HubPlanContext) => Effect.Effect<HubPlan<R> | HubNoCall, HubRefusal>;
 }): HubAction<R> => ({
   tool: action.tool,
   effect: action.effect,
   otherwise: action.otherwise,
+  ...(action.operation === undefined ? {} : { operation: action.operation }),
+  ...(action.unreadable === undefined ? {} : { unreadable: action.unreadable }),
   decode: Schema.decodeUnknownEffect(action.input),
   plan: (input, context) => action.plan(input as S["Type"], context),
 });
@@ -159,13 +181,16 @@ const refuse = (message: string) => Effect.fail(new HubRefusal({ message }));
  */
 export const redactedAnswer = (
   redactor: Redactor,
-  call: Effect.Effect<string, { readonly message: string }>,
+  call: Effect.Effect<string | HubToolAnswer, { readonly message: string }>,
   failed: { readonly log: string; readonly text: string },
 ): Effect.Effect<HubToolAnswer> =>
   call.pipe(
     Effect.match({
       onFailure: (refused): HubToolAnswer => ({ text: redactor.text(refused.message), refused: true }),
-      onSuccess: (text): HubToolAnswer => ({ text: redactor.text(text), refused: false }),
+      onSuccess: (sent): HubToolAnswer =>
+        typeof sent === "string"
+          ? { text: redactor.text(sent), refused: false }
+          : { ...sent, text: redactor.text(sent.text) },
     }),
     Effect.catchDefect((defect) =>
       Effect.logError(failed.log, defect).pipe(Effect.as({ text: failed.text, refused: true })),
@@ -245,9 +270,10 @@ export const makeHubActions =
       Effect.gen(function* () {
         const input = yield* action
           .decode(raw)
-          .pipe(Effect.mapError((error) => new HubRefusal({ message: describe(error) })));
+          .pipe(Effect.mapError((error) => new HubRefusal({ message: (action.unreadable ?? describe)(error) })));
         const access = yield* accessNow(action);
         const plan = yield* action.plan(input, planContext(turn, access));
+        if ("_tag" in plan) return plan;
         if (!mayPlan(owner, plan.request)) {
           return yield* Effect.die(
             new Error(`${action.tool.name} planned a ${plan.request._tag} request its owner does not declare.`),
@@ -262,7 +288,9 @@ export const makeHubActions =
 
     const run = (action: HubAction<R>, raw: unknown, step: HubCallStep | undefined) =>
       Effect.gen(function* () {
-        const { access, plan } = yield* planned(action, raw);
+        const planning = yield* planned(action, raw);
+        if ("_tag" in planning) return planning.text;
+        const { access, plan } = planning;
         const { summary } = plan.card;
         const decision = yield* askOnStep({
           call: {
@@ -285,8 +313,12 @@ export const makeHubActions =
         );
         yield* record(step, action.tool, decision.verdict);
         const sent = yield* plan.send;
-        const text = owner._tag === "Charm" ? `${outsideDataLine(owner.name)}\n${sent}` : sent;
-        return decision.approval === undefined ? text : `${text} ${approvalNote(decision.approval)}`;
+        const answer: HubToolAnswer = typeof sent === "string" ? { text: sent, refused: false } : sent;
+        const text = owner._tag === "Charm" ? `${outsideDataLine(owner.name)}\n${answer.text}` : answer.text;
+        return {
+          ...answer,
+          text: decision.approval === undefined ? text : `${text} ${approvalNote(decision.approval)}`,
+        };
       });
 
     const call = (name: string, raw: unknown, step?: HubCallStep): Effect.Effect<HubToolAnswer> => {
@@ -299,4 +331,26 @@ export const makeHubActions =
     };
 
     return { tools: options.actions.map((action) => action.tool), call };
+  };
+
+/**
+ * The hub tools a turn is offered for `actions`, as `makeHubActions` runs them, read under the turn's
+ * access: a tool whose operation the hob's policy answers Never for is not offered (ADR 014), and a
+ * turn with no access or no tool left is offered none. A call still reaches every action, so a tool
+ * that was not offered is refused by the policy in its own words.
+ */
+export const offerHubActions =
+  <R extends HubRequest, V extends AskableVerdict>(options: HubActionsOptions<R, V>) =>
+  (turn: CharmTurn): Effect.Effect<HubTools | null> => {
+    const hub = makeHubActions(options);
+    const operations = new Map(options.actions.map((action) => [action.tool.name, action.operation]));
+    return Effect.map(turn.currentAccess, (access) => {
+      if (access === null) return null;
+      const offered = hub(turn);
+      const open = offered.tools.filter((tool) => {
+        const operation = operations.get(tool.name);
+        return operation === undefined || operationDecision(access.policy, operation) !== "deny";
+      });
+      return open.length === 0 ? null : { ...offered, tools: open };
+    });
   };

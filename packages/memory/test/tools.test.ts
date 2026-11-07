@@ -18,6 +18,7 @@ import {
   type RuntimeEvent,
   type ToolAccess,
   type TurnApprovals,
+  UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
   type AgentId,
@@ -165,6 +166,11 @@ interface CallOptions {
   readonly work?: string;
   /** The Attempt a turn outside any chat runs as. */
   readonly attemptId?: AttemptId;
+  /**
+   * What recording the call's step answers, as the turn's `recordToolStart` would (ADR 031); each
+   * record lands in the hub's `reached`, beside the store's calls. Absent, the step reports its start.
+   */
+  readonly records?: boolean;
 }
 
 /** A turn's memory tools, and one call of `name`, with a step the user can be asked on. */
@@ -193,7 +199,17 @@ const callOn = (hub: Hub, name: string, input: unknown, options: CallOptions = {
     const answer = yield* tools.call(
       name,
       input,
-      hubCallStep("step-1", (event) => events.push(event)),
+      hubCallStep(
+        "step-1",
+        (event) => events.push(event),
+        options.records === undefined
+          ? null
+          : (event) =>
+              Effect.sync(() => {
+                hub.reached.push(`recorded ${event.tool} ${event.operation}`);
+                return options.records as boolean;
+              }),
+      ),
     );
     return { offered: tools.tools.map((tool) => tool.name), answer, events };
   }).pipe(Effect.provide(hub.layer), Effect.runPromise);
@@ -328,6 +344,27 @@ describe("the memory tools", () => {
       ["notes/tests.md", attemptId],
       ["notes/chat.md", undefined],
     ]);
+  });
+
+  // covers EX-004, ADR 028 (The memory tools), ADR 031
+  it("[TC-PE-492] records each call's step before memory is reached, and reaches nothing when it cannot", async () => {
+    const hub = makeHub();
+    await callOn(hub, MEMORY_SAVE_TOOL, page("recorded"), { records: true });
+    await callOn(hub, MEMORY_SEARCH_TOOL, { query: "pnpm test" }, { records: true });
+    expect(hub.reached).toEqual([
+      "recorded memory_save save-memory",
+      "write",
+      "recorded memory_search search-memory",
+      "search",
+    ]);
+    // A step the turn cannot record sends nothing: no save is recorded and memory is never called.
+    const unrecorded = makeHub();
+    const save = await callOn(unrecorded, MEMORY_SAVE_TOOL, page("unrecorded"), { records: false });
+    const search = await callOn(unrecorded, MEMORY_SEARCH_TOOL, { query: "pnpm test" }, { records: false });
+    for (const answer of [save.answer, search.answer])
+      expect(answer).toEqual({ text: UNRECORDED_TOOL_CALL, refused: true });
+    expect(unrecorded.reached).toEqual(["recorded memory_save save-memory", "recorded memory_search search-memory"]);
+    expect(unrecorded.saves.saves()).toEqual([]);
   });
 
   // covers ADR 028 (The memory tools), ADR 014 (the Memory group), PE-008

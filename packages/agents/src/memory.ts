@@ -28,6 +28,7 @@ import {
 } from "@hobbots/domain";
 import { Context, Effect, Option } from "effect";
 import type { CharmTurn } from "./charms.ts";
+import type { HubPlanContext } from "./hub-actions.ts";
 import type { HubToolAnswer, HubTools } from "./runtime.ts";
 
 type Memory<A, E = MemoryUnavailable> = Effect.Effect<A, E>;
@@ -291,7 +292,8 @@ export interface MemoryShareRequest {
   readonly input: string;
   /** The safety preset the turn runs under, which decides whether the share waits for you (ADR 028). */
   readonly preset: SafetyPreset;
-  readonly turn: CharmTurn;
+  /** The turn's ids, as the hub action pipeline gives them to a plan. */
+  readonly turn: HubPlanContext["turn"];
 }
 
 /**
