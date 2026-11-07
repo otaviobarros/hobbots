@@ -90,12 +90,19 @@ test("[TC-UX-221] two Quests in one thread each keep their own ticket under the 
 
   // Each ticket sits under the request that started it, in the order you sent them, once the turn
   // has settled. The order is read from the page in one go, so a scroll between reads cannot skew it.
+  // A ticket is read by what a screen reader hears, leaving out its sprites: a sprite's mark (? or z)
+  // follows its lane live, and the second Quest's lead is woken once more and then stalls (#1081).
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
   const chat = page.getByRole("main", { name: "Chat" });
   const order = () =>
     chat.evaluate((root) => {
+      const heard = (button: Element) => {
+        const copy = button.cloneNode(true) as Element;
+        for (const hidden of copy.querySelectorAll("[aria-hidden]")) hidden.remove();
+        return copy.textContent ?? "";
+      };
       const marks = [...root.querySelectorAll("*")].flatMap((each) => {
-        const ticket = each.tagName === "BUTTON" ? (each.textContent ?? "") : "";
+        const ticket = each.tagName === "BUTTON" ? heard(each) : "";
         const text = each.childElementCount === 0 ? (each.textContent ?? "") : "";
         if (ticket.startsWith("Tidy the notes: ")) return ["ticket 1"];
         if (ticket.startsWith("Write the summary: ")) return ["ticket 2"];
