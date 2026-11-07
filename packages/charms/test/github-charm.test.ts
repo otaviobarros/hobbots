@@ -101,7 +101,7 @@ const access = (folders: ReadonlyArray<string>, readGitHub?: PolicyDecision, git
     sharedFolders: [project],
     hob: {
       ...EMPTY_HOB_POLICY,
-      overrides: readGitHub === undefined ? {} : { "read-github": readGitHub },
+      ...(readGitHub === undefined ? {} : { charms: { overrides: { "github.read": readGitHub } } }),
       ...(githubCharm ? {} : { githubCharm: false }),
     },
     dataFolder: path.join(root, "data"),

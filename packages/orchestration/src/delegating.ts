@@ -8,11 +8,8 @@ import {
   isTerminalTask,
   MilestoneId,
   NoteId,
-  POLICY_OPERATIONS,
-  type PolicyDecision,
   type PolicyOperation,
   type PolicyOverrides,
-  type Quest,
   QuestId,
   questsAbove,
   type Task,
@@ -22,7 +19,7 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import { type Authority, delegatedAuthority, narrowBy, type PathSeparator } from "./authority.ts";
+import { type Authority, delegatedAuthority, narrowBy, operationsOf, type PathSeparator } from "./authority.ts";
 import { cut, firstLine, planNote } from "./briefs.ts";
 import {
   type CallScope,
@@ -186,8 +183,10 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
       const both = narrowBy(own, narrowed.authority, separator);
       // Only the answers the Delegation gives: the member's own preset answers stay its own.
       const overrides = Object.fromEntries(
-        POLICY_OPERATIONS.flatMap((operation) =>
-          narrowed.authority.overrides[operation] === undefined ? [] : [[operation, both.decisions[operation]]],
+        operationsOf(both).flatMap((operation) =>
+          narrowed.authority.overrides[operation] === undefined
+            ? []
+            : [[operation, both.decisions[operation] ?? "deny"]],
         ),
       );
       return { given: { overrides, folders: [...both.folders] }, decisions: both.decisions, lead: lead.folders };

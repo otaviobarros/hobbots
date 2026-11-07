@@ -30,6 +30,7 @@ import {
   EMPTY_HOB_POLICY,
   type GitHubRepository,
   type HobGitHubApp,
+  HobPolicy,
   hobAppBot,
   MessageId,
   type PolicyDecision,
@@ -37,7 +38,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { Effect, Layer, Option, Redacted } from "effect";
+import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -194,9 +195,9 @@ const layer = (w: World, keys: Layer.Layer<HobAppKeys> = HobAppKeysMemory) =>
 /** The hob's GitHub identity switches, each recorded with the grants it revoked. */
 const grantsOf = (w: World) =>
   Layer.succeed(GrantService, {
-    switchGitHub: <A, E, R>(id: AgentId, change: Effect.Effect<A, E, R>) =>
+    switchIdentity: <A, E, R>(_charm: unknown, id: AgentId, change: Effect.Effect<A, E, R>) =>
       Effect.sync(() => void w.revokedGitHub.push(id)).pipe(Effect.andThen(change)),
-    githubIdentity: (id: AgentId) => Effect.sync(() => w.revokedGitHub.filter((each) => each === id).length),
+    identity: (_charm: unknown, id: AgentId) => Effect.sync(() => w.revokedGitHub.filter((each) => each === id).length),
     exclusive: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
   } as unknown as GrantService["Service"]);
 
@@ -1094,7 +1095,8 @@ const accessIn = (
   policy: {
     preset,
     sharedFolders: [folder],
-    hob: { ...EMPTY_HOB_POLICY, overrides },
+    // Charm overrides go apart from the built-in ones, as a stored policy reads.
+    hob: Schema.decodeUnknownSync(HobPolicy)({ ...EMPTY_HOB_POLICY, overrides }),
     dataFolder: join(temp, "data"),
     restrictions: [],
   },
@@ -1211,7 +1213,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
       text: expect.stringContaining("Opened draft pull request #2"),
     });
     expect(outcome.asked).toHaveLength(1);
-    expect(outcome.asked[0]).toMatchObject({ tool: "github_open_pull_request", operation: "open-pull-request" });
+    expect(outcome.asked[0]).toMatchObject({ tool: "github_open_pull_request", operation: "github.open-pull-request" });
     expect(outcome.asked[0]?.arguments.actingAs).toEqual({ _tag: "HobApp", hob: "Frodo", bot });
     expect(outcome.summary[0]?.split("\n").at(-1)).toBe(`As Frodo's app, ${bot}.`);
     expect(outcome.labels).toContain(`Opening a pull request from feat/x as Frodo's app, ${bot}`);
@@ -1280,7 +1282,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
           project.folder,
           "github_comment",
           { number: 1, body: "Never.", key: "p-1" },
-          { overrides: { "comment-github": "deny" } },
+          { overrides: { "github.comment": "deny" } },
         );
         const denied = yield* callAs(
           FRODO,

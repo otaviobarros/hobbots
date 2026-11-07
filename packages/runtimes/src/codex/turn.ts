@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from 
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { type PromptRequest, RuntimeError, type RuntimeEvent, type RuntimeLimitReached } from "@hobbots/agents";
-import type { PolicyOperation, SandboxState } from "@hobbots/domain";
+import type { AnyOperation, SandboxState } from "@hobbots/domain";
 import type { PolicyEngine } from "@hobbots/permissions";
 import { Deferred, type Duration, Effect, Queue, type Scope, Stream } from "effect";
 import { grantedHosts } from "../approval.ts";
@@ -77,7 +77,7 @@ export const TOOLS_CLOSED = "You have no tools in this conversation, so this did
 
 const denied = (
   turn: CodexToolTurn,
-  call: { readonly id: string; readonly tool: string; readonly operation: PolicyOperation; readonly label: string },
+  call: { readonly id: string; readonly tool: string; readonly operation: AnyOperation; readonly label: string },
   targets: ReadonlyArray<string> = [],
 ) => turn.report({ _tag: "ToolDenied", ...call, targets, reason: TOOLS_CLOSED, decidedBy: "policy" });
 

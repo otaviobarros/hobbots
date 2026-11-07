@@ -29,6 +29,7 @@ import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { githubActor, recordedLogin } from "./github-actor.ts";
 import { GitHubApi, type GitHubError, type GitHubWrite } from "./github-api.ts";
+import { GITHUB_CHARM, withGitHubOperations } from "./github-operations.ts";
 
 /**
  * The GitHub Charm's Open pull requests and Comment on GitHub (ADR 020, #324). The hub redacts the
@@ -46,7 +47,12 @@ class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> 
 export const decideCharmWrite =
   (engine: PolicyEngine["Service"], turn: CharmTurn, base: ToolAccess, request: PolicyRequest) =>
   (fresh: ToolAccess | null): Effect.Effect<AskableVerdict> =>
-    decideHubCall(engine, turn.approvals, base, request)(fresh);
+    decideHubCall(
+      engine,
+      turn.approvals,
+      withGitHubOperations(base),
+      request,
+    )(fresh === null ? null : withGitHubOperations(fresh));
 
 /** Fails with the reason when Git would not take `name` as a branch name (ADR 020). */
 export const branchNameCheck = (git: GitPush["Service"], name: string): Effect.Effect<void, string> =>
@@ -314,7 +320,14 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
               recorded: { existing: existing.map((pr) => pr.number) },
               appliedText: `Opened a pull request from ${plan.head} into ${plan.base} in ${slug}.`,
               label: `Opening a pull request from ${input.head} ${githubActorText(actingAs)}`,
-              request: { _tag: "PullRequest", folder, repository: slug, base },
+              request: {
+                _tag: "Charm",
+                charm: GITHUB_CHARM.id,
+                operation: "github.open-pull-request",
+                folder,
+                site: { repository: slug, base },
+                targets: [`github.com/${slug} into ${base}`],
+              },
               send: sendOnceMore(
                 api.openPullRequest(agentId, repository, {
                   head: plan.head,
@@ -391,7 +404,14 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
               recorded: { marker },
               appliedText: `Commented on #${input.number} in ${slug}.`,
               label: `Commenting on #${input.number} ${githubActorText(actingAs)}`,
-              request: { _tag: "GitHubComment", folder, repository: slug, number: input.number },
+              request: {
+                _tag: "Charm",
+                charm: GITHUB_CHARM.id,
+                operation: "github.comment",
+                folder,
+                site: { repository: slug },
+                targets: [`github.com/${slug} #${input.number}`],
+              },
               send: sendOnceMore(
                 api.comment(agentId, repository, input.number, `${body}\n\n${commentMarker(marker)}`),
               ).pipe(Effect.map((result) => outcomeOf(result, (posted) => commentedText(plan, posted.url)))),

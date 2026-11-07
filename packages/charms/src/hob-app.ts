@@ -20,6 +20,7 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } fr
 import { sendToGitHub } from "./github-api.ts";
 import { appJwt } from "./github-app-jwt.ts";
 import { GitHubError } from "./github-error.ts";
+import { GITHUB_CHARM } from "./github-operations.ts";
 import { allPages, GITHUB_HOSTS, GITHUB_PAGE_SIZE, type GitHubHosts } from "./github-sign-in.ts";
 import { type HobAppReconnect, HobAppTokens, makeHobAppTokens } from "./hob-app-tokens.ts";
 import { deleteOutcome, HobAppKeys, type KeychainError } from "./keychain.ts";
@@ -426,7 +427,7 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               return yield* notKept(why, made.slug);
             }
             // What the user allowed the hob to do on GitHub as them is not allowed as its bot (ADR 022).
-            yield* grants.switchGitHub(open.agentId, apps.save(open.agentId, app));
+            yield* grants.switchIdentity(GITHUB_CHARM, open.agentId, apps.save(open.agentId, app));
             yield* tokens.forget(open.agentId);
             yield* Effect.logInfo("A hob's GitHub app was made", { agentId: open.agentId, slug: app.slug });
             return { hobName: open.hobName, app, installUrl: installUrl(app) };
@@ -655,13 +656,13 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
             // The hob acts as the bot until here, then as the user: nothing allowed for its bot runs as
             // them, and no request it asked as the bot saves a grant for them (ADR 022).
             if (problems.length === 0) {
-              yield* grants.switchGitHub(agentId, apps.remove(agentId));
+              yield* grants.switchIdentity(GITHUB_CHARM, agentId, apps.remove(agentId));
               yield* Effect.logInfo("A hob's GitHub app was disconnected", { agentId, slug: app.slug });
               return { deleteUrl: deleteUrl(app.slug), problem: null, keyKept: null };
             }
             // Kept as left over, so the problem and where to delete the app stay shown (ADR 022).
             const left = problems.join(" ");
-            yield* grants.switchGitHub(agentId, apps.leave(agentId, left));
+            yield* grants.switchIdentity(GITHUB_CHARM, agentId, apps.leave(agentId, left));
             yield* Effect.logWarning("A hob's GitHub app was not fully removed", { agentId, slug: app.slug });
             return { deleteUrl: deleteUrl(app.slug), problem: left, keyKept: kept };
           }),

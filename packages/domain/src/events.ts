@@ -308,6 +308,7 @@ export type MessageDelta = typeof MessageDelta.Type;
 
 /** Each journaled event type's payload version, from 1; an incompatible payload change bumps it (ADR 013). */
 export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
+  // A hob's GitHub overrides moved to its Charm overrides under their Charm ids, read from the old names, compatibly.
   AgentUpserted: 1,
   // 2: a thread carries its `sessions` and its own `brain`. 3: its `archivedAt`. Its `pinnedAt` was
   // added with a default, compatibly.
@@ -320,9 +321,11 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   TurnStopRequested: 1,
   TurnStopped: 1,
   // A request's `grantable`, `rules`, `lifetime` and `expiresAt` were added with defaults, compatibly.
+  // The GitHub operations and rules were renamed to Charm ids and `CharmSite`, read from the old ones, compatibly.
   ApprovalRequested: 1,
   ApprovalResolved: 1,
   // A grant's `taskId` replaced its unused `questId`, read as null when absent, compatibly.
+  // The GitHub operations and rules were renamed to Charm ids and `CharmSite`, read from the old ones, compatibly.
   GrantCreated: 1,
   GrantRevoked: 1,
   TaskCreated: 1,

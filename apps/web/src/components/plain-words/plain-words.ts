@@ -1,8 +1,8 @@
 import {
+  type AnyOperation,
   type CommandRecord,
   exactAction,
   type FileChangeKind,
-  type PolicyOperation,
   type ReplyStep,
 } from "@hobbots/domain";
 import { operationLabel } from "../../lib/reply-steps.ts";
@@ -217,7 +217,7 @@ const labelCommand = (label: string): string => label.replace(/^Running\s+/, "")
  * "run check.sh". A call on files names them and a command says what it runs; any other says what
  * the Permissions tab calls it. `command` is the command line of a call that runs one.
  */
-export const actionPhrase = (operation: PolicyOperation, targets: ReadonlyArray<string>, command = ""): string => {
+export const actionPhrase = (operation: AnyOperation, targets: ReadonlyArray<string>, command = ""): string => {
   switch (operation) {
     case "read-files":
     case "edit-files":
@@ -237,7 +237,7 @@ export const actionPhrase = (operation: PolicyOperation, targets: ReadonlyArray<
 
 /** What an approval asks to do, in the words of `actionPhrase`. */
 export const approvalAction = (approval: {
-  readonly operation: PolicyOperation;
+  readonly operation: AnyOperation;
   readonly targets: ReadonlyArray<string>;
   readonly arguments: Readonly<Record<string, unknown>>;
   readonly label: string;
@@ -266,8 +266,15 @@ export const stepDoing = (step: ReplyStep): string => {
     case "delete-files":
       return messages.doing[call.operation]({ what: fileList(call.targets) });
     default:
-      return messages.doing[call.operation];
+      return doingWords(call.operation);
   }
+};
+
+/** A step that runs now, for an operation whose words name no file: its own words, or the Permissions tab's. */
+const doingWords = (operation: AnyOperation): string => {
+  const words: Readonly<Record<string, unknown>> = messages.doing;
+  const own = words[operation];
+  return typeof own === "string" ? own : operationLabel(operation);
 };
 
 /** A step that was stopped before it ran, as a lane says it. */

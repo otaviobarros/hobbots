@@ -1,4 +1,4 @@
-import type { PolicyOperation, ReplyStep } from "@hobbots/domain";
+import type { AnyOperation, ReplyStep } from "@hobbots/domain";
 import { RULES } from "../api/safety.ts";
 
 /**
@@ -9,5 +9,5 @@ export const shownSteps = (steps: ReadonlyArray<ReplyStep>, inProgress: boolean)
   inProgress ? steps : steps.filter((step) => step.kind === "tool");
 
 /** The Permissions tab's name for an operation, so a step and the policy use the same words. */
-export const operationLabel = (operation: PolicyOperation): string =>
+export const operationLabel = (operation: AnyOperation): string =>
   RULES.find((rule) => rule.operation === operation)?.label ?? operation;

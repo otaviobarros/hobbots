@@ -1,19 +1,25 @@
 import { type DeviceRevoked, GrantNotFound, UserSession } from "@hobbots/api";
 import {
   type AgentId,
+  type AnyOperation,
   type ApprovalRequest,
+  type CharmDeclaration,
+  type CharmId,
+  type CharmOperation,
   type Committed,
   type Grant,
   type GrantId,
   type GrantRevokeReason,
   type GrantRule,
   type HobPolicy,
+  hobAnswers,
+  isCharmOperation,
   isLiveGrant,
   isNarrowerOrEqual,
   POLICY_OPERATIONS,
   type PolicyDecision,
-  type PolicyOperation,
   PRESET_DECISIONS,
+  presetDecision,
   ruleOperation,
   type SafetyPreset,
   stableJson,
@@ -42,21 +48,36 @@ export class GrantRepository extends Context.Service<
   }
 >()("@hobbots/agents/GrantRepository") {}
 
-/** The grant rules that allow a GitHub write, which the hob makes under its GitHub identity. */
-const GITHUB_RULES: ReadonlySet<GrantRule["_tag"]> = new Set(["Push", "PullRequest", "GitHubComment"]);
-
-/** Whether a rule allows a GitHub write, so a grant of it belongs to one GitHub identity (ADR 022). */
-export const isGitHubRule = (rule: GrantRule) => GITHUB_RULES.has(rule._tag);
+/**
+ * Whether a rule allows a call `charm` makes as its identity, so a grant of it belongs to one
+ * identity (ADR 022, ADR 031): one of the Charm's operations it declares `actsAsIdentity`, or a
+ * built-in operation it takes over, such as Push for the GitHub Charm.
+ */
+export const actsAsIdentity = (charm: CharmDeclaration, rule: GrantRule): boolean =>
+  rule._tag === "CharmSite"
+    ? rule.charm === charm.id &&
+      charm.operations.some((operation) => operation.id === rule.operation && operation.actsAsIdentity)
+    : charm.takesOver.some((operation) => operation === ruleOperation(rule));
 
 /**
- * The hob's GitHub identity a call was pinned to when it chose its credential (ADR 022), as
- * `GrantService.githubIdentity` counted it then. A request the call asks records it, rather than the
+ * The Charms the hub holds, as they declare themselves to the policy (ADR 031). The hub's composition
+ * provides them; without it no Charm operation is declared, so every Charm call stays closed.
+ */
+export const CharmDeclarations = Context.Reference<ReadonlyArray<CharmDeclaration>>(
+  "@hobbots/agents/CharmDeclarations",
+  { defaultValue: () => [] },
+);
+
+/**
+ * The identity of a Charm a call was pinned to when it chose its credential (ADR 022), as
+ * `GrantService.identity` counted it then. A request the call asks records it, rather than the
  * identity when the request is stored, so a call that began as one identity never asks as the other.
  */
-export const GitHubIdentityPin = Context.Reference<{ readonly agentId: AgentId; readonly identity: number } | null>(
-  "@hobbots/agents/GitHubIdentityPin",
-  { defaultValue: () => null },
-);
+export const CharmIdentityPin = Context.Reference<{
+  readonly agentId: AgentId;
+  readonly charm: CharmId;
+  readonly identity: number;
+} | null>("@hobbots/agents/CharmIdentityPin", { defaultValue: () => null });
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
@@ -80,9 +101,9 @@ const rulePaths = (rule: GrantRule): ReadonlyArray<string> => {
       return rule.paths;
     case "Command":
     case "Push":
-    case "PullRequest":
-    case "GitHubComment":
       return [rule.cwd];
+    case "CharmSite":
+      return rule.cwd === undefined ? [] : [rule.cwd];
     case "Host":
       return [];
   }
@@ -117,9 +138,9 @@ export const ruleOffered = (approval: ApprovalRequest, rule: GrantRule): boolean
 export const ruleHolds = (access: ToolAccess | null, rule: GrantRule): boolean => {
   if (access === null) return false;
   const operation = ruleOperation(rule);
-  const { preset, hob, restrictions } = access.policy;
-  if (PRESET_DECISIONS[preset][operation] !== "ask") return false;
-  const layers = [hob.overrides[operation], ...restrictions.map((restriction) => restriction[operation])];
+  const { preset, hob, restrictions, charmOperations = [] } = access.policy;
+  if (presetDecision(preset, operation, charmOperations) !== "ask") return false;
+  const layers = [hobAnswers(hob)[operation], ...restrictions.map((restriction) => restriction[operation])];
   if (layers.some((decision) => decision !== undefined && decision !== "allow")) return false;
   return rulePaths(rule).every((path) => access.folders.some((folder) => within(path, folder)));
 };
@@ -127,7 +148,7 @@ export const ruleHolds = (access: ToolAccess | null, rule: GrantRule): boolean =
 /** What a change took away: folders that left the hob's folders, and operations narrowed to Ask or Never. */
 export interface AuthorityLoss {
   readonly folders: ReadonlyArray<string>;
-  readonly operations: ReadonlyArray<PolicyOperation>;
+  readonly operations: ReadonlyArray<AnyOperation>;
 }
 
 /** Why a grant no longer holds after the change, or null when it still does (ADR 015). */
@@ -144,26 +165,45 @@ const narrowedTo = (before: PolicyDecision | undefined, after: PolicyDecision | 
   after !== before &&
   (before === undefined || isNarrowerOrEqual(after, before));
 
-/** What a hob's policy change takes away: folders removed or hidden, and overrides narrowed to Ask or Never. */
-export const policyLoss = (before: HobPolicy, after: HobPolicy): AuthorityLoss => ({
-  folders: [
-    ...before.ownFolders.filter((folder) => !after.ownFolders.includes(folder)),
-    ...after.hiddenSharedFolders.filter((folder) => !before.hiddenSharedFolders.includes(folder)),
-  ],
-  operations: POLICY_OPERATIONS.filter((operation) =>
-    narrowedTo(before.overrides[operation], after.overrides[operation]),
-  ),
-});
+/** The Charm operations either policy holds an override for. */
+const charmOverridden = (before: HobPolicy, after: HobPolicy): ReadonlyArray<AnyOperation> =>
+  [...new Set([...Object.keys(hobAnswers(before)), ...Object.keys(hobAnswers(after))])].filter(
+    (operation): operation is AnyOperation => isCharmOperation(operation as AnyOperation),
+  );
 
-/** What a setup change takes away from every hob: shared folders removed, and the preset narrowed to Ask or Never. */
+/** What a hob's policy change takes away: folders removed or hidden, and overrides narrowed to Ask or Never. */
+export const policyLoss = (before: HobPolicy, after: HobPolicy): AuthorityLoss => {
+  const was = hobAnswers(before);
+  const is = hobAnswers(after);
+  return {
+    folders: [
+      ...before.ownFolders.filter((folder) => !after.ownFolders.includes(folder)),
+      ...after.hiddenSharedFolders.filter((folder) => !before.hiddenSharedFolders.includes(folder)),
+    ],
+    operations: [...POLICY_OPERATIONS, ...charmOverridden(before, after)].filter((operation) =>
+      narrowedTo(was[operation], is[operation]),
+    ),
+  };
+};
+
+/**
+ * What a setup change takes away from every hob: shared folders removed, and the preset narrowed to
+ * Ask or Never, for a built-in operation or one of `charmOperations`.
+ */
 export const setupLoss = (
   before: { readonly safetyPreset: SafetyPreset; readonly approvedFolders: ReadonlyArray<string> },
   after: { readonly safetyPreset: SafetyPreset; readonly approvedFolders: ReadonlyArray<string> },
+  charmOperations: ReadonlyArray<CharmOperation>,
 ): AuthorityLoss => ({
   folders: before.approvedFolders.filter((folder) => !after.approvedFolders.includes(folder)),
-  operations: POLICY_OPERATIONS.filter((operation) =>
-    narrowedTo(PRESET_DECISIONS[before.safetyPreset][operation], PRESET_DECISIONS[after.safetyPreset][operation]),
-  ),
+  operations: [
+    ...POLICY_OPERATIONS.filter((operation) =>
+      narrowedTo(PRESET_DECISIONS[before.safetyPreset][operation], PRESET_DECISIONS[after.safetyPreset][operation]),
+    ),
+    ...charmOperations
+      .filter((operation) => narrowedTo(operation.presets[before.safetyPreset], operation.presets[after.safetyPreset]))
+      .map((operation) => operation.id),
+  ],
 });
 
 /**
@@ -196,19 +236,25 @@ export class GrantService extends Context.Service<
     /** Revokes every grant of a hob that retired. */
     readonly revokeForAgent: (agentId: AgentId, reason: GrantRevokeReason) => Effect.Effect<void>;
     /**
-     * Switches the hob's GitHub identity (ADR 022) with `change`, the write that makes the hob act as
-     * its own app or as the user. In one turn of the lock it counts the change, revokes the hob's
-     * grants for GitHub writes (Push, pull requests, comments), then runs `change`: no grant is saved
-     * between them, and none allowed for one identity runs as the other.
+     * Switches the identity `charm` acts as for the hob (ADR 022, ADR 031) with `change`, such as the
+     * write that makes the hob act on GitHub as its own app or as the user. In one turn of the lock it
+     * counts the change, revokes the hob's grants for what the Charm does as its identity (for GitHub:
+     * Push, pull requests, comments), then runs `change`: no grant is saved between them, and none
+     * allowed for one identity runs as the other.
      */
-    readonly switchGitHub: <A, E, R>(agentId: AgentId, change: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+    readonly switchIdentity: <A, E, R>(
+      charm: CharmDeclaration,
+      agentId: AgentId,
+      change: Effect.Effect<A, E, R>,
+    ) => Effect.Effect<A, E, R>;
     /**
-     * How many times the hob's GitHub identity changed since the hub started. A decision saves a grant
-     * for a GitHub write only while it is what it was when the call asking chose its credential,
-     * checked inside `exclusive`, so no grant approved for one identity is saved for the other. Read
-     * inside `exclusive` together with the credential, it names the identity that credential is.
+     * How many times the identity `charm` acts as for the hob changed since the hub started. A decision
+     * saves a grant for a call made as that identity only while it is what it was when the call asking
+     * chose its credential, checked inside `exclusive`, so no grant approved for one identity is saved
+     * for the other. Read inside `exclusive` together with the credential, it names the identity that
+     * credential is.
      */
-    readonly githubIdentity: (agentId: AgentId) => Effect.Effect<number>;
+    readonly identity: (charm: CharmId, agentId: AgentId) => Effect.Effect<number>;
     readonly used: (ids: ReadonlyArray<GrantId>) => Effect.Effect<void>;
     /**
      * Runs `effect` while no revocation for a change runs, so a grant saved inside it is either seen
@@ -224,8 +270,9 @@ export class GrantService extends Context.Service<
       const bus = yield* EventPublisher;
       // Saving grants and revoking them for a change take turns (see `exclusive`).
       const lock = yield* Semaphore.make(1);
-      // Each hob's GitHub identity changes, counted under the lock (see `githubIdentity`).
-      const identities = new Map<AgentId, number>();
+      // Each hob's identity changes per Charm, counted under the lock (see `identity`).
+      const identities = new Map<string, number>();
+      const identityKey = (charm: CharmId, agentId: AgentId) => `${charm}\0${agentId}`;
 
       const liveOf = (grants: ReadonlyArray<Grant>) =>
         Effect.map(nowIso, (now) => grants.filter((grant) => isLiveGrant(grant, now)));
@@ -283,16 +330,18 @@ export class GrantService extends Context.Service<
             ? Effect.void
             : revokeWhere(agentId, (grant) => lostAuthority(grant, loss)),
         revokeForAgent: (agentId, reason) => revokeWhere(agentId, () => reason),
-        switchGitHub: (agentId, change) =>
+        switchIdentity: (charm, agentId, change) =>
           Semaphore.withPermit(
             lock,
             Effect.gen(function* () {
-              identities.set(agentId, (identities.get(agentId) ?? 0) + 1);
-              yield* revokeEach(agentId, (grant) => (isGitHubRule(grant.rule) ? "github-identity" : null));
+              const key = identityKey(charm.id, agentId);
+              identities.set(key, (identities.get(key) ?? 0) + 1);
+              // GitHub is the only Charm with an identity yet, so the reason keeps its stored name.
+              yield* revokeEach(agentId, (grant) => (actsAsIdentity(charm, grant.rule) ? "github-identity" : null));
               return yield* change;
             }),
           ),
-        githubIdentity: (agentId) => Effect.sync(() => identities.get(agentId) ?? 0),
+        identity: (charm, agentId) => Effect.sync(() => identities.get(identityKey(charm, agentId)) ?? 0),
         exclusive: (effect) => Semaphore.withPermit(lock, effect),
         used: (ids) => (ids.length === 0 ? Effect.void : Effect.flatMap(nowIso, (at) => repo.touch(ids, at))),
       });

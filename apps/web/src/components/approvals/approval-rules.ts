@@ -1,4 +1,4 @@
-import type { ApprovalRequest, GrantRule, TaskTree } from "@hobbots/domain";
+import type { AnyOperation, ApprovalRequest, GrantRule, TaskTree } from "@hobbots/domain";
 import { messages } from "../messages.ts";
 
 const copy = messages.approval.rule;
@@ -74,11 +74,25 @@ const rulePhrase = (rule: GrantRule, name: string): string => {
       return copy.host({ name, host: rule.host });
     case "Push":
       return copy.push({ name, branch: rule.branch, remote: rule.remote, folder: rule.cwd });
-    case "PullRequest":
-      return copy.pullRequest({ name, repository: rule.repository, base: rule.base });
-    case "GitHubComment":
-      return copy.comment({ name, repository: rule.repository });
+    case "CharmSite":
+      return charmPhrase(rule, name);
   }
+};
+
+/** A Charm rule in words: the GitHub Charm's own, or the operation and its site for any other. */
+const charmPhrase = (rule: Extract<GrantRule, { readonly _tag: "CharmSite" }>, name: string): string => {
+  const repository = rule.site.repository ?? "";
+  if (rule.operation === "github.open-pull-request") {
+    return copy.pullRequest({ name, repository, base: rule.site.base ?? "" });
+  }
+  if (rule.operation === "github.comment") return copy.comment({ name, repository });
+  return copy.charm({ name, operation: rule.operation, site: Object.values(rule.site).join(" ") });
+};
+
+/** What a call risks, in the card's words; nothing for an operation the card has no words for. */
+export const riskOf = (operation: AnyOperation): string => {
+  const words: Readonly<Record<string, string>> = messages.approval.riskOf;
+  return words[operation] ?? "";
 };
 
 /** Programs whose words name a script that a file in the folder defines, and that file. */

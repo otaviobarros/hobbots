@@ -19,13 +19,14 @@ import {
   type CharmCall,
   EMPTY_HOB_POLICY,
   type GitHubRepository,
+  HobPolicy,
   MessageId,
   type PolicyDecision,
   type SafetyPreset,
   ThreadId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   GitHubApi,
@@ -193,7 +194,8 @@ const accessFor = (preset: SafetyPreset = "balanced", overrides: Record<string, 
   policy: {
     preset,
     sharedFolders: [folder],
-    hob: { ...EMPTY_HOB_POLICY, overrides },
+    // Charm overrides go apart from the built-in ones, as a stored policy reads.
+    hob: Schema.decodeUnknownSync(HobPolicy)({ ...EMPTY_HOB_POLICY, overrides }),
     dataFolder: path.join(root, "data"),
     restrictions: [],
   },
@@ -305,11 +307,19 @@ describe("the GitHub Charm's pull requests and comments", () => {
     expect(asked).toHaveLength(1);
     expect(card).toMatchObject({
       tool: "github_open_pull_request",
-      operation: "open-pull-request",
+      operation: "github.open-pull-request",
       targets: ["github.com/octo/app into main"],
       onceOnly: false,
       grantable: true,
-      rules: [{ _tag: "PullRequest", cwd: folder, repository: "octo/app", base: "main" }],
+      rules: [
+        {
+          _tag: "CharmSite",
+          charm: "github",
+          operation: "github.open-pull-request",
+          cwd: folder,
+          site: { repository: "octo/app", base: "main" },
+        },
+      ],
     });
     expect(card.arguments).toMatchObject({
       head: "feat/x",
@@ -344,10 +354,18 @@ describe("the GitHub Charm's pull requests and comments", () => {
     const [card] = asked as [ApprovalAction];
     expect(card).toMatchObject({
       tool: "github_comment",
-      operation: "comment-github",
+      operation: "github.comment",
       targets: ["github.com/octo/app #8"],
       grantable: true,
-      rules: [{ _tag: "GitHubComment", cwd: folder, repository: "octo/app" }],
+      rules: [
+        {
+          _tag: "CharmSite",
+          charm: "github",
+          operation: "github.comment",
+          cwd: folder,
+          site: { repository: "octo/app" },
+        },
+      ],
     });
     expect(card.arguments).toMatchObject({
       number: 8,
@@ -415,7 +433,7 @@ describe("the GitHub Charm's pull requests and comments", () => {
     const never = await hub.call(
       "github_open_pull_request",
       { head: "feat/x", title: "Never", key: "t-2" },
-      { access: accessFor("trusting", { "open-pull-request": "deny" }), asked },
+      { access: accessFor("trusting", { "github.open-pull-request": "deny" }), asked },
     );
     const denied = await hub.call(
       "github_comment",

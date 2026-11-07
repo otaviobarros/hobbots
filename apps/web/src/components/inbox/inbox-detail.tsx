@@ -2,13 +2,13 @@ import type { SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots
 import {
   type Agent,
   type AgentId,
+  type AnyOperation,
   type ApprovalRequest,
   type BackpackItem,
   exactAction,
   type FailedTask,
   type HubQuestion,
   type MemoryShare,
-  type PolicyOperation,
   type Quest,
   type TaskId,
   type ThreadId,
@@ -144,7 +144,7 @@ function ApprovalDetail({
 }
 
 /** The operations whose exact action is a command line, shown after a prompt sign. */
-const COMMANDS: ReadonlySet<PolicyOperation> = new Set(["run-commands", "local-git", "push"]);
+const COMMANDS: ReadonlySet<AnyOperation> = new Set(["run-commands", "local-git", "push"]);
 
 /** The exact action on the deep ground, with Copy: a command after a `$`, or the address or file as it is. */
 function ActionBlock({ action, command }: { action: string; command: boolean }) {

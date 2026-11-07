@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
-import { PolicyOperation } from "./policy.ts";
+import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { SkillName, TurnSkill, UsedSkill } from "./skills.ts";
 import { ToolOutput } from "./tool-output.ts";
@@ -65,7 +65,7 @@ export type ReplyStepState = typeof ReplyStepState.Type;
 export const ToolCall = Schema.Struct({
   /** The runtime's own name for the tool, such as `Bash` or `Edit`. */
   tool: Schema.String,
-  operation: PolicyOperation,
+  operation: StoredOperation,
   /** The canonical paths, the command's folder, or the remote the call was decided on. */
   targets: Schema.Array(Schema.String),
 });

@@ -1,4 +1,7 @@
+import type { HobPermissions } from "@hobbots/api";
+import { type AgentId, type CharmOverrides, type PolicyOverrides, PRESET_DECISIONS } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
+import { enforcementFixture } from "../test/enforcement.ts";
 import {
   addFolder,
   answersWithin,
@@ -45,16 +48,16 @@ describe("safety presets", () => {
 describe("per-hob rules", () => {
   it("lists every operation the policy decides once", () => {
     expect(RULES.map((r) => r.operation).sort()).toEqual([
-      "comment-github",
       "delete-files",
       "edit-files",
+      "github.comment",
+      "github.open-pull-request",
+      "github.read",
       "local-git",
-      "open-pull-request",
       "outside-folders",
       "propose-skill",
       "push",
       "read-files",
-      "read-github",
       "request-skill",
       "run-commands",
       "save-memory",
@@ -66,8 +69,8 @@ describe("per-hob rules", () => {
   });
 
   it("shows an Ask that Read GitHub cannot give as the Never it acts as", () => {
-    expect(offeredAnswer("read-github", "ask")).toBe("deny");
-    expect(offeredAnswer("read-github", "allow")).toBe("allow");
+    expect(offeredAnswer("github.read", "ask")).toBe("deny");
+    expect(offeredAnswer("github.read", "allow")).toBe("allow");
     expect(offeredAnswer("push", "ask")).toBe("ask");
   });
 
@@ -78,9 +81,29 @@ describe("per-hob rules", () => {
   });
 
   it("drops an override that matches the preset and keeps a narrower one", () => {
-    const narrowed = pickAnswer({}, "run-commands", "ask", "balanced");
-    expect(narrowed).toEqual({ "run-commands": "ask" });
-    expect(pickAnswer({ ...narrowed, push: "deny" }, "run-commands", "allow", "balanced")).toEqual({ push: "deny" });
+    const permissions = (overrides: PolicyOverrides, charms: CharmOverrides = {}): HobPermissions => ({
+      agentId: "pip" as AgentId,
+      configVersion: 1,
+      preset: "balanced",
+      sharedFolders: [],
+      policy: { ownFolders: [], hiddenSharedFolders: [], overrides, charms: { overrides: charms } },
+      folders: [],
+      decisions: PRESET_DECISIONS.balanced,
+      presets: { ...PRESET_DECISIONS.balanced, "github.comment": "ask" },
+      enforcement: enforcementFixture(),
+    });
+    const narrowed = pickAnswer(permissions({}), "run-commands", "ask");
+    expect(narrowed).toEqual({ overrides: { "run-commands": "ask" } });
+    expect(pickAnswer(permissions({ "run-commands": "ask", push: "deny" }), "run-commands", "allow")).toEqual({
+      overrides: { push: "deny" },
+    });
+    // A Charm's operation is saved with the hob's Charm overrides, apart from the built-in ones.
+    expect(pickAnswer(permissions({ push: "deny" }), "github.comment", "deny")).toEqual({
+      charms: { overrides: { "github.comment": "deny" } },
+    });
+    expect(pickAnswer(permissions({}, { "github.comment": "deny" }), "github.comment", "ask")).toEqual({
+      charms: { overrides: {} },
+    });
   });
 
   it("marks deleting checked, and pushing checked while commands and the web are both allowed", () => {
@@ -92,9 +115,9 @@ describe("per-hob rules", () => {
       "local-git": "allow",
       push: "ask",
       "use-web": "allow",
-      "read-github": "allow",
-      "open-pull-request": "ask",
-      "comment-github": "ask",
+      "github.read": "allow",
+      "github.open-pull-request": "ask",
+      "github.comment": "ask",
       "outside-folders": "deny",
       "search-memory": "allow",
       "save-memory": "allow",
@@ -119,9 +142,9 @@ describe("per-hob rules", () => {
       "local-git": "allow",
       push: "ask",
       "use-web": "allow",
-      "read-github": "allow",
-      "open-pull-request": "ask",
-      "comment-github": "ask",
+      "github.read": "allow",
+      "github.open-pull-request": "ask",
+      "github.comment": "ask",
       "outside-folders": "deny",
       "search-memory": "allow",
       "save-memory": "allow",
