@@ -13,6 +13,7 @@ import {
   PermissionSummary,
   RuntimeAdapter,
 } from "@hobbots/agents";
+import { roleFields } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -199,7 +200,35 @@ describe("skills routes", () => {
     expect(read.body.instructions).toBe(
       "---\nname: release\ndescription: Use when releasing.\n---\n\nTag, then push.\n",
     );
-    const stale = await request("POST", `/api/skills/${skill.id}/edits`, { ...edit, base: "0".repeat(64) });
-    expect(stale.status).toBe(404);
+    const missing = await request("POST", `/api/skills/${skill.id}/edits`, { ...edit, base: "0".repeat(64) });
+    expect(missing.status).toBe(404);
+
+    // An edit made from r1 after r2 was saved is refused, and saves nothing: r2 stays the newest.
+    const stale = await request("POST", `/api/skills/${skill.id}/edits`, { ...edit, instructions: "Only tag." });
+    expect(stale.status).toBe(409);
+    expect(stale.body).toMatchObject({ _tag: "SkillEditStale", latest: edited.body.revision.hash });
+    const after = await request("GET", `/api/skills/${skill.id}`);
+    expect(after.body.skill).toMatchObject({ revisions: 2, latest: edited.body.revision.hash });
+  });
+
+  // covers ADR 029 (Scopes, The Skills page), #1062
+  it("[TC-AG-148] lists the projects a skill can go to: those hobs work in, before any skill is given to them", async () => {
+    const site = join(await mkdtemp(join(tmpdir(), "skills-")), "Site");
+    await mkdir(site);
+    expect((await request("GET", "/api/skills")).body.projects).toEqual([]);
+    await request("PATCH", "/api/setup", { safetyPreset: "balanced", approvedFolders: [site] });
+    const hob = {
+      name: "Wren",
+      ...roleFields("writer"),
+      lookSeed: 7,
+      lookColor: "moss",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+    };
+    expect((await request("POST", "/api/agents", hob)).status).toBe(200);
+    // A folder with no Git remote is its own project, by its name.
+    expect((await request("GET", "/api/skills")).body.projects).toEqual(["site"]);
   });
 });

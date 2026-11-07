@@ -74,6 +74,7 @@ const list = (overrides: Partial<SkillsList> = {}): SkillsList => ({
   skills: [],
   sources: [],
   assignments: [],
+  projects: [],
   agentsFolder: { path: null, problems: [] },
   ...overrides,
 });

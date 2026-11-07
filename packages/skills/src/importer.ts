@@ -4,6 +4,7 @@ import {
   type SkillDropped,
   type SkillFlag,
   type SkillId,
+  type SkillMovedOn,
   type SkillName,
   SkillNameChanged,
   SkillNameTaken,
@@ -11,6 +12,7 @@ import {
   type SkillOrigin,
   type SkillRefused,
   type SkillRevisionHash,
+  SkillSourceChanged,
   SkillSourceUnreadable,
 } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
@@ -64,12 +66,26 @@ export interface SkillScan {
 export interface SkillImportOptions {
   /** The folders to take, from a scan; all of them when absent. */
   readonly folders?: ReadonlyArray<string>;
+  /**
+   * What a scan found in each folder taken, by content hash: the import fails with `SkillSourceChanged`
+   * when the source now holds anything else, so only what you looked at is added.
+   */
+  readonly scanned?: ReadonlyMap<string, SkillRevisionHash>;
   /** The skill the one folder taken is a new revision of; a new skill when absent. */
   readonly skillId?: SkillId;
+  /** The revision of `skillId` the new one was made from; the import fails once the skill's newest is another. */
+  readonly after?: SkillRevisionHash;
   readonly by: SkillBy;
 }
 
-export type SkillImportError = SkillSourceUnreadable | SkillRefused | SkillNotFound | SkillNameTaken | SkillNameChanged;
+export type SkillImportError =
+  | SkillSourceUnreadable
+  | SkillRefused
+  | SkillNotFound
+  | SkillNameTaken
+  | SkillNameChanged
+  | SkillMovedOn
+  | SkillSourceChanged;
 
 export interface SkillImporterShape {
   /** Lists the skills a source holds, checked, writing nothing. */
@@ -261,6 +277,11 @@ export const SkillImporterLive = Layer.effect(
         Effect.gen(function* () {
           const tree = yield* openTree(source);
           const chosen = yield* picked(yield* checkAll(tree), options);
+          if (options.scanned !== undefined) {
+            const scanned = options.scanned;
+            const moved = chosen.find(({ skill }) => scanned.get(skill.folder) !== skill.hash);
+            if (moved !== undefined) return yield* new SkillSourceChanged({ folder: moved.skill.folder });
+          }
           yield* Effect.forEach(chosen, ({ skill }) => checkName(skill, options.skillId), { discard: true });
           return yield* Effect.forEach(chosen, ({ skill, locked }) =>
             Effect.gen(function* () {
@@ -278,6 +299,7 @@ export const SkillImporterLive = Layer.effect(
                 path: locked?.url != null ? locked.path : skill.folder === "" ? null : skill.folder,
                 label: skill.label,
                 addedBy: options.by,
+                ...(options.after === undefined ? {} : { after: options.after }),
               });
               yield* announce(committed.entries);
               return committed.value;

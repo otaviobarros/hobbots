@@ -7,6 +7,7 @@ import {
   HobbotsRepository,
   hobSkills,
   MemoryProjects,
+  memoryActorFor,
   PermissionSummary,
   SkillFiles,
   SkillLibrary,
@@ -15,14 +16,25 @@ import {
 import {
   HobbotsApi,
   SKILL_FILE_SHOWN_MAX,
+  SkillEditStale,
   SkillImportRefused,
   SkillMissing,
   SkillNameConflict,
+  SkillScanOutdated,
   SkillSourceNotRead,
   type SkillSourcePayload,
   SkillStillAssigned,
 } from "@hobbots/api";
-import type { AgentId, Committed, SkillBy, SkillId, SkillNotFound, SkillRevisionHash } from "@hobbots/domain";
+import type {
+  Agent,
+  AgentId,
+  Committed,
+  SkillAssignment,
+  SkillBy,
+  SkillId,
+  SkillNotFound,
+  SkillRevisionHash,
+} from "@hobbots/domain";
 import {
   AgentsFolder,
   AgentsFolderLive,
@@ -61,6 +73,10 @@ const importError = (error: SkillImportError) => {
       return new SkillNameConflict({ name: error.name, skillId: error.skillId });
     case "SkillNameChanged":
       return new SkillNameConflict({ name: error.given, skillId: error.skillId });
+    case "SkillMovedOn":
+      return new SkillEditStale({ skillId: error.skillId, latest: error.latest });
+    case "SkillSourceChanged":
+      return new SkillScanOutdated({ folder: error.folder });
   }
 };
 
@@ -80,7 +96,14 @@ const textOf = (bytes: Uint8Array): string | null => {
 
 /** A hub built without the library, as most of the server's tests are: no skills, and nothing to import into. */
 const libraryOff = {
-  list: () => Effect.succeed({ skills: [], sources: [], assignments: [], agentsFolder: { path: null, problems: [] } }),
+  list: () =>
+    Effect.succeed({
+      skills: [],
+      sources: [],
+      assignments: [],
+      projects: [],
+      agentsFolder: { path: null, problems: [] },
+    }),
   get: ({ params }: { readonly params: { readonly skillId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.skillId })),
   revision: ({ params }: { readonly params: { readonly hash: string } }) =>
@@ -92,7 +115,13 @@ const libraryOff = {
   revise: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   edit: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   syncAgentsFolder: () =>
-    Effect.succeed({ skills: [], sources: [], assignments: [], agentsFolder: { path: null, problems: [] } }),
+    Effect.succeed({
+      skills: [],
+      sources: [],
+      assignments: [],
+      projects: [],
+      agentsFolder: { path: null, problems: [] },
+    }),
   remove: ({ params }: { readonly params: { readonly skillId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.skillId })),
   rollOut: ({ params }: { readonly params: { readonly skillId: string } }) =>
@@ -139,26 +168,6 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
     const agentsFolder = yield* Effect.serviceOption(AgentsFolder);
     const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a skill change");
 
-    const list = Effect.gen(function* () {
-      const problems = Option.isSome(agentsFolder) ? yield* agentsFolder.value.problems : [];
-      return {
-        skills: yield* library.list,
-        sources: yield* library.sources,
-        assignments: yield* library.assignments(),
-        agentsFolder: {
-          path: Option.isSome(agentsFolder) ? agentsFolder.value.path : null,
-          problems: problems.map((problem) => ({
-            folder: problem.folder,
-            check: problem.refusal?.check ?? null,
-            message:
-              problem.unreadable ??
-              problem.refusal?.message ??
-              `The library already has a skill named ${problem.takenBy ?? problem.folder}.`,
-          })),
-        },
-      };
-    });
-
     const repo = yield* Effect.serviceOption(HobbotsRepository);
     const permissions = yield* Effect.serviceOption(PermissionSummary);
     const projects = yield* Effect.serviceOption(MemoryProjects);
@@ -173,15 +182,18 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           Effect.map((committed) => committed.value),
         ),
       );
+    /** The folders a hob works in now. */
+    const foldersOf = (agent: Agent) =>
+      Option.isSome(permissions)
+        ? Effect.map(permissions.value.of(agent), (summary) => summary.folders)
+        : Effect.succeed(agent.policy.ownFolders);
     // A hob's skills as its next turn would get them, in the folders it works in now.
     const hobView = (agentId: AgentId) =>
       Effect.gen(function* () {
         const found = yield* hobOf(agentId);
         if (Option.isNone(found)) return yield* new SkillMissing({ id: agentId });
         const agent = found.value;
-        const folders = Option.isSome(permissions)
-          ? (yield* permissions.value.of(agent)).folders
-          : agent.policy.ownFolders;
+        const folders = yield* foldersOf(agent);
         const resolved = yield* hobSkills(library, projects, { agentId, policy: agent.policy, folders });
         return {
           agentId,
@@ -189,6 +201,41 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           optedOut: (yield* library.optOuts(agentId)).map((one) => one.skillId),
         };
       });
+
+    /** The projects hobs that are not retired work in now, as their turns resolve them, and those `assignments` reach. */
+    const projectsNow = (assignments: ReadonlyArray<SkillAssignment>) =>
+      Effect.gen(function* () {
+        const hobs = Option.isSome(repo) ? yield* repo.value.listAgentsWithStatus(["active", "paused"]) : [];
+        const reached = yield* Effect.forEach(hobs, (agent) =>
+          Effect.gen(function* () {
+            return (yield* memoryActorFor(projects, agent.id, yield* foldersOf(agent))).projects;
+          }),
+        );
+        const given = assignments.flatMap((one) => (one.scope._tag === "Project" ? [one.scope.identity] : []));
+        return [...new Set([...reached.flat(), ...given])].sort();
+      });
+
+    const list = Effect.gen(function* () {
+      const problems = Option.isSome(agentsFolder) ? yield* agentsFolder.value.problems : [];
+      const assignments = yield* library.assignments();
+      return {
+        skills: yield* library.list,
+        sources: yield* library.sources,
+        assignments,
+        projects: yield* projectsNow(assignments),
+        agentsFolder: {
+          path: Option.isSome(agentsFolder) ? agentsFolder.value.path : null,
+          problems: problems.map((problem) => ({
+            folder: problem.folder,
+            check: problem.refusal?.check ?? null,
+            message:
+              problem.unreadable ??
+              problem.refusal?.message ??
+              `The library already has a skill named ${problem.takenBy ?? problem.folder}.`,
+          })),
+        },
+      };
+    });
 
     const skillOf = (skillId: Parameters<typeof library.get>[0]) =>
       Effect.flatMap(library.get(skillId), (skill) =>
@@ -201,9 +248,13 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
      * in the middle of, and content already rolled out, or no longer the newest, moves none, so a
      * rollback stays.
      */
-    const revised = (skillId: SkillId, source: SkillImportSource, folders: { readonly folders?: Array<string> }) =>
+    const revised = (
+      skillId: SkillId,
+      source: SkillImportSource,
+      options: { readonly folders?: Array<string>; readonly after?: SkillRevisionHash },
+    ) =>
       Effect.gen(function* () {
-        const [one] = yield* importer.add(source, { by: YOU, skillId, ...folders }).pipe(Effect.mapError(importError));
+        const [one] = yield* importer.add(source, { by: YOU, skillId, ...options }).pipe(Effect.mapError(importError));
         if (one === undefined) return yield* new SkillMissing({ id: skillId });
         const rolledOut = yield* missing(rollOutAll(library, announce, skillId, one.revision.hash, "pending"));
         return { ...one, rolledOut };
@@ -253,6 +304,9 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           .add(sourceOf(payload.source), {
             by: YOU,
             ...(payload.folders === undefined ? {} : { folders: payload.folders }),
+            ...(payload.scanned === undefined
+              ? {}
+              : { scanned: new Map(payload.scanned.map((one) => [one.folder, one.hash])) }),
           })
           .pipe(
             Effect.map((imported) => ({ imported })),
@@ -314,7 +368,8 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           if (changed !== null) yield* announce(changed.entries);
           return yield* hobView(params.agentId);
         }),
-      // An edit in Hobbots: `base`'s files with another description and instructions, rolled out like any revision.
+      // An edit in Hobbots: `base`'s files with another description and instructions, rolled out like any
+      // revision. It is saved only while `base` is still the newest, checked as the revision is written.
       edit: ({ params, payload }) =>
         Effect.gen(function* () {
           const skill = yield* skillOf(params.skillId);
@@ -322,7 +377,8 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           const folder = yield* files.folder(payload.base);
           if (base === null || folder === null) return yield* new SkillMissing({ id: payload.base });
           const { description, instructions } = payload;
-          return yield* revised(skill.id, { _tag: "Edited", folder, description, instructions }, {});
+          const source = { _tag: "Edited", folder, description, instructions } as const;
+          return yield* revised(skill.id, source, { after: payload.base });
         }),
       syncAgentsFolder: () =>
         Effect.gen(function* () {

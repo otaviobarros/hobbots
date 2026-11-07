@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile, stat } from "node:fs/promises";
+import { lstat, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SkillFiles, SkillLibrary } from "@hobbots/agents";
 import { SkillName } from "@hobbots/domain";
@@ -369,6 +369,42 @@ describe("skill import", () => {
         // The same edit again is the revision it already made.
         const [again] = yield* importer.add(edit, { ...you, skillId: first.skill.id });
         expect(again).toMatchObject({ added: false, revision: { number: 2 } });
+      }),
+    );
+  });
+
+  // covers ADR 029 (Import, Storage and revisions), #1062
+  it("[TC-AG-147] adds only what was looked at: a source that changed since its scan, or an edit of an older revision, writes nothing", async () => {
+    const { layer } = await importerLayer();
+    const folder = await folderOf({ "SKILL.md": skillMd("release") });
+    await runWith(layer)(
+      Effect.gen(function* () {
+        const importer = yield* SkillImporter;
+        const library = yield* SkillLibrary;
+        const source = { _tag: "Folder", path: folder } as const;
+        const [seen] = (yield* importer.scan(source)).candidates;
+        if (seen?.hash == null) return expect.unreachable();
+        const scanned = new Map([[seen.folder, seen.hash]]);
+        // The folder changes between Look and Import: nothing is added.
+        yield* Effect.promise(() => writeFile(join(folder, "SKILL.md"), `${skillMd("release")}\nAnd push.\n`));
+        const changed = yield* Effect.flip(importer.add(source, { ...you, scanned }));
+        expect(changed).toMatchObject({ _tag: "SkillSourceChanged", folder: seen.folder });
+        expect(yield* library.list).toEqual([]);
+        // What a new scan found is added.
+        const [now] = (yield* importer.scan(source)).candidates;
+        if (now?.hash == null) return expect.unreachable();
+        const [first] = yield* importer.add(source, { ...you, scanned: new Map([[now.folder, now.hash]]) });
+        if (first === undefined) return expect.unreachable();
+        // An edit made from r1 after r2 was saved is refused, and r2 stays the newest.
+        const base = (yield* (yield* SkillFiles).folder(first.revision.hash)) ?? "";
+        const edit = (instructions: string) =>
+          ({ _tag: "Edited", folder: base, description: "Releases.", instructions }) as const;
+        const after = first.revision.hash;
+        const [second] = yield* importer.add(edit("Tag it."), { ...you, skillId: first.skill.id, after });
+        expect(second?.revision.number).toBe(2);
+        const stale = yield* Effect.flip(importer.add(edit("Push it."), { ...you, skillId: first.skill.id, after }));
+        expect(stale).toMatchObject({ _tag: "SkillMovedOn", latest: second?.revision.hash });
+        expect(yield* library.get(first.skill.id)).toMatchObject({ revisions: 2, latest: second?.revision.hash });
       }),
     );
   });

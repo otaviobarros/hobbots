@@ -303,6 +303,17 @@ export class SkillNameChanged extends Schema.TaggedError<SkillNameChanged>()("Sk
   given: SkillName,
 }) {}
 
+/** A source no longer holds what a scan of it found in `folder`, such as a branch that moved on since. */
+export class SkillSourceChanged extends Schema.TaggedError<SkillSourceChanged>()("SkillSourceChanged", {
+  folder: Schema.String,
+}) {}
+
+/** A revision made from one that is no longer the skill's newest: `latest` is, now. */
+export class SkillMovedOn extends Schema.TaggedError<SkillMovedOn>()("SkillMovedOn", {
+  skillId: SkillId,
+  latest: SkillRevisionHash,
+}) {}
+
 /** A skill something still assigns cannot be removed; `assignments` says who uses it. */
 export class SkillInUse extends Schema.TaggedError<SkillInUse>()("SkillInUse", {
   skillId: SkillId,

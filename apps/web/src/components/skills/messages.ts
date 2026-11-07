@@ -260,10 +260,14 @@ export const messages = {
     cancel: "Cancel",
     unchanged: "Nothing changed yet.",
     added: ({ name }: { name: string }) => `Added ${name} as r1. No hob has it yet.`,
+    addedGiven: ({ name, who }: { name: string; who: string }) =>
+      `Added ${name} as r1. ${who} gets it from the next chat.`,
     saved: ({ rev }: { rev: string }) => `Saved ${rev}. No hob moved to it yet.`,
     same: ({ rev }: { rev: string }) => `That is ${rev} already, so nothing new was saved.`,
     taken: "Your library has a skill of that name. Pick another name, or edit that one.",
     failed: "It was not saved. Your text is still here; try again.",
+    stale:
+      "A newer revision was saved while you edited, so this was not saved. Your text is still here: copy it, then edit the newest revision.",
   },
   giveChoice: {
     legend: "Give it to",
@@ -272,6 +276,8 @@ export const messages = {
     nobodySub: "Library only",
     everyone: "Everyone",
     everyoneSub: "Every hob",
+    project: ({ name }: { name: string }) => `The ${name} project`,
+    projectSub: "Hobs in its folders",
     hobSub: "This hob only",
   },
   rollout: {
@@ -344,6 +350,7 @@ export const messages = {
       `Imported ${skills(count)} as r1. ${who} gets ${plural(count, { one: "it", other: "them" })} from the next chat.`,
     refusedRule: ({ path, rule }: { path: string; rule: string }) => `${path}: ${rule}`,
     failed: "Nothing was imported. Try again.",
+    moved: "The source changed since you looked, so nothing was imported. Look again to see what it holds now.",
     taken: ({ name }: { name: string }) =>
       `Your library already has ${name}. Open it and add the new content as a revision there.`,
   },

@@ -85,7 +85,8 @@ function Group({ group, hobs, now }: { group: SkillGroup; hobs: HobDirectory; no
 }
 
 /** What deserves a look: skills in `~/.agents/skills` the hub did not take, and why. */
-function WorthALook({ list }: { list: SkillsList }) {
+/** What `~/.agents/skills` held that was not added, and why: shown on an empty library too. */
+export function WorthALook({ list }: { list: SkillsList }) {
   const problems = list.agentsFolder.problems;
   if (problems.length === 0) return null;
   return (

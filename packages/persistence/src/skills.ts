@@ -11,6 +11,7 @@ import {
   SkillFlag,
   SkillId,
   SkillInUse,
+  SkillMovedOn,
   type SkillName,
   SkillNameChanged,
   SkillNameTaken,
@@ -270,6 +271,9 @@ export const SkillLibraryLive = Layer.effect(
         }
         const skill = yield* skillRow(skillId);
         if (skill === null) return yield* new SkillNotFound({ id: skillId });
+        if (input.after !== undefined && skill.latest !== input.after) {
+          return yield* new SkillMovedOn({ skillId: skill.id, latest: skill.latest });
+        }
         const same = yield* revisionRow(skill.id, input.hash);
         if (same !== null) return { _tag: "Same" as const, skill, revision: same };
         if (skill.name !== input.name) {
@@ -281,7 +285,7 @@ export const SkillLibraryLive = Layer.effect(
     const addRevision = (skillId: SkillId | null, input: SkillRevisionInput) =>
       change<
         { skill: Skill; revision: SkillRevision; added: boolean },
-        SkillNotFound | SkillNameTaken | SkillNameChanged | SqlError.SqlError
+        SkillNotFound | SkillNameTaken | SkillNameChanged | SkillMovedOn | SqlError.SqlError
       >((first) =>
         Effect.gen(function* () {
           const target = yield* targetOf(skillId, input);

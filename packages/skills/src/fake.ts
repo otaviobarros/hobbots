@@ -6,6 +6,7 @@ import {
   SkillAssignmentId,
   SkillId,
   SkillInUse,
+  SkillMovedOn,
   SkillNameChanged,
   SkillNameTaken,
   SkillNotFound,
@@ -63,6 +64,9 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
       const target = skillId === null ? named(input.name) : (skills.get(skillId) ?? null);
       if (skillId !== null && target === null) return yield* new SkillNotFound({ id: skillId });
       if (target === null) return { _tag: "Next" as const, skill: null };
+      if (skillId !== null && input.after !== undefined && target.latest !== input.after) {
+        return yield* new SkillMovedOn({ skillId: target.id, latest: target.latest });
+      }
       const same = revisionOf(target.id, input.hash);
       if (same !== null) return { _tag: "Same" as const, skill: target, revision: same };
       if (skillId === null) return yield* new SkillNameTaken({ name: input.name, skillId: target.id });

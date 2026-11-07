@@ -52,8 +52,11 @@ export const skillFileQuery = (skillId: SkillId, hash: SkillRevisionHash, path: 
 export const scanSkills = (source: SkillSourcePayload) => call((c) => c.skills.scan({ payload: { source } }));
 
 /** Adds the picked folders of a source to the library, each as a new skill. */
-export const importSkills = (input: { source: SkillSourcePayload; folders?: ReadonlyArray<string> }) =>
-  call((c) => c.skills.import({ payload: input }));
+export const importSkills = (input: {
+  source: SkillSourcePayload;
+  folders?: ReadonlyArray<string>;
+  scanned?: ReadonlyArray<{ folder: string; hash: SkillRevisionHash }>;
+}) => call((c) => c.skills.import({ payload: input }));
 
 /** A new revision of a skill, from an edit of `base` in Hobbots. */
 export const editSkill = (input: {

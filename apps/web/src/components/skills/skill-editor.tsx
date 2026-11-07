@@ -5,7 +5,7 @@ import { Switch } from "@hobbots/ui/components/switch";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { skillQuery, skillRevisionQuery } from "../../api/skills.ts";
+import { skillQuery, skillRevisionQuery, skillsErrorTag } from "../../api/skills.ts";
 import { messages } from "./messages.ts";
 import { DescriptionField, EditorFooter, InstructionsField } from "./skill-fields.tsx";
 import type { Say } from "./skills-flash.ts";
@@ -13,6 +13,7 @@ import {
   descriptionState,
   type HobDirectory,
   instructionsOf,
+  numberOfPin,
   scopeName,
   skillsSearchOf,
   skillTitle,
@@ -57,7 +58,11 @@ function RollOut({
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="text-ui text-text-strong">{who}</span>
                 <span className="text-meta text-label">
-                  {on ? copy.rollout.follows : copy.rollout.held({ rev: now })}
+                  {on
+                    ? copy.rollout.follows
+                    : copy.rollout.held({
+                        rev: skillRevisionLabel({ number: numberOfPin(detail.revisions, assignment.pin) }),
+                      })}
                 </span>
               </span>
               <Switch
@@ -106,7 +111,7 @@ function EditForm({
   const [moving, setMoving] = useState<ReadonlySet<SkillAssignmentId>>(
     () => new Set(detail.assignments.filter((one) => !one.held).map((one) => one.id)),
   );
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const title = skillTitle(skill.name);
   const next = skillRevisionLabel({ number: skill.revisions + 1 });
   const back = skillView(skill.id);
@@ -120,7 +125,7 @@ function EditForm({
       onSubmit={(event) => {
         event.preventDefault();
         if (!valid || pending) return;
-        setFailed(false);
+        setFailure(null);
         saveEdit(writes, detail, moving, { description: description.trim(), instructions: body })
           .then((saved) => {
             const rev = skillRevisionLabel(saved.revision);
@@ -130,7 +135,9 @@ function EditForm({
             say({ tone: "done", message }, back);
             void navigate({ to: "/skills", search: skillsSearchOf(back) });
           })
-          .catch(() => setFailed(true));
+          .catch((error: unknown) =>
+            setFailure(skillsErrorTag(error) === "SkillEditStale" ? copy.editor.stale : copy.editor.failed),
+          );
       }}
     >
       <header className="flex flex-col gap-1">
@@ -160,7 +167,7 @@ function EditForm({
         />
       )}
       <EditorFooter
-        failure={failed ? copy.editor.failed : null}
+        failure={failure}
         saveLabel={pending ? copy.editor.saving : copy.rollout.save({ count: moving.size, rev: next })}
         disabled={!valid || pending}
         back={back}

@@ -11,6 +11,7 @@ import type {
   SkillFlag,
   SkillId,
   SkillInUse,
+  SkillMovedOn,
   SkillName,
   SkillNameChanged,
   SkillNameTaken,
@@ -46,6 +47,8 @@ export interface SkillRevisionInput {
   readonly path: string | null;
   readonly label: string | null;
   readonly addedBy: SkillBy;
+  /** The revision this one was made from: adding it fails with `SkillMovedOn` once the skill's newest is another. */
+  readonly after?: SkillRevisionHash;
 }
 
 /**
@@ -84,12 +87,13 @@ export interface SkillLibraryShape {
    * Adds `input` as the newest revision of skill `skillId`, or as the first of a new skill when null.
    * Content the skill already has answers that revision, unchanged, and a new skill whose content a
    * skill of that name already has answers that one. Otherwise a new skill fails on a name the
-   * library has (`SkillNameTaken`), and a revision on a name that is not its skill's (`SkillNameChanged`).
+   * library has (`SkillNameTaken`), and a revision on a name that is not its skill's (`SkillNameChanged`)
+   * or made from a revision that is no longer the newest (`SkillMovedOn`), checked as it is written.
    */
   readonly addRevision: (
     skillId: SkillId | null,
     input: SkillRevisionInput,
-  ) => Library<Committed<SkillRevisionAdded>, SkillNotFound | SkillNameTaken | SkillNameChanged>;
+  ) => Library<Committed<SkillRevisionAdded>, SkillNotFound | SkillNameTaken | SkillNameChanged | SkillMovedOn>;
   /** Every assignment, or a skill's. */
   readonly assignments: (skillId?: SkillId) => Library<ReadonlyArray<SkillAssignment>>;
   /** Assigns a skill to a scope, or changes its assignment there; a skill has one per scope. */

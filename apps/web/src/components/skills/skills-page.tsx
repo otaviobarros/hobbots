@@ -11,7 +11,7 @@ import { type Say, useFlash } from "./skills-flash.ts";
 import { SkillsImport } from "./skills-import.tsx";
 import { type SkillsSearch, type SkillsView, skillsSearchOf, skillsViewOf } from "./skills-model.ts";
 import { SkillsNav } from "./skills-nav.tsx";
-import { SkillsOverview } from "./skills-overview.tsx";
+import { SkillsOverview, WorthALook } from "./skills-overview.tsx";
 import { SkillsEmpty, SkillsFailed, SkillsLoading, SkillsScope, SkillsSearchResults } from "./skills-views.tsx";
 import { type SkillsReads, useSkills } from "./use-skills.ts";
 
@@ -40,8 +40,10 @@ const headLine = (reads: SkillsReads) => {
 
 /** The view's body: the editors and Add a skill open whatever the library holds; the rest read it. */
 function ViewBody({ view, reads, say, now }: { view: SkillsView; reads: SkillsReads; say: Say; now: Date }) {
-  if (view._tag === "Add") return <SkillsImport from={view.from} active={reads.active} hobs={reads.hobs} say={say} />;
-  if (view._tag === "New") return <SkillNew active={reads.active} say={say} />;
+  const projects = reads.list.data?.projects ?? [];
+  if (view._tag === "Add")
+    return <SkillsImport from={view.from} active={reads.active} projects={projects} hobs={reads.hobs} say={say} />;
+  if (view._tag === "New") return <SkillNew active={reads.active} projects={projects} hobs={reads.hobs} say={say} />;
   if (view._tag === "Edit") return <SkillEditor skillId={view.skillId} hobs={reads.hobs} say={say} />;
   const list = reads.list.data;
   if (list === undefined) {
@@ -59,7 +61,14 @@ function ViewBody({ view, reads, say, now }: { view: SkillsView; reads: SkillsRe
     case "Scope":
       return <SkillsScope scope={view.scope} list={list} hobs={reads.hobs} now={now} />;
     case "Overview":
-      return list.skills.length === 0 ? <SkillsEmpty /> : <SkillsOverview list={list} hobs={reads.hobs} now={now} />;
+      return list.skills.length === 0 ? (
+        <div className="flex max-w-[760px] flex-col gap-5">
+          <SkillsEmpty />
+          <WorthALook list={list} />
+        </div>
+      ) : (
+        <SkillsOverview list={list} hobs={reads.hobs} now={now} />
+      );
   }
 }
 

@@ -1,10 +1,11 @@
-import { type Agent, memoryScopeKey, type SkillScope } from "@hobbots/domain";
+import { type Agent, type MemoryProjectIdentity, memoryScopeKey, type SkillScope } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { messages } from "./messages.ts";
+import { projectName } from "./skills-model.ts";
 
 const copy = messages;
 
-/** Who a new skill goes to: nobody yet, Everyone, or one hob. */
+/** Who a new skill goes to: nobody yet, Everyone, a project, or one hob. */
 export type GiveTo = SkillScope | null;
 
 const keyOf = (give: GiveTo) => (give === null ? "none" : memoryScopeKey(give));
@@ -14,16 +15,23 @@ export function GiveChoice({
   value,
   onChange,
   active,
+  projects,
   many = false,
 }: {
   value: GiveTo;
   onChange: (give: GiveTo) => void;
   active: ReadonlyArray<Agent>;
+  projects: ReadonlyArray<MemoryProjectIdentity>;
   many?: boolean;
 }) {
   const options: ReadonlyArray<{ give: GiveTo; label: string; sub: string }> = [
     { give: null, label: copy.giveChoice.nobody, sub: copy.giveChoice.nobodySub },
     { give: { _tag: "Everyone" }, label: copy.giveChoice.everyone, sub: copy.giveChoice.everyoneSub },
+    ...projects.map((identity) => ({
+      give: { _tag: "Project", identity } as const,
+      label: copy.giveChoice.project({ name: projectName(identity) }),
+      sub: copy.giveChoice.projectSub,
+    })),
     ...active.map((hob) => ({
       give: { _tag: "Hob", agentId: hob.id } as const,
       label: hob.name,

@@ -36,6 +36,7 @@ import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertM
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
+import { refreshSkills } from "./skills.ts";
 import {
   newer,
   recordAgent,
@@ -141,30 +142,11 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
-  // No screen shows the skills library yet (ADR 029, #1062).
-  "SkillRevisionAdded",
-  "SkillAssigned",
-  "SkillUnassigned",
-  "SkillRolledOut",
-  "SkillHeld",
-  "SkillOptOutChanged",
-  "SkillRemoved",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
   {
-    readonly _tag:
-      | "TurnStopRequested"
-      | "TurnStopped"
-      | "TurnStarted"
-      | "TurnEnded"
-      | "SkillRevisionAdded"
-      | "SkillAssigned"
-      | "SkillUnassigned"
-      | "SkillRolledOut"
-      | "SkillHeld"
-      | "SkillOptOutChanged"
-      | "SkillRemoved";
+    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -183,6 +165,11 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     return;
   }
   if (isUnapplied(event)) return;
+  // A skill changed here, on another device or in `~/.agents/skills`: the Skills page reads it again.
+  if (isSkillEvent(event)) {
+    void refreshSkills(queryClient);
+    return;
+  }
   if (isMemoryEvent(event)) {
     applyMemoryEvent(queryClient, event);
     return;
@@ -225,6 +212,18 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       return;
   }
 };
+
+const SKILL_EVENTS = new Set<HobbotsEvent["_tag"]>([
+  "SkillRevisionAdded",
+  "SkillAssigned",
+  "SkillUnassigned",
+  "SkillRolledOut",
+  "SkillHeld",
+  "SkillOptOutChanged",
+  "SkillRemoved",
+]);
+type SkillEvent = Extract<HobbotsEvent, { readonly _tag: `Skill${string}` }>;
+const isSkillEvent = (event: HobbotsEvent): event is SkillEvent => SKILL_EVENTS.has(event._tag);
 
 type MemoryEvent = Extract<
   HobbotsEvent,
@@ -365,6 +364,8 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         if (!ready.resumed) startGeneration(queryClient);
         void refreshMemory(queryClient);
         void refreshMemorySaves(queryClient);
+        // What changed while the stream was down is not replayed into the Skills page's reads.
+        void refreshSkills(queryClient);
         setDeviceAccess(queryClient, "approved");
         report("live");
       } catch (error) {

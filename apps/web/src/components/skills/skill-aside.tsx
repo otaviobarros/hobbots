@@ -14,19 +14,14 @@ import { useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
 
-/** Where the skill could also go: Everyone, the projects the library knows and each hob, less where it is already. */
+/** Where the skill could also go: Everyone, each project hobs work in or skills go to, and each hob, less where it is already. */
 const placesFor = (detail: SkillDetail, list: SkillsList, active: ReadonlyArray<Agent>) => {
   const given = new Set(detail.assignments.map((assignment) => memoryScopeKey(assignment.scope)));
-  const projects = new Map(
-    list.assignments
-      .filter((assignment) => assignment.scope._tag === "Project")
-      .map((assignment) => [memoryScopeKey(assignment.scope), assignment.scope]),
-  );
   const places: Array<{ scope: SkillScope; label: string; sub: string }> = [
     { scope: { _tag: "Everyone" }, label: copy.give.everyone, sub: copy.give.everyoneSub },
-    ...[...projects.values()].map((scope) => ({
-      scope,
-      label: copy.give.project({ name: scope._tag === "Project" ? projectName(scope.identity) : "" }),
+    ...list.projects.map((identity) => ({
+      scope: { _tag: "Project", identity } as const,
+      label: copy.give.project({ name: projectName(identity) }),
       sub: copy.give.projectSub,
     })),
     ...active.map((hob) => ({

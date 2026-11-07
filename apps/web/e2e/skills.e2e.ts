@@ -82,7 +82,7 @@ test("[TC-UX-1062] Skills: write one, give it out, edit and roll out with one ho
   await expectAccessible(page, main);
   await main.getByRole("button", { name: "Add to the library" }).click();
   await expect(main.getByRole("heading", { name: "Release steps", level: 2 })).toBeVisible();
-  await expect(main).toContainText("Added Release steps as r1");
+  await expect(main).toContainText("Added Release steps as r1. Pip gets it from the next chat.");
   await expect(main).toContainText("Tag the release.");
 
   // Also give it to Wren, then keep Wren on r1.

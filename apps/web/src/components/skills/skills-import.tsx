@@ -1,11 +1,11 @@
 import type { SkillScan, SkillSourcePayload } from "@hobbots/api";
-import type { Agent } from "@hobbots/domain";
+import type { Agent, MemoryProjectIdentity } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { scanSkills } from "../../api/skills.ts";
+import { scanSkills, skillsErrorTag } from "../../api/skills.ts";
 import { GiveChoice, type GiveTo } from "./give-choice.tsx";
 import { ImportCandidates, ImportRefused } from "./import-candidates.tsx";
 import { FileSource, GitSource } from "./import-sources.tsx";
@@ -56,12 +56,14 @@ function ScanResult({
   source,
   scan,
   active,
+  projects,
   hobs,
   say,
 }: {
   source: SkillSourcePayload;
   scan: SkillScan;
   active: ReadonlyArray<Agent>;
+  projects: ReadonlyArray<MemoryProjectIdentity>;
   hobs: HobDirectory;
   say: Say;
 }) {
@@ -70,14 +72,18 @@ function ScanResult({
   const can = scan.candidates.filter(importable).map((candidate) => candidate.folder);
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set(can));
   const [give, setGive] = useState<GiveTo>(null);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   if (scan.candidates.length === 0) return <p className="m-0 text-ui text-text-secondary">{copy.import.none}</p>;
   if (scan.candidates.every((candidate) => candidate.refusal !== null))
     return <ImportRefused candidates={scan.candidates} />;
   const folders = can.filter((folder) => picked.has(folder));
 
   const run = async () => {
-    const added = await writes.add.mutateAsync({ source, folders });
+    // Only what this scan found is added: a branch that moved on since is refused, not imported unseen.
+    const scanned = scan.candidates.flatMap((one) =>
+      one.hash !== null && folders.includes(one.folder) ? [{ folder: one.folder, hash: one.hash }] : [],
+    );
+    const added = await writes.add.mutateAsync({ source, folders, scanned });
     if (give !== null) {
       for (const one of added.imported) await writes.assign.mutateAsync({ skillId: one.skill.id, scope: give });
     }
@@ -101,17 +107,17 @@ function ScanResult({
           })
         }
       />
-      <GiveChoice value={give} onChange={setGive} active={active} many />
-      {failed && (
+      <GiveChoice value={give} onChange={setGive} active={active} projects={projects} many />
+      {failure !== null && (
         <p role="alert" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
-          {copy.import.failed}
+          {failure}
         </p>
       )}
       <div className="flex gap-2">
         <Button
           disabled={folders.length === 0 || writes.busy}
           onClick={() => {
-            setFailed(false);
+            setFailure(null);
             run()
               .then((count) => {
                 const message =
@@ -121,7 +127,9 @@ function ScanResult({
                 say({ tone: "done", message }, { _tag: "Overview" });
                 void navigate({ to: "/skills", search: {} });
               })
-              .catch(() => setFailed(true));
+              .catch((error: unknown) =>
+                setFailure(skillsErrorTag(error) === "SkillScanOutdated" ? copy.import.moved : copy.import.failed),
+              );
           }}
         >
           {writes.busy ? copy.import.importing : copy.import.importN({ count: folders.length })}
@@ -140,11 +148,13 @@ function ScanResult({
 export function SkillsImport({
   from,
   active,
+  projects,
   hobs,
   say,
 }: {
   from: ImportFrom;
   active: ReadonlyArray<Agent>;
+  projects: ReadonlyArray<MemoryProjectIdentity>;
   hobs: HobDirectory;
   say: Say;
 }) {
@@ -180,7 +190,15 @@ export function SkillsImport({
         </p>
       )}
       {shown && (
-        <ScanResult key={scan.submittedAt} source={source} scan={scan.data} active={active} hobs={hobs} say={say} />
+        <ScanResult
+          key={scan.submittedAt}
+          source={source}
+          scan={scan.data}
+          active={active}
+          projects={projects}
+          hobs={hobs}
+          say={say}
+        />
       )}
     </div>
   );

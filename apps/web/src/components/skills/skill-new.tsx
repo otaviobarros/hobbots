@@ -1,4 +1,4 @@
-import type { Agent } from "@hobbots/domain";
+import type { Agent, MemoryProjectIdentity } from "@hobbots/domain";
 import { Input } from "@hobbots/ui/components/input";
 import { useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
@@ -9,9 +9,11 @@ import { DescriptionField, EditorFooter, InstructionsField } from "./skill-field
 import type { Say } from "./skills-flash.ts";
 import {
   descriptionState,
+  type HobDirectory,
   nameOf,
   nameValid,
   newSkillFile,
+  scopeName,
   skillsSearchOf,
   skillTitle,
   skillView,
@@ -21,7 +23,17 @@ import { useSkillWrites } from "./use-skill-writes.ts";
 const copy = messages;
 
 /** Write one: a new skill from a blank one, checked as you type, added as r1 and given to whom you pick. */
-export function SkillNew({ active, say }: { active: ReadonlyArray<Agent>; say: Say }) {
+export function SkillNew({
+  active,
+  projects,
+  hobs,
+  say,
+}: {
+  active: ReadonlyArray<Agent>;
+  projects: ReadonlyArray<MemoryProjectIdentity>;
+  hobs: HobDirectory;
+  say: Say;
+}) {
   const navigate = useNavigate();
   const writes = useSkillWrites();
   const ids = { name: useId(), nameHint: useId() };
@@ -56,7 +68,12 @@ export function SkillNew({ active, say }: { active: ReadonlyArray<Agent>; say: S
         save()
           .then((one) => {
             const at = skillView(one.skill.id);
-            say({ tone: "done", message: copy.editor.added({ name: skillTitle(one.skill.name) }) }, at);
+            const name = skillTitle(one.skill.name);
+            const message =
+              give === null
+                ? copy.editor.added({ name })
+                : copy.editor.addedGiven({ name, who: scopeName(give, hobs) });
+            say({ tone: "done", message }, at);
             void navigate({ to: "/skills", search: skillsSearchOf(at) });
           })
           .catch((error: unknown) =>
@@ -84,7 +101,7 @@ export function SkillNew({ active, say }: { active: ReadonlyArray<Agent>; say: S
       </label>
       <DescriptionField value={description} onChange={setDescription} />
       <InstructionsField value={body} onChange={setBody} rows={10} />
-      <GiveChoice value={give} onChange={setGive} active={active} />
+      <GiveChoice value={give} onChange={setGive} active={active} projects={projects} />
       <EditorFooter
         failure={failure}
         saveLabel={pending ? copy.editor.saving : copy.editor.saveNew}

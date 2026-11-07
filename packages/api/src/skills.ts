@@ -1,5 +1,6 @@
 import {
   AgentId,
+  MemoryProjectIdentity,
   Skill,
   SkillAssignment,
   SkillAssignmentId,
@@ -52,6 +53,20 @@ export class SkillSourceNotRead extends Schema.TaggedError<SkillSourceNotRead>()
 export class SkillNameConflict extends Schema.TaggedError<SkillNameConflict>()(
   "SkillNameConflict",
   { name: SkillName, skillId: SkillId },
+  { httpApiStatus: 409 },
+) {}
+
+/** An edit made from a revision that is no longer the skill's newest; `latest` is. Nothing was saved. */
+export class SkillEditStale extends Schema.TaggedError<SkillEditStale>()(
+  "SkillEditStale",
+  { skillId: SkillId, latest: SkillRevisionHash },
+  { httpApiStatus: 409 },
+) {}
+
+/** The source changed since it was scanned; scan it again to see what it holds now. Nothing was written. */
+export class SkillScanOutdated extends Schema.TaggedError<SkillScanOutdated>()(
+  "SkillScanOutdated",
+  { folder: Schema.String },
   { httpApiStatus: 409 },
 ) {}
 
@@ -114,6 +129,11 @@ export const ImportSkillsPayload = Schema.Struct({
   source: SkillSourcePayload,
   /** The folders to take, from a scan; every one when absent. */
   folders: Schema.optionalKey(Schema.Array(Schema.String)),
+  /**
+   * What the scan found in each folder taken: the import fails with `SkillScanOutdated` when the source
+   * now holds anything else, such as a branch that moved on since you looked.
+   */
+  scanned: Schema.optionalKey(Schema.Array(Schema.Struct({ folder: Schema.String, hash: SkillRevisionHash }))),
 });
 
 export const ReviseSkillPayload = Schema.Struct({
@@ -188,6 +208,8 @@ export const SkillsList = Schema.Struct({
   sources: Schema.Array(SkillSource),
   /** Every assignment, of every skill: where each one applies, as the Skills page groups them. */
   assignments: Schema.Array(SkillAssignment),
+  /** The projects a skill can be given to: those hobs work in now, and those the library already gives skills to. */
+  projects: Schema.Array(MemoryProjectIdentity),
   agentsFolder: Schema.Struct({ path: Schema.NullOr(Schema.String), problems: Schema.Array(AgentsFolderProblem) }),
 });
 export type SkillsList = typeof SkillsList.Type;
@@ -229,7 +251,14 @@ export const EditSkillPayload = Schema.Struct({
 const skillParams = { skillId: SkillId };
 const assignmentParams = { assignmentId: SkillAssignmentId };
 const hobParams = { agentId: AgentId };
-const importErrors = [SkillImportRefused, SkillSourceNotRead, SkillMissing, SkillNameConflict];
+const importErrors = [
+  SkillImportRefused,
+  SkillSourceNotRead,
+  SkillMissing,
+  SkillNameConflict,
+  SkillEditStale,
+  SkillScanOutdated,
+];
 
 export class SkillsGroup extends HttpApiGroup.make("skills")
   .add(HttpApiEndpoint.get("list", "/skills", { success: SkillsList }))
