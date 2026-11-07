@@ -1,5 +1,5 @@
 import type { SkillDetail, SkillsList } from "@hobbots/api";
-import { type Agent, SkillName, type SkillScope } from "@hobbots/domain";
+import { type Agent, SkillName, type SkillScope, type SkillSetSkill } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useNavigate } from "@tanstack/react-router";
 import { Schema } from "effect";
@@ -15,8 +15,13 @@ const copy = messages;
 const isSkillName = Schema.is(SkillName);
 
 /** Who a copy can go to: nobody yet, Everyone, each project hobs work in, and each hob. */
-const choicesFor = (list: SkillsList, active: ReadonlyArray<Agent>) => [
-  { key: "none", scope: null, label: copy.copySkill.nobody, note: copy.copySkill.nobodyNote },
+const choicesFor = (list: SkillsList, active: ReadonlyArray<Agent>, inSet: boolean) => [
+  {
+    key: "none",
+    scope: null,
+    label: copy.copySkill.nobody,
+    note: inSet ? copy.copySkill.nobodyNoteSet : copy.copySkill.nobodyNote,
+  },
   {
     key: "everyone",
     scope: { _tag: "Everyone" } as SkillScope,
@@ -39,42 +44,55 @@ const choicesFor = (list: SkillsList, active: ReadonlyArray<Agent>) => [
 
 /**
  * Make a copy (ADR 029): a skill written in Hobbots with the same files at r1, under a new name, that
- * you can edit. It goes to nobody until you pick who gets it; the original stays as it is.
+ * you can edit. It goes to nobody until you pick who gets it; the original stays as it is. For a
+ * skill of a set, `member` is the one copied, as a skill of its own (ADR 029, Skill sets).
  */
 export function SkillCopy({
   detail,
   list,
   active,
   say,
+  member,
 }: {
   detail: SkillDetail;
   list: SkillsList;
   active: ReadonlyArray<Agent>;
   say: Say;
+  member?: SkillSetSkill;
 }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(`${detail.skill.name}-copy`);
+  const [name, setName] = useState(`${member?.name ?? detail.skill.name}-copy`);
   const [who, setWho] = useState("none");
   const [failure, setFailure] = useState<string | null>(null);
   const writes = useSkillWrites();
   const navigate = useNavigate();
   const nameHint = useId();
-  const title = skillTitle(detail.skill.name);
-  const choices = choicesFor(list, active);
+  const title = skillTitle(member?.name ?? detail.skill.name);
+  const choices = choicesFor(list, active, member !== undefined);
   const picked = choices.find((choice) => choice.key === who) ?? choices[0];
   const valid = isSkillName(name);
-  const files = detail.revisions[0]?.files.length ?? 0;
+  const files = member === undefined ? (detail.revisions[0]?.files.length ?? 0) : null;
 
   const submit = () => {
     if (!isSkillName(name)) return setFailure(copy.copySkill.invalid);
     setFailure(null);
     writes.copy.mutate(
-      { skillId: detail.skill.id, name, ...(picked?.scope == null ? {} : { scope: picked.scope }) },
+      {
+        skillId: detail.skill.id,
+        name,
+        ...(picked?.scope == null ? {} : { scope: picked.scope }),
+        ...(member === undefined ? {} : { member: member.name }),
+      },
       {
         onSuccess: (copied) => {
           // The line is said on the copy's page, where it opens.
           const at = skillView(copied.skill.id);
-          say({ tone: "done", message: copy.copySkill.done({ name: skillTitle(copied.skill.name) }) }, at);
+          const named = skillTitle(copied.skill.name);
+          const message =
+            member === undefined
+              ? copy.copySkill.done({ name: named })
+              : copy.copySkill.doneSet({ name: named, set: detail.skill.name });
+          say({ tone: "done", message }, at);
           void navigate({ to: "/skills", search: skillsSearchOf(at) });
         },
         onError: (error) =>
@@ -132,7 +150,7 @@ export function SkillCopy({
             ))}
           </fieldset>
           <span className="text-detail text-text-secondary">
-            {`${copy.copySkill.starts({ count: files })} ${picked?.note ?? ""}`}
+            {`${files === null ? copy.copySkill.startsSet : copy.copySkill.starts({ count: files })} ${picked?.note ?? ""}`}
           </span>
           {failure !== null && (
             <p role="alert" className="m-0 text-detail text-rose">

@@ -12,7 +12,14 @@ import { ImportCandidates, ImportRefused } from "./import-candidates.tsx";
 import { FileSource, GitSource } from "./import-sources.tsx";
 import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
-import { type HobDirectory, type ImportFrom, importable, scopeName, skillsSearchOf } from "./skills-model.ts";
+import {
+  type HobDirectory,
+  type ImportFrom,
+  importable,
+  scopeName,
+  skillsSearchOf,
+  skillView,
+} from "./skills-model.ts";
 import { SkillsIcon } from "./skills-parts.tsx";
 import { giveAll, useSkillWrites } from "./use-skill-writes.ts";
 
@@ -82,6 +89,9 @@ function ScanResult({
   if (scan.candidates.every((candidate) => candidate.refusal !== null))
     return <ImportRefused candidates={scan.candidates} />;
   const folders = can.filter((folder) => picked.has(folder));
+  // A plugin comes in as one set (ADR 029, Skill sets): the page names it, and so does Add.
+  const sets = scan.candidates.filter((one) => one.set !== null);
+  const onlySet = folders.length === 1 ? sets.find((one) => one.folder === folders[0]) : undefined;
 
   // A Hobbots export brings who gets each skill with it, so it is not given out again here.
   const exported = scan.exported;
@@ -123,6 +133,22 @@ function ScanResult({
       if (!given) return setFailure(copy.import.notGiven({ count: ids.length, who: scopeName(give, hobs) }));
     }
     const count = ids.length;
+    if (onlySet?.set != null && ids.length === 1 && ids[0] !== undefined) {
+      const named = { name: onlySet.name ?? onlySet.folder, count: onlySet.set.skills.length };
+      const at = skillView(ids[0]);
+      say(
+        {
+          tone: "done",
+          message:
+            give === null
+              ? copy.import.addedSet(named)
+              : copy.import.addedSetGiven({ ...named, who: scopeName(give, hobs) }),
+        },
+        at,
+      );
+      void navigate({ to: "/skills", search: skillsSearchOf(at) });
+      return;
+    }
     const message =
       exported !== null && fromExport !== null
         ? copy.import.importedSet({ count, given: fromExport.assigned, left: fromExport.leftOut })
@@ -137,6 +163,7 @@ function ScanResult({
     <div className="flex flex-col gap-3.5">
       <p className="m-0 text-detail text-text-secondary">
         {copy.import.found({ count: scan.candidates.length, commit: scan.commit })}
+        {sets.length > 0 && ` ${copy.import.setIntro}`}
       </p>
       <ImportCandidates
         candidates={scan.candidates}
@@ -155,7 +182,17 @@ function ScanResult({
           {copy.import.exportedNote({ when: copy.day(exported.exportedAt), count: exported.assignments })}
         </p>
       )}
-      {!keepsAssignments && <GiveChoice value={give} onChange={setGive} active={active} projects={projects} many />}
+      {!keepsAssignments && (
+        <GiveChoice
+          value={give}
+          onChange={setGive}
+          active={active}
+          projects={projects}
+          many
+          {...(onlySet === undefined ? {} : { legend: copy.import.setLegend })}
+        />
+      )}
+      {onlySet !== undefined && <p className="m-0 text-detail text-label">{copy.import.setNote}</p>}
       {failure !== null && (
         <p role="alert" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
           {failure}
@@ -165,9 +202,11 @@ function ScanResult({
         <Button disabled={(added === null && folders.length === 0) || writes.busy} onClick={() => void run()}>
           {writes.busy
             ? copy.import.importing
-            : added === null
-              ? copy.import.importN({ count: folders.length })
-              : copy.import.giveAgain}
+            : added !== null
+              ? copy.import.giveAgain
+              : onlySet?.set != null
+                ? copy.import.addSet({ name: onlySet.name ?? onlySet.folder, count: onlySet.set.skills.length })
+                : copy.import.importN({ count: folders.length })}
         </Button>
         <Button asChild variant="quiet">
           <Link to="/skills" search={{}}>

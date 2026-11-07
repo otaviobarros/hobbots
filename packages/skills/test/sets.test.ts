@@ -333,4 +333,50 @@ describe("skill sets", () => {
     expect(read).not.toContain("skills/one/assets/huge.bin");
     await (tree as { close?: () => Promise<void> }).close?.();
   });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-15] copies one skill of a set as a skill of its own, with the set's files it links to and its links pointed at them", async () => {
+    const { layer } = await importerLayer();
+    const repository = await repositoryOf(agentEngineering());
+    await runWith(layer)(
+      Effect.gen(function* () {
+        const importer = yield* SkillImporter;
+        const [set] = yield* importer.add({ _tag: "Git", url: repository.url, ref: null }, you);
+        const member = set?.revision.set?.skills.find((one) => one.name === "deliver-change");
+        if (set === undefined || member === undefined) return expect.unreachable();
+        const folder = (yield* (yield* SkillFiles).folder(set.revision.hash)) ?? "";
+        const source = {
+          _tag: "Copied",
+          folder,
+          name: "deliver-change-copy",
+          carried: { charms: [], dropped: [] },
+          member,
+        } as const;
+        const [copy] = yield* importer.add(source, you);
+        expect(copy?.revision).toMatchObject({ name: "deliver-change-copy", number: 1, set: null, sourceId: null });
+        const copied = (yield* (yield* SkillFiles).folder(copy?.revision.hash ?? ("" as never))) ?? "";
+        // Its folder at the top; what it links to, directly or through those files, under linked/. Another
+        // skill's SKILL.md is named after its folder, and a file nothing reaches stays out.
+        expect(yield* Effect.promise(() => files(copied))).toEqual([
+          "SKILL.md",
+          "linked/references/verification.md",
+          "linked/references/workflow-contract.md",
+          "linked/skills/implement-change/implement-change.md",
+          "linked/skills/plan-change/plan-change.md",
+        ]);
+        const skill = yield* Effect.promise(() => readFile(join(copied, "SKILL.md"), "utf8"));
+        expect(skill).toContain("name: deliver-change-copy");
+        expect(skill).toContain("[contract](linked/references/workflow-contract.md)");
+        expect(skill).toContain("[plan-change](linked/skills/plan-change/plan-change.md)");
+        const plan = yield* Effect.promise(() =>
+          readFile(join(copied, "linked", "skills", "plan-change", "plan-change.md"), "utf8"),
+        );
+        // A link between two files it brings keeps working from their new places.
+        expect(plan).toContain("[contract](../../references/workflow-contract.md)");
+        expect(plan).toContain("[implement-change](../implement-change/implement-change.md)");
+        // The set itself is unchanged.
+        expect(yield* Effect.promise(() => files(folder))).toContain("skills/deliver-change/SKILL.md");
+      }),
+    );
+  });
 });

@@ -18,9 +18,20 @@ type SkillViewOf = Extract<SkillsView, { _tag: "Skill" }>;
 const isScript = (revision: SkillRevision, file: SkillFile) =>
   file.mode === "executable" || revision.flags.some((flag) => flag._tag === "Script" && flag.path === file.path);
 
-/** The files of a revision: each opens read-only below the list. */
-function FileList({ view, revision }: { view: SkillViewOf; revision: SkillRevision }) {
-  const bytes = revision.files.reduce((sum, file) => sum + file.size, 0);
+/**
+ * The files of a revision, or the ones given of it, as a skill of a set lists its own: each opens
+ * read-only below the list.
+ */
+export function FileList({
+  view,
+  revision,
+  files = revision.files,
+}: {
+  view: SkillViewOf;
+  revision: SkillRevision;
+  files?: ReadonlyArray<SkillFile>;
+}) {
+  const bytes = files.reduce((sum, file) => sum + file.size, 0);
   return (
     <section
       aria-label={copy.skill.files({ rev: skillRevisionLabel(revision) })}
@@ -28,10 +39,10 @@ function FileList({ view, revision }: { view: SkillViewOf; revision: SkillRevisi
     >
       <div className="flex items-center gap-2 border-b border-line bg-deep px-3 py-2.5 text-detail">
         <h3 className="lbl m-0 flex-1 text-label">{copy.skill.files({ rev: skillRevisionLabel(revision) })}</h3>
-        <span className="text-label">{copy.skill.filesSize({ count: revision.files.length, bytes })}</span>
+        <span className="text-label">{copy.skill.filesSize({ count: files.length, bytes })}</span>
       </div>
       <ul className="m-0 list-none p-0 [&>li+li]:border-t [&>li+li]:border-line">
-        {revision.files.map((file) => {
+        {files.map((file) => {
           const open = view.file === file.path;
           const script = isScript(revision, file);
           return (
@@ -66,17 +77,17 @@ function FileList({ view, revision }: { view: SkillViewOf; revision: SkillRevisi
   );
 }
 
-/** One file of a revision, read-only: its text, or why it is not shown. */
-function FileView({
+/** One file of a revision, read-only: its text, or why it is not shown, with where it is changed. */
+export function FileView({
   view,
   revision,
   path,
-  fromFolder,
+  note,
 }: {
   view: SkillViewOf;
   revision: SkillRevision;
   path: string;
-  fromFolder: boolean;
+  note: string;
 }) {
   const read = useQuery(skillFileQuery(revision.skillId, revision.hash, path));
   return (
@@ -86,7 +97,7 @@ function FileView({
     >
       <div className="flex items-center gap-2 border-b border-line bg-deep px-3 py-2 text-detail">
         <code className="min-w-0 flex-1 truncate font-mono text-moonlight">{path}</code>
-        <span className="text-meta text-label">{fromFolder ? copy.agents.fileReadOnly : copy.file.readOnly}</span>
+        <span className="text-meta text-label">{note}</span>
         <Button asChild variant="quiet" size="xs">
           <Link to="/skills" search={skillsSearchOf({ ...view, file: null })}>
             {copy.file.close}
@@ -151,7 +162,14 @@ export function SkillInstructions({
       )}
       <FlagList revision={latest} />
       <FileList view={view} revision={latest} />
-      {view.file !== null && <FileView view={view} revision={latest} path={view.file} fromFolder={fromFolder} />}
+      {view.file !== null && (
+        <FileView
+          view={view}
+          revision={latest}
+          path={view.file}
+          note={fromFolder ? copy.agents.fileReadOnly : copy.file.readOnly}
+        />
+      )}
     </div>
   );
 }

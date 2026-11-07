@@ -41,6 +41,7 @@ export const messages = {
   openInSkills: "Open in Skills",
   give: ({ name }: { name: string }) => `Give ${name} a skill…`,
   carries: {
+    inSet: ({ set }: { set: string }) => `In ${set}`,
     title: ({ name }: { name: string }) => `${name}'s skills`,
     line: ({ name, count }: { name: string; count: number }) =>
       `${formatCount(count)} ${plural(count, { one: "skill", other: "skills" })} load for ${name}. Claude Code and Codex load the same set, and nothing else.`,

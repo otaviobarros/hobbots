@@ -84,6 +84,7 @@ const list: SkillsList = {
   projects: [site, docs],
   agentsFolder: { path: null, problems: [] },
   usesThisWeek: [],
+  sets: [],
 };
 const [, , deploySite, deployDocs, styleEveryone, stylePip] = assignments;
 if (!deploySite || !deployDocs || !styleEveryone || !stylePip) throw new Error("fixture");

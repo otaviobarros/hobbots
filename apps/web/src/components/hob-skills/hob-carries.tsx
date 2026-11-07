@@ -1,11 +1,12 @@
 import type { HobSkills, SkillsList } from "@hobbots/api";
-import { type Agent, skillRevisionLabel } from "@hobbots/domain";
+import { type Agent, SkillName, skillRevisionLabel } from "@hobbots/domain";
 import { Switch } from "@hobbots/ui/components/switch";
 import { Link } from "@tanstack/react-router";
 import { RowList } from "../memory/memory-overview.tsx";
 import { messages as shared } from "../messages.ts";
 import {
   type HobDirectory,
+  memberView,
   projectName,
   scopeName,
   skillsSearchOf,
@@ -77,7 +78,8 @@ function Row({
   onSwitch: (row: CarriedRow, on: boolean) => void;
   busy: boolean;
 }) {
-  const title = skillTitle(row.skill.name);
+  const title = skillTitle(row.member?.name ?? row.skill.name);
+  const at = row.member === null ? skillView(row.skill.id) : memberView(row.skill.id, row.member.name);
   // A shared skill that loads, or one turned off, can be switched for this hob alone.
   const switchable = row.scope._tag !== "Hob" && (row.state._tag === "Loads" || row.state._tag === "Off");
   return (
@@ -86,15 +88,16 @@ function Row({
         <span className="flex flex-wrap items-center gap-2">
           <Link
             to="/skills"
-            search={skillsSearchOf(skillView(row.skill.id))}
+            search={skillsSearchOf(at)}
             className="truncate text-ui font-semibold text-text-strong no-underline hover:underline"
           >
             {title}
           </Link>
+          {row.member !== null && <SkillChip tone="set">{copy.inSet({ set: row.skill.name })}</SkillChip>}
           {row.number !== null && <RevTag label={skillRevisionLabel({ number: row.number })} />}
           <RowNotes row={row} hob={hob} hobs={hobs} />
         </span>
-        <span className="truncate text-meta text-label">{row.skill.description}</span>
+        <span className="truncate text-meta text-label">{row.member?.description ?? row.skill.description}</span>
       </span>
       {switchable && (
         <Switch
@@ -129,9 +132,14 @@ export function HobCarries({
   const writes = useHobSkillWrites();
   const groups = carriedGroups(view, list);
   const onSwitch = (row: CarriedRow, on: boolean) => {
-    const skill = skillTitle(row.skill.name);
+    const skill = skillTitle(row.member?.name ?? row.skill.name);
     writes.optOut.mutate(
-      { agentId: hob.id, skillId: row.skill.id, optedOut: !on },
+      {
+        agentId: hob.id,
+        skillId: row.skill.id,
+        optedOut: !on,
+        ...(row.member === null ? {} : { member: SkillName.make(row.member.name) }),
+      },
       {
         onSuccess: () =>
           onSaid(on ? copy.turnedOn({ name: hob.name, skill }) : copy.turnedOff({ name: hob.name, skill })),
@@ -155,7 +163,7 @@ export function HobCarries({
               <RowList label={title}>
                 {group.rows.map((row) => (
                   <Row
-                    key={`${row.skill.id}-${row.state._tag}`}
+                    key={`${row.skill.id}-${row.member?.name ?? ""}-${row.state._tag}`}
                     row={row}
                     hob={hob}
                     hobs={hobs}

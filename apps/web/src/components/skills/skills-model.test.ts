@@ -81,6 +81,7 @@ const list = (overrides: Partial<SkillsList> = {}): SkillsList => ({
   projects: [],
   agentsFolder: { path: null, problems: [] },
   usesThisWeek: [],
+  sets: [],
   ...overrides,
 });
 
@@ -91,8 +92,23 @@ describe("the Skills page's address", () => {
       { _tag: "Scope", scope: { _tag: "Hob", agentId: pip.id } },
       { _tag: "Add", from: "file" },
       { _tag: "New" },
-      { _tag: "Skill", skillId: SkillId.make("s1"), tab: "history", file: null, diff: hash(2) },
-      { _tag: "Skill", skillId: SkillId.make("s1"), tab: null, file: "references/checks.md", diff: null },
+      { _tag: "Skill", skillId: SkillId.make("s1"), member: null, tab: "history", file: null, diff: hash(2) },
+      {
+        _tag: "Skill",
+        skillId: SkillId.make("s1"),
+        member: null,
+        tab: null,
+        file: "references/checks.md",
+        diff: null,
+      },
+      {
+        _tag: "Skill",
+        skillId: SkillId.make("s9"),
+        member: "deliver-change",
+        tab: null,
+        file: "skills/deliver-change/SKILL.md",
+        diff: null,
+      },
       { _tag: "Edit", skillId: SkillId.make("s1") },
       { _tag: "Search", q: "release" },
     ] as const;

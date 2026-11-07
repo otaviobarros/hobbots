@@ -377,7 +377,7 @@ const memoryRoute = createRoute({
   },
 });
 // Skills (ADR 029): `?scope=` opens a scope, `?skill=` a skill with `&tab=` its tab, `&file=` a file and
-// `&diff=` what a revision changed; `&edit=skill` opens its editor and `?edit=new` a new skill; `?add=`
+// `&diff=` what a revision changed; `&member=` a skill of a set, by its name in the set; `&edit=skill` opens its editor and `?edit=new` a new skill; `?add=`
 // opens Add a skill from Git, a folder or written here; `?export=skills` opens Export skills; `?view=changes`
 // What changed; `?q=` searches.
 const skillsRoute = createRoute({
@@ -388,6 +388,7 @@ const skillsRoute = createRoute({
     Schema.Struct({
       scope: searchParam(MemoryScopeKey),
       skill: searchParam(Schema.String),
+      member: searchParam(Schema.String),
       tab: searchParam(SkillTab),
       file: searchParam(Schema.String),
       diff: searchParam(Schema.String),

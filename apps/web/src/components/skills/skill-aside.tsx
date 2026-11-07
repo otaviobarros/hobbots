@@ -42,7 +42,8 @@ const placesFor = (detail: SkillDetail, list: SkillsList, active: ReadonlyArray<
   return places.filter((place) => !given.has(memoryScopeKey(place.scope)));
 };
 
-function GiveTo({
+/** Also give it to: Everyone, a project or a hob that does not have it yet. */
+export function GiveTo({
   detail,
   list,
   hobs,
