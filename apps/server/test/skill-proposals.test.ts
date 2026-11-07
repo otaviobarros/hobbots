@@ -61,8 +61,9 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { hubCallRuntimes } from "@hobbots/runtimes/testing";
 import { SkillImporter, SkillToolsLive } from "@hobbots/skills";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Exit, Layer, ManagedRuntime } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -911,6 +912,85 @@ describe("hobs proposing skills", () => {
       `recorded ${SKILL_PROPOSE_TOOL} with 1 assignments`,
     ]);
     expect(await proposals()).toHaveLength(1);
+  });
+
+  // covers EX-004, ADR 029 (Proactive hobs), ADR 031
+  it("[TC-PE-496] each runtime records a skill call's step before the library changes, and changes nothing unrecorded", {
+    timeout: 300_000,
+  }, async () => {
+    const turns = await hubCallRuntimes();
+    try {
+      expect(turns.runtimes.map((one) => one.name)).toEqual([
+        "fake",
+        ...(process.env.HOBBOTS_CLAUDE_CODE === undefined ? [] : ["claude-code"]),
+        ...(process.env.HOBBOTS_CODEX === undefined ? [] : ["codex"]),
+      ]);
+      for (const on of turns.runtimes) {
+        const name = `release-${on.name}`;
+        await importSkill(name);
+        const calls = [
+          { tool: SKILL_SEARCH_TOOL, input: { query: "release" } },
+          { tool: SKILL_REQUEST_TOOL, input: { name, why: "To release." } },
+          { tool: SKILL_FEEDBACK_TOOL, input: { name, kind: "unclear", note: "Step 2 is unclear." } },
+          {
+            tool: SKILL_PROPOSE_TOOL,
+            input: {
+              key: `deploy-${on.name}`,
+              name: `deploy-${on.name}`,
+              instructions: skillMd(`deploy-${on.name}`),
+              why: "I deploy every week.",
+            },
+          },
+        ];
+        // What the library held, by Ada's assignments and the proposals waiting, as each step was recorded.
+        const seen = async (records: boolean) => {
+          const order: Array<string> = [];
+          const { exit } = await runtime.runPromise(
+            Effect.gen(function* () {
+              const skills = yield* SkillLibrary;
+              const tools = yield* (yield* SkillTools).forTurn(turnFor(accessFor("trusting")));
+              if (tools === null) throw new Error("No skill tools");
+              const context = yield* Effect.context<never>();
+              return yield* Effect.promise(() =>
+                on.turn({
+                  hubTools: tools,
+                  recordToolStart: (event) =>
+                    skills.assignments().pipe(
+                      Effect.orDie,
+                      Effect.map((assignments) => {
+                        order.push(`recorded ${event.tool} with ${assignments.length} assignments`);
+                        return records;
+                      }),
+                      Effect.provideContext(context),
+                    ),
+                  calls,
+                }),
+              );
+            }),
+          );
+          expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+          return order;
+        };
+        const before = (await runtime.runPromise(SkillLibrary.use((skills) => skills.assignments()))).length;
+        const waiting = (await proposals()).length;
+        const unrecorded = await seen(false);
+        expect(unrecorded, on.name).toEqual(calls.map((call) => `recorded ${call.tool} with ${before} assignments`));
+        expect((await runtime.runPromise(SkillLibrary.use((skills) => skills.assignments()))).length, on.name).toBe(
+          before,
+        );
+        expect((await proposals()).length, on.name).toBe(waiting);
+        // Recorded, the request is recorded before it assigns the skill.
+        expect(await seen(true), on.name).toEqual([
+          `recorded ${SKILL_SEARCH_TOOL} with ${before} assignments`,
+          `recorded ${SKILL_REQUEST_TOOL} with ${before} assignments`,
+          `recorded ${SKILL_FEEDBACK_TOOL} with ${before + 1} assignments`,
+          `recorded ${SKILL_PROPOSE_TOOL} with ${before + 1} assignments`,
+        ]);
+        expect((await proposals()).length, on.name).toBe(waiting + 1);
+      }
+    } finally {
+      turns.close();
+    }
   });
 
   // covers ADR 029 (Proactive hobs), #1063
