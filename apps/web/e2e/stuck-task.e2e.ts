@@ -142,3 +142,25 @@ test("[TC-IN-1087-04] says when Retry in a stuck lane is not saved, and when the
   await unread.getByRole("button", { name: "Try again" }).click();
   await expect(card.getByRole("button", { name: "Reassign…" })).toBeVisible();
 });
+
+// covers IN-007, UX-004
+test("[TC-IN-1087-05] Retry in a stuck lane gives the hob a fresh try, which gets through, so the lane and the Inbox stop saying it is stuck", async ({
+  page,
+}) => {
+  const current = await stuckCopy(page);
+  await openRoom(page, "Plan the launch");
+  await expect(laneHead(page, "Quill")).toContainText("Stuck");
+  const sent = page.waitForResponse(
+    (response) => /\/api\/blockers\/[^/]+\/decision$/.test(response.url()) && response.ok(),
+  );
+  await (await laneMenu(page, "Quill")).getByRole("menuitem", { name: "Retry" }).click();
+  await sent;
+  // The try runs once the hub saved it: the stuck work leaves the lane and the Inbox.
+  await expect(laneHead(page, "Quill")).not.toContainText("Stuck", { timeout: 20_000 });
+  await expect(lane(page, "Quill").getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+  await expect((await laneMenu(page, "Quill")).getByRole("menuitem", { name: "Retry" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.goto(`${current.url}/#/inbox`);
+  await expect(page.getByText("Nothing needs you")).toBeVisible();
+});
