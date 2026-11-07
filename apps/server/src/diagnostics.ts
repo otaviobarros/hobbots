@@ -23,6 +23,7 @@ import { DiagnosticsReadsLive, SetupRepository } from "@hobbots/persistence";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { Installation } from "./installation.ts";
+import { hobSkillLines } from "./skills.ts";
 
 /** How many Quests Diagnostics offers to follow, and how many of a Quest's journal entries it shows. */
 const LIMITS = { quests: 50, journal: 200 } as const;
@@ -49,6 +50,8 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
     const held = yield* workHeld;
     // The handlers are built once, as the hub starts, after its recovery ran.
     const startedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
+    // Each hob's skills by name and revision, never their contents (ADR 029).
+    const skills = yield* hobSkillLines;
 
     const now = Effect.gen(function* () {
       const at = new Date(yield* Clock.currentTimeMillis).toISOString();
@@ -77,6 +80,7 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
         recovery: errors.map((error) => ({ ...error, message: redactor.text(error.message) })),
         workHeld: yield* held,
         startedAt,
+        skills: yield* skills,
       };
     });
 
@@ -126,6 +130,7 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
           workHeld: current.workHeld,
           stalled: current.stalled,
           recovery: current.recovery,
+          skills: current.skills,
           trace: followed,
           includeTitles,
         });

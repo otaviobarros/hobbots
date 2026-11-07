@@ -153,9 +153,43 @@ describe("report", () => {
     workHeld: false,
     stalled: [],
     recovery: [],
+    skills: [],
     trace: null,
     includeTitles: false,
   };
+
+  // covers ADR 029 (Backups, exports and Diagnostics), #1064
+  it("[TC-OP-120] keeps each hob's skill names and revisions, and drops anything else a skill carries", () => {
+    const revision = "e".repeat(64) as never;
+    const report = allowlistedReport({
+      ...input,
+      skills: [
+        {
+          agentId: ADA,
+          runtime: "codex",
+          skills: [
+            {
+              name: "release-steps",
+              number: 4,
+              revision,
+              scope: "Project",
+              description: "How we release",
+              instructions: "Tag, then push.",
+            } as ReportInput["skills"][number]["skills"][number],
+          ],
+          clashes: [],
+        },
+      ],
+    });
+    expect(report.skills).toEqual([
+      {
+        agentId: ADA,
+        runtime: "codex",
+        skills: [{ name: "release-steps", number: 4, revision, scope: "Project" }],
+        clashes: [],
+      },
+    ]);
+  });
 
   it("holds only what its schema names, so account details and new fields never reach it", () => {
     const report = allowlistedReport({

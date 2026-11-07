@@ -1,4 +1,5 @@
 import type { SkillsList } from "@hobbots/api";
+import { Button } from "@hobbots/ui/components/button";
 import { Link } from "@tanstack/react-router";
 import { formatAgo, formatCount } from "../../lib/format.ts";
 import { RowList } from "../memory/memory-overview.tsx";
@@ -127,12 +128,17 @@ export function SkillsOverview({ list, hobs, now }: { list: SkillsList; hobs: Ho
         {groups.map((group) => (
           <Group key={group.key} group={group} hobs={hobs} now={now} />
         ))}
-        <p className="m-0 flex items-start gap-2.5 rounded-card bg-deep px-3.5 py-2.5 text-ui text-text-secondary">
+        <div className="flex items-start gap-2.5 rounded-card bg-deep px-3.5 py-2.5 text-ui text-text-secondary">
           <span className="mt-0.5">
             <SkillsIcon name="notice" />
           </span>
-          <span>{copy.overview.note}</span>
-        </p>
+          <p className="m-0 flex-1">{copy.overview.note}</p>
+          <Button asChild variant="quiet" size="sm" className="flex-none">
+            <Link to="/skills" search={skillsSearchOf({ _tag: "Export" })}>
+              {copy.overview.export}
+            </Link>
+          </Button>
+        </div>
       </section>
       <WorthALook list={list} />
     </div>

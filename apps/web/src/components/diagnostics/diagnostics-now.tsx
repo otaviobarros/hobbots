@@ -1,11 +1,11 @@
-import type { DiagnosticsNow, StalledWork } from "@hobbots/api";
+import type { DiagnosticsHobSkills, DiagnosticsNow, StalledWork } from "@hobbots/api";
 import { type MemoryEngineHealth, RUNTIME_NAMES, type RuntimeHealth } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
-import { formatAgo } from "../../lib/format.ts";
+import { formatAgo, formatList } from "../../lib/format.ts";
 import { messages } from "./messages.ts";
-import { type HobName, memoryNote, recoveryText, runtimeFix, stalledText } from "./model.ts";
+import { type HobName, memoryNote, recoveryText, runtimeFix, skillsText, stalledText } from "./model.ts";
 
 const copy = messages.now;
 
@@ -63,6 +63,22 @@ function StalledRow({
   );
 }
 
+/** One hob's skills by name and revision, on the runtime it thinks with. */
+function SkillsRow({ hob, hobName }: { hob: DiagnosticsHobSkills; hobName: HobName }) {
+  return (
+    <li className="flex flex-col gap-1 border-b-(length:--edge) border-line py-2">
+      <span className="flex items-center gap-2">
+        <span className="flex-1">{hobName(hob.agentId)}</span>
+        <span className="text-meta text-label">{RUNTIME_NAMES[hob.runtime]}</span>
+      </span>
+      <span className="text-ui text-text-secondary">{skillsText(hob)}</span>
+      {hob.clashes.length > 0 && (
+        <span className="text-ui text-lantern">{messages.skills.clash({ names: formatList(hob.clashes) })}</span>
+      )}
+    </li>
+  );
+}
+
 /** The Now view: each runtime with its fix, stalled work with what to do, and the last start's recovery. */
 export function DiagnosticsNowView({
   now,
@@ -107,6 +123,18 @@ export function DiagnosticsNowView({
             {recoveryText(error)}
           </li>
         ))}
+      </ul>
+      <span className="lbl pt-2 text-label">{copy.skills}</span>
+      <p className="m-0 text-meta text-label">{messages.skills.note}</p>
+      <ul aria-label={copy.skills} className="m-0 flex list-none flex-col p-0">
+        {now.skills.every((hob) => hob.skills.length === 0) && (
+          <li className="text-ui text-text-secondary">{messages.skills.noHobs}</li>
+        )}
+        {now.skills
+          .filter((hob) => hob.skills.length > 0 || hob.clashes.length > 0)
+          .map((hob) => (
+            <SkillsRow key={hob.agentId} hob={hob} hobName={hobName} />
+          ))}
       </ul>
     </section>
   );

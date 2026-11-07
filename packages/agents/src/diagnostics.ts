@@ -1,4 +1,5 @@
 import {
+  type DiagnosticsHobSkills,
   DiagnosticsReport,
   type QuestTrace,
   type RecoveryError,
@@ -186,6 +187,7 @@ export interface ReportInput {
   readonly workHeld: boolean;
   readonly stalled: ReadonlyArray<StalledWork>;
   readonly recovery: ReadonlyArray<RecoveryError>;
+  readonly skills: ReadonlyArray<DiagnosticsHobSkills>;
   readonly trace: QuestTrace | null;
   readonly includeTitles: boolean;
 }
@@ -291,6 +293,7 @@ export const allowlistedReport = (input: ReportInput): DiagnosticsReport =>
     workHeld: input.workHeld,
     stalled: input.stalled,
     recovery: input.recovery,
+    skills: input.skills,
     quest: input.trace === null ? null : reportQuest(input.trace, input.includeTitles),
   }) as DiagnosticsReport;
 

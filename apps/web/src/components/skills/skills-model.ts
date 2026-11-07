@@ -42,6 +42,8 @@ export interface SkillsSearch {
   readonly edit?: "skill" | "new" | undefined;
   /** Add a skill, from where. */
   readonly add?: ImportFrom | undefined;
+  /** `skills` opens Export skills. */
+  readonly export?: "skills" | undefined;
   readonly q?: string | undefined;
 }
 
@@ -49,6 +51,7 @@ export type SkillsView =
   | { readonly _tag: "Overview" }
   | { readonly _tag: "Scope"; readonly scope: SkillScope }
   | { readonly _tag: "Add"; readonly from: ImportFrom }
+  | { readonly _tag: "Export" }
   | { readonly _tag: "New" }
   | {
       readonly _tag: "Skill";
@@ -77,6 +80,7 @@ export const skillsViewOf = (search: SkillsSearch): SkillsView => {
     };
   }
   if (search.add !== undefined) return { _tag: "Add", from: search.add };
+  if (search.export === "skills") return { _tag: "Export" };
   const scope = search.scope === undefined ? null : memoryScopeOfKey(search.scope);
   return scope === null ? { _tag: "Overview" } : { _tag: "Scope", scope };
 };
@@ -90,6 +94,8 @@ export const skillsSearchOf = (view: SkillsView): SkillsSearch => {
       return { scope: memoryScopeKey(view.scope) };
     case "Add":
       return { add: view.from };
+    case "Export":
+      return { export: "skills" };
     case "New":
       return { edit: "new" };
     case "Skill":
@@ -221,6 +227,38 @@ export const libraryGroups = (list: SkillsList, hobs: HobDirectory): ReadonlyArr
       origin: originOf(skill.sourceId, list.sources),
     }));
   return loose.length === 0 ? sorted : [...sorted, { key: "none", scope: null, rows: sortRows(loose) }];
+};
+
+/** One skill as Export skills lists it: its newest revision, and where it applies first. */
+export interface ExportRow {
+  readonly skill: Skill;
+  readonly scope: SkillScope | null;
+  /** The scope's name, with how many more scopes it has, and "~/.agents" for a skill from that folder. */
+  readonly where: string;
+}
+
+/**
+ * Every skill once, as Export skills lists it: in the overview's order, Everyone, each project and
+ * each hob, then those no one has, each under the first scope it has.
+ */
+export const exportRows = (list: SkillsList, hobs: HobDirectory): ReadonlyArray<ExportRow> => {
+  const groups = libraryGroups(list, hobs);
+  const seen = new Set<SkillId>();
+  const rows: Array<ExportRow> = [];
+  for (const group of groups) {
+    for (const row of group.rows) {
+      if (seen.has(row.skill.id)) continue;
+      seen.add(row.skill.id);
+      const more = groups.filter((other) => other !== group && other.rows.some((one) => one.skill.id === row.skill.id));
+      const name = group.scope === null ? copy.scopes.none : scopeName(group.scope, hobs);
+      const parts = [
+        more.length === 0 ? name : copy.export.more({ name, count: more.length }),
+        ...(row.origin?._tag === "AgentsFolder" ? [copy.export.agents] : []),
+      ];
+      rows.push({ skill: row.skill, scope: group.scope, where: parts.join(" · ") });
+    }
+  }
+  return rows;
 };
 
 const sortRows = (rows: ReadonlyArray<SkillRow>) => [...rows].sort((a, b) => a.skill.name.localeCompare(b.skill.name));

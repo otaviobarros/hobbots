@@ -13,6 +13,7 @@ import {
   PermissionSummary,
   RecoveryLog,
   SecretRedaction,
+  SkillLibrary,
   TaskRepository,
   WorkHold,
 } from "@hobbots/agents";
@@ -26,6 +27,8 @@ import {
   DelegationId,
   EMPTY_HOB_POLICY,
   QuestId,
+  SkillName,
+  SkillRevisionHash,
   TaskId,
   Thread,
   ThreadId,
@@ -39,6 +42,7 @@ import {
   HobbotsRepositoryLive,
   SearchIndex,
   SetupRepository,
+  SkillLibraryLive,
   TaskRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -85,6 +89,7 @@ const App = HobLifecycle.layer.pipe(
         BackpackLive,
         SetupRepository.layer,
         SearchIndex.layer,
+        SkillLibraryLive,
       ).pipe(Layer.provideMerge(TestDatabase)),
       EventBus.layer,
       HobAdmission.layer,
@@ -448,5 +453,46 @@ describe("Diagnostics", () => {
     expect(report.workHeld).toBe(true);
     held = false;
     expect(Schema.decodeUnknownSync(DiagnosticsNow)((await get("/api/diagnostics")).body).workHeld).toBe(false);
+  });
+  // covers ADR 029 (Backups, exports and Diagnostics), #1064
+  it("[TC-OP-119] names each hob's skills and revisions in Right now and in the report, never their contents", async () => {
+    const DESCRIPTION = "How this repository releases, step by step.";
+    const hash = SkillRevisionHash.make("d".repeat(64));
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        yield* twoHobQuest;
+        const library = yield* SkillLibrary;
+        const added = yield* library.addRevision(null, {
+          hash,
+          name: SkillName.make("release-steps"),
+          description: DESCRIPTION,
+          charms: [],
+          files: [{ path: "SKILL.md", mode: "regular", size: 10, sha256: "0".repeat(64) }],
+          flags: [],
+          dropped: [],
+          origin: null,
+          commit: null,
+          path: null,
+          label: null,
+          addedBy: { _tag: "You" },
+        });
+        yield* library.assign({
+          skillId: added.value.skill.id,
+          scope: { _tag: "Everyone" },
+          pin: hash,
+          held: false,
+          onlyWhenAsked: false,
+          by: { _tag: "You" },
+        });
+      }),
+    );
+    const line = { name: "release-steps", number: 1, revision: hash, scope: "Everyone" };
+    const current = Schema.decodeUnknownSync(DiagnosticsNow)((await get("/api/diagnostics")).body);
+    expect(current.skills.map((hob) => [hob.agentId, hob.skills]).sort()).toEqual(
+      [ADA, ALDRIC, QUILL].map((agentId) => [agentId, [line]]).sort(),
+    );
+    const report = (await get("/api/diagnostics/report")).body;
+    expect(Schema.decodeUnknownSync(DiagnosticsReport)(report).skills).toEqual(current.skills);
+    expect(JSON.stringify(report)).not.toContain(DESCRIPTION);
   });
 });

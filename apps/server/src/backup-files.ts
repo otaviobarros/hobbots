@@ -29,7 +29,14 @@ export const BackupManifest = Schema.Struct({
   database: Schema.Literals(["included", "external"]),
   schemaVersion: Schema.Int,
   installationId: Schema.String,
-  counts: Schema.Struct({ hobs: Schema.Int, threads: Schema.Int, quests: Schema.Int, tasks: Schema.Int }),
+  counts: Schema.Struct({
+    hobs: Schema.Int,
+    threads: Schema.Int,
+    quests: Schema.Int,
+    tasks: Schema.Int,
+    /** Skills in the library, not counting the Archive. A backup made before the library has none. */
+    skills: Schema.optionalKey(Schema.Int),
+  }),
   hobFolders: Schema.Array(ManifestFolders),
   files: Schema.Array(ManifestFile),
 });
@@ -56,6 +63,17 @@ export const BACKUP_PARTS = {
 export const MEMORY_PART = `memory/${MEMORY_ARCHIVE}`;
 
 /**
+ * The skills library's files in a backup (ADR 029): each revision's folder, as `skills/<hash>/` in the
+ * backup and `skills/objects/<hash>/` in the data folder. The library's rows come with the database.
+ * A file keeps whether it runs, since a revision's hash covers that, and a restore makes each folder
+ * read-only again, as the hub wrote it.
+ */
+export const SKILLS_PART = { backup: "skills", data: join("skills", "objects") } as const;
+
+/** A revision's folder in the object store: its SHA-256. A half-written one is still named `.staging-…`. */
+const REVISION_FOLDER = /^[0-9a-f]{64}$/;
+
+/**
  * The entries of the data folder that are the hub's own, which a restore moves aside and Start over
  * deletes. The desktop app keeps its window's own files in the same folder, and they stay where they
  * are.
@@ -71,6 +89,7 @@ export const HUB_ENTRIES = [
   "memory-settings.json",
   "memory",
   "memory-keys",
+  "skills",
   "installation-id",
   "window-key",
   "charms",
@@ -140,7 +159,12 @@ export const sizeOf = async (path: string): Promise<number> => {
  * Copies one file owner-only, never over an existing one, and returns its size and SHA-256. `onBytes`
  * hears of every chunk, for progress.
  */
-const copyFile = async (source: string, target: string, onBytes: (n: number) => void = () => {}) => {
+const copyFile = async (
+  source: string,
+  target: string,
+  onBytes: (n: number) => void = () => {},
+  mode: number = 0o600,
+) => {
   await mkdir(dirname(target), { recursive: true, mode: 0o700 });
   const hash = createHash("sha256");
   let size = 0;
@@ -152,7 +176,7 @@ const copyFile = async (source: string, target: string, onBytes: (n: number) => 
       done(null, chunk);
     },
   });
-  await pipeline(createReadStream(source), tap, createWriteStream(target, { flags: "wx", mode: 0o600 }));
+  await pipeline(createReadStream(source), tap, createWriteStream(target, { flags: "wx", mode }));
   return { size, sha256: hash.digest("hex") };
 };
 
@@ -184,6 +208,77 @@ export const copyTree = async (
     entries.push({ path: join(prefix, file).split(sep).join("/"), ...copied });
   }
   return entries;
+};
+
+/** Owner-only, and runnable when the file it was copied from could be run. */
+const modeOf = async (source: string) => (((await lstat(source)).mode & 0o100) === 0 ? 0o600 : 0o700);
+
+/**
+ * Copies each revision's folder of the skills object store into `target`, owner-only, and returns
+ * each file's entry for the manifest under `skills/`. A file that runs stays one, since the
+ * revision's hash covers it. A folder still being written, which is not named by its hash yet, is
+ * left out: no record names it.
+ */
+export const copySkillObjects = async (
+  source: string,
+  target: string,
+  onBytes: (n: number) => void = () => {},
+): Promise<ReadonlyArray<ManifestFile>> => {
+  const entries: Array<ManifestFile> = [];
+  for (const file of await listFiles(source)) {
+    if (!REVISION_FOLDER.test(file.split(sep)[0] ?? "")) continue;
+    const from = join(source, file);
+    const copied = await copyFile(from, join(target, file), onBytes, await modeOf(from));
+    entries.push({ path: join(SKILLS_PART.backup, file).split(sep).join("/"), ...copied });
+  }
+  return entries;
+};
+
+/** Makes every folder under `path` writable again, so a read-only tree such as a skill revision can be removed. */
+const openFolders = async (path: string): Promise<void> => {
+  const stat = await lstat(path).catch(() => undefined);
+  if (stat === undefined || !stat.isDirectory()) return;
+  await chmod(path, 0o700);
+  for (const entry of await readdir(path)) await openFolders(join(path, entry));
+};
+
+/**
+ * Removes `path` and everything under it, read-only folders included: the skills object store keeps
+ * each revision read-only (ADR 029), which `rm` alone cannot delete. A missing path is no error.
+ */
+export const removeTree = async (path: string) => {
+  await openFolders(path);
+  await rm(path, { recursive: true, force: true });
+};
+
+/** Makes a restored revision read-only, as the hub wrote it: files `0444`, or `0555` for one that runs, then folders `0555`. */
+const sealRevision = async (folder: string): Promise<void> => {
+  for (const entry of await readdir(folder, { withFileTypes: true })) {
+    const path = join(folder, entry.name);
+    if (entry.isDirectory()) await sealRevision(path);
+    else await chmod(path, ((await lstat(path)).mode & 0o100) === 0 ? 0o444 : 0o555);
+  }
+  await chmod(folder, 0o555);
+};
+
+/**
+ * Restores the skills object store from a backup's `skills/` files into `<dataDir>/skills/objects`:
+ * each file keeps whether it runs, and each revision's folder is read-only again.
+ */
+const restoreSkillObjects = async (dataDir: string, backup: string, manifest: BackupManifest) => {
+  const objects = join(dataDir, SKILLS_PART.data);
+  const files = manifest.files.filter((file) => file.path.startsWith(`${SKILLS_PART.backup}/`));
+  if (files.length === 0) return;
+  await mkdir(objects, { recursive: true, mode: 0o700 });
+  await chmod(dirname(objects), 0o700);
+  const revisions = new Set<string>();
+  for (const file of files) {
+    const inner = file.path.slice(SKILLS_PART.backup.length + 1);
+    const from = join(backup, file.path);
+    await copyFile(from, join(objects, ...inner.split("/")), () => {}, await modeOf(from));
+    revisions.add(inner.split("/")[0] ?? "");
+  }
+  for (const revision of revisions) if (REVISION_FOLDER.test(revision)) await sealRevision(join(objects, revision));
 };
 
 /** Writes the manifest last, owner-only. */
@@ -281,7 +376,7 @@ const putBack = async (
 ) => {
   for (const entry of HUB_ENTRIES) {
     if (originals.includes(entry) && !moved.includes(entry)) continue;
-    await rm(join(dataDir, entry), { recursive: true, force: true });
+    await removeTree(join(dataDir, entry));
   }
   for (const entry of moved) await rename(join(setAside, entry), join(dataDir, entry)).catch(() => undefined);
   if (madeSetAside) await rmdir(setAside).catch(() => undefined);
@@ -289,9 +384,9 @@ const putBack = async (
 
 /**
  * Restores a checked backup into `dataDir`, with no hub running there (ADR 026): moves the hub's own
- * entries aside into `<dataDir>.before-restore-<date>`, copies the backup in owner-only, unpacks its
- * memory, writes a new installation ID, new memory bearers (ADR 028) and the marker the next start
- * applies. A failure puts everything back as it was.
+ * entries aside into `<dataDir>.before-restore-<date>`, copies the backup in owner-only, puts back the
+ * skills library's revisions read-only (ADR 029), unpacks its memory, writes a new installation ID,
+ * new memory bearers (ADR 028) and the marker the next start applies. A failure puts everything back as it was.
  * Returns the folder set aside, or null when the data folder held nothing of the hub's.
  */
 export const restoreInto = async (
@@ -329,6 +424,7 @@ export const restoreInto = async (
       }
       if (part === BACKUP_PARTS.workspace) await mkdir(target, { recursive: true, mode: 0o700 });
     }
+    await restoreSkillObjects(dataDir, backup, manifest);
     if (manifest.files.some((file) => file.path === MEMORY_PART)) {
       await Effect.runPromise(
         restoreMemoryArchive(join(backup, MEMORY_PART), memoryFolder(dataDir)).pipe(

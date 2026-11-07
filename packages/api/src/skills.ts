@@ -20,6 +20,8 @@ import {
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
+import { InvalidFolder } from "./errors.ts";
+import { ExportFailed } from "./export.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**
@@ -117,6 +119,11 @@ export const SkillCandidate = Schema.Struct({
     Schema.Struct({ check: SkillCheck, path: Schema.NullOr(Schema.String), message: Schema.String }),
   ),
   locked: Schema.NullOr(Schema.Struct({ matches: Schema.Boolean, url: Schema.NullOr(Schema.String) })),
+  /**
+   * What a Hobbots export's `skills.lock.json` says of it (ADR 029): whether this copy is still the
+   * exported revision, and the older revisions and assignments that come with it.
+   */
+  exported: Schema.NullOr(Schema.Struct({ matches: Schema.Boolean, revisions: Schema.Int, assignments: Schema.Int })),
   existing: Schema.NullOr(Schema.Struct({ skillId: SkillId, number: Schema.NullOr(Schema.Int) })),
 });
 export type SkillCandidate = typeof SkillCandidate.Type;
@@ -124,6 +131,8 @@ export type SkillCandidate = typeof SkillCandidate.Type;
 export const SkillScan = Schema.Struct({
   commit: Schema.NullOr(Schema.String),
   candidates: Schema.Array(SkillCandidate),
+  /** Set when the source is a Hobbots export: when it was made, and how many skills and assignments it keeps. */
+  exported: Schema.NullOr(Schema.Struct({ exportedAt: Schema.String, skills: Schema.Int, assignments: Schema.Int })),
 });
 export type SkillScan = typeof SkillScan.Type;
 
@@ -198,7 +207,25 @@ export const HobSkills = Schema.Struct({
 });
 export type HobSkills = typeof HobSkills.Type;
 
-export const ImportedSkills = Schema.Struct({ imported: Schema.Array(ImportedSkill) });
+/**
+ * What an import added. From a Hobbots export it also gives out the assignments the export kept:
+ * `assigned` on this hub, and `leftOut` those whose hob is not here.
+ */
+export const ImportedSkills = Schema.Struct({
+  imported: Schema.Array(ImportedSkill),
+  assigned: Schema.Array(SkillAssignment),
+  leftOut: Schema.Int,
+});
+
+/** Export skills (ADR 029): every skill, or those named, and whether to keep who gets each one. */
+export const ExportSkillsPayload = Schema.Struct({
+  skillIds: Schema.optionalKey(Schema.Array(SkillId).check(Schema.isMinLength(1))),
+  assignments: Schema.Boolean,
+});
+
+/** An export of skills: the folder made on the hub, its name, and how many skills it holds. */
+export const SkillsExported = Schema.Struct({ folder: Schema.String, name: Schema.String, skills: Schema.Int });
+export type SkillsExported = typeof SkillsExported.Type;
 
 /** A skill in `~/.agents/skills` the hub did not take, and why; `folder` is "" when the folder itself could not be read. */
 export const AgentsFolderProblem = Schema.Struct({
@@ -305,6 +332,14 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
       payload: ImportSkillsPayload,
       success: ImportedSkills,
       error: importErrors,
+    }),
+  )
+  .add(
+    // A folder with each skill and `skills.lock.json`, in the hub user's Downloads folder.
+    HttpApiEndpoint.post("export", "/skills/export", {
+      payload: ExportSkillsPayload,
+      success: SkillsExported,
+      error: [InvalidFolder, ExportFailed],
     }),
   )
   .add(

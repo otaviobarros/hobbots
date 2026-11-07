@@ -1,8 +1,8 @@
-import type { QuestTrace, RecoveryError, StalledWork } from "@hobbots/api";
+import type { DiagnosticsHobSkills, QuestTrace, RecoveryError, StalledWork } from "@hobbots/api";
 import type { Attempt, BackpackItem, Delegation, MemoryEngineHealth, RuntimeHealth, Task } from "@hobbots/domain";
-import { RUNTIME_NAMES } from "@hobbots/domain";
+import { RUNTIME_NAMES, skillTitle } from "@hobbots/domain";
 import { runtimeProblem } from "../../api/runtime-health.ts";
-import { firstLine, formatAgo, formatCount, plural } from "../../lib/format.ts";
+import { firstLine, formatAgo, formatCount, formatList, plural } from "../../lib/format.ts";
 import { messages } from "./messages.ts";
 
 /** A hob's name by id; one this hub no longer lists reads as "a hob". */
@@ -34,6 +34,18 @@ export const memoryNote = (health: MemoryEngineHealth, now: Date = new Date()): 
 /** What stalled and what to do about it, in one sentence. */
 export const stalledText = (stalled: StalledWork, hobName: HobName, now: Date = new Date()): string =>
   messages.stalled[stalled.kind]({ hob: hobName(stalled.agentId), since: formatAgo(stalled.since, now) });
+
+/** A hob's skills by name and revision, as Right now lists them: "Release steps r5 and Commit style r3". */
+export const skillsText = (hob: DiagnosticsHobSkills): string =>
+  hob.skills.length === 0
+    ? messages.skills.none
+    : formatList(
+        hob.skills.map((skill) =>
+          skill.number === null
+            ? messages.skills.gone({ name: skillTitle(skill.name) })
+            : messages.skills.skill({ name: skillTitle(skill.name), number: formatCount(skill.number) }),
+        ),
+      );
 
 export const recoveryText = (error: RecoveryError): string =>
   messages.recovery[error.step]({ tag: error.tag, message: error.message });

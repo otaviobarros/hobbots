@@ -75,25 +75,42 @@ function ScanResult({
   const [failure, setFailure] = useState<string | null>(null);
   // The skills this scan already added: Import again gives them out, and imports nothing twice.
   const [added, setAdded] = useState<ReadonlyArray<SkillId> | null>(null);
+  // What importing an export gave out, kept for when giving out fails and Import runs again.
+  const [given, setGiven] = useState<{ readonly assigned: number; readonly leftOut: number } | null>(null);
   if (scan.candidates.length === 0) return <p className="m-0 text-ui text-text-secondary">{copy.import.none}</p>;
   if (scan.candidates.every((candidate) => candidate.refusal !== null))
     return <ImportRefused candidates={scan.candidates} />;
   const folders = can.filter((folder) => picked.has(folder));
+
+  // A Hobbots export brings who gets each skill with it, so it is not given out again here.
+  const exported = scan.exported;
+  const keepsAssignments = exported !== null && exported.assignments > 0;
 
   const importPicked = async () => {
     // Only what this scan found is added: a branch that moved on since is refused, not imported unseen.
     const scanned = scan.candidates.flatMap((one) =>
       one.hash !== null && folders.includes(one.folder) ? [{ folder: one.folder, hash: one.hash }] : [],
     );
-    return (await writes.add.mutateAsync({ source, folders, scanned })).imported.map((one) => one.skill.id);
+    const result = await writes.add.mutateAsync({ source, folders, scanned });
+    setGiven({ assigned: result.assigned.length, leftOut: result.leftOut });
+    return {
+      ids: result.imported.map((one) => one.skill.id),
+      assigned: result.assigned.length,
+      leftOut: result.leftOut,
+    };
   };
 
   // Two saves, each kept once made: the import, then giving each skill out. What failed is said as such.
   const run = async () => {
     setFailure(null);
     let ids = added;
+    let fromExport = given;
     try {
-      ids ??= await importPicked();
+      if (ids === null) {
+        const result = await importPicked();
+        ids = result.ids;
+        fromExport = { assigned: result.assigned, leftOut: result.leftOut };
+      }
     } catch (error) {
       setFailure(skillsErrorTag(error) === "SkillScanOutdated" ? copy.import.moved : copy.import.failed);
       return;
@@ -105,9 +122,11 @@ function ScanResult({
     }
     const count = ids.length;
     const message =
-      give === null
-        ? copy.import.imported({ count })
-        : copy.import.importedGiven({ count, who: scopeName(give, hobs) });
+      exported !== null && fromExport !== null
+        ? copy.import.importedSet({ count, given: fromExport.assigned, left: fromExport.leftOut })
+        : give === null
+          ? copy.import.imported({ count })
+          : copy.import.importedGiven({ count, who: scopeName(give, hobs) });
     say({ tone: "done", message }, { _tag: "Overview" });
     void navigate({ to: "/skills", search: {} });
   };
@@ -129,7 +148,12 @@ function ScanResult({
           })
         }
       />
-      <GiveChoice value={give} onChange={setGive} active={active} projects={projects} many />
+      {exported !== null && (
+        <p className="m-0 rounded-card bg-deep px-3.5 py-2.5 text-ui text-text-secondary">
+          {copy.import.exportedNote({ when: copy.day(exported.exportedAt), count: exported.assignments })}
+        </p>
+      )}
+      {!keepsAssignments && <GiveChoice value={give} onChange={setGive} active={active} projects={projects} many />}
       {failure !== null && (
         <p role="alert" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
           {failure}

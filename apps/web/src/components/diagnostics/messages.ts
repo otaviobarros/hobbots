@@ -14,6 +14,15 @@ export const messages = {
     recovered: ({ when }: { when: string }) => `Hobbots started ${when} and recovered everything it found.`,
     held: "Work is held after a restore. Nothing that was waiting runs until you resume it.",
     followQuest: "Follow its quest",
+    skills: "Skills each hob has",
+  },
+  skills: {
+    none: "No skills",
+    skill: ({ name, number }: { name: string; number: string }) => `${name} r${number}`,
+    gone: ({ name }: { name: string }) => `${name}, a revision this hub no longer has`,
+    clash: ({ names }: { names: string }) => `Two projects both give ${names}, so neither loads until you pick one.`,
+    noHobs: "No hob has skills yet.",
+    note: "Names and revisions only. A skill's instructions and files never go in Diagnostics or its report.",
   },
   availability: {
     ready: "Ready",

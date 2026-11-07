@@ -27,6 +27,8 @@ export interface BackupCounts {
   readonly threads: number;
   readonly quests: number;
   readonly tasks: number;
+  /** Skills in the library, not counting the Archive (ADR 029). */
+  readonly skills: number;
 }
 
 /**
@@ -67,6 +69,11 @@ const backupCounts = (schema: CopySchema): Effect.Effect<BackupCounts, SqlError.
       threads: yield* count("threads"),
       quests: yield* count("quests"),
       tasks: yield* count("tasks"),
+      skills: schema.has("skills", "removed_at")
+        ? yield* sql<{ readonly n: unknown }>`SELECT COUNT(*) AS n FROM skills WHERE removed_at IS NULL`.pipe(
+            Effect.map((rows) => Number(rows[0]?.n ?? 0)),
+          )
+        : 0,
     };
   });
 

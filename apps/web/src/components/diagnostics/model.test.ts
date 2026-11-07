@@ -1,7 +1,16 @@
 import type { QuestTrace, StalledWork } from "@hobbots/api";
 import { AgentId, AttemptId, DelegationId, QuestId, RuntimeHealth, TaskId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { eventLabel, memoryNote, recoveryText, runtimeFix, stalledText, traceRows, triesText } from "./model.ts";
+import {
+  eventLabel,
+  memoryNote,
+  recoveryText,
+  runtimeFix,
+  skillsText,
+  stalledText,
+  traceRows,
+  triesText,
+} from "./model.ts";
 
 const now = new Date("2026-11-02T12:00:00.000Z");
 const names: Record<string, string> = { aldric: "Aldric", ada: "Ada" };
@@ -85,6 +94,24 @@ describe("Diagnostics copy", () => {
     expect(eventLabel("QuestStarted")).toBe("Quest started");
     expect(eventLabel("SomethingNew")).toBe("SomethingNew");
     expect([triesText(1), triesText(3)]).toEqual(["1 try", "3 tries"]);
+  });
+});
+
+describe("skillsText", () => {
+  // covers ADR 029 (Backups, exports and Diagnostics), #1064
+  it("names each skill and its revision, and says when a hob has none", () => {
+    const revision = "a".repeat(64) as never;
+    const hob = { agentId: AgentId.make("pip"), runtime: "codex" as const, clashes: [] };
+    expect(skillsText({ ...hob, skills: [] })).toBe("No skills");
+    expect(
+      skillsText({
+        ...hob,
+        skills: [
+          { name: "release-steps", number: 5, revision, scope: "Project" },
+          { name: "commit-style", number: 3, revision, scope: "Everyone" },
+        ],
+      }),
+    ).toBe("Release steps r5 and Commit style r3");
   });
 });
 

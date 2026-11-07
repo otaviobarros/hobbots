@@ -13,6 +13,11 @@ const checkLine = (candidate: SkillCandidate): { readonly text: string; readonly
     const path = candidate.refusal.path;
     return { text: path === null ? rule : copy.import.refusedRule({ path, rule }), tone: "bad" };
   }
+  if (candidate.exported !== null && candidate.existing === null) {
+    return candidate.exported.matches
+      ? { text: copy.import.exportedLine({ count: candidate.exported.revisions }), tone: "ok" }
+      : { text: copy.import.exportedChanged, tone: "label" };
+  }
   if (candidate.existing?.number != null) {
     return {
       text: copy.import.alreadyLine({ rev: copy.revision({ number: candidate.existing.number }) }),

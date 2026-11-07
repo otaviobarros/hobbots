@@ -7,6 +7,7 @@ import { messages } from "./messages.ts";
 import { SkillEditor } from "./skill-editor.tsx";
 import { SkillNew } from "./skill-new.tsx";
 import { SkillPage } from "./skill-page.tsx";
+import { SkillsExport } from "./skills-export.tsx";
 import { type Say, useFlash } from "./skills-flash.ts";
 import { SkillsImport } from "./skills-import.tsx";
 import { type SkillsSearch, type SkillsView, skillsSearchOf, skillsViewOf } from "./skills-model.ts";
@@ -58,6 +59,8 @@ function ViewBody({ view, reads, say, now }: { view: SkillsView; reads: SkillsRe
       return <SkillPage view={view} list={list} hobs={reads.hobs} active={reads.active} say={say} />;
     case "Search":
       return <SkillsSearchResults q={view.q} list={list} />;
+    case "Export":
+      return <SkillsExport list={list} hobs={reads.hobs} say={say} />;
     case "Scope":
       return <SkillsScope scope={view.scope} list={list} hobs={reads.hobs} now={now} />;
     case "Overview":

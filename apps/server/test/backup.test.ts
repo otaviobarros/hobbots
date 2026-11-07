@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -7,6 +7,7 @@ import {
   HobbotsRepository,
   type NewAttempt,
   SaveDestinations,
+  SkillLibrary,
   TaskRepository,
   WorkHold,
 } from "@hobbots/agents";
@@ -42,9 +43,11 @@ import {
   knownSchemaVersion,
   migrations,
   RestoreRepository,
+  SkillLibraryLive,
   SqliteLive,
   TaskRepositoryLive,
 } from "@hobbots/persistence";
+import { SkillImporter, SkillObjects } from "@hobbots/skills";
 import { Effect, Exit, Fiber, Latch, Layer, Option, Redacted, Ref, Stream } from "effect";
 import { SqlClient } from "effect/sql";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -55,7 +58,9 @@ import { checkDestination } from "../src/destination.ts";
 import { Installation } from "../src/installation.ts";
 import { readMemorySettings } from "../src/memory-settings.ts";
 import { backupBeforeMigrations, migrationBackupsFolder } from "../src/migration-backup.ts";
+import { wipeHubData } from "../src/resets.ts";
 import { performRestore, RestoreRulesLive, WorkHoldLive } from "../src/restores.ts";
+import { SkillsLive } from "../src/skills.ts";
 
 // Backup and restore (ADR 026), on real SQLite files in real data folders: a backup made from a
 // running hub's database, the data folder deleted, the backup restored, and the hub started again
@@ -612,7 +617,7 @@ describe("backup and restore", () => {
       expect(made).not.toBeNull();
       const manifest = await readBackup(made as string, 41);
       expect(manifest.schemaVersion).toBe(Number(before) - 1);
-      expect(manifest.counts).toEqual({ hobs: 0, threads: 0, quests: 0, tasks: 0 });
+      expect(manifest.counts).toEqual({ hobs: 0, threads: 0, quests: 0, tasks: 0, skills: 0 });
       // The next start migrates it.
       await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dir))));
     }
@@ -681,5 +686,91 @@ describe("backup and restore", () => {
       /Hobbots could not back up memory: memory is not answering right now\./,
     );
     await expect(lstat(failing)).rejects.toThrow();
+  });
+  // covers OP-003, ADR 029 (Backups, exports and Diagnostics), #1064
+  it("[TC-OP-115] brings back every skill revision, assignment, hold and pin, with each revision's files read-only", async () => {
+    await onHub(dataDir, seed);
+    const source = join(root, "release");
+    await mkdir(join(source, "scripts"), { recursive: true });
+    const skillFile = (text: string) =>
+      writeFile(
+        join(source, "SKILL.md"),
+        `---\nname: release\ndescription: How this repository releases.\n---\n${text}\n`,
+      );
+    await skillFile("Tag, then push.");
+    await writeFile(join(source, "scripts", "tag.sh"), "git tag v1\n");
+    await chmod(join(source, "scripts", "tag.sh"), 0o755);
+    const skills = SkillsLive(dataDir, null).pipe(Layer.provideMerge(SkillLibraryLive));
+    const before = await onHub(
+      dataDir,
+      Effect.gen(function* () {
+        const importer = yield* SkillImporter;
+        const library = yield* SkillLibrary;
+        const [first] = yield* importer.add({ _tag: "Folder", path: source }, { by: { _tag: "You" } });
+        if (first === undefined) throw new Error("nothing imported");
+        yield* Effect.promise(() => skillFile("Tag, push, then write the notes."));
+        const [second] = yield* importer.add(
+          { _tag: "Folder", path: source },
+          { by: { _tag: "You" }, skillId: first.skill.id },
+        );
+        if (second === undefined) throw new Error("no second revision");
+        const by = { _tag: "You" } as const;
+        const base = { skillId: first.skill.id, onlyWhenAsked: false, by };
+        yield* library.assign({ ...base, scope: { _tag: "Everyone" }, pin: second.revision.hash, held: false });
+        yield* library.assign({
+          ...base,
+          scope: { _tag: "Hob", agentId: FRODO },
+          pin: first.revision.hash,
+          held: true,
+        });
+        return { skillId: first.skill.id, r1: first.revision.hash, r2: second.revision.hash };
+      }).pipe(Effect.provide(skills)),
+    );
+    const folder = join(destination, "skills.hobbots-backup");
+    await backUp(dataDir, folder);
+    const manifest = await readBackup(folder, knownSchemaVersion());
+    expect(manifest.counts.skills).toBe(1);
+    const paths = manifest.files.map((file) => file.path);
+    for (const hash of [before.r1, before.r2]) {
+      expect(paths).toContain(`skills/${hash}/SKILL.md`);
+      expect(paths).toContain(`skills/${hash}/scripts/tag.sh`);
+    }
+
+    await rm(dataDir, { recursive: true, force: true });
+    await Effect.runPromise(performRestore(dataDir, folder));
+    const after = await onHub(
+      dataDir,
+      Effect.gen(function* () {
+        const library = yield* SkillLibrary;
+        const objects = yield* SkillObjects;
+        return {
+          skills: yield* library.list,
+          revisions: yield* library.revisions(before.skillId),
+          assignments: yield* library.assignments(before.skillId),
+          folders: [yield* objects.folder(before.r1), yield* objects.folder(before.r2)],
+        };
+      }).pipe(Effect.provide(skills)),
+    );
+    expect(after.skills.map((skill) => [skill.name, skill.latest])).toEqual([["release", before.r2]]);
+    expect(after.revisions.map((revision) => [revision.number, revision.hash])).toEqual([
+      [2, before.r2],
+      [1, before.r1],
+    ]);
+    expect(after.assignments.map((one) => [one.scope._tag, one.pin, one.held]).sort()).toEqual([
+      ["Everyone", before.r2, false],
+      ["Hob", before.r1, true],
+    ]);
+    for (const revision of after.folders) {
+      if (revision === null) throw new Error("a revision's files did not come back");
+      expect(await readFile(join(revision, "scripts", "tag.sh"), "utf8")).toBe("git tag v1\n");
+      // Still runnable, as its hash says, and read-only, as the hub writes every revision.
+      expect((await lstat(join(revision, "scripts", "tag.sh"))).mode & 0o777).toBe(0o555);
+      expect((await lstat(join(revision, "SKILL.md"))).mode & 0o777).toBe(0o444);
+      expect((await lstat(revision)).mode & 0o777).toBe(0o555);
+    }
+
+    // Start over deletes the library too, read-only revisions and all.
+    await wipeHubData(dataDir);
+    await expect(lstat(join(dataDir, "skills"))).rejects.toThrow();
   });
 });

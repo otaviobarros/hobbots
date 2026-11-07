@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expectAccessible } from "./accessibility.ts";
@@ -234,4 +234,80 @@ test("[TC-UX-1062-04] rollout switches alone, or with text that saves the same, 
   await main.getByRole("link", { name: "Cancel" }).click();
   await main.getByRole("tab", { name: /Who uses it/ }).click();
   await expect(main.getByRole("listitem").filter({ hasText: "Everyone" })).toContainText("r3");
+});
+
+// covers ADR 029 (Backups, exports and Diagnostics), #1064
+test("[TC-UX-1064] Skills: export a set with skills.lock.json, import it on a fresh hub, and see it in Diagnostics", async ({
+  page,
+}) => {
+  const { api } = await hubWithHobs();
+  const imported = (await api("POST", "/skills", {
+    source: {
+      _tag: "Written",
+      files: [
+        {
+          path: "SKILL.md",
+          text: "---\nname: release-steps\ndescription: Use when releasing the site, from version to tag.\n---\n\nTag the release.\n",
+        },
+      ],
+    },
+  })) as unknown as { imported: ReadonlyArray<{ skill: { id: string } }> };
+  const skillId = imported.imported[0]?.skill.id ?? "";
+  const pip = (
+    (await (await fetch(`${hub?.url}/api/agents`, { headers: hub?.headers ?? {} })).json()) as Array<{
+      id: string;
+      name: string;
+    }>
+  ).find((agent) => agent.name === "Pip");
+  await api("POST", `/skills/${skillId}/assignments`, { scope: { _tag: "Hob", agentId: pip?.id } });
+  await api("POST", `/skills/${skillId}/assignments`, { scope: { _tag: "Everyone" } });
+  // The hub saves exports in its user's Downloads folder; this hub's user lives in a folder of its own.
+  await hub?.stop();
+  const home = emptyDataDir();
+  mkdirSync(join(home, "Downloads"), { recursive: true });
+  hub = await startHub(dataDir, { HOME: home });
+
+  await page.goto(`${hub.url}/#/skills`);
+  const main = page.getByRole("main", { name: "Skills" });
+  await main.getByRole("link", { name: "Export…" }).click();
+  await expect(main.getByRole("heading", { name: "Export skills" })).toBeVisible();
+  await expect(main.getByRole("checkbox", { name: "Export Release steps" })).toBeChecked();
+  await expect(main.getByRole("switch", { name: "Include who gets each skill" })).toBeChecked();
+  await expectAccessible(page, main);
+  await main.getByRole("button", { name: "Export 1 skill" }).click();
+  await expect(main).toContainText(
+    /Saved hobbots-skills-\d{4}-\d{2}-\d{2} to Downloads: 1 skill and skills\.lock\.json\./,
+  );
+  const [exported] = readdirSync(join(home, "Downloads"));
+  const folder = join(home, "Downloads", exported ?? "");
+
+  // A fresh hub, where Pip is a new hob of the same name, takes the export as it was.
+  await hub.stop();
+  removeDataDir(dataDir);
+  // It answers at the same address, so the browser's device on the first hub goes first.
+  await page.context().clearCookies();
+  const fresh = await hubWithHobs();
+  try {
+    await page.goto(`${fresh.url}/#/skills?add=file`);
+    await main.getByLabel("Folder on the hub's computer").fill(folder);
+    await main.getByRole("button", { name: "Look" }).click();
+    await expect(main).toContainText("A Hobbots export from");
+    await expect(main).toContainText("Exactly the exported revision");
+    await expectAccessible(page, main);
+    await main.getByRole("button", { name: "Import 1 skill" }).click();
+    await expect(main).toContainText(
+      "Imported 1 skill with the revisions the export names, and gave out 2 assignments.",
+    );
+
+    // Diagnostics names each hob's skills and revisions, never their instructions.
+    await page.goto(`${fresh.url}/#/settings/help`);
+    await page.getByText("Technical details").click();
+    const diagnostics = page.getByRole("region", { name: "Diagnostics" });
+    const skills = diagnostics.getByRole("list", { name: "Skills each hob has" });
+    await expect(skills.getByRole("listitem").filter({ hasText: "Pip" })).toContainText("Release steps r1");
+    await expect(skills.getByRole("listitem").filter({ hasText: "Wren" })).toContainText("Release steps r1");
+    await expect(diagnostics).not.toContainText("Tag the release.");
+  } finally {
+    removeDataDir(home);
+  }
 });

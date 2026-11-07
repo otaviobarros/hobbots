@@ -1,20 +1,23 @@
 import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   announcer,
   EventPublisher,
+  ExportFolders,
   HobbotsRepository,
   hobSkills,
   MemoryProjects,
   memoryActorFor,
   PermissionSummary,
+  SaveDestinations,
   SkillFiles,
   type SkillHoldChange,
   SkillLibrary,
   type SkillLibraryShape,
 } from "@hobbots/agents";
 import {
+  ExportFailed,
   HobbotsApi,
   SKILL_FILE_SHOWN_MAX,
   SkillEditStale,
@@ -41,15 +44,20 @@ import {
   AgentsFolder,
   AgentsFolderLive,
   defaultAgentsFolder,
+  type ExportedHob,
   type SkillImportError,
   SkillImporter,
   SkillImporterLive,
   type SkillImportSource,
+  SkillObjects,
   SkillObjectsLive,
   SkillWriterLive,
+  writeSkillExport,
 } from "@hobbots/skills";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
+import { fileStamp } from "./backup-files.ts";
+import { defaultSaveFolder } from "./destination.ts";
 
 /**
  * The skills library's routes (ADR 029, Import). Every change here is yours: a device session
@@ -120,6 +128,7 @@ const libraryOff = {
     Effect.fail(new SkillMissing({ id: params.hash })),
   scan: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   import: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
+  export: () => Effect.fail(new ExportFailed({ message: NO_LIBRARY })),
   revise: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   edit: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   syncAgentsFolder: () => Effect.succeed(NO_SKILLS),
@@ -268,6 +277,54 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
         return { ...one, rolledOut };
       });
 
+    /**
+     * The hob an exported assignment names, on this hub: the same hob when it is here and not retired,
+     * or else the one hob of that name. Null when there is none, or more than one.
+     */
+    const placeHob = (hob: ExportedHob) =>
+      Effect.gen(function* () {
+        if (Option.isNone(repo)) return null;
+        const hobs = yield* repo.value.listAgentsWithStatus(["active", "paused"]);
+        if (hobs.some((one) => one.id === hob.agentId)) return hob.agentId;
+        const named = hobs.filter((one) => hob.name !== null && one.name === hob.name);
+        return named.length === 1 ? (named[0]?.id ?? null) : null;
+      });
+
+    const objects = yield* Effect.serviceOption(SkillObjects);
+    const folders = yield* Effect.serviceOption(ExportFolders);
+    const destinations = yield* Effect.serviceOption(SaveDestinations);
+
+    /**
+     * Export skills (ADR 029): a new folder `hobbots-skills-<date>` in the hub user's Downloads folder,
+     * never inside a folder hobs work in, with each skill and `skills.lock.json`. A failure deletes it.
+     */
+    const exportSkills = (payload: { readonly skillIds?: ReadonlyArray<SkillId>; readonly assignments: boolean }) =>
+      Effect.gen(function* () {
+        if (Option.isNone(objects) || Option.isNone(folders))
+          return yield* new ExportFailed({ message: "This hub does not make exports" });
+        const typed = defaultSaveFolder();
+        const parent = Option.isSome(destinations) ? yield* destinations.value.check(typed) : typed;
+        const now = yield* DateTime.now;
+        // The date where you are, as the folder's name says it.
+        const day = fileStamp(new Date(DateTime.toEpochMillis(now))).slice(0, 10);
+        const folder = yield* folders.value.create(parent, `hobbots-skills-${day}`);
+        const names = new Map(
+          (Option.isSome(repo) ? yield* repo.value.listAgents : []).map((one) => [one.id, one.name]),
+        );
+        const written = yield* writeSkillExport(folder, {
+          ...(payload.skillIds === undefined ? {} : { skillIds: payload.skillIds }),
+          assignments: payload.assignments,
+          hobName: (agentId) => names.get(agentId) ?? null,
+          exportedAt: DateTime.formatIso(now),
+        }).pipe(
+          Effect.provideService(SkillLibrary, library),
+          Effect.provideService(SkillObjects, objects.value),
+          Effect.catchDefect(() => Effect.fail(new ExportFailed({ message: `Hobbots could not write ${folder}` }))),
+          Effect.tapError(() => folders.value.remove(folder)),
+        );
+        return { folder, name: basename(folder), skills: written.skills };
+      });
+
     return handlers.handleAll({
       list: () => list,
       get: ({ params }) =>
@@ -307,19 +364,19 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
         importer
           .scan(sourceOf(payload.source))
           .pipe(Effect.mapError((error) => new SkillSourceNotRead({ message: error.message }))),
+      // A Hobbots export gives out the assignments it kept too, each hob found here (ADR 029).
       import: ({ payload }) =>
         importer
-          .add(sourceOf(payload.source), {
+          .addSet(sourceOf(payload.source), {
             by: YOU,
+            placeHob,
             ...(payload.folders === undefined ? {} : { folders: payload.folders }),
             ...(payload.scanned === undefined
               ? {}
               : { scanned: new Map(payload.scanned.map((one) => [one.folder, one.hash])) }),
           })
-          .pipe(
-            Effect.map((imported) => ({ imported })),
-            Effect.mapError(importError),
-          ),
+          .pipe(Effect.mapError(importError)),
+      export: ({ payload }) => exportSkills(payload),
       revise: ({ params, payload }) =>
         Effect.gen(function* () {
           const skill = yield* skillOf(params.skillId);
@@ -412,6 +469,43 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
     });
   }),
 );
+
+/**
+ * Each hob's skills as its next turn would get them, in the folders it works in now, by name and
+ * revision only, for Diagnostics (ADR 029): the same on every runtime. Empty on a hub without skills.
+ */
+export const hobSkillLines = Effect.gen(function* () {
+  const library = yield* Effect.serviceOption(SkillLibrary);
+  const repo = yield* Effect.serviceOption(HobbotsRepository);
+  const permissions = yield* Effect.serviceOption(PermissionSummary);
+  const projects = yield* Effect.serviceOption(MemoryProjects);
+  return Effect.gen(function* () {
+    if (Option.isNone(library) || Option.isNone(repo)) return [];
+    const skills = library.value;
+    const hobs = yield* repo.value.listAgentsWithStatus(["active", "paused"]);
+    return yield* Effect.forEach(hobs, (agent) =>
+      Effect.gen(function* () {
+        const folders = Option.isSome(permissions)
+          ? (yield* permissions.value.of(agent)).folders
+          : agent.policy.ownFolders;
+        const resolved = yield* hobSkills(skills, projects, { agentId: agent.id, policy: agent.policy, folders });
+        return {
+          agentId: agent.id,
+          runtime: agent.runtime,
+          skills: yield* Effect.forEach(resolved.skills, (skill) =>
+            Effect.map(skills.revision(skill.skillId, skill.pin), (revision) => ({
+              name: skill.name,
+              number: revision?.number ?? null,
+              revision: skill.pin,
+              scope: skill.scope._tag,
+            })),
+          ),
+          clashes: resolved.clashes.map((clash) => clash.name),
+        };
+      }),
+    );
+  });
+});
 
 /** The folder `~/.agents/skills` is read from, or null when the hub reads none (`HOBBOTS_AGENTS_SKILLS`). */
 export const agentsSkillsFolder = (setting: Option.Option<string>, runtime: "claude" | "fake"): string | null => {
