@@ -10,6 +10,7 @@ import {
   FileChange,
   FileChangeId,
   MessageId,
+  Milestone,
   Question,
   QuestionId,
   Task,
@@ -189,6 +190,16 @@ describe("summaryOf", () => {
       ["milestone", "done"],
       ["checkpoint", "waiting"],
       ["milestone", "next"],
+    ]);
+  });
+
+  it("names the hob whose work reached a milestone only when it is not the Task's owner (#743)", () => {
+    const own = new Milestone({ ...milestone(CAMPAIGN, "Copy drafted", 0, true), reachedBy: ALDRIC });
+    const other = new Milestone({ ...milestone(CAMPAIGN, "Committed", 1, true), reachedBy: ADA });
+    const lines = summaryOf(tree({ milestones: [own, other] }), task(CAMPAIGN), done, null, []).happened;
+    expect(lines.flatMap((line) => (line.kind === "milestone" ? [[line.milestone.title, line.by]] : []))).toEqual([
+      ["Copy drafted", null],
+      ["Committed", ADA],
     ]);
   });
 

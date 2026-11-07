@@ -335,6 +335,11 @@ export interface HubTools {
    * folder whose origin is on GitHub (ADR 020), or null when the push is decided as a push.
    */
   readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
+  /**
+   * Why a `git commit` in the repository Git finds from `cwd` is held, or null when it may run: a
+   * lead's commit where a member's open Task left changes, which are that member's to commit (#742).
+   */
+  readonly holdsCommit?: (cwd: string) => Effect.Effect<string | null>;
 }
 
 /**

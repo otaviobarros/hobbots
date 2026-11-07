@@ -354,7 +354,7 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
             input: GitInitInput,
             effect: "write",
             otherwise: "there is nowhere to create a repository",
-            invalid: "Give the folder to make a repository, as an absolute path.",
+            unreadable: () => "Give the folder to make a repository, as an absolute path.",
             plan: ({ folder }, { access }) =>
               Effect.gen(function* () {
                 if (access.folders.length === 0) {

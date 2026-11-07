@@ -12,6 +12,7 @@ import {
   HobLifecycle,
   HobService,
   MemoryStore,
+  type MemoryStoreShape,
   PermissionSummary,
   SecretRedaction,
   TaskFiles,
@@ -73,12 +74,20 @@ execFileSync("git", ["init", "--quiet", project]);
 execFileSync("git", ["-C", project, "remote", "add", "origin", "git@github.com:me/app.git"]);
 
 const memory = makeMemoryStoreFake();
+/** Runs as a call reaches memory, before it is searched or written, so a test can look at the reply then. */
+let onReach: (() => Promise<void>) | null = null;
+const reached = () => Effect.promise(() => onReach?.() ?? Promise.resolve());
+const store: MemoryStoreShape = {
+  ...memory.store,
+  search: (...args) => Effect.andThen(reached(), memory.store.search(...args)),
+  write: (...args) => Effect.andThen(reached(), memory.store.write(...args)),
+};
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
 beforeAll(() => {
   const Memory = MemoryToolsLive.pipe(
-    Layer.provide(Layer.mergeAll(Layer.succeed(MemoryStore, memory.store), MemoryProjectsLive, PolicyEngine.node)),
+    Layer.provide(Layer.mergeAll(Layer.succeed(MemoryStore, store), MemoryProjectsLive, PolicyEngine.node)),
   );
   const App = Layer.mergeAll(HobLifecycle.layer, WakeOnArrival)
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))
@@ -254,5 +263,44 @@ describe("hobs remember through the hub, end to end", () => {
       memory.store.page({ _tag: "You" }, { _tag: "Hob", agentId: pip.id }, MemoryPath.make("notes/other.md")),
     );
     expect(other).toBeNull();
+  });
+
+  // covers EX-004, ADR 028 (The memory tools), ADR 031
+  it("[TC-PE-494] the fake runtime records a memory call's step with the reply before memory is reached", async () => {
+    await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
+    const ember = await summon("Ember", 957);
+    const thread = (await request<Thread>("POST", `/api/agents/${ember.id}/threads`)).body;
+    // What the reply held each time a call reached memory.
+    const seen: Array<unknown> = [];
+    onReach = async () => {
+      const reply = (await messages(thread)).at(-1);
+      seen.push(
+        reply?.steps
+          .filter((step) => step.kind === "tool")
+          .map(({ label, state, call, startedAt }) => ({
+            label,
+            state,
+            operation: call?.operation,
+            started: startedAt !== undefined,
+          })),
+      );
+    };
+    try {
+      await exchange(
+        thread,
+        "Remember how the tests run, then look it up",
+        hub("memory_save", { ...lesson, key: "ember" }),
+        hub("memory_search", { query: "pnpm test" }),
+      );
+    } finally {
+      onReach = null;
+    }
+    expect(seen).toEqual([
+      [{ label: MEMORY_SAVE_LABEL, state: "running", operation: "save-memory", started: true }],
+      [
+        { label: MEMORY_SAVE_LABEL, state: "done", operation: "save-memory", started: true },
+        { label: MEMORY_SEARCH_LABEL, state: "running", operation: "search-memory", started: true },
+      ],
+    ]);
   });
 });

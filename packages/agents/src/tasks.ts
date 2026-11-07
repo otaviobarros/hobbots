@@ -154,6 +154,8 @@ export interface NewCheckpoint {
   readonly source: CheckpointSource;
   readonly kind: CheckpointKind;
   readonly milestoneId: MilestoneId | null;
+  /** For a milestone, the hob whose work reached it when that is not the Task's owner (#743). */
+  readonly reachedBy?: AgentId | null;
   readonly summary: string;
   /** More about it than the summary holds, for the Workbench, or null. */
   readonly detail?: string | null;

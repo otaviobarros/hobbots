@@ -55,15 +55,21 @@ function OverviewBody({ list, hobs, now }: { list: SkillsList; hobs: SkillsReads
   );
 }
 
-/** The editor, but a skill from ~/.agents/skills has none (ADR 029): its page says where to change it. */
+/**
+ * The editor, but a skill from ~/.agents/skills and a set have none (ADR 029): the page says where
+ * each changes instead.
+ */
 function EditBody({ skillId, reads, say }: { skillId: SkillId; reads: SkillsReads; say: Say }) {
   const listed = reads.list.data;
   const skill = listed?.skills.find((one) => one.id === skillId);
-  if (listed === undefined || skill === undefined || agentsFolderOf(skill, listed.sources) === null)
-    return <SkillEditor skillId={skillId} hobs={reads.hobs} say={say} />;
+  const readOnly =
+    skill !== undefined &&
+    listed !== undefined &&
+    (agentsFolderOf(skill, listed.sources) !== null || listed.sets.some((set) => set.skillId === skillId));
+  if (listed === undefined || !readOnly) return <SkillEditor skillId={skillId} hobs={reads.hobs} say={say} />;
   return (
     <SkillPage
-      view={{ _tag: "Skill", skillId, tab: null, file: null, diff: null }}
+      view={{ _tag: "Skill", skillId, member: null, tab: null, file: null, diff: null }}
       list={listed}
       hobs={reads.hobs}
       active={reads.active}

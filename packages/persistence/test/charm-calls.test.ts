@@ -5,7 +5,7 @@ import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { CharmCallsLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
-import charmCallValues from "../src/migrations/0074_charm_call_values.ts";
+import charmCallValues from "../src/migrations/0075_charm_call_values.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const TestLayer = CharmCallService.layer.pipe(
@@ -195,8 +195,8 @@ describe("Charm call records", () => {
   });
 
   // covers DP-003, ADR 031
-  it("[TC-DP-289] 0074 names every stored call's Charm and moves its applied text out of its plan, readable after", async () => {
-    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0074")) as typeof migrations;
+  it("[TC-DP-289] 0075 names every stored call's Charm and moves its applied text out of its plan, readable after", async () => {
+    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0075")) as typeof migrations;
     const stored = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* seed;

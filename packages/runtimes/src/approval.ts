@@ -15,6 +15,7 @@ import { Effect } from "effect";
 import { inSharedTemp, TEMP_HINT } from "./sandbox.ts";
 import {
   commandWritesTo,
+  commitFolders,
   initsRepository,
   narrowestVerdict,
   overridesCommitIdentity,
@@ -60,16 +61,34 @@ const pushesFrom = (call: ToolCall) => [
   ),
 ];
 
-/** The hub tool a call's `git push` is pointed to instead, or null when none is. */
-const steeredTo = (call: ToolCall, steersPush: ((cwd: string) => Effect.Effect<string | null>) | undefined) =>
+/** The first answer `answer` gives for one of `folders` that is not null, or null. */
+const firstAnswer = (
+  folders: ReadonlyArray<string>,
+  answer: ((cwd: string) => Effect.Effect<string | null>) | undefined,
+): Effect.Effect<string | null> =>
   Effect.gen(function* () {
-    if (steersPush === undefined) return null;
-    for (const cwd of pushesFrom(call)) {
-      const tool = yield* steersPush(cwd);
-      if (tool !== null) return tool;
+    if (answer === undefined) return null;
+    for (const cwd of folders) {
+      const found = yield* answer(cwd);
+      if (found !== null) return found;
     }
     return null;
   });
+
+/**
+ * What the hub points a turn's calls to, or holds them for, before the policy decides them: the
+ * same for every runtime, which takes it from the turn's tools.
+ */
+export interface CallSteers {
+  /** Who the turn's commits are made as (#586, #741), which a refused identity override names. */
+  readonly commitsAs: CommitsAs;
+  /** The hub tool a `git push` in a folder is pointed to, when the turn offers one (ADR 020). */
+  readonly steersPush?: ((cwd: string) => Effect.Effect<string | null>) | undefined;
+  /** The hub tool a `git init` command is pointed to, when the turn offers it (ADR 014). */
+  readonly initTool?: string | undefined;
+  /** Why a `git commit` in a folder is held, when the hub holds it (#742). */
+  readonly holdsCommit?: ((cwd: string) => Effect.Effect<string | null>) | undefined;
+}
 
 /**
  * Why a `git push` command is refused when the turn offers the GitHub Charm's push for its folder (ADR 020): in any
@@ -90,7 +109,7 @@ export const steerCommitIdentity = (commitsAs: CommitsAs) => {
     "Run Git without setting who commits: no -c user.*, git config user.*, --author or -C on git commit, and no GIT_AUTHOR_*, GIT_COMMITTER_*, EMAIL or GIT_CONFIG* variables, whether set, exported or unset.";
   switch (commitsAs._tag) {
     case "Missing":
-      return `${rule} Hobbots sets who your commits are made as, never you, and none is set yet: the user's Git config sets no identity, and Hobbots is asking the user who hobs should commit as. Do not ask them yourself, and do not commit until a later turn: leave your changes uncommitted and say that the commit waits for their answer.`;
+      return `${rule} Hobbots sets who your commits are made as, never you, and none is set yet: the user's Git config sets no identity, and Hobbots is asking the user who hobs should commit as. Do not ask them or another hob yourself, and do not commit until a later turn: leave your changes uncommitted and say that the commit waits for their answer.`;
     case "Bot":
     case "UserGiven":
       return `${rule} Hobbots sets who your commits are made as, and they are made as ${commitsAs.identity.name} <${commitsAs.identity.email}>${
@@ -126,7 +145,8 @@ const decideIn = (
 /**
  * Decides a tool call: the policy's answer, and for Ask the user's (PE-003). While the user decides,
  * `report` gets ToolAwaitingApproval. An approved call is decided again under the hob's policy as
- * it is now, just before it runs (PE-008).
+ * it is now, just before it runs (PE-008). A call `steers` points elsewhere or holds is refused
+ * with why, before the policy decides it.
  */
 export const decideCall = (
   engine: PolicyEngine["Service"],
@@ -134,13 +154,11 @@ export const decideCall = (
   approvals: TurnApprovals | null | undefined,
   call: ToolCall,
   report: (event: RuntimeEvent) => void,
-  commitsAs: CommitsAs,
+  steers: CallSteers,
   redaction?: Redactor | null,
-  steersPush?: (cwd: string) => Effect.Effect<string | null>,
-  initTool?: string,
 ): Effect.Effect<CallDecision> =>
-  Effect.flatMap(steeredTo(call, steersPush), (pushTool) => {
-    const steer = steeredAway(context, call, pushTool, initTool, commitsAs);
+  Effect.flatMap(steeredAway(context, call, steers), (steer) => {
+    const { initTool } = steers;
     return steer !== null
       ? Effect.succeed<CallDecision>({ _tag: "Refuse", verdict: undefined, reason: steer })
       : askUntilDecided({
@@ -160,23 +178,23 @@ export const decideCall = (
 
 /**
  * Why a call is refused before the policy decides it, pointing the hob to what works from its
- * sandbox, or null: a `git push` the GitHub Charm makes (ADR 020), a `git init`, which the hub makes
- * (ADR 014), a write in a shared temporary folder, for which the turn has its own (#578), and a
- * commit identity of the command's own, since the hub sets it (#700).
+ * sandbox, or null: a `git push` the GitHub Charm makes (ADR 020), a commit identity of the
+ * command's own, since the hub sets it (#700), a commit the hub holds, as a lead's of a member's
+ * open work (#742), a `git init`, which the hub makes (ADR 014), and a write in a shared temporary
+ * folder, for which the turn has its own (#578).
  */
-const steeredAway = (
-  context: PolicyContext,
-  call: ToolCall,
-  pushTool: string | null,
-  initTool: string | undefined,
-  commitsAs: CommitsAs,
-): string | null => {
-  if (pushTool !== null) return steerPush(pushTool);
-  if (overridesCommitIdentity(call.tool, call.input, call.cwd)) return steerCommitIdentity(commitsAs);
-  if (initTool !== undefined && initsRepository(call.tool, call.input, call.cwd)) return steerGitInit(initTool);
-  const temp = sharedTempWrites(context, call);
-  return temp.length > 0 ? steerTemp(temp) : null;
-};
+const steeredAway = (context: PolicyContext, call: ToolCall, steers: CallSteers): Effect.Effect<string | null> =>
+  Effect.gen(function* () {
+    const pushTool = yield* firstAnswer(pushesFrom(call), steers.steersPush);
+    if (pushTool !== null) return steerPush(pushTool);
+    if (overridesCommitIdentity(call.tool, call.input, call.cwd)) return steerCommitIdentity(steers.commitsAs);
+    const held = yield* firstAnswer(commitFolders(call.tool, call.input, call.cwd), steers.holdsCommit);
+    if (held !== null) return held;
+    const { initTool } = steers;
+    if (initTool !== undefined && initsRepository(call.tool, call.input, call.cwd)) return steerGitInit(initTool);
+    const temp = sharedTempWrites(context, call);
+    return temp.length > 0 ? steerTemp(temp) : null;
+  });
 
 /** Whether `path` is in one of the hob's folders, as the context names them. */
 const inFolders = (context: PolicyContext, path: string) =>

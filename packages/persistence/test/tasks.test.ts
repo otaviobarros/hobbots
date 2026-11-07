@@ -1536,6 +1536,58 @@ describe("waits and Task tool calls", () => {
     expect(result.pipWork.map((each) => each.task.id)).toEqual(["copy"]);
     expect(result.quillWork).toEqual([]);
   });
+
+  // covers IN-007, OR-006
+  it("[TC-IN-1087-01] closes the stuck work about a Task once its earlier owner hands it on, and once it ends (#1087)", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const sql = yield* SqlClient.SqlClient;
+        // The hob's tries at starting the Task ran out: its item fails with a blocker for you.
+        const stick = (recipientId: AgentId) =>
+          Effect.gen(function* () {
+            const rows = yield* sql<{ readonly id: string }>`UPDATE backpack_items SET state = 'failed'
+              WHERE task_id = 'copy' AND recipient_id = ${recipientId} AND state = 'pending' RETURNING id`;
+            for (const { id } of rows) {
+              yield* sql`INSERT INTO backpack_blockers (item_id, number, reason, next_action, diagnostic, last_end,
+                  after_deliveries, raised_at, decision, decided_at)
+                VALUES (${id}, 1, 'retries-exhausted', 'retry', NULL, 'interrupted', 3, ${now}, NULL, NULL)`;
+            }
+          });
+        const items = sql<{
+          readonly recipientId: string;
+          readonly state: string;
+          readonly disposition: string | null;
+        }>`
+          SELECT recipient_id, state, disposition FROM backpack_items WHERE task_id = 'copy' ORDER BY recorded_sequence`;
+        yield* stick(QUILL);
+        const copy = TaskId.make("copy");
+        const reassigned = yield* tasks.reassignTask(copy, (yield* latest("copy")).revision, PIP, later);
+        const afterReassign = yield* items;
+        yield* stick(PIP);
+        const failed = yield* tasks.moveTask(copy, (yield* latest("copy")).revision, "failed", later);
+        return { reassigned, afterReassign, failed, afterEnd: yield* items };
+      }),
+    );
+    // Quill's stuck item closes as late with the reassignment, and Pip gets the Task as new work.
+    expect(tags(result.reassigned.entries)).toEqual([
+      "TaskStateChanged",
+      "BackpackItemChanged",
+      "BackpackItemRecorded",
+    ]);
+    expect(result.afterReassign.map((each) => [each.recipientId, each.state])).toEqual([
+      [QUILL, "resolved"],
+      [PIP, "pending"],
+    ]);
+    expect(JSON.parse(result.afterReassign[0]?.disposition ?? "null")).toMatchObject({ _tag: "late" });
+    // Pip's stuck item closes once the Task ends, so nothing is left for you to choose.
+    expect(tags(result.failed.entries)).toContain("BackpackItemChanged");
+    expect(result.afterEnd.filter((each) => each.recipientId === PIP).map((each) => each.state)).toEqual(["resolved"]);
+    expect(JSON.parse(result.afterEnd.find((each) => each.recipientId === PIP)?.disposition ?? "null")).toMatchObject({
+      _tag: "late",
+    });
+  });
 });
 
 // Issue #702: what the third run's records left out or got wrong.

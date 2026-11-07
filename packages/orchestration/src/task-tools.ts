@@ -53,6 +53,7 @@ import { makeCharmRecords } from "./charm-records.ts";
 import { makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeDelegating } from "./delegating.ts";
 import { flagIdleQuest } from "./empty-quests.ts";
+import { makeHeldCommits } from "./held-commits.ts";
 import { makeLeading } from "./leading.ts";
 import { makePlanning } from "./planning.ts";
 import { routineReply, waitingForYou } from "./quiet-replies.ts";
@@ -158,10 +159,12 @@ export class TaskTools extends Context.Service<
         const hobs = yield* HobbotsRepository;
         const wrapUp = yield* makeWrapUp;
         const settle = yield* makeSettle;
+        // A lead's commit of a member's open work is held, whichever runtime makes it (#742).
+        const heldCommit = yield* makeHeldCommits;
         const handlers: Record<TaskToolName, ToolHandler> = {
           ...makePlanning({ tasks, capacity, limits, wrapUp, folderChecks, authority: authority.of, separator }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
-          ...makeAsking({ tasks }),
+          ...makeAsking({ tasks, hobs }),
           ...makeLeading({ tasks }),
         };
 
@@ -317,6 +320,7 @@ export class TaskTools extends Context.Service<
                   : refused(name, input),
                 step,
               ),
+            holdsCommit: (cwd) => heldCommit(caller.taskId, cwd),
           };
         };
 
@@ -395,6 +399,7 @@ export class TaskTools extends Context.Service<
                   }),
                   step,
                 ),
+              holdsCommit: (cwd) => heldCommit(known, cwd),
             };
             return {
               hubTools,

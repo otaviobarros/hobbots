@@ -1,5 +1,6 @@
-import type { Agent, TaskId } from "@hobbots/domain";
+import type { Agent, BackpackItem, TaskId } from "@hobbots/domain";
 import { useState } from "react";
+import { useDecideBlocker } from "../../api/blockers.ts";
 import { type TaskControl, useTaskControl } from "../../api/task-controls.ts";
 
 /**
@@ -13,10 +14,18 @@ export type MenuView = "items" | "reassign" | "cancel";
  * view, the one cancel waiting for Yes, and the one control on its way to the hub. The room holds it
  * whether or not its Task tree has loaded. A lane's menu and
  * the cards in its body read the same state, so Reassign… on a failed Task opens its menu on the
- * hobs, and a refusal shows in the lane whose Task the hub refused.
+ * hobs, and a refusal shows in the lane whose Task the hub refused. Retry on stuck work goes the
+ * same way: sent from the menu, and why it was not saved shown under its Task once the menu closed.
  */
 export const useLaneActions = () => {
   const control = useTaskControl();
+  const decide = useDecideBlocker();
+  // The Task whose stuck work Retry was last sent for.
+  const [retried, setRetried] = useState<TaskId | null>(null);
+  const reset = () => {
+    control.reset();
+    decide.reset();
+  };
   // The lane whose menu is open, named by its header's Task, and the Task the view acts on.
   const [menu, setMenu] = useState<{ readonly lane: TaskId; readonly taskId: TaskId; readonly view: MenuView } | null>(
     null,
@@ -34,14 +43,14 @@ export const useLaneActions = () => {
      * the hob's other failed Tasks, on that one.
      */
     openMenu: (lane: TaskId, view: MenuView = "items", taskId: TaskId = lane) => {
-      control.reset();
+      reset();
       setMenu({ lane, taskId, view });
     },
     closeMenu: () => setMenu(null),
     /** Whether the Task's cancel waits for Yes. */
     asking: (taskId: TaskId) => asking === taskId,
     ask: (taskId: TaskId | null) => {
-      control.reset();
+      reset();
       setAsking(taskId);
     },
     /**
@@ -57,8 +66,15 @@ export const useLaneActions = () => {
         },
       });
     },
+    /** Retry on the Task's stuck work (IN-007): a fresh set of tries for the blocker shown. */
+    retryStuck: (taskId: TaskId, item: BackpackItem, blocker: number) => {
+      setRetried(taskId);
+      decide.mutate({ item, blocker, action: "retry" });
+    },
+    /** Why Retry on the Task's stuck work was not saved, while it was not; else null. */
+    stuckRefusal: (taskId: TaskId): unknown => (decide.isError && retried === taskId ? decide.error : null),
     /** Any control is on its way, so none can be sent twice. */
-    busy: control.isPending,
+    busy: control.isPending || decide.isPending,
     /** The kind of control on its way for the Task, else null. */
     sending: (taskId: TaskId): TaskControl["kind"] | null =>
       control.isPending && on(taskId) ? (control.variables?.kind ?? null) : null,

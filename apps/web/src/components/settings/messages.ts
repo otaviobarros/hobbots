@@ -333,7 +333,7 @@ export const messages = {
   check: {
     title: "Check that everything works",
     intro:
-      "Hobbots checks your AI, the sandbox, folders, GitHub, remote access and stuck work, and tells you what to fix in plain words.",
+      "Hobbots checks your AI, the sandbox, memory, folders, GitHub, remote access and stuck work, and tells you what to fix in plain words.",
     run: "Check now",
     again: "Check again",
     checking: "Checking…",
@@ -341,6 +341,7 @@ export const messages = {
     names: {
       ai: "AI",
       sandbox: "Sandbox",
+      memory: "Memory",
       folders: "Folders",
       github: "GitHub",
       remote: "Other devices",
@@ -358,6 +359,15 @@ export const messages = {
         `${name}: ${state}. Connections says how to fix it.`,
       sandbox: "The sandbox starts",
       noSandbox: "The sandbox is not verified on this hub yet, so commands, Git and the web stay blocked.",
+      memoryRunning: "Memory is running",
+      memoryStarting: "Memory is starting",
+      memoryRestarting: "Memory stopped, and Hobbots is starting it again. Hobs keep working without it meanwhile.",
+      memoryOff: "Memory is turned off (optional)",
+      memoryUnread: "Hobbots could not check memory. Check again in a moment.",
+      memoryMissing:
+        "Memory can't start: this copy of Hobbots has no memory engine. Reinstall Hobbots to bring it back.",
+      memoryChecksum:
+        "Memory can't start: the memory engine in this copy of Hobbots is not the one it was built with. Reinstall Hobbots.",
       oneFolder: "Your folder opens",
       folders: ({ count }: { count: string }) => `Your ${count} folders open`,
       noFolders: "No folders yet. Add one in Safety so hobs can work on your files.",

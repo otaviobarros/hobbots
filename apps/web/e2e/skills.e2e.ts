@@ -369,3 +369,86 @@ test("[TC-UX-1139] a skill from ~/.agents/skills is read-only with Make a copy, 
     removeDataDir(home);
   }
 });
+
+// covers ADR 029 (Skill sets), #1143
+test("[TC-UX-1143] a plugin comes in as one set, opens on its own page, and a skill of it opens read-only with Make a copy", async ({
+  page,
+}) => {
+  const { url } = await hubWithHobs();
+  // A plugin whose two skills share a file of rules, as agent-engineering's do.
+  const plugin = join(dataDir, "to-import", "agent-engineering");
+  mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(plugin, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "agent-engineering", version: "0.5.0", description: "A playbook for coding agents." }),
+  );
+  for (const [name, description] of [
+    ["deliver-change", "Use to run the whole flow, from plan to draft pull request."],
+    ["plan-change", "Use to plan a change: acceptance criteria, scope, slices and checks."],
+  ] as const) {
+    mkdirSync(join(plugin, "skills", name), { recursive: true });
+    writeFileSync(
+      join(plugin, "skills", name, "SKILL.md"),
+      `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n---\n\nFirst read the [contract](../../references/workflow-contract.md).\n`,
+    );
+  }
+  mkdirSync(join(plugin, "references"), { recursive: true });
+  writeFileSync(join(plugin, "references", "workflow-contract.md"), "# Shared workflow contract\n");
+
+  await page.goto(`${url}/#/skills?add=file`);
+  const main = page.getByRole("main", { name: "Skills" });
+  await main.getByLabel("Folder on the hub's computer").fill(plugin);
+  await main.getByRole("button", { name: "Look" }).click();
+  await expect(main).toContainText("This source is a plugin whose skills share files, so it comes in as one set");
+  const candidate = main.getByRole("listitem", { name: "The set agent-engineering" });
+  await expect(candidate).toContainText("Set of 2 skills");
+  await expect(candidate.getByRole("list", { name: "The skills in agent-engineering" })).toContainText(
+    "/deliver-change",
+  );
+  await expect(candidate).toContainText("Shared by them: references/, 1 file.");
+  await expect(main.getByRole("group", { name: "Give the set to" })).toBeVisible();
+  await main.getByRole("radio", { name: /Everyone/ }).check();
+  await expectAccessible(page, main);
+  await main.getByRole("button", { name: "Add agent-engineering, 2 skills" }).click();
+
+  // The set's page: its skills, the file they share, and no editor.
+  await expect(main).toContainText("Added agent-engineering. Everyone gets its 2 skills from the next chat.");
+  await expect(main.getByRole("heading", { name: "agent-engineering", level: 2 })).toBeVisible();
+  await expect(main.getByRole("note")).toContainText("These skills come and update together");
+  const skills = main.getByRole("list", { name: "Skills in this set" });
+  await expect(skills.getByRole("link")).toHaveCount(2);
+  await expect(main.getByRole("region", { name: "Shared files" })).toContainText("references/workflow-contract.md");
+  await expect(main.getByRole("region", { name: "Shared files" })).toContainText("linked by all 2");
+  const aside = main.getByRole("complementary", { name: "About this set" });
+  await expect(aside.getByRole("link", { name: "Edit" })).toHaveCount(0);
+  await expect(aside.getByRole("button", { name: "Remove the set…" })).toBeVisible();
+  await expectAccessible(page, main);
+
+  // The library lists it as one row.
+  await page.goto(`${url}/#/skills`);
+  const row = main.getByRole("link", { name: /agent-engineering/ }).first();
+  await expect(row).toContainText("Set of 2 skills");
+  await row.click();
+
+  // A skill of the set opens read-only, and Make a copy makes a loose skill you can edit.
+  await skills.getByRole("link", { name: /^deliver-change/ }).click();
+  await expect(main.getByRole("heading", { name: "Deliver change", level: 2 })).toBeVisible();
+  await expect(main.getByRole("note")).toContainText("changes only with a new version of the set");
+  await expect(main).toContainText("First read the contract.");
+  const memberAside = main.getByRole("complementary", { name: "About this skill" });
+  await expect(memberAside.getByRole("link", { name: "Edit" })).toHaveCount(0);
+  await expectAccessible(page, main);
+  await memberAside.getByRole("button", { name: "Make a copy…" }).click();
+  const form = memberAside.getByRole("form", { name: "Make a copy of Deliver change" });
+  await expect(form.getByRole("textbox", { name: "Typed as" })).toHaveValue("deliver-change-copy");
+  await form.getByRole("button", { name: "Make the copy" }).click();
+  await expect(main).toContainText(
+    "Deliver change copy is in your library at r1, and you can edit it. agent-engineering is unchanged.",
+  );
+  await expect(
+    main.getByRole("complementary", { name: "About this skill" }).getByRole("link", { name: "Edit" }),
+  ).toBeVisible();
+  // It brought the file it links to.
+  await expect(main).toContainText("linked/references/workflow-contract.md");
+  await expectAccessible(page, main);
+});

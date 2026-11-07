@@ -35,10 +35,13 @@ import {
   type AgentId,
   type Committed,
   type MemoryProjectIdentity,
+  type Skill,
   type SkillAssignment,
   type SkillBy,
   type SkillId,
+  type SkillName,
   type SkillNotFound,
+  type SkillRevision,
   type SkillRevisionHash,
   skillUseWeekStart,
 } from "@hobbots/domain";
@@ -56,6 +59,7 @@ import {
   SkillObjects,
   SkillObjectsLive,
   SkillWriterLive,
+  setLinksOf,
   writeSkillExport,
 } from "@hobbots/skills";
 import { DateTime, Effect, Layer, Option } from "effect";
@@ -126,6 +130,36 @@ const NO_SKILLS = {
   projects: [],
   agentsFolder: { path: null, problems: [] },
   usesThisWeek: [],
+  sets: [],
+};
+
+/**
+ * What Make a copy imports (ADR 029): the revision's files under the new name, or for a set, the one
+ * of its skills named, with the set's files it links to. A set is never copied whole.
+ */
+const copiedSource = (
+  setName: string,
+  base: SkillRevision,
+  folder: string,
+  payload: { readonly name: SkillName; readonly member?: SkillName | undefined },
+) => {
+  const member = base.set?.skills.find((one) => one.name === payload.member);
+  if (base.set !== null && member === undefined)
+    return Effect.fail(
+      new SkillImportRefused({
+        check: "set",
+        path: null,
+        message: `Pick one skill of ${setName} to copy; a set is copied one skill at a time.`,
+      }),
+    );
+  const carried = { charms: member?.charms ?? base.charms, dropped: base.dropped };
+  return Effect.succeed({
+    _tag: "Copied",
+    folder,
+    name: payload.name,
+    carried,
+    ...(member === undefined ? {} : { member }),
+  } satisfies SkillImportSource);
 };
 
 /** A hub built without the library, as most of the server's tests are: no skills, and nothing to import into. */
@@ -257,11 +291,46 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
         return [...new Set([...reached.flat(), ...given])].sort();
       });
 
+    // Each set's skills, from its newest revision, so the library can say "Set of 9 skills".
+    const setsOf = (skills: ReadonlyArray<Skill>) =>
+      Effect.map(
+        Effect.forEach(skills, (skill) => library.revision(skill.id, skill.latest)),
+        (latest) =>
+          latest.flatMap((revision) =>
+            revision?.set == null ? [] : [{ skillId: revision.skillId, skills: revision.set.skills }],
+          ),
+      );
+
+    // A set's files outside its skills' folders, with the skills whose SKILL.md links to each one.
+    const sharedOf = (revision: SkillRevision | undefined) =>
+      Effect.gen(function* () {
+        if (revision?.set == null) return null;
+        const members = revision.set.skills;
+        const folder = yield* files.folder(revision.hash);
+        const links = yield* Effect.forEach(members, (member) =>
+          Effect.promise(async () => {
+            const path = `${member.path}/SKILL.md`;
+            const text = folder === null ? null : await readFile(join(folder, path), "utf8").catch(() => null);
+            return { name: member.name, links: text === null ? [] : setLinksOf(path, text) };
+          }),
+        );
+        const inMember = (path: string) => members.some((member) => path.startsWith(`${member.path}/`));
+        const linksTo = (links: ReadonlyArray<string>, path: string) =>
+          links.some((link) => path === link || path.startsWith(`${link}/`));
+        return revision.files
+          .filter((file) => !inMember(file.path))
+          .map((file) => ({
+            path: file.path,
+            linkedBy: links.filter((one) => linksTo(one.links, file.path)).map((one) => one.name),
+          }));
+      });
+
     const list = Effect.gen(function* () {
       const problems = Option.isSome(agentsFolder) ? yield* agentsFolder.value.problems : [];
       const assignments = yield* library.assignments();
+      const skills = yield* library.list;
       return {
-        skills: yield* library.list,
+        skills,
         sources: yield* library.sources,
         assignments,
         projects: yield* projectsNow(assignments),
@@ -277,6 +346,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           })),
         },
         usesThisWeek: yield* library.usesSince(skillUseWeekStart(DateTime.formatIso(yield* DateTime.now))),
+        sets: yield* setsOf(skills),
       };
     });
 
@@ -386,10 +456,12 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
       get: ({ params }) =>
         Effect.gen(function* () {
           const skill = yield* skillOf(params.skillId);
+          const revisions = yield* library.revisions(skill.id);
           return {
             skill,
-            revisions: yield* library.revisions(skill.id),
+            revisions,
             assignments: yield* library.assignments(skill.id),
+            shared: yield* sharedOf(revisions[0]),
           };
         }),
       revision: ({ params }) =>
@@ -529,8 +601,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           if (base === null || folder === null) return yield* new SkillMissing({ id: hash });
           if (payload.scope?._tag === "Hob" && Option.isNone(yield* hobOf(payload.scope.agentId)))
             return yield* new SkillMissing({ id: payload.scope.agentId });
-          const carried = { charms: base.charms, dropped: base.dropped };
-          const source = { _tag: "Copied", folder, name: payload.name, carried } as const;
+          const source = yield* copiedSource(skill.name, base, folder, payload);
           const [copied] = yield* importer.add(source, { by: YOU }).pipe(Effect.mapError(importError));
           if (copied === undefined) return yield* new SkillMissing({ id: skill.id });
           // Content a skill of that name already has is that skill, not a new copy.

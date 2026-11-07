@@ -331,6 +331,49 @@ const linkedPath = (path: string, target: string): string | null => {
   return resolved === "." ? null : resolved.replace(/\/$/, "");
 };
 
+/**
+ * The paths inside a set that a file at `path` links to (ADR 029, Skill sets), each once, as the set
+ * lays them out: a link to a folder names the folder. Anchors, URLs and links outside the set are left out.
+ */
+export const setLinksOf = (path: string, text: string): ReadonlyArray<string> => {
+  const source = path.toLowerCase().endsWith(".md") ? withoutCode(text) : text;
+  const linked = linkTargetsOf(source).flatMap((target) => {
+    const at = linkedPath(path, target);
+    return at === null || at === ".." || at.startsWith("../") || at.startsWith("/") ? [] : [at];
+  });
+  return [...new Set(linked)];
+};
+
+/**
+ * A file's text with each link that leads inside a set pointed elsewhere: `to` gets the path inside
+ * the set a link leads to and gives the new target, or null to leave the link as written. What
+ * follows the path, such as `#a-heading`, is kept.
+ */
+export const rewriteSetLinks = (path: string, text: string, to: (linked: string) => string | null): string => {
+  const retarget = (target: string) => {
+    const linked = linkedPath(path, target);
+    if (linked === null) return target;
+    const moved = to(linked);
+    if (moved === null) return target;
+    const at = target.search(/[?#]/);
+    return at === -1 ? moved : `${moved}${target.slice(at)}`;
+  };
+  const inline = LINK_TARGETS.reduce(
+    (current, pattern) =>
+      current.replace(pattern, (match: string, target: string) => match.replace(target, retarget(target))),
+    text,
+  );
+  return inline
+    .split("\n")
+    .map((line) => {
+      const target = REFERENCE.exec(line.trim())?.[1];
+      if (target === undefined) return line;
+      const bare = target.replace(/^<|>$/g, "");
+      return line.replace(bare, retarget(bare));
+    })
+    .join("\n");
+};
+
 /** Whether a set's path is a part of the plugin import never keeps, such as its hooks or its manifest. */
 const pluginOnly = (path: string) => PLUGIN_ONLY.some((part) => path === part || path.startsWith(`${part}/`));
 

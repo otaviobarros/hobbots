@@ -433,7 +433,13 @@ describe("skills library", () => {
         yield* seed;
         const library = yield* SkillLibrary;
         const skill = (yield* library.addRevision(null, input(H1))).value.skill;
-        const use = (id: string, at: string, threadId: string | null, source: "library" | "organization" = "library") =>
+        const use = (
+          id: string,
+          at: string,
+          threadId: string | null,
+          source: "library" | "organization" = "library",
+          set: string | null = null,
+        ) =>
           new SkillUse({
             id: SkillUseId.make(id),
             source,
@@ -446,8 +452,11 @@ describe("skills library", () => {
             threadId: threadId === null ? null : ThreadId.make(threadId),
             messageId: threadId === null ? null : MessageId.make(`reply-${id}`),
             at,
+            set: set === null ? null : SkillName.make(set),
           });
         yield* library.recordUse(use("old", "2026-10-01T10:00:00.000Z", "t1"));
+        // A use of a set's skill counts for the set, and for that skill by its name in the set (#1143).
+        yield* library.recordUse(use("member", "2026-11-06T09:00:00.000Z", "t2", "library", "release-kit"));
         yield* library.recordUse(use("a", "2026-11-05T10:00:00.000Z", "t1"));
         yield* library.recordUse(use("b", "2026-11-06T10:00:00.000Z", "t2"));
         yield* library.recordUse(use("step", "2026-11-06T11:00:00.000Z", null));
@@ -456,15 +465,16 @@ describe("skills library", () => {
         const since = "2026-10-31T00:00:00.000Z";
         expect(yield* library.useCounts(skill.id, since)).toEqual({
           skillId: skill.id,
-          total: 4,
-          thisWeek: 3,
-          hobs: [{ agentId: pip, count: 4, lastAt: "2026-11-06T11:00:00.000Z" }],
+          total: 5,
+          thisWeek: 4,
+          hobs: [{ agentId: pip, count: 5, lastAt: "2026-11-06T11:00:00.000Z" }],
           threads: [
-            { threadId: "t2", agentId: pip, count: 1, lastAt: "2026-11-06T10:00:00.000Z" },
+            { threadId: "t2", agentId: pip, count: 2, lastAt: "2026-11-06T10:00:00.000Z" },
             { threadId: "t1", agentId: pip, count: 2, lastAt: "2026-11-05T10:00:00.000Z" },
           ],
+          members: [{ name: "release", total: 1, thisWeek: 1 }],
         });
-        expect(yield* library.usesSince(since)).toEqual([{ skillId: skill.id, count: 3 }]);
+        expect(yield* library.usesSince(since)).toEqual([{ skillId: skill.id, count: 4 }]);
         expect((yield* library.lastUses(pip, 10)).map((one) => one.id)).toEqual(["org", "step"]);
         expect((yield* library.lastUses(pip, 1)).map((one) => one.id)).toEqual(["org"]);
         expect((yield* library.uses({ messageId: MessageId.make("reply-a") })).map((one) => one.id)).toEqual(["a"]);

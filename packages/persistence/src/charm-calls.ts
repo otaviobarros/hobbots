@@ -69,7 +69,7 @@ const toRow = (call: CharmCall) => ({
 });
 
 /**
- * The SQL Charm call records (migrations 0028 and 0074), keyed by hob, scope and key (migration 0045). Recording a call checks its key and its site in the
+ * The SQL Charm call records (migrations 0028 and 0075), keyed by hob, scope and key (migration 0045). Recording a call checks its key and its site in the
  * same transaction, with the journal's head taken first so concurrent calls take turns on PostgreSQL.
  */
 export const CharmCallsLive = Layer.effect(

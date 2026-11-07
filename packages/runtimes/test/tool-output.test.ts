@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { fullToolOutput, toolOutputText } from "../src/tool-output.ts";
+import { fullToolOutput, savedOutputFolder, toolOutputText } from "../src/tool-output.ts";
 
 describe("toolOutputText", () => {
   it("reads a command's stdout, then its stderr", () => {
@@ -73,5 +73,31 @@ describe("fullToolOutput", () => {
 
   it("reads other tools' responses as they come", async () => {
     expect(await fullToolOutput("Grep", { content: "a.ts:1:x", filenames: [] }, [config])).toBe("a.ts:1:x");
+  });
+});
+
+describe("savedOutputFolder", () => {
+  const runtime = "/data-runtimes/hob";
+  const session = (session_id: string, transcript_path: string) => ({ session_id, transcript_path });
+
+  it("names the session's tool-results folder beside its transcript", () => {
+    expect(savedOutputFolder(runtime, session("s1", `${runtime}/projects/-work/s1.jsonl`))).toBe(
+      `${runtime}/projects/-work/s1/tool-results`,
+    );
+  });
+
+  it("names nothing for a transcript outside the hob's configuration folder or not the session's", () => {
+    for (const [id, transcript] of [
+      ["s1", "/home/user/.claude/projects/-work/s1.jsonl"],
+      ["s1", "/data-runtimes/other/projects/-work/s1.jsonl"],
+      ["s1", `${runtime}/projects/s1.jsonl`],
+      ["s1", `${runtime}/projects/a/b/s1.jsonl`],
+      ["s1", `${runtime}/projects/../s1.jsonl`],
+      ["s1", `${runtime}/projects/-work/s2.jsonl`],
+      ["..", `${runtime}/projects/-work/...jsonl`],
+      ["", ""],
+    ] as const) {
+      expect(savedOutputFolder(runtime, session(id, transcript))).toBeUndefined();
+    }
   });
 });

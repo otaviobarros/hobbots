@@ -24,12 +24,13 @@ import {
   SkillRefused,
   type SkillRevisionHash,
   type SkillSetContent,
+  type SkillSetSkill,
   SkillSourceChanged,
   SkillSourceUnreadable,
 } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
 import { type CheckedSkill, type CheckResult, checkSet, checkSkill } from "./check.ts";
-import { copiedTree, editedTree, type SkillEdit } from "./edit.ts";
+import { copiedTree, editedTree, memberCopyTree, type SkillEdit } from "./edit.ts";
 import {
   decodeSkillsLock,
   type LockedSkill as ExportedSkill,
@@ -73,6 +74,11 @@ export type SkillImportSource =
       readonly folder: string;
       readonly name: SkillName;
       readonly carried: { readonly charms: ReadonlyArray<string>; readonly dropped: ReadonlyArray<SkillDropped> };
+      /**
+       * For a set's revision (ADR 029, Skill sets), the one of its skills copied: its folder, and the
+       * set's files it links to under `linked/`, with those links pointed at them.
+       */
+      readonly member?: SkillSetSkill;
     };
 
 /** One skill a source holds, as import would take it, or the rule it broke. */
@@ -88,6 +94,8 @@ export interface SkillCandidate {
   readonly label: string | null;
   /** For a set (ADR 029, Skill sets), the skills it holds; null for a skill. */
   readonly set: SkillSetContent | null;
+  /** For a set, the files it keeps outside its skills' folders, which they share; empty for a skill. */
+  readonly shared: ReadonlyArray<string>;
   readonly refusal: SkillRefused | null;
   /**
    * What the source's lock says of it, the `skills` CLI's `skills-lock.json` or a Hobbots export's
@@ -247,7 +255,9 @@ const openTree = (source: SkillImportSource) => {
       case "Edited":
         return editedTree(source.folder, source);
       case "Copied":
-        return copiedTree(source.folder, source.name);
+        return source.member === undefined
+          ? copiedTree(source.folder, source.name)
+          : memberCopyTree(source.folder, source.member, source.name);
     }
   };
   return Effect.acquireRelease(
@@ -267,6 +277,16 @@ interface ExportedSet {
 }
 
 /** `path` inside the export's folder. */
+/** A set's files outside its skills' folders, which they share (ADR 029, Skill sets). */
+const sharedOf = (skill: CheckedSkill): ReadonlyArray<string> => {
+  const members = skill.set?.skills ?? [];
+  if (members.length === 0) return [];
+  return skill.files
+    .map((file) => file.path)
+    .filter((path) => !members.some((member) => path.startsWith(`${member.path}/`)))
+    .sort();
+};
+
 const inExport = (set: ExportedSet, path: string) => (set.base === "" ? path : `${set.base}/${path}`);
 
 /**
@@ -511,6 +531,7 @@ export const SkillImporterLive = Layer.effect(
             hash: null,
             label: null,
             set: null,
+            shared: [],
             locked: null,
             existing: null,
           };
@@ -537,6 +558,7 @@ export const SkillImporterLive = Layer.effect(
           charms: skill.charms,
           label: skill.label,
           set: skill.set,
+          shared: sharedOf(skill),
           refusal: null,
           locked: lockedOf(skill, locked),
           exported,

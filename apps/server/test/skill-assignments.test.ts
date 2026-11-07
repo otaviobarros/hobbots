@@ -680,4 +680,68 @@ describe("skill uses", () => {
     });
     expect(edit).toMatchObject({ status: 422, body: { _tag: "SkillImportRefused", check: "set" } });
   });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-16] the Skills page reads a set: its skills in the library, the files they share, each skill's uses, and a copy of one", async () => {
+    const pip = await summon("Pip", 973);
+    const plugin = join(root, "agent-engineering-page");
+    await mkdir(join(plugin, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      join(plugin, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "agent-engineering", version: "0.5.0", description: "A playbook." }),
+    );
+    for (const [name, links] of [
+      ["deliver-change", "[the contract](../../references/workflow-contract.md) and [plan](../plan-change/SKILL.md)"],
+      ["plan-change", "[the review rules](../../references/review.md)"],
+    ] as const) {
+      await mkdir(join(plugin, "skills", name), { recursive: true });
+      await writeFile(join(plugin, "skills", name, "SKILL.md"), `${skillMd(name)}\nRead ${links}.\n`);
+    }
+    await mkdir(join(plugin, "references"), { recursive: true });
+    await writeFile(join(plugin, "references", "workflow-contract.md"), "# Contract\n[Review](review.md)\n");
+    await writeFile(join(plugin, "references", "review.md"), "# Review\n");
+    const [set] = (await request("POST", "/api/skills", { source: { _tag: "Folder", path: plugin } })).body.imported;
+    await request("POST", `/api/skills/${set.skill.id}/assignments`, { scope: { _tag: "Hob", agentId: pip.id } });
+
+    // The library says which entries are sets, with their skills.
+    const list = (await request("GET", "/api/skills")).body;
+    expect(list.sets).toEqual([{ skillId: set.skill.id, skills: set.revision.set.skills }]);
+    // The set's page lists the files its skills share, with the skills whose SKILL.md links to each.
+    const detail = (await request("GET", `/api/skills/${set.skill.id}`)).body;
+    expect(detail.shared).toEqual([
+      { path: "references/review.md", linkedBy: ["plan-change"] },
+      { path: "references/workflow-contract.md", linkedBy: ["deliver-change"] },
+    ]);
+    // A loose skill has none.
+    const loose = join(root, "loose-for-page");
+    await mkdir(loose, { recursive: true });
+    await writeFile(join(loose, "SKILL.md"), skillMd("loose-for-page"));
+    const [one] = (await request("POST", "/api/skills", { source: { _tag: "Folder", path: loose } })).body.imported;
+    expect((await request("GET", `/api/skills/${one.skill.id}`)).body.shared).toBeNull();
+
+    // Each skill of the set counts its own uses.
+    const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    await send(thread, "/deliver-change go");
+    await replies(thread, 1);
+    const uses = (await request("GET", `/api/skills/${set.skill.id}/uses`)).body;
+    expect(uses).toMatchObject({ total: 1, members: [{ name: "deliver-change", total: 1, thisWeek: 1 }] });
+
+    // Make a copy takes one skill of the set, with the set's files it links to; never the whole set.
+    const whole = await request("POST", `/api/skills/${set.skill.id}/copies`, { name: "agent-engineering-copy" });
+    expect(whole).toMatchObject({ status: 422, body: { _tag: "SkillImportRefused", check: "set" } });
+    const copied = await request("POST", `/api/skills/${set.skill.id}/copies`, {
+      name: "deliver-change-copy",
+      member: "deliver-change",
+      scope: { _tag: "Hob", agentId: pip.id },
+    });
+    expect(copied.status).toBe(200);
+    expect(copied.body.revision).toMatchObject({ name: "deliver-change-copy", number: 1, set: null });
+    expect(copied.body.revision.files.map((file: { path: string }) => file.path)).toEqual([
+      "SKILL.md",
+      "linked/references/review.md",
+      "linked/references/workflow-contract.md",
+      "linked/skills/plan-change/plan-change.md",
+    ]);
+    expect(copied.body.assignment).toMatchObject({ scope: { _tag: "Hob", agentId: pip.id } });
+  });
 });

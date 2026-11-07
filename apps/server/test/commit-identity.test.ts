@@ -238,7 +238,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     const before = await current.access();
     expect(before?.commitsAs._tag).toBe("Missing");
     expect(commitAs(before)).toMatch(/^failed: .*no email was given/s);
-    expect(turnCommits(before).note).toContain("Do not ask the user yourself");
+    expect(turnCommits(before).note).toContain("Do not ask the user or another hob who to commit as");
     await current.access();
     const [question, ...others] = await current.open();
     expect(others).toEqual([]);

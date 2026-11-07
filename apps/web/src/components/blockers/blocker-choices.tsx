@@ -1,16 +1,21 @@
 import { type BackpackBlocker, type BackpackItem, openBlocker } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { type ReactNode, useId, useRef } from "react";
+import { type ReactNode, useRef } from "react";
 import { useDecideBlocker } from "../../api/blockers.ts";
 import { ApiError } from "../../api/client.ts";
 import type { FocusTargets } from "../move-on/follow-focus.ts";
 import { useMoveOn } from "../move-on/move-on.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
+import { BlockerReassign } from "./blocker-reassign.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages;
 
 type Hob = ReturnType<HobLookup>;
+
+/** Why a choice on stuck work was not saved, in the card's words: the hob retired, or it did not reach the hub. */
+export const blockerError = (error: unknown, name: string): string =>
+  error instanceof ApiError && error.tag === "HobUnavailable" ? copy.retired({ name }) : copy.failed;
 
 /** An item's open blocker, whether its hob retired, and so the action it suggests next. */
 export const blockerChoice = (
@@ -29,36 +34,37 @@ export const blockerChoice = (
 };
 
 /**
- * Retry, Reassign and Dismiss for a stuck item, bound to the blocker shown, with why Reassign is
- * held and what went wrong when a choice could not be saved. `children` joins the buttons' row.
- * Without `held`, Reassign is left out instead of shown disabled. With `targets`, the card leaves
- * once a choice is sent: focus moves there and a toast says what was sent (#988).
+ * Retry, Reassign… and Dismiss for a stuck item, bound to the blocker shown, with what went wrong
+ * when a choice could not be saved. `children` joins the buttons' row. Reassign… shows while the
+ * item's Task can change hands, as the lane's ⋯ menu offers it (#1087); without `reassign` it is
+ * left out. With `targets`, the card leaves once a choice is sent: focus moves there and a toast
+ * says what was sent (#988).
  */
 export function BlockerChoices({
   item,
   hob,
-  held: showHeld = true,
+  reassign = true,
   targets,
   children,
 }: {
   item: BackpackItem;
   hob: Hob;
-  held?: boolean;
+  reassign?: boolean;
   targets?: FocusTargets;
   children?: ReactNode;
 }) {
-  const decide = useDecideBlocker(item);
-  const held = useId();
+  const decide = useDecideBlocker();
   const area = useRef<HTMLDivElement>(null);
   const moveOn = useMoveOn();
   const choice = blockerChoice(item, hob);
   if (choice === null) return null;
   const { blocker, retired, next } = choice;
-  const choose = (action: "retry" | "dismiss") => {
-    const sent = decide.mutateAsync({ blocker: blocker.number, action });
+  const follow = (sent: Promise<unknown>, say: string) => {
     if (targets === undefined) sent.catch(() => undefined);
-    else moveOn({ from: area.current, targets, sent, say: copy.decided[action]({ name: hob.name }) });
+    else moveOn({ from: area.current, targets, sent, say });
   };
+  const choose = (action: "retry" | "dismiss") =>
+    follow(decide.mutateAsync({ item, blocker: blocker.number, action }), copy.decided[action]({ name: hob.name }));
   return (
     <div ref={area} className="contents">
       <div className="flex flex-wrap items-center gap-2">
@@ -72,10 +78,14 @@ export function BlockerChoices({
             {copy.retry}
           </Button>
         )}
-        {showHeld && (
-          <Button size="xs" variant="outline" disabled aria-describedby={held}>
-            {copy.reassign}
-          </Button>
+        {reassign && item.threadId !== null && (
+          <BlockerReassign
+            item={item}
+            threadId={item.threadId}
+            owner={hob.name}
+            disabled={decide.isPending}
+            onSent={(sent, to) => follow(sent, copy.decided.reassign({ name: to.name }))}
+          />
         )}
         <Button
           size="xs"
@@ -87,16 +97,9 @@ export function BlockerChoices({
         </Button>
         {children}
       </div>
-      {showHeld && (
-        <p id={held} className="m-0 text-meta text-label">
-          {copy.reassignHeld}
-        </p>
-      )}
       {decide.isError && (
         <p role="alert" className="m-0 text-meta text-rose">
-          {decide.error instanceof ApiError && decide.error.tag === "HobUnavailable"
-            ? copy.retired({ name: hob.name })
-            : copy.failed}
+          {blockerError(decide.error, hob.name)}
         </p>
       )}
     </div>
