@@ -1,4 +1,4 @@
-import { lengthChoice, type RuntimeHealth, type RuntimeModels, voiceChoice } from "@hobbots/domain";
+import { lengthChoice, type RuntimeHealth, type RuntimeModels, type SkillId, voiceChoice } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton, WaitNote } from "@hobbots/ui/components/skeleton";
 import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
@@ -8,6 +8,7 @@ import { useState } from "react";
 import { type FirstHobDraft, roleTitleOf, thinksWith } from "../../api/first-hob.ts";
 import type { PresetInfo } from "../../api/safety.ts";
 import { ModelsBrain } from "../hob-form/hob-form.tsx";
+import { SummonSkills } from "../hob-skills/summon-skills.tsx";
 import { messages as shared } from "../messages.ts";
 import { messages } from "./messages.ts";
 import { ProviderCards, ProviderCardsWaiting } from "./provider-cards.tsx";
@@ -32,6 +33,7 @@ export function ReadyStep({
   models,
   signedOut,
   onGo,
+  skills,
 }: {
   draft: FirstHobDraft;
   onChange: Update;
@@ -44,6 +46,8 @@ export function ReadyStep({
   /** The signed-out AI the hob would think with, which Ready leads with until it is signed in. */
   signedOut?: RuntimeHealth | undefined;
   onGo: (step: SummonStep) => void;
+  /** The library skills picked to give the hob once it exists. */
+  skills: { picked: ReadonlyArray<SkillId>; onPick: (picked: ReadonlyArray<SkillId>) => void };
 }) {
   const voice = voiceChoice(draft.voice).title;
   const length = lengthChoice(draft.length).title;
@@ -81,6 +85,7 @@ export function ReadyStep({
         )}
         <Row term={copy.worksOn} value={copy.thisComputer} note={copy.thisComputerNote} last />
       </dl>
+      <SummonSkills name={name} picked={skills.picked} onPick={skills.onPick} />
 
       <section aria-label={copy.ai} className="flex flex-col gap-2 rounded-card bg-deep p-3.5">
         <span aria-hidden className="lbl text-label">

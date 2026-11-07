@@ -38,10 +38,11 @@ export const messages = {
   newChatWith: ({ name }: { name: string }) => `New chat with ${name}`,
   profile: "Profile",
   tabs: {
-    label: ({ name }: { name: string }) => `${name}'s chats, history and memory`,
+    label: ({ name }: { name: string }) => `${name}'s chats, history, memory and skills`,
     chats: "Chats",
     history: "History",
     memory: "Memory",
+    skills: "Skills",
   },
   memory: {
     intro: ({ name, count }: { name: string; count: number }) =>

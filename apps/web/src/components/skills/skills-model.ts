@@ -24,7 +24,7 @@ export const ImportFrom = Schema.Literals(["git", "file", "write"]);
 export type ImportFrom = typeof ImportFrom.Type;
 
 /** A skill's tabs. Instructions is the default and has no value in the address. */
-export const SkillTab = Schema.Literals(["who", "history"]);
+export const SkillTab = Schema.Literals(["who", "history", "activity"]);
 export type SkillTab = typeof SkillTab.Type;
 
 /** What the Skills page's address holds (STD-REACT-002). */
@@ -45,10 +45,15 @@ export interface SkillsSearch {
   /** `skills` opens Export skills. */
   readonly export?: "skills" | undefined;
   readonly q?: string | undefined;
+  /** `changes` opens What changed; `review` To review, with `item` the proposal open there. */
+  readonly view?: "changes" | "review" | undefined;
+  readonly item?: string | undefined;
 }
 
 export type SkillsView =
   | { readonly _tag: "Overview" }
+  | { readonly _tag: "Changes" }
+  | { readonly _tag: "Review"; readonly item: string | null }
   | { readonly _tag: "Scope"; readonly scope: SkillScope }
   | { readonly _tag: "Add"; readonly from: ImportFrom }
   | { readonly _tag: "Export" }
@@ -63,24 +68,28 @@ export type SkillsView =
   | { readonly _tag: "Edit"; readonly skillId: SkillId }
   | { readonly _tag: "Search"; readonly q: string };
 
-/** The view an address names. A search wins, then the editor, a skill, Add and a scope; anything else opens the overview. */
+/** The open skill's view: its editor, or the skill on a tab. */
+const skillViewOf = (search: SkillsSearch, skillId: SkillId): SkillsView =>
+  search.edit === "skill"
+    ? { _tag: "Edit", skillId }
+    : {
+        _tag: "Skill",
+        skillId,
+        tab: search.tab ?? null,
+        file: search.file ?? null,
+        diff: (search.diff as SkillRevisionHash | undefined) ?? null,
+      };
+
+/** The view an address names. A search wins, then the editor, a skill, Add, What changed, To review and a scope; anything else opens the overview. */
 export const skillsViewOf = (search: SkillsSearch): SkillsView => {
   const q = search.q?.trim() ?? "";
   if (q !== "") return { _tag: "Search", q };
   if (search.edit === "new") return { _tag: "New" };
-  if (search.skill !== undefined && search.skill !== "") {
-    const skillId = search.skill as SkillId;
-    if (search.edit === "skill") return { _tag: "Edit", skillId };
-    return {
-      _tag: "Skill",
-      skillId,
-      tab: search.tab ?? null,
-      file: search.file ?? null,
-      diff: (search.diff as SkillRevisionHash | undefined) ?? null,
-    };
-  }
+  if (search.skill !== undefined && search.skill !== "") return skillViewOf(search, search.skill as SkillId);
   if (search.add !== undefined) return { _tag: "Add", from: search.add };
   if (search.export === "skills") return { _tag: "Export" };
+  if (search.view === "changes") return { _tag: "Changes" };
+  if (search.view === "review") return { _tag: "Review", item: search.item ?? null };
   const scope = search.scope === undefined ? null : memoryScopeOfKey(search.scope);
   return scope === null ? { _tag: "Overview" } : { _tag: "Scope", scope };
 };
@@ -90,6 +99,10 @@ export const skillsSearchOf = (view: SkillsView): SkillsSearch => {
   switch (view._tag) {
     case "Overview":
       return {};
+    case "Changes":
+      return { view: "changes" };
+    case "Review":
+      return { view: "review", item: view.item ?? undefined };
     case "Scope":
       return { scope: memoryScopeKey(view.scope) };
     case "Add":

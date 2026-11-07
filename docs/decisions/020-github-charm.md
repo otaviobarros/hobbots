@@ -1,6 +1,6 @@
 # ADR 020 — The GitHub Charm
 
-Status: **Accepted.** Extends the Charms section of [ADR 014](014-tool-policy-and-enforcement.md) and the hub tools of [ADR 018](018-tasks-and-quests.md) for the GitHub Charm ([#320](https://github.com/otaviobarros/hobbots/issues/320)). Uses the approval lifetimes and grants of [ADR 015](015-approval-lifetimes-and-grants.md).
+Status: **Accepted.** Extends the Charms section of [ADR 014](014-tool-policy-and-enforcement.md) and the hub tools of [ADR 018](018-tasks-and-quests.md) for the GitHub Charm ([#320](https://github.com/otaviobarros/hobbots/issues/320)). Uses the approval lifetimes and grants of [ADR 015](015-approval-lifetimes-and-grants.md). Amended by [ADR 031](031-charm-actions-and-registry.md): its operations are renamed `github.read`, `github.open-pull-request` and `github.comment`, Read GitHub can ask, the grant is a Charm id in the hob's set, and `git push` steering is a declaration of the Charm.
 
 ## Context
 

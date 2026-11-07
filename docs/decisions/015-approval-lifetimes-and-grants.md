@@ -1,6 +1,6 @@
 # ADR 015 — Approval lifetimes and standing grants
 
-Status: **Accepted.** Refines the [permissions contract](../architecture/permissions.md) and the approvals of [ADR 014](014-tool-policy-and-enforcement.md#asking-the-user) for Slice 8.
+Status: **Accepted.** Refines the [permissions contract](../architecture/permissions.md) and the approvals of [ADR 014](014-tool-policy-and-enforcement.md#asking-the-user) for Slice 8. Amended by [ADR 031](031-charm-actions-and-registry.md): a Charm action's site is one `CharmSite` rule naming only the site fields its Charm declares.
 
 ## Context
 

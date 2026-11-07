@@ -1,4 +1,4 @@
-import type { RuntimeHealth } from "@hobbots/domain";
+import type { AgentId, RuntimeHealth, SkillId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Stepper } from "@hobbots/ui/components/stepper";
 import { focusElement } from "@hobbots/ui/lib/restore-focus";
@@ -24,6 +24,8 @@ import { openSummonDraft, summonProblem } from "../../api/summon.ts";
 import { motionReduced } from "../../lib/motion.ts";
 import { readyProviders } from "../../lib/providers.ts";
 import { useSettledBrain, useSettledRuntime } from "../hob-form/hob-form.tsx";
+import { ownScope } from "../hob-skills/hob-skills-model.ts";
+import { type HobSkillWrites, useHobSkillWrites } from "../hob-skills/use-hob-skill-writes.ts";
 import { messages as shared } from "../messages.ts";
 import { LookStep } from "./look-step.tsx";
 import { messages } from "./messages.ts";
@@ -54,7 +56,9 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
   const [draft, setDraft] = useState<FirstHobDraft>(() => openSummonDraft(keptSummonDraft(), hobs.data ?? []));
   const models = useQuery(modelsQuery(draft.runtime));
   const [tried, setTried] = useState(false);
-  const { left, summon, summoning } = useSummonHob(draft, setDraft, create);
+  // The library skills to give the hob once it exists; Everyone's and its projects' come by themselves.
+  const [skills, setSkills] = useState<ReadonlyArray<SkillId>>([]);
+  const { left, summon, summoning } = useSummonHob(draft, setDraft, create, skills);
   const { scroller, heading } = useStepStart(step);
 
   // Leaving and coming back keeps what was chosen, until the hob exists.
@@ -148,6 +152,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
                   signedOut={signedOut}
                   models={models}
                   onStep={onStep}
+                  skills={{ picked: skills, onPick: setSkills }}
                 />
               </div>
             </fieldset>
@@ -219,8 +224,10 @@ function useSummonHob(
   draft: FirstHobDraft,
   setDraft: React.Dispatch<React.SetStateAction<FirstHobDraft>>,
   create: Create,
+  skills: ReadonlyArray<SkillId>,
 ) {
   const navigate = useNavigate();
+  const give = useHobSkillWrites().give;
   const [summoning, setSummoning] = useState(false);
   // A summon that finishes after the user left only joins the hob list; it does not pull them back.
   const left = useRef(false);
@@ -242,9 +249,17 @@ function useSummonHob(
       // The hob exists, so the next Summon starts fresh, even when the user already left. A newer
       // draft started meanwhile belongs to another hob and stays.
       settleSummonDraft(sent.id, null);
+      // The skills picked are given as its own once it exists; one that fails is said on arrival.
+      const given = await giveSkills(give, made.id, skills);
       // The circle plays out before the hob is shown, unless motion is reduced.
       await wait(summoningLeft(startedAt, Date.now(), SUMMONING_MS, motionReduced()));
-      if (!left.current) void navigate({ to: "/hobs/$hobId/arrived", params: { hobId: made.id }, replace: true });
+      if (!left.current)
+        void navigate({
+          to: "/hobs/$hobId/arrived",
+          params: { hobId: made.id },
+          search: given ? {} : { skills: "not-given" },
+          replace: true,
+        });
     } catch (error) {
       setSummoning(false);
       if (error instanceof ApiError && error.tag === "InvalidHob") {
@@ -256,6 +271,16 @@ function useSummonHob(
   };
   return { left, summon, summoning };
 }
+
+/** Gives each picked skill to the new hob as its own, true once every one is given. */
+const giveSkills = async (give: HobSkillWrites["give"], agentId: AgentId, skills: ReadonlyArray<SkillId>) => {
+  try {
+    for (const skillId of skills) await give.mutateAsync({ skillId, scope: ownScope(agentId) });
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 

@@ -29,6 +29,10 @@ A turn carries its skills as `PromptRequest.skills`, a list of mounts: each skil
 
 The clean-runtime contract tests (`packages/runtimes/test/clean-runtime-*.test.ts`) run each adapter against one fixture: a fake home and repository holding skills, MCP servers, a plugin, hooks and instruction files in every place each runtime reads. A new runtime adapter is not accepted until it passes them ([evidence](../evidence/2026-11-06-skills-delivery.md)).
 
+## Hub tools
+
+A turn's hub tools reach the runtime as `HubTools`: `tools`, the list it offers the model, and `call`, which the hub decides and runs ([ADR 031](../decisions/031-charm-actions-and-registry.md)). Claude Code serves them through an in-process MCP server, and Codex as dynamic tools (ADR 024). `call` takes the call's `HubCallStep`, whose `record` the adapter wires to the turn's `recordToolStart`: the hub records the step before it sends anything, and a call whose step cannot be recorded does not run. A Charm that takes over a built-in request, such as the GitHub Charm's `github_push` for a `git push`, declares it; `approval.ts` steers the call from that declaration for every runtime, and no adapter imports a Charm.
+
 ## Capability matrix to fill with evidence
 
 For each runtime/version/executor, verify native session persistence/resumption versus reconstruction; concurrent sessions versus serialized turns; streaming and cursor semantics; interruption acknowledgement; approval interception; sandbox/filesystem/network restrictions; terminal/artifact/diff visibility; browser screenshots versus live browser control; computer opt-in; model discovery; usage reporting; MCP support and scoped credentials.

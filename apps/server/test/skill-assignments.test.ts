@@ -357,11 +357,14 @@ describe("skill assignments", () => {
     ]);
     expect(view.clashes).toMatchObject([{ name: "deploy" }]);
     expect(view.clashes[0].assignments).toHaveLength(2);
+    // The projects it works in, so a project skill it turned off still shows under its project.
+    expect(view.projects).toEqual(["alpha", "beta"]);
 
     // With one project, it loads, and says which Charm the hob lacks.
     await request("PATCH", "/api/setup", { approvedFolders: [alpha] });
     const one = (await request("GET", `/api/skills/hobs/${pip.id}`)).body;
     expect(one.clashes).toEqual([]);
+    expect(one.projects).toEqual(["alpha"]);
     expect(one.skills.find((skill: { name: string }) => skill.name === "deploy")).toMatchObject({
       scope: { _tag: "Project", identity: "alpha" },
       missingCharms: ["slack"],

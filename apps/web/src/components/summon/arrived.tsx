@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate } from "@tanstack/react-router";
 import { writeDraft } from "../../api/drafts.ts";
 import { agentsQuery } from "../../api/queries.ts";
+import { messages as skillsCopy } from "../hob-skills/messages.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { startersFor } from "./summon-model.ts";
@@ -21,12 +22,12 @@ const TWINKLES = [
 ];
 
 /** The Arrived screen for a hob by its id; a hob that is gone opens its page, which says so. */
-export function ArrivedPage({ hobId }: { hobId: AgentId }) {
+export function ArrivedPage({ hobId, skillsNotGiven = false }: { hobId: AgentId; skillsNotGiven?: boolean }) {
   const hobs = useQuery(agentsQuery);
   const hob = hobs.data?.find((h) => h.id === hobId);
   if (hobs.isPending) return <ArrivedWaiting />;
   if (!hob) return <Navigate to="/hobs/$hobId" params={{ hobId }} replace />;
-  return <Arrived hob={hob} />;
+  return <Arrived hob={hob} skillsNotGiven={skillsNotGiven} />;
 }
 
 /**
@@ -34,7 +35,7 @@ export function ArrivedPage({ hobId }: { hobId: AgentId }) {
  * the ways on: its chat, its profile, or another summon. A question opens the chat with it typed in,
  * ready to send or change. Long names wrap in the words and shorten on the buttons.
  */
-function Arrived({ hob }: { hob: Agent }) {
+function Arrived({ hob, skillsNotGiven }: { hob: Agent; skillsNotGiven: boolean }) {
   const name = hob.name;
   const place = `new-${hob.id}` as const;
   return (
@@ -45,6 +46,22 @@ function Arrived({ hob }: { hob: Agent }) {
           {copy.title({ name })}
         </h1>
         <p className="m-0 max-w-full text-text-secondary break-words">{copy.body({ name, role: hob.roleTitle })}</p>
+        {skillsNotGiven && (
+          <p
+            role="status"
+            className="m-0 w-full rounded-card bg-notice px-3.5 py-2.5 text-start text-ui text-text-strong"
+          >
+            {skillsCopy.summon.notGiven({ name })}{" "}
+            <Link
+              to="/hobs/$hobId"
+              params={{ hobId: hob.id }}
+              search={{ tab: "skills" }}
+              className="text-link underline"
+            >
+              {skillsCopy.summon.openTab}
+            </Link>
+          </p>
+        )}
 
         <section aria-labelledby="arrived-ask" className="flex w-full flex-col gap-2 pt-2 text-start">
           <h2 id="arrived-ask" className="lbl m-0 text-label">

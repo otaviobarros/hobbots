@@ -37,6 +37,7 @@ const view: HobSkills = {
   replaced: [],
   clashes: [],
   optedOut: [],
+  projects: [],
   lastUsed: [],
 };
 

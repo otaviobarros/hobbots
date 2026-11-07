@@ -8,6 +8,7 @@ import {
   type RemoteAccessStatus,
   Revision,
   Skill,
+  SkillFeedback,
   SkillId,
   SkillName,
   SkillRevisionHash,
@@ -22,7 +23,7 @@ import { applyEvent, remoteAccessChanged } from "./events.ts";
 import { queryKeys } from "./queries.ts";
 import { remoteAccessQuery } from "./remote-access.ts";
 import { skillProposalsQuery } from "./skill-proposals.ts";
-import { skillQuery, skillRevisionQuery, skillsListQuery } from "./skills.ts";
+import { skillFeedbackQuery, skillQuery, skillRevisionQuery, skillsListQuery } from "./skills.ts";
 
 const threadId = ThreadId.make("t1");
 const now = "2026-10-28T12:00:00.000Z";
@@ -61,6 +62,39 @@ describe("applyEvent", () => {
     await vi.waitFor(() => expect(client.getQueryState(list)?.isInvalidated).toBe(true));
     expect(client.getQueryState(detail)?.isInvalidated).toBe(true);
     expect(client.getQueryState(revision)?.isInvalidated).toBe(false);
+  });
+
+  // covers ADR 029 (skill_feedback), STD-REACT-012, #1062
+  it("[TC-UX-1062-09] a note left while a skill's first read of its notes is under way is read again, not lost", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const skillId = SkillId.make("s1");
+    const reads: Array<(answer: { feedback: ReadonlyArray<SkillFeedback> }) => void> = [];
+    const observer = new QueryObserver(client, {
+      ...skillFeedbackQuery(skillId),
+      queryFn: () => new Promise<{ feedback: ReadonlyArray<SkillFeedback> }>((resolve) => reads.push(resolve)),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const note = new SkillFeedback({
+      id: "f1",
+      agentId: AgentId.make("pip"),
+      skillId,
+      kind: "unclear",
+      note: "Step 1 does not say which diff.",
+      revision: null,
+      threadId: null,
+      messageId: null,
+      createdAt: now,
+    });
+
+    // The note lands before the first read answers: that read started without it, so a new one runs.
+    applyEvent(client, { _tag: "SkillFeedbackLeft", feedback: note });
+    await vi.waitFor(() => expect(reads).toHaveLength(2));
+    reads[0]?.({ feedback: [] });
+    reads[1]?.({ feedback: [note] });
+    await tick();
+    expect(observer.getCurrentResult().data).toEqual([note]);
+    unsubscribe();
   });
 
   it("makes a reply that lands its thread's last line in the hob's thread list", () => {
