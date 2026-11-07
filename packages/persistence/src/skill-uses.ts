@@ -31,6 +31,8 @@ interface CountRow {
   readonly count: unknown;
   readonly recent: unknown;
   readonly lastAt: string | null;
+  /** For a `member` row, the name in its set of the skill used. */
+  readonly name: string | null;
 }
 
 /** How many uses a read answers unless it asks for fewer or more. */
@@ -69,6 +71,13 @@ export const insertSkillUse = (sql: SqlClient.SqlClient, use: SkillUse) =>
     set_name: use.set,
   })}`;
 
+/** Each skill of a set that was used, by its name in the set (ADR 029, Skill sets). */
+const membersOf = (rows: ReadonlyArray<CountRow>) =>
+  rows
+    .flatMap((row) => (row.kind === "member" && row.name !== null ? [row] : []))
+    .map((row) => ({ name: String(row.name), total: Number(row.count), thisWeek: Number(row.recent) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
 /** The uses of skills (migration 0069, ADR 029 The use line): each journaled as `SkillUsed`. */
 export const skillUses = (
   sql: SqlClient.SqlClient,
@@ -98,14 +107,19 @@ export const skillUses = (
       Effect.gen(function* () {
         const rows = yield* sql<CountRow>`
           SELECT 'total' AS kind, NULL AS agent_id, NULL AS thread_id, COUNT(*) AS count,
-            COALESCE(SUM(CASE WHEN used_at > ${since} THEN 1 ELSE 0 END), 0) AS recent, MAX(used_at) AS last_at
+            COALESCE(SUM(CASE WHEN used_at > ${since} THEN 1 ELSE 0 END), 0) AS recent, MAX(used_at) AS last_at,
+            NULL AS name
           FROM skill_uses WHERE skill_id = ${skillId}
           UNION ALL
-          SELECT 'hob', agent_id, NULL, COUNT(*), 0, MAX(used_at)
+          SELECT 'hob', agent_id, NULL, COUNT(*), 0, MAX(used_at), NULL
           FROM skill_uses WHERE skill_id = ${skillId} GROUP BY agent_id
           UNION ALL
-          SELECT 'thread', agent_id, thread_id, COUNT(*), 0, MAX(used_at)
-          FROM skill_uses WHERE skill_id = ${skillId} AND thread_id IS NOT NULL GROUP BY thread_id, agent_id`;
+          SELECT 'thread', agent_id, thread_id, COUNT(*), 0, MAX(used_at), NULL
+          FROM skill_uses WHERE skill_id = ${skillId} AND thread_id IS NOT NULL GROUP BY thread_id, agent_id
+          UNION ALL
+          SELECT 'member', NULL, NULL, COUNT(*), COALESCE(SUM(CASE WHEN used_at > ${since} THEN 1 ELSE 0 END), 0),
+            MAX(used_at), name
+          FROM skill_uses WHERE skill_id = ${skillId} AND set_name IS NOT NULL GROUP BY name`;
         const total = rows.find((row) => row.kind === "total");
         const newest = (a: CountRow, b: CountRow) =>
           String(b.lastAt).localeCompare(String(a.lastAt)) ||
@@ -127,6 +141,7 @@ export const skillUses = (
               count: Number(row.count),
               lastAt: row.lastAt,
             })),
+          members: membersOf(rows),
         }).pipe(Effect.orDie);
       }),
     ),

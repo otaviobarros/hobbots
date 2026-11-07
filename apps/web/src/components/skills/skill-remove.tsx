@@ -14,7 +14,18 @@ const copy = messages;
  * Remove from the library: asks first. A skill something still gives cannot go, so the question says
  * who has it instead, and the hub refuses it the same way if that changed meanwhile.
  */
-export function SkillRemove({ detail, hobs, say }: { detail: SkillDetail; hobs: HobDirectory; say: Say }) {
+export function SkillRemove({
+  detail,
+  hobs,
+  say,
+  label = copy.remove.open,
+}: {
+  detail: SkillDetail;
+  hobs: HobDirectory;
+  say: Say;
+  /** What the button says: a set's reads "Remove the set…". */
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
   const writes = useSkillWrites();
   const navigate = useNavigate();
@@ -23,7 +34,7 @@ export function SkillRemove({ detail, hobs, say }: { detail: SkillDetail; hobs: 
   return (
     <>
       <Button variant="quiet" aria-expanded={open} onClick={() => setOpen(!open)}>
-        {copy.remove.open}
+        {label}
       </Button>
       {open && (
         <div

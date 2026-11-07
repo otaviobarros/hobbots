@@ -16,6 +16,7 @@ import {
   SkillRevisionHash,
   SkillScope,
   SkillSetContent,
+  SkillSetSkill,
   SkillSource,
   SkillUse,
   SkillUseCounts,
@@ -150,6 +151,8 @@ export const SkillCandidate = Schema.Struct({
   label: Schema.NullOr(Schema.String),
   /** For a set (ADR 029, Skill sets), the skills it holds, shown before you add it; null for a skill. */
   set: Schema.NullOr(SkillSetContent),
+  /** For a set, the files it keeps outside its skills' folders, which they share; empty for a skill. */
+  shared: Schema.Array(Schema.String),
   refusal: Schema.NullOr(CandidateRefusal),
   locked: Schema.NullOr(Schema.Struct({ matches: Schema.Boolean, url: Schema.NullOr(Schema.String) })),
   /**
@@ -352,6 +355,8 @@ export const SkillsList = Schema.Struct({
   agentsFolder: Schema.Struct({ path: Schema.NullOr(Schema.String), problems: Schema.Array(AgentsFolderProblem) }),
   /** How often hobs used each skill in the last seven days; a skill nobody used is left out. */
   usesThisWeek: Schema.Array(Schema.Struct({ skillId: SkillId, count: Schema.Int })),
+  /** Each set in the library (ADR 029, Skill sets), with the skills its newest revision holds. */
+  sets: Schema.Array(Schema.Struct({ skillId: SkillId, skills: Schema.Array(SkillSetSkill) })),
 });
 export type SkillsList = typeof SkillsList.Type;
 
@@ -360,6 +365,11 @@ export const SkillDetail = Schema.Struct({
   /** Newest first. */
   revisions: Schema.Array(SkillRevision),
   assignments: Schema.Array(SkillAssignment),
+  /**
+   * For a set (ADR 029, Skill sets), the files of its newest revision that are in none of its skills'
+   * folders, each with the skills whose `SKILL.md` links to it; null for a skill.
+   */
+  shared: Schema.NullOr(Schema.Array(Schema.Struct({ path: Schema.String, linkedBy: Schema.Array(SkillName) }))),
 });
 export type SkillDetail = typeof SkillDetail.Type;
 
@@ -403,6 +413,8 @@ export const CopySkillPayload = Schema.Struct({
   name: SkillName,
   base: Schema.optionalKey(SkillRevisionHash),
   scope: Schema.optionalKey(SkillScope),
+  /** For a set (ADR 029, Skill sets), the one of its skills to copy, by its name in the set. */
+  member: Schema.optionalKey(SkillName),
 });
 
 /** The copy, and the assignment it was given, if any. */

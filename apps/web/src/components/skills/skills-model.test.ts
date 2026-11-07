@@ -29,6 +29,7 @@ import {
   newSkillFile,
   originText,
   searchHits,
+  sharedFoldersOf,
   skillsSearchOf,
   skillsViewOf,
   skillTitle,
@@ -81,6 +82,7 @@ const list = (overrides: Partial<SkillsList> = {}): SkillsList => ({
   projects: [],
   agentsFolder: { path: null, problems: [] },
   usesThisWeek: [],
+  sets: [],
   ...overrides,
 });
 
@@ -91,8 +93,23 @@ describe("the Skills page's address", () => {
       { _tag: "Scope", scope: { _tag: "Hob", agentId: pip.id } },
       { _tag: "Add", from: "file" },
       { _tag: "New" },
-      { _tag: "Skill", skillId: SkillId.make("s1"), tab: "history", file: null, diff: hash(2) },
-      { _tag: "Skill", skillId: SkillId.make("s1"), tab: null, file: "references/checks.md", diff: null },
+      { _tag: "Skill", skillId: SkillId.make("s1"), member: null, tab: "history", file: null, diff: hash(2) },
+      {
+        _tag: "Skill",
+        skillId: SkillId.make("s1"),
+        member: null,
+        tab: null,
+        file: "references/checks.md",
+        diff: null,
+      },
+      {
+        _tag: "Skill",
+        skillId: SkillId.make("s9"),
+        member: "deliver-change",
+        tab: null,
+        file: "skills/deliver-change/SKILL.md",
+        diff: null,
+      },
       { _tag: "Edit", skillId: SkillId.make("s1") },
       { _tag: "Search", q: "release" },
     ] as const;
@@ -141,6 +158,37 @@ describe("the library by scope", () => {
     expect(originText(group?.rows[0]?.origin ?? null)).toBe("github.com/acme/skills · v1.4.0");
     expect(originText(null)).toBe("Written in Hobbots");
     expect(originText({ _tag: "AgentsFolder", path: "/home/me/.agents/skills" })).toBe("~/.agents/skills");
+  });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-UI-1143-01] lists a set as one row with its skills, and names the folders its skills share", () => {
+    const set = skill("s9", "agent-engineering", "A playbook.");
+    const member = (name: string) => ({
+      name: SkillName.make(name),
+      description: `${name}.`,
+      path: `skills/${name}`,
+      charms: [],
+    });
+    const [group] = libraryGroups(
+      list({
+        skills: [set, skill("s1", "commit-style", "Commits.")],
+        assignments: [assignment("a1", "s9", { _tag: "Everyone" }), assignment("a2", "s1", { _tag: "Everyone" })],
+        sets: [{ skillId: SkillId.make("s9"), skills: [member("plan-change"), member("deliver-change")] }],
+      }),
+      hobs,
+    );
+    expect(group?.rows.map((row) => [row.skill.name, row.set])).toEqual([
+      ["agent-engineering", ["plan-change", "deliver-change"]],
+      ["commit-style", null],
+    ]);
+    expect(
+      sharedFoldersOf([
+        { path: "references/review.md" },
+        { path: "references/workflow-contract.md" },
+        { path: "assets/logo.svg" },
+        { path: "GLOSSARY.md" },
+      ]),
+    ).toEqual(["GLOSSARY.md", "assets/", "references/"]);
   });
 });
 

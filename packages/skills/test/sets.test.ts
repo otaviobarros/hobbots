@@ -1,9 +1,11 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SkillFiles, SkillLibrary } from "@hobbots/agents";
+import { SkillName } from "@hobbots/domain";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { checkSet } from "../src/check.ts";
+import { memberCopyTree } from "../src/edit.ts";
 import { decodeSkillsLock, SKILLS_LOCK_FILE, SkillImporter, writeSkillExport } from "../src/index.ts";
 import { folderTree } from "../src/sources/folder.ts";
 import { type Fixture, folderOf, importerLayer, repositoryOf, runWith, skillMd, temp } from "./fixtures.ts";
@@ -332,5 +334,101 @@ describe("skill sets", () => {
     expect(result).toMatchObject({ _tag: "Refused", refusal: { check: "too-large", path: null } });
     expect(read).not.toContain("skills/one/assets/huge.bin");
     await (tree as { close?: () => Promise<void> }).close?.();
+  });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-15] copies one skill of a set as a skill of its own, with the set's files it links to and its links pointed at them", async () => {
+    const { layer } = await importerLayer();
+    const repository = await repositoryOf(agentEngineering());
+    await runWith(layer)(
+      Effect.gen(function* () {
+        const importer = yield* SkillImporter;
+        const [set] = yield* importer.add({ _tag: "Git", url: repository.url, ref: null }, you);
+        const member = set?.revision.set?.skills.find((one) => one.name === "deliver-change");
+        if (set === undefined || member === undefined) return expect.unreachable();
+        const folder = (yield* (yield* SkillFiles).folder(set.revision.hash)) ?? "";
+        const source = {
+          _tag: "Copied",
+          folder,
+          name: SkillName.make("deliver-change-copy"),
+          carried: { charms: [], dropped: [] },
+          member,
+        } as const;
+        const [copy] = yield* importer.add(source, you);
+        expect(copy?.revision).toMatchObject({ name: "deliver-change-copy", number: 1, set: null, sourceId: null });
+        const copied = (yield* (yield* SkillFiles).folder(copy?.revision.hash ?? ("" as never))) ?? "";
+        // Its folder at the top; what it links to, directly or through those files, under linked/. Another
+        // skill's SKILL.md is named after its folder, and a file nothing reaches stays out.
+        expect(yield* Effect.promise(() => files(copied))).toEqual([
+          "SKILL.md",
+          "linked/references/verification.md",
+          "linked/references/workflow-contract.md",
+          "linked/skills/implement-change/implement-change.md",
+          "linked/skills/plan-change/plan-change.md",
+        ]);
+        const skill = yield* Effect.promise(() => readFile(join(copied, "SKILL.md"), "utf8"));
+        expect(skill).toContain("name: deliver-change-copy");
+        expect(skill).toContain("[contract](linked/references/workflow-contract.md)");
+        expect(skill).toContain("[plan-change](linked/skills/plan-change/plan-change.md)");
+        const plan = yield* Effect.promise(() =>
+          readFile(join(copied, "linked", "skills", "plan-change", "plan-change.md"), "utf8"),
+        );
+        // A link between two files it brings keeps working from their new places.
+        expect(plan).toContain("[contract](../../references/workflow-contract.md)");
+        expect(plan).toContain("[implement-change](../implement-change/implement-change.md)");
+        // The set itself is unchanged.
+        expect(yield* Effect.promise(() => files(folder))).toContain("skills/deliver-change/SKILL.md");
+      }),
+    );
+  });
+
+  it("[TC-AG-1143-17] keeps every file a copy of a set's skill brings, byte for byte, and gives each one place", async () => {
+    const folder = await folderOf({
+      // It links to plan-change's SKILL.md and to a file beside it named as that SKILL.md is renamed.
+      "skills/deliver-change/SKILL.md": skillMd("deliver-change").replace(
+        "Steps for deliver-change.",
+        "Read [plan](../plan-change/SKILL.md), [notes](../plan-change/plan-change.md), [rules](../../references/rules.md), [own](linked/references/rules.md) and [art](art.bin).",
+      ),
+      // Its own file where the set's shared rules would go.
+      "skills/deliver-change/linked/references/rules.md": "Its own rules.\n",
+      "skills/plan-change/SKILL.md": skillMd("plan-change"),
+      "skills/plan-change/plan-change.md": "Notes beside the skill.\n",
+      "references/rules.md": "Shared rules.\n",
+    });
+    // Not UTF-8 and no NUL byte, and a text file with a byte order mark: both must come through unchanged.
+    const art = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0xc3, 0x28, 0x0a]);
+    const marked = Uint8Array.from([0xef, 0xbb, 0xbf, ...new TextEncoder().encode("Marked.\n")]);
+    await writeFile(join(folder, "skills/deliver-change/art.bin"), art);
+    await writeFile(join(folder, "skills/deliver-change/marked.md"), marked);
+    const member = {
+      name: SkillName.make("deliver-change"),
+      description: "x",
+      path: "skills/deliver-change",
+      charms: [],
+    };
+    const tree = await memberCopyTree(folder, member as never, "deliver-change-copy");
+    const paths = tree.entries.map((entry) => entry.path).sort();
+    expect(paths).toEqual([
+      "SKILL.md",
+      "art.bin",
+      "linked-2/references/rules.md",
+      "linked-2/skills/plan-change/plan-change-2.md",
+      "linked-2/skills/plan-change/plan-change.md",
+      "linked/references/rules.md",
+      "marked.md",
+    ]);
+    expect(Uint8Array.from(await tree.read("art.bin"))).toEqual(art);
+    expect(Uint8Array.from(await tree.read("marked.md"))).toEqual(marked);
+    const text = async (path: string) => new TextDecoder().decode(await tree.read(path));
+    expect(await text("linked/references/rules.md")).toBe("Its own rules.\n");
+    expect(await text("linked-2/references/rules.md")).toBe("Shared rules.\n");
+    expect(await text("linked-2/skills/plan-change/plan-change.md")).toBe("Notes beside the skill.\n");
+    expect(await text("linked-2/skills/plan-change/plan-change-2.md")).toContain("name: plan-change");
+    const skill = await text("SKILL.md");
+    expect(skill).toContain("[plan](linked-2/skills/plan-change/plan-change-2.md)");
+    expect(skill).toContain("[notes](linked-2/skills/plan-change/plan-change.md)");
+    expect(skill).toContain("[rules](linked-2/references/rules.md)");
+    expect(skill).toContain("[own](linked/references/rules.md)");
+    expect(skill).toContain("[art](art.bin)");
   });
 });

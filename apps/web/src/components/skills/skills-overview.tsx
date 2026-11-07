@@ -27,6 +27,7 @@ function RowChips({ row }: { row: SkillRow }) {
   const { assignment, origin } = row;
   return (
     <>
+      {row.set !== null && <SkillChip tone="set">{copy.chips.set({ count: row.set.length })}</SkillChip>}
       {origin?._tag === "AgentsFolder" && <SkillChip tone="later">{copy.chips.agents}</SkillChip>}
       {assignment?.held === true && (
         <SkillChip tone="waiting">
@@ -47,7 +48,7 @@ export function SkillRowLink({ row, now }: { row: SkillRow; now: Date }) {
       <Link to="/skills" search={skillsSearchOf(skillView(skill.id))} className={rowLink}>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="text-body font-semibold">{skillTitle(skill.name)}</span>
+            <span className="text-body font-semibold">{row.set === null ? skillTitle(skill.name) : skill.name}</span>
             {row.number !== null && <RevTag label={copy.revision({ number: row.number })} />}
             <RowChips row={row} />
           </span>

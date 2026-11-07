@@ -355,6 +355,10 @@ export const SkillUseCounts = Schema.Struct({
   threads: Schema.Array(
     Schema.Struct({ threadId: ThreadId, agentId: AgentId, count: Schema.Int, lastAt: Schema.String }),
   ),
+  /** For a set (ADR 029, Skill sets), each of its skills that was used, by its name in the set. */
+  members: Schema.Array(Schema.Struct({ name: Schema.String, total: Schema.Int, thisWeek: Schema.Int })).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+  ),
 });
 export type SkillUseCounts = typeof SkillUseCounts.Type;
 
@@ -369,7 +373,16 @@ export const countSkillUses = (skillId: SkillId, uses: ReadonlyArray<SkillUse>, 
   const mine = uses.filter((use) => use.skillId === skillId).sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
   const hobs = new Map<AgentId, { agentId: AgentId; count: number; lastAt: string }>();
   const threads = new Map<ThreadId, { threadId: ThreadId; agentId: AgentId; count: number; lastAt: string }>();
+  const members = new Map<string, { name: string; total: number; thisWeek: number }>();
   for (const use of mine) {
+    if (use.set !== null) {
+      const member = members.get(use.name) ?? { name: use.name, total: 0, thisWeek: 0 };
+      members.set(use.name, {
+        ...member,
+        total: member.total + 1,
+        thisWeek: member.thisWeek + (use.at > since ? 1 : 0),
+      });
+    }
     const hob = hobs.get(use.agentId) ?? { agentId: use.agentId, count: 0, lastAt: use.at };
     hobs.set(use.agentId, { ...hob, count: hob.count + 1 });
     if (use.threadId === null) continue;
@@ -387,6 +400,7 @@ export const countSkillUses = (skillId: SkillId, uses: ReadonlyArray<SkillUse>, 
     thisWeek: mine.filter((use) => use.at > since).length,
     hobs: [...hobs.values()],
     threads: [...threads.values()],
+    members: [...members.values()].sort((a, b) => a.name.localeCompare(b.name)),
   };
 };
 
