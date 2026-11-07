@@ -46,6 +46,11 @@ export interface ChatTaskTurn {
   /** The Task tools the turn offers its runtime; the hub checks every call. */
   readonly hubTools: HubTools;
   /**
+   * Why a `git commit` in the repository Git finds from `cwd` is held, or null when it may run: a
+   * lead's commit where a member's open Task left changes, which are that member's to commit (#742).
+   */
+  readonly holdsCommit?: (cwd: string) => Effect.Effect<string | null>;
+  /**
    * What the turn's session needs to know of the open Task: the state, checkpoints and results of
    * the Tasks under it, never their sessions. Null when the hob works on no open Task here.
    */

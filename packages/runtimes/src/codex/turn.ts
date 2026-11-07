@@ -630,7 +630,7 @@ const sandboxFor = (
 const governedTurn = (config: CodexTurnConfig, request: PromptRequest) => {
   const policy = config.policy;
   // Who its commits are made as, as on Claude Code (#586, #741).
-  const tools = policy ? toolTurn(request.tools, policy.sandboxState, request.hubTools, CODEX_MODEL_HOSTS) : null;
+  const tools = policy ? toolTurn(request.tools, policy.sandboxState, request, CODEX_MODEL_HOSTS) : null;
   const commits = turnCommits(tools);
   if (!policy || tools === null) return null;
   return { policy, tools, commits, sandbox: policy.sandbox.state === "on" ? policy.sandbox : null };

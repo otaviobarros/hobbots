@@ -21,7 +21,6 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   approvalNote,
-  type HubTools,
   operationDecision,
   type PromptRequest,
   type Redactor,
@@ -777,7 +776,7 @@ export const turnPrompt = (
  * whether the sandbox wraps it.
  */
 export const claudeTurnStart = (request: PromptRequest, policySandboxState: SandboxState, sandboxOn: boolean) => {
-  const tools = toolTurn(request.tools, policySandboxState, request.hubTools);
+  const tools = toolTurn(request.tools, policySandboxState, request);
   const commits = turnCommits(tools);
   const instructions = turnInstructions(
     request.instructions,
@@ -821,13 +820,23 @@ export const sessionPolicy = (tools: ToolTurn | null): { readonly policyVersion?
   tools === null ? {} : { policyVersion: policyVersion(tools.context) };
 
 /**
+ * What the hub points the turn's calls to, or holds them for (ADR 031): the requests the Charms the hob
+ * holds take over and the commits it holds, from the turn's steering, and `git init` when it offers it.
+ */
+const hubSteers = (hub: Pick<PromptRequest, "hubTools" | "steering"> | null | undefined) => ({
+  ...(hub?.steering?.takeovers.length ? { takeovers: hub.steering.takeovers } : {}),
+  ...(hub?.steering?.holdsCommit ? { holdsCommit: hub.steering.holdsCommit } : {}),
+  ...(hub?.hubTools?.tools.some((tool) => tool.name === GIT_INIT_TOOL) ? { initTool: GIT_INIT_TOOL } : {}),
+});
+
+/**
  * The turn's tools, or null for a chat-only turn: no access, no folder that exists, reading the
  * folders denied (Claude Code cannot start in a folder it cannot read), or no tool open.
  */
 export const toolTurn = (
   access: ToolAccess | null | undefined,
   sandbox: SandboxState,
-  hubTools?: HubTools | null,
+  hub?: Pick<PromptRequest, "hubTools" | "steering"> | null,
   modelHosts: ReadonlyArray<string> = CLAUDE_CODE_MODEL_HOSTS,
 ): ToolTurn | null => {
   if (!access) return null;
@@ -852,9 +861,7 @@ export const toolTurn = (
     folders,
     tools,
     runtimeFolder: access.runtimeFolder,
-    ...(hubTools?.steersPush ? { steersPush: hubTools.steersPush } : {}),
-    ...(hubTools?.holdsCommit ? { holdsCommit: hubTools.holdsCommit } : {}),
-    ...(hubTools?.tools.some((tool) => tool.name === GIT_INIT_TOOL) ? { initTool: GIT_INIT_TOOL } : {}),
+    ...hubSteers(hub),
     ...(access.commitAs ? { commitAs: access.commitAs } : {}),
     commitsAs: access.commitsAs,
   };

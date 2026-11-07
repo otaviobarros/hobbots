@@ -2,7 +2,15 @@ import { CharmCall, type CharmDeclaration, isCharmCallSettled } from "@hobbots/d
 import { Effect, Layer, Option, Schema } from "effect";
 import type { AskableVerdict } from "./asking.ts";
 import { CharmCalls } from "./charm-calls.ts";
-import { type Charm, type CharmOffer, Charms, type CharmTurn, defineCharm, joinHubTools } from "./charms.ts";
+import {
+  type Charm,
+  type CharmOffer,
+  Charms,
+  type CharmTurn,
+  defineCharm,
+  joinHubTools,
+  takeoversOf,
+} from "./charms.ts";
 import { hubAction } from "./hub-actions.ts";
 
 /** Test doubles for the agents package's ports, for this package's tests and its callers'. */
@@ -70,6 +78,10 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) => {
 export const charmToolsFor = (turn: CharmTurn, offer?: CharmOffer) =>
   Charms.use((charms) => charms.forTurn(turn, offer)).pipe(Effect.map(joinHubTools));
 
+/** The built-in requests the Charms a turn is offered take over, as the runtimes steer them (ADR 031). */
+export const charmTakeoversFor = (turn: CharmTurn, offer?: CharmOffer) =>
+  Charms.use((charms) => charms.forTurn(turn, offer)).pipe(Effect.map(takeoversOf));
+
 // A fake Charm (ADR 031), for tests that register Charms other than GitHub.
 
 const allowed = (operation: `${string}.${string}`): AskableVerdict => ({
@@ -84,8 +96,11 @@ const allowed = (operation: `${string}.${string}`): AskableVerdict => ({
   policyVersion: "v1",
 });
 
-/** The declaration of a fake Charm called `id`: a read and a write, allowed under every preset. */
-export const fakeCharmDeclaration = (id: string): CharmDeclaration => ({
+/**
+ * The declaration of a fake Charm called `id`: a read and a write, allowed under every preset, and
+ * Push when it `takesOverPush`.
+ */
+export const fakeCharmDeclaration = (id: string, takesOverPush = false): CharmDeclaration => ({
   id,
   operations: ["read", "write"].map((operation) => ({
     id: `${id}.${operation}` as const,
@@ -95,7 +110,7 @@ export const fakeCharmDeclaration = (id: string): CharmDeclaration => ({
     onceOnly: false,
     actsAsIdentity: false,
   })),
-  takesOver: [],
+  takesOver: takesOverPush ? ["push"] : [],
 });
 
 const tool = (name: string) => ({ name, description: name, inputSchema: { type: "object" }, label: name });
@@ -107,6 +122,8 @@ export interface FakeCharm {
   readonly read?: string;
   readonly write?: string;
   readonly connected?: boolean;
+  /** The folders a `git push` is made with its write from instead, folders inside them included. */
+  readonly pushesFrom?: ReadonlyArray<string>;
 }
 
 /** A Charm whose read answers its name, and whose write ends uncertain and is found applied when read back. */
@@ -120,9 +137,10 @@ export const fakeCharm = (charm: FakeCharm): Effect.Effect<Charm> => {
     operation: `${charm.id}.${operation}`,
     site: {},
   });
+  const { pushesFrom } = charm;
   return Effect.succeed(
     defineCharm({
-      declaration: fakeCharmDeclaration(charm.id),
+      declaration: fakeCharmDeclaration(charm.id, pushesFrom !== undefined),
       name: charm.name,
       actions: [
         hubAction({
@@ -153,6 +171,18 @@ export const fakeCharm = (charm: FakeCharm): Effect.Effect<Charm> => {
       ],
       decide: (_approvals, _base, planned) => () => Effect.succeed(allowed(planned.operation as `${string}.${string}`)),
       connected: () => Effect.succeed(charm.connected ?? true),
+      ...(pushesFrom === undefined
+        ? {}
+        : {
+            takeovers: [
+              {
+                operation: "push",
+                tool: write,
+                appliesIn: (_turn, cwd) =>
+                  Effect.succeed(pushesFrom.some((folder) => cwd === folder || cwd.startsWith(`${folder}/`))),
+              },
+            ],
+          }),
     }),
   );
 };

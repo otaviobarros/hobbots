@@ -477,7 +477,7 @@ export const scriptedToolEvents = (
 ): Stream.Stream<RuntimeEvent> => {
   // Commands are decided as on a hub where the sandbox started, or where it cannot start.
   // Who its commits are made as comes with the turn, as on the real runtimes (#741).
-  const turn = engine ? toolTurn(request.tools, sandbox, request.hubTools) : null;
+  const turn = engine ? toolTurn(request.tools, sandbox, request) : null;
   if (engine === undefined || turn === null) return Stream.empty;
   const cwd = turn.folders[0] as string;
   const calls = request.prompt
@@ -790,7 +790,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
         _tag: "SessionStarted",
         sessionId,
         billing: "fake",
-        ...sessionPolicy(toolTurn(request.tools, sandbox, request.hubTools)),
+        ...sessionPolicy(toolTurn(request.tools, sandbox, request)),
       },
       ...(scripted.split("\n").some((line) => line.trim() === FAKE_COMPACT_DIRECTIVE)
         ? [{ _tag: "SessionCompacted" } as const]

@@ -28,7 +28,7 @@ import {
   GitPushLive,
   GitRemotes,
 } from "../src/index.ts";
-import { approvingUser, charmToolsFor, directSandbox, memoryCharmCalls } from "./support.ts";
+import { approvingUser, charmTakeoversFor, charmToolsFor, directSandbox, memoryCharmCalls } from "./support.ts";
 
 let root = "";
 let project = "";
@@ -199,7 +199,7 @@ const callWith = (
 ) =>
   Effect.gen(function* () {
     let now: ToolAccess | null = access([project]);
-    const tools = yield* charmToolsFor({
+    const turn = {
       agentId: AgentId.make("hob"),
       threadId: null,
       messageId: null,
@@ -207,11 +207,14 @@ const callWith = (
       currentAccess: Effect.sync(() => now),
       redactor: makeRedactor(),
       approvals: null,
-    });
+    };
+    const tools = yield* charmToolsFor(turn);
     if (tools === null) throw new Error("The turn was offered no GitHub tools");
+    // The Push the Charm takes over, as the runtimes steer it (ADR 031).
+    const push = (yield* charmTakeoversFor(turn)).find((takeover) => takeover.operation === "push");
     now = current;
     const steered: Array<string | null> = [];
-    for (const cwd of steerFrom) steered.push(tools.steersPush ? yield* tools.steersPush(cwd) : null);
+    for (const cwd of steerFrom) steered.push(push !== undefined && (yield* push.appliesIn(cwd)) ? push.tool : null);
     // Every call shows as a step, which records it before it runs (ADR 031).
     const answer = yield* tools.call(
       name,

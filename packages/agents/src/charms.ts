@@ -24,7 +24,16 @@ import {
   readBacksOf,
 } from "./hub-actions.ts";
 import { MemoryTools } from "./memory.ts";
-import type { HubCallStep, HubToolAnswer, HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
+import type {
+  CallSteering,
+  HubCallStep,
+  HubOffer,
+  HubToolAnswer,
+  HubTools,
+  Takeover,
+  ToolAccess,
+  TurnApprovals,
+} from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
 import { SkillTools } from "./skill-proposals.ts";
 
@@ -90,27 +99,25 @@ export const hubToolNameProblem = (owners: ReadonlyArray<HubToolOwner>): string 
   return null;
 };
 
-/** The hub tools one owner offers a turn, or null when it offers none. */
+/**
+ * The hub tools one owner offers a turn, or null when it offers none, and the built-in requests it
+ * takes over for the turn: a Charm's, while it is offered (ADR 031).
+ */
 export interface HubToolSet {
   readonly owner: string;
   readonly tools: HubTools | null;
+  readonly takeovers?: ReadonlyArray<Takeover>;
 }
 
-/** The first answer any of `sets` gives for a folder that is not null, or null when none does. */
-const firstOf =
-  (
-    sets: ReadonlyArray<HubTools>,
-    pick: (set: HubTools) => ((cwd: string) => Effect.Effect<string | null>) | undefined,
-  ) =>
-  (cwd: string): Effect.Effect<string | null> =>
-    Effect.gen(function* () {
-      for (const set of sets) {
-        const answer = pick(set);
-        const found = answer ? yield* answer(cwd) : null;
-        if (found !== null) return found;
-      }
-      return null;
-    });
+/** The built-in requests `sets` take over, in their order. */
+export const takeoversOf = (sets: ReadonlyArray<HubToolSet>): ReadonlyArray<Takeover> =>
+  sets.flatMap((set) => (set.tools === null ? [] : (set.takeovers ?? [])));
+
+/** The steering of the takeovers `sets` declare, or null when they declare none. */
+const steeringOf = (sets: ReadonlyArray<HubToolSet>): CallSteering | null => {
+  const takeovers = takeoversOf(sets);
+  return takeovers.length === 0 ? null : { takeovers };
+};
 
 /**
  * Every tool of several sets, as one, in their order: a call goes to the set that offers its tool.
@@ -130,10 +137,19 @@ export const joinHubTools = (sets: ReadonlyArray<HubToolSet>): HubTools | null =
     tools: all.flatMap((set) => set.tools),
     // A tool no set offers goes to the first, which refuses it in its own words.
     call: (name, input, step) => (owner.get(name) ?? (all[0] as HubTools)).call(name, input, step),
-    steersPush: firstOf(all, (set) => set.steersPush),
-    holdsCommit: firstOf(all, (set) => set.holdsCommit),
   };
 };
+
+/**
+ * How a Charm steers a built-in request it takes over (ADR 031): a request of `operation`, which its
+ * declaration's `takesOver` must name, from a folder where `appliesIn` holds for the turn, is made with
+ * the Charm's own `tool` instead.
+ */
+export interface CharmTakeover {
+  readonly operation: Takeover["operation"];
+  readonly tool: string;
+  readonly appliesIn: (turn: CharmTurn, cwd: string) => Effect.Effect<boolean>;
+}
 
 /** What a Charm says of itself, as it defines itself and as the registry holds it. */
 interface CharmIdentity {
@@ -144,10 +160,11 @@ interface CharmIdentity {
   /** Whether the Charm can act for the hob now, such as while GitHub is connected for it. */
   readonly connected: (agentId: AgentId) => Effect.Effect<boolean>;
   /**
-   * The hub tool a `git push` run in `cwd` is made with instead, for a hob that holds the Charm, or
-   * null when the push is decided as a push.
+   * How it steers the built-in requests its declaration takes over, for a hob offered its tools.
+   * A request it declares no steering for is decided as itself, as Push is from a folder whose origin
+   * is not on GitHub.
    */
-  readonly steersPush?: (turn: CharmTurn, cwd: string) => Effect.Effect<string | null>;
+  readonly takeovers?: ReadonlyArray<CharmTakeover>;
   /** The hub's services each call runs with, its logger included, since a runtime runs it on its own. */
   readonly context?: Context.Context<never>;
 }
@@ -198,6 +215,25 @@ export const defineCharm = <R extends HubRequest, V extends AskableVerdict>(
 /** The prefix a built-in Charm's tool names start with: its id, as `<charm>_<action>` (ADR 031). */
 const toolPrefix = (charm: CharmDeclaration) => `${charm.id.replaceAll("-", "_")}_`;
 
+/**
+ * Why a Charm's steering cannot be registered, or null when it can: a takeover of a request its
+ * declaration does not take over, two of the same request, or one steered to a tool it does not offer.
+ */
+const takeoverProblem = (charm: Charm): string | null => {
+  const seen = new Set<string>();
+  for (const takeover of charm.takeovers ?? []) {
+    if (!(charm.declaration.takesOver as ReadonlyArray<string>).includes(takeover.operation)) {
+      return `The ${charm.name} Charm steers ${takeover.operation}, which it does not take over.`;
+    }
+    if (seen.has(takeover.operation)) return `The ${charm.name} Charm steers ${takeover.operation} twice.`;
+    seen.add(takeover.operation);
+    if (!charm.tools.some((tool) => tool.name === takeover.tool)) {
+      return `The ${charm.name} Charm steers ${takeover.operation} to ${takeover.tool}, which it does not offer.`;
+    }
+  }
+  return null;
+};
+
 /** Why the Charms cannot be registered together, or null when they can (ADR 031). */
 export const charmsProblem = (charms: ReadonlyArray<Charm>): string | null => {
   const ids = new Set<string>();
@@ -208,6 +244,8 @@ export const charmsProblem = (charms: ReadonlyArray<Charm>): string | null => {
     if (misnamed !== undefined) {
       return `The ${charm.name} Charm's tool ${misnamed.name} does not start with ${toolPrefix(charm.declaration)}.`;
     }
+    const problem = takeoverProblem(charm);
+    if (problem !== null) return problem;
   }
   return hubToolNameProblem([
     ...BUILT_IN_HUB_TOOLS,
@@ -232,7 +270,7 @@ export class Charms extends Context.Service<
     readonly charms: ReadonlyArray<Charm>;
     /**
      * The tools of each Charm the turn's hob holds and that is connected, read at its start, so a
-     * change applies from the next turn.
+     * change applies from the next turn, with the steering of the built-in requests each takes over.
      */
     readonly forTurn: (turn: CharmTurn, offer?: CharmOffer) => Effect.Effect<ReadonlyArray<HubToolSet>>;
   }
@@ -264,7 +302,15 @@ export class Charms extends Context.Service<
           const hub = serve(turn);
           const writes = new Set(charm.tools.filter((tool) => tool.effect === "write").map((tool) => tool.name));
           const tools = offer?.writes === false ? hub.tools.filter((tool) => !writes.has(tool.name)) : hub.tools;
-          const { steersPush } = charm;
+          // A Charm steers the requests it takes over while it offers the turn any tool.
+          const takeovers = (charm.takeovers ?? []).map(
+            (takeover): Takeover => ({
+              operation: takeover.operation,
+              charm: charm.name,
+              tool: takeover.tool,
+              appliesIn: (cwd) => run(takeover.appliesIn(turn, cwd)),
+            }),
+          );
           return {
             owner: `the ${charm.name} Charm`,
             tools:
@@ -273,8 +319,8 @@ export class Charms extends Context.Service<
                 : {
                     tools,
                     call: (name: string, input: unknown, step?: HubCallStep) => run(hub.call(name, input, step)),
-                    ...(steersPush === undefined ? {} : { steersPush: (cwd: string) => run(steersPush(turn, cwd)) }),
                   },
+            takeovers,
           };
         };
 
@@ -334,7 +380,8 @@ export const hubAnswer = <R>(
  * reads (ADR 014): a chat turn's, a party member's or a step's, each narrowed by its Delegations.
  * Every kind of turn that offers Task tools offers them this one way, so the tools a delegation
  * promises are the tools its member gets (#699), and every runtime that serves hub tools serves
- * memory (ADR 028) and skills (ADR 029). Without a service, a turn offers none of its tools.
+ * memory (ADR 028) and skills (ADR 029). Without a service, a turn offers none of its tools. The
+ * offer's steering holds the built-in requests its Charms take over (ADR 031).
  */
 export const hubToolOffer = Effect.gen(function* () {
   const localGit = yield* Effect.serviceOption(LocalGitTools);
@@ -343,7 +390,7 @@ export const hubToolOffer = Effect.gen(function* () {
   const skills = yield* Effect.serviceOption(SkillTools);
   const none = Effect.succeed(null);
   // Each reads the turn's access itself, so they are read side by side.
-  return (turn: CharmTurn, offer?: CharmOffer) =>
+  return (turn: CharmTurn, offer?: CharmOffer): Effect.Effect<HubOffer> =>
     Effect.all(
       [
         Option.isSome(localGit) ? localGit.value.forTurn(turn) : none,
@@ -353,14 +400,15 @@ export const hubToolOffer = Effect.gen(function* () {
       ],
       { concurrency: "unbounded" },
     ).pipe(
-      Effect.map(([git, charmSets, memoryTools, skillTools]) =>
-        joinHubTools([
+      Effect.map(([git, charmSets, memoryTools, skillTools]) => {
+        const sets = [
           { owner: "Local Git", tools: git },
           ...charmSets,
           { owner: "Memory", tools: memoryTools },
           { owner: "Skills", tools: skillTools },
-        ]),
-      ),
+        ];
+        return { hubTools: joinHubTools(sets), steering: steeringOf(sets) };
+      }),
     );
 });
 

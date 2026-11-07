@@ -6,6 +6,7 @@ import {
   FolderChecks,
   HobbotsRepository,
   type HubCallStep,
+  type HubOffer,
   type HubTools,
   hubToolOffer,
   joinHubTools,
@@ -126,13 +127,14 @@ export class TaskTools extends Context.Service<
      * The tools a session working the caller's Task outside any chat offers, a party member's or a
      * step's: those of `forTurn`, and the local Git and Charm tools its access opens, read at its
      * start, as a chat turn's are (#699). A Charm call is keyed in the Task's work and recorded on
-     * the Task, under `turn.currentAccess`, which every Delegation above it narrows.
+     * the Task, under `turn.currentAccess`, which every Delegation above it narrows. Its steering
+     * holds a commit of a member's open work, as a chat turn's does (#742).
      */
     readonly forSession: (
       caller: TaskToolCaller,
       turn: SessionCharms,
       only?: ReadonlyArray<TaskToolName>,
-    ) => Effect.Effect<HubTools>;
+    ) => Effect.Effect<HubOffer & { readonly hubTools: HubTools }>;
     /**
      * The tools a chat turn offers, on the open Task its hob owns in the thread. A call that starts
      * work starts that Task from the turn's prompt when there is none; each turn that starts a Task
@@ -330,7 +332,6 @@ export class TaskTools extends Context.Service<
                   : refused(name, input),
                 step,
               ),
-            holdsCommit: (cwd) => heldCommit(caller.taskId, cwd),
           };
         };
 
@@ -409,10 +410,10 @@ export class TaskTools extends Context.Service<
                   }),
                   step,
                 ),
-              holdsCommit: (cwd) => heldCommit(known, cwd),
             };
             return {
               hubTools,
+              holdsCommit: (cwd) => heldCommit(known, cwd),
               briefing: briefed?.text ?? null,
               told: briefed?.told ?? null,
               end,
@@ -441,35 +442,37 @@ export class TaskTools extends Context.Service<
          * The Charms a session outside any chat offers: none of their writes. A write whose answer
          * is lost waits for you to settle it on the reply step it showed as (ADR 020), and such a
          * session has no reply, so its writes stay with the lead's chat until it does. A call to one
-         * is refused as a tool the session does not offer, and a `git push` is decided as a push.
+         * is refused as a tool the session does not offer, and a `git push` is decided as a push: the
+         * session's steering takes over none of the Charms' requests.
          */
-        const withoutSteering = (charms: HubTools | null): HubTools | null =>
-          charms === null || charms.tools.length === 0 ? null : { tools: charms.tools, call: charms.call };
+        const anyTools = (charms: HubTools | null): HubTools | null =>
+          charms === null || charms.tools.length === 0 ? null : charms;
         // Without Charms or local Git tools, a session offers only its Task tools.
         const charmsFor = yield* hubToolOffer;
         const forSession = (caller: TaskToolCaller, turn: SessionCharms, only?: ReadonlyArray<TaskToolName>) =>
           Effect.gen(function* () {
             const scope = () => callScope.task(caller.taskId);
-            const charms = withoutSteering(
-              yield* charmsFor(
-                {
-                  ...turn,
-                  agentId: caller.agentId,
-                  threadId: null,
-                  messageId: null,
-                  scope,
-                },
-                { writes: false },
-              ),
+            const offer = yield* charmsFor(
+              {
+                ...turn,
+                agentId: caller.agentId,
+                threadId: null,
+                messageId: null,
+                scope,
+              },
+              { writes: false },
             );
+            const charms = anyTools(offer.hubTools);
             const recorded = charmRecords({ agentId: caller.agentId, scope, taskOf: () => caller.taskId })(charms);
             const tools = forTurn(caller, only);
-            return (
-              joinHubTools([
-                { owner: "the Task tools", tools },
-                { owner: "the hub's other tools", tools: recorded },
-              ]) ?? tools
-            );
+            return {
+              hubTools:
+                joinHubTools([
+                  { owner: "the Task tools", tools },
+                  { owner: "the hub's other tools", tools: recorded },
+                ]) ?? tools,
+              steering: { takeovers: [], holdsCommit: (cwd: string) => heldCommit(caller.taskId, cwd) },
+            };
           });
 
         return TaskTools.of({ call, forTurn, forSession, forChat });

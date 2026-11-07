@@ -72,7 +72,7 @@ const withGitInit: HubTools = {
 
 /** What the policy hook reports for one tool call in `project`. */
 const hooked = async (project: string, tool: string, input: Record<string, unknown>, hubTools?: HubTools) => {
-  const turn = toolTurn(access(project), "on", hubTools);
+  const turn = toolTurn(access(project), "on", hubTools === undefined ? null : { hubTools });
   if (turn === null) throw new Error("expected a tool turn");
   const events: Array<RuntimeEvent> = [];
   const { hooks } = policyHooks(engine, turn, (event) => events.push(event));
@@ -261,7 +261,7 @@ describe("pointing a hob to what works in its sandbox", () => {
     }
     // A turn without the tool decides git init as Local Git, as before.
     expect(toolTurn(access(project), "on")?.initTool).toBeUndefined();
-    expect(toolTurn(access(project), "on", withGitInit)?.initTool).toBe(GIT_INIT_TOOL);
+    expect(toolTurn(access(project), "on", { hubTools: withGitInit })?.initTool).toBe(GIT_INIT_TOOL);
     expect(await hooked(project, "Bash", { command: "git init" })).toMatchObject({
       _tag: "ToolStarted",
       operation: "local-git",
@@ -359,7 +359,7 @@ describe("a repository a hob deletes", () => {
     expect((plain as { reason: string }).reason).not.toContain(GIT_INIT_TOOL);
 
     // A delete that ran and met the sandbox gets the note with its result, on macOS's words or Linux's.
-    const turn = toolTurn(access(project, "trusting"), "on", withGitInit);
+    const turn = toolTurn(access(project, "trusting"), "on", { hubTools: withGitInit });
     if (turn === null) throw new Error("expected a tool turn");
     const { hooks } = policyHooks(engine, turn, () => {});
     const signal = new AbortController().signal;
