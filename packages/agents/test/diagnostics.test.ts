@@ -173,6 +173,7 @@ describe("report", () => {
               number: 4,
               revision,
               scope: "Project",
+              set: "agent-engineering",
               description: "How we release",
               instructions: "Tag, then push.",
             } as ReportInput["skills"][number]["skills"][number],
@@ -185,7 +186,7 @@ describe("report", () => {
       {
         agentId: ADA,
         runtime: "codex",
-        skills: [{ name: "release-steps", number: 4, revision, scope: "Project" }],
+        skills: [{ name: "release-steps", number: 4, revision, scope: "Project", set: "agent-engineering" }],
         clashes: [],
       },
     ]);

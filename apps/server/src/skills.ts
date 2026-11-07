@@ -163,6 +163,7 @@ const libraryOff = {
       replaced: [],
       clashes: [],
       optedOut: [],
+      optedOutOfSets: [],
       projects: [],
       lastUsed: [],
     }),
@@ -230,10 +231,14 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
         const agent = found.value;
         const folders = yield* foldersOf(agent);
         const resolved = yield* hobSkills(library, projects, { agentId, policy: agent.policy, folders });
+        const optOuts = yield* library.optOuts(agentId);
         return {
           agentId,
           ...resolved,
-          optedOut: (yield* library.optOuts(agentId)).map((one) => one.skillId),
+          optedOut: optOuts.filter((one) => one.member === null).map((one) => one.skillId),
+          optedOutOfSets: optOuts.flatMap((one) =>
+            one.member === null ? [] : [{ skillId: one.skillId, name: one.member }],
+          ),
           projects: (yield* memoryActorFor(projects, agentId, folders)).projects,
           lastUsed: yield* library.lastUses(agentId, LAST_USED),
         };
@@ -490,7 +495,9 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
       optOut: ({ params, payload }) =>
         Effect.gen(function* () {
           if (Option.isNone(yield* hobOf(params.agentId))) return yield* new SkillMissing({ id: params.agentId });
-          const changed = yield* library.setOptOut(params.agentId, params.skillId, payload.optedOut).pipe(missing);
+          const changed = yield* library
+            .setOptOut(params.agentId, params.skillId, payload.optedOut, payload.member ?? null)
+            .pipe(missing);
           if (changed !== null) yield* announce(changed.entries);
           return yield* hobView(params.agentId);
         }),
@@ -590,6 +597,7 @@ export const hobSkillLines = Effect.gen(function* () {
               number: revision?.number ?? null,
               revision: skill.pin,
               scope: skill.scope._tag,
+              set: skill.set,
             })),
           ),
           clashes: resolved.clashes.map((clash) => clash.name),

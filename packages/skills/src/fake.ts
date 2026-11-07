@@ -100,6 +100,7 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
     const id = target?.id ?? SkillId.make(nextId());
     const revision = new SkillRevision({
       ...input,
+      set: input.set ?? null,
       skillId: id,
       number: (target?.revisions ?? 0) + 1,
       sourceId: source?.id ?? null,
@@ -202,13 +203,15 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
     hold: (id, held) =>
       Effect.map(assignmentOf(id), (before) => save(new SkillAssignment({ ...before, held, revision: ++sequence }))),
     optOuts: (agentId) => Effect.sync(() => optOuts.filter((one) => agentId === undefined || one.agentId === agentId)),
-    setOptOut: (agentId, skillId, optedOut) =>
+    setOptOut: (agentId, skillId, optedOut, member = null) =>
       Effect.gen(function* () {
         if (!skills.has(skillId)) return yield* new SkillNotFound({ id: skillId });
-        const index = optOuts.findIndex((one) => one.agentId === agentId && one.skillId === skillId);
+        const index = optOuts.findIndex(
+          (one) => one.agentId === agentId && one.skillId === skillId && one.member === member,
+        );
         if (optedOut === (index !== -1)) return null;
         if (!optedOut) return committed(optOuts.splice(index, 1)[0] as SkillOptOut);
-        const optOut = { agentId, skillId, at: now() };
+        const optOut: SkillOptOut = { agentId, skillId, member, at: now() };
         optOuts.push(optOut);
         return committed(optOut);
       }),

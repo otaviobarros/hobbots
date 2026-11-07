@@ -659,13 +659,17 @@ describe("hobs proposing skills", () => {
     const noted = await runtime.runPromise(
       Effect.gen(function* () {
         // The turn starts on r1.
-        const tools = yield* (yield* SkillTools)
-          .forTurn(turnFor(accessFor("trusting")))
-          .pipe(
-            Effect.provideService(TurnSkillsInUse, [
-              { skillId: skill?.id as never, name: "release-steps" as never, pin: r1 as never, onlyWhenAsked: false },
-            ]),
-          );
+        const tools = yield* (yield* SkillTools).forTurn(turnFor(accessFor("trusting"))).pipe(
+          Effect.provideService(TurnSkillsInUse, [
+            {
+              skillId: skill?.id as never,
+              name: "release-steps" as never,
+              pin: r1 as never,
+              onlyWhenAsked: false,
+              set: null,
+            },
+          ]),
+        );
         // r2 rolls out to Ada during the turn.
         const importer = yield* SkillImporter;
         const [r2] = yield* importer.add(

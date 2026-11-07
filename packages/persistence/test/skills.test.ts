@@ -279,6 +279,65 @@ describe("skills library", () => {
       }),
     ));
 
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-DP-1143-01] keeps a set's skills with its revision, a hob's opt-out of one of them, and a use with its set", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const library = yield* SkillLibrary;
+        const set = {
+          skills: [
+            {
+              name: SkillName.make("deliver-change"),
+              description: "Deliver.",
+              path: "skills/deliver-change",
+              charms: [],
+            },
+            {
+              name: SkillName.make("plan-change"),
+              description: "Plan.",
+              path: "skills/plan-change",
+              charms: ["github"],
+            },
+          ],
+        };
+        const added = (yield* library.addRevision(null, input(H1, { name: SkillName.make("agent-engineering"), set })))
+          .value;
+        expect(added.revision.set).toEqual(set);
+        expect((yield* library.revision(added.skill.id, H1))?.set).toEqual(set);
+        // A plain skill has none.
+        const plain = (yield* library.addRevision(null, input(H2))).value;
+        expect(plain.revision.set).toBeNull();
+        const plan = SkillName.make("plan-change");
+        expect((yield* library.setOptOut(pip, added.skill.id, true, plan))?.value).toMatchObject({ member: plan });
+        expect(yield* library.setOptOut(pip, added.skill.id, true, plan)).toBeNull();
+        yield* library.setOptOut(pip, added.skill.id, true);
+        expect((yield* library.optOuts(pip)).map((one) => one.member)).toEqual([null, plan]);
+        yield* library.setOptOut(pip, added.skill.id, false, plan);
+        expect((yield* library.optOuts(pip)).map((one) => one.member)).toEqual([null]);
+        yield* library.recordUse(
+          new SkillUse({
+            id: SkillUseId.make("use-set"),
+            source: "library",
+            skillId: added.skill.id,
+            name: "deliver-change",
+            pin: H1,
+            number: 1,
+            explicit: true,
+            agentId: pip,
+            threadId: null,
+            messageId: null,
+            at: "2026-11-07T10:00:00.000Z",
+            set: SkillName.make("agent-engineering"),
+          }),
+        );
+        expect((yield* library.uses({ skillId: added.skill.id }))[0]).toMatchObject({
+          name: "deliver-change",
+          set: "agent-engineering",
+        });
+      }),
+    ));
+
   // covers ADR 029 (The use line), #1096
   it("[TC-DP-282] records each use with its hob, thread and reply, journals it, and reads a skill's or a hob's", () =>
     run(

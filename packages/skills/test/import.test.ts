@@ -134,7 +134,7 @@ describe("skill import", () => {
     );
   });
 
-  it("[TC-AG-126] imports a Claude Code plugin with only its skills, and notes what it dropped", async () => {
+  it("[TC-AG-126] imports a Claude Code plugin as one set of its skills, and notes what it dropped", async () => {
     const { layer } = await importerLayer();
     const plugin = await folderOf({
       ".claude-plugin/plugin.json": JSON.stringify({ name: "acme", version: "2.1.0" }),
@@ -149,23 +149,28 @@ describe("skill import", () => {
       Effect.gen(function* () {
         const importer = yield* SkillImporter;
         const scan = yield* importer.scan({ _tag: "Folder", path: plugin });
-        expect(scan.candidates.map((one) => one.folder)).toEqual(["skills/release", "skills/review"]);
+        // One set, offered whole (ADR 029, Skill sets).
+        expect(scan.candidates.map((one) => [one.folder, one.name])).toEqual([["", "acme"]]);
         const added = yield* importer.add({ _tag: "Folder", path: plugin }, you);
-        expect(added.map((one) => one.revision.name)).toEqual(["release", "review"]);
-        const release = added[0]?.revision;
-        expect(release?.label).toBe("2.1.0");
-        expect(release?.path).toBe("skills/release");
-        expect(release?.dropped).toEqual([
+        expect(added.map((one) => one.revision.name)).toEqual(["acme"]);
+        const acme = added[0]?.revision;
+        expect(acme?.label).toBe("2.1.0");
+        expect(acme?.path).toBeNull();
+        expect(acme?.set?.skills.map((skill) => [skill.name, skill.path])).toEqual([
+          ["release", "skills/release"],
+          ["review", "skills/review"],
+        ]);
+        expect(acme?.dropped).toEqual([
           { kind: "hooks", path: "hooks" },
           { kind: "commands", path: "commands" },
           { kind: "agents", path: "agents" },
           { kind: "mcp-servers", path: ".mcp.json" },
           { kind: "allowed-tools", path: "skills/release/SKILL.md" },
         ]);
-        expect(release?.files.map((file) => file.path)).toEqual(["SKILL.md"]);
+        expect(acme?.files.map((file) => file.path)).toEqual(["skills/release/SKILL.md", "skills/review/SKILL.md"]);
         // The stored SKILL.md no longer grants tools.
-        const folder = yield* (yield* SkillFiles).folder(release?.hash ?? ("" as never));
-        const text = yield* Effect.promise(() => readFile(join(folder ?? "", "SKILL.md"), "utf8"));
+        const folder = yield* (yield* SkillFiles).folder(acme?.hash ?? ("" as never));
+        const text = yield* Effect.promise(() => readFile(join(folder ?? "", "skills", "release", "SKILL.md"), "utf8"));
         expect(text).not.toContain("allowed-tools");
         expect(text).toContain("name: release");
         expect(text).toContain("# release");

@@ -15,6 +15,7 @@ import {
   SkillRevision,
   SkillRevisionHash,
   SkillScope,
+  SkillSetContent,
   SkillSource,
   SkillUse,
   SkillUseCounts,
@@ -147,6 +148,8 @@ export const SkillCandidate = Schema.Struct({
   dropped: Schema.Array(SkillDropped),
   charms: Schema.Array(Schema.String),
   label: Schema.NullOr(Schema.String),
+  /** For a set (ADR 029, Skill sets), the skills it holds, shown before you add it; null for a skill. */
+  set: Schema.NullOr(SkillSetContent),
   refusal: Schema.NullOr(CandidateRefusal),
   locked: Schema.NullOr(Schema.Struct({ matches: Schema.Boolean, url: Schema.NullOr(Schema.String) })),
   /**
@@ -235,6 +238,8 @@ export const HobSkill = Schema.Struct({
   onlyWhenAsked: Schema.Boolean,
   /** The Charms it names that the hob does not have: shown as "Needs the GitHub Charm". */
   missingCharms: Schema.Array(Schema.String),
+  /** The set it comes from, or null for a skill of its own (ADR 029, Skill sets). */
+  set: Schema.NullOr(SkillName),
 });
 export type HobSkill = typeof HobSkill.Type;
 
@@ -246,9 +251,12 @@ export type HobSkill = typeof HobSkill.Type;
 export const HobSkills = Schema.Struct({
   agentId: AgentId,
   skills: Schema.Array(HobSkill),
-  replaced: Schema.Array(Schema.Struct({ assignment: SkillAssignment, by: SkillAssignment })),
+  /** Each replaced assignment, with the skill's name, which for a set is the one of its skills replaced. */
+  replaced: Schema.Array(Schema.Struct({ assignment: SkillAssignment, by: SkillAssignment, name: SkillName })),
   clashes: Schema.Array(Schema.Struct({ name: SkillName, assignments: Schema.Array(SkillAssignment) })),
   optedOut: Schema.Array(SkillId),
+  /** Single skills of a set the hob turned off, each with its set's id (ADR 029, Skill sets). */
+  optedOutOfSets: Schema.Array(Schema.Struct({ skillId: SkillId, name: SkillName })),
   /** The projects it works in now, whose skills it gets: an opted-out project skill shows under its project. */
   projects: Schema.Array(MemoryProjectIdentity),
   /** The skills it used last, each once, the most recent first (ADR 029, The use line). */
@@ -518,10 +526,10 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
     }),
   )
   .add(
-    // Turns an Everyone or Project skill off for one hob, or on again.
+    // Turns an Everyone or Project skill off for one hob, or on again; with `member`, one skill of a set.
     HttpApiEndpoint.put("optOut", "/skills/hobs/:agentId/opt-outs/:skillId", {
       params: { ...hobParams, ...skillParams },
-      payload: Schema.Struct({ optedOut: Schema.Boolean }),
+      payload: Schema.Struct({ optedOut: Schema.Boolean, member: Schema.optionalKey(Schema.NullOr(SkillName)) }),
       success: HobSkills,
       error: SkillMissing,
     }),

@@ -100,7 +100,7 @@ const readFolder = (path: string) =>
       const tree = await folderTree(path);
       const skills = [];
       for (const folder of skillFoldersOf(tree))
-        skills.push(await checkSkill(tree, { folder, dropped: [], plugin: null }));
+        skills.push(await checkSkill(tree, { folder, dropped: [], plugin: null, manifest: null }));
       return { skills, folders: foldersOf(tree) };
     },
     catch: (error) => (error instanceof Error ? error.message : String(error)),
