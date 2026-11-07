@@ -3,11 +3,13 @@ import {
   Agent,
   AgentId,
   MemoryProjectIdentity,
+  Message,
   MessageId,
   SkillName,
   SkillRevisionHash,
   SkillUse,
   SkillUseId,
+  Thread,
   ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
@@ -245,6 +247,56 @@ describe("skills library", () => {
         expect(yield* library.uses({ agentId: pip })).toHaveLength(3);
         expect(yield* library.uses({ agentId: AgentId.make("quill") })).toEqual([]);
         expect((yield* library.uses({})).at(0)).toMatchObject({ source: "organization", skillId: null, pin: null });
+      }),
+    ));
+
+  // covers ADR 029 (The use line), STD-DATA-001
+  it("[TC-DP-284] saves a reply's Used line and its use in one transaction, so a failed write keeps neither", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const repo = yield* HobbotsRepository;
+        const library = yield* SkillLibrary;
+        const skill = (yield* library.addRevision(null, input(H1))).value.skill;
+        const at = "2026-11-06T10:00:00.000Z";
+        const threadId = ThreadId.make("t1");
+        yield* repo.upsertThread(new Thread({ id: threadId, agentId: pip, title: "t", createdAt: at, updatedAt: at }));
+        const used = {
+          source: "library",
+          skillId: skill.id,
+          name: "release",
+          pin: H1,
+          number: 1,
+          explicit: false,
+        } as const;
+        const reply = new Message({
+          id: MessageId.make("reply"),
+          threadId,
+          role: "assistant",
+          content: "",
+          status: "streaming",
+          error: null,
+          configVersion: 1,
+          createdAt: at,
+          skillsUsed: [used],
+        });
+        const use = new SkillUse({
+          id: SkillUseId.make("use-1"),
+          ...used,
+          agentId: pip,
+          threadId,
+          messageId: reply.id,
+          at,
+        });
+        const saved = yield* repo.upsertMessage(reply, [use]);
+        expect(saved.entries.map((entry) => entry.payload._tag)).toEqual(["MessageUpserted", "SkillUsed"]);
+        expect((yield* library.uses({ messageId: reply.id })).map((one) => one.id)).toEqual(["use-1"]);
+
+        // The same use again fails its insert, and the reply's new text is not saved either.
+        const again = yield* Effect.exit(repo.upsertMessage(new Message({ ...saved.value, content: "Later" }), [use]));
+        expect(again._tag).toBe("Failure");
+        expect((yield* repo.listMessages(threadId)).map((one) => one.content)).toEqual([""]);
+        expect(yield* library.uses({ messageId: reply.id })).toHaveLength(1);
       }),
     ));
 

@@ -75,7 +75,14 @@ beforeEach(async () => {
     ...fake,
     sendPrompt: (request: PromptRequest) => {
       given.push(request.skills ?? []);
-      const answer = fake.sendPrompt({ ...request, prompt: request.prompt.replace(/^hold\n/, "") });
+      const answer = fake.sendPrompt({ ...request, prompt: request.prompt.replace(/^(hold|stuck)\n/, "") });
+      // `stuck`: the turn uses its skill, then waits until it is stopped.
+      if (request.prompt.startsWith("stuck\n")) {
+        return answer.pipe(
+          Stream.takeUntil((event) => event._tag === "SkillUsed"),
+          Stream.concat(Stream.never),
+        );
+      }
       return request.prompt.startsWith("hold\n")
         ? Stream.unwrap(
             Effect.as(
@@ -421,5 +428,24 @@ describe("skill uses", () => {
       { skillId: skill.skill.id, name: "release-steps", number: 1, threadId: pipThread.id, explicit: true },
     ]);
     expect((await request("GET", `/api/skills/${crypto.randomUUID()}/uses`)).status).toBe(404);
+  });
+
+  // covers ADR 029 (The use line), STD-DATA-001
+  it("[TC-AG-149] a reply stopped right after its skill was used keeps its line, and the use is counted once", async () => {
+    const pip = await summon("Pip", 968);
+    const skill = await importSkill("release-steps");
+    await request("POST", `/api/skills/${skill.skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+    const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    await send(thread, "stuck\nfake:skill release-steps");
+    // The line and the count are saved together, so the count shows only once the line has.
+    await eventually(async () => {
+      const reply = (await messages(thread)).find((m) => m.role === "assistant");
+      return reply !== undefined && reply.skillsUsed.length > 0 ? reply : undefined;
+    });
+    expect((await request("POST", `/api/threads/${thread.id}/interrupt`)).status).toBe(204);
+    const stopped = await replies(thread, 1);
+    expect(stopped.status).toBe("stopped");
+    expect(stopped.skillsUsed).toMatchObject([{ name: "release-steps", number: 1 }]);
+    expect((await request("GET", `/api/skills/${skill.skill.id}/uses`)).body).toMatchObject({ total: 1 });
   });
 });

@@ -1,7 +1,6 @@
 import {
   type AgentId,
   type HobPolicy,
-  Message,
   type MessageId,
   type SkillAssignment,
   type SkillName,
@@ -135,6 +134,13 @@ export interface SkillUseTurn {
   readonly messageId: MessageId | null;
 }
 
+/** A use as the runtime reported it. */
+interface ReportedUse {
+  readonly source: "library" | "organization";
+  readonly name: string;
+  readonly explicit: boolean;
+}
+
 /** Records the skills a turn uses (ADR 029, The use line), each once per turn. */
 export interface SkillUseRecorderShape {
   /** The turn's skills, once they are known: what its message was accepted with, or resolved as it started. */
@@ -142,14 +148,15 @@ export interface SkillUseRecorderShape {
   /** The skills an administrator's settings bring, as the session reported them when it started. */
   readonly organization: (names: ReadonlyArray<string> | undefined) => void;
   /**
-   * Maps a use the runtime reported to the revision the turn mounted, and journals it. Answers the
-   * skill as the reply records it, or null for a skill the turn already used or was never given.
+   * Maps a use the runtime reported to the revision the turn mounted. Answers the skill as the reply
+   * records it, with the use to save (none without a library), or null for a skill the turn already
+   * used or was never given. The caller saves the use, as a chat does with its reply.
    */
-  readonly record: (used: {
-    readonly source: "library" | "organization";
-    readonly name: string;
-    readonly explicit: boolean;
-  }) => Effect.Effect<UsedSkill | null>;
+  readonly resolve: (
+    used: ReportedUse,
+  ) => Effect.Effect<{ readonly used: UsedSkill; readonly use: SkillUse | null } | null>;
+  /** As `resolve`, and saves the use on its own: for a turn with no reply, as a Task step's. */
+  readonly record: (used: ReportedUse) => Effect.Effect<UsedSkill | null>;
 }
 
 /**
@@ -184,6 +191,18 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
         };
         return used;
       });
+    const resolve = ({ source, name, explicit }: ReportedUse) =>
+      Effect.gen(function* () {
+        // A library skill and an organization one may share a name; each counts on its own.
+        const key = `${source}:${name}`;
+        if (recorded.has(key)) return null;
+        const used = yield* usedOf(source, name, explicit);
+        if (used === null) return null;
+        recorded.add(key);
+        if (Option.isNone(library)) return { used, use: null };
+        const at = DateTime.formatIso(yield* DateTime.now);
+        return { used, use: new SkillUse({ id: SkillUseId.make(crypto.randomUUID()), ...used, ...turn, at }) };
+      });
     const shape: SkillUseRecorderShape = {
       given: (given) => {
         skills = given ?? [];
@@ -191,49 +210,16 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
       organization: (names) => {
         organization = names ?? [];
       },
-      record: ({ source, name, explicit }) =>
+      resolve,
+      record: (reported) =>
         Effect.gen(function* () {
-          // A library skill and an organization one may share a name; each counts on its own.
-          const key = `${source}:${name}`;
-          if (recorded.has(key)) return null;
-          const used = yield* usedOf(source, name, explicit);
-          if (used === null) return null;
-          recorded.add(key);
-          if (Option.isSome(library)) {
-            const at = DateTime.formatIso(yield* DateTime.now);
-            yield* library.value.recordUse(
-              new SkillUse({ id: SkillUseId.make(crypto.randomUUID()), ...used, ...turn, at }),
-            );
-          }
-          return used;
+          const resolved = yield* resolve(reported);
+          if (resolved === null) return null;
+          if (resolved.use !== null && Option.isSome(library)) yield* library.value.recordUse(resolved.use);
+          return resolved.used;
         }),
     };
     return shape;
-  });
-
-/**
- * A reply as a previous process left it, with every skill its turn recorded a use of (ADR 029, The
- * use line). A use is saved, and journaled, before the reply's line is, so a process that died
- * between the two left the count without the line; this puts the line back. Idempotent.
- */
-export const withRecordedUses = (message: Message) =>
-  Effect.gen(function* () {
-    const library = yield* Effect.serviceOption(SkillLibrary);
-    if (Option.isNone(library)) return message;
-    const uses = yield* library.value.uses({ messageId: message.id });
-    const skillsUsed = [...uses].reverse().reduce<ReadonlyArray<UsedSkill>>(
-      (skills, use) =>
-        withUsedSkill(skills, {
-          source: use.source,
-          skillId: use.skillId,
-          name: use.name,
-          pin: use.pin,
-          number: use.number,
-          explicit: use.explicit,
-        }),
-      message.skillsUsed,
-    );
-    return skillsUsed.length === message.skillsUsed.length ? message : new Message({ ...message, skillsUsed });
   });
 
 /** `skills` with `used` added, unless it already holds that skill: a reply records each skill once. */

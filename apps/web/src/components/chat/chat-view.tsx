@@ -16,7 +16,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { useActivity } from "../../api/activity.ts";
 import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../../api/drafts.ts";
-import { hobSkillsQuery } from "../../api/hob-skills.ts";
+import { useHobSkills } from "../../api/hob-skills.ts";
 import { useConnection } from "../../api/live.ts";
 import { threadMemorySavesQuery } from "../../api/memory-saves.ts";
 import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../../api/outbox.ts";
@@ -111,7 +111,7 @@ export function ChatView({
   });
   const threadCount = useQuery({ ...threadsQuery(hobId), select: (threads) => threads.length });
   // The hob's skills, which `/` in the composer picks one of (ADR 029).
-  const skills = useQuery(hobSkillsQuery(hobId));
+  const skills = useHobSkills(hobId, hob.data?.configVersion);
   const messages = useQuery({ ...messagesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
   // What waits on you in this chat shows in the tray above the composer.
   const needs = useThreadNeeds(threadId);

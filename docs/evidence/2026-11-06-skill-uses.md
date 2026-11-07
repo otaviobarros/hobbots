@@ -54,10 +54,19 @@ A second review found five more problems, fixed with these checks:
 | Case | Check | Result |
 |---|---|---|
 | TC-AG-146, TC-AG-147, TC-RT-534 | A library skill and an organization skill share a name; Codex reads both in one turn | ✅ Each reported with its source, recorded once each: the library one at its revision, the organization one without |
-| TC-AG-148 | A reply left unfinished after its turn saved a use, but not its line | ✅ The hub puts the line back when it starts, once |
 | TC-UI-1096-08 to -10 | A skill is assigned and another taken off while the chat is open | ✅ The `/` list shows the new one and drops the other without a reload; the browser test fails without the fix |
 | TC-UI-1096-11 | 31 skills in a 640-pixel-high window | ✅ The list stays under half the window and scrolls; ↑ to the last skill brings it into view; the composer stays on screen |
 | TC-DP-283 | Counts, this week, a hob's last uses and a reply's uses, on SQLite and PostgreSQL 16 | ✅ Counted in the database, one row per answer, with a limit on every list |
+
+A third review found four more problems, fixed with these checks:
+
+| Case | Check | Result |
+|---|---|---|
+| TC-DP-284 | A reply's Used line and its use are saved together, then a second save fails on the use | ✅ Both journaled in one commit; the failed save kept neither the use nor the reply's new text, on SQLite and PostgreSQL 16 |
+| TC-AG-149 | A reply is stopped right after its skill was used | ✅ Stopped with its line, and the use counted once |
+| TC-UI-1096-12 | With the list open, Shift+Enter, Shift+↓ and Shift+Tab | ✅ A new line, no move in the list, focus moves back; the draft is not rewritten. Fails without the fix |
+| TC-UI-1096-13 | Another window moves the hob from one folder to another, each with its own project's skill | ✅ The list swaps the skills without a reload. Fails without the fix |
+| TC-DP-283 | A skill's total, week, hobs and threads | ✅ Counted in one statement, so a use recorded meanwhile is in all of them or none. No test runs a concurrent writer |
 
 ## Gaps
 

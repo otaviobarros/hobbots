@@ -22,6 +22,16 @@ interface UseRow {
 const decodeUse = Schema.decodeUnknownEffect(SkillUse);
 const decodeCounts = Schema.decodeUnknownEffect(SkillUseCounts);
 
+/** One row of a skill's counts: its total, a hob's, or a thread's. */
+interface CountRow {
+  readonly kind: string;
+  readonly agentId: string | null;
+  readonly threadId: string | null;
+  readonly count: unknown;
+  readonly recent: unknown;
+  readonly lastAt: string | null;
+}
+
 /** How many uses a read answers unless it asks for fewer or more. */
 const DEFAULT_LIMIT = 100;
 
@@ -40,6 +50,22 @@ const useOf = (row: UseRow) =>
     at: row.usedAt,
   }).pipe(Effect.orDie);
 
+/** Inserts one use; its caller journals it as `SkillUsed` in the same transaction. */
+export const insertSkillUse = (sql: SqlClient.SqlClient, use: SkillUse) =>
+  sql`INSERT INTO skill_uses ${sql.insert({
+    id: use.id,
+    source: use.source,
+    skill_id: use.skillId,
+    name: use.name,
+    pin: use.pin,
+    number: use.number,
+    explicit: use.explicit ? 1 : 0,
+    agent_id: use.agentId,
+    thread_id: use.threadId,
+    message_id: use.messageId,
+    used_at: use.at,
+  })}`;
+
 /** The uses of skills (migration 0069, ADR 029 The use line): each journaled as `SkillUsed`. */
 export const skillUses = (
   sql: SqlClient.SqlClient,
@@ -48,19 +74,7 @@ export const skillUses = (
   recordUse: (use) =>
     change<SkillUse, SqlError.SqlError>(() =>
       Effect.gen(function* () {
-        yield* sql`INSERT INTO skill_uses ${sql.insert({
-          id: use.id,
-          source: use.source,
-          skill_id: use.skillId,
-          name: use.name,
-          pin: use.pin,
-          number: use.number,
-          explicit: use.explicit ? 1 : 0,
-          agent_id: use.agentId,
-          thread_id: use.threadId,
-          message_id: use.messageId,
-          used_at: use.at,
-        })}`;
+        yield* insertSkillUse(sql, use);
         return { value: use, events: [{ _tag: "SkillUsed", use }] };
       }),
     ),
@@ -74,35 +88,42 @@ export const skillUses = (
         Effect.flatMap((rows) => Effect.forEach(rows, useOf)),
       ),
     ),
+  // One statement, so the total, the week and each hob's and thread's counts come from the same
+  // snapshot: a use recorded meanwhile is in all of them or in none, on SQLite and PostgreSQL alike.
   useCounts: (skillId, since) =>
     sqlOrDie(
       Effect.gen(function* () {
-        const [totals] = yield* sql<{ readonly total: unknown; readonly recent: unknown }>`
-          SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN used_at > ${since} THEN 1 ELSE 0 END), 0) AS recent
-          FROM skill_uses WHERE skill_id = ${skillId}`;
-        const hobs = yield* sql<{ readonly agentId: string; readonly count: unknown; readonly lastAt: string }>`
-          SELECT agent_id, COUNT(*) AS count, MAX(used_at) AS last_at FROM skill_uses
-          WHERE skill_id = ${skillId} GROUP BY agent_id ORDER BY last_at DESC, agent_id`;
-        const threads = yield* sql<{
-          readonly threadId: string;
-          readonly agentId: string;
-          readonly count: unknown;
-          readonly lastAt: string;
-        }>`
-          SELECT thread_id, agent_id, COUNT(*) AS count, MAX(used_at) AS last_at FROM skill_uses
-          WHERE skill_id = ${skillId} AND thread_id IS NOT NULL
-          GROUP BY thread_id, agent_id ORDER BY last_at DESC, thread_id`;
+        const rows = yield* sql<CountRow>`
+          SELECT 'total' AS kind, NULL AS agent_id, NULL AS thread_id, COUNT(*) AS count,
+            COALESCE(SUM(CASE WHEN used_at > ${since} THEN 1 ELSE 0 END), 0) AS recent, MAX(used_at) AS last_at
+          FROM skill_uses WHERE skill_id = ${skillId}
+          UNION ALL
+          SELECT 'hob', agent_id, NULL, COUNT(*), 0, MAX(used_at)
+          FROM skill_uses WHERE skill_id = ${skillId} GROUP BY agent_id
+          UNION ALL
+          SELECT 'thread', agent_id, thread_id, COUNT(*), 0, MAX(used_at)
+          FROM skill_uses WHERE skill_id = ${skillId} AND thread_id IS NOT NULL GROUP BY thread_id, agent_id`;
+        const total = rows.find((row) => row.kind === "total");
+        const newest = (a: CountRow, b: CountRow) =>
+          String(b.lastAt).localeCompare(String(a.lastAt)) ||
+          String(a.threadId ?? a.agentId).localeCompare(String(b.threadId ?? b.agentId));
         return yield* decodeCounts({
           skillId,
-          total: Number(totals?.total ?? 0),
-          thisWeek: Number(totals?.recent ?? 0),
-          hobs: hobs.map((row) => ({ agentId: row.agentId, count: Number(row.count), lastAt: row.lastAt })),
-          threads: threads.map((row) => ({
-            threadId: row.threadId,
-            agentId: row.agentId,
-            count: Number(row.count),
-            lastAt: row.lastAt,
-          })),
+          total: Number(total?.count ?? 0),
+          thisWeek: Number(total?.recent ?? 0),
+          hobs: rows
+            .filter((row) => row.kind === "hob")
+            .sort(newest)
+            .map((row) => ({ agentId: row.agentId, count: Number(row.count), lastAt: row.lastAt })),
+          threads: rows
+            .filter((row) => row.kind === "thread")
+            .sort(newest)
+            .map((row) => ({
+              threadId: row.threadId,
+              agentId: row.agentId,
+              count: Number(row.count),
+              lastAt: row.lastAt,
+            })),
         }).pipe(Effect.orDie);
       }),
     ),

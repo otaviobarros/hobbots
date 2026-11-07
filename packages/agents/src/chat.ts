@@ -65,7 +65,6 @@ import {
   skillMounter,
   skillUseRecorder,
   withoutMention,
-  withRecordedUses,
   withUsedSkill,
 } from "./skill-turn.ts";
 import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
@@ -417,9 +416,8 @@ export class ChatService extends Context.Service<
 
       // A previous process may have died mid-turn; those turns cannot resume. A reply the user had
       // asked to stop is stopped; any other is interrupted.
-      // A skill use saved just before the process died gets its line on the reply back (ADR 029).
       for (const message of yield* repo.listUnfinishedMessages) {
-        const next = MessageTransitions.interrupt(yield* withRecordedUses(message));
+        const next = MessageTransitions.interrupt(message);
         if (next instanceof Message) yield* saveMessage(next);
       }
 
@@ -743,11 +741,19 @@ export class ChatService extends Context.Service<
               case "SessionCompacted":
                 return forgetTaskBrief;
               // The reply shows each skill it used once, under it.
+              // Its use is saved with the reply's line, in one transaction, so neither outlives the other.
               case "SkillUsed":
-                return Effect.flatMap(skillUses.record(event), (used) =>
-                  used === null
+                return Effect.flatMap(skillUses.resolve(event), (resolved) =>
+                  resolved === null
                     ? Effect.void
-                    : update((m) => new Message({ ...m, skillsUsed: withUsedSkill(m.skillsUsed, used) })),
+                    : transition(
+                        reply,
+                        (m) => new Message({ ...m, skillsUsed: withUsedSkill(m.skillsUsed, resolved.used) }),
+                        (next) =>
+                          repo
+                            .upsertMessage(next, resolved.use === null ? [] : [resolved.use])
+                            .pipe(Effect.flatMap(announce)),
+                      ),
                 );
               // Steps, a tool call's included, are saved with the reply, so they replay on reconnect.
               default:

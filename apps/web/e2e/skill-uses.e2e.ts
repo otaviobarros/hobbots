@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
@@ -30,14 +32,14 @@ const hubWithSkill = async (names: ReadonlyArray<string> = []) => {
     if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
     return response.json() as Promise<A>;
   };
-  /** Imports a skill and assigns it to everyone; answers the assignment's id. */
-  const addSkill = async (name: string) => {
+  /** Imports a skill and assigns it to everyone, or to `scope`; answers the assignment's id. */
+  const addSkill = async (name: string, scope: unknown = { _tag: "Everyone" }) => {
     const imported = await api<{ imported: ReadonlyArray<{ skill: { id: string } }> }>("POST", "/skills", {
       source: { _tag: "Written", files: [{ path: "SKILL.md", text: skillMd(name) }] },
     });
     const skill = imported.imported[0]?.skill;
     if (skill === undefined) throw new Error(`${name} was not imported.`);
-    return (await api<{ id: string }>("POST", `/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" } })).id;
+    return (await api<{ id: string }>("POST", `/skills/${skill.id}/assignments`, { scope })).id;
   };
   await api("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
   const pip = await api<{ id: string }>("POST", "/agents", {
@@ -161,4 +163,47 @@ test("[TC-UI-1096-11] a long list scrolls inside its own space and keeps the hig
   const last = picker.getByRole("button", { name: /step-29/ });
   await expect(last).toHaveAttribute("aria-current", "true");
   await expect(last).toBeInViewport();
+});
+
+// covers ADR 029 (Explicit use), STD-UI-003
+test("[TC-UI-1096-12] with the list open, Shift+Enter adds a line, Shift+Tab moves focus back, and a modified arrow moves the cursor", async ({
+  page,
+}) => {
+  const { url, pip } = await hubWithSkill(["review-notes"]);
+  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  const composer = composerOf(page);
+  await composer.fill("/re");
+  await expect(pickerOf(page)).toContainText("/release-steps");
+
+  await composer.press("Shift+Enter");
+  await expect(composer).toHaveValue("/re\n");
+  await composer.fill("/re");
+  await composer.press("Shift+ArrowDown");
+  await expect(composer).toHaveValue("/re");
+  // The highlight did not move: plain ↓ still goes to the second skill.
+  await expect(pickerOf(page).getByRole("button", { name: /release-steps/ })).toHaveAttribute("aria-current", "true");
+  await composer.press("Shift+Tab");
+  await expect(composer).not.toBeFocused();
+  await expect(composer).toHaveValue("/re");
+});
+
+// covers ADR 029 (Scopes, Explicit use), STD-REACT-012
+test("[TC-UI-1096-13] the list follows the hob's folders when another window changes them", async ({ page }) => {
+  const { url, pip, api, addSkill } = await hubWithSkill();
+  const siteA = join(dataDir, "folders", "site-a");
+  const siteB = join(dataDir, "folders", "site-b");
+  mkdirSync(siteA, { recursive: true });
+  mkdirSync(siteB, { recursive: true });
+  // Without memory, a folder's project is its name.
+  await addSkill("site-a-deploy", { _tag: "Project", identity: "site-a" });
+  await addSkill("site-b-deploy", { _tag: "Project", identity: "site-b" });
+  await api("PATCH", `/agents/${pip.id}/permissions`, { ownFolders: [siteA] });
+  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  const composer = composerOf(page);
+  await composer.fill("/site");
+  await expect(pickerOf(page)).toContainText("/site-a-deploy");
+
+  await api("PATCH", `/agents/${pip.id}/permissions`, { ownFolders: [siteB] });
+  await expect(pickerOf(page)).toContainText("/site-b-deploy");
+  await expect(pickerOf(page)).not.toContainText("/site-a-deploy");
 });

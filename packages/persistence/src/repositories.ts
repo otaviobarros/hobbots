@@ -11,6 +11,7 @@ import {
   messageEvents,
   previewLine,
   type ReplyUsage,
+  type SkillUse,
   Thread,
   ThreadCheckpoint,
   ThreadId,
@@ -18,6 +19,7 @@ import {
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { makeJournaled } from "./journal.ts";
+import { insertSkillUse } from "./skill-uses.ts";
 
 // Rows use snake_case columns; the client transforms them to the camelCase domain fields.
 // Where SQLite and PostgreSQL differ, the query chooses explicitly (ADR 011).
@@ -410,13 +412,16 @@ export const HobbotsRepositoryLive = Layer.effect(
           revision = excluded.revision`;
       });
 
-    // The message's revision is its MessageUpserted entry, the first of its events.
-    const upsertMessage = (input: Message) =>
-      journaled(messageEvents(input).length, (revision) =>
+    // The message's revision is its MessageUpserted entry, the first of its events. The skill uses
+    // its turn recorded are saved with it, so a count never outlives a reply that lost its line.
+    const upsertMessage = (input: Message, uses: ReadonlyArray<SkillUse>) =>
+      journaled(messageEvents(input).length + uses.length, (revision) =>
         Effect.gen(function* () {
           const message = new Message({ ...input, revision });
           yield* writeMessage(message);
-          return { value: message, events: messageEvents(message) };
+          for (const use of uses) yield* insertSkillUse(sql, use);
+          const used = uses.map((use): JournaledEvent => ({ _tag: "SkillUsed", use }));
+          return { value: message, events: [...messageEvents(message), ...used] };
         }),
       );
 
@@ -474,7 +479,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       upsertThread: (thread) => always(upsertThread(thread)),
       markThreadRead,
       listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),
-      upsertMessage: (message) => always(upsertMessage(message)),
+      upsertMessage: (message, uses = []) => always(upsertMessage(message, uses)),
       checkpointMessage: (message) =>
         sql`UPDATE messages SET content = ${message.content}
           WHERE id = ${message.id} AND status IN ('streaming', 'stopping')`.pipe(Effect.asVoid, Effect.orDie),

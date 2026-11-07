@@ -1,17 +1,35 @@
+import type { HobSkills } from "@hobbots/api";
 import type { AgentId } from "@hobbots/domain";
-import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { type QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
 import { call } from "./client.ts";
+import { setupQuery } from "./setup.ts";
 
 /** Every hob's skills, the key the reads below share. */
 const hobSkillsKey = ["skills", "hob"] as const;
 
-/** A hob's skills as its next turn would get them (ADR 029), which `/` in the composer offers. */
-export const hobSkillsQuery = (agentId: AgentId) =>
+/**
+ * A hob's skills as its next turn would get them (ADR 029), which `/` in the composer offers. Which
+ * a hob gets depends on the folders it works in, from its configuration and the setup's shared
+ * folders, so `basis` names those and a change to any of them reads it again; until then the list
+ * keeps what it showed.
+ */
+export const hobSkillsQuery = (agentId: AgentId, basis: ReadonlyArray<unknown> = []) =>
   queryOptions({
-    queryKey: [...hobSkillsKey, agentId] as const,
+    queryKey: [...hobSkillsKey, agentId, ...basis] as const,
     queryFn: () => call((c) => c.skills.hob({ params: { agentId } })),
     staleTime: 30_000,
+    placeholderData: (previous: HobSkills | undefined) => previous,
   });
+
+/**
+ * The hob's skills, read again when its configuration version changes, as a change to its folders
+ * from another window makes it, or when the shared folders the setup holds do.
+ */
+export const useHobSkills = (agentId: AgentId, configVersion: number | undefined) => {
+  const setup = useQuery(setupQuery);
+  const basis = [configVersion, ...(setup.data?.approvedFolders ?? [])];
+  return useQuery(hobSkillsQuery(agentId, basis));
+};
 
 /**
  * A skill was added, assigned, rolled out, held, opted out of, or taken off, here or elsewhere: any

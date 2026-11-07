@@ -14,6 +14,9 @@ import {
 
 const copy = messages.picker;
 
+/** A key pressed with Shift, Alt, Command or Control, which the list leaves to the input. */
+const modified = (event: KeyboardEvent) => event.shiftKey || event.altKey || event.metaKey || event.ctrlKey;
+
 /**
  * Picking one of the hob's skills with `/` (ADR 029, Explicit use): while the draft is `/` and the
  * start of a name, the list shows the skills that match; ↑ and ↓ move, Enter or a click picks, and
@@ -47,9 +50,13 @@ export const useSkillPicker = (
     setDismissed(null);
     write(startedDraft(draft), 1);
   };
-  /** Handles a key for the list; true when it took the key. */
+  /**
+   * Handles a key for the list; true when it took the key. It takes only the plain keys it names:
+   * Shift+Enter still adds a line, Shift+Tab still moves focus back, and a modified arrow still moves
+   * through the text.
+   */
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
-    if (!open) return false;
+    if (!open || modified(event)) return false;
     if (event.key === "Escape") {
       const back = slash === null ? draft : dismissedDraft(draft, slash);
       if (back === draft) setDismissed(draft);
