@@ -206,22 +206,23 @@ const setsOf = (mounts: ReadonlyArray<SkillMount>): ReadonlyMap<string, Readonly
 };
 
 /**
- * Makes every file and folder under `path` read-only, or writable again to change or remove it. A
- * file that can be run, such as a skill's script, stays one: only its write bits change.
+ * Makes every file under `path` read-only, or writable again to change it. A file that can be run,
+ * such as a skill's script, stays one: only its write bits change. Folders stay writable to their
+ * owner either way, so a folder a stopped hub left behind is removed by a plain `rm -rf` of the data
+ * folder (#1196); the sandbox, not the folder's mode, keeps a turn from writing in it.
  */
 const setWritable = (path: string, writable: boolean) => {
   const stat = lstatSync(path);
   if (stat.isDirectory()) {
-    if (writable) chmodSync(path, 0o700);
+    chmodSync(path, 0o700);
     for (const entry of readdirSync(path)) setWritable(join(path, entry), writable);
-    if (!writable) chmodSync(path, 0o500);
   } else if (stat.isFile()) {
     const runnable = (stat.mode & 0o111) !== 0;
     chmodSync(path, (writable ? 0o600 : 0o400) | (runnable ? 0o100 : 0));
   }
 };
 
-/** Removes a skill folder, or anything under it, read-only files included. */
+/** Removes a skill folder, or anything under it, including one an earlier hub sealed read-only. */
 export const removeFolder = (path: string) => {
   if (!existsSync(path)) return;
   setWritable(path, true);
@@ -254,7 +255,6 @@ export const writeSkillFolder = (base: string, mounts: ReadonlyArray<SkillMount>
     if (sets.length > 0) mkdirSync(join(draft, SETS), { mode: 0o700 });
     for (const [name, members] of setsOf(mounts)) copySet(join(draft, SETS), name, members);
     setWritable(draft, false);
-    // Read-only folders can still be renamed: only their parent must be writable.
     if (!existsSync(folder)) renameSync(draft, folder);
   } finally {
     removeFolder(draft);
