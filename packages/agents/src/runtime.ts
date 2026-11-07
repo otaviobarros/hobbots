@@ -134,13 +134,16 @@ export type RuntimeEvent =
    * turn. `source` says where the runtime loaded it from: `library`, one of the turn's mounts, or
    * `organization`, a skill an administrator's settings brought that the session reported, so a
    * name both share is never mistaken for the other. `explicit` when it is the skill the turn was
-   * asked to use (`askedSkill`). The hub maps a mount's name to the revision the turn mounted.
+   * asked to use (`askedSkill`). The hub maps a mount's name, and its set when it has one, to the
+   * revision the turn mounted.
    */
   | {
       readonly _tag: "SkillUsed";
       readonly source: "library" | "organization";
       readonly name: string;
       readonly explicit: boolean;
+      /** The set of the mount it used, for a skill of a set (ADR 029, Skill sets). */
+      readonly set?: string | null;
     }
   | {
       readonly _tag: "Completed";
@@ -320,6 +323,12 @@ export interface SkillMount {
   readonly folder: string;
   /** Whether the hob may pick the skill on its own; false is Only when asked. */
   readonly implicit: boolean;
+  /**
+   * For a skill of a set (ADR 029, Skill sets): the set's name, and the skill's folder inside it. Then
+   * `folder` holds the whole set, laid out as it was imported, so the skill's links to the set's
+   * other files resolve, and `revision` is the set's. Mounts of one set share its folder.
+   */
+  readonly set?: { readonly name: string; readonly path: string } | null;
 }
 
 export interface PromptRequest {
@@ -373,7 +382,8 @@ export interface PromptRequest {
    */
   readonly skills?: ReadonlyArray<SkillMount> | null;
   /**
-   * The name of one of `skills` that you picked for this message with `/` (ADR 029, Explicit use).
+   * The name of one of `skills` that you picked for this message with `/` (ADR 029, Explicit use), as
+   * `<set>:<name>` for a skill of a set (ADR 029, Skill sets).
    * The adapter hands it to the runtime as the runtime's own mention, and reports `SkillUsed` with
    * `explicit` once the turn starts. Absent or null when you picked none.
    */

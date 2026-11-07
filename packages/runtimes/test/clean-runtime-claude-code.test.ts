@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { makeClaudeCode } from "../src/claude-code.ts";
 import { pluginSkill } from "../src/claude-code-skills.ts";
 import { ProcessSandbox } from "../src/sandbox.ts";
+import { SKILL_MOUNTS, skillMountsHash } from "../src/skills.ts";
 import {
   AGENTS_SKILL,
   ASKED_SKILL,
@@ -18,6 +19,11 @@ import {
   FOREIGN_MARKERS,
   FOREIGN_SKILLS,
   LIBRARY_SKILL,
+  SET_RULES,
+  SET_SIBLING,
+  SET_SKILL,
+  SET_SKIPPED,
+  TEAM_SET,
 } from "./clean-runtime.ts";
 import { type MessagesMove, messagesStandIn } from "./messages-stand-in.ts";
 
@@ -105,6 +111,10 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     // The mounted skills, the `~/.agents` one among them, reach the turn through Hobbots.
     expect(offered).toContain(pluginSkill(LIBRARY_SKILL));
     expect(offered).toContain(`${AGENTS_SKILL}-offered`);
+    // A mounted set's skills, by their set (ADR 029, Skill sets), less the one the hob turned off.
+    expect(offered).toContain(`${TEAM_SET}:${SET_SKILL}`);
+    expect(offered).toContain(`${TEAM_SET}:${SET_SIBLING}`);
+    expect(offered).not.toContain(SET_SKIPPED);
     // Only when asked: listed to no model.
     expect(offered).not.toContain(`${ASKED_SKILL}-offered`);
     // No MCP server's tools, and the Skill tool for the mounted skills.
@@ -125,7 +135,8 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     expect(requests.length).toBeGreaterThan(0);
     expectClean(offered, toolsOf(requests));
     // No other tool: Claude Code adds a placeholder of its own beside a deferred-loading tool.
-    expect(toolsOf(requests).filter((tool) => tool !== "DeferredToolPlaceholder")).toEqual(["Skill"]);
+    // Read is there for the skills' own files alone (ADR 029, Skill sets).
+    expect(toolsOf(requests).filter((tool) => tool !== "DeferredToolPlaceholder")).toEqual(["Read", "Skill"]);
   });
 
   // covers RT-001, PE-001, ADR 029
@@ -177,6 +188,61 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     const events = Exit.isSuccess(exit) ? exit.value : [];
     expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
       { _tag: "SkillUsed", source: "library", name: ASKED_SKILL, explicit: true },
+    ]);
+  });
+
+  /** Where a skill of the mounted set is in a turn's folder under `base`. */
+  const setSkillFolder = (base: string, name: string) =>
+    join(base, SKILL_MOUNTS, skillMountsHash(fixture.mounts), "sets", TEAM_SET, "skills", name);
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-1143-01] a skill of a set follows its links to the set's files, and a chat reads nothing else", {
+    timeout: 120_000,
+  }, async () => {
+    const base = setSkillFolder(join(root, "workspace"), SET_SKILL);
+    const { exit, requests } = await turn({}, [
+      { tool: "Skill", input: { skill: `${TEAM_SET}:${SET_SKILL}` } },
+      { tool: "Read", input: { file_path: join(base, "..", "..", "references", "rules.md") } },
+      { tool: "Read", input: { file_path: join(base, "..", SET_SIBLING, "SKILL.md") } },
+      { tool: "Read", input: { file_path: join(fixture.repo, ".claude", "skills", "repo-claude-skill", "SKILL.md") } },
+      { say: "Done." },
+    ]);
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(JSON.stringify(requests[1])).toContain(`Use ${SET_SKILL}.`);
+    expect(JSON.stringify(requests[1])).toContain(base);
+    expect(JSON.stringify(requests[2])).toContain(SET_RULES);
+    expect(JSON.stringify(requests[3])).toContain(`name: ${SET_SIBLING}`);
+    expect(JSON.stringify(requests[4])).toContain("reads only the files of its skills");
+    expect(JSON.stringify(requests[4])).not.toContain("repo-claude-skill-offered");
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: SET_SKILL, explicit: false, set: TEAM_SET },
+    ]);
+  });
+
+  // covers RT-001, PE-001, ADR 029
+  it("[TC-RT-1143-02] with tools, a skill of a set reads the set's files under the policy's sandbox", {
+    timeout: 120_000,
+  }, async () => {
+    const base = setSkillFolder(access.runtimeFolder, SET_SKILL);
+    const { exit, requests } = await turn({ tools: access }, [
+      { tool: "Read", input: { file_path: join(base, "..", "..", "references", "rules.md") } },
+      { say: "Done." },
+    ]);
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(JSON.stringify(requests[1])).toContain(SET_RULES);
+  });
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-1143-03] a skill of a set you picked loads by its set's name, and counts as used", {
+    timeout: 120_000,
+  }, async () => {
+    const { exit, offered } = await turn({ prompt: "Plan it.", askedSkill: `${TEAM_SET}:${SET_SKILL}` });
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(offered).toContain(`Use ${SET_SKILL}.`);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: SET_SKILL, explicit: true, set: TEAM_SET },
     ]);
   });
 

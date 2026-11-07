@@ -57,6 +57,7 @@ const loaded = (name: string, scope: SkillScope, pin = hash(1), missingCharms: R
   scope,
   onlyWhenAsked: false,
   missingCharms,
+  set: null,
 });
 
 const skills = [
@@ -89,9 +90,10 @@ if (!deploySite || !deployDocs || !styleEveryone || !stylePip) throw new Error("
 const view: HobSkills = {
   agentId: pip,
   skills: [loaded("commit-style", everyone, hash(1), ["github"]), loaded("style", own(pip))],
-  replaced: [{ assignment: styleEveryone, by: stylePip }],
+  replaced: [{ assignment: styleEveryone, by: stylePip, name: SkillName.make("style") }],
   clashes: [{ name: SkillName.make("deploy"), assignments: [deploySite, deployDocs] }],
   optedOut: [SkillId.make("astro")],
+  optedOutOfSets: [],
   projects: [site, docs],
   lastUsed: [],
 };

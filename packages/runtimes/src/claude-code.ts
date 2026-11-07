@@ -68,7 +68,7 @@ import {
   isExecutable,
   runnableBinary,
 } from "./binary.ts";
-import { askedSkillPrompt, SKILL_TOOL, withSkills } from "./claude-code-skills.ts";
+import { askedSkillPrompt, READ_TOOL, readsSkillFile, SKILL_TOOL, withSkills } from "./claude-code-skills.ts";
 import { COMMAND_ENV_FILE_VARIABLE, commandColorFile, plainBashResponse } from "./command-color.ts";
 import { toolFinished } from "./command-exit.ts";
 import { turnCommits } from "./git-config.ts";
@@ -710,7 +710,7 @@ export const wholeUsage = (earlier: ReplyUsage | undefined, later: ReplyUsage | 
  * announced as `init` again, with its own `result`. So the session starts once, and the turn
  * completes when Claude Code stops, with what each run replied and what all of them used.
  */
-export const wholeTurn = (asked: string | null = null) => {
+export const wholeTurn = (asked: string | null = null, askedSet: string | null = null) => {
   let started = false;
   let completed: Extract<RuntimeEvent, { _tag: "Completed" }> | null = null;
   return {
@@ -719,7 +719,10 @@ export const wholeTurn = (asked: string | null = null) => {
         if (started) return [];
         started = true;
         // The skill you picked loads with the prompt, as Claude Code's own mention (ADR 029).
-        if (asked !== null) return [event, { _tag: "SkillUsed", source: "library", name: asked, explicit: true }];
+        if (asked !== null) {
+          const set = askedSet === null ? {} : { set: askedSet };
+          return [event, { _tag: "SkillUsed", source: "library", name: asked, explicit: true, ...set }];
+        }
       }
       if (event._tag !== "Completed") return [event];
       const earlier = completed?.text ?? "";
@@ -779,7 +782,7 @@ export const claudeTurnStart = (request: PromptRequest, policySandboxState: Sand
   );
   const asked = askedMount(request.askedSkill, request.skills);
   const prompt = askedSkillPrompt(turnPrompt(request, instructions, commits.now), asked);
-  return { tools, commits, instructions, prompt, asked: asked?.name ?? null };
+  return { tools, commits, instructions, prompt, asked: asked?.name ?? null, askedSet: asked?.set?.name ?? null };
 };
 
 /** A turn with tools: the context every call is decided under, its folders and the tools offered. */
@@ -871,6 +874,7 @@ export const policyHooks = (
   redaction?: Redactor | null,
   record?: PromptRequest["recordToolStart"],
   background?: BackgroundCommands | null,
+  skillFolder?: string | null,
 ): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
   const label = (tool: string, input: Record<string, unknown>) => toolLabel(tool, input, redaction?.text);
   const started = new Set<string>();
@@ -929,6 +933,8 @@ export const policyHooks = (
     if (hubToolOf(tool) !== null) return {};
     // A mounted skill's instructions are the hob's to read; the skills hook decides those (ADR 029).
     if (tool === SKILL_TOOL) return {};
+    // A read of a skill's own files, or its set's, is the skills hook's to allow (ADR 029, Skill sets).
+    if (tool === READ_TOOL && readsSkillFile(input.tool_input, skillFolder)) return {};
     const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
@@ -1231,6 +1237,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                               request.redaction,
                               request.recordToolStart,
                               background,
+                              skills?.folder ?? null,
                             ),
                             // Only Hobbots' script: one the hub was started with never reaches the commands.
                             { ...base.env, [COMMAND_ENV_FILE_VARIABLE]: colorScript },
@@ -1272,7 +1279,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               ),
           );
           const toEvents = turnEvents(tools);
-          const whole = wholeTurn(start.asked);
+          const whole = wholeTurn(start.asked, start.askedSet);
           // Tool events arrive from the hooks while the turn runs, so the turn's own events share their queue.
           yield* Stream.fromAsyncIterable(turn, errorMessage).pipe(
             // A background command's end arrives as its task's notification.

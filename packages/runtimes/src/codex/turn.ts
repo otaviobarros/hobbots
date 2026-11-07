@@ -37,7 +37,14 @@ import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
 import { codexCaBundle, codexPath } from "./locate.ts";
 import { POLICY_REQUESTS, type PolicyRequest, policyGate, refusalNotice, shellScript } from "./policy.ts";
 import { TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
-import { admitSkills, askedSkillInput, skillRootsOf, skillSettings, unusedSkillRoots } from "./skills.ts";
+import {
+  admitSkills,
+  askedSkillInput,
+  setSkillFilesOf,
+  skillRootsOf,
+  skillSettings,
+  unusedSkillRoots,
+} from "./skills.ts";
 
 /** Starts a turn's App Server for as long as the scope lasts. */
 export type StartAppServer = (
@@ -695,9 +702,15 @@ const turnEvents = (
       }
       const opened = yield* openThread(server, request, launch.cwd, launch.instructions).pipe(Effect.mapError(failed));
       const threadId = opened.thread.id;
-      const mapper = codexTurnEvents(threadId, skillRootsOf(launch.skills), admitted.organizationFiles);
+      const mapper = codexTurnEvents(
+        threadId,
+        skillRootsOf(launch.skills),
+        admitted.organizationFiles,
+        setSkillFilesOf(launch.skills, request.skills),
+      );
       // The skill you picked loads with the turn's first input, as Codex's own skill item (ADR 029).
-      const asked = askedSkillInput(launch.skills, askedMount(request.askedSkill, request.skills));
+      const askedOne = askedMount(request.askedSkill, request.skills);
+      const asked = askedSkillInput(launch.skills, askedOne);
       turn = {
         events: mapper,
         report,
@@ -737,7 +750,10 @@ const turnEvents = (
           mapper.follow(started.turn.id);
           now.turnId = started.turn.id;
           // Codex took the skill item with the turn, so the skill you picked is used (ADR 029).
-          if (skill !== null) report({ _tag: "SkillUsed", source: "library", name: skill.name, explicit: true });
+          if (skill !== null) {
+            const set = askedOne?.set ? { set: askedOne.set.name } : {};
+            report({ _tag: "SkillUsed", source: "library", name: skill.name, explicit: true, ...set });
+          }
         });
 
       // Cancelling the turn asks Codex to stop it and waits for the acknowledgement, so the process

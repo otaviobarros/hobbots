@@ -486,7 +486,7 @@ describe("Diagnostics", () => {
         });
       }),
     );
-    const line = { name: "release-steps", number: 1, revision: hash, scope: "Everyone" };
+    const line = { name: "release-steps", number: 1, revision: hash, scope: "Everyone", set: null };
     const current = Schema.decodeUnknownSync(DiagnosticsNow)((await get("/api/diagnostics")).body);
     expect(current.skills.map((hob) => [hob.agentId, hob.skills]).sort()).toEqual(
       [ADA, ALDRIC, QUILL].map((agentId) => [agentId, [line]]).sort(),

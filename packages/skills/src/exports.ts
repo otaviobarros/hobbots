@@ -16,13 +16,15 @@ import {
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import { SkillObjects } from "./store.ts";
+import { parentOf } from "./tree.ts";
 
 /**
  * An export of skills (ADR 029, Backups, exports and Diagnostics): a folder with each skill's newest
  * revision in `<name>/`, any older revision an exported assignment pins in `.revisions/<name>/r<n>/`,
  * and `skills.lock.json`, which names each skill's source, revisions and assignments. Import on
  * another hub reads the lock, so it gets exactly the same revisions, and the same assignments where
- * it has those hobs and projects.
+ * it has those hobs and projects. A set's revision is its folder as it was imported, with a
+ * `.claude-plugin/plugin.json` naming the set, so import takes it as the same set (ADR 029, Skill sets).
  */
 
 /** The lock file at the top of an export. */
@@ -66,6 +68,8 @@ const LockedSkill = Schema.Struct({
   revisions: Schema.Array(LockedRevision),
   /** Empty when the export left out who gets each skill. */
   assignments: Schema.Array(LockedAssignment),
+  /** For a set, the names of the skills its newest revision holds. */
+  set: Schema.optionalKey(Schema.Struct({ skills: Schema.Array(SkillName) })),
 });
 export type LockedSkill = typeof LockedSkill.Type;
 
@@ -121,6 +125,23 @@ const copyRevision = async (from: string, target: string, revision: SkillRevisio
     await chmod(into, file.mode === "executable" ? 0o700 : 0o600);
   }
   await mkdir(target, { recursive: true, mode: 0o700 });
+  if (revision.set !== null) await writeSetManifest(target, revision);
+};
+
+/** The manifest that names an exported set, with its description, version and the folders of its skills. */
+const writeSetManifest = async (target: string, revision: SkillRevision) => {
+  const folders = [...new Set((revision.set?.skills ?? []).map((skill) => `./${parentOf(skill.path)}`))].sort();
+  const manifest = {
+    name: revision.name,
+    description: revision.description,
+    ...(revision.label === null ? {} : { version: revision.label }),
+    skills: folders,
+  };
+  await mkdir(join(target, ".claude-plugin"), { mode: 0o700 });
+  await writeFile(join(target, ".claude-plugin", "plugin.json"), `${JSON.stringify(manifest, null, 2)}\n`, {
+    flag: "wx",
+    mode: 0o600,
+  });
 };
 
 /**
@@ -145,12 +166,14 @@ export const writeSkillExport = (folder: string, options: SkillExportOptions) =>
       }
       const assignments = options.assignments ? yield* library.assignments(skill.id) : [];
       const exported: Array<LockedRevision> = [];
+      let newestSet: SkillRevision["set"] = null;
       for (const revision of revisionsToExport(yield* library.revisions(skill.id), assignments)) {
         const from = yield* objects.folder(revision.hash);
         if (from === null) continue;
         const relative =
           revision.hash === skill.latest ? skill.name : `${OLDER_REVISIONS}/${skill.name}/r${revision.number}`;
         yield* Effect.promise(() => copyRevision(from, join(folder, ...relative.split("/")), revision));
+        if (revision.hash === skill.latest) newestSet = revision.set;
         exported.push({
           hash: revision.hash,
           number: revision.number,
@@ -178,6 +201,7 @@ export const writeSkillExport = (folder: string, options: SkillExportOptions) =>
             held: one.held,
             onlyWhenAsked: one.onlyWhenAsked,
           })),
+        ...(newestSet === null ? {} : { set: { skills: newestSet.skills.map((one) => one.name) } }),
       });
     }
     const lock: SkillsLock = { format: "hobbots.skills", version: 1, exportedAt: options.exportedAt, skills: locked };

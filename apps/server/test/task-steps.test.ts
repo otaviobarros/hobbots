@@ -394,7 +394,13 @@ describe("a Task's steps in fresh sessions", () => {
     await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
     await run(control.open("Cut the release"));
     await run(treeWhen(thread.id, (tree) => states(tree)[0] === "completed"));
-    const mount = { name: "release", revision: hash, folder: `/hobbots/skills/objects/${hash}`, implicit: false };
+    const mount = {
+      name: "release",
+      revision: hash,
+      folder: `/hobbots/skills/objects/${hash}`,
+      implicit: false,
+      set: null,
+    };
     expect(stepsAsked()[0]?.skills).toEqual([mount]);
     // The chat turn that planned the step had them too.
     expect(control.requests[0]?.skills).toEqual([mount]);

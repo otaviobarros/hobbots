@@ -43,7 +43,13 @@ export const skillsText = (hob: DiagnosticsHobSkills): string =>
         hob.skills.map((skill) =>
           skill.number === null
             ? messages.skills.gone({ name: skillTitle(skill.name) })
-            : messages.skills.skill({ name: skillTitle(skill.name), number: formatCount(skill.number) }),
+            : skill.set === null
+              ? messages.skills.skill({ name: skillTitle(skill.name), number: formatCount(skill.number) })
+              : messages.skills.inSet({
+                  name: skillTitle(skill.name),
+                  set: skill.set,
+                  number: formatCount(skill.number),
+                }),
         ),
       );
 
