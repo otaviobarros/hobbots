@@ -187,6 +187,18 @@ describe("resolveSkills with sets (ADR 029, Skill sets)", () => {
     const clash = resolveSkills([web, api], turn({ projects: [WEB, API] }));
     expect(clash.skills).toEqual([]);
     expect(clash.clashes.map((one) => one.name)).toEqual(["plan-change", "ship-change"]);
+    // Their clash holds against a wider skill of one of its names; only a hob's own passes it.
+    const everyonePlan = pinned("plan-change", { _tag: "Everyone" });
+    const blocked = resolveSkills([web, api, everyonePlan], turn({ projects: [WEB, API] }));
+    expect(blocked.skills).toEqual([]);
+    expect(blocked.clashes.map((one) => one.name)).toEqual(["plan-change", "ship-change"]);
+    const pipPlan = pinned("plan-change", { _tag: "Hob", agentId: PIP });
+    const passed = resolveSkills([web, api, everyonePlan, pipPlan], turn({ projects: [WEB, API] }));
+    expect(passed.skills.map((one) => [one.name, one.skillId])).toEqual([["plan-change", pipPlan.assignment.skillId]]);
+    expect(passed.clashes.map((one) => one.name)).toEqual(["ship-change"]);
+    expect(passed.replaced.map((one) => one.assignment.id).sort()).toEqual(
+      [everyonePlan.assignment.id, web.assignment.id, api.assignment.id].sort(),
+    );
   });
 
   // covers ADR 029 (Skill sets), #1143

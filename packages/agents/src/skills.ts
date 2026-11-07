@@ -400,12 +400,13 @@ const twoProjects = (winners: ReadonlyArray<Offered>): boolean => {
 /**
  * Each set as one unit (ADR 029, Skill sets): of a set's assignments that reach the turn, the
  * narrowest one alone brings its skills, all on that one revision, and the wider ones are replaced
- * by it. Two projects that both assign the set load none of its skills.
+ * by it. When two projects both assign the set, its names are blocked as a Project clash instead.
  */
 const wholeSets = (reached: ReadonlyArray<PinnedSkill>) => {
   const winning = new Set<PinnedSkill>();
   const replaced: Array<ResolvedSkills["replaced"][number]> = [];
-  const clashes: Array<ResolvedSkills["clashes"][number]> = [];
+  /** Each name of a set that two projects assign, with those assignments. */
+  const blocked = new Map<SkillName, Array<SkillAssignment>>();
   const bySet = new Map<SkillId, Array<PinnedSkill>>();
   for (const one of reached) {
     if (one.set) bySet.set(one.assignment.skillId, [...(bySet.get(one.assignment.skillId) ?? []), one]);
@@ -418,14 +419,32 @@ const wholeSets = (reached: ReadonlyArray<PinnedSkill>) => {
     if (winners.length > 1) {
       const assignments = winners.map((one) => one.assignment);
       const names = new Set(winners.flatMap((one) => (one.set?.skills ?? []).map((skill) => skill.name)));
-      for (const name of names) clashes.push({ name, assignments });
+      for (const name of names) blocked.set(name, [...(blocked.get(name) ?? []), ...assignments]);
       continue;
     }
     winning.add(winner);
     for (const one of assigned)
       if (one !== winner) replaced.push({ assignment: one.assignment, by: winner.assignment, name: one.name });
   }
-  return { kept: reached.filter((one) => !one.set || winning.has(one)), replaced, clashes };
+  return { kept: reached.filter((one) => !one.set || winning.has(one)), replaced, blocked };
+};
+
+/**
+ * The skills of one name that load: those of its narrowest scope, or a clash when two projects define
+ * it. `blocked` holds the assignments of a set two projects assign, which clash as Project ones do, so
+ * only a hob's own skill of that name passes them.
+ */
+const winnersOf = (group: ReadonlyArray<Offered>, blocked: ReadonlyArray<SkillAssignment>) => {
+  const narrowest = Math.max(
+    ...group.map((one) => NARROWNESS[one.pinned.assignment.scope._tag]),
+    blocked.length > 0 ? NARROWNESS.Project : -1,
+  );
+  const all = group.filter((one) => NARROWNESS[one.pinned.assignment.scope._tag] === narrowest);
+  const [winner] = all;
+  if (winner === undefined || twoProjects(all) || (blocked.length > 0 && narrowest === NARROWNESS.Project)) {
+    return { _tag: "Clash", assignments: [...blocked, ...all.map((one) => one.pinned.assignment)] } as const;
+  }
+  return { _tag: "Load", winner, all } as const;
 };
 
 /**
@@ -439,27 +458,25 @@ export const resolveSkills = (pinned: ReadonlyArray<PinnedSkill>, turn: SkillTur
   const reached = pinned.filter((one) => reaches(one.assignment.scope, turn) && !optedOut(one, turn));
   const sets = wholeSets(reached);
   const replaced: Array<ResolvedSkills["replaced"][number]> = [...sets.replaced];
-  const clashes: Array<ResolvedSkills["clashes"][number]> = [...sets.clashes];
+  const clashes: Array<ResolvedSkills["clashes"][number]> = [];
   const groups = new Map<SkillName, Array<Offered>>();
   for (const one of sets.kept) {
     for (const offered of offeredOf(one, turn))
       groups.set(offered.name, [...(groups.get(offered.name) ?? []), offered]);
   }
+  for (const name of sets.blocked.keys()) if (!groups.has(name)) groups.set(name, []);
   const skills: Array<ResolvedSkill> = [];
   for (const [name, group] of groups) {
-    const narrowest = Math.max(...group.map((one) => NARROWNESS[one.pinned.assignment.scope._tag]));
-    const winners = group.filter((one) => NARROWNESS[one.pinned.assignment.scope._tag] === narrowest);
-    const [winner] = winners;
-    if (winner === undefined) continue;
-    if (twoProjects(winners)) {
-      clashes.push({ name, assignments: winners.map((one) => one.pinned.assignment) });
+    const winners = winnersOf(group, sets.blocked.get(name) ?? []);
+    if (winners._tag === "Clash") {
+      clashes.push({ name, assignments: winners.assignments });
       continue;
     }
-    for (const one of winners) skills.push(resolvedOf(one, turn));
-    for (const one of group) {
-      if (!winners.includes(one))
-        replaced.push({ assignment: one.pinned.assignment, by: winner.pinned.assignment, name });
-    }
+    const by = winners.winner.pinned.assignment;
+    for (const one of winners.all) skills.push(resolvedOf(one, turn));
+    for (const one of group)
+      if (!winners.all.includes(one)) replaced.push({ assignment: one.pinned.assignment, by, name });
+    for (const assignment of sets.blocked.get(name) ?? []) replaced.push({ assignment, by, name });
   }
   return { skills: skills.sort(bySetAndName), replaced, clashes: clashes.sort(byName) };
 };
