@@ -29,7 +29,7 @@ import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { GitHubApi } from "./github-api.ts";
 import type { GitHubError } from "./github-error.ts";
-import { GITHUB_CHARM, withGitHubOperations } from "./github-operations.ts";
+import { GITHUB_CHARM } from "./github-operations.ts";
 import { makeGitHubPush, pushReadBack } from "./github-push.ts";
 import { commentReadBack, makeGitHubWrites, pullRequestReadBack } from "./github-writes.ts";
 import { GitRemotes } from "./remotes.ts";
@@ -50,9 +50,10 @@ export const GITHUB_UNASKABLE =
 const describe = (error: Schema.SchemaError) => error.message.split("\n").slice(0, 6).join("\n");
 
 // The engine decides a GitHub read on the folder and the hob's answers alone: the sandbox and the
-// model's hosts do not hold this rule, since the hub reads GitHub outside the sandbox.
+// model's hosts do not hold this rule, since the hub reads GitHub outside the sandbox. Its operations
+// are the ones the hub declares: a hub that holds no GitHub Charm leaves them closed (ADR 031).
 const policyContext = (access: ToolAccess): PolicyContext => ({
-  ...withGitHubOperations(access).policy,
+  ...access.policy,
   sandbox: "on",
   modelHosts: [],
 });

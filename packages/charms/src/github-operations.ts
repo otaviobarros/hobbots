@@ -1,4 +1,3 @@
-import type { ToolAccess } from "@hobbots/agents";
 import type { CharmDeclaration } from "@hobbots/domain";
 
 /**
@@ -37,18 +36,3 @@ export const GITHUB_CHARM = {
   ],
   takesOver: ["push"],
 } as const satisfies CharmDeclaration;
-
-/**
- * `access` with the GitHub Charm's operations declared, as the hub's Charms declare them. The Charm
- * decides only its own operations, so it never relies on a caller having passed its declaration.
- */
-export const withGitHubOperations = (access: ToolAccess): ToolAccess => ({
-  ...access,
-  policy: {
-    ...access.policy,
-    charmOperations: [
-      ...(access.policy.charmOperations ?? []).filter((operation) => !operation.id.startsWith(`${GITHUB_CHARM.id}.`)),
-      ...GITHUB_CHARM.operations,
-    ],
-  },
-});

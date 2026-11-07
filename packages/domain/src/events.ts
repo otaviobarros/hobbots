@@ -328,6 +328,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // The GitHub operations and rules were renamed to Charm ids and `CharmSite`, read from the old ones, compatibly.
   GrantCreated: 1,
   GrantRevoked: 1,
+  // A Delegation's authority names the GitHub operations by their Charm ids, read from the old names, compatibly.
   TaskCreated: 1,
   // A change's `wait` was added with a default, and its optional `control` and `reply` later, compatibly.
   TaskStateChanged: 1,

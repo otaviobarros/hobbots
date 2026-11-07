@@ -167,6 +167,8 @@ export const ReasonCode = Schema.Literals([
   "grant",
   /** A Charm call for an operation no Charm the hub holds declares. */
   "undeclared-operation",
+  /** A Charm operation declared once only is high risk: it always asks, once only, unless refused. */
+  "once-only-operation",
 ]);
 export type ReasonCode = typeof ReasonCode.Type;
 
@@ -649,7 +651,15 @@ const evaluateCharm = (
   const place = request.folder === undefined ? null : locate(scope, request.folder);
   if (place !== null && !located(place)) return { targets, answers: [place] };
   const site = charmSite(declared, request, place === null ? null : place.canonical);
-  return { targets, answers: [fromLayers(context, request.operation, site)], onceOnly: declared.onceOnly };
+  const answer = fromLayers(context, request.operation, site);
+  if (!declared.onceOnly || answer.decision === "deny") return { targets, answers: [answer] };
+  // A high-risk operation asks even where every layer allows it (ADR 015): Never still wins.
+  const message = `${declared.words.charAt(0).toUpperCase()}${declared.words.slice(1)} always waits for you, once only.`;
+  return {
+    targets,
+    answers: [{ decision: "ask", operation: request.operation, code: "once-only-operation", message }],
+    onceOnly: true,
+  };
 };
 
 const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: ResolvedRequest): Evaluated => {

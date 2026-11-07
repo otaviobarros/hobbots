@@ -42,6 +42,7 @@ import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { GITHUB_CHARM } from "../src/github-operations.ts";
 import {
   ACTION_PERMISSIONS,
   GitHubApi,
@@ -1099,6 +1100,8 @@ const accessIn = (
     hob: Schema.decodeUnknownSync(HobPolicy)({ ...EMPTY_HOB_POLICY, overrides }),
     dataFolder: join(temp, "data"),
     restrictions: [],
+    // The hub declares the GitHub Charm's operations, as the server does (ADR 031).
+    charmOperations: GITHUB_CHARM.operations,
   },
   folders: [folder],
   runtimeFolder: join(temp, "runtimes", "frodo"),
@@ -1516,6 +1519,8 @@ const pushAccess = (folder: string): ToolAccess => ({
     hob: EMPTY_HOB_POLICY,
     dataFolder: join(temp, "data"),
     restrictions: [],
+    // The hub declares the GitHub Charm's operations, as the server does (ADR 031).
+    charmOperations: GITHUB_CHARM.operations,
   },
   folders: [folder],
   runtimeFolder: join(temp, "runtimes", "frodo"),

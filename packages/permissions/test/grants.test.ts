@@ -6,13 +6,26 @@ import {
   type CharmOperationId,
   Grant,
   GrantId,
-  type GrantRule,
+  GrantRule,
+  HobPolicy,
   ruleOperation,
+  StoredPolicyLayer,
   TaskId,
 } from "@hobbots/domain";
+import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { type PolicyContext, type PolicyRequest, readCommandLine } from "../src/index.ts";
-import { comment, contextFor, decide, files, GITHUB_OPERATIONS, type Home, pullRequest, useHome } from "./fixture.ts";
+import {
+  comment,
+  contextFor,
+  decide,
+  files,
+  GITHUB_OPERATIONS,
+  githubRead,
+  type Home,
+  pullRequest,
+  useHome,
+} from "./fixture.ts";
 
 const home: Home = useHome();
 
@@ -367,7 +380,7 @@ describe("a Charm request", () => {
     {
       id: "mail.send",
       words: "sending mail",
-      presets: { careful: "ask", balanced: "ask", trusting: "ask" },
+      presets: { careful: "ask", balanced: "ask", trusting: "allow" },
       site: ["to"],
       onceOnly: true,
       actsAsIdentity: true,
@@ -468,9 +481,31 @@ describe("a Charm request", () => {
   });
 
   // covers PE-007
-  it("[TC-PE-459] offers a once-only operation once only, whatever its site", async () => {
+  it("[TC-PE-459] asks before a once-only operation, once only, even where its preset allows it, and Never still wins", async () => {
+    // Trusting allows sending mail, but a once-only operation is high risk and always waits for you (ADR 015).
     const asked = await decide(withMail("trusting"), mail("mail.send", { to: "ada@example.com" }));
-    expect(asked).toMatchObject({ decision: "ask", onceOnly: true, grantable: false, rules: [] });
+    expect(asked).toMatchObject({
+      decision: "ask",
+      onceOnly: true,
+      grantable: false,
+      rules: [],
+      reason: { code: "once-only-operation", message: "Sending mail always waits for you, once only." },
+    });
+    expect(await decide(withMail("balanced"), mail("mail.send", { to: "ada@example.com" }))).toMatchObject({
+      decision: "ask",
+      onceOnly: true,
+      grantable: false,
+    });
+    const refused = withMail("trusting", {
+      hob: { ownFolders: [], hiddenSharedFolders: [], overrides: {}, charms: { overrides: { "mail.send": "deny" } } },
+    });
+    expect(await decide(refused, mail("mail.send", { to: "ada@example.com" }))).toMatchObject({
+      decision: "deny",
+      reason: { code: "override" },
+    });
+    expect(
+      await decide(withMail("trusting", { restrictions: [{ "mail.send": "deny" }] }), mail("mail.send", { to: "x" })),
+    ).toMatchObject({ decision: "deny", reason: { code: "restriction" } });
     const saved = {
       ...withMail("trusting"),
       grants: [grantOf({ _tag: "CharmSite", charm: "mail", operation: "mail.send", site: { to: "ada@example.com" } })],
@@ -489,5 +524,52 @@ describe("a Charm request", () => {
         operation: "outside-folders",
       });
     }
+  });
+});
+
+describe("GitHub answers saved before the Charm operations", () => {
+  // covers PE-007, DP-003
+  it("[TC-PE-462] answer the same calls whether read in their old form or as 0071 rewrites them", async () => {
+    const repository = "otaviobarros/hobbots";
+    // The stored forms before and after 0071, as [TC-DP-285] writes and checks them.
+    const stored = {
+      before: {
+        hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { push: "ask", "read-github": "deny" } },
+        rule: { _tag: "GitHubComment", cwd: home.project, repository },
+        delegation: { "open-pull-request": "deny", "edit-files": "ask" },
+      },
+      after: {
+        hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { push: "ask", "github.read": "deny" } },
+        rule: {
+          _tag: "CharmSite",
+          charm: "github",
+          operation: "github.comment",
+          cwd: home.project,
+          site: { repository },
+        },
+        delegation: { "github.open-pull-request": "deny", "edit-files": "ask" },
+      },
+    };
+    const contextOf = (form: (typeof stored)["before" | "after"]) =>
+      contextFor(home, "balanced", {
+        hob: Schema.decodeUnknownSync(HobPolicy)(form.hob),
+        grants: [grantOf(Schema.decodeUnknownSync(GrantRule)(form.rule))],
+        restrictions: [Schema.decodeUnknownSync(StoredPolicyLayer)(form.delegation)],
+      });
+    const calls = [githubRead(home.project), comment(home.project), pullRequest(home.project)];
+    const answers = async (context: PolicyContext) =>
+      Promise.all(
+        calls.map(async (call) => {
+          const { decision, operation, reason } = await decide(context, call);
+          return { decision, operation, code: reason.code };
+        }),
+      );
+    const before = await answers(contextOf(stored.before));
+    expect(before).toEqual([
+      { decision: "deny", operation: "github.read", code: "override" },
+      { decision: "allow", operation: "github.comment", code: "grant" },
+      { decision: "deny", operation: "github.open-pull-request", code: "restriction" },
+    ]);
+    expect(await answers(contextOf(stored.after))).toEqual(before);
   });
 });

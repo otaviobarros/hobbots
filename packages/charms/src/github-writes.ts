@@ -29,7 +29,7 @@ import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { githubActor, recordedLogin } from "./github-actor.ts";
 import { GitHubApi, type GitHubError, type GitHubWrite } from "./github-api.ts";
-import { GITHUB_CHARM, withGitHubOperations } from "./github-operations.ts";
+import { GITHUB_CHARM } from "./github-operations.ts";
 
 /**
  * The GitHub Charm's Open pull requests and Comment on GitHub (ADR 020, #324). The hub redacts the
@@ -47,12 +47,7 @@ class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> 
 export const decideCharmWrite =
   (engine: PolicyEngine["Service"], turn: CharmTurn, base: ToolAccess, request: PolicyRequest) =>
   (fresh: ToolAccess | null): Effect.Effect<AskableVerdict> =>
-    decideHubCall(
-      engine,
-      turn.approvals,
-      withGitHubOperations(base),
-      request,
-    )(fresh === null ? null : withGitHubOperations(fresh));
+    decideHubCall(engine, turn.approvals, base, request)(fresh);
 
 /** Fails with the reason when Git would not take `name` as a branch name (ADR 020). */
 export const branchNameCheck = (git: GitPush["Service"], name: string): Effect.Effect<void, string> =>

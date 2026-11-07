@@ -29,6 +29,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Schema } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  GITHUB_CHARM,
   GitHubApi,
   GitHubCharmTools,
   type GitHubPostedComment,
@@ -198,6 +199,8 @@ const accessFor = (preset: SafetyPreset = "balanced", overrides: Record<string, 
     hob: Schema.decodeUnknownSync(HobPolicy)({ ...EMPTY_HOB_POLICY, overrides }),
     dataFolder: path.join(root, "data"),
     restrictions: [],
+    // The hub declares the GitHub Charm's operations, as the server does (ADR 031).
+    charmOperations: GITHUB_CHARM.operations,
   },
   folders: [folder],
   runtimeFolder: path.join(root, "runtimes", "hob"),
@@ -445,6 +448,29 @@ describe("the GitHub Charm's pull requests and comments", () => {
     expect(denied).toMatchObject({ refused: true, text: expect.stringContaining("Their reason: Not yet.") });
     expect(asked).toHaveLength(1);
     expect(hub.github.sent).toEqual(["comment #7"]);
+  });
+
+  // covers PE-001, PE-002
+  it("[TC-PE-461] sends nothing, even under Trusting, on a hub that declares no GitHub operation", async () => {
+    const hub = makeHub();
+    const asked: Array<ApprovalAction> = [];
+    const trusting = accessFor("trusting");
+    const undeclared = { ...trusting, policy: { ...trusting.policy, charmOperations: [] } };
+    const comment = await hub.call(
+      "github_comment",
+      { number: 7, body: "On it.", key: "n-1" },
+      { access: undeclared, asked },
+    );
+    const pull = await hub.call(
+      "github_open_pull_request",
+      { head: "feat/x", title: "Undeclared", key: "n-2" },
+      { access: undeclared, asked },
+    );
+    for (const answer of [comment, pull]) {
+      expect(answer).toMatchObject({ refused: true, text: expect.stringContaining("No Charm on this hub declares") });
+    }
+    expect(asked).toHaveLength(0);
+    expect(hub.github.sent).toEqual([]);
   });
 
   // covers PE-002, PE-003
