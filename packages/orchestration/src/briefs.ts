@@ -223,13 +223,6 @@ export const memberReminder = (task: Task, tree: TaskTree, lead: string): string
   ].join("\n");
 };
 
-/**
- * How a lead completes the Task it leads: once everything under it ended, and for a Quest only when
- * its result delivers what the user asked for (#1181).
- */
-const COMPLETE_RULE =
-  "Call complete_task with the Task's result once everything under it has ended. For a Quest you lead, pass delivered: true only when the result delivers everything the user asked for, where they asked for it; if it does not, finish it or ask the user, and leave the Quest open.";
-
 /** How a member's Task ends, as every later turn is reminded: only `complete_task` or a blocker ends it (#1086). */
 const MEMBER_FINISH =
   "When it is done, call complete_task with its result. If you cannot finish it, report a blocker with report_checkpoint. A final reply alone does not complete it.";
@@ -397,7 +390,7 @@ export const ownerBriefingParts = (
               ? [STOPPED_STEP]
               : []),
           ),
-          rule("complete", COMPLETE_RULE),
+          rule("complete", "Call complete_task with the Task's result once everything under it has ended."),
         ]),
     rule("commits", COMMIT_RULE),
     rule("chat", LEAN_CHAT_RULE, FINISH_RULE),
