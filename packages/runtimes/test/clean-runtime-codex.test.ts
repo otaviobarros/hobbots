@@ -194,7 +194,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     expect(offered).toContain(`Use ${ASKED_SKILL}.`);
     const events = Exit.isSuccess(exit) ? exit.value : [];
     expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
-      { _tag: "SkillUsed", name: ASKED_SKILL, explicit: true },
+      { _tag: "SkillUsed", source: "library", name: ASKED_SKILL, explicit: true },
     ]);
   });
 
@@ -211,7 +211,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     expect(Exit.isSuccess(exit), String(exit)).toBe(true);
     const events = Exit.isSuccess(exit) ? exit.value : [];
     expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
-      { _tag: "SkillUsed", name: LIBRARY_SKILL, explicit: false },
+      { _tag: "SkillUsed", source: "library", name: LIBRARY_SKILL, explicit: false },
     ]);
   });
 

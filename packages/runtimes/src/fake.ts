@@ -155,8 +155,10 @@ const fakeSkillUses = (request: PromptRequest, scripted: string): ReadonlyArray<
     .map((line) => line.slice(FAKE_SKILL_DIRECTIVE.length).trim())
     .filter((name) => mounted.has(name) && !asked.includes(name));
   return [
-    ...asked.map((name): RuntimeEvent => ({ _tag: "SkillUsed", name, explicit: true })),
-    ...[...new Set(named)].map((name): RuntimeEvent => ({ _tag: "SkillUsed", name, explicit: false })),
+    ...asked.map((name): RuntimeEvent => ({ _tag: "SkillUsed", source: "library", name, explicit: true })),
+    ...[...new Set(named)].map(
+      (name): RuntimeEvent => ({ _tag: "SkillUsed", source: "library", name, explicit: false }),
+    ),
   ];
 };
 

@@ -130,11 +130,17 @@ export type RuntimeEvent =
   | { readonly _tag: "SessionCompacted" }
   /**
    * The turn used a skill (ADR 029, The use line), read from the runtime's own events at no extra
-   * turn: `name` is a mount's name, or a skill from an administrator's settings that the session
-   * reported. `explicit` when it is the skill the turn was asked to use (`askedSkill`). The hub
-   * maps the name to the revision the turn mounted.
+   * turn. `source` says where the runtime loaded it from: `library`, one of the turn's mounts, or
+   * `organization`, a skill an administrator's settings brought that the session reported, so a
+   * name both share is never mistaken for the other. `explicit` when it is the skill the turn was
+   * asked to use (`askedSkill`). The hub maps a mount's name to the revision the turn mounted.
    */
-  | { readonly _tag: "SkillUsed"; readonly name: string; readonly explicit: boolean }
+  | {
+      readonly _tag: "SkillUsed";
+      readonly source: "library" | "organization";
+      readonly name: string;
+      readonly explicit: boolean;
+    }
   | {
       readonly _tag: "Completed";
       readonly sessionId: string;

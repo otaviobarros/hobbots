@@ -313,10 +313,12 @@ export type SkillUseCounts = typeof SkillUseCounts.Type;
 /** The span "this week" counts, in milliseconds: the seven days up to now. */
 export const SKILL_USE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Counts uses of one skill, as `SkillUseCounts` (ADR 029). `now` is an ISO time. */
-export const countSkillUses = (skillId: SkillId, uses: ReadonlyArray<SkillUse>, now: string): SkillUseCounts => {
+/** When "this week" starts for `now`, an ISO time: seven days before it. */
+export const skillUseWeekStart = (now: string): string => new Date(Date.parse(now) - SKILL_USE_WEEK_MS).toISOString();
+
+/** Counts uses of one skill, as `SkillUseCounts` (ADR 029), "this week" being after `since`, an ISO time. */
+export const countSkillUses = (skillId: SkillId, uses: ReadonlyArray<SkillUse>, since: string): SkillUseCounts => {
   const mine = uses.filter((use) => use.skillId === skillId).sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
-  const weekAgo = Date.parse(now) - SKILL_USE_WEEK_MS;
   const hobs = new Map<AgentId, { agentId: AgentId; count: number; lastAt: string }>();
   const threads = new Map<ThreadId, { threadId: ThreadId; agentId: AgentId; count: number; lastAt: string }>();
   for (const use of mine) {
@@ -334,21 +336,20 @@ export const countSkillUses = (skillId: SkillId, uses: ReadonlyArray<SkillUse>, 
   return {
     skillId,
     total: mine.length,
-    thisWeek: mine.filter((use) => Date.parse(use.at) > weekAgo).length,
+    thisWeek: mine.filter((use) => use.at > since).length,
     hobs: [...hobs.values()],
     threads: [...threads.values()],
   };
 };
 
-/** How often each skill was used in the seven days up to `now`, as the scope lists show it ("Used 12 times this week"). */
-export const weeklySkillUses = (
+/** How often each skill was used after `since`, as the scope lists show it ("Used 12 times this week"). */
+export const skillUsesSince = (
   uses: ReadonlyArray<SkillUse>,
-  now: string,
+  since: string,
 ): ReadonlyArray<{ readonly skillId: SkillId; readonly count: number }> => {
-  const weekAgo = Date.parse(now) - SKILL_USE_WEEK_MS;
   const counts = new Map<SkillId, number>();
   for (const use of uses) {
-    if (use.skillId === null || Date.parse(use.at) <= weekAgo) continue;
+    if (use.skillId === null || use.at <= since) continue;
     counts.set(use.skillId, (counts.get(use.skillId) ?? 0) + 1);
   }
   return [...counts].map(([skillId, count]) => ({ skillId, count }));

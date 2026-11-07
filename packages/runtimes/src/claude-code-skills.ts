@@ -43,7 +43,7 @@ export const withSkills = (
     const name = skill.slice(SKILLS_PLUGIN.length + 1);
     report({ _tag: "StepStarted", id: input.tool_use_id, kind: "tool", label: `Reading the ${name} skill` });
     // The model picked the skill: the reply shows it used it (ADR 029, The use line).
-    report({ _tag: "SkillUsed", name, explicit: false });
+    report({ _tag: "SkillUsed", source: "library", name, explicit: false });
     return {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",

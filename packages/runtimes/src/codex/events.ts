@@ -231,7 +231,7 @@ export const codexTurnEvents = (
     if (!("status" in item)) return NOTHING;
     // A command that read a mounted skill's `SKILL.md` is the model using that skill (ADR 029).
     const used = skillReadsOf(item, skillRoots, skillFiles).map(
-      (name): RuntimeEvent => ({ _tag: "SkillUsed", name, explicit: false }),
+      (read): RuntimeEvent => ({ _tag: "SkillUsed", ...read, explicit: false }),
     );
     const finished = toolFinished(item);
     return used.length === 0 ? finished : { ...finished, events: [...finished.events, ...used] };

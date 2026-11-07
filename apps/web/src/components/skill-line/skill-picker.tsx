@@ -1,6 +1,6 @@
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { MemoryIcon } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
 import {
@@ -93,6 +93,11 @@ export function SkillPickerList({
   picking: SkillPicking | undefined;
   picker: ReturnType<typeof useSkillPicker>;
 }) {
+  const list = useRef<HTMLUListElement>(null);
+  // The highlighted skill stays in view as ↑ and ↓ move through a list longer than the space it has.
+  useEffect(() => {
+    if (picker.open) list.current?.children[picker.active]?.scrollIntoView({ block: "nearest" });
+  }, [picker.open, picker.active]);
   if (picking === undefined || !picker.open) return null;
   const empty = picking.skills.length === 0;
   return (
@@ -101,7 +106,8 @@ export function SkillPickerList({
       className="flex animate-hb-in flex-col gap-1 rounded-card border border-line-2 bg-card p-2"
     >
       <span className="px-2 py-1 text-meta text-label">{copy.heading({ name: picking.hobName })}</span>
-      <ul className="m-0 flex list-none flex-col p-0">
+      {/* At most a third of the window, so the conversation keeps its room; the rest scrolls. */}
+      <ul ref={list} className="m-0 flex max-h-[33vh] list-none flex-col overflow-y-auto p-0">
         {picker.list.map((skill, index) => (
           <li key={skill.name}>
             <button

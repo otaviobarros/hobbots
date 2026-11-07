@@ -49,6 +49,16 @@ A review of the pull request found five problems, fixed with these checks:
 | TC-RT-533 | Codex refuses `turn/start` for a turn with a skill you picked | ✅ No `SkillUsed`; with a Codex that takes the turn, one, after `turn/start` |
 | TC-RT-531, TC-RT-532 | A Codex command reads an administrator's skill's `SKILL.md` that admission let through | ✅ Reported as used; another `SKILL.md` and another file of that skill are not |
 
+A second review found five more problems, fixed with these checks:
+
+| Case | Check | Result |
+|---|---|---|
+| TC-AG-146, TC-AG-147, TC-RT-534 | A library skill and an organization skill share a name; Codex reads both in one turn | ✅ Each reported with its source, recorded once each: the library one at its revision, the organization one without |
+| TC-AG-148 | A reply left unfinished after its turn saved a use, but not its line | ✅ The hub puts the line back when it starts, once |
+| TC-UI-1096-08 to -10 | A skill is assigned and another taken off while the chat is open | ✅ The `/` list shows the new one and drops the other without a reload; the browser test fails without the fix |
+| TC-UI-1096-11 | 31 skills in a 640-pixel-high window | ✅ The list stays under half the window and scrolls; ↑ to the last skill brings it into view; the composer stays on screen |
+| TC-DP-283 | Counts, this week, a hob's last uses and a reply's uses, on SQLite and PostgreSQL 16 | ✅ Counted in the database, one row per answer, with a limit on every list |
+
 ## Gaps
 
 - No real model ran, so whether a real model picks a skill, and how often, was not observed.

@@ -724,11 +724,11 @@ describe("a Codex turn's skill uses (ADR 029, #1096)", () => {
   it("[TC-RT-528] counts a finished read of a mounted SKILL.md as a use, and nothing else", () => {
     const events = codexTurnEvents(THREAD, [ROOT]);
     expect(events.map(read("c1", `${ROOT}/release-steps/SKILL.md`)).events).toEqual([
-      { _tag: "SkillUsed", name: "release-steps", explicit: false },
+      { _tag: "SkillUsed", source: "library", name: "release-steps", explicit: false },
     ]);
     // A relative path is read from the command's folder.
     expect(events.map(read("c2", "../commit-style/SKILL.md", "completed", `${ROOT}/release-steps`)).events).toEqual([
-      { _tag: "SkillUsed", name: "commit-style", explicit: false },
+      { _tag: "SkillUsed", source: "library", name: "commit-style", explicit: false },
     ]);
     // Another of the skill's files, a SKILL.md outside the turn's folder, and a declined read are no use.
     expect(events.map(read("c3", `${ROOT}/release-steps/references/notes.md`)).events).toEqual([]);
@@ -743,10 +743,25 @@ describe("a Codex turn's skill uses (ADR 029, #1096)", () => {
     const org = { name: "org-steps", path: "/etc/codex/skills/org-steps/SKILL.md" };
     const events = codexTurnEvents(THREAD, [], [org]);
     expect(events.map(read("o1", org.path)).events).toEqual([
-      { _tag: "SkillUsed", name: "org-steps", explicit: false },
+      { _tag: "SkillUsed", source: "organization", name: "org-steps", explicit: false },
     ]);
     expect(events.map(read("o2", "/etc/codex/skills/other/SKILL.md")).events).toEqual([]);
     expect(events.map(read("o3", "/etc/codex/skills/org-steps/notes.md")).events).toEqual([]);
+  });
+
+  // covers ADR 029 (Admin policy still applies)
+  it("[TC-RT-534] names where each skill of the same name was read from, the turn's folder or an administrator's", () => {
+    const events = codexTurnEvents(
+      THREAD,
+      [ROOT],
+      [{ name: "release-steps", path: "/etc/codex/skills/release-steps/SKILL.md" }],
+    );
+    expect(events.map(read("s1", "/etc/codex/skills/release-steps/SKILL.md")).events).toEqual([
+      { _tag: "SkillUsed", source: "organization", name: "release-steps", explicit: false },
+    ]);
+    expect(events.map(read("s2", `${ROOT}/release-steps/SKILL.md`)).events).toEqual([
+      { _tag: "SkillUsed", source: "library", name: "release-steps", explicit: false },
+    ]);
   });
 });
 
@@ -1165,7 +1180,7 @@ describe("a Codex turn's skills (ADR 029)", () => {
     });
     const ran = await run(config(server.start));
     expect(events(ran).filter((event) => event._tag === "SkillUsed")).toEqual([
-      { _tag: "SkillUsed", name: "org-steps", explicit: false },
+      { _tag: "SkillUsed", source: "organization", name: "org-steps", explicit: false },
     ]);
   });
 
@@ -1176,7 +1191,7 @@ describe("a Codex turn's skills (ADR 029)", () => {
     const ran = await run(config(taken.start), asked);
     expect(Exit.isSuccess(ran), String(ran)).toBe(true);
     expect(events(ran).filter((event) => event._tag === "SkillUsed")).toEqual([
-      { _tag: "SkillUsed", name: "release", explicit: true },
+      { _tag: "SkillUsed", source: "library", name: "release", explicit: true },
     ]);
     expect(taken.requests.find((request) => request.method === "turn/start")?.params).toMatchObject({
       input: [{ type: "text" }, { type: "skill", name: "release" }],

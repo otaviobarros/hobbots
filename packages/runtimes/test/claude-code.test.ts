@@ -542,7 +542,7 @@ describe("one turn over several runs of Claude Code", () => {
     const whole = wholeTurn("release-steps");
     expect([started, completed("Waiting."), started].flatMap(whole.read)).toEqual([
       started,
-      { _tag: "SkillUsed", name: "release-steps", explicit: true },
+      { _tag: "SkillUsed", source: "library", name: "release-steps", explicit: true },
     ]);
   });
 

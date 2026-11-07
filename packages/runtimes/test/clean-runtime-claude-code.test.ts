@@ -153,7 +153,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     );
     // The use line: the mounted skill was used, the refused one never (#1096).
     expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
-      { _tag: "SkillUsed", name: LIBRARY_SKILL, explicit: false },
+      { _tag: "SkillUsed", source: "library", name: LIBRARY_SKILL, explicit: false },
     ]);
     // The mounted skill's instructions reached the model; the home folder's was refused.
     expect(JSON.stringify(requests[1])).toContain(`Use ${LIBRARY_SKILL}.`);
@@ -176,7 +176,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     expect(offered).toContain(`Use ${ASKED_SKILL}.`);
     const events = Exit.isSuccess(exit) ? exit.value : [];
     expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
-      { _tag: "SkillUsed", name: ASKED_SKILL, explicit: true },
+      { _tag: "SkillUsed", source: "library", name: ASKED_SKILL, explicit: true },
     ]);
   });
 

@@ -14,21 +14,30 @@ test.afterEach(async () => {
   removeDataDir(dataDir);
 });
 
-const SKILL_MD = "---\nname: release-steps\ndescription: How we cut a release.\n---\n\n# Release steps\n";
+const skillMd = (name: string) => `---\nname: ${name}\ndescription: About ${name}.\n---\n\n# ${name}\n`;
 
-/** A hub past setup with Pip, and Release steps in the library for everyone. */
-const hubWithSkill = async () => {
+/** A hub past setup with Pip, and each of `names` in the library for everyone, Release steps first. */
+const hubWithSkill = async (names: ReadonlyArray<string> = []) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
   const started = hub;
-  const api = async <A>(method: string, path: string, body: unknown): Promise<A> => {
+  const api = async <A>(method: string, path: string, body?: unknown): Promise<A> => {
     const response = await fetch(`${started.url}/api${path}`, {
       method,
-      headers: { "content-type": "application/json", ...started.headers },
-      body: JSON.stringify(body),
+      headers: { ...(body === undefined ? {} : { "content-type": "application/json" }), ...started.headers },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
     return response.json() as Promise<A>;
+  };
+  /** Imports a skill and assigns it to everyone; answers the assignment's id. */
+  const addSkill = async (name: string) => {
+    const imported = await api<{ imported: ReadonlyArray<{ skill: { id: string } }> }>("POST", "/skills", {
+      source: { _tag: "Written", files: [{ path: "SKILL.md", text: skillMd(name) }] },
+    });
+    const skill = imported.imported[0]?.skill;
+    if (skill === undefined) throw new Error(`${name} was not imported.`);
+    return (await api<{ id: string }>("POST", `/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" } })).id;
   };
   await api("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
   const pip = await api<{ id: string }>("POST", "/agents", {
@@ -45,13 +54,9 @@ const hubWithSkill = async () => {
     effort: null,
     instructions: "",
   });
-  const imported = await api<{ imported: ReadonlyArray<{ skill: { id: string } }> }>("POST", "/skills", {
-    source: { _tag: "Written", files: [{ path: "SKILL.md", text: SKILL_MD }] },
-  });
-  const skill = imported.imported[0]?.skill;
-  if (skill === undefined) throw new Error("The skill was not imported.");
-  await api("POST", `/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" } });
-  return { url: started.url, pip };
+  const release = await addSkill("release-steps");
+  for (const name of names) await addSkill(name);
+  return { url: started.url, pip, api, addSkill, release };
 };
 
 const composerOf = (page: Page) => page.getByRole("textbox", { name: /^Message Pip/ });
@@ -117,4 +122,43 @@ test("[TC-UI-1096-07] when the hob's skills cannot be read, the list says so and
   await pickerOf(page).getByRole("button", { name: "Try again" }).click();
   await expect(pickerOf(page)).toContainText("/release-steps");
   await expect(composer).toBeFocused();
+});
+
+// covers ADR 029 (Explicit use), STD-REACT-012
+test("[TC-UI-1096-10] the list follows a skill assigned or taken off while the chat is open", async ({ page }) => {
+  const { url, pip, api, addSkill, release } = await hubWithSkill();
+  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  const composer = composerOf(page);
+  await composer.fill("/");
+  await expect(pickerOf(page)).toContainText("/release-steps");
+
+  await addSkill("review-notes");
+  await expect(pickerOf(page)).toContainText("/review-notes");
+  await api("DELETE", `/skills/assignments/${release}`);
+  await expect(pickerOf(page)).not.toContainText("/release-steps");
+  await expect(pickerOf(page)).toContainText("/review-notes");
+});
+
+// covers ADR 029 (Explicit use)
+test("[TC-UI-1096-11] a long list scrolls inside its own space and keeps the highlighted skill in view", async ({
+  page,
+}) => {
+  const names = Array.from({ length: 30 }, (_, index) => `step-${String(index).padStart(2, "0")}`);
+  const { url, pip } = await hubWithSkill(names);
+  await page.setViewportSize({ width: 1280, height: 640 });
+  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  const composer = composerOf(page);
+  await composer.fill("/");
+  const picker = pickerOf(page);
+  await expect(picker.getByRole("listitem")).toHaveCount(31);
+  const box = await picker.boundingBox();
+  expect(box?.height ?? Number.POSITIVE_INFINITY).toBeLessThan(640 / 2);
+  // The composer stays on screen under it.
+  await expect(composer).toBeInViewport();
+
+  // ↑ from the first skill goes to the last, which scrolls into view.
+  await composer.press("ArrowUp");
+  const last = picker.getByRole("button", { name: /step-29/ });
+  await expect(last).toHaveAttribute("aria-current", "true");
+  await expect(last).toBeInViewport();
 });

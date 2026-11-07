@@ -248,6 +248,52 @@ describe("skills library", () => {
       }),
     ));
 
+  // covers ADR 029 (The use line)
+  it("[TC-DP-283] counts a skill's uses, its week, and each hob's last uses in the database, one row per answer", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const library = yield* SkillLibrary;
+        const skill = (yield* library.addRevision(null, input(H1))).value.skill;
+        const use = (id: string, at: string, threadId: string | null, source: "library" | "organization" = "library") =>
+          new SkillUse({
+            id: SkillUseId.make(id),
+            source,
+            skillId: source === "library" ? skill.id : null,
+            name: "release",
+            pin: source === "library" ? H1 : null,
+            number: source === "library" ? 1 : null,
+            explicit: false,
+            agentId: pip,
+            threadId: threadId === null ? null : ThreadId.make(threadId),
+            messageId: threadId === null ? null : MessageId.make(`reply-${id}`),
+            at,
+          });
+        yield* library.recordUse(use("old", "2026-10-01T10:00:00.000Z", "t1"));
+        yield* library.recordUse(use("a", "2026-11-05T10:00:00.000Z", "t1"));
+        yield* library.recordUse(use("b", "2026-11-06T10:00:00.000Z", "t2"));
+        yield* library.recordUse(use("step", "2026-11-06T11:00:00.000Z", null));
+        // An organization skill of the same name is its own skill.
+        yield* library.recordUse(use("org", "2026-11-06T12:00:00.000Z", "t2", "organization"));
+        const since = "2026-10-31T00:00:00.000Z";
+        expect(yield* library.useCounts(skill.id, since)).toEqual({
+          skillId: skill.id,
+          total: 4,
+          thisWeek: 3,
+          hobs: [{ agentId: pip, count: 4, lastAt: "2026-11-06T11:00:00.000Z" }],
+          threads: [
+            { threadId: "t2", agentId: pip, count: 1, lastAt: "2026-11-06T10:00:00.000Z" },
+            { threadId: "t1", agentId: pip, count: 2, lastAt: "2026-11-05T10:00:00.000Z" },
+          ],
+        });
+        expect(yield* library.usesSince(since)).toEqual([{ skillId: skill.id, count: 3 }]);
+        expect((yield* library.lastUses(pip, 10)).map((one) => one.id)).toEqual(["org", "step"]);
+        expect((yield* library.lastUses(pip, 1)).map((one) => one.id)).toEqual(["org"]);
+        expect((yield* library.uses({ messageId: MessageId.make("reply-a") })).map((one) => one.id)).toEqual(["a"]);
+        expect(yield* library.uses({ agentId: pip, limit: 2 })).toHaveLength(2);
+      }),
+    ));
+
   it("[TC-DP-280] refuses to remove a skill something assigns, naming who, and frees its name once removed", () =>
     run(
       Effect.gen(function* () {

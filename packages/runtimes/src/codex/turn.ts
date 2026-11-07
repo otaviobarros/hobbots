@@ -737,7 +737,7 @@ const turnEvents = (
           mapper.follow(started.turn.id);
           now.turnId = started.turn.id;
           // Codex took the skill item with the turn, so the skill you picked is used (ADR 029).
-          if (skill !== null) report({ _tag: "SkillUsed", name: skill.name, explicit: true });
+          if (skill !== null) report({ _tag: "SkillUsed", source: "library", name: skill.name, explicit: true });
         });
 
       // Cancelling the turn asks Codex to stop it and waits for the acknowledgement, so the process

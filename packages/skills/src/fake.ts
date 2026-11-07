@@ -1,6 +1,8 @@
 import { rolloutTargets, SkillLibrary, type SkillLibraryShape, type SkillRevisionInput } from "@hobbots/agents";
 import {
   type Committed,
+  countSkillUses,
+  lastSkillUses,
   Skill,
   SkillAssignment,
   SkillAssignmentId,
@@ -16,6 +18,7 @@ import {
   SkillSource,
   SkillSourceId,
   type SkillUse,
+  skillUsesSince,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 
@@ -194,12 +197,19 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
       }),
     uses: (filter) =>
       Effect.sync(() =>
-        uses.filter(
-          (use) =>
-            (filter.skillId === undefined || use.skillId === filter.skillId) &&
-            (filter.agentId === undefined || use.agentId === filter.agentId),
-        ),
+        uses
+          .filter(
+            (use) =>
+              (filter.skillId === undefined || use.skillId === filter.skillId) &&
+              (filter.agentId === undefined || use.agentId === filter.agentId) &&
+              (filter.messageId === undefined || use.messageId === filter.messageId),
+          )
+          .slice(0, filter.limit ?? 100),
       ),
+    useCounts: (skillId, since) => Effect.sync(() => countSkillUses(skillId, uses, since)),
+    usesSince: (since) => Effect.sync(() => skillUsesSince(uses, since)),
+    lastUses: (agentId, limit) =>
+      Effect.sync(() => lastSkillUses(uses.filter((use) => use.agentId === agentId)).slice(0, limit)),
   };
 };
 

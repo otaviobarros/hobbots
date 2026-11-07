@@ -65,6 +65,7 @@ import {
   skillMounter,
   skillUseRecorder,
   withoutMention,
+  withRecordedUses,
   withUsedSkill,
 } from "./skill-turn.ts";
 import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
@@ -416,8 +417,9 @@ export class ChatService extends Context.Service<
 
       // A previous process may have died mid-turn; those turns cannot resume. A reply the user had
       // asked to stop is stopped; any other is interrupted.
+      // A skill use saved just before the process died gets its line on the reply back (ADR 029).
       for (const message of yield* repo.listUnfinishedMessages) {
-        const next = MessageTransitions.interrupt(message);
+        const next = MessageTransitions.interrupt(yield* withRecordedUses(message));
         if (next instanceof Message) yield* saveMessage(next);
       }
 

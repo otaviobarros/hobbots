@@ -1,6 +1,7 @@
 import {
   type AgentId,
   type HobPolicy,
+  Message,
   type MessageId,
   type SkillAssignment,
   type SkillName,
@@ -144,12 +145,17 @@ export interface SkillUseRecorderShape {
    * Maps a use the runtime reported to the revision the turn mounted, and journals it. Answers the
    * skill as the reply records it, or null for a skill the turn already used or was never given.
    */
-  readonly record: (used: { readonly name: string; readonly explicit: boolean }) => Effect.Effect<UsedSkill | null>;
+  readonly record: (used: {
+    readonly source: "library" | "organization";
+    readonly name: string;
+    readonly explicit: boolean;
+  }) => Effect.Effect<UsedSkill | null>;
 }
 
 /**
- * What records a turn's skill uses. A name is mapped only to a skill the turn was given, so a
- * runtime that names any other records nothing; without a skills library nothing is journaled, and
+ * What records a turn's skill uses. A library use is mapped only to a skill the turn was given, and
+ * an organization use only to one the session reported, so a runtime that names any other records
+ * nothing; without a skills library nothing is journaled, and
  * the use still shows under the reply.
  */
 export const skillUseRecorder = (turn: SkillUseTurn) =>
@@ -158,14 +164,15 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
     let skills: ReadonlyArray<TurnSkill> = [];
     let organization: ReadonlyArray<string> = [];
     const recorded = new Set<string>();
-    const usedOf = (name: string, explicit: boolean) =>
+    const usedOf = (source: "library" | "organization", name: string, explicit: boolean) =>
       Effect.gen(function* () {
-        const mounted = skills.find((skill) => skill.name === name);
-        if (mounted === undefined) {
+        if (source === "organization") {
           if (!organization.includes(name)) return null;
           const used: UsedSkill = { source: "organization", skillId: null, name, pin: null, number: null, explicit };
           return used;
         }
+        const mounted = skills.find((skill) => skill.name === name);
+        if (mounted === undefined) return null;
         const revision = Option.isSome(library) ? yield* library.value.revision(mounted.skillId, mounted.pin) : null;
         const used: UsedSkill = {
           source: "library",
@@ -184,12 +191,14 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
       organization: (names) => {
         organization = names ?? [];
       },
-      record: ({ name, explicit }) =>
+      record: ({ source, name, explicit }) =>
         Effect.gen(function* () {
-          if (recorded.has(name)) return null;
-          const used = yield* usedOf(name, explicit);
+          // A library skill and an organization one may share a name; each counts on its own.
+          const key = `${source}:${name}`;
+          if (recorded.has(key)) return null;
+          const used = yield* usedOf(source, name, explicit);
           if (used === null) return null;
-          recorded.add(name);
+          recorded.add(key);
           if (Option.isSome(library)) {
             const at = DateTime.formatIso(yield* DateTime.now);
             yield* library.value.recordUse(
@@ -200,6 +209,31 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
         }),
     };
     return shape;
+  });
+
+/**
+ * A reply as a previous process left it, with every skill its turn recorded a use of (ADR 029, The
+ * use line). A use is saved, and journaled, before the reply's line is, so a process that died
+ * between the two left the count without the line; this puts the line back. Idempotent.
+ */
+export const withRecordedUses = (message: Message) =>
+  Effect.gen(function* () {
+    const library = yield* Effect.serviceOption(SkillLibrary);
+    if (Option.isNone(library)) return message;
+    const uses = yield* library.value.uses({ messageId: message.id });
+    const skillsUsed = [...uses].reverse().reduce<ReadonlyArray<UsedSkill>>(
+      (skills, use) =>
+        withUsedSkill(skills, {
+          source: use.source,
+          skillId: use.skillId,
+          name: use.name,
+          pin: use.pin,
+          number: use.number,
+          explicit: use.explicit,
+        }),
+      message.skillsUsed,
+    );
+    return skillsUsed.length === message.skillsUsed.length ? message : new Message({ ...message, skillsUsed });
   });
 
 /** `skills` with `used` added, unless it already holds that skill: a reply records each skill once. */

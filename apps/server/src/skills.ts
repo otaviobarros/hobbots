@@ -24,13 +24,11 @@ import {
 import {
   type AgentId,
   type Committed,
-  countSkillUses,
-  lastSkillUses,
   type SkillBy,
   type SkillId,
   type SkillNotFound,
   type SkillRevisionHash,
-  weeklySkillUses,
+  skillUseWeekStart,
 } from "@hobbots/domain";
 import {
   AgentsFolder,
@@ -74,6 +72,9 @@ const importError = (error: SkillImportError) => {
 };
 
 const NO_LIBRARY = "This hub has no skills library.";
+
+/** How many skills a hob's view lists as last used. */
+const LAST_USED = 20;
 
 const NO_SKILLS = { skills: [], sources: [], agentsFolder: { path: null, problems: [] }, usesThisWeek: [] };
 
@@ -152,7 +153,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
               `The library already has a skill named ${problem.takenBy ?? problem.folder}.`,
           })),
         },
-        usesThisWeek: weeklySkillUses(yield* library.uses({}), DateTime.formatIso(yield* DateTime.now)),
+        usesThisWeek: yield* library.usesSince(skillUseWeekStart(DateTime.formatIso(yield* DateTime.now))),
       };
     });
 
@@ -184,7 +185,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           agentId,
           ...resolved,
           optedOut: (yield* library.optOuts(agentId)).map((one) => one.skillId),
-          lastUsed: lastSkillUses(yield* library.uses({ agentId })),
+          lastUsed: yield* library.lastUses(agentId, LAST_USED),
         };
       });
 
@@ -293,11 +294,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
       uses: ({ params }) =>
         Effect.gen(function* () {
           const skill = yield* skillOf(params.skillId);
-          return countSkillUses(
-            skill.id,
-            yield* library.uses({ skillId: skill.id }),
-            DateTime.formatIso(yield* DateTime.now),
-          );
+          return yield* library.useCounts(skill.id, skillUseWeekStart(DateTime.formatIso(yield* DateTime.now)));
         }),
       optOut: ({ params, payload }) =>
         Effect.gen(function* () {

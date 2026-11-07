@@ -719,7 +719,7 @@ export const wholeTurn = (asked: string | null = null) => {
         if (started) return [];
         started = true;
         // The skill you picked loads with the prompt, as Claude Code's own mention (ADR 029).
-        if (asked !== null) return [event, { _tag: "SkillUsed", name: asked, explicit: true }];
+        if (asked !== null) return [event, { _tag: "SkillUsed", source: "library", name: asked, explicit: true }];
       }
       if (event._tag !== "Completed") return [event];
       const earlier = completed?.text ?? "";
