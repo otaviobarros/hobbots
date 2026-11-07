@@ -1,4 +1,11 @@
-import { announcer, EventPublisher, SkillLibrary, type SkillRevisionAdded } from "@hobbots/agents";
+import {
+  announcer,
+  EventPublisher,
+  type SkillImportError,
+  SkillLibrary,
+  type SkillRevisionAdded,
+  type WrittenFile,
+} from "@hobbots/agents";
 import {
   type SkillBy,
   type SkillDropped,
@@ -30,14 +37,6 @@ export type SkillImportSource =
   | { readonly _tag: "Git"; readonly url: string; readonly ref: string | null }
   /** Written in Hobbots: each file's path in the skill and its text. */
   | { readonly _tag: "Written"; readonly files: ReadonlyArray<WrittenFile> };
-
-/**
- * A file of a skill written in Hobbots: its text, or its bytes when it is a file kept from an earlier
- * revision, such as a script a proposal leaves as it was, with whether it runs.
- */
-export type WrittenFile =
-  | { readonly path: string; readonly text: string; readonly executable?: boolean }
-  | { readonly path: string; readonly bytes: Uint8Array; readonly executable?: boolean };
 
 /** One skill a source holds, as import would take it, or the rule it broke. */
 export interface SkillCandidate {
@@ -71,10 +70,12 @@ export interface SkillImportOptions {
   readonly folders?: ReadonlyArray<string>;
   /** The skill the one folder taken is a new revision of; a new skill when absent. */
   readonly skillId?: SkillId;
+  /** The revision of `skillId` the files were built on: written only while it is still the newest. */
+  readonly after?: SkillRevisionHash;
   readonly by: SkillBy;
 }
 
-export type SkillImportError = SkillSourceUnreadable | SkillRefused | SkillNotFound | SkillNameTaken | SkillNameChanged;
+export type { SkillImportError, WrittenFile } from "@hobbots/agents";
 
 export interface SkillImporterShape {
   /** Lists the skills a source holds, checked, writing nothing. */
@@ -281,6 +282,7 @@ export const SkillImporterLive = Layer.effect(
                 path: locked?.url != null ? locked.path : skill.folder === "" ? null : skill.folder,
                 label: skill.label,
                 addedBy: options.by,
+                ...(options.after === undefined ? {} : { after: options.after }),
               });
               yield* announce(committed.entries);
               return committed.value;

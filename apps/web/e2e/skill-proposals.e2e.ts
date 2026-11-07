@@ -130,6 +130,39 @@ test("[TC-UX-1063-02] Edit then add keeps your draft through a refusal and adds 
   await page.keyboard.press("Enter");
   await expect(review.getByRole("status")).toHaveText("Not now. Ada is told, and the library is unchanged.");
   await expect(page.getByRole("link", { name: "Hobbots inbox, something needs you" })).toHaveCount(0);
+
+  // Decided proposals stay listed in History, but nothing waits: Needs you says so.
+  await page.goto(`${url}/#/inbox`);
+  await expect(page.getByText("Nothing needs you")).toBeVisible({ timeout: 20_000 });
+});
+
+// covers ADR 029 (Proactive hobs), #1063
+test("[TC-UX-1063-04] what the checks flag shows before you add it, a hidden character is marked where it is, and an edit is checked first", async ({
+  page,
+}) => {
+  const { url, propose } = await proposalHub();
+  await propose("release-steps", "Tag the\u200B release.");
+  await page.goto(`${url}/#/inbox`);
+  await page.getByRole("link", { name: /Ada drafted a skill: Release steps/ }).click({ timeout: 20_000 });
+  const review = page.getByRole("article", { name: "Skill from Ada" });
+  const flags = review.getByRole("region", { name: "Look at these first" });
+  await expect(flags).toContainText("SKILL.md has characters you cannot see, such as U+200B.");
+  await expect(review.getByRole("region", { name: "The skill" }).getByTitle("hidden character U+200B")).toHaveText(
+    "U+200B",
+  );
+  await expectAccessible(page, review);
+
+  // An edit that links out is checked when you add it: it says what it found, then waits for you.
+  await review.getByRole("button", { name: "Edit, then add" }).click();
+  const field = review.getByRole("textbox", { name: "The skill to add" });
+  await field.fill(skillMd("release-steps", "Read https://example.com/release, then tag."));
+  await review.getByRole("button", { name: "Add it" }).click();
+  await expect(flags).toContainText("SKILL.md links to https://example.com/release.");
+  await expect(review.getByRole("status")).toHaveCount(0);
+  await review.getByRole("button", { name: "Add it anyway" }).click();
+  await expect(review.getByRole("status")).toHaveText(
+    "Added Release steps r1 for Ada. Ada uses it from its next chat. You edited it before you added it.",
+  );
 });
 
 // covers ADR 029 (Proactive hobs), #1063

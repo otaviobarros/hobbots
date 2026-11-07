@@ -15,6 +15,7 @@ import {
   type ToolAccess,
   type ToolStartedEvent,
   type TurnApprovals,
+  TurnSkillsInUse,
   trackTurn,
 } from "@hobbots/agents";
 import {
@@ -124,13 +125,12 @@ export const runSessionTurn = (
     const memory = yield* sessionMemoryBrief(turn.agent.id, turn.access?.folders ?? [], turn.sessionId);
     // The hob's skills (ADR 029), resolved as the turn starts, as a chat's are.
     const mounter = yield* skillMounter;
-    const skills = yield* mounter.mounts(
-      yield* mounter.resolve({
-        agentId: turn.agent.id,
-        policy: turn.config.policy,
-        folders: turn.access?.folders ?? [],
-      }),
-    );
+    const resolved = yield* mounter.resolve({
+      agentId: turn.agent.id,
+      policy: turn.config.policy,
+      folders: turn.access?.folders ?? [],
+    });
+    const skills = yield* mounter.mounts(resolved);
     const expected = turn.sessionId === null ? undefined : { sessionId: turn.sessionId };
     // Counted as received only once the runtime answers the prompt that carried it.
     let session: string | null = null;
@@ -172,7 +172,8 @@ export const runSessionTurn = (
           redaction: redactor,
           recordToolStart: (event) =>
             turn.recordToolStart(event).pipe(Effect.tap((recorded) => (recorded ? stepOf(event) : Effect.void))),
-          hubTools: yield* turn.hubTools,
+          // A hub tool reads the revisions this turn mounted, not what a rollout moved since.
+          hubTools: yield* Effect.provideService(turn.hubTools, TurnSkillsInUse, resolved),
         },
         adapter.sendPrompt,
       )

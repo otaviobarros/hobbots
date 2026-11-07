@@ -1,5 +1,5 @@
-import type { SkillProposalView } from "@hobbots/api";
-import type { SkillProposal } from "@hobbots/domain";
+import type { SkillProposalCheck, SkillProposalView } from "@hobbots/api";
+import { SKILL_HIDDEN_TEXT, type SkillFlag, type SkillProposal } from "@hobbots/domain";
 import { diffLines } from "diff";
 import { messages } from "./messages.ts";
 
@@ -20,9 +20,23 @@ export const proposalWhat = (proposal: SkillProposal, who: string): string =>
 /** The revision a change was read at, or the newest when the skill moved on since: what it is shown against. */
 const shownAgainst = (view: SkillProposalView) => view.latest?.number ?? view.proposal.base?.number ?? 0;
 
+/**
+ * When a change's content is already a revision of the skill: the newest (`same`), so adding it
+ * changes nothing, or an earlier one, which adding it brings back.
+ */
+export const proposalReuse = (
+  view: SkillProposalView,
+  check: SkillProposalCheck | null = view.check,
+): { readonly as: "same" | "earlier"; readonly number: number } | null => {
+  if (view.proposal.base === null || check?.existing == null) return null;
+  return { as: check.existing === shownAgainst(view) ? "same" : "earlier", number: check.existing };
+};
+
 /** The number the revision it adds would have, once added. */
 const nextNumber = (view: SkillProposalView): number =>
-  view.proposal.added?.number ?? (view.proposal.base === null ? 1 : shownAgainst(view) + 1);
+  view.proposal.added?.number ??
+  proposalReuse(view)?.number ??
+  (view.proposal.base === null ? 1 : shownAgainst(view) + 1);
 
 /** The revision line of the card: "new · r1", or "r5 → r6". */
 export const proposalRevision = (view: SkillProposalView): string =>
@@ -88,6 +102,8 @@ export const addLabel = (view: SkillProposalView, who: string): string => {
 /** The line under the card: what adding it does. */
 export const proposalFoot = (view: SkillProposalView): string => {
   if (view.proposal.base === null || view.rollout === null) return copy.footNew;
+  const reuse = proposalReuse(view);
+  if (reuse !== null) return reuse.as === "same" ? copy.footSame(reuse) : copy.footEarlier(reuse);
   const next = nextNumber(view);
   return view.rollout.held > 0 ? copy.footHeld({ count: view.rollout.held, next }) : copy.footChange({ next });
 };
@@ -101,7 +117,11 @@ export const proposalOutcome = (proposal: SkillProposal, who: string): string =>
       const done =
         proposal.base === null
           ? copy.outcomeAddedOwn({ title, who, number })
-          : copy.outcomeAddedChange({ title, number });
+          : proposal.added?.as === "same"
+            ? copy.outcomeSame({ title, number })
+            : proposal.added?.as === "earlier"
+              ? copy.outcomeEarlier({ title, number })
+              : copy.outcomeAddedChange({ title, number });
       return proposal.edited ? `${done} ${copy.outcomeEdited}` : done;
     }
     case "declined":
@@ -111,4 +131,40 @@ export const proposalOutcome = (proposal: SkillProposal, who: string): string =>
     default:
       return "";
   }
+};
+
+const flagLine = (flag: SkillFlag): string => {
+  switch (flag._tag) {
+    case "Script":
+      return copy.flagScript(flag);
+    case "Url":
+      return copy.flagUrl(flag);
+    case "HiddenText":
+      return copy.flagHidden(flag);
+  }
+};
+
+/** What a reader is warned of, one line each, in the order the checks found them. */
+export const flagLines = (flags: ReadonlyArray<SkillFlag>): ReadonlyArray<string> => flags.map(flagLine);
+
+/** A piece of a line: text you can see, or one character you cannot, by its code point. */
+export type LinePart =
+  | { readonly _tag: "text"; readonly text: string }
+  | { readonly _tag: "hidden"; readonly codePoint: string };
+
+const codePointOf = (character: string) =>
+  `U+${(character.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}`;
+
+/** A line split where each character you cannot see is, so each one can be shown in its place. */
+export const lineParts = (text: string): ReadonlyArray<LinePart> => {
+  const parts: Array<LinePart> = [];
+  let from = 0;
+  for (const match of text.matchAll(new RegExp(SKILL_HIDDEN_TEXT.source, "gu"))) {
+    const at = match.index;
+    if (at > from) parts.push({ _tag: "text", text: text.slice(from, at) });
+    parts.push({ _tag: "hidden", codePoint: codePointOf(match[0]) });
+    from = at + match[0].length;
+  }
+  if (from < text.length || parts.length === 0) parts.push({ _tag: "text", text: text.slice(from) });
+  return parts;
 };

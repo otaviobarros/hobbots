@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { chmod, lstat, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { chmod, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve, sep } from "node:path";
 import { SkillFiles } from "@hobbots/agents";
-import type { SkillRevisionHash } from "@hobbots/domain";
+import { type SkillRevisionHash, SkillSourceUnreadable } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
 import type { SkillContent } from "./hash.ts";
 
@@ -88,7 +88,22 @@ export const SkillObjectsLive = (dataFolder: string) => {
     SkillFiles,
     Effect.gen(function* () {
       const store = yield* SkillObjects;
-      return SkillFiles.of({ folder: store.folder });
+      return SkillFiles.of({
+        folder: store.folder,
+        read: (hash, path) =>
+          Effect.gen(function* () {
+            const folder = yield* store.folder(hash);
+            const target = folder === null ? null : resolve(folder, path);
+            // Only a file inside the revision's own folder.
+            if (folder === null || target === null || !target.startsWith(`${folder}${sep}`)) {
+              return yield* new SkillSourceUnreadable({ message: `The hub has no ${path} for revision ${hash}.` });
+            }
+            return yield* Effect.tryPromise({
+              try: () => readFile(target),
+              catch: () => new SkillSourceUnreadable({ message: `${path} of revision ${hash} could not be read.` }),
+            });
+          }),
+      });
     }),
   );
   return Layer.provideMerge(files, objects);

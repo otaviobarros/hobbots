@@ -27,6 +27,22 @@ export type SkillProposalState = typeof SkillProposalState.Type;
 export const SkillRevisionRef = Schema.Struct({ hash: SkillRevisionHash, number: Schema.Int });
 export type SkillRevisionRef = typeof SkillRevisionRef.Type;
 
+/**
+ * What adding a proposal did to the library: a revision it did not have (`new`), none since the
+ * skill's newest already is that content (`same`), or an earlier revision brought back, rolled out
+ * as a rollback is (`earlier`).
+ */
+export const SkillProposalAddedAs = Schema.Literals(["new", "same", "earlier"]);
+export type SkillProposalAddedAs = typeof SkillProposalAddedAs.Type;
+
+/** The revision a proposal became, and how. */
+export const SkillProposalAdded = Schema.Struct({
+  hash: SkillRevisionHash,
+  number: Schema.Int,
+  as: SkillProposalAddedAs,
+});
+export type SkillProposalAdded = typeof SkillProposalAdded.Type;
+
 /** A proposal a hob made, recorded and journaled before you see it, once per hob, work and key. */
 export class SkillProposal extends Schema.Class<SkillProposal>("SkillProposal")({
   id: SkillProposalId,
@@ -51,8 +67,8 @@ export class SkillProposal extends Schema.Class<SkillProposal>("SkillProposal")(
   state: SkillProposalState,
   /** Whether you changed it before you added it. */
   edited: Schema.Boolean,
-  /** The revision it became, once added. */
-  added: Schema.NullOr(SkillRevisionRef),
+  /** The revision it became, once added, and whether it was new, the newest already, or an earlier one. */
+  added: Schema.NullOr(SkillProposalAdded),
   /** Learned from: the memory pages it names, as the hob gave them. */
   memoryPages: Schema.Array(Schema.String),
   /** Learned from: the reply it was made from, when it came from a chat turn. */
@@ -99,9 +115,18 @@ const revisionWords = (proposal: SkillProposal) =>
 export const skillProposalWaitingText = (proposal: SkillProposal) =>
   `Proposed ${revisionWords(proposal)}. It waits for the user's review in their Inbox, so nothing changed yet, and you are told when they decide. Do not propose it again.`;
 
-/** What a hob is told once the user added its proposal. */
-export const skillProposalAddedText = (proposal: SkillProposal) =>
-  `The user added ${revisionWords(proposal)}${proposal.added === null ? "" : ` as r${proposal.added.number}`}${proposal.edited ? ", with their own edits" : ""}. You use it from your next turn.`;
+/** What a hob is told once the user added its proposal, by what adding it did. */
+export const skillProposalAddedText = (proposal: SkillProposal) => {
+  const edits = proposal.edited ? ", with their own edits" : "";
+  switch (proposal.added?.as) {
+    case "same":
+      return `The user accepted ${revisionWords(proposal)}${edits}, but it is what r${proposal.added.number} already says, so the library is unchanged.`;
+    case "earlier":
+      return `The user accepted ${revisionWords(proposal)}${edits}. It is what r${proposal.added.number} said, so ${proposal.name} went back to r${proposal.added.number}. You use it from your next turn.`;
+    default:
+      return `The user added ${revisionWords(proposal)}${proposal.added === null ? "" : ` as r${proposal.added.number}`}${edits}. You use it from your next turn.`;
+  }
+};
 
 /** What a hob is told once the user said Not now. */
 export const skillProposalDeclinedText = (proposal: SkillProposal) =>

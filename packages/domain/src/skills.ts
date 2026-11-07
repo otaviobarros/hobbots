@@ -112,6 +112,12 @@ export const SkillFile = Schema.Struct({
 export type SkillFile = typeof SkillFile.Type;
 
 /**
+ * Characters a reader cannot see, such as a zero-width space or a bidirectional override, that a skill
+ * could hide instructions with: import flags the first it finds, and a review shows where each is.
+ */
+export const SKILL_HIDDEN_TEXT = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\u{E0000}-\u{E007F}]/u;
+
+/**
  * What deserves a careful look before a skill loads (ADR 029, Import): a script, a URL, or text hidden
  * from view, such as a zero-width character. Shown on an import and on every update.
  */
@@ -283,6 +289,17 @@ export class SkillRefused extends Schema.TaggedError<SkillRefused>()("SkillRefus
 /** A source could not be read: a folder that is not there, an archive that is not one, a Git fetch that failed. */
 export class SkillSourceUnreadable extends Schema.TaggedError<SkillSourceUnreadable>()("SkillSourceUnreadable", {
   message: Schema.String,
+}) {}
+
+/**
+ * A revision built on the skill's newest revision found a newer one when it was written: another
+ * import or an update landed meanwhile, so what it kept of the files it was built on is out of date.
+ */
+export class SkillMovedOn extends Schema.TaggedError<SkillMovedOn>()("SkillMovedOn", {
+  skillId: SkillId,
+  /** The newest revision it was built on, and the one the skill has now. */
+  expected: SkillRevisionHash,
+  latest: SkillRevisionHash,
 }) {}
 
 /** No skill, source or assignment with that id. */

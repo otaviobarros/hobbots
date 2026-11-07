@@ -1,16 +1,19 @@
-import type { SkillProposalView } from "@hobbots/api";
+import type { SkillProposalCheck, SkillProposalView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
-import { proposalClosed, useDecideProposal } from "../../api/skill-proposals.ts";
+import { proposalClosed, useCheckProposal, useDecideProposal } from "../../api/skill-proposals.ts";
 import { DraftForm } from "../draft-form/draft-form.tsx";
 import { messages } from "./messages.ts";
 import {
   addLabel,
+  flagLines,
+  lineParts,
   proposalDestination,
   proposalLines,
   proposalOutcome,
+  proposalReuse,
   proposalRevision,
   skillTitle,
 } from "./proposal-model.ts";
@@ -61,9 +64,54 @@ export function ProposalDiff({ view, who }: { view: SkillProposalView; who: stri
             {line.op !== "same" && (
               <span className="sr-only">{`${line.op === "add" ? copy.added : copy.removed}: `}</span>
             )}
-            <span className="min-w-0 whitespace-pre-wrap break-words">{line.text}</span>
+            <span className="min-w-0 whitespace-pre-wrap break-words">
+              <LineText text={line.text} />
+            </span>
           </li>
         ))}
+      </ul>
+    </section>
+  );
+}
+
+/** A line of the skill, with each character you cannot see marked in its place by its code point. */
+function LineText({ text }: { text: string }) {
+  return lineParts(text).map((part, at) =>
+    part._tag === "text" ? (
+      // biome-ignore lint/suspicious/noArrayIndexKey: a line's pieces have no identity but their place (STD-REACT-020).
+      <span key={at}>{part.text}</span>
+    ) : (
+      <mark
+        // biome-ignore lint/suspicious/noArrayIndexKey: a line's pieces have no identity but their place (STD-REACT-020).
+        key={at}
+        title={copy.hiddenMark(part)}
+        className="rounded-control bg-[color-mix(in_srgb,var(--color-lantern)_24%,transparent)] px-0.5 text-meta text-text-strong"
+      >
+        {part.codePoint}
+      </mark>
+    ),
+  );
+}
+
+/**
+ * What the checks find in it before it is added: each script, URL and hidden character, and when its
+ * content is already a revision of the skill, that adding it changes nothing or brings that one back.
+ */
+function ProposalFlags({ view, check }: { view: SkillProposalView; check: SkillProposalCheck | null }) {
+  const lines = flagLines(check?.flags ?? []);
+  const reuse = proposalReuse(view, check);
+  if (lines.length === 0 && reuse === null) return null;
+  return (
+    <section
+      aria-label={copy.flagsLabel}
+      className="flex flex-col gap-1.5 rounded-card border border-line-2 bg-deep px-3 py-2.5"
+    >
+      <h3 className="m-0 text-detail text-text-strong">{copy.flagsLabel}</h3>
+      <ul className="m-0 flex list-disc flex-col gap-1 ps-5 text-detail text-text-secondary">
+        {lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+        {reuse !== null && <li>{reuse.as === "same" ? copy.footSame(reuse) : copy.footEarlier(reuse)}</li>}
       </ul>
     </section>
   );
@@ -83,23 +131,50 @@ const errorText = (error: unknown) => {
 export function ProposalDecision({ view, who }: { view: SkillProposalView; who: string }) {
   const { proposal } = view;
   const decide = useDecideProposal(proposal);
+  const checking = useCheckProposal(proposal);
   const [editing, setEditing] = useState(false);
+  // Your edit as the checks last found it: it is added only once you have seen what they found.
+  const [checked, setChecked] = useState<{ readonly draft: string; readonly check: SkillProposalCheck } | null>(null);
   const waiting = proposal.state === "waiting";
-  const busy = decide.isPending;
+  const busy = decide.isPending || checking.isPending;
+  const addEdit = (draft: string) => {
+    if (draft === proposal.instructions || checked?.draft === draft) {
+      decide.mutate({ _tag: "add", instructions: draft });
+      return;
+    }
+    checking.mutate(draft, {
+      onSuccess: (check) => {
+        if (check.flags.length === 0 && proposalReuse(view, check) === null) {
+          decide.mutate({ _tag: "add", instructions: draft });
+        } else {
+          setChecked({ draft, check });
+        }
+      },
+    });
+  };
+  const failure = checking.isError ? checking.error : decide.isError ? decide.error : null;
   return (
     <div className="flex flex-col gap-3">
+      {waiting && <ProposalFlags view={view} check={editing && checked !== null ? checked.check : view.check} />}
       {waiting && editing && (
         <DraftForm
           initial={proposal.instructions}
           label={copy.editLabel}
           hint={copy.editHint}
-          submit={copy.addEdited}
+          submit={checked === null ? copy.addEdited : copy.addAnyway}
           back={copy.cancelEdit}
           rows={12}
           code
           busy={busy}
-          onSubmit={(instructions) => decide.mutate({ _tag: "add", instructions })}
-          onBack={() => setEditing(false)}
+          onSubmit={addEdit}
+          onChange={() => {
+            setChecked(null);
+            checking.reset();
+          }}
+          onBack={() => {
+            setEditing(false);
+            setChecked(null);
+          }}
         />
       )}
       {waiting && !editing && (
@@ -120,9 +195,9 @@ export function ProposalDecision({ view, who }: { view: SkillProposalView; who: 
           {proposalOutcome(proposal, who)}
         </p>
       )}
-      {decide.isError && (
+      {failure !== null && (
         <p role="alert" className="m-0 text-meta text-rose">
-          {errorText(decide.error)}
+          {errorText(failure)}
         </p>
       )}
     </div>

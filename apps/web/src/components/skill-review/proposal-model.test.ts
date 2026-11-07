@@ -3,10 +3,13 @@ import { AgentId, SkillId, SkillProposal, SkillProposalId, SkillRevisionHash } f
 import { describe, expect, it } from "vitest";
 import {
   addLabel,
+  flagLines,
+  lineParts,
   proposalDestination,
   proposalFoot,
   proposalLines,
   proposalOutcome,
+  proposalReuse,
   proposalRevision,
   proposalWhat,
   skillTitle,
@@ -42,10 +45,11 @@ const proposal = (fields: Partial<SkillProposal> = {}) =>
     ...fields,
   });
 
-const fresh: SkillProposalView = { proposal: proposal(), base: null, latest: null, rollout: null };
+const fresh: SkillProposalView = { proposal: proposal(), base: null, latest: null, rollout: null, check: null };
 const change = (
   rollout: SkillProposalView["rollout"],
   latest: SkillProposalView["latest"] = null,
+  check: SkillProposalView["check"] = null,
 ): SkillProposalView => ({
   proposal: proposal({
     skillId: SkillId.make("s1"),
@@ -55,6 +59,7 @@ const change = (
   base: "# Launch email\n\nStep one.\n",
   latest,
   rollout,
+  check,
 });
 
 describe("a skill proposal in words", () => {
@@ -97,8 +102,52 @@ describe("a skill proposal in words", () => {
     expect(addLabel(change({ scopes: [{ _tag: "Everyone" }], held: 0 }), "Pip")).toBe("Accept and roll out");
   });
 
+  it("says when a change is a revision the skill already has, before and after you add it", () => {
+    const same = change({ scopes: [], held: 0 }, null, { flags: [], existing: 5 });
+    expect(proposalReuse(same)).toEqual({ as: "same", number: 5 });
+    expect(proposalFoot(same)).toBe("It is what r5 already says, so adding it changes nothing.");
+    const earlier = change({ scopes: [], held: 0 }, null, { flags: [], existing: 2 });
+    expect(proposalRevision(earlier)).toBe("r5 → r2");
+    expect(proposalFoot(earlier)).toBe(
+      "It is what r2 said, so adding it brings every hob that uses it back to r2, unless you hold it.",
+    );
+    const back = proposal({
+      state: "added",
+      skillId: SkillId.make("s1"),
+      base: { hash: hash(5), number: 5 },
+      added: { hash: hash(2), number: 2, as: "earlier" },
+    });
+    expect(proposalOutcome(back, "Pip")).toBe(
+      "Accepted. It is what Launch email r2 said, so every hob that uses it goes back to r2 from its next chat.",
+    );
+    expect(proposalOutcome(proposal({ ...back, added: { hash: hash(5), number: 5, as: "same" } }), "Pip")).toBe(
+      "Accepted. It is what Launch email r5 already says, so the library is unchanged.",
+    );
+  });
+
+  it("names each flag, and marks each character you cannot see where it is", () => {
+    expect(
+      flagLines([
+        { _tag: "Script", path: "run.sh" },
+        { _tag: "Url", path: "SKILL.md", url: "https://example.com" },
+        { _tag: "HiddenText", path: "SKILL.md", codePoint: "U+200B" },
+      ]),
+    ).toEqual([
+      "run.sh is a script a hob can run.",
+      "SKILL.md links to https://example.com.",
+      "SKILL.md has characters you cannot see, such as U+200B. Each is marked where it is.",
+    ]);
+    expect(lineParts("Tag\u200Bit\u202E")).toEqual([
+      { _tag: "text", text: "Tag" },
+      { _tag: "hidden", codePoint: "U+200B" },
+      { _tag: "text", text: "it" },
+      { _tag: "hidden", codePoint: "U+202E" },
+    ]);
+    expect(lineParts("")).toEqual([{ _tag: "text", text: "" }]);
+  });
+
   it("says what happened once you decided", () => {
-    expect(proposalOutcome(proposal({ state: "added", added: { hash: hash(1), number: 1 } }), "Pip")).toBe(
+    expect(proposalOutcome(proposal({ state: "added", added: { hash: hash(1), number: 1, as: "new" } }), "Pip")).toBe(
       "Added Launch email r1 for Pip. Pip uses it from its next chat.",
     );
     expect(proposalOutcome(proposal({ state: "declined" }), "Pip")).toBe(

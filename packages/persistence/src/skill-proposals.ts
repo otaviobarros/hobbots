@@ -22,6 +22,7 @@ interface Row {
   readonly edited: number | boolean;
   readonly addedHash: string | null;
   readonly addedNumber: number | string | null;
+  readonly addedAs: string | null;
   readonly memoryPages: string;
   readonly threadId: string | null;
   readonly messageId: string | null;
@@ -49,6 +50,11 @@ const decodeFeedback = Schema.decodeUnknownEffect(SkillFeedback);
 const refOf = (hash: string | null, number: number | string | null) =>
   hash === null || number === null ? null : { hash, number: Number(number) };
 
+const addedOf = (row: Row) => {
+  const ref = refOf(row.addedHash, row.addedNumber);
+  return ref === null ? null : { ...ref, as: row.addedAs };
+};
+
 const fromRow = (row: Row) =>
   decodeProposal({
     id: row.id,
@@ -64,7 +70,7 @@ const fromRow = (row: Row) =>
     why: row.why,
     state: row.state,
     edited: Boolean(Number(row.edited)),
-    added: refOf(row.addedHash, row.addedNumber),
+    added: addedOf(row),
     memoryPages: JSON.parse(row.memoryPages),
     threadId: row.threadId,
     messageId: row.messageId,
@@ -91,6 +97,7 @@ const toRow = (proposal: SkillProposal) => ({
   edited: proposal.edited ? 1 : 0,
   added_hash: proposal.added?.hash ?? null,
   added_number: proposal.added?.number ?? null,
+  added_as: proposal.added?.as ?? null,
   memory_pages: JSON.stringify(proposal.memoryPages),
   thread_id: proposal.threadId,
   message_id: proposal.messageId,
@@ -153,6 +160,7 @@ export const SkillProposalLogLive = Layer.effect(
               UPDATE skill_proposals SET
                 instructions = ${row.instructions}, description = ${row.description}, state = ${row.state},
                 edited = ${row.edited}, added_hash = ${row.added_hash}, added_number = ${row.added_number},
+                added_as = ${row.added_as},
                 updated_at = ${row.updated_at}, decided_at = ${row.decided_at}
               WHERE id = ${proposal.id} AND ${sql.in("state", [...from])}
               RETURNING *`;

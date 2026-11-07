@@ -1,4 +1,4 @@
-import type { SkillProposalView } from "@hobbots/api";
+import type { SkillProposalCheck, SkillProposalView } from "@hobbots/api";
 import { type SkillProposal, skillProposalOpen } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
@@ -61,3 +61,10 @@ export const useDecideProposal = (proposal: SkillProposal) => {
     onSettled: () => skillProposalsChanged(queryClient),
   });
 };
+
+/** What the checks find in your edit before it is added; writes nothing, so the list is not read again. */
+export const useCheckProposal = (proposal: SkillProposal) =>
+  useMutation({
+    mutationFn: (instructions: string): Promise<SkillProposalCheck> =>
+      call((c) => c.skillProposals.check({ params: { proposalId: proposal.id }, payload: { instructions } })),
+  });

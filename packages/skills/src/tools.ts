@@ -16,7 +16,9 @@ import {
   SkillProposalLog,
   type SkillProposalStart,
   SkillTools,
+  SkillWriter,
   type ToolAccess,
+  TurnSkillsInUse,
 } from "@hobbots/agents";
 import {
   isSkillToolName,
@@ -41,10 +43,10 @@ import {
   skillProposalText,
   skillToolJsonSchema,
   stableJson,
+  type TurnSkill,
 } from "@hobbots/domain";
 import { decideHubCall, PolicyEngine } from "@hobbots/permissions";
 import { Data, DateTime, Effect, Layer, Option, Schema } from "effect";
-import { SkillImporter } from "./importer.ts";
 
 /**
  * The skill tools (ADR 029, Proactive hobs), served on the hub beside the memory tools on every
@@ -56,14 +58,14 @@ import { SkillImporter } from "./importer.ts";
  * library. A note is recorded on the skill and changes nothing.
  */
 
-class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> {}
-
 const OPERATIONS: Record<SkillToolName, SkillOperation> = {
   [SKILL_SEARCH_TOOL]: "search-skills",
   [SKILL_REQUEST_TOOL]: "request-skill",
   [SKILL_PROPOSE_TOOL]: "propose-skill",
   [SKILL_FEEDBACK_TOOL]: "skill-feedback",
 };
+
+class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> {}
 
 const TOOLS: ReadonlyArray<HubTool> = (Object.keys(OPERATIONS) as ReadonlyArray<SkillToolName>).map((name) => ({
   name,
@@ -152,7 +154,7 @@ export const SkillToolsLive = Layer.effect(
     const engine = yield* PolicyEngine;
     const library = yield* SkillLibrary;
     const log = yield* SkillProposalLog;
-    const importer = yield* SkillImporter;
+    const writer = yield* SkillWriter;
     const projects = yield* Effect.serviceOption(MemoryProjects);
     const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a skill proposal");
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
@@ -283,20 +285,21 @@ export const SkillToolsLive = Layer.effect(
     /** The proposed `SKILL.md`, checked as import checks it, so a hob hears now what it must fix. */
     const checked = (input: SkillProposeInput, instructions: string) =>
       Effect.gen(function* () {
-        const scan = yield* importer
-          .scan({ _tag: "Written", files: [{ path: "SKILL.md", text: instructions }] })
-          .pipe(Effect.mapError((error) => new Refused({ message: error.message })));
-        const [candidate] = scan.candidates;
-        if (candidate === undefined) return yield* new Refused({ message: "Hobbots found no SKILL.md in it." });
-        if (candidate.refusal !== null) {
-          return yield* new Refused({ message: `This SKILL.md cannot be a skill: ${candidate.refusal.message}` });
-        }
+        const candidate = yield* writer.check([{ path: "SKILL.md", text: instructions }]).pipe(
+          Effect.mapError(
+            (error) =>
+              new Refused({
+                message:
+                  error._tag === "SkillRefused" ? `This SKILL.md cannot be a skill: ${error.message}` : error.message,
+              }),
+          ),
+        );
         if (candidate.name !== input.name) {
           return yield* new Refused({
-            message: `The front matter names ${candidate.name ?? "no skill"}, but you proposed ${input.name}. Give them the same name.`,
+            message: `The front matter names ${candidate.name}, but you proposed ${input.name}. Give them the same name.`,
           });
         }
-        return candidate.description ?? "";
+        return candidate.description;
       });
 
     const propose = (turn: CharmTurn, access: ToolAccess, input: SkillProposeInput, step: HubCallStep | undefined) => {
@@ -351,7 +354,30 @@ export const SkillToolsLive = Layer.effect(
       );
     };
 
-    const feedback = (turn: CharmTurn, access: ToolAccess, input: SkillFeedbackInput, step: HubCallStep | undefined) =>
+    /**
+     * The revision a note is left on: the one the turn mounted at its start, which a rollout during
+     * the turn never moves, or the hob's pin now for a skill it was given since.
+     */
+    const noteRevision = (
+      turn: CharmTurn,
+      access: ToolAccess,
+      skill: Skill,
+      mounted: ReadonlyArray<TurnSkill> | null,
+    ) =>
+      Effect.gen(function* () {
+        const used = mounted?.find((one) => one.skillId === skill.id);
+        if (used !== undefined) return used.pin;
+        const own = yield* ownSkills(turn, access);
+        return own.skills.find((one) => one.skillId === skill.id)?.pin ?? null;
+      });
+
+    const feedback = (
+      turn: CharmTurn,
+      access: ToolAccess,
+      input: SkillFeedbackInput,
+      step: HubCallStep | undefined,
+      mounted: ReadonlyArray<TurnSkill> | null,
+    ) =>
       Effect.gen(function* () {
         const skill = yield* named(input.name);
         return yield* decided(
@@ -362,7 +388,7 @@ export const SkillToolsLive = Layer.effect(
           { ...input },
           step,
           Effect.gen(function* () {
-            const own = yield* ownSkills(turn, access);
+            const revision = yield* noteRevision(turn, access, skill, mounted);
             const committed = yield* log.leaveFeedback(
               new SkillFeedback({
                 id: crypto.randomUUID(),
@@ -370,7 +396,7 @@ export const SkillToolsLive = Layer.effect(
                 skillId: skill.id,
                 kind: input.kind,
                 note: turn.redactor.text(input.note),
-                revision: own.skills.find((one) => one.skillId === skill.id)?.pin ?? null,
+                revision,
                 threadId: turn.threadId,
                 messageId: turn.messageId,
                 createdAt: yield* now,
@@ -385,7 +411,13 @@ export const SkillToolsLive = Layer.effect(
         );
       });
 
-    const call = (turn: CharmTurn, name: string, raw: unknown, step: HubCallStep | undefined) =>
+    const call = (
+      turn: CharmTurn,
+      mounted: ReadonlyArray<TurnSkill> | null,
+      name: string,
+      raw: unknown,
+      step: HubCallStep | undefined,
+    ) =>
       hubAnswer(
         turn.redactor,
         Effect.gen(function* () {
@@ -402,7 +434,7 @@ export const SkillToolsLive = Layer.effect(
             case SKILL_PROPOSE_TOOL:
               return yield* propose(turn, access, yield* decodeInput(SkillProposeInput, raw, "proposal"), step);
             case SKILL_FEEDBACK_TOOL:
-              return yield* feedback(turn, access, yield* decodeInput(SkillFeedbackInput, raw, "note"), step);
+              return yield* feedback(turn, access, yield* decodeInput(SkillFeedbackInput, raw, "note"), step, mounted);
           }
         }),
       ).pipe(Effect.provideContext(context));
@@ -410,14 +442,16 @@ export const SkillToolsLive = Layer.effect(
     return SkillTools.of({
       // Offered only where its Skills group opens it; a tool it answers Never for is not offered at all.
       forTurn: (turn) =>
-        Effect.map(turn.currentAccess, (access) =>
-          offeredHubTools(
-            access,
+        Effect.gen(function* () {
+          // The skills this turn mounted as it started, read now, before a rollout can move them.
+          const mounted = yield* TurnSkillsInUse;
+          return offeredHubTools(
+            yield* turn.currentAccess,
             TOOLS,
             (tool) => OPERATIONS[tool as SkillToolName],
-            (name, input, step) => call(turn, name, input, step),
-          ),
-        ),
+            (name, input, step) => call(turn, mounted, name, input, step),
+          );
+        }),
     });
   }),
 );

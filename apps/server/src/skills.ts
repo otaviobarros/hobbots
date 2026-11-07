@@ -14,6 +14,7 @@ import {
 } from "@hobbots/agents";
 import {
   HobbotsApi,
+  SkillChangedMeanwhile,
   SkillImportRefused,
   SkillMissing,
   SkillNameConflict,
@@ -31,6 +32,7 @@ import {
   SkillImporterLive,
   type SkillImportSource,
   SkillObjectsLive,
+  SkillWriterLive,
 } from "@hobbots/skills";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -60,6 +62,8 @@ export const importError = (error: SkillImportError) => {
       return new SkillNameConflict({ name: error.name, skillId: error.skillId });
     case "SkillNameChanged":
       return new SkillNameConflict({ name: error.given, skillId: error.skillId });
+    case "SkillMovedOn":
+      return new SkillChangedMeanwhile({ skillId: error.skillId });
   }
 };
 
@@ -311,6 +315,9 @@ export const agentsSkillsFolder = (setting: Option.Option<string>, runtime: "cla
  * import into the library, and `~/.agents/skills` read into it when there is one to read.
  */
 export const SkillsLive = (dataDir: string, agentsFolder: string | null) => {
-  const services = SkillImporterLive.pipe(Layer.provideMerge(SkillObjectsLive(dataDir)));
+  const services = SkillWriterLive.pipe(
+    Layer.provideMerge(SkillImporterLive),
+    Layer.provideMerge(SkillObjectsLive(dataDir)),
+  );
   return agentsFolder === null ? services : AgentsFolderLive(agentsFolder).pipe(Layer.provideMerge(services));
 };

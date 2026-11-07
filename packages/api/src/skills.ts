@@ -52,6 +52,16 @@ export class SkillNameConflict extends Schema.TaggedError<SkillNameConflict>()(
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * The skill got a newer revision while this one was written from it, again each time it was tried,
+ * so nothing was added: read it again and decide on what it is now.
+ */
+export class SkillChangedMeanwhile extends Schema.TaggedError<SkillChangedMeanwhile>()(
+  "SkillChangedMeanwhile",
+  { skillId: SkillId },
+  { httpApiStatus: 409 },
+) {}
+
 /** Something still assigns the skill, so it stays; `assignments` says who uses it. */
 export class SkillStillAssigned extends Schema.TaggedError<SkillStillAssigned>()(
   "SkillStillAssigned",
@@ -201,7 +211,7 @@ export const SkillRevisionDetail = Schema.Struct({ revision: SkillRevision, inst
 const skillParams = { skillId: SkillId };
 const assignmentParams = { assignmentId: SkillAssignmentId };
 const hobParams = { agentId: AgentId };
-const importErrors = [SkillImportRefused, SkillSourceNotRead, SkillMissing, SkillNameConflict];
+const importErrors = [SkillImportRefused, SkillSourceNotRead, SkillMissing, SkillNameConflict, SkillChangedMeanwhile];
 
 export class SkillsGroup extends HttpApiGroup.make("skills")
   .add(HttpApiEndpoint.get("list", "/skills", { success: SkillsList }))

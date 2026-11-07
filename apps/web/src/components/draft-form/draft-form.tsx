@@ -17,6 +17,7 @@ export function DraftForm({
   busy,
   onSubmit,
   onBack,
+  onChange,
 }: {
   initial: string;
   label: string;
@@ -29,6 +30,8 @@ export function DraftForm({
   busy: boolean;
   onSubmit: (draft: string) => void;
   onBack: () => void;
+  /** Told of each change to the draft, as when what was said of an earlier one no longer holds. */
+  onChange?: (draft: string) => void;
 }) {
   const [draft, setDraft] = useState(initial);
   const fieldId = useId();
@@ -49,7 +52,10 @@ export function DraftForm({
         rows={rows}
         text={code ? "mono" : "body"}
         value={draft}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          onChange?.(event.target.value);
+        }}
       />
       <span className="text-meta text-label">{hint}</span>
       <div className="flex flex-wrap gap-2">

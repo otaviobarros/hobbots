@@ -23,6 +23,7 @@ import {
   PermissionSummary,
   RecoveryLog,
   SecretRedaction,
+  SkillReviewsLive,
   TaskFiles,
 } from "@hobbots/agents";
 import {
@@ -135,7 +136,6 @@ import { QuietRoutineReads } from "./request-log.ts";
 import { finishReset, HubReset, wipeHubData } from "./resets.ts";
 import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLive, WorkHoldLive } from "./restores.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
-import { SkillReviewsLive } from "./skill-proposals.ts";
 import { agentsSkillsFolder, SkillsLive } from "./skills.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
 import { TaskFileRoute } from "./task-files.ts";

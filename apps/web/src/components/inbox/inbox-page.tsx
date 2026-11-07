@@ -112,8 +112,11 @@ const readEmpty = (read: { readonly isSuccess: boolean; readonly data?: Readonly
  */
 const emptyState = (tab: InboxTab, read: boolean, entries: ReadonlyArray<InboxEntry>, reads: WaitReads) => {
   if (tab === "history" || !read || entries.length > 0) return undefined;
-  const all = [reads.blockers, reads.questions, reads.failed, reads.hub, reads.proposals];
-  if (!all.every(readEmpty)) return undefined;
+  const all = [reads.blockers, reads.questions, reads.failed, reads.hub];
+  // The proposals read keeps the latest decided ones too: only those that still wait count.
+  const proposals = reads.proposals;
+  const noProposals = proposals.isSuccess && waitingProposals(proposals.data).length === 0;
+  if (!all.every(readEmpty) || !noProposals) return undefined;
   return ALL_CLEAR;
 };
 

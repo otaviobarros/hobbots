@@ -18,8 +18,11 @@ import {
   SkillLibrary,
   SkillProposalLog,
   SkillReviews,
+  SkillReviewsLive,
   SkillTools,
+  SkillWriter,
   type ToolAccess,
+  TurnSkillsInUse,
 } from "@hobbots/agents";
 import type { SkillProposalView } from "@hobbots/api";
 import {
@@ -60,7 +63,6 @@ import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
-import { SkillReviewsLive } from "../src/skill-proposals.ts";
 import { SkillsLive } from "../src/skills.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
@@ -88,6 +90,30 @@ fs.mkdirSync(folder, { recursive: true });
 const skillMd = (name: string, body = `Steps for ${name}.`) =>
   `---\nname: ${name}\ndescription: What ${name} is for, and when to use it.\n---\n\n# ${name}\n\n${body}\n`;
 
+/**
+ * What lands in the library just before the next writes of a proposal you add, one per write, as
+ * another import or update would land while its files were copied.
+ */
+const races: Array<Effect.Effect<unknown, unknown, SkillImporter>> = [];
+
+/** The library's writer as proposals reach it, with `races` landing first. */
+const RacingWriter = Layer.effect(
+  SkillWriter,
+  Effect.gen(function* () {
+    const real = yield* SkillWriter;
+    const importer = yield* SkillImporter;
+    return SkillWriter.of({
+      check: real.check,
+      write: (files, options) =>
+        Effect.gen(function* () {
+          const race = races.shift();
+          if (race !== undefined) yield* Effect.orDie(Effect.provideService(race, SkillImporter, importer));
+          return yield* real.write(files, options);
+        }),
+    });
+  }),
+);
+
 const App = (data: string) => {
   const Persistence = Layer.mergeAll(
     HobbotsRepositoryLive,
@@ -101,7 +127,10 @@ const App = (data: string) => {
     SkillLibraryLive,
     SkillProposalLogLive,
   ).pipe(Layer.provideMerge(TestDatabase));
-  const Skills = SkillToolsLive.pipe(Layer.provideMerge(SkillReviewsLive), Layer.provide(PolicyEngine.node));
+  const Skills = SkillToolsLive.pipe(
+    Layer.provideMerge(SkillReviewsLive.pipe(Layer.provide(RacingWriter))),
+    Layer.provide(PolicyEngine.node),
+  );
   return HobLifecycle.layer
     .pipe(
       Layer.provideMerge(
@@ -139,6 +168,7 @@ let run = 0;
 
 beforeEach(async () => {
   run += 1;
+  races.length = 0;
   runtime = ManagedRuntime.make(App(path.join(root, `data-${run}`)));
   await runtime.runPromise(
     HobbotsRepository.use((repo) =>
@@ -479,6 +509,173 @@ describe("hobs proposing skills", () => {
     await runtime.runPromise(SkillReviews.use((reviews) => reviews.recover));
     const states = Object.fromEntries((await proposals()).map((view) => [view.proposal.name, view.proposal.state]));
     expect(states).toEqual({ "release-steps": "waiting", "review-steps": "added" });
+  });
+
+  // covers ADR 029 (Proactive hobs), #1063
+  it("[TC-AG-154] a revision that lands while a change is written is not overwritten: the change is built again on it", async () => {
+    const add = (files: ReadonlyArray<{ path: string; text: string; executable?: boolean }>, skillId?: string) =>
+      SkillImporter.use((importer) =>
+        importer.add(
+          { _tag: "Written", files },
+          { by: { _tag: "You" }, ...(skillId === undefined ? {} : { skillId: skillId as never }) },
+        ),
+      );
+    const [first] = await runtime.runPromise(
+      add([
+        { path: "SKILL.md", text: skillMd("release-steps") },
+        { path: "scripts/tag.sh", text: "#!/bin/sh\ngit tag v1\n", executable: true },
+      ]),
+    );
+    const skillId = first?.revision.skillId;
+    await propose("release-steps", { basedOn: 1, body: "Tag, then push." });
+    const [waiting] = await proposals();
+    // r2 lands after the add read r1's files, before it is written: it fixes the script.
+    races.push(
+      add(
+        [
+          { path: "SKILL.md", text: skillMd("release-steps", "Fixed.") },
+          { path: "scripts/tag.sh", text: '#!/bin/sh\ngit tag "$1"\n', executable: true },
+        ],
+        skillId,
+      ),
+    );
+    const added = await request("POST", `/api/skill-proposals/${waiting?.proposal.id}/add`, {});
+    expect(added).toMatchObject({ status: 200, body: { state: "added", added: { number: 3, as: "new" } } });
+    const folder = await runtime.runPromise(SkillFiles.use((store) => store.folder(added.body.added.hash)));
+    if (folder === null) throw new Error("No files for r3");
+    expect(fs.readFileSync(path.join(folder, "scripts/tag.sh"), "utf8")).toBe('#!/bin/sh\ngit tag "$1"\n');
+
+    // A skill that moves on at every try is sent back to you, with nothing written over it.
+    await propose("release-steps", { basedOn: 3, body: "Tag, push, announce.", key: "again", work: "reply:m2" });
+    const again = (await proposals()).find((one) => one.proposal.state === "waiting");
+    for (const body of ["Four.", "Five.", "Six."]) {
+      races.push(add([{ path: "SKILL.md", text: skillMd("release-steps", body) }], skillId));
+    }
+    const moved = await request("POST", `/api/skill-proposals/${again?.proposal.id}/add`, {});
+    expect(moved).toMatchObject({ status: 409, body: { _tag: "SkillChangedMeanwhile" } });
+    expect((await proposals()).find((one) => one.proposal.id === again?.proposal.id)?.proposal.state).toBe("waiting");
+    expect((await library())[0]?.revisions).toBe(6);
+    // The library refuses a revision built on one that is no longer the newest, whoever writes it.
+    const stale = await runtime.runPromise(
+      SkillWriter.use((writer) =>
+        writer.write([{ path: "SKILL.md", text: skillMd("release-steps", "Seven.") }], {
+          by: { _tag: "You" },
+          skillId: skillId as never,
+          after: first?.revision.hash as never,
+        }),
+      ).pipe(Effect.flip),
+    );
+    expect(stale._tag).toBe("SkillMovedOn");
+  });
+
+  // covers ADR 029 (Proactive hobs), #1063
+  it("[TC-AG-155] a change that is an earlier revision again says so, and rolls back to it; the newest again changes nothing", async () => {
+    await importSkill("release-steps");
+    const [skill] = await library();
+    await call(SKILL_REQUEST_TOOL, { name: "release-steps", why: "To release." }, accessFor("trusting"));
+    const revised = await request("POST", `/api/skills/${skill?.id}/revisions`, {
+      source: { _tag: "Written", files: [{ path: "SKILL.md", text: skillMd("release-steps", "Tag, then push.") }] },
+    });
+    expect(revised.status).toBe(200);
+    const pinOf = async () =>
+      (await runtime.runPromise(SkillLibrary.use((skills) => skills.assignments(skill?.id as never))))[0]?.pin;
+    const r1 = (await runtime.runPromise(SkillLibrary.use((skills) => skills.revisions(skill?.id as never)))).find(
+      (one) => one.number === 1,
+    );
+    // Ada moves to r2 when you roll it out, then proposes r1's words again.
+    const r2 = (await library())[0]?.latest;
+    await runtime.runPromise(
+      SkillLibrary.use((skills) => skills.rollOutRevision(skill?.id as never, r2 as never, { _tag: "You" }, "always")),
+    );
+    expect(await pinOf()).toBe(r2);
+    await propose("release-steps", { basedOn: 2, body: "Steps for release-steps." });
+    const [waiting] = await proposals();
+    expect(waiting?.check).toEqual({ flags: [], existing: 1 });
+    const added = await request("POST", `/api/skill-proposals/${waiting?.proposal.id}/add`, {});
+    expect(added).toMatchObject({ status: 200, body: { state: "added", added: { number: 1, as: "earlier" } } });
+    expect((await library())[0]?.revisions).toBe(2);
+    expect(await pinOf()).toBe(r1?.hash);
+    expect(await propose("release-steps", { basedOn: 2, body: "Steps for release-steps." })).toEqual({
+      text: "The user accepted a change to release-steps. It is what r1 said, so release-steps went back to r1. You use it from your next turn.",
+      refused: false,
+    });
+
+    // The newest revision's words again: accepted, and the library is as it was.
+    await propose("release-steps", { basedOn: 2, body: "Tag, then push.", key: "same", work: "reply:m2" });
+    const same = (await proposals()).find((one) => one.proposal.state === "waiting");
+    expect(same?.check).toEqual({ flags: [], existing: 2 });
+    const kept = await request("POST", `/api/skill-proposals/${same?.proposal.id}/add`, {});
+    expect(kept).toMatchObject({ status: 200, body: { added: { number: 2, as: "same" } } });
+    expect((await library())[0]?.revisions).toBe(2);
+  });
+
+  // covers ADR 029 (Proactive hobs), #1063
+  it("[TC-AG-156] a note is left on the revision the turn mounted, even after a rollout moved the hob on", async () => {
+    await importSkill("release-steps");
+    const [skill] = await library();
+    await call(SKILL_REQUEST_TOOL, { name: "release-steps", why: "To release." }, accessFor("trusting"));
+    const r1 = skill?.latest;
+    const noted = await runtime.runPromise(
+      Effect.gen(function* () {
+        // The turn starts on r1.
+        const tools = yield* (yield* SkillTools)
+          .forTurn(turnFor(accessFor("trusting")))
+          .pipe(
+            Effect.provideService(TurnSkillsInUse, [
+              { skillId: skill?.id as never, name: "release-steps" as never, pin: r1 as never, onlyWhenAsked: false },
+            ]),
+          );
+        // r2 rolls out to Ada during the turn.
+        const importer = yield* SkillImporter;
+        const [r2] = yield* importer.add(
+          { _tag: "Written", files: [{ path: "SKILL.md", text: skillMd("release-steps", "Tag, then push.") }] },
+          { by: { _tag: "You" }, skillId: skill?.id as never },
+        );
+        yield* (yield* SkillLibrary).rollOutRevision(
+          skill?.id as never,
+          r2?.revision.hash as never,
+          { _tag: "You" },
+          "pending",
+        );
+        return yield* tools?.call(SKILL_FEEDBACK_TOOL, {
+          name: "release-steps",
+          kind: "unclear",
+          note: "Step 2 is unclear.",
+        }) ?? Effect.die("No tools");
+      }),
+    );
+    expect(noted.refused).toBe(false);
+    const assignments = await runtime.runPromise(SkillLibrary.use((skills) => skills.assignments(skill?.id as never)));
+    expect(assignments[0]?.pin).not.toBe(r1);
+    expect((await request("GET", `/api/skills/${skill?.id}/feedback`)).body.feedback).toMatchObject([
+      { note: "Step 2 is unclear.", revision: r1 },
+    ]);
+  });
+
+  // covers ADR 029 (Proactive hobs), #1063
+  it("[TC-AG-157] the review shows what the checks flag, and checks your edit before it is added", async () => {
+    await propose("release-steps", { body: "Read https://example.com/release first.\u200B Then tag." });
+    const [waiting] = await proposals();
+    expect(waiting?.check?.flags).toEqual([
+      { _tag: "Url", path: "SKILL.md", url: "https://example.com/release" },
+      { _tag: "HiddenText", path: "SKILL.md", codePoint: "U+200B" },
+    ]);
+    const id = waiting?.proposal.id;
+    // Your edit is checked as adding it would check it, and nothing is written.
+    const clean = await request("POST", `/api/skill-proposals/${id}/check`, {
+      instructions: skillMd("release-steps", "Tag."),
+    });
+    expect(clean).toMatchObject({ status: 200, body: { flags: [], existing: null } });
+    const linked = await request("POST", `/api/skill-proposals/${id}/check`, {
+      instructions: skillMd("release-steps", "See http://example.org."),
+    });
+    expect(linked.body.flags).toEqual([{ _tag: "Url", path: "SKILL.md", url: "http://example.org" }]);
+    const broken = await request("POST", `/api/skill-proposals/${id}/check`, {
+      instructions: skillMd("release-steps").replace("name: release-steps", "name: Release Steps"),
+    });
+    expect(broken).toMatchObject({ status: 422, body: { _tag: "SkillImportRefused" } });
+    expect((await proposals())[0]?.proposal).toMatchObject({ state: "waiting", edited: false });
+    expect(await library()).toEqual([]);
   });
 
   // covers ADR 029 (Proactive hobs), #1063

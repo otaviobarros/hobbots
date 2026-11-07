@@ -36,6 +36,16 @@ export const messages = {
     `Every hob that uses it moves to r${next} from its next chat, unless you hold it on an older revision.`,
   footHeld: ({ count, next }: { count: number; next: number }) =>
     `${plural(count, { one: `${formatCount(count)} assignment is held and stays where it is`, other: `${formatCount(count)} assignments are held and stay where they are` })}. The others move to r${next} from their next chat.`,
+  footSame: ({ number }: { number: number }) => `It is what r${number} already says, so adding it changes nothing.`,
+  footEarlier: ({ number }: { number: number }) =>
+    `It is what r${number} said, so adding it brings every hob that uses it back to r${number}, unless you hold it.`,
+  flagsLabel: "Look at these first",
+  flagScript: ({ path }: { path: string }) => `${path} is a script a hob can run.`,
+  flagUrl: ({ path, url }: { path: string; url: string }) => `${path} links to ${url}.`,
+  flagHidden: ({ path, codePoint }: { path: string; codePoint: string }) =>
+    `${path} has characters you cannot see, such as ${codePoint}. Each is marked where it is.`,
+  hiddenMark: ({ codePoint }: { codePoint: string }) => `hidden character ${codePoint}`,
+  addAnyway: "Add it anyway",
   stale: ({ who, base, latest }: { who: string; base: number; latest: number }) =>
     `${who} changed r${base}, but the skill is on r${latest} now, so the change is shown against r${latest}.`,
   why: ({ who }: { who: string }) => `Why ${who} suggests it`,
@@ -46,6 +56,10 @@ export const messages = {
     `Added ${title} r${number} for ${who}. ${who} uses it from its next chat.`,
   outcomeAddedChange: ({ title, number }: { title: string; number: number }) =>
     `Accepted. ${title} r${number} rolls out from each hob's next chat.`,
+  outcomeSame: ({ title, number }: { title: string; number: number }) =>
+    `Accepted. It is what ${title} r${number} already says, so the library is unchanged.`,
+  outcomeEarlier: ({ title, number }: { title: string; number: number }) =>
+    `Accepted. It is what ${title} r${number} said, so every hob that uses it goes back to r${number} from its next chat.`,
   outcomeEdited: "You edited it before you added it.",
   outcomeDeclined: ({ who }: { who: string }) => `Not now. ${who} is told, and the library is unchanged.`,
   outcomeAdding: "Adding it to the library…",

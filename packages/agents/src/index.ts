@@ -31,6 +31,7 @@ export * from "./repository.ts";
 export * from "./runtime.ts";
 export * from "./secrets.ts";
 export * from "./skill-proposals.ts";
+export * from "./skill-reviews.ts";
 export * from "./skill-turn.ts";
 export * from "./skills.ts";
 export { nextSteps } from "./steps.ts";

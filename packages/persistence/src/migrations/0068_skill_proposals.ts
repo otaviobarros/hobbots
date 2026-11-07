@@ -5,7 +5,8 @@ import { SqlClient } from "effect/sql";
 // A proposal is keyed by hob, work and key, as memory saves are (`scope`, `call_key`, `input` hold
 // the work and the SHA-256 of the key and of the input). `skill_id` and `base_hash`/`base_number`
 // name the skill and revision a change was made against, and are null for a new skill;
-// `added_hash`/`added_number` the revision it became. `memory_pages` is JSON, and `edited` is 0 or
+// `added_hash`/`added_number` the revision it became, and `added_as` whether it was new, the newest
+// already, or an earlier one brought back. `memory_pages` is JSON, and `edited` is 0 or
 // 1. A hob has at most one proposal per name open at once. Feedback is a hob's note on a skill.
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -27,6 +28,7 @@ export default Effect.gen(function* () {
       edited INTEGER NOT NULL CONSTRAINT skill_proposals_edited_flag CHECK (edited IN (0, 1)),
       added_hash TEXT,
       added_number INTEGER,
+      added_as TEXT,
       memory_pages TEXT NOT NULL,
       thread_id TEXT,
       message_id TEXT,

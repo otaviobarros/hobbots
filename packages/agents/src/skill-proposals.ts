@@ -1,10 +1,11 @@
-import type { UserSession } from "@hobbots/api";
+import type { SkillProposalCheck, SkillProposalView, UserSession } from "@hobbots/api";
 import type {
   AgentId,
   Committed,
   EventEnvelope,
   SkillFeedback,
   SkillId,
+  SkillMovedOn,
   SkillNameChanged,
   SkillNameTaken,
   SkillNotFound,
@@ -97,7 +98,8 @@ export type SkillReviewError =
   | SkillSourceUnreadable
   | SkillNotFound
   | SkillNameTaken
-  | SkillNameChanged;
+  | SkillNameChanged
+  | SkillMovedOn;
 
 /**
  * Your side of proposals: what waits for you and what was decided lately, and your decisions. Only
@@ -106,7 +108,13 @@ export type SkillReviewError =
 export class SkillReviews extends Context.Service<
   SkillReviews,
   {
-    readonly list: Effect.Effect<ReadonlyArray<SkillProposal>>;
+    /** Each proposal with what its review shows: what it changes, where it reaches, and what the checks find. */
+    readonly list: Effect.Effect<ReadonlyArray<SkillProposalView>>;
+    /** What the checks find in your edit of a waiting proposal, as adding it would find it; writes nothing. */
+    readonly check: (
+      id: string,
+      instructions: string,
+    ) => Effect.Effect<SkillProposalCheck, SkillReviewError, UserSession>;
     /**
      * Adds the proposal to the library, as the hob wrote it or as you edited it (`instructions`): a new
      * skill for the hob that proposed it, or a new revision rolled out like your own edit. One the

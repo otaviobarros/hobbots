@@ -1,6 +1,7 @@
 import {
   SKILL_INSTRUCTIONS_MAX,
   SkillFeedback,
+  SkillFlag,
   SkillId,
   SkillProposal,
   SkillProposalState,
@@ -8,7 +9,13 @@ import {
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { SkillImportRefused, SkillMissing, SkillNameConflict, SkillSourceNotRead } from "./skills.ts";
+import {
+  SkillChangedMeanwhile,
+  SkillImportRefused,
+  SkillMissing,
+  SkillNameConflict,
+  SkillSourceNotRead,
+} from "./skills.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**
@@ -32,15 +39,28 @@ export class SkillProposalDecided extends Schema.TaggedError<SkillProposalDecide
 ) {}
 
 /**
+ * What the import checks find in a proposal as it would be added, before you add it: what a reader
+ * is warned of (a script, a URL, hidden text), and the revision of the skill this content already
+ * is, when it is one, so adding it changes nothing (the newest) or brings an earlier one back.
+ */
+export const SkillProposalCheck = Schema.Struct({
+  flags: Schema.Array(SkillFlag),
+  existing: Schema.NullOr(Schema.Int),
+});
+export type SkillProposalCheck = typeof SkillProposalCheck.Type;
+
+/**
  * A proposal with what its review shows: the `SKILL.md` of the revision it changes, and the newest
  * revision's when the skill moved on since the hob read it (stale), so the change is shown against
  * it. `rollout` is where adding a revision reaches, by the assignments it would move and those held.
+ * `check` is what the import checks find in it now, while it waits, and null once it is decided.
  */
 export const SkillProposalView = Schema.Struct({
   proposal: SkillProposal,
   base: Schema.NullOr(Schema.String),
   latest: Schema.NullOr(Schema.Struct({ number: Schema.Int, instructions: Schema.String })),
   rollout: Schema.NullOr(Schema.Struct({ scopes: Schema.Array(SkillScope), held: Schema.Int })),
+  check: Schema.NullOr(SkillProposalCheck),
 });
 export type SkillProposalView = typeof SkillProposalView.Type;
 
@@ -56,6 +76,12 @@ export const AddSkillProposalPayload = Schema.Struct({
 });
 export type AddSkillProposalPayload = typeof AddSkillProposalPayload.Type;
 
+/** Your edit of a proposal, checked as adding it would check it, before you add it. */
+export const CheckSkillProposalPayload = Schema.Struct({
+  instructions: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(SKILL_INSTRUCTIONS_MAX)),
+});
+export type CheckSkillProposalPayload = typeof CheckSkillProposalPayload.Type;
+
 export const SkillFeedbackList = Schema.Struct({ feedback: Schema.Array(SkillFeedback) });
 export type SkillFeedbackList = typeof SkillFeedbackList.Type;
 
@@ -67,6 +93,7 @@ const decisionErrors = [
   SkillSourceNotRead,
   SkillMissing,
   SkillNameConflict,
+  SkillChangedMeanwhile,
 ];
 
 export class SkillProposalsGroup extends HttpApiGroup.make("skillProposals")
@@ -76,6 +103,15 @@ export class SkillProposalsGroup extends HttpApiGroup.make("skillProposals")
       params: proposalParams,
       payload: AddSkillProposalPayload,
       success: SkillProposal,
+      error: decisionErrors,
+    }),
+  )
+  .add(
+    // Writes nothing: what the checks find in your edit, as adding it would find it.
+    HttpApiEndpoint.post("check", "/skill-proposals/:proposalId/check", {
+      params: proposalParams,
+      payload: CheckSkillProposalPayload,
+      success: SkillProposalCheck,
       error: decisionErrors,
     }),
   )
