@@ -381,7 +381,7 @@ export function OnboardingProviders() {
           <span
             id="providers-hint"
             role={failed ? "alert" : undefined}
-            className={`flex-1 text-detail ${failed ? "text-rose" : ready ? "text-text-secondary" : "text-label"}`}
+            className={cn("flex-1 text-detail", failed ? "text-rose" : ready ? "text-text-secondary" : "text-label")}
           >
             {failed ? copy.saveFailed : ready ? messages.providers.connectedCount({ count }) : copy.connectOne}
           </span>
@@ -393,9 +393,9 @@ export function OnboardingProviders() {
             aria-disabled={!ready}
             aria-describedby="providers-hint"
             disabled={providers.isPending}
-            className={
-              ready ? undefined : "cursor-not-allowed bg-line-2 text-label [--press-color:transparent] hover:bg-line-2"
-            }
+            className={cn(
+              !ready && "cursor-not-allowed bg-line-2 text-label [--press-color:transparent] hover:bg-line-2",
+            )}
           >
             {shared.continue}
           </Button>

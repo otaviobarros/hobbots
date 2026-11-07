@@ -1,7 +1,9 @@
+// jscpd:ignore-start: the Settings cards import the same primitives, and a shared import module would hide what each one uses.
 import { RUNTIME_NAMES, type RuntimeHealth, type RuntimeKind } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton, WaitNote } from "@hobbots/ui/components/skeleton";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -12,6 +14,8 @@ import { messages as sharedMessages } from "../messages.ts";
 import { ProviderFixActions, providerFix } from "../providers/provider-fix.tsx";
 import { messages } from "./messages.ts";
 import { accountLine, hobsLine } from "./provider-lines.ts";
+
+// jscpd:ignore-end
 
 const copy = messages.providers;
 
@@ -27,7 +31,7 @@ function ProviderFacts({ health }: { health: RuntimeHealth }) {
     <>
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ui">
         <dt className="text-label">{copy.billing}</dt>
-        <dd className={billsElsewhere(health) ? "m-0 text-lantern" : "m-0"}>{health.billing ?? "—"}</dd>
+        <dd className={cn("m-0", billsElsewhere(health) && "text-lantern")}>{health.billing ?? "—"}</dd>
         <dt className="text-label">{copy.version}</dt>
         <dd className="m-0">{health.version ?? "—"}</dd>
       </dl>
@@ -78,7 +82,10 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
       <div className="flex items-center gap-2.5">
         <span
           aria-hidden
-          className={`grid size-7 flex-none place-items-center rounded-tile text-detail font-bold text-provider-ink ${look.tile}`}
+          className={cn(
+            "grid size-7 flex-none place-items-center rounded-tile text-detail font-bold text-provider-ink",
+            look.tile,
+          )}
         >
           {look.mark}
         </span>

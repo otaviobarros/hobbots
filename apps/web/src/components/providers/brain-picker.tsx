@@ -179,7 +179,7 @@ function RuntimeChoices({
       <span className="flex items-center gap-2 text-ui">
         <RuntimeTile runtime={health.runtime} />
         <b className="flex-1">{RUNTIME_NAMES[health.runtime]}</b>
-        <span className={reason === null ? "text-meta text-mint" : "text-meta text-lantern"}>
+        <span className={cn("text-meta", reason === null ? "text-mint" : "text-lantern")}>
           {RUNTIME_STATE_WORDS[health.availability]}
         </span>
       </span>

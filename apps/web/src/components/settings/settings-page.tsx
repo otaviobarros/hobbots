@@ -106,7 +106,7 @@ function SettingsNav({ current }: { current: SettingsSection | null }) {
         const name = section === null ? copy.page.overview : sectionName(section);
         const body = (
           <>
-            <span className={on ? "text-lantern" : undefined}>
+            <span className={cn(on && "text-lantern")}>
               <SectionIcon section={section ?? "overview"} />
             </span>
             <span className="flex-1">{name}</span>

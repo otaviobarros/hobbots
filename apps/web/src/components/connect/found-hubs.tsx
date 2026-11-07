@@ -1,5 +1,6 @@
 import type { FoundHubView, HubListView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useEffect, useEffectEvent, useState } from "react";
 import { TailscaleNotReady } from "../remote-access/tailscale-not-ready.tsx";
 import type { SetupBridge } from "./connect-model.ts";
@@ -45,7 +46,7 @@ function HubRow({ hub, disabled, onConnect }: { hub: FoundHubView; disabled: boo
   if (hub.hubName !== null && hub.hubName !== hub.computer) details.push(copy.calledItself({ name: hub.hubName }));
   return (
     <li className="cut flex items-center gap-3 border-(length:--edge) border-line-2 bg-card px-3.5 py-3">
-      <span aria-hidden className={`size-2.5 flex-none ${usable ? "bg-mint" : "bg-lantern"}`} />
+      <span aria-hidden className={cn("size-2.5 flex-none", usable ? "bg-mint" : "bg-lantern")} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="font-bold">{hub.computer}</span>
         <span className="truncate font-mono text-code text-text-secondary">{details.join(" · ")}</span>

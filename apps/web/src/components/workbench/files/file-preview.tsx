@@ -2,6 +2,7 @@ import { type AttemptId, PREVIEW_TEXT_BYTES, type TaskFile } from "@hobbots/doma
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { taskFileTextQuery, taskFileUrl } from "../../../api/workbench.ts";
 import { formatBytes } from "../../../lib/format.ts";
@@ -50,7 +51,7 @@ function TextPreview({ attemptId, file, markdown }: { attemptId: AttemptId; file
   if (read.isPending) return <TextSkeleton onRetry={() => void read.refetch()} />;
   if (read.isError) {
     return (
-      <p className={`${NOTE} flex items-center gap-3`}>
+      <p className={cn(NOTE, "flex items-center gap-3")}>
         <span>{messages.previewFailed}</span>
         <Button variant="chip" size="xs" onClick={() => void read.refetch()}>
           {messages.tryAgain}

@@ -1,6 +1,7 @@
 import type { WaitingDevice } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
+import { cn } from "@hobbots/ui/lib/utils";
 import { type ReactNode, useRef, useState } from "react";
 import { type PairingDecision, usePromptedDevices } from "../../api/pairing.ts";
 import { formatWhen } from "../../lib/time.ts";
@@ -70,7 +71,7 @@ function PromptContent({
     <DialogContent
       ref={content}
       aria-describedby={undefined}
-      className={`animate-hb-pop ${border}`}
+      className={cn("animate-hb-pop", border)}
       // A click outside never dismisses a device's request.
       onInteractOutside={(event) => event.preventDefault()}
       onOpenAutoFocus={(event) => {

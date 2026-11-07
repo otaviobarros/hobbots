@@ -128,7 +128,7 @@ function ChoicesForm({
         onChange={(event) => setAnswer(event.target.value)}
         onKeyDown={enterSends(submit)}
         variant={composer ? "bare" : "deep"}
-        className={composer ? "min-h-14" : "min-h-10"}
+        className={cn(composer ? "min-h-14" : "min-h-10")}
       />
       <SendRow
         line={line}

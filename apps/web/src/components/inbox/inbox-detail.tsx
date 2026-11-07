@@ -573,11 +573,10 @@ function Chain({ names }: { names: ReadonlyArray<string> }) {
         <span key={index} aria-hidden="true" className="flex items-center gap-1">
           {index > 0 && <span className="text-label">→</span>}
           <span
-            className={
-              index === names.length - 1
-                ? "rounded-tag bg-line px-2 text-detail font-semibold text-text-strong"
-                : "rounded-tag bg-hover px-2 text-detail text-text-secondary"
-            }
+            className={cn(
+              "rounded-tag px-2 text-detail",
+              index === names.length - 1 ? "bg-line font-semibold text-text-strong" : "bg-hover text-text-secondary",
+            )}
           >
             {name}
           </span>

@@ -1,4 +1,5 @@
 import type { Agent } from "@hobbots/domain";
+import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
@@ -11,7 +12,10 @@ export function ArchiveFrame({ label, wide = true, children }: { label: string; 
   return (
     <main aria-label={label} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <div
-        className={`mx-auto flex w-full flex-1 flex-col gap-5 px-6 pt-5 pb-12 ${wide ? "max-w-[920px]" : "max-w-[800px]"}`}
+        className={cn(
+          "mx-auto flex w-full flex-1 flex-col gap-5 px-6 pt-5 pb-12",
+          wide ? "max-w-[920px]" : "max-w-[800px]",
+        )}
       >
         {children}
       </div>
@@ -69,7 +73,7 @@ export function DimPortrait({ hob, size = "row" }: { hob: Agent; size?: "row" | 
   return (
     <span
       aria-hidden
-      className={`grid flex-none place-items-center rounded-control bg-deep ${size === "row" ? "size-9" : "size-12"}`}
+      className={cn("grid flex-none place-items-center rounded-control bg-deep", size === "row" ? "size-9" : "size-12")}
     >
       <HobSprite hob={hob} size={size === "row" ? 28 : 38} className="opacity-60 grayscale-80" />
     </span>

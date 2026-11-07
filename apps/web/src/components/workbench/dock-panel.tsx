@@ -61,7 +61,7 @@ export function DockPanel({
        * A list grows past the panel and scrolls in it; the Terminal fills the panel exactly, as
        * xterm.js scrolls its own rows and fits the space it is given.
        */}
-      <TabsContent value={tab} forceMount className={tab === "terminal" ? "h-full" : "min-h-full"}>
+      <TabsContent value={tab} forceMount className={cn(tab === "terminal" ? "h-full" : "min-h-full")}>
         {tab === "browser" ? (
           <Notices>
             <Notice text={messages.comingSoon} />

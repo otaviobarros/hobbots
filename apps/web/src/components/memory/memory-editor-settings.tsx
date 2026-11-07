@@ -1,5 +1,6 @@
 import type { MemoryScope } from "@hobbots/domain";
 import { Input } from "@hobbots/ui/components/input";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useId } from "react";
 import type { EditorDraft } from "./memory-edit-model.ts";
 import { type HobDirectory, keptInOf } from "./memory-model.ts";
@@ -64,7 +65,7 @@ export function EditorSettings({
           onChange={(event) => onChange({ forgetOn: event.target.value })}
           onBlur={onBlurDay}
         />
-        <span id={hintId} className={error === undefined ? "text-meta text-label" : "text-meta text-rose"}>
+        <span id={hintId} className={cn("text-meta", error === undefined ? "text-label" : "text-rose")}>
           {error ?? copy.editor.forgetHint}
         </span>
       </MemoryCard>

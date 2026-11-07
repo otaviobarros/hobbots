@@ -1,5 +1,6 @@
 import type { Question } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { formatList } from "../../lib/format.ts";
 import { Said } from "../said/said.tsx";
 import { messages } from "./messages.ts";
@@ -56,20 +57,18 @@ function ChoiceList({
   return (
     <ul
       aria-label={copy.choices({ name: askerName })}
-      className={
-        look === "rows" ? "m-0 flex list-none flex-col gap-1.5 p-0" : "m-0 flex list-none flex-wrap gap-1.5 p-0"
-      }
+      className={cn("m-0 flex list-none gap-1.5 p-0", look === "rows" ? "flex-col" : "flex-wrap")}
     >
       {question.options.map((option, index) => {
         const recommended = index === question.recommended;
         const key = String(index + 1);
         return (
-          <li key={option.label} className={look === "rows" ? "flex" : undefined}>
+          <li key={option.label} className={cn(look === "rows" && "flex")}>
             <Button
               type="button"
               variant={look === "rows" ? "choice" : "chip"}
               size={look === "rows" ? "default" : "xs"}
-              className={look === "rows" ? "w-full" : undefined}
+              className={cn(look === "rows" && "w-full")}
               data-recommended={recommended}
               aria-keyshortcuts={key}
               title={look === "chips" && option.consequence !== "" ? option.consequence : undefined}

@@ -2,6 +2,7 @@ import { HOB_COLORS } from "@hobbots/art/look";
 import type { Agent, AgentId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate } from "@tanstack/react-router";
 import { writeDraft } from "../../api/drafts.ts";
@@ -126,7 +127,7 @@ function Stage({ hob }: { hob: Agent | undefined }) {
           key={spot}
           aria-hidden
           viewBox="0 0 10 10"
-          className={`absolute z-10 animate-hb-twinkle fill-current text-lantern ${spot}`}
+          className={cn("absolute z-10 animate-hb-twinkle fill-current text-lantern", spot)}
         >
           <path d="M5 0 6 4 10 5 6 6 5 10 4 6 0 5 4 4Z" />
         </svg>

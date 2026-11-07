@@ -1,5 +1,6 @@
 import { Button } from "@hobbots/ui/components/button";
 import { Switch } from "@hobbots/ui/components/switch";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId } from "react";
 import { loginItemNotice } from "../../api/login-item.ts";
@@ -53,9 +54,10 @@ function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) 
       {notice && (
         <div
           role="status"
-          className={`cut flex items-center gap-3 border-(length:--edge) bg-notice px-3 py-2.5 text-ui ${
-            notice.tone === "problem" ? "border-rose" : "border-lantern"
-          }`}
+          className={cn(
+            "cut flex items-center gap-3 border-(length:--edge) bg-notice px-3 py-2.5 text-ui",
+            notice.tone === "problem" ? "border-rose" : "border-lantern",
+          )}
         >
           <span className="flex-1">{notice.text}</span>
           {state.data?.status === "requires-approval" && (

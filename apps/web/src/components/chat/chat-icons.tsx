@@ -1,3 +1,4 @@
+import { cn } from "@hobbots/ui/lib/utils";
 import type { ReactNode } from "react";
 
 // The chat's line icons, 1.5 stroke with round caps: the header's back arrow and ⋯ menu, and the
@@ -12,13 +13,11 @@ const LineIcon = ({ children, size }: { children: ReactNode; size: "menu" | "dan
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden
-    className={
-      size === "send" || size === "back"
-        ? "size-4 flex-none"
-        : size === "menu"
-          ? "size-3.5 flex-none text-text-secondary"
-          : "size-3.5 flex-none"
-    }
+    className={cn(
+      "flex-none",
+      size === "send" || size === "back" ? "size-4" : "size-3.5",
+      size === "menu" && "text-text-secondary",
+    )}
   >
     {children}
   </svg>

@@ -1,4 +1,5 @@
 import { Skeleton } from "@hobbots/ui/components/skeleton";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { aboutQuery, DEPENDENCIES_URL, GUIDE_URL, LICENSE_URL, REPOSITORY_URL } from "../../api/about.ts";
@@ -33,7 +34,7 @@ export function AboutSettings() {
           <button
             type="button"
             onClick={() => setShortcuts(true)}
-            className={`cursor-pointer border-0 bg-transparent p-0 text-ui ${linkClass}`}
+            className={cn("cursor-pointer border-0 bg-transparent p-0 text-ui", linkClass)}
           >
             {copy.shortcuts}
           </button>

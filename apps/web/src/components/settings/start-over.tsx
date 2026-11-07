@@ -1,6 +1,7 @@
 import type { BackupState } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@hobbots/ui/components/dialog";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useActivity } from "../../api/activity.ts";
@@ -172,7 +173,7 @@ function List({
       <ul aria-label={label} className="m-0 flex list-none flex-col gap-1.5 p-0 text-detail">
         {items.map((item) => (
           <li key={item} className="flex gap-2">
-            <span aria-hidden className={`w-3 flex-none ${tone}`}>
+            <span aria-hidden className={cn("w-3 flex-none", tone)}>
               {glyph}
             </span>
             <span>{item}</span>

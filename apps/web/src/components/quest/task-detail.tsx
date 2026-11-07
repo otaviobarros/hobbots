@@ -1,4 +1,5 @@
 import { type Question, saysMore, type Task, type TaskId, type TaskTree } from "@hobbots/domain";
+import { cn } from "@hobbots/ui/lib/utils";
 import type { ReactNode } from "react";
 import { formatTime } from "../../lib/time.ts";
 import { TaskApprovals, useShownApprovals } from "../approvals/task-approvals.tsx";
@@ -58,7 +59,7 @@ export function TaskDetail({
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-detail">
             {detail.milestones.map((milestone) => (
               <li key={milestone.id} className="flex items-center gap-2">
-                <span className={milestone.reachedAt === null ? "text-label" : "text-mint"}>
+                <span className={cn(milestone.reachedAt === null ? "text-label" : "text-mint")}>
                   {milestone.reachedAt === null ? "○" : "✓"}
                 </span>
                 <span className="flex-1">{milestone.title}</span>
@@ -207,7 +208,7 @@ function Artifacts({ artifacts }: { artifacts: ReturnType<typeof taskDetail>["ou
               {artifact.value}
             </a>
           ) : (
-            <span className={artifact.kind === "file" ? "font-mono break-all" : "whitespace-pre-wrap"}>
+            <span className={cn(artifact.kind === "file" ? "font-mono break-all" : "whitespace-pre-wrap")}>
               {artifact.value}
             </span>
           )}
