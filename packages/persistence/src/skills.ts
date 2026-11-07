@@ -410,6 +410,13 @@ export const SkillLibraryLive = Layer.effect(
         const fields = { pin: input.pin, held: input.held, onlyWhenAsked: input.onlyWhenAsked, by: input.by };
         if (found !== undefined) {
           const before = yield* assignmentOf(found);
+          // The same assignment asked for again, as a retry does, changes nothing and records nothing.
+          const same =
+            before.pin === fields.pin &&
+            before.held === fields.held &&
+            before.onlyWhenAsked === fields.onlyWhenAsked &&
+            byJson(before.by) === byJson(fields.by);
+          if (same) return { value: before, events: [] };
           const assignment = new SkillAssignment({ ...before, ...fields, revision: first });
           yield* saveAssignment(assignment);
           const events: Array<JournaledEvent> = [{ _tag: "SkillAssigned", assignment }];

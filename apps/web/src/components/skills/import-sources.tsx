@@ -1,8 +1,12 @@
 import type { SkillSourcePayload } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { Input } from "@hobbots/ui/components/input";
+import { cn } from "@hobbots/ui/lib/utils";
+import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { messages } from "./messages.ts";
+import { type ImportFrom, skillsSearchOf } from "./skills-model.ts";
+import { SkillsIcon } from "./skills-parts.tsx";
 
 const copy = messages;
 
@@ -20,7 +24,17 @@ const base64Of = async (file: File): Promise<string> => {
 };
 
 /** From Git: a repository and the branch, tag or commit to read, which the hub pins to a commit. */
-export function GitSource({ looking, onLook }: { looking: boolean; onLook: (source: SkillSourcePayload) => void }) {
+export function GitSource({
+  looking,
+  locked,
+  onLook,
+}: {
+  looking: boolean;
+  /** An import from this source is running: it can't be read again until that ends. */
+  locked: boolean;
+  onLook: (source: SkillSourcePayload) => void;
+}) {
+  const busy = looking || locked;
   const ids = { url: useId(), ref: useId() };
   const [url, setUrl] = useState("");
   const [ref, setRef] = useState("");
@@ -29,7 +43,7 @@ export function GitSource({ looking, onLook }: { looking: boolean; onLook: (sour
       className="grid grid-cols-[minmax(0,1fr)_180px_auto] items-end gap-2.5 max-[900px]:grid-cols-1"
       onSubmit={(event) => {
         event.preventDefault();
-        if (url.trim() === "" || looking) return;
+        if (url.trim() === "" || busy) return;
         onLook({ _tag: "Git", url: url.trim(), ref: ref.trim() === "" ? null : ref.trim() });
       }}
     >
@@ -46,7 +60,7 @@ export function GitSource({ looking, onLook }: { looking: boolean; onLook: (sour
           onChange={(event) => setRef(event.target.value)}
         />
       </label>
-      <Button type="submit" variant="outline" disabled={url.trim() === "" || looking}>
+      <Button type="submit" variant="outline" disabled={url.trim() === "" || busy}>
         {looking ? copy.import.looking : copy.import.look}
       </Button>
     </form>
@@ -54,7 +68,17 @@ export function GitSource({ looking, onLook }: { looking: boolean; onLook: (sour
 }
 
 /** A folder on the hub's computer, chosen in the desktop app or typed, or a .zip from this computer. */
-export function FileSource({ looking, onLook }: { looking: boolean; onLook: (source: SkillSourcePayload) => void }) {
+export function FileSource({
+  looking,
+  locked,
+  onLook,
+}: {
+  looking: boolean;
+  /** An import from this source is running: it can't be read again until that ends. */
+  locked: boolean;
+  onLook: (source: SkillSourcePayload) => void;
+}) {
+  const busy = looking || locked;
   const ids = { path: useId(), zip: useId() };
   const [path, setPath] = useState("");
   const [tooLarge, setTooLarge] = useState(false);
@@ -65,7 +89,7 @@ export function FileSource({ looking, onLook }: { looking: boolean; onLook: (sou
       {chooseFolder !== undefined ? (
         <Button
           variant="outline"
-          disabled={looking}
+          disabled={busy}
           onClick={() =>
             void chooseFolder().then((folder) => {
               if (folder !== null) onLook({ _tag: "Folder", path: folder });
@@ -79,7 +103,7 @@ export function FileSource({ looking, onLook }: { looking: boolean; onLook: (sou
           className="flex w-full max-w-[520px] items-end gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            if (path.trim() === "" || looking) return;
+            if (path.trim() === "" || busy) return;
             onLook({ _tag: "Folder", path: path.trim() });
           }}
         >
@@ -87,7 +111,7 @@ export function FileSource({ looking, onLook }: { looking: boolean; onLook: (sou
             {copy.import.folder}
             <Input id={ids.path} value={path} onChange={(event) => setPath(event.target.value)} />
           </label>
-          <Button type="submit" variant="outline" disabled={path.trim() === "" || looking}>
+          <Button type="submit" variant="outline" disabled={path.trim() === "" || busy}>
             {looking ? copy.import.looking : copy.import.look}
           </Button>
         </form>
@@ -99,7 +123,7 @@ export function FileSource({ looking, onLook }: { looking: boolean; onLook: (sou
           id={ids.zip}
           type="file"
           accept=".zip,.skill"
-          disabled={looking}
+          disabled={busy}
           className="text-detail text-text-secondary file:me-3 file:cursor-pointer file:rounded-control file:border-(length:--edge) file:border-solid file:border-control file:bg-transparent file:px-3 file:py-1.5 file:text-text-strong"
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -116,5 +140,40 @@ export function FileSource({ looking, onLook }: { looking: boolean; onLook: (sou
         </p>
       )}
     </div>
+  );
+}
+
+const TABS: ReadonlyArray<{ from: ImportFrom; icon: "git" | "file" | "write" }> = [
+  { from: "git", icon: "git" },
+  { from: "file", icon: "file" },
+  { from: "write", icon: "write" },
+];
+
+/** Where to add a skill from: Git, a file, or written here. */
+export function SourceTabs({ from }: { from: ImportFrom }) {
+  return (
+    <nav aria-label={copy.import.from} className="grid grid-cols-3 gap-2.5 max-[900px]:grid-cols-1">
+      {TABS.map((tab) => {
+        const on = tab.from === from;
+        return (
+          <Link
+            key={tab.from}
+            to="/skills"
+            search={skillsSearchOf({ _tag: "Add", from: tab.from })}
+            aria-current={on ? "page" : undefined}
+            className={cn(
+              "flex flex-col items-start gap-1 rounded-card border-(length:--edge) border-solid border-line-2 bg-card p-3.5 text-start text-text-strong no-underline hover:border-control",
+              on && "border-focus-ring shadow-[0_0_0_1px_var(--color-focus-ring)]",
+            )}
+          >
+            <span className="text-text-secondary">
+              <SkillsIcon name={tab.icon} size={18} />
+            </span>
+            <span className="text-ui font-semibold">{copy.import.tabs[tab.from].label}</span>
+            <span className="text-meta text-label">{copy.import.tabs[tab.from].sub}</span>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
