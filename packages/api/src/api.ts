@@ -52,6 +52,7 @@ import { PermissionsGroup } from "./permissions.ts";
 import { RemoteAccessGroup } from "./remote-access.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
+import { SkillProposalsGroup } from "./skill-proposals.ts";
 import { SkillsGroup } from "./skills.ts";
 import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
 import { UsageGroup } from "./usage.ts";
@@ -409,4 +410,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(MemoryPagesGroup)
   .add(MemorySharesGroup)
   .add(HobMemoryGroup)
-  .add(SkillsGroup) {}
+  .add(SkillsGroup)
+  .add(SkillProposalsGroup) {}

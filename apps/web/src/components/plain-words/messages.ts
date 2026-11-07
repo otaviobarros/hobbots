@@ -32,6 +32,10 @@ export const messages = {
     "outside-folders": "Working outside its folders",
     "search-memory": "Searching its memory",
     "save-memory": "Saving to its memory",
+    "search-skills": "Looking through its skills",
+    "request-skill": "Asking for a skill",
+    "propose-skill": "Suggesting a skill",
+    "skill-feedback": "Reporting a skill problem",
   },
   /** A command that only looks around, while it runs. */
   looking: "Looking through the files",

@@ -129,6 +129,7 @@ export const messages = {
     message: "a message",
     "approval-outcome": "an approval's outcome",
     deadline: "a deadline",
+    "skill-proposal": "a skill proposal's outcome",
     progress: "progress",
   },
   questStates: { active: "Under way", completed: "Done", failed: "Failed", cancelled: "Cancelled" },

@@ -21,6 +21,7 @@ import {
   type Question,
   type ReplyStep,
   type ReplyStepState,
+  skillProposalText,
   type Task,
   type TaskId,
   type ThreadId,
@@ -177,6 +178,8 @@ const arrivalText = (payload: Exclude<BackpackPayload, { readonly _tag: "task" |
       return `Approval ${payload.approval.state}: "${payload.approval.label}"`;
     case "deadline":
       return `Deadline passed at ${payload.dueAt} (Task ${payload.taskId})`;
+    case "skill-proposal":
+      return skillProposalText(payload.proposal);
   }
 };
 

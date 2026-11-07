@@ -8,7 +8,7 @@ import {
   type JournaledEvent,
   type NewBackpackItem,
 } from "@hobbots/domain";
-import { backpackItemsFor, type ToolCallSource, tasksTouched } from "@hobbots/inbox";
+import { backpackItemsFor, needsItemsWithoutTasks, type ToolCallSource, tasksTouched } from "@hobbots/inbox";
 import { Context, DateTime, Duration, Effect, Schema } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import { makeTaskReads } from "./task-rows.ts";
@@ -115,7 +115,10 @@ const contextOf = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEven
     const touched = tasksTouched(events);
     const approvalOutcomes = yield* UnwaitedApprovals;
     const toolCall = yield* CurrentToolCall;
-    if (touched.length === 0) return approvalOutcomes ? { tasks: [], quests: [], toolCall, approvalOutcomes } : null;
+    if (touched.length === 0)
+      return approvalOutcomes || needsItemsWithoutTasks(events)
+        ? { tasks: [], quests: [], toolCall, approvalOutcomes }
+        : null;
     const read = makeTaskReads(sql);
     const roots = yield* sql<{ readonly rootId: string }>`SELECT DISTINCT root_id FROM tasks
       WHERE ${sql.in("id", touched)}`;

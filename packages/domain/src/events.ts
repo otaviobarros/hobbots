@@ -22,6 +22,7 @@ import {
   TaskNote,
   TaskWait,
 } from "./quest.ts";
+import { SkillFeedback, SkillProposal } from "./skill-proposals.ts";
 import {
   Skill,
   SkillAssignment,
@@ -185,6 +186,12 @@ const SkillHeld = Schema.TaggedStruct("SkillHeld", { assignment: SkillAssignment
 const SkillOptOutChanged = Schema.TaggedStruct("SkillOptOutChanged", { optOut: SkillOptOut, optedOut: Schema.Boolean });
 /** A skill left the library, with its assignments gone before it. Its revisions' files stay for backups. */
 const SkillRemoved = Schema.TaggedStruct("SkillRemoved", { skill: Skill });
+/** A hob proposed a new skill or a revision (ADR 029, Proactive hobs), recorded before you see it. It waits for you. */
+const SkillProposalRequested = Schema.TaggedStruct("SkillProposalRequested", { proposal: SkillProposal });
+/** A proposal moved: you accepted it and the hub is writing it, it was added, or you said Not now. */
+const SkillProposalChanged = Schema.TaggedStruct("SkillProposalChanged", { proposal: SkillProposal });
+/** A hob noted that a skill is wrong, outdated or unclear. */
+const SkillFeedbackLeft = Schema.TaggedStruct("SkillFeedbackLeft", { feedback: SkillFeedback });
 /** A hob used a skill in a turn (ADR 029, The use line): the revision the turn mounted, or an organization's skill. */
 const SkillUsed = Schema.TaggedStruct("SkillUsed", { use: SkillUse });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
@@ -281,6 +288,9 @@ export const JournaledEvent = Schema.Union([
   SkillHeld,
   SkillOptOutChanged,
   SkillRemoved,
+  SkillProposalRequested,
+  SkillProposalChanged,
+  SkillFeedbackLeft,
   SkillUsed,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
@@ -355,6 +365,9 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   SkillHeld: 1,
   SkillOptOutChanged: 1,
   SkillRemoved: 1,
+  SkillProposalRequested: 1,
+  SkillProposalChanged: 1,
+  SkillFeedbackLeft: 1,
   SkillUsed: 1,
 };
 

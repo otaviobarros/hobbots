@@ -11,10 +11,13 @@ import {
 
 /**
  * One thing the tray asks about: a request to approve, work that is stuck, or a question for you, a
- * hob's or the hub's. A hob asking to share what it learned waits in the Inbox and Memory, never in
- * the way of a chat.
+ * hob's or the hub's. A hob asking to share what it learned, or proposing a skill, waits in the
+ * Inbox, never in the way of a chat.
  */
-export type TrayEntry = Exclude<InboxEntry, { kind: "device" } | { kind: "failed" } | { kind: "memory" }>;
+export type TrayEntry = Exclude<
+  InboxEntry,
+  { kind: "device" } | { kind: "failed" } | { kind: "memory" } | { kind: "skill" }
+>;
 
 /**
  * What the tray holds, in the order it asks: pending approvals, then stuck work, then questions,

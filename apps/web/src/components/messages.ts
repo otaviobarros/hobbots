@@ -580,6 +580,10 @@ export const messages = {
       "outside-folders": "Acts outside the folders this hob may use.",
       "search-memory": "Reads only. Nothing changes.",
       "save-memory": "Writes a page to its own memory. You can edit or undo it.",
+      "search-skills": "Reads only. Nothing changes.",
+      "request-skill": "Gives it a skill from your library. You can undo it.",
+      "propose-skill": "Drafts a skill. Nothing changes until you add it.",
+      "skill-feedback": "Leaves a note on a skill. Nothing changes.",
     },
   },
   charms: {
@@ -976,6 +980,7 @@ export const messages = {
     groups: {
       files: "Files",
       memory: "Memory",
+      skills: "Skills",
       commands: "Commands",
       internet: "Internet",
       outside: "Outside its folders",
@@ -995,7 +1000,7 @@ export const messages = {
     sandbox: "Sandbox",
     details: "Details: how these rules are kept",
     detailsNote: ({ name }: { name: string }) =>
-      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way. Memory rules are decided by Hobbots each time ${name} uses its memory tools: on Never, it cannot search its memory or save to it. Even then, each new session still starts with a short brief from the memory ${name} reads, and Hobbots still keeps a summary of each chat in ${name}'s own memory.`,
+      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way. Memory rules are decided by Hobbots each time ${name} uses its memory tools: on Never, it cannot search its memory or save to it. Even then, each new session still starts with a short brief from the memory ${name} reads, and Hobbots still keeps a summary of each chat in ${name}'s own memory. Skill rules work the same way: a skill itself grants nothing, and its scripts run under the rules above.`,
   },
   signing: {
     label: "Sign commits with my 1Password key",

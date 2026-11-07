@@ -791,6 +791,8 @@ describe("only the user decides approvals and manages grants", () => {
         join("packages", "agents", "src", "hub-questions.ts"),
         join("packages", "agents", "src", "memory-shares.ts"),
         join("packages", "agents", "src", "questions.ts"),
+        join("packages", "agents", "src", "skill-proposals.ts"),
+        join("packages", "agents", "src", "skill-reviews.ts"),
         join("packages", "api", "src", "user-session.ts"),
       ].sort(),
     );
@@ -805,6 +807,8 @@ describe("only the user decides approvals and manages grants", () => {
       "grants.ts",
       "memory-shares.ts",
       "questions.ts",
+      "skill-proposals.ts",
+      "skill-reviews.ts",
     ]) {
       const lines = readFileSync(join(root, "packages", "agents", "src", service), "utf8")
         .split("\n")

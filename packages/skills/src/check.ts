@@ -1,5 +1,6 @@
 import { posix } from "node:path";
 import {
+  SKILL_HIDDEN_TEXT,
   SKILL_LIMITS,
   type SkillCheck,
   type SkillDropped,
@@ -65,8 +66,6 @@ const textOf = (bytes: Uint8Array): string | null => {
   }
 };
 
-/** Characters that hide text from a reader: zero-width, direction overrides and tag characters. */
-const HIDDEN = /[​-‏‪-‮⁠-⁤⁦-⁩﻿\u{E0000}-\u{E007F}]/u;
 const URL = /\bhttps?:\/\/[^\s<>"'`)\]\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]+/g;
 const SCRIPT_EXTENSIONS = /\.(?:sh|bash|zsh|fish|py|js|mjs|cjs|ts|rb|pl|php|ps1|psm1|bat|cmd|exe|bin)$/i;
 const LINK_TARGETS = [/\]\(\s*<?([^)\s>]+)>?/g, /\b(?:src|href)\s*=\s*["']([^"']+)["']/gi];
@@ -145,7 +144,7 @@ const flagsOf = (file: SkillContent, text: string | null): ReadonlyArray<SkillFl
   if (text === null) return flags;
   const urls = (text.match(URL) ?? []).map(withoutTrailingPunctuation);
   for (const url of new Set(urls)) flags.push({ _tag: "Url", path: file.path, url });
-  const hidden = HIDDEN.exec(text.startsWith("﻿") ? text.slice(1) : text);
+  const hidden = SKILL_HIDDEN_TEXT.exec(text.startsWith("﻿") ? text.slice(1) : text);
   if (hidden !== null) {
     const codePoint = `U+${(hidden[0].codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}`;
     flags.push({ _tag: "HiddenText", path: file.path, codePoint });

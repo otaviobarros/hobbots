@@ -1,4 +1,4 @@
-import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
+import type { SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
 import {
   type AgentId,
   type ApprovalRequest,
@@ -10,6 +10,7 @@ import {
   memoryShareWaits,
   openBlocker,
   type Quest,
+  skillProposalOpen,
   type TaskId,
   type TaskTree,
   type ThreadId,
@@ -18,6 +19,7 @@ import { firstLine } from "../../lib/format.ts";
 import { blockerTries, blockerWhat } from "../blockers/blocker-model.ts";
 import { shareWhat } from "../memory/review-model.ts";
 import { taskTitle } from "../quest/work-model.ts";
+import { proposalWhat } from "../skill-review/proposal-model.ts";
 import { expiryText, requestTitle, statusText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
 
@@ -27,7 +29,7 @@ const copy = messages;
  * One thing in the Inbox list. Every kind shows as the same row and opens beside the list: a
  * request to approve, a question no lead could answer, a question the hub itself asks (#976), work
  * that is stuck, a party member's Task that failed while its Quest goes on (ADR 027), a device
- * asking to pair, or a hob asking to share what it learned (ADR 028). `key` names it in the address: a request by its own id, so links from Home and the chat
+ * asking to pair, a hob asking to share what it learned (ADR 028), or a hob that drafted a skill (ADR 029). `key` names it in the address: a request by its own id, so links from Home and the chat
  * still open it, and the other kinds by their kind and id.
  */
 export type InboxEntry =
@@ -37,7 +39,8 @@ export type InboxEntry =
   | { readonly kind: "stuck"; readonly key: string; readonly item: BackpackItem }
   | { readonly kind: "failed"; readonly key: string; readonly failed: FailedTask }
   | { readonly kind: "device"; readonly key: string; readonly device: WaitingDevice }
-  | { readonly kind: "memory"; readonly key: string; readonly share: MemoryShare };
+  | { readonly kind: "memory"; readonly key: string; readonly share: MemoryShare }
+  | { readonly kind: "skill"; readonly key: string; readonly view: SkillProposalView };
 
 export const approvalEntry = (request: ApprovalRequest): InboxEntry => ({ kind: "approval", key: request.id, request });
 
@@ -69,13 +72,19 @@ export const deviceEntry = (device: WaitingDevice): InboxEntry => ({
 
 export const memoryEntry = (share: MemoryShare): InboxEntry => ({ kind: "memory", key: `memory:${share.id}`, share });
 
+const skillEntry = (view: SkillProposalView): InboxEntry => ({
+  kind: "skill",
+  key: `skill:${view.proposal.id}`,
+  view,
+});
+
 /** Whether a key from the address names a request, which the Inbox can read on its own. */
 export const namesRequest = (key: string): boolean => !key.includes(":");
 
 /**
  * What Needs you lists, in one list: devices asking, questions for you, the hub's own, stuck work,
- * failed Tasks, the requests, then the shares that wait. A share decided while it is open stays, so
- * its outcome and Undo show, the way a decided request does.
+ * failed Tasks, the requests, then the shares and skill proposals that wait. One decided while it is
+ * open stays, so its outcome and Undo show, the way a decided request does.
  */
 export const needsEntries = ({
   devices,
@@ -85,6 +94,7 @@ export const needsEntries = ({
   failed,
   requests,
   shares = [],
+  proposals = [],
   selected,
 }: {
   readonly devices: ReadonlyArray<WaitingDevice>;
@@ -94,7 +104,8 @@ export const needsEntries = ({
   readonly failed: ReadonlyArray<FailedTask>;
   readonly requests: ReadonlyArray<ApprovalRequest>;
   readonly shares?: ReadonlyArray<MemoryShare>;
-  /** The key the address names, to keep a share decided there in view. */
+  readonly proposals?: ReadonlyArray<SkillProposalView>;
+  /** The key the address names, to keep a share or a proposal decided there in view. */
   readonly selected?: string | undefined;
 }): Array<InboxEntry> => [
   ...devices.map(deviceEntry),
@@ -104,6 +115,9 @@ export const needsEntries = ({
   ...failed.map(failedEntry),
   ...requests.map(approvalEntry),
   ...shares.filter((share) => memoryShareWaits(share) || `memory:${share.id}` === selected).map(memoryEntry),
+  ...proposals
+    .filter((view) => skillProposalOpen(view.proposal) || `skill:${view.proposal.id}` === selected)
+    .map(skillEntry),
 ];
 
 /** The thread an entry is about, or null for a device, or a hub question about no chat, which are about this hub. */
@@ -121,6 +135,8 @@ export const entryThread = (entry: InboxEntry): ThreadId | null => {
       return entry.failed.task.threadId;
     case "memory":
       return entry.share.threadId;
+    case "skill":
+      return entry.view.proposal.threadId;
     default:
       return null;
   }
@@ -139,6 +155,8 @@ export const entryAsker = (entry: InboxEntry): AgentId | undefined => {
       return entry.failed.task.ownerId;
     case "memory":
       return entry.share.agentId;
+    case "skill":
+      return entry.view.proposal.agentId;
     default:
       return undefined;
   }
@@ -181,14 +199,15 @@ export const topQuests = (trees: ReadonlyArray<TaskTree>): Map<TaskId, Quest> =>
 };
 
 /**
- * Where a group of entries belongs: a quest, a thread with no quest, this hub for devices, or
- * memory for the shares, which wait together however they were learned.
+ * Where a group of entries belongs: a quest, a thread with no quest, this hub for devices, memory
+ * for the shares, which wait together however they were learned, or skills for the proposals.
  */
 export type InboxPlace =
   | { readonly kind: "quest"; readonly quest: Quest }
   | { readonly kind: "thread"; readonly threadId: ThreadId }
   | { readonly kind: "hub" }
-  | { readonly kind: "memory" };
+  | { readonly kind: "memory" }
+  | { readonly kind: "skills" };
 
 export interface InboxGroup {
   readonly key: string;
@@ -199,6 +218,7 @@ export interface InboxGroup {
 /** The place an entry is listed under, from the top Quest over its Task when there is one. */
 export const entryPlace = (entry: InboxEntry, questOf: (taskId: TaskId) => Quest | undefined): InboxPlace => {
   if (entry.kind === "memory") return { kind: "memory" };
+  if (entry.kind === "skill") return { kind: "skills" };
   const taskId = entryTask(entry);
   const quest = taskId === null ? undefined : questOf(taskId);
   if (quest !== undefined) return { kind: "quest", quest };
@@ -244,6 +264,13 @@ const urgency = (entry: InboxEntry) => {
       return { closed: false, risky: false, expiresAt: null, since: entry.failed.task.updatedAt };
     case "memory":
       return { closed: !memoryShareWaits(entry.share), risky: false, expiresAt: null, since: entry.share.createdAt };
+    case "skill":
+      return {
+        closed: !skillProposalOpen(entry.view.proposal),
+        risky: false,
+        expiresAt: null,
+        since: entry.view.proposal.createdAt,
+      };
     default:
       return {
         closed: false,
@@ -403,6 +430,15 @@ const shareRow = (share: MemoryShare, names: HobName): InboxRow => {
   };
 };
 
+const proposalRow = ({ proposal }: SkillProposalView, names: HobName): InboxRow => ({
+  chain: [names(proposal.agentId), copy.row.youEnd],
+  kind: copy.kind.skill,
+  tag: skillProposalOpen(proposal) ? "needs-you" : "muted",
+  what: proposalWhat(proposal, names(proposal.agentId)),
+  when: copy.row.noRush,
+  tone: "plain",
+});
+
 const deviceRow = ({ request }: WaitingDevice, now: Date): InboxRow => ({
   chain: [request.name, copy.row.youEnd],
   kind: copy.kind.device,
@@ -430,6 +466,8 @@ export const entryRow = (entry: InboxEntry, names: HobName, lead: AgentId | unde
       return failedRow(entry.failed, names, lead);
     case "memory":
       return shareRow(entry.share, names);
+    case "skill":
+      return proposalRow(entry.view, names);
     default:
       return deviceRow(entry.device, now);
   }

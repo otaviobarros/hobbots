@@ -3,6 +3,7 @@ import { ApprovalRequest } from "./approval.ts";
 import { AgentId, ThreadId } from "./ids.ts";
 import { ArtifactRef, Checkpoint, Delegation, HandOff, NoteId, QuestId, Question } from "./quest.ts";
 import { Revision } from "./revision.ts";
+import { SkillProposal } from "./skill-proposals.ts";
 import { AttemptId, Task, TaskId } from "./task.ts";
 
 /**
@@ -20,7 +21,11 @@ export const CONTINUATION_HEADER = "Hobbots wrote this, not the user.";
 export const BackpackItemId = Schema.String.pipe(Schema.brand("BackpackItemId"));
 export type BackpackItemId = typeof BackpackItemId.Type;
 
-/** The kinds of ADR 019. Every kind but `progress` is actionable and can wake its hob (IN-005). */
+/**
+ * The kinds of ADR 019, and how a skill proposal ended (ADR 029). Every kind but `progress` and
+ * `skill-proposal` is actionable and can wake its hob (IN-005): the hob hears how its proposal ended
+ * in its next turn, never in a turn of its own.
+ */
 export const BackpackItemKind = Schema.Literals([
   "task",
   "result",
@@ -33,10 +38,11 @@ export const BackpackItemKind = Schema.Literals([
   "approval-outcome",
   "deadline",
   "progress",
+  "skill-proposal",
 ]);
 export type BackpackItemKind = typeof BackpackItemKind.Type;
 
-export const isActionableKind = (kind: BackpackItemKind): boolean => kind !== "progress";
+export const isActionableKind = (kind: BackpackItemKind): boolean => kind !== "progress" && kind !== "skill-proposal";
 
 /**
  * How soon an item should be dealt with among a hob's open items, higher first: an answer or an
@@ -76,6 +82,8 @@ export const BackpackPayload = Schema.Union([
   Schema.TaggedStruct("deadline", { taskId: TaskId, dueAt: Schema.String }),
   /** Routine progress, including the hub's started and waiting states. */
   Schema.TaggedStruct("progress", { checkpoint: Checkpoint }),
+  /** You added a hob's skill proposal, or said Not now (ADR 029). Routine: it rides along the hob's next turn. */
+  Schema.TaggedStruct("skill-proposal", { proposal: SkillProposal }),
 ]);
 export type BackpackPayload = typeof BackpackPayload.Type;
 

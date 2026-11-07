@@ -144,6 +144,7 @@ export const TaskToolCallsLive = Layer.effect(
               "charm_calls",
               "memory_saves",
               "memory_shares",
+              "skill_proposals",
             ]) {
               yield* sql`UPDATE ${sql(table)} SET scope = ${outcome.scope}
                 WHERE agent_id = ${call.agentId} AND scope = ${call.scope}`;

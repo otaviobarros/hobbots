@@ -16,6 +16,7 @@ import {
   type ToolAccess,
   type ToolStartedEvent,
   type TurnApprovals,
+  TurnSkillsInUse,
   trackTurn,
 } from "@hobbots/agents";
 import {
@@ -175,7 +176,8 @@ export const runSessionTurn = (
           redaction: redactor,
           recordToolStart: (event) =>
             turn.recordToolStart(event).pipe(Effect.tap((recorded) => (recorded ? stepOf(event) : Effect.void))),
-          hubTools: yield* turn.hubTools,
+          // A hub tool reads the revisions this turn mounted, not what a rollout moved since.
+          hubTools: yield* Effect.provideService(turn.hubTools, TurnSkillsInUse, given),
         },
         adapter.sendPrompt,
       )

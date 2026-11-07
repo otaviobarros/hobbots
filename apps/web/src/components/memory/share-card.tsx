@@ -1,10 +1,10 @@
 import { type MemoryShare, memoryKindOf } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { Textarea } from "@hobbots/ui/components/textarea";
 import { Link } from "@tanstack/react-router";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { memoryNotAnswering } from "../../api/memory-pages.ts";
 import { shareChangedMeanwhile, shareClosed, useDecideShare } from "../../api/memory-shares.ts";
+import { DraftForm } from "../draft-form/draft-form.tsx";
 import { type HobDirectory, memorySearchOf, scopeName } from "./memory-model.ts";
 import { KindTag } from "./memory-parts.tsx";
 import { messages } from "./messages.ts";
@@ -74,40 +74,22 @@ export function ShareDecision({
 }) {
   const decide = useDecideShare(share);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(share.markdown);
-  const fieldId = useId();
   const waiting = share.state === "waiting";
   const busy = decide.isPending;
   return (
     <div className="flex flex-col gap-3">
       {waiting && editing && (
-        <form
-          className="flex flex-col gap-2 rounded-card border-(length:--edge) border-control bg-card p-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            decide.mutate({ _tag: "share", markdown: draft });
-          }}
-        >
-          <label htmlFor={fieldId} className="text-detail text-text-secondary">
-            {copy.editLabel}
-          </label>
-          <Textarea
-            id={fieldId}
-            variant="deep"
-            rows={8}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <span className="text-meta text-label">{copy.editHint}</span>
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={busy || draft.trim() === ""}>
-              {copy.shareEdited}
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => setEditing(false)} disabled={busy}>
-              {copy.cancelEdit}
-            </Button>
-          </div>
-        </form>
+        <DraftForm
+          initial={share.markdown}
+          label={copy.editLabel}
+          hint={copy.editHint}
+          submit={copy.shareEdited}
+          back={copy.cancelEdit}
+          rows={8}
+          busy={busy}
+          onSubmit={(markdown) => decide.mutate({ _tag: "share", markdown })}
+          onBack={() => setEditing(false)}
+        />
       )}
       {waiting && !editing && (
         <div className="flex flex-wrap gap-2">

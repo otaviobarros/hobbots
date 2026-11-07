@@ -1,4 +1,11 @@
-import { announcer, EventPublisher, SkillLibrary, type SkillRevisionAdded } from "@hobbots/agents";
+import {
+  announcer,
+  EventPublisher,
+  type SkillImportError,
+  SkillLibrary,
+  type SkillRevisionAdded,
+  type WrittenFile,
+} from "@hobbots/agents";
 import {
   type SkillBy,
   type SkillDropped,
@@ -32,7 +39,7 @@ export type SkillImportSource =
   | { readonly _tag: "Archive"; readonly fileName: string; readonly bytes: Uint8Array }
   | { readonly _tag: "Git"; readonly url: string; readonly ref: string | null }
   /** Written in Hobbots: each file's path in the skill and its text. */
-  | { readonly _tag: "Written"; readonly files: ReadonlyArray<{ readonly path: string; readonly text: string }> }
+  | { readonly _tag: "Written"; readonly files: ReadonlyArray<WrittenFile> }
   /** A revision's folder, edited in Hobbots: its other files are kept as they are. */
   | ({
       readonly _tag: "Edited";
@@ -86,14 +93,7 @@ export interface SkillImportOptions {
   readonly by: SkillBy;
 }
 
-export type SkillImportError =
-  | SkillSourceUnreadable
-  | SkillRefused
-  | SkillNotFound
-  | SkillNameTaken
-  | SkillNameChanged
-  | SkillMovedOn
-  | SkillSourceChanged;
+export type { SkillImportError, WrittenFile } from "@hobbots/agents";
 
 export interface SkillImporterShape {
   /** Lists the skills a source holds, checked, writing nothing. */
@@ -116,13 +116,14 @@ export class SkillImporter extends Context.Service<SkillImporter, SkillImporterS
 const encoder = new TextEncoder();
 
 /** A skill written in Hobbots, as a source like any other. */
-const writtenTree = (files: ReadonlyArray<{ readonly path: string; readonly text: string }>): SkillTree => {
-  const bytes = new Map(files.map((file) => [file.path, encoder.encode(file.text)]));
+const writtenTree = (files: ReadonlyArray<WrittenFile>): SkillTree => {
+  const bytes = new Map(files.map((file) => [file.path, "bytes" in file ? file.bytes : encoder.encode(file.text)]));
+  const runs = new Set(files.flatMap((file) => (file.executable === true ? [file.path] : [])));
   const folders = new Set(files.flatMap((file) => (parentOf(file.path) === "" ? [] : [parentOf(file.path)])));
   const entries: Array<TreeEntry> = [
     ...[...folders].map((path): TreeEntry => ({ path, kind: "directory", executable: false, size: 0 })),
     ...[...bytes].map(
-      ([path, content]): TreeEntry => ({ path, kind: "file", executable: false, size: content.length }),
+      ([path, content]): TreeEntry => ({ path, kind: "file", executable: runs.has(path), size: content.length }),
     ),
   ];
   return { entries, commit: null, read: async (path) => bytes.get(path) ?? new Uint8Array() };

@@ -69,6 +69,7 @@ import skillRollouts from "./0066_skill_rollouts.ts";
 import messageSkills from "./0067_message_skills.ts";
 import messageSkillsUsed from "./0068_message_skills_used.ts";
 import skillUses from "./0069_skill_uses.ts";
+import skillProposals from "./0070_skill_proposals.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -145,4 +146,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0067_message_skills": messageSkills,
   "0068_message_skills_used": messageSkillsUsed,
   "0069_skill_uses": skillUses,
+  "0070_skill_proposals": skillProposals,
 };

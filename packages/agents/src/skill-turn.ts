@@ -10,7 +10,7 @@ import {
   type TurnSkill,
   type UsedSkill,
 } from "@hobbots/domain";
-import { DateTime, Effect, Option } from "effect";
+import { Context, DateTime, Effect, Option } from "effect";
 import { MemoryProjects, memoryActorFor } from "./memory.ts";
 import type { SkillMount } from "./runtime.ts";
 import {
@@ -27,6 +27,15 @@ import {
  * when the turn starts and hands the runtime their mounts. Every session gets them the same way, a
  * chat's, a Task step's and a party member's.
  */
+
+/**
+ * The skills the turn being served mounted at its start, as it recorded them (ADR 029, Pins and
+ * rollout), or null when the hub does not know them: a hub tool reads which revision the turn uses
+ * here, such as the one a note is left on, so a rollout during the turn never moves it.
+ */
+export const TurnSkillsInUse = Context.Reference<ReadonlyArray<TurnSkill> | null>("@hobbots/agents/TurnSkillsInUse", {
+  defaultValue: () => null,
+});
 
 /**
  * The Charm ids in a hob's configuration, which a skill's Charm hint is compared with. The GitHub

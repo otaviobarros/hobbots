@@ -1,4 +1,4 @@
-import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
+import type { SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
 import type {
   ApprovalRequest,
   BackpackItem,
@@ -29,6 +29,7 @@ import { memorySharesQuery, waitingShares } from "../../api/memory-shares.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
 import { agentsQuery } from "../../api/queries.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
+import { skillProposalsQuery, waitingProposals } from "../../api/skill-proposals.ts";
 import { readStored, writeStored } from "../../lib/storage.ts";
 import { PageToastViewport } from "../archive/archive-toast.tsx";
 import { messages as blockerCopy } from "../blockers/messages.ts";
@@ -70,11 +71,16 @@ const NO_QUESTIONS: ReadonlyArray<WaitingQuestion> = [];
 const NO_FAILED: ReadonlyArray<FailedTask> = [];
 const NO_HUB: ReadonlyArray<HubQuestion> = [];
 const NO_SHARES: ReadonlyArray<MemoryShare> = [];
+const NO_PROPOSALS: ReadonlyArray<SkillProposalView> = [];
 
 type BlockersRead = ReturnType<typeof useBlockersQuery>;
 type QuestionsRead = ReturnType<typeof useWaitingQuestionsQuery>;
 type FailedRead = ReturnType<typeof useFailedTasksQuery>;
 type HubRead = ReturnType<typeof useHubQuestionsQuery>;
+type ProposalsRead = ReturnType<typeof useSkillProposals>;
+
+/** The skill proposals hobs made, as the Inbox lists them. */
+const useSkillProposals = () => useQuery(skillProposalsQuery);
 
 /** The reads besides the requests that Needs you lists from. */
 interface WaitReads {
@@ -83,6 +89,8 @@ interface WaitReads {
   readonly failed: FailedRead;
   /** The questions the hub itself asks you (#976). */
   readonly hub: HubRead;
+  /** The skills hobs propose (ADR 029). */
+  readonly proposals: ProposalsRead;
 }
 type InboxRead = ReturnType<typeof useQuery<ReadonlyArray<ApprovalRequest>>>;
 
@@ -104,9 +112,11 @@ const readEmpty = (read: { readonly isSuccess: boolean; readonly data?: Readonly
  */
 const emptyState = (tab: InboxTab, read: boolean, entries: ReadonlyArray<InboxEntry>, reads: WaitReads) => {
   if (tab === "history" || !read || entries.length > 0) return undefined;
-  if (!(readEmpty(reads.blockers) && readEmpty(reads.questions) && readEmpty(reads.failed) && readEmpty(reads.hub))) {
-    return undefined;
-  }
+  const all = [reads.blockers, reads.questions, reads.failed, reads.hub];
+  // The proposals read keeps the latest decided ones too: only those that still wait count.
+  const proposals = reads.proposals;
+  const noProposals = proposals.isSuccess && waitingProposals(proposals.data).length === 0;
+  if (!all.every(readEmpty) || !noProposals) return undefined;
   return ALL_CLEAR;
 };
 
@@ -125,7 +135,7 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
   const questions = useWaitingQuestionsQuery();
   const failed = useFailedTasksQuery();
   const hub = useHubQuestionsQuery();
-  const reads: WaitReads = { blockers, questions, failed, hub };
+  const reads: WaitReads = { blockers, questions, failed, hub, proposals: useSkillProposals() };
   const devices = usePromptedDevices();
   const shares = useQuery(memorySharesQuery).data ?? NO_SHARES;
   const entries = tabEntries(tab, requests, devices, reads, shares, requestId);
@@ -139,7 +149,11 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
     reads,
     entries,
     selected: tab === "history" || shown.hold !== undefined ? undefined : selectedEntry(entries, requestId),
-    waiting: waitingCount(approvals, reads) + devices.length + waitingShares(shares).length,
+    waiting:
+      waitingCount(approvals, reads) +
+      devices.length +
+      waitingShares(shares).length +
+      waitingProposals(reads.proposals.data ?? NO_PROPOSALS).length,
     empty: emptyState(tab, inbox.isSuccess, entries, reads),
   };
 };
@@ -267,10 +281,15 @@ function NeedsList({
   listRef: RefObject<HTMLUListElement | null>;
 }) {
   // Until the reads land, the list holds three rows in skeleton, never a line in their place.
-  const { questions, blockers, failed, hub } = reads;
+  const { questions, blockers, failed, hub, proposals } = reads;
   const reading =
     entries.length === 0 &&
-    (inbox.isPending || questions.isPending || blockers.isPending || failed.isPending || hub.isPending);
+    (inbox.isPending ||
+      questions.isPending ||
+      blockers.isPending ||
+      failed.isPending ||
+      hub.isPending ||
+      proposals.isPending);
   return (
     <aside aria-label={copy.title} className="flex w-95 flex-none flex-col border-e border-line bg-panel">
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
@@ -279,6 +298,7 @@ function NeedsList({
         <ReadState read={blockers} failed={blockerCopy.loadFailed} />
         <ReadState read={failed} failed={copy.failedTask.loadFailed} />
         <ReadState read={hub} failed={copy.question.loadFailed} />
+        <ReadState read={proposals} failed={copy.skillsFailed} />
         {reading && (
           <div aria-busy="true" className="flex flex-col gap-2 px-2.5 py-1">
             <InboxRowsSkeleton />
@@ -290,6 +310,7 @@ function NeedsList({
                 void blockers.refetch();
                 void failed.refetch();
                 void hub.refetch();
+                void proposals.refetch();
               }}
             />
           </div>
@@ -331,7 +352,7 @@ const tabEntries = (
   tab: InboxTab,
   requests: ReadonlyArray<ApprovalRequest>,
   devices: ReadonlyArray<WaitingDevice>,
-  { questions, blockers, failed, hub }: WaitReads,
+  { questions, blockers, failed, hub, proposals }: WaitReads,
   shares: ReadonlyArray<MemoryShare>,
   selected: string | undefined,
 ): ReadonlyArray<InboxEntry> =>
@@ -344,6 +365,7 @@ const tabEntries = (
         failed: failed.data ?? NO_FAILED,
         requests,
         shares,
+        proposals: proposals.data ?? NO_PROPOSALS,
         selected,
       })
     : [];
@@ -399,7 +421,13 @@ function Selected({
  * A read Needs you lists from besides the requests, when it failed: a way to read it again. While
  * it is read the list's skeleton rows stand in. A read again that failed keeps what was read before.
  */
-function ReadState({ read, failed }: { read: BlockersRead | QuestionsRead | FailedRead | HubRead; failed: string }) {
+function ReadState({
+  read,
+  failed,
+}: {
+  read: BlockersRead | QuestionsRead | FailedRead | HubRead | ProposalsRead;
+  failed: string;
+}) {
   return read.isError ? <LoadFailed message={failed} onRetry={() => void read.refetch()} /> : null;
 }
 

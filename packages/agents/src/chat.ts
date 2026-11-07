@@ -64,6 +64,7 @@ import {
   mentionedSkill,
   skillMounter,
   skillUseRecorder,
+  TurnSkillsInUse,
   withoutMention,
   withUsedSkill,
 } from "./skill-turn.ts";
@@ -857,6 +858,7 @@ export class ChatService extends Context.Service<
                 approvals: turnApprovals?.approvals ?? null,
                 redaction: redactor,
                 recordToolStart,
+                // Its hub tools read the revisions this turn mounted, not what a rollout moved since.
                 hubTools: yield* Effect.gen(function* () {
                   const messageId = (yield* Ref.get(reply.current)).id;
                   const charmTurn: CharmTurn = {
@@ -872,7 +874,7 @@ export class ChatService extends Context.Service<
                   // A Charm call's refusal is recorded as a Task tool's is, when the turn has Task tools.
                   const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);
                   return combineHubTools(taskTurn?.hubTools ?? null, recorded(yield* charmsFor(charmTurn)));
-                }),
+                }).pipe(Effect.provideService(TurnSkillsInUse, skills.recorded)),
               },
               adapter.sendPrompt,
             )

@@ -4,7 +4,7 @@ import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { makeJournaled } from "./journal.ts";
 import { beginMemoryCall, type MemoryCallRow, memoryCallColumns, memoryCallFields } from "./memory-calls.ts";
-import { sqlOrDie } from "./sql-errors.ts";
+import { firstRow, sqlOrDie } from "./sql-errors.ts";
 
 interface Row extends MemoryCallRow {
   readonly pending: string | null;
@@ -83,12 +83,7 @@ export const MemoryShareLogLive = Layer.effect(
             return { value: moved, events: [{ _tag: "MemoryShareChanged", share: moved }] as const };
           }),
         ),
-      get: (id) =>
-        sqlOrDie(
-          sql<Row>`SELECT * FROM memory_shares WHERE id = ${id}`.pipe(
-            Effect.flatMap(([row]) => (row === undefined ? Effect.succeedNone : Effect.map(fromRow(row), Option.some))),
-          ),
-        ),
+      get: (id) => firstRow(sql<Row>`SELECT * FROM memory_shares WHERE id = ${id}`, fromRow),
       list: (decided) =>
         sqlOrDie(
           Effect.gen(function* () {

@@ -37,6 +37,7 @@ import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertM
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
+import { skillProposalsChanged } from "./skill-proposals.ts";
 import { refreshSkills } from "./skills.ts";
 import {
   newer,
@@ -161,6 +162,19 @@ type SkillLibraryChange = Extract<
 const isSkillLibraryChange = (event: HobbotsEvent): event is SkillLibraryChange =>
   SKILL_LIBRARY_CHANGES.has(event._tag);
 
+/**
+ * Library changes a proposal's review is drawn from: the newest revision it is shown against, and
+ * the assignments adding it would roll out to.
+ */
+const REVIEWED_LIBRARY: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  "SkillRevisionAdded",
+  "SkillAssigned",
+  "SkillUnassigned",
+  "SkillRolledOut",
+  "SkillHeld",
+  "SkillRemoved",
+]);
+
 /** Events the cache takes nothing from. */
 const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // The reply's own upsert, sent just before, already carries its stopping or stopped status.
@@ -193,14 +207,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     if (event._tag === "CommandOutput") applyCommandOutput(queryClient, event);
     return;
   }
-  if (isUnapplied(event)) return;
-  // A skill changed here, on another device or in `~/.agents/skills`: the Skills page reads it again,
-  // and what a hob's next turn gets may have changed, which the composer's `/` list shows (ADR 029).
-  if (isSkillLibraryChange(event)) {
-    void refreshSkills(queryClient);
-    void hobSkillsChanged(queryClient);
-    return;
-  }
+  if (isUnapplied(event) || applySkillEvent(queryClient, event)) return;
   if (isMemoryEvent(event)) {
     applyMemoryEvent(queryClient, event);
     return;
@@ -255,6 +262,40 @@ const MEMORY_EVENTS = new Set<HobbotsEvent["_tag"]>([
   "MemoryShareChanged",
 ]);
 const isMemoryEvent = (event: HobbotsEvent): event is MemoryEvent => MEMORY_EVENTS.has(event._tag);
+
+type ProposalEvent = Extract<
+  HobbotsEvent,
+  { readonly _tag: "SkillProposalRequested" | "SkillProposalChanged" | "SkillFeedbackLeft" }
+>;
+const PROPOSAL_EVENTS = new Set<HobbotsEvent["_tag"]>([
+  "SkillProposalRequested",
+  "SkillProposalChanged",
+  "SkillFeedbackLeft",
+]);
+const isProposalEvent = (event: HobbotsEvent): event is ProposalEvent => PROPOSAL_EVENTS.has(event._tag);
+
+/**
+ * A proposal's event, or a change to the skills library: the Inbox reads the proposals again, so a
+ * review waiting there shows the library as Add would find it, and a hob's next turn may get other
+ * skills, which the composer's `/` list shows (ADR 029). A note on a skill shows on its page, which
+ * #1062 builds. Whether the event was one of these.
+ */
+const applySkillEvent = (
+  queryClient: QueryClient,
+  event: HobbotsEvent,
+): event is ProposalEvent | SkillLibraryChange => {
+  // A skill changed here, on another device or in `~/.agents/skills`: the Skills page reads it again,
+  // and what a hob's next turn gets may have changed, which the composer's `/` list shows (ADR 029).
+  if (isSkillLibraryChange(event)) {
+    void refreshSkills(queryClient);
+    void hobSkillsChanged(queryClient);
+    if (REVIEWED_LIBRARY.has(event._tag)) void skillProposalsChanged(queryClient);
+    return true;
+  }
+  if (!isProposalEvent(event)) return false;
+  if (event._tag !== "SkillFeedbackLeft") void skillProposalsChanged(queryClient);
+  return true;
+};
 
 /** A hob's save or share, as memory's lists show it (ADR 028). */
 const applyMemoryEvent = (queryClient: QueryClient, event: MemoryEvent) => {

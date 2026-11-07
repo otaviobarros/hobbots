@@ -314,6 +314,40 @@ const approvalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolC
     ];
   });
 
+/** Whether a proposal moved to where the hob that made it hears of it: you added it, or said Not now. */
+const decidedProposal = (event: JournaledEvent) =>
+  event._tag === "SkillProposalChanged" &&
+  event.proposal.threadId !== null &&
+  (event.proposal.state === "added" || event.proposal.state === "declined");
+
+/**
+ * How a skill proposal ended (ADR 029), for the hob that made it, in the thread it proposed from.
+ * Routine, so it rides along that thread's next turn and never wakes the hob on its own. A proposal
+ * made outside any chat, as a party member's, has no thread to carry it: that hob hears how it ended
+ * from `skill_propose` when it proposes again.
+ */
+const proposalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolCallSource | null) =>
+  events.flatMap((event): ReadonlyArray<NewBackpackItem> => {
+    if (event._tag !== "SkillProposalChanged" || !decidedProposal(event)) return [];
+    const { proposal } = event;
+    const draft = { record: `skill-proposal:${proposal.id}`, version: null };
+    return [
+      {
+        recipientId: proposal.agentId,
+        taskId: null,
+        questId: null,
+        attemptId: null,
+        threadId: proposal.threadId,
+        dedupeKey: dedupeKey(draft, "skill-proposal", toolCall),
+        payload: { _tag: "skill-proposal", proposal },
+        notBefore: null,
+      },
+    ];
+  });
+
+/** Whether a change's events call for items that need no Task trees, such as how a skill proposal ended. */
+export const needsItemsWithoutTasks = (events: ReadonlyArray<JournaledEvent>): boolean => events.some(decidedProposal);
+
 /**
  * The blocker a change recorded with each Task it moved to a Failure state: the reason it moved
  * for, as `moveTask` records it in the same change (#683).
@@ -362,7 +396,7 @@ export const backpackItemsFor = (
       notBefore: null,
     })),
   );
-  return [...fromTasks, ...outcomes];
+  return [...fromTasks, ...outcomes, ...proposalOutcomes(events, context.toolCall)];
 };
 
 /** The Tasks a change's events touch, so the repository knows which trees to read for `backpackItemsFor`. */

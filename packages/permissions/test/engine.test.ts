@@ -40,6 +40,10 @@ const requests = (h: Home): Record<PolicyOperation, PolicyRequest> => ({
   "outside-folders": files("read-files", h.project, "../secret.txt"),
   "search-memory": { _tag: "Memory", operation: "search-memory", scope: "your memory" },
   "save-memory": { _tag: "Memory", operation: "save-memory", scope: "your memory" },
+  "search-skills": { _tag: "Skills", operation: "search-skills", skill: "release" },
+  "request-skill": { _tag: "Skills", operation: "request-skill", skill: "release-steps" },
+  "propose-skill": { _tag: "Skills", operation: "propose-skill", skill: "release-steps" },
+  "skill-feedback": { _tag: "Skills", operation: "skill-feedback", skill: "release-steps" },
 });
 
 /** ADR 014's preset table, written out again so the engine is checked against the decision, not itself. */
@@ -59,6 +63,11 @@ const ADR_014: Record<PolicyOperation, readonly [PolicyDecision, PolicyDecision,
   // ADR 028's Memory group.
   "search-memory": ["allow", "allow", "allow"],
   "save-memory": ["allow", "allow", "allow"],
+  // ADR 029's Skills group: a request follows the preset, and a proposal always waits for review anyway.
+  "search-skills": ["allow", "allow", "allow"],
+  "request-skill": ["ask", "ask", "allow"],
+  "propose-skill": ["allow", "allow", "allow"],
+  "skill-feedback": ["allow", "allow", "allow"],
 };
 
 /** Ways a path can name something outside the hob's folders. */

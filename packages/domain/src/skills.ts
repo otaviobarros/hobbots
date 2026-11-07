@@ -112,6 +112,12 @@ export const SkillFile = Schema.Struct({
 export type SkillFile = typeof SkillFile.Type;
 
 /**
+ * Characters a reader cannot see, such as a zero-width space or a bidirectional override, that a skill
+ * could hide instructions with: import flags the first it finds, and a review shows where each is.
+ */
+export const SKILL_HIDDEN_TEXT = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\u{E0000}-\u{E007F}]/u;
+
+/**
  * What deserves a careful look before a skill loads (ADR 029, Import): a script, a URL, or text hidden
  * from view, such as a zero-width character. Shown on an import and on every update.
  */

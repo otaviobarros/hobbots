@@ -72,6 +72,7 @@ const RULE_GROUPS: ReadonlyArray<readonly [keyof typeof messages.permissions.gro
   [
     ["files", ["read-files", "edit-files", "delete-files"]],
     ["memory", ["search-memory", "save-memory"]],
+    ["skills", ["search-skills", "request-skill", "propose-skill", "skill-feedback"]],
     ["commands", ["run-commands", "local-git"]],
     ["internet", ["use-web"]],
     ["outside", ["outside-folders"]],

@@ -2,8 +2,6 @@ import { createHash } from "node:crypto";
 import { sep } from "node:path";
 import {
   announcer,
-  approvalNote,
-  askOnStep,
   type CharmTurn,
   EventPublisher,
   type HubCallStep,
@@ -15,8 +13,8 @@ import {
   MemoryShares,
   MemoryStore,
   MemoryTools,
-  operationDecision,
-  showStarted,
+  offeredHubTools,
+  runWhenAllowed,
   type ToolAccess,
 } from "@hobbots/agents";
 import {
@@ -186,25 +184,23 @@ export const MemoryToolsLive = Layer.effect(
       step: HubCallStep | undefined,
       run: Effect.Effect<HubToolAnswer, Refused, A>,
     ) =>
-      Effect.gen(function* () {
-        const label = name === MEMORY_SEARCH_TOOL ? MEMORY_SEARCH_LABEL : MEMORY_SAVE_LABEL;
-        const decision = yield* askOnStep({
-          call: { id: step?.id ?? name, tool: name, arguments: args, label },
-          step,
-          approvals: turn.approvals,
-          // Under the hob's Memory group, with its live grants, as every hub tool's call is.
-          decide: decideHubCall(engine, turn.approvals, access, {
-            _tag: "Memory",
-            operation: OPERATIONS[name],
-            scope: memoryScopeWords(scope),
-          }),
-        });
-        if (decision._tag === "Refuse") return yield* new Refused({ message: decision.reason });
-        showStarted(step, name, label, decision.verdict);
-        const answer = yield* run;
-        return decision.approval === undefined
-          ? answer
-          : { ...answer, text: `${answer.text} ${approvalNote(decision.approval)}` };
+      runWhenAllowed({
+        call: {
+          id: step?.id ?? name,
+          tool: name,
+          arguments: args,
+          label: name === MEMORY_SEARCH_TOOL ? MEMORY_SEARCH_LABEL : MEMORY_SAVE_LABEL,
+        },
+        step,
+        approvals: turn.approvals,
+        // Under the hob's Memory group, with its live grants, as every hub tool's call is.
+        decide: decideHubCall(engine, turn.approvals, access, {
+          _tag: "Memory",
+          operation: OPERATIONS[name],
+          scope: memoryScopeWords(scope),
+        }),
+        refuse: (message) => new Refused({ message }),
+        run,
       });
 
     const search = (turn: CharmTurn, access: ToolAccess, input: MemorySearchInput, step: HubCallStep | undefined) =>
@@ -370,15 +366,14 @@ export const MemoryToolsLive = Layer.effect(
     return MemoryTools.of({
       // Offered only where its Memory group opens it; a tool it answers Never for is not offered at all.
       forTurn: (turn) =>
-        Effect.map(turn.currentAccess, (access) => {
-          if (access === null) return null;
-          const tools = TOOLS.filter(
-            (tool) => operationDecision(access.policy, OPERATIONS[tool.name as MemoryToolName]) !== "deny",
-          );
-          return tools.length === 0
-            ? null
-            : { tools, call: (name: string, input: unknown, step?: HubCallStep) => call(turn, name, input, step) };
-        }),
+        Effect.map(turn.currentAccess, (access) =>
+          offeredHubTools(
+            access,
+            TOOLS,
+            (tool) => OPERATIONS[tool as MemoryToolName],
+            (name, input, step) => call(turn, name, input, step),
+          ),
+        ),
     });
   }),
 );

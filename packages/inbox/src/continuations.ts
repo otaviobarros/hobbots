@@ -5,6 +5,7 @@ import {
   checkpointText,
   choicesText,
   type Question,
+  skillProposalText,
   type Task,
   type ThreadId,
 } from "@hobbots/domain";
@@ -131,10 +132,14 @@ const describeArrival = (item: BackpackItem, results: ResultsIn): string => {
       return `The deadline on Task ${payload.taskId} passed at ${payload.dueAt}.`;
     case "task":
       return `${about(payload.task)} is yours to work on.`;
-    case "progress":
-      return progressDigest([item])[0] ?? "";
+    default:
+      return describeRoutine(item);
   }
 };
+
+/** A routine item, as the digest lists it: a Task's progress, or how a skill proposal ended (ADR 029). */
+const describeRoutine = (item: BackpackItem): string =>
+  item.payload._tag === "skill-proposal" ? skillProposalText(item.payload.proposal) : (progressDigest([item])[0] ?? "");
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -155,9 +160,13 @@ const progressDigest = (items: ReadonlyArray<BackpackItem>): ReadonlyArray<strin
   );
 };
 
-/** The digest's own section of a turn's text, or nothing when no progress came. */
+/**
+ * The digest's own section of a turn's text, or nothing when no routine item came: progress folded
+ * per Task, then each other routine item, such as how a skill proposal ended (ADR 029), on its own line.
+ */
 const digestSection = (items: ReadonlyArray<BackpackItem>, alone: boolean): ReadonlyArray<string> => {
-  const lines = progressDigest(items);
+  const others = items.filter((item) => item.payload._tag !== "progress");
+  const lines = [...progressDigest(items), ...others.map((item) => describeArrival(item, "inline"))];
   if (lines.length === 0) return [];
   const heading = `${alone ? "" : "\n"}Routine progress since your last turn, ${plural(items.length, "update")} in all. It needs no reply:`;
   return [heading, ...lines.map((line) => `- ${line}`)];

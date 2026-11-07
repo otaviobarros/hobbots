@@ -17,6 +17,7 @@ import {
   type Message,
   SkillName,
   SkillRevisionHash,
+  SkillSourceUnreadable,
   type Task,
   TaskId,
   type TaskTree,
@@ -377,7 +378,10 @@ describe("a Task's steps in fresh sessions", () => {
     );
     const skills = Layer.mergeAll(
       Layer.succeed(SkillLibrary, library),
-      Layer.succeed(SkillFiles, { folder: (pin) => Effect.succeed(`/hobbots/skills/objects/${pin}`) }),
+      Layer.succeed(SkillFiles, {
+        folder: (pin) => Effect.succeed(`/hobbots/skills/objects/${pin}`),
+        read: (pin, path) => Effect.fail(new SkillSourceUnreadable({ message: `${path} of ${pin} is not read here.` })),
+      }),
     );
     const { run, control, stepsAsked } = setUp({ skills });
     const thread = await run(seed);

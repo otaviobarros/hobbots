@@ -46,6 +46,7 @@ import {
   SkillImporterLive,
   type SkillImportSource,
   SkillObjectsLive,
+  SkillWriterLive,
 } from "@hobbots/skills";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -63,7 +64,7 @@ const sourceOf = (payload: SkillSourcePayload): SkillImportSource =>
     : payload;
 
 /** The library's refusals, in the words of the HTTP contract. */
-const importError = (error: SkillImportError) => {
+export const importError = (error: SkillImportError) => {
   switch (error._tag) {
     case "SkillRefused":
       return new SkillImportRefused({ check: error.check, path: error.path, message: error.message });
@@ -423,6 +424,9 @@ export const agentsSkillsFolder = (setting: Option.Option<string>, runtime: "cla
  * import into the library, and `~/.agents/skills` read into it when there is one to read.
  */
 export const SkillsLive = (dataDir: string, agentsFolder: string | null) => {
-  const services = SkillImporterLive.pipe(Layer.provideMerge(SkillObjectsLive(dataDir)));
+  const services = SkillWriterLive.pipe(
+    Layer.provideMerge(SkillImporterLive),
+    Layer.provideMerge(SkillObjectsLive(dataDir)),
+  );
   return agentsFolder === null ? services : AgentsFolderLive(agentsFolder).pipe(Layer.provideMerge(services));
 };

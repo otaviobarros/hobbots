@@ -23,7 +23,13 @@ Trusted Workspace is the default. The [design](../decisions/008-design.md) names
 | Comment on GitHub (a Charm) | Ask | Ask | Allow |
 | Search memory | Allow | Allow | Allow |
 | Save to memory (the hob's own memory) | Allow | Allow | Allow |
+| Search skills | Allow | Allow | Allow |
+| Ask for a skill in the library | Ask | Ask | Allow |
+| Propose a skill (always waits for you) | Allow | Allow | Allow |
+| Note a problem with a skill | Allow | Allow | Allow |
 | Anything outside the hob's folders | Deny | Deny | Deny |
+
+The skill rows are Hobbots' own tools ([ADR 029](../decisions/029-skills.md)): a proposal is let through to your Inbox under every preset, but nothing it holds reaches the library until you add it.
 
 Careful keeps investigation automatic and asks before modifications and consequential work. Trusting is deliberately broad inside the hob's folders and the sandbox, with clear disclosure of actual runtime privileges; it never grants self-approval or Hobbots administration. Per-hob overrides only narrow the table; a widening needs a separately recorded user grant. The UI says **Never** for Deny.
 

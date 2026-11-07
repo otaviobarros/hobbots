@@ -1,4 +1,4 @@
-import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
+import type { SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
@@ -41,6 +41,9 @@ import { controlError } from "../quest/control-room.ts";
 import { useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { roomSearch } from "../quest-room/room-search.ts";
+import { messages as skillCopy } from "../skill-review/messages.ts";
+import { ProposalDecision, ProposalDiff } from "../skill-review/proposal-card.tsx";
+import { proposalFoot } from "../skill-review/proposal-model.ts";
 import { EntryPortrait } from "./entry-portrait.tsx";
 import { entryRow, entryThread, type InboxEntry, type InboxRow } from "./inbox-entries.ts";
 import { InboxIcon } from "./inbox-icons.tsx";
@@ -88,6 +91,9 @@ export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob
       return <FailedDetail key={entry.key} failed={entry.failed} hob={hob} row={row} lead={lead} {...context} />;
     case "memory":
       return <ShareDetail key={entry.key} share={entry.share} hob={hob} row={row} {...context} />;
+    case "skill":
+      // Keyed by the entry, so an edit begun on one proposal never shows on the next.
+      return <ProposalDetail key={entry.key} view={entry.view} hob={hob} row={row} {...context} />;
     default:
       return <DeviceDetail device={entry.device} row={row} now={context.now} />;
   }
@@ -436,6 +442,57 @@ function ShareDetail({
       <ShareDiff share={share} hobs={hobs} />
       <Facts rows={[[memoryCopy.review.facts.suggestedBy, `${who} · ${formatWhen(share.createdAt, now)}`]]} />
       <ShareDecision share={share} hobs={hobs} edit="in-memory" />
+    </DetailFrame>
+  );
+}
+
+/**
+ * A hob's skill proposal (ADR 029): the revision it makes and where it goes, each line it adds or
+ * changes, why the hob suggests it and what it learned it from, then Add, Edit then add, or Not now.
+ * A change made against an older revision says so, and is shown against the newest.
+ */
+function ProposalDetail({
+  view,
+  hob,
+  row,
+  directory,
+  now,
+}: { view: SkillProposalView; hob: Agent | undefined; row: InboxRow } & DetailContext) {
+  const { proposal } = view;
+  const who = directory.hobName(proposal.agentId);
+  const stale =
+    view.latest !== null && proposal.base !== null
+      ? skillCopy.stale({ who, base: proposal.base.number, latest: view.latest.number })
+      : null;
+  return (
+    <DetailFrame
+      label={copy.detail.skillLabel({ name: who })}
+      portrait={<EntryPortrait hob={hob} device={false} waiting={row.tag === "needs-you"} large />}
+      row={row}
+      why={proposal.why}
+      chat={chatLink(
+        proposal.agentId,
+        proposal.threadId,
+        proposal.messageId === null ? null : { messageId: proposal.messageId },
+      )}
+      foot={proposal.state === "waiting" ? proposalFoot(view) : ""}
+    >
+      {stale !== null && <p className="m-0 text-detail text-lantern">{stale}</p>}
+      <ProposalDiff view={view} who={who} />
+      <Facts
+        rows={[
+          [skillCopy.facts.suggestedBy, `${who} · ${formatWhen(proposal.createdAt, now)}`],
+          [
+            skillCopy.learnedFrom,
+            proposal.memoryPages.length > 0
+              ? proposal.memoryPages.join(", ")
+              : proposal.threadId !== null
+                ? skillCopy.learnedChat
+                : undefined,
+          ],
+        ]}
+      />
+      <ProposalDecision view={view} who={who} />
     </DetailFrame>
   );
 }
