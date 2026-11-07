@@ -48,9 +48,15 @@ const ENDINGS: Record<"replied" | "failed" | "stopped", TurnEnding> = {
   stopped: { _tag: "Stopped", reason: "Stopped by Hobbots" },
 };
 
-/** A move as a short word: `stay`, `→failed`, or `complete|<what the Task does when that is refused>`. */
+/** A move as a short word: `stay`, `→failed`, `back`, or `complete|<what the Task does when that is refused>`. */
 const shown = (move: TaskMove): string =>
-  move._tag === "Stay" ? "stay" : move._tag === "Move" ? `→${move.to}` : `complete|${shown(move.otherwise)}`;
+  move._tag === "Stay"
+    ? "stay"
+    : move._tag === "Move"
+      ? `→${move.to}`
+      : move._tag === "SendBack"
+        ? "back"
+        : `complete|${shown(move.otherwise)}`;
 
 const STATES: ReadonlyArray<TaskState> = [
   "queued",
@@ -88,10 +94,10 @@ const MOVES: Record<TurnRunner, Record<TaskState, readonly [string, string, stri
     cancelled: ["stay", "stay", "stay"],
   },
   member: {
-    queued: ["complete|stay", "stay", "stay"],
-    active: ["complete|→waiting", "stay", "→waiting"],
-    waiting: ["complete|stay", "stay", "stay"],
-    blocked: ["complete|stay", "stay", "stay"],
+    queued: ["back", "stay", "stay"],
+    active: ["back", "stay", "→waiting"],
+    waiting: ["back", "stay", "stay"],
+    blocked: ["back", "stay", "stay"],
     cancelling: ["→cancelled", "→cancelled", "→cancelled"],
     completed: ["stay", "stay", "stay"],
     failed: ["stay", "stay", "stay"],
@@ -213,7 +219,6 @@ describe("turnEnded", () => {
     // A reply becomes the result, or says there was none.
     const empty = decide("step", "active", { _tag: "Replied", text: "  " }).task;
     expect(empty).toMatchObject({ _tag: "Complete", summary: "The step finished without a reply." });
-    expect(decide("member", "active", ENDINGS.replied).task).toMatchObject({ summary: "Reviewed it" });
   });
 
   // covers OR-004, IN-004
@@ -234,7 +239,7 @@ describe("turnEnded", () => {
       ledger: [deadline("n1")],
       carried: new Set(["n1"]),
     });
-    expect(shown(carried.task)).toBe("complete|→waiting");
+    expect(shown(carried.task)).toBe("back");
     // The root waits while its wait holds, or goes back to what it was before the turn.
     expect(shown(decide("root", "active", ENDINGS.replied, [waitEntry]).task)).toBe("→waiting");
     const was = (before: TaskState) =>
@@ -270,5 +275,52 @@ describe("turnEnded", () => {
     // A wait that holds still shows waiting, and nothing open gives the block back.
     expect(moved([child, waitEntry])).toBe("→waiting");
     expect(moved([])).toBe("→blocked");
+  });
+
+  // covers OR-004, EX-002
+  it("[TC-OR-648] never shows a member's Task done on its reply alone: it sends the member back once, then blocks it", () => {
+    const again = (state: TaskState, ending: TurnEnding, ledger: ReadonlyArray<LedgerEntry> = []) =>
+      turnEnded({ runner: "member", task: task(state), ending, ledger, carried: new Set(), sentBack: true });
+    const unfinished: TurnEnding = { _tag: "Replied", text: "  The Task is blocked and not complete.  " };
+    // A reply with nothing open sends its member back, whatever it says (#1086).
+    expect(shown(decide("member", "active", unfinished).task)).toBe("back");
+    expect(decide("member", "active", unfinished).attempt.state).toBe("completed");
+    // Sent back and replying again: blocked, with the reply as the reason its lead reads.
+    const blocked = again("active", unfinished).task;
+    expect(shown(blocked)).toBe("→blocked");
+    expect(blocked).toMatchObject({
+      reason: expect.stringContaining("last reply: The Task is blocked and not complete."),
+    });
+    expect(again("waiting", { _tag: "Replied", text: " " }).task).toMatchObject({
+      to: "blocked",
+      reason: expect.stringContaining("gave no reply"),
+    });
+    // One already blocked stays so; anything open still holds it, and a failure or stop does as before.
+    expect(shown(again("blocked", unfinished).task)).toBe("stay");
+    expect(shown(again("active", unfinished, [deadline("n1")]).task)).toBe("→waiting");
+    expect([shown(again("active", ENDINGS.failed).task), shown(again("active", ENDINGS.stopped).task)]).toEqual([
+      "stay",
+      "→waiting",
+    ]);
+    // A blocker it reported, in the turn or the one it was sent back for, blocks it on that blocker,
+    // which its lead already heard: no send-back, and no second blocker of the hub's own (#1086).
+    const reported = (sentBack: boolean, lastReport: "blocker" | "finding", state: TaskState = "active") =>
+      turnEnded({
+        runner: "member",
+        task: task(state),
+        ending: unfinished,
+        ledger: [],
+        carried: new Set(),
+        sentBack,
+        lastReport,
+      }).task;
+    expect(reported(false, "blocker")).toEqual({ _tag: "Move", to: "blocked" });
+    expect(reported(true, "blocker")).toEqual({ _tag: "Move", to: "blocked" });
+    expect(shown(reported(false, "blocker", "blocked"))).toBe("stay");
+    // A finding is not a blocker: it still sends the member back to finish.
+    expect(shown(reported(false, "finding"))).toBe("back");
+    // A step and the root never send back.
+    expect(shown(decide("step", "active", unfinished).task)).toBe("complete|→failed");
+    expect(shown(decide("root", "active", unfinished).task)).toBe("stay");
   });
 });

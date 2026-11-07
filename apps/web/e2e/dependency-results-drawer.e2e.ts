@@ -87,7 +87,10 @@ test("[TC-OR-215] Rook's Task drawer shows Quill's result and core.py under Hand
       script("delegate_task", {
         key: "frontend",
         hob: "Rook",
-        brief: "Write the frontend",
+        brief: [
+          "Write the frontend",
+          script("complete_task", { key: "frontend-done", summary: "Frontend ready." }),
+        ].join("\n"),
         depends_on: ["$backend.task_id"],
       }),
     ].join("\n"),

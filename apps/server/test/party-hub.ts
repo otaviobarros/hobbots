@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ActivityRecorder,
+  AdditionalRuntimes,
   ApprovalRepository,
   ApprovalService,
   ChatService,
@@ -16,6 +17,7 @@ import {
   type PromptRequest,
   QuestionService,
   RuntimeAdapter,
+  type RuntimeAdapterShape,
   type RuntimeEvent,
   TaskControls,
   TaskRepository,
@@ -26,6 +28,7 @@ import {
   AgentId,
   EMPTY_HOB_POLICY,
   type Message,
+  type RuntimeKind,
   type Task,
   type TaskTree,
   Thread,
@@ -47,7 +50,7 @@ import {
   UsageLedger,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { FakeAdditionalRuntimesLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive } from "@hobbots/workbench";
 import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { DispatcherHostLive } from "../src/backpack.ts";
@@ -67,12 +70,12 @@ export const PIP = AgentId.make("pip");
 export const NETTLE = AgentId.make("nettle");
 export const threadId = ThreadId.make("first-run");
 
-const hob = (id: AgentId, name: string) =>
+const hob = (id: AgentId, name: string, runtime: RuntimeKind) =>
   new Agent({
     id,
     name,
     roleTitle: "Engineer",
-    runtime: "claude-code",
+    runtime,
     model: null,
     effort: null,
     instructions: "",
@@ -124,6 +127,16 @@ const reacted = (prompt: string, reactions: Array<Reaction>) => {
 };
 
 /**
+ * How a member's turn sent back to finish starts (#1086): its reply alone did not complete its Task.
+ * The party's hobs then finish, as a model told so does, by returning the result with complete_task.
+ */
+export const SENT_BACK = "ended without complete_task, so the Task is not done yet.";
+const finishedWhenSentBack = (prompt: string) =>
+  prompt.includes(SENT_BACK)
+    ? [prompt, hub("complete_task", { key: "sent-back", summary: "Done as briefed" })].join("\n")
+    : prompt;
+
+/**
  * The hub's services, a temporary project folder, and what each scripted call was answered. With
  * `memory`, the hub's hobs remember through it (ADR 028); with `activity`, each turn outside a chat
  * keeps its steps on its Attempt, as the hub's Workbench records them (ADR 023).
@@ -134,6 +147,10 @@ export const partyHub = (
     readonly activity?: boolean;
     /** Which turns announce their session twice, as a runtime bug would. */
     readonly announcesTwice?: (prompt: string) => boolean;
+    /** Whether a member sent back to finish only replies again, rather than returning its result (#1086). */
+    readonly repliesWhenSentBack?: boolean;
+    /** The runtime the party's members run on; Frodo always runs on Claude Code. */
+    readonly members?: RuntimeKind;
   } = {},
 ) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -165,27 +182,31 @@ export const partyHub = (
     }),
   );
 
-  const recording = Layer.effect(
-    RuntimeAdapter,
-    Effect.gen(function* () {
-      const fake = yield* RuntimeAdapter;
-      return RuntimeAdapter.of({
-        ...fake,
-        sendPrompt: (sent) => {
-          const request = answering({ ...sent, prompt: reacted(sent.prompt, reactions) }, answers, gates);
-          requests.push(request);
-          const events = fake.sendPrompt(request);
-          return options.announcesTwice?.(request.prompt)
-            ? events.pipe(
-                Stream.flatMap((event) =>
-                  Stream.fromIterable<RuntimeEvent>(event._tag === "SessionStarted" ? [event, event] : [event]),
-                ),
-              )
-            : events;
-        },
-      });
-    }),
-  ).pipe(Layer.provide(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node))));
+  /** The fake, with each prompt it is sent recorded and played as the test scripts it. */
+  const recorded = (fake: RuntimeAdapterShape): RuntimeAdapterShape => ({
+    ...fake,
+    sendPrompt: (sent) => {
+      const prompt = reacted(sent.prompt, reactions);
+      const finished = options.repliesWhenSentBack === true ? prompt : finishedWhenSentBack(prompt);
+      const request = answering({ ...sent, prompt: finished }, answers, gates);
+      requests.push(request);
+      const events = fake.sendPrompt(request);
+      return options.announcesTwice?.(request.prompt)
+        ? events.pipe(
+            Stream.flatMap((event) =>
+              Stream.fromIterable<RuntimeEvent>(event._tag === "SessionStarted" ? [event, event] : [event]),
+            ),
+          )
+        : events;
+    },
+  });
+  const recording = Layer.merge(
+    Layer.effect(RuntimeAdapter, Effect.map(RuntimeAdapter, recorded)).pipe(Layer.provide(FakeRuntimeLayer())),
+    Layer.effect(
+      AdditionalRuntimes,
+      Effect.map(AdditionalRuntimes, (others) => new Map([...others].map(([kind, fake]) => [kind, recorded(fake)]))),
+    ).pipe(Layer.provide(FakeAdditionalRuntimesLayer())),
+  ).pipe(Layer.provide(PolicyEngine.node));
 
   const party = Layer.effectDiscard(
     Effect.gen(function* () {
@@ -197,7 +218,7 @@ export const partyHub = (
         [PIP, "Pip"],
         [NETTLE, "Nettle"],
       ] as const) {
-        yield* repo.insertAgent(hob(id, name));
+        yield* repo.insertAgent(hob(id, name, id === FRODO ? "claude-code" : (options.members ?? "claude-code")));
       }
       yield* repo.upsertThread(
         new Thread({ id: threadId, agentId: FRODO, title: "First run", createdAt: now, updatedAt: now }),

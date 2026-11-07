@@ -4,6 +4,7 @@ import {
   answerHow,
   type BackpackItem,
   CHECKPOINT_WORDS,
+  CONTINUATION_HEADER,
   checkpointText,
   FINISH_RULE,
   handedFrom,
@@ -208,9 +209,27 @@ export const memberReminder = (task: Task, tree: TaskTree, lead: string): string
     ...(standing.length === 0
       ? []
       : [cut(["Where the Tasks your work builds on stand now:", ...standing].join("\n"), STEP_INPUT_LIMIT)]),
-    "When it is done, call complete_task with its result; while nothing else keeps it open, your final reply becomes its result.",
+    MEMBER_FINISH,
   ].join("\n");
 };
+
+/** How a member's Task ends, as every later turn is reminded: only `complete_task` or a blocker ends it (#1086). */
+const MEMBER_FINISH =
+  "When it is done, call complete_task with its result. If you cannot finish it, report a blocker with report_checkpoint. A final reply alone does not complete it.";
+
+/**
+ * What a member's session is told when its turn ended in prose with nothing open (#1086): its reply
+ * does not say whether the work is done, so it goes on once to say so with a tool. A second turn that
+ * ends the same way blocks the Task, with its reply as the reason its lead reads.
+ */
+export const sendBackPrompt = (task: Task, lead: string): string =>
+  [
+    CONTINUATION_HEADER,
+    `Your turn on Task ${task.id} ended without complete_task, so the Task is not done yet.`,
+    "If the work is done, call complete_task now with its result.",
+    "If it is not done, finish it and then call complete_task, or, if you cannot, report a blocker with report_checkpoint that says what stops you.",
+    `If this turn also ends without either, the Task goes back to ${lead} as blocked, with your reply as the reason.`,
+  ].join("\n");
 
 /**
  * The Tasks the owner's briefing lists under `task`, depth first, each with its place (`1`, `1.2`):

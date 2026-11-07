@@ -10,6 +10,7 @@ import {
   type TaskId,
   type TaskMove,
   type TaskState,
+  type TaskTree,
   type TurnEndInput,
   type TurnEnding,
   type TurnRunner,
@@ -36,6 +37,13 @@ export interface TurnOnTask {
   readonly policyVersion?: string | null;
   /** The root's state before the turn. */
   readonly was?: TaskState;
+  /** A member's turn that ran because its last one was sent back to finish properly (#1086). */
+  readonly sentBack?: boolean;
+  /**
+   * When the member's turn began, before any turn it was sent back for: only what it reported since
+   * says how it ended, since its Attempt keeps the reports of earlier turns it resumed (#1086).
+   */
+  readonly startedAt?: string;
   readonly at: string;
 }
 
@@ -59,7 +67,8 @@ const moveAfter = (
       yield* deps.attempt(
         deps.tasks.moveTask(now.value.id, now.value.revision, move.to, at, {
           carried,
-          ...(move.reason === undefined ? {} : { reason: move.reason }),
+          // A reason that carries a member's reply (#1086) is cut as a result would be.
+          ...(move.reason === undefined ? {} : { reason: cut(move.reason, RESULT_LIMIT) }),
         }),
         `move a Task to ${move.to}`,
       );
@@ -102,11 +111,36 @@ const completeWith = (
       : move.otherwise;
   });
 
+/** What the turn-end decision reads for `turn` on `task`, as `tree` and its `open` ledger show it now. */
+const inputOf = (turn: TurnOnTask, task: Task, tree: TaskTree, open: TurnEndInput["ledger"]): TurnEndInput => {
+  // What the turn last reported in its Attempt; a tree lists its checkpoints in the order they were recorded.
+  const report = tree.checkpoints.findLast(
+    (each) =>
+      each.taskId === task.id &&
+      each.attemptId === turn.attemptId &&
+      (turn.startedAt === undefined || each.createdAt >= turn.startedAt) &&
+      each.source !== "automatic" &&
+      each.kind !== "progress",
+  );
+  return {
+    runner: turn.runner,
+    task,
+    ending: turn.ending,
+    ledger: open,
+    carried: new Set(turn.carried.map((each) => each.itemId as string)),
+    ...(turn.was === undefined ? {} : { was: turn.was }),
+    ...(report === undefined ? {} : { lastReport: report.kind }),
+    ...(turn.sentBack === true ? { sentBack: true } : {}),
+  };
+};
+
 /**
  * Ends a turn on its Task by the one turn-end decision (`turnEnded`), the same for every runner.
  * A Task the turn completes with its reply completes first and its Attempt ends after, so a restart
  * in between keeps the result. Then the Attempt ends, and the Task makes its move, which a Task
- * that ended or moved on meanwhile refuses. Returns the decision, and whether the Task completed.
+ * that ended or moved on meanwhile refuses. A member's turn sent back to finish (#1086) ends nothing:
+ * its Attempt stays live for the turn that goes on in its session. Returns the decision, whether the
+ * Task completed, and whether the turn was sent back.
  */
 export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
   Effect.gen(function* () {
@@ -129,37 +163,22 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
     const tree = Option.getOrUndefined(yield* tasks.readTree(turn.taskId));
     const task = tree?.tasks[0];
     // A Task retried or reassigned meanwhile is no longer this turn's to move: only its Attempt ends.
-    if (task?.currentAttemptId !== turn.attemptId) {
+    if (tree === undefined || task?.currentAttemptId !== turn.attemptId) {
       yield* ended(attemptEndOf(turn.runner, turn.ending));
-      return { decided: null, completed: false };
+      return { decided: null, completed: false, sentBack: false };
     }
-    // What the turn last reported in its Attempt; a tree lists its checkpoints in the order they were recorded.
-    const report = tree?.checkpoints.findLast(
-      (each) =>
-        each.taskId === task.id &&
-        each.attemptId === turn.attemptId &&
-        each.source !== "automatic" &&
-        each.kind !== "progress",
-    );
     // A step's move does not depend on what is open, so only the other runners read it.
     const ledger =
       turn.runner === "step" || isTerminalTask(task.state) ? Option.none() : yield* tasks.readLedger(task.id);
-    const input: TurnEndInput = {
-      runner: turn.runner,
-      task,
-      ending: turn.ending,
-      ledger: Option.match(ledger, { onNone: () => [], onSome: (each) => each.open }),
-      carried: new Set(turn.carried.map((each) => each.itemId as string)),
-      ...(turn.was === undefined ? {} : { was: turn.was }),
-      ...(report === undefined ? {} : { lastReport: report.kind }),
-    };
+    const input = inputOf(turn, task, tree, Option.match(ledger, { onNone: () => [], onSome: (each) => each.open }));
     const decided = turnEnded(input);
-    let move = decided.task;
+    if (decided.task._tag === "SendBack") return { decided, completed: false, sentBack: true };
+    let move: TaskMove = decided.task;
     if (move._tag === "Complete") {
       const completed = yield* completeWith(deps, task, move, turn);
       if (completed === true) {
         yield* ended(decided.cause);
-        return { decided, completed: true };
+        return { decided, completed: true, sentBack: false };
       }
       move = completed;
     }
@@ -167,8 +186,9 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
     // A Task that changed while its turn ended, as one whose cancel arrived meanwhile, moves as it now is.
     if (Option.isSome(after) && after.value.task.state !== task.state) {
       const again = turnEnded({ ...input, task: after.value.task }).task;
+      // Its Attempt has ended, so a turn sent back now would have none to go on in.
       move = again._tag === "Complete" ? again.otherwise : again;
     }
     if (move._tag === "Move") yield* moveAfter(deps, task.id, move, after, turn);
-    return { decided, completed: false };
+    return { decided, completed: false, sentBack: false };
   });

@@ -381,7 +381,14 @@ describe("an approval for This Task", () => {
     const { run } = setUp();
     const delegatePush = (key: string) =>
       say(
-        ["Get help", hub("delegate_task", { key, hob: "Quill", brief: ["Push the copy", push].join("\n") })].join("\n"),
+        [
+          "Get help",
+          hub("delegate_task", {
+            key,
+            hob: "Quill",
+            brief: ["Push the copy", push, hub("complete_task", { key: `${key}-done`, summary: "Pushed" })].join("\n"),
+          }),
+        ].join("\n"),
       );
 
     // With no override of Aldric's, Quill's push asks only because of the preset: you allow it Always.

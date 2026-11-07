@@ -37,11 +37,14 @@ const backend = hub("delegate_task", {
   ].join("\n"),
 });
 
-/** Rook's frontend Task, after Quill's: it calls no tool, so its final reply is its result. */
+/** Rook's frontend Task, after Quill's: it returns its result in its one turn. */
 const frontend = hub("delegate_task", {
   key: "frontend",
   hob: "Rook",
-  brief: "Write the frontend",
+  brief: [
+    "Write the frontend",
+    hub("complete_task", { key: "frontend-done", summary: "The frontend is written" }),
+  ].join("\n"),
   depends_on: ["$backend.task_id"],
 });
 
