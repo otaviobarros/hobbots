@@ -2,8 +2,8 @@ import type { ExportedOlderRevision, SkillCandidate } from "@hobbots/api";
 import { cn } from "@hobbots/ui/lib/utils";
 import { messages } from "./messages.ts";
 import { droppedLine, flagLine } from "./skill-flags.tsx";
-import { importable, skillTitle } from "./skills-model.ts";
-import { SkillChip, SkillsIcon } from "./skills-parts.tsx";
+import { importable, sharedFoldersOf, skillTitle } from "./skills-model.ts";
+import { RevTag, SkillChip, SkillsIcon } from "./skills-parts.tsx";
 
 const copy = messages;
 
@@ -56,6 +56,76 @@ function OlderNotes({ candidate }: { candidate: SkillCandidate }) {
       </span>
     );
   });
+}
+
+/**
+ * A plugin whose skills share files, offered as one set (ADR 029, Skill sets): its skills, as you
+ * type them, and the files they share. It comes in whole, so it is picked as one.
+ */
+function SetCandidate({
+  candidate,
+  set,
+  picked,
+  onToggle,
+}: {
+  candidate: SkillCandidate;
+  set: NonNullable<SkillCandidate["set"]>;
+  picked: boolean;
+  onToggle: (on: boolean) => void;
+}) {
+  const can = importable(candidate);
+  const line = checkLine(candidate);
+  const name = candidate.name ?? (candidate.folder || copy.wholeSkill);
+  const dropped = droppedLine(candidate.dropped);
+  const folders = sharedFoldersOf(candidate.shared.map((path) => ({ path })));
+  return (
+    <li aria-label={copy.import.setLabel({ name })} className="flex items-start gap-3 bg-card px-3.5 py-3">
+      <input
+        type="checkbox"
+        className="mt-1 size-4 flex-none accent-(--color-mint-deep)"
+        aria-label={copy.import.pick({ name })}
+        checked={can && picked}
+        disabled={!can}
+        onChange={(event) => onToggle(event.target.checked)}
+      />
+      <span className="flex min-w-0 flex-1 flex-col gap-2.5">
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="text-body font-semibold text-text-strong">{name}</span>
+          {candidate.label !== null && <RevTag label={candidate.label} />}
+          <SkillChip tone="set">{copy.chips.set({ count: set.skills.length })}</SkillChip>
+          {candidate.existing?.number != null && <SkillChip tone="later">{copy.import.already}</SkillChip>}
+          {flaggedOf(candidate) && <SkillChip tone="needs">{copy.import.flagged}</SkillChip>}
+          <span
+            className={cn(
+              "ms-auto text-meta",
+              line.tone === "ok" && "text-mint",
+              line.tone === "label" && "text-label",
+              line.tone === "bad" && "text-rose",
+            )}
+          >
+            {line.tone === "ok" && candidate.exported === null ? `✓ ${copy.import.setPassed}` : line.text}
+          </span>
+        </span>
+        <ul
+          aria-label={copy.import.setSkills({ name })}
+          className="m-0 grid list-none grid-cols-3 gap-x-3 gap-y-1 p-0 max-[900px]:grid-cols-1"
+        >
+          {set.skills.map((skill) => (
+            <li key={skill.name} className="flex min-w-0 flex-col py-1">
+              <code className="self-start font-mono text-meta text-text-strong">{`/${skill.name}`}</code>
+              <span className="line-clamp-2 text-meta text-text-secondary">{skill.description}</span>
+            </li>
+          ))}
+        </ul>
+        <span className="text-detail text-text-secondary">
+          {candidate.shared.length === 0
+            ? copy.import.noShared
+            : copy.import.sharedBy({ folders, count: candidate.shared.length })}
+        </span>
+        {dropped !== null && <span className="text-meta text-label">{dropped}</span>}
+      </span>
+    </li>
+  );
 }
 
 /** One skill a source holds: pick it to import, or see why it cannot be. */
@@ -123,14 +193,24 @@ export function ImportCandidates({
 }) {
   return (
     <ul className="m-0 flex list-none flex-col overflow-hidden rounded-card p-0 [&>li+li]:border-t [&>li+li]:border-line">
-      {candidates.map((candidate) => (
-        <Candidate
-          key={candidate.folder}
-          candidate={candidate}
-          picked={picked.has(candidate.folder)}
-          onToggle={(on) => onToggle(candidate.folder, on)}
-        />
-      ))}
+      {candidates.map((candidate) =>
+        candidate.set === null ? (
+          <Candidate
+            key={candidate.folder}
+            candidate={candidate}
+            picked={picked.has(candidate.folder)}
+            onToggle={(on) => onToggle(candidate.folder, on)}
+          />
+        ) : (
+          <SetCandidate
+            key={candidate.folder}
+            candidate={candidate}
+            set={candidate.set}
+            picked={picked.has(candidate.folder)}
+            onToggle={(on) => onToggle(candidate.folder, on)}
+          />
+        ),
+      )}
     </ul>
   );
 }

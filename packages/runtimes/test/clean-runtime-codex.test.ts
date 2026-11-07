@@ -22,6 +22,7 @@ import { startAppServer } from "../src/codex/app-server.ts";
 import { unexpectedSkillsMessage } from "../src/codex/skills.ts";
 import { type CodexTurnConfig, runCodexTurn } from "../src/codex/turn.ts";
 import { SKILL_MOUNTS, skillMountsHash } from "../src/skills.ts";
+import { functionCall, type Move, runs, standIn } from "../src/testing/responses-stand-in.ts";
 import {
   AGENTS_SKILL,
   ASKED_SKILL,
@@ -37,7 +38,6 @@ import {
   TEAM_SET,
 } from "./clean-runtime.ts";
 import { approvalsAnswering, approve } from "./codex-fixture.ts";
-import { functionCall, type Move, runs, standIn } from "./responses-stand-in.ts";
 
 /**
  * The clean-runtime contract test on an installed Codex (ADR 029), with a stand-in model that records

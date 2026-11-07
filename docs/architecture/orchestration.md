@@ -35,7 +35,7 @@ Expose controlled Hobbots tools through MCP or a supported equivalent adapter in
 | `plan_steps` | A Task's owner | Splits its own Task into steps, each with a brief |
 | `start_quest` | A Task's owner | Turns its Task into a Quest with a goal, milestones, limits and the folders its work is in |
 | `delegate_task` | A Task's owner, which becomes or already is its lead | Gives another hob a Task with a brief, milestones and dependencies; the first call makes the Task a Quest |
-| `report_checkpoint` | A Task's owner | Reports a milestone, finding, blocker or progress, in a short summary with an optional detail |
+| `report_checkpoint` | A Task's owner | Reports a milestone, finding, blocker or progress, in a short summary with an optional detail. A milestone another hob in the work reached, such as a commit its lead made, names that hob, and the Task shows who reached it ([#743](https://github.com/otaviobarros/hobbots/issues/743)) |
 | `ask` | A Task's owner | Asks a question, routed to the nearest lead |
 | `answer` | A lead | Answers a question from its subtree |
 | `escalate` | A lead | Passes a question to the next lead, and from the top lead to you |

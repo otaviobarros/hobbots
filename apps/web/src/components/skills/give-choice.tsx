@@ -17,12 +17,15 @@ export function GiveChoice({
   active,
   projects,
   many = false,
+  legend,
 }: {
   value: GiveTo;
   onChange: (give: GiveTo) => void;
   active: ReadonlyArray<Agent>;
   projects: ReadonlyArray<MemoryProjectIdentity>;
   many?: boolean;
+  /** What the choice is called, when not "Give it to" or "Give them to": a set's reads "Give the set to". */
+  legend?: string;
 }) {
   const options: ReadonlyArray<{ give: GiveTo; label: string; sub: string }> = [
     { give: null, label: copy.giveChoice.nobody, sub: copy.giveChoice.nobodySub },
@@ -42,7 +45,7 @@ export function GiveChoice({
   return (
     <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
       <legend className="lbl pb-1.5 text-meta text-label">
-        {many ? copy.giveChoice.legendMany : copy.giveChoice.legend}
+        {legend ?? (many ? copy.giveChoice.legendMany : copy.giveChoice.legend)}
       </legend>
       <div className="grid grid-cols-3 gap-2 max-[900px]:grid-cols-1">
         {options.map((option) => {

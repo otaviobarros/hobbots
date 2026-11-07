@@ -11,6 +11,7 @@ import { makeClaudeCode } from "../src/claude-code.ts";
 import { pluginSkill } from "../src/claude-code-skills.ts";
 import { ProcessSandbox } from "../src/sandbox.ts";
 import { SKILL_MOUNTS, skillMountsHash } from "../src/skills.ts";
+import { type MessagesMove, messagesStandIn } from "../src/testing/messages-stand-in.ts";
 import {
   AGENTS_SKILL,
   ASKED_SKILL,
@@ -27,7 +28,6 @@ import {
   stepRecordingContract,
   TEAM_SET,
 } from "./clean-runtime.ts";
-import { type MessagesMove, messagesStandIn } from "./messages-stand-in.ts";
 
 /**
  * The clean-runtime contract test on an installed Claude Code (ADR 029), with a stand-in for the

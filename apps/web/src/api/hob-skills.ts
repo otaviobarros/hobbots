@@ -1,5 +1,5 @@
 import type { HobSkills } from "@hobbots/api";
-import type { AgentId, SkillId } from "@hobbots/domain";
+import type { AgentId, SkillId, SkillName } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { watchedSetupQuery } from "./setup.ts";
@@ -44,10 +44,16 @@ export const hobSkillsChanged = async (queryClient: QueryClient) => {
 };
 
 /** Turns a shared skill off for one hob, or on again (ADR 029, Scopes). */
-export const setSkillOptOut = (input: { agentId: AgentId; skillId: SkillId; optedOut: boolean }) =>
+export const setSkillOptOut = (input: {
+  agentId: AgentId;
+  skillId: SkillId;
+  optedOut: boolean;
+  /** For a set, the one of its skills to turn off or on (ADR 029, Skill sets). */
+  member?: SkillName;
+}) =>
   call((c) =>
     c.skills.optOut({
       params: { agentId: input.agentId, skillId: input.skillId },
-      payload: { optedOut: input.optedOut },
+      payload: { optedOut: input.optedOut, ...(input.member === undefined ? {} : { member: input.member }) },
     }),
   );

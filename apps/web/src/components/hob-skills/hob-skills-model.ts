@@ -33,6 +33,11 @@ export interface CarriedRow {
   /** The Charms it names that the hob does not have. */
   readonly missingCharms: ReadonlyArray<string>;
   readonly state: CarriedState;
+  /**
+   * For a skill of a set (ADR 029, Skill sets), the one of its skills this row is; null for a skill,
+   * or for a whole set the hob turned off.
+   */
+  readonly member: { readonly name: string; readonly description: string } | null;
 }
 
 /** A scope a hob gets skills from: Everyone, each project it works in, and its own. */
@@ -44,7 +49,17 @@ export interface CarriedGroup {
 
 const LOADS: CarriedState = { _tag: "Loads" };
 
-const byName = (a: CarriedRow, b: CarriedRow) => a.skill.name.localeCompare(b.skill.name);
+const nameOf = (row: CarriedRow) => row.member?.name ?? row.skill.name;
+const byName = (a: CarriedRow, b: CarriedRow) => nameOf(a).localeCompare(nameOf(b));
+
+type Members = ReadonlyMap<SkillId, ReadonlyArray<{ readonly name: string; readonly description: string }>>;
+
+/** A set's skill by its name, or null for a skill that is no set (ADR 029, Skill sets). */
+const memberOf = (members: Members, skillId: SkillId, name: string): CarriedRow["member"] => {
+  const set = members.get(skillId);
+  if (set === undefined) return null;
+  return set.find((one) => one.name === name) ?? { name, description: "" };
+};
 
 /** The assignment a hob skill comes from: the library's assignment of that skill to that scope. */
 const assignmentOf = (assignments: ReadonlyArray<SkillAssignment>, skillId: SkillId, scope: SkillScope) => {
@@ -57,7 +72,12 @@ const rowOf = (
   scope: SkillScope,
   assignment: SkillAssignment | null,
   pin: string,
-  extra: { onlyWhenAsked: boolean; missingCharms: ReadonlyArray<string>; state: CarriedState },
+  extra: {
+    onlyWhenAsked: boolean;
+    missingCharms: ReadonlyArray<string>;
+    state: CarriedState;
+    member: CarriedRow["member"];
+  },
 ): CarriedRow => {
   const latest = pin === skill.latest;
   return {
@@ -78,6 +98,7 @@ const rowOf = (
  */
 export const carriedGroups = (hob: HobSkills, list: SkillsList): ReadonlyArray<CarriedGroup> => {
   const skills = new Map(list.skills.map((skill) => [skill.id, skill]));
+  const members: Members = new Map(list.sets.map((set) => [set.skillId, set.skills]));
   const own: SkillScope = { _tag: "Hob", agentId: hob.agentId };
   const scopes: ReadonlyArray<SkillScope> = [
     { _tag: "Everyone" },
@@ -91,9 +112,15 @@ export const carriedGroups = (hob: HobSkills, list: SkillsList): ReadonlyArray<C
     const skill = skills.get(one.skillId);
     if (skill === undefined) continue;
     const assignment = assignmentOf(list.assignments, one.skillId, one.scope);
-    add(rowOf(skill, one.scope, assignment, one.pin, { ...one, state: LOADS }));
+    add(
+      rowOf(skill, one.scope, assignment, one.pin, {
+        ...one,
+        state: LOADS,
+        member: memberOf(members, skill.id, one.name),
+      }),
+    );
   }
-  for (const { assignment, by } of hob.replaced) {
+  for (const { assignment, by, name } of hob.replaced) {
     const skill = skills.get(assignment.skillId);
     if (skill === undefined) continue;
     add(
@@ -102,7 +129,7 @@ export const carriedGroups = (hob: HobSkills, list: SkillsList): ReadonlyArray<C
         assignment.scope,
         assignment,
         assignment.pin,
-        extraOf(assignment, { _tag: "Replaced", by: by.scope }),
+        extraOf(assignment, { _tag: "Replaced", by: by.scope }, memberOf(members, skill.id, name)),
       ),
     );
   }
@@ -110,14 +137,22 @@ export const carriedGroups = (hob: HobSkills, list: SkillsList): ReadonlyArray<C
     for (const assignment of clash.assignments) {
       const skill = skills.get(assignment.skillId);
       if (skill === undefined) continue;
-      add(rowOf(skill, assignment.scope, assignment, assignment.pin, extraOf(assignment, { _tag: "Clash" })));
+      const member = memberOf(members, skill.id, clash.name);
+      add(rowOf(skill, assignment.scope, assignment, assignment.pin, extraOf(assignment, { _tag: "Clash" }, member)));
     }
   }
   for (const skillId of hob.optedOut) {
     const skill = skills.get(skillId);
     const assignment = sharedAssignment(list.assignments, skillId, hob.projects);
     if (skill === undefined || assignment === null) continue;
-    add(rowOf(skill, assignment.scope, assignment, assignment.pin, extraOf(assignment, { _tag: "Off" })));
+    add(rowOf(skill, assignment.scope, assignment, assignment.pin, extraOf(assignment, { _tag: "Off" }, null)));
+  }
+  for (const { skillId, name } of hob.optedOutOfSets) {
+    const skill = skills.get(skillId);
+    const assignment = sharedAssignment(list.assignments, skillId, hob.projects);
+    if (skill === undefined || assignment === null) continue;
+    const member = memberOf(members, skillId, name) ?? { name, description: "" };
+    add(rowOf(skill, assignment.scope, assignment, assignment.pin, extraOf(assignment, { _tag: "Off" }, member)));
   }
   return scopes.map((scope) => {
     const key = memoryScopeKey(scope);
@@ -125,10 +160,11 @@ export const carriedGroups = (hob: HobSkills, list: SkillsList): ReadonlyArray<C
   });
 };
 
-const extraOf = (assignment: SkillAssignment, state: CarriedState) => ({
+const extraOf = (assignment: SkillAssignment, state: CarriedState, member: CarriedRow["member"]) => ({
   onlyWhenAsked: assignment.onlyWhenAsked,
   missingCharms: [],
   state,
+  member,
 });
 
 /** The shared assignment a hob turned off: Everyone's, else one of the projects it works in. */

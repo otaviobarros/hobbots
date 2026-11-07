@@ -1,7 +1,7 @@
 import type { AnyOperation, ApprovalLifetime, GrantId, GrantRule, PolicyDecision } from "@hobbots/domain";
 import { Effect } from "effect";
 import { actionDigest } from "./approvals.ts";
-import type { HubCallStep, HubToolAnswer, RuntimeEvent, ToolAccess, TurnApprovals } from "./runtime.ts";
+import type { HubCallStep, RuntimeEvent, ToolAccess, TurnApprovals } from "./runtime.ts";
 
 /**
  * Asking the user before a call runs (PE-003, PE-008), for every kind of call: a runtime's own
@@ -218,27 +218,4 @@ export const askOnStep = <V extends AskableVerdict>(options: {
     decide: options.decide,
     report: options.step?.report ?? (() => {}),
     unknown: "Hobbots cannot decide this call.",
-  });
-
-/**
- * Runs a hub tool call once its policy, or you, let it: asks on its step as `askOnStep` does, shows
- * it started, runs `run`, and adds how you approved it to the answer. A call it refuses fails with
- * `refuse` of the reason, and `run` never starts.
- */
-export const runWhenAllowed = <V extends AskableVerdict, E, R>(options: {
-  readonly call: AskedCall;
-  readonly step: HubCallStep | undefined;
-  readonly approvals: TurnApprovals | null;
-  readonly decide: AskOptions<V>["decide"];
-  readonly refuse: (reason: string) => E;
-  readonly run: Effect.Effect<HubToolAnswer, E, R>;
-}): Effect.Effect<HubToolAnswer, E, R> =>
-  Effect.gen(function* () {
-    const decision = yield* askOnStep(options);
-    if (decision._tag === "Refuse") return yield* Effect.fail(options.refuse(decision.reason));
-    showStarted(options.step, options.call.tool, options.call.label, decision.verdict);
-    const answer = yield* options.run;
-    return decision.approval === undefined
-      ? answer
-      : { ...answer, text: `${answer.text} ${approvalNote(decision.approval)}` };
   });

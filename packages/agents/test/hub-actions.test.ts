@@ -21,6 +21,7 @@ import {
   makeHubActions,
   makeRedactor,
   nextSteps,
+  offerHubActions,
   outsideDataLine,
   type RuntimeEvent,
   type ToolAccess,
@@ -364,5 +365,165 @@ describe("the hub action pipeline (ADR 031)", () => {
     const [context] = contexts as Array<Record<string, Record<string, unknown>>>;
     expect(Object.keys(context ?? {}).sort()).toEqual(["access", "turn"]);
     expect(Object.keys(context?.turn ?? {}).sort()).toEqual(["agentId", "messageId", "scope", "threadId"]);
+  });
+});
+
+// A built-in set, Notes, on the pipeline as the Memory and Skill tools are (#1135): offered by its
+// operations' answers, answering a call that changes nothing without deciding it, and keeping its own answers.
+
+interface NotesScenario {
+  /** The hob's own answers for the set's operations. */
+  readonly overrides?: Readonly<Record<string, PolicyDecision>>;
+  /** What the policy answers each call. */
+  readonly decision?: PolicyDecision;
+}
+
+const notesTurn = (now: ToolAccess | null, approvals: TurnApprovals | null) => ({
+  agentId: AgentId.make("hob"),
+  threadId: null,
+  messageId: null,
+  scope: () => "",
+  currentAccess: Effect.succeed(now),
+  redactor: makeRedactor(),
+  approvals,
+});
+
+const approvingOnce: TurnApprovals = {
+  request: (action) =>
+    Effect.gen(function* () {
+      const digest = yield* actionDigest(action);
+      return {
+        approvalId: ApprovalId.make("approval-1"),
+        decision: Effect.succeed<ApprovalOutcome>({
+          _tag: "Approved",
+          actionDigest: digest,
+          policyVersion: action.policyVersion,
+          lifetime: "once",
+        }),
+      };
+    }),
+  currentAccess: Effect.succeed(access()),
+  grants: Effect.succeed([]),
+  used: () => Effect.void,
+};
+
+/** Offers the Notes set to a turn under `scenario`, and says what each call did. */
+const offerNotes = (scenario: NotesScenario = {}, now: ToolAccess | null = access()) => {
+  const happened: Array<string> = [];
+  const shelf = Schema.Struct({ shelf: Schema.String });
+  const tools = offerHubActions({
+    owner: { _tag: "BuiltIn" },
+    actions: [
+      hubAction({
+        tool: { name: "notes_search", description: "Searches notes.", inputSchema: {}, label: "Searching notes" },
+        input: shelf,
+        effect: "read",
+        operation: "search-memory",
+        otherwise: "notes are closed",
+        unreadable: () => "Name the shelf to search as `shelf`.",
+        plan: (input) =>
+          Effect.succeed({
+            request: { _tag: "Memory", operation: "search-memory" },
+            card: { arguments: { ...input } },
+            send: Effect.sync(() => {
+              happened.push("searched");
+              return `Nothing on the ${input.shelf} shelf.`;
+            }),
+          }),
+      }),
+      hubAction({
+        tool: { name: "notes_save", description: "Saves a note.", inputSchema: {}, label: "Saving a note" },
+        input: shelf,
+        effect: "write",
+        operation: "save-memory",
+        otherwise: "notes are closed",
+        plan: (input) =>
+          input.shelf === "kept"
+            ? Effect.succeed({ _tag: "NoCall", text: "That note is already kept, so nothing changed." } as const)
+            : Effect.succeed({
+                request: { _tag: "Memory", operation: "save-memory" },
+                card: { arguments: { ...input } },
+                send: Effect.sync(() => {
+                  happened.push("saved");
+                  return { text: "You already used this key for another note.", refused: true };
+                }),
+              }),
+      }),
+    ],
+    decide: (_approvals, _base, request) => () =>
+      Effect.sync(() => {
+        happened.push(`decided ${request.operation}`);
+        return { ...verdict(scenario.decision ?? "allow"), operation: request.operation ?? "search-memory" };
+      }),
+  });
+  const withOverrides =
+    now === null
+      ? null
+      : { ...now, policy: { ...now.policy, hob: { ...now.policy.hob, overrides: scenario.overrides ?? {} } } };
+  const call = (name: string, input: unknown) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const offered = yield* tools(notesTurn(withOverrides, approvingOnce));
+        if (offered === null) return { offered: null, answer: null };
+        const step = hubCallStep(
+          "toolu_1",
+          () => {},
+          (event) =>
+            Effect.sync(() => {
+              happened.push(`recorded ${event.tool}`);
+              return true;
+            }),
+        );
+        return { offered: offered.tools.map((tool) => tool.name), answer: yield* offered.call(name, input, step) };
+      }),
+    );
+  return { call, happened };
+};
+
+describe("a built-in set on the hub action pipeline (#1135)", () => {
+  // covers PE-008, ADR 014, ADR 031
+  it("[TC-PE-490] offers only the tools whose operation the hob's policy does not answer Never for", async () => {
+    const all = await offerNotes().call("notes_search", { shelf: "top" });
+    expect(all.offered).toEqual(["notes_search", "notes_save"]);
+
+    const noSaves = offerNotes({ overrides: { "save-memory": "deny" } });
+    const narrowed = await noSaves.call("notes_save", { shelf: "top" });
+    expect(narrowed.offered).toEqual(["notes_search"]);
+    // A call to the tool that was not offered still reaches the pipeline, which decides it.
+    expect(noSaves.happened).toEqual(["decided save-memory", "recorded notes_save", "saved"]);
+
+    const none = await offerNotes({ overrides: { "search-memory": "deny", "save-memory": "deny" } }).call(
+      "notes_search",
+      { shelf: "top" },
+    );
+    expect(none).toEqual({ offered: null, answer: null });
+    expect(await offerNotes({}, null).call("notes_search", { shelf: "top" })).toEqual({ offered: null, answer: null });
+  });
+
+  // covers EX-004, ADR 031
+  it("[TC-PE-491] answers a call that changes nothing unrecorded, and keeps a set's own words and answers", async () => {
+    const kept = offerNotes();
+    expect((await kept.call("notes_save", { shelf: "kept" })).answer).toEqual({
+      text: "That note is already kept, so nothing changed.",
+      refused: false,
+    });
+    expect(kept.happened).toEqual([]);
+
+    const unread = offerNotes();
+    expect((await unread.call("notes_search", { shelf: 3 })).answer).toEqual({
+      text: "Name the shelf to search as `shelf`.",
+      refused: true,
+    });
+    expect(unread.happened).toEqual([]);
+
+    // A refused answer of the set's own, after an approval, says it was refused and how it was approved.
+    const asked = offerNotes({ decision: "ask" });
+    const answer = (await asked.call("notes_save", { shelf: "top" })).answer;
+    expect(answer?.refused).toBe(true);
+    expect(answer?.text).toBe(
+      "You already used this key for another note. Hobbots showed the user an approval request for this call before it ran. They approved it just this once, so a call like it asks again.",
+    );
+    // Decided, asked, decided again on the approval, then recorded before it is sent.
+    expect(asked.happened).toEqual(["decided save-memory", "decided save-memory", "recorded notes_save", "saved"]);
   });
 });

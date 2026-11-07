@@ -1,4 +1,5 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { ServerResponse } from "node:http";
+import { standInServer } from "./stand-in-server.ts";
 
 // A stand-in for the Messages API, as the ADR 029 probe used: Claude Code reaches it through
 // `ANTHROPIC_BASE_URL`, each request is recorded, and the model's moves are fixed.
@@ -64,20 +65,16 @@ export const messagesStandIn = (marker: string) => {
   const moves: Array<MessagesMove> = [];
   const requests: Array<MessagesRequest> = [];
   let served = 0;
-  const server: Server = createServer((request: IncomingMessage, response: ServerResponse) => {
-    let body = "";
-    request.on("data", (chunk) => (body += chunk));
-    request.on("end", () => {
-      if (!request.url?.startsWith("/v1/messages") || request.url.startsWith("/v1/messages/count_tokens")) {
-        response.writeHead(404, { "content-type": "application/json" }).end("{}");
-        return;
-      }
-      const parsed = JSON.parse(body) as MessagesRequest;
-      served += 1;
-      const turn = JSON.stringify(parsed.system ?? "").includes(marker);
-      if (turn) requests.push(parsed);
-      answer(response, (turn ? moves.shift() : undefined) ?? { say: "Nothing scripted." }, `m${served}`);
-    });
+  const server = standInServer((request, body, response) => {
+    if (!request.url?.startsWith("/v1/messages") || request.url.startsWith("/v1/messages/count_tokens")) {
+      response.writeHead(404, { "content-type": "application/json" }).end("{}");
+      return;
+    }
+    const parsed = JSON.parse(body) as MessagesRequest;
+    served += 1;
+    const turn = JSON.stringify(parsed.system ?? "").includes(marker);
+    if (turn) requests.push(parsed);
+    answer(response, (turn ? moves.shift() : undefined) ?? { say: "Nothing scripted." }, `m${served}`);
   });
   return { server, moves, requests };
 };

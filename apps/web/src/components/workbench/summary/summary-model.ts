@@ -47,8 +47,16 @@ export type HappenedLine =
   | { readonly kind: "member"; readonly task: Task; readonly tries: number; readonly mark: Mark }
   /** Something the Task's owner reported: a finding, a blocker, a question or progress. */
   | { readonly kind: "checkpoint"; readonly checkpoint: Checkpoint; readonly mark: Mark }
-  /** A milestone the brief planned: reached, or still next. */
-  | { readonly kind: "milestone"; readonly milestone: Milestone; readonly mark: Mark }
+  /**
+   * A milestone the brief planned: reached, or still next. `by` is the hob whose work reached it when
+   * that is not the Task's owner (#743), such as its lead making a commit the owner could not.
+   */
+  | {
+      readonly kind: "milestone";
+      readonly milestone: Milestone;
+      readonly by: AgentId | null;
+      readonly mark: Mark;
+    }
   /** A Task tool call the hub refused on this Task, with how many times it was tried (#575). */
   | { readonly kind: "refused"; readonly refusal: RefusedCall; readonly mark: Mark }
   /** A tool call of the Attempt's own turns, as a step's or a party member's turn recorded it (#892). */
@@ -226,6 +234,10 @@ const toolLines = (attempt: Attempt | null, activity: AttemptActivity | null): A
   });
 };
 
+/** The hob whose work reached `milestone`, when it is not the Task's owner. */
+const reacherOf = (task: Task, milestone: Milestone): AgentId | null =>
+  milestone.reachedBy === null || milestone.reachedBy === task.ownerId ? null : milestone.reachedBy;
+
 /**
  * What happened, in order: the Task's steps and its members' Tasks, the tool calls of the chosen
  * Attempt's own turns, what its owner reported in the
@@ -242,7 +254,12 @@ const happenedOf = (
   const reached: Array<Timed> = milestones.flatMap((milestone) =>
     milestone.reachedAt === null
       ? []
-      : [{ at: milestone.reachedAt, line: { kind: "milestone", milestone, mark: "done" } }],
+      : [
+          {
+            at: milestone.reachedAt,
+            line: { kind: "milestone", milestone, by: reacherOf(task, milestone), mark: "done" },
+          },
+        ],
   );
   // A refused call is the hub's record, not a report, so it shows whichever Attempt is chosen.
   const refused: Array<Timed> = tree.refusals
@@ -258,7 +275,7 @@ const happenedOf = (
   // A stable sort keeps lines that share a time, such as steps planned together, in their order.
   const lines = timed.sort((a, b) => a.at.localeCompare(b.at)).map((each) => each.line);
   for (const milestone of milestones) {
-    if (milestone.reachedAt === null) lines.push({ kind: "milestone", milestone, mark: "next" });
+    if (milestone.reachedAt === null) lines.push({ kind: "milestone", milestone, by: null, mark: "next" });
   }
   if (attempt !== null && ENDED_EARLY.has(attempt.state)) {
     lines.push({ kind: "ended", attempt, mark: endedMark(attempt.state) });

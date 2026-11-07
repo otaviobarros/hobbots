@@ -35,7 +35,6 @@ import {
 } from "@hobbots/agents";
 import {
   type CommitIdentity,
-  type CommitsAs,
   GIT_INIT_TOOL,
   type PlanUsage,
   policySandbox,
@@ -58,6 +57,7 @@ import {
 import { type Duration, Effect, Layer, Queue, Stream } from "effect";
 import {
   type CallDecision,
+  type CallSteers,
   decideCall,
   grantedHosts,
   keptGitHint,
@@ -792,21 +792,15 @@ export const claudeTurnStart = (request: PromptRequest, policySandboxState: Sand
 };
 
 /** A turn with tools: the context every call is decided under, its folders and the tools offered. */
-export interface ToolTurn {
+export interface ToolTurn extends CallSteers {
   readonly context: PolicyContext;
   /** Canonical and existing; the first is where Claude Code starts. */
   readonly folders: ReadonlyArray<string>;
   readonly tools: ReadonlyArray<string>;
   /** Claude Code's configuration folder for this hob. */
   readonly runtimeFolder: string;
-  /** The hub tool a `git push` command in a folder is pointed to, when the turn offers one (ADR 020). */
-  readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
-  /** The hub tool a `git init` command is pointed to, when the turn offers it (ADR 014). */
-  readonly initTool?: string;
   /** The hob's bot, when it has its own GitHub App: its commands commit as it (ADR 022). */
   readonly commitAs?: CommitIdentity;
-  /** Who its commits are made as, as the hub settled it (#586, #741), which a refused identity override names. */
-  readonly commitsAs: CommitsAs;
 }
 
 /**
@@ -859,6 +853,7 @@ export const toolTurn = (
     tools,
     runtimeFolder: access.runtimeFolder,
     ...(hubTools?.steersPush ? { steersPush: hubTools.steersPush } : {}),
+    ...(hubTools?.holdsCommit ? { holdsCommit: hubTools.holdsCommit } : {}),
     ...(hubTools?.tools.some((tool) => tool.name === GIT_INIT_TOOL) ? { initTool: GIT_INIT_TOOL } : {}),
     ...(access.commitAs ? { commitAs: access.commitAs } : {}),
     commitsAs: access.commitsAs,
@@ -950,9 +945,9 @@ export const policyHooks = (
     const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
-    const decision = await Effect.runPromise(
-      decideCall(engine, context(), null, call, report, turn.commitsAs, redaction, turn.steersPush, turn.initTool),
-    ).catch(() => failed(tool));
+    const decision = await Effect.runPromise(decideCall(engine, context(), null, call, report, turn, redaction)).catch(
+      () => failed(tool),
+    );
     if (decision._tag === "Run") {
       if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
         const reason = refuse(call.id, tool, toolInput, unrecorded(decision));
@@ -1031,12 +1026,9 @@ export const policyHooks = (
     }
     const call = { id: options.toolUseID, tool, input, cwd: hooked?.cwd ?? (turn.folders[0] as string) };
     // An aborted call stops waiting, which expires its request.
-    const decision = await Effect.runPromise(
-      decideCall(engine, context(), approvals, call, report, turn.commitsAs, redaction, turn.steersPush, turn.initTool),
-      {
-        signal: options.signal,
-      },
-    ).catch(() => failed(tool));
+    const decision = await Effect.runPromise(decideCall(engine, context(), approvals, call, report, turn, redaction), {
+      signal: options.signal,
+    }).catch(() => failed(tool));
     if (decision._tag === "Run") {
       // A call the hook allowed was recorded then.
       if (started.has(call.id) || (await begin(call.id, tool, input, decision.verdict))) {
