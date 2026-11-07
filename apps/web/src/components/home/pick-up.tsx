@@ -80,7 +80,13 @@ function Row({
       <Link to="/hobs/$hobId/threads/$threadId" params={{ hobId: hob.id, threadId: thread.id }} className={rowClass}>
         <HobTile hob={hob} tile="lg" />
         <Body title={thread.title} who={hob.name}>
-          {now === undefined ? thread.lastLine : now === "working" ? copy.writing : copy.thinking}
+          {now === undefined
+            ? thread.lastLine
+            : now === "working"
+              ? copy.writing
+              : now === "waiting"
+                ? copy.waiting
+                : copy.thinking}
         </Body>
         <Age at={row.at} />
       </Link>

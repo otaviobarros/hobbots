@@ -34,11 +34,13 @@ import {
   useSendPrompt,
   useSetBrain,
   useStartThread,
+  useStopWaiting,
 } from "../../api/queries.ts";
 import { runtimeProblem } from "../../api/runtime-health.ts";
 import { useReadThread } from "../../api/thread-reads.ts";
 import { brainSwitches, lastReplyBrain } from "../../lib/brains.ts";
 import { isQuietReply } from "../../lib/quiet-replies.ts";
+import { minutesSince, type ReplyWait, replyWait } from "../../lib/reply-wait.ts";
 import { sendErrorText } from "../../lib/send-error.ts";
 import { ReplyApprovals } from "../approvals/reply-approvals.tsx";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
@@ -46,6 +48,7 @@ import { ThreadHeaderMenu } from "../archive/thread-menu.tsx";
 import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
 import { ChatSearch, ChatSearchButton } from "../chat-search/chat-search.tsx";
 import { HobSprite, stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
+import { useNow } from "../inbox/use-now.ts";
 import { replySaves } from "../memory-line/memory-line-model.ts";
 import { MemorySavedLines, MemorySavesUnread } from "../memory-line/memory-saved-line.tsx";
 import { messages } from "../messages.ts";
@@ -82,6 +85,16 @@ const stayAtEnd = (view: HTMLDivElement | null) => {
 };
 
 const copy = messages.chat;
+const queuedCopy = messages.queued;
+
+/** What the header says the hob does while its reply waits only on commands (#1056). */
+const waitingWords = (wait: ReplyWait, now: Date): string => {
+  const time = messages.composer.minutes({ count: minutesSince(wait.since, now) });
+  const command = wait.commands.length === 1 ? wait.commands[0] : undefined;
+  return command === undefined
+    ? copy.waitingOnMany({ count: wait.commands.length, time })
+    : copy.waitingOn({ command, time });
+};
 const brainCopy = messages.brain;
 
 /** The middle of the chat workspace. Without a thread id it is the empty "fresh page". */
@@ -133,6 +146,7 @@ export function ChatView({
   const send = useSendPrompt(threadId ?? ("" as ThreadId));
   const start = useStartThread(hobId);
   const interrupt = useInterrupt(threadId ?? ("" as ThreadId));
+  const stopWaiting = useStopWaiting(threadId ?? ("" as ThreadId));
   const pause = usePauseHob(hobId);
   const remove = useRemoveQueued(threadId ?? ("" as ThreadId));
   const sendNow = useSendNow(threadId ?? ("" as ThreadId));
@@ -141,7 +155,18 @@ export function ChatView({
 
   const streaming = messages.data?.some((m) => isInProgress(m.status)) ?? false;
   // Stopping lasts from the hub recording the request until the runtime confirms the turn ended.
-  const stopping = interrupt.isPending || (messages.data?.some((m) => m.status === "stopping") ?? false);
+  const stopping =
+    interrupt.isPending || stopWaiting.isPending || (messages.data?.some((m) => m.status === "stopping") ?? false);
+  // What the reply waits on once its hob has answered, while only commands keep it open (#1056).
+  const wait = replyWait(messages.data?.find((m) => isInProgress(m.status)));
+  const waitCommand = wait?.commands.length === 1 ? (wait.commands[0] ?? null) : null;
+  const waitsFor =
+    wait === null
+      ? null
+      : waitCommand === null
+        ? queuedCopy.waitsForCommands
+        : queuedCopy.waitsForCommand({ command: waitCommand });
+  const now = useNow(wait === null ? null : 60_000);
   // Queued messages wait above the composer, in the order they will start, until they join the transcript.
   const transcript = messages.data?.filter((m) => m.status !== "queued");
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
@@ -277,7 +302,7 @@ export function ChatView({
             >
               {current.name}
             </Link>
-            {copy.leadLine({ doing: stateLabel[state] })}
+            {copy.leadLine({ doing: wait === null ? stateLabel[state] : waitingWords(wait, now) })}
           </span>
         </div>
         {/* Beside the open room, whose header is the Quest's, the column keeps its width for the chat. */}
@@ -416,6 +441,7 @@ export function ChatView({
                   message={message}
                   hob={current}
                   replying={streaming}
+                  waitsFor={waitsFor}
                   pending={remove.isPending || sendNow.isPending}
                   onRemove={() => remove.mutate(message.id)}
                   onSendNow={() => sendNow.mutate(message.id)}
@@ -433,6 +459,8 @@ export function ChatView({
             sending={start.isPending || send.isPending}
             onSend={sendDraft}
             onStop={() => interrupt.mutate()}
+            wait={wait}
+            onStopWaiting={() => stopWaiting.mutate()}
             skills={skillPicking(skills, current.name)}
             paused={
               paused

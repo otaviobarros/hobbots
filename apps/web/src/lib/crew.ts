@@ -10,6 +10,7 @@ const groupOfState: Record<HobState, CrewGroup> = {
   "needs-you": "needs-you",
   working: "working",
   thinking: "working",
+  "on-command": "working",
   waiting: "waiting",
   failed: "failed",
   idle: "resting",

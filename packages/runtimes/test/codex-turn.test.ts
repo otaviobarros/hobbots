@@ -899,6 +899,31 @@ describe("a Codex command that outlives its turn (#1048)", () => {
     });
   });
 
+  // covers CH-004, EX-004
+  it("[TC-RT-1056-01] says the reply waits on the outlived command once the hob has answered, and keeps waiting", async () => {
+    const server = fakeServer({
+      asks: [runsSleep],
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/started", commandItem("c1")),
+        message("m1", "Started the server."),
+        completed("completed"),
+      ],
+    });
+    const { turnConfig, request } = await toolsSetup(server);
+    // The command never ends here, so the turn is read up to its wait and then let go.
+    const seen = await Effect.runPromise(
+      Stream.runCollect(
+        runCodexTurn(turnConfig, request).pipe(Stream.takeUntil((event) => event._tag === "AwaitingCommands")),
+      ),
+    );
+    const tags = Array.from(seen, (event) => event._tag);
+    expect(seen.at(-1)).toEqual({ _tag: "AwaitingCommands", ids: ["c1"] });
+    expect(tags).toContain("TextDelta");
+    expect(tags).not.toContain("ToolFinished");
+    expect(tags).not.toContain("Completed");
+  });
+
   // regression for #1048
   it("[TC-RT-1048-02] ends with no follow-up when every command ended inside the turn", async () => {
     const server = fakeServer({
@@ -1031,14 +1056,14 @@ describe("a Codex command that outlives its turn (#1048)", () => {
     read.started("c1");
     read.map(item("item/started", commandItem("c1")));
     expect(read.map(completed("completed")).end).toEqual({ _tag: "Completed" });
-    expect(read.afterTurn()).toEqual({ notice: null, waiting: true });
+    expect(read.afterTurn()).toEqual({ notice: null, waiting: ["c1"] });
     // A turn Hobbots did not ask for is left out; one it asked for counts before Codex names it.
     expect(read.map(inTurn(TURN_2, "item/agentMessage/delta", { itemId: "m2", delta: "x" })).events).toEqual([]);
     const step = read.map(commandEnds("c1", 0, "ok"));
     expect(step.commandEnded).toBe(true);
     expect(read.afterTurn()).toEqual({
       notice: commandsEndedNotice([{ command: "sleep 15", failed: false, exitCode: 0, output: "ok" }], 0),
-      waiting: false,
+      waiting: [],
     });
     read.expect();
     expect(read.map(inTurn(TURN_2, "item/agentMessage/delta", { itemId: "m2", delta: "x" })).events).toEqual([

@@ -68,6 +68,7 @@ export const messages = {
   failed: "failed",
   running: "running",
   uncertain: "unknown",
+  stopped: "stopped by you",
   /** Older marks folded into one count, as the design draws it; the label says what opening it does. */
   folded: ({ count }: { count: number }) => `+${formatCount(count)} more`,
   foldedLabel: ({ count }: { count: number }) =>

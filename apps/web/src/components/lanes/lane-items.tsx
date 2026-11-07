@@ -107,6 +107,8 @@ const runOutcome = ({ command }: Run) => {
       return { text: "…", label: messages.running };
     case "uncertain":
       return { text: "?", label: messages.uncertain };
+    case "stopped":
+      return { text: "■", label: messages.stopped };
   }
 };
 

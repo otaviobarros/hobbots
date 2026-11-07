@@ -892,14 +892,15 @@ const makeRecorder = (limits: ActivityLimits) =>
             if (wrote || command !== undefined) yield* rescanLater;
           });
 
-        const uncertain = (id: string, at: string) => {
+        /** A running command ended without a result: uncertain, or `stopped` when you stopped it (#1056). */
+        const uncertain = (id: string, at: string, state: "uncertain" | "stopped" = "uncertain") => {
           const command = commands.get(id);
           if (command === undefined || command.state !== "running") return;
           const whole = printed.get(id) ?? "";
           const preview = previewToolOutput(whole);
           commands.set(id, {
             ...command,
-            state: "uncertain",
+            state,
             endedAt: at,
             output: whole === "" ? null : { ...preview, logged: false },
           });
@@ -915,10 +916,13 @@ const makeRecorder = (limits: ActivityLimits) =>
             case "ToolFinished":
               return finished(event);
             case "ToolUncertain":
+            case "ToolStopped": {
               stopWriting(event.id);
-              return Effect.flatMap(nowIso, (at) => Effect.sync(() => uncertain(event.id, at))).pipe(
+              const state = event._tag === "ToolStopped" ? "stopped" : "uncertain";
+              return Effect.flatMap(nowIso, (at) => Effect.sync(() => uncertain(event.id, at, state))).pipe(
                 Effect.andThen(sync),
               );
+            }
             default:
               return Effect.void;
           }

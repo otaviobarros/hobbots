@@ -244,6 +244,12 @@ interface ScriptedEffect {
   readonly background?: boolean;
   /** How long a background command runs, such as "2 seconds"; without it, it runs until its turn ends. */
   readonly runsFor?: Duration.Input;
+  /**
+   * A background command that outlives the reply, as one the model leaves running does (#1048,
+   * #1056): the reply is written while it runs, the turn then waits on it, and once it ends the
+   * fake follows up with a line on how it ended. Without `runsFor` it runs until you stop waiting.
+   */
+  readonly outlives?: boolean;
 }
 
 interface ScriptedCall {
@@ -333,6 +339,8 @@ interface BackgroundRun {
   readonly call: ScriptedCall & { readonly id: string };
   readonly folders: ReadonlyArray<string>;
   readonly endsAt: number | null;
+  /** It goes on after the reply is written, so the turn waits on it (#1056). */
+  readonly outlives: boolean;
 }
 
 /**
@@ -407,6 +415,7 @@ const ranScripted = (
         call,
         folders,
         endsAt: runsFor === undefined ? null : now + Duration.toMillis(Duration.fromInputUnsafe(runsFor)),
+        outlives: call.effect.outlives === true,
       });
       return;
     }
@@ -721,14 +730,35 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     const written = Stream.suspend(() => {
       const reply = quiet ? "" : answers.length === 0 ? echo : [echo, ...answers].join("\n\n");
       const words = reply === "" ? [] : reply.split(/(?<= )/);
-      return Stream.fromIterable<RuntimeEvent>([
-        ...(ending === "complete" ? words : words.slice(0, 2)).map(
-          (text): RuntimeEvent => ({ _tag: "TextDelta", text }),
+      const deltas = Stream.fromIterable<RuntimeEvent>(
+        (ending === "complete" ? words : words.slice(0, 2)).map((text): RuntimeEvent => ({ _tag: "TextDelta", text })),
+      );
+      if (ending !== "complete") return deltas;
+      const outliving = background.filter((run) => run.outlives);
+      // The turn waits on what outlives the reply, then tells how each ended, as Claude Code and Codex do.
+      const followUp = outliving.map((run) => `${String(run.call.input.command)} ended.`).join(" ");
+      const text = followUp === "" ? reply : reply === "" ? followUp : `${reply}\n\n${followUp}`;
+      const completed: RuntimeEvent = {
+        _tag: "Completed",
+        sessionId,
+        text,
+        usage: fakeUsage(told, text, known !== undefined),
+      };
+      if (outliving.length === 0) return Stream.concat(deltas, Stream.fromIterable([completed]));
+      return deltas.pipe(
+        Stream.concat(
+          Stream.fromIterable<RuntimeEvent>([{ _tag: "AwaitingCommands", ids: outliving.map((run) => run.call.id) }]),
         ),
-        ...(ending === "complete"
-          ? [{ _tag: "Completed", sessionId, text: reply, usage: fakeUsage(told, reply, known !== undefined) } as const]
-          : []),
-      ]);
+        Stream.concat(backgroundEnds(outliving)),
+        // One that never ends on its own keeps the turn waiting until you stop waiting.
+        Stream.concat(outliving.some((run) => run.endsAt === null) ? Stream.never : Stream.empty),
+        Stream.concat(
+          Stream.fromIterable<RuntimeEvent>([
+            { _tag: "TextDelta", text: reply === "" ? followUp : `\n\n${followUp}` },
+            completed,
+          ]),
+        ),
+      );
     });
     const failure = fakeFailure(ending);
     const background: Array<BackgroundRun> = [];
@@ -751,7 +781,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
       Stream.concat(scriptedToolEvents({ ...request, prompt: scripted }, options.engine, sandbox, background)),
       Stream.concat(scriptedHubEvents({ ...request, prompt: scripted }, answers, details)),
       // Like Claude Code, the turn completes once its background commands that end have ended.
-      Stream.concat(Stream.suspend(() => backgroundEnds(background))),
+      Stream.concat(Stream.suspend(() => backgroundEnds(background.filter((run) => !run.outlives)))),
       Stream.concat(written),
       Stream.concat(failure),
     );
