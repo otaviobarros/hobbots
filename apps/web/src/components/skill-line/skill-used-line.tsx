@@ -1,4 +1,5 @@
 import type { Agent, Message } from "@hobbots/domain";
+import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { skillsSearchOf } from "../skills/skills-model.ts";
 import { messages } from "./messages.ts";
@@ -25,7 +26,10 @@ export function SkillUsedLines({ message, hob }: { message: Message; hob: Agent 
           <li key={`${used.source}:${used.name}:${used.pin ?? ""}`} className="flex animate-hb-in">
             <span
               role="status"
-              className={`flex flex-wrap items-center gap-2 rounded-card border border-line-2 py-1.5 ps-3 text-detail text-text-secondary ${page === null ? "pe-3" : "pe-1.5"}`}
+              className={cn(
+                "flex flex-wrap items-center gap-2 rounded-card border border-line-2 py-1.5 ps-3 pe-3 text-detail text-text-secondary",
+                page !== null && "pe-1.5",
+              )}
             >
               <span className="flex text-star">
                 <SkillIcon />

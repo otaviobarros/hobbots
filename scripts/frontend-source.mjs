@@ -256,6 +256,27 @@ const localeFormatting = (file, lines, program, lineOf) => {
   return problems;
 };
 
+/** Whether a className expression builds its classes by hand: a template with holes, a condition, a `+` or a join. */
+const composedByHand = (node) =>
+  (node.type === "TemplateLiteral" && node.expressions.length > 0) ||
+  node.type === "ConditionalExpression" ||
+  node.type === "LogicalExpression" ||
+  (node.type === "BinaryExpression" && node.operator === "+") ||
+  (node.type === "CallExpression" && node.callee.type === "MemberExpression" && node.callee.property.name === "join");
+
+/** Classes that depend on a condition or join other classes go through cn (STD-UI-012). */
+const composedClasses = (file, lines, program, lineOf) => {
+  const problems = [];
+  walk(program, (node) => {
+    if (node.type !== "JSXAttribute" || node.name.name !== "className") return;
+    if (node.value?.type !== "JSXExpressionContainer" || !composedByHand(node.value.expression)) return;
+    const line = lineOf(node.start);
+    if (!allowedAt(lines, line, "STD-UI-012"))
+      problems.push(`${file}:${line}: compose the classes with cn, not by hand (STD-UI-012)`);
+  });
+  return problems;
+};
+
 const lineStarts = (text) => {
   const starts = [0];
   for (let index = 0; index < text.length; index++) if (text[index] === "\n") starts.push(index + 1);
@@ -280,7 +301,11 @@ export const checkSource = (file, text) => {
   const lines = text.split("\n");
   const problems = [...localeFormatting(file, lines, program, lineOf)];
   if (file.startsWith("apps/desktop/")) return problems;
-  problems.push(...size(file, text, program, lineOf), ...logicalClasses(file, lines, program, lineOf));
+  problems.push(
+    ...size(file, text, program, lineOf),
+    ...logicalClasses(file, lines, program, lineOf),
+    ...composedClasses(file, lines, program, lineOf),
+  );
   if (file.startsWith(WEB))
     problems.push(
       ...featureFolder(file),
