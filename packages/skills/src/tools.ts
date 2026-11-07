@@ -21,6 +21,7 @@ import {
   TurnSkillsInUse,
 } from "@hobbots/agents";
 import {
+  isAgentsFolderSource,
   isSkillToolName,
   SKILL_FEEDBACK_TOOL,
   SKILL_PROPOSE_TOOL,
@@ -270,6 +271,13 @@ export const SkillToolsLive = Layer.effect(
         if (skill === null) {
           return yield* new Refused({
             message: `The library has no skill named ${input.name}. For a new skill, leave out basedOn.`,
+          });
+        }
+        // A skill from ~/.agents/skills changes only in that folder, which other tools use too (ADR 029).
+        const sources = yield* library.sources;
+        if (isAgentsFolderSource(sources.find((source) => source.id === skill.sourceId))) {
+          return yield* new Refused({
+            message: `${skill.name} comes from ~/.agents/skills, which Hobbots only reads, so it cannot change here. Propose a skill under a new name instead, such as ${skill.name}-copy, without basedOn, starting from the files you read.`,
           });
         }
         const revision = (yield* library.revisions(skill.id)).find((one) => one.number === input.basedOn);

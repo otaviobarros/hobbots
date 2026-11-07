@@ -22,16 +22,32 @@ const editSkillFile = (text: string, edit: SkillEdit): string => {
   return `---\n${document.toString()}---\n\n${savedSkillInstructions(edit.instructions)}`;
 };
 
+/** A `SKILL.md` under another name: `name` set in its front matter, every other line kept as it was. */
+const renameSkillFile = (text: string, name: string): string => {
+  const found = FRONT_MATTER.exec(text);
+  const document = parseDocument(found?.[1] ?? "");
+  document.set("name", name);
+  return `---\n${document.toString()}---\n${found === null ? text : text.slice(found[0].length)}`;
+};
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-/** A revision's folder with the edit applied to its `SKILL.md`, as a source like any other. */
-export const editedTree = async (folder: string, edit: SkillEdit): Promise<SkillTree> => {
+/** A revision's folder with its `SKILL.md` changed by `change`, every other file as it is. */
+const withSkillFile = async (folder: string, change: (text: string) => string): Promise<SkillTree> => {
   const tree = await folderTree(folder);
-  const skillFile = encoder.encode(editSkillFile(decoder.decode(await tree.read("SKILL.md")), edit));
+  const skillFile = encoder.encode(change(decoder.decode(await tree.read("SKILL.md"))));
   return {
     commit: null,
     entries: tree.entries.map((entry) => (entry.path === "SKILL.md" ? { ...entry, size: skillFile.length } : entry)),
     read: (path) => (path === "SKILL.md" ? Promise.resolve(skillFile) : tree.read(path)),
   };
 };
+
+/** A revision's folder with the edit applied to its `SKILL.md`, as a source like any other. */
+export const editedTree = (folder: string, edit: SkillEdit): Promise<SkillTree> =>
+  withSkillFile(folder, (text) => editSkillFile(text, edit));
+
+/** A revision's folder as a copy named `name` (ADR 029, Make a copy): the same files, its `SKILL.md` renamed. */
+export const copiedTree = (folder: string, name: string): Promise<SkillTree> =>
+  withSkillFile(folder, (text) => renameSkillFile(text, name));

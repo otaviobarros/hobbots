@@ -47,7 +47,11 @@ export const messages = {
       "Hob settings, looks and permissions",
       "Skills, their history and which hobs use them",
     ],
-    left: ["Passwords, keys and tokens (they stay in the keychain)", "Your own folders the hobs worked in"],
+    left: [
+      "Passwords, keys and tokens (they stay in the keychain)",
+      "Your own folders the hobs worked in",
+      "Skills in ~/.agents/skills (they stay in that folder)",
+    ],
   },
   restore: {
     open: "Restore from a backup…",
@@ -96,6 +100,14 @@ export const messages = {
     resuming: "Resuming…",
     resumeFailed: "Hobbots could not resume work. Try again in a moment.",
     missing: "Folders the backup named that are not on this computer:",
+    skillsNotHere:
+      "Skills from ~/.agents/skills that are not in that folder on this computer, so no hob gets them until they are back:",
+    skillMoves:
+      "These moved to the revision now in ~/.agents/skills, since a backup keeps none of that folder's files:",
+    skillMove: ({ skill, who }: { skill: string; who: string }) => `${skill} for ${who}`,
+    everyone: "Everyone",
+    project: ({ name }: { name: string }) => `the ${name} project`,
+    formerHob: "a hob no longer here",
     setAside: ({ size }: { size: string }) => `The data from before the restore · ${size}`,
     delete: "Delete…",
     deleteConfirm: "Delete the data from before the restore for good?",

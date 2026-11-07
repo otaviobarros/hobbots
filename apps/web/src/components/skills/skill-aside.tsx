@@ -6,10 +6,19 @@ import { useState } from "react";
 import { formatDay } from "../../lib/format.ts";
 import { MemoryCard } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
+import { SkillCopy } from "./skill-copy.tsx";
 import { droppedLine } from "./skill-flags.tsx";
 import { SkillRemove } from "./skill-remove.tsx";
 import type { Say } from "./skills-flash.ts";
-import { type HobDirectory, originOf, originText, projectName, scopeName, skillsSearchOf } from "./skills-model.ts";
+import {
+  agentsFolderOf,
+  type HobDirectory,
+  originOf,
+  originText,
+  projectName,
+  scopeName,
+  skillsSearchOf,
+} from "./skills-model.ts";
 import { useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
@@ -88,7 +97,7 @@ function GiveTo({
   );
 }
 
-function Origin({ detail, list }: { detail: SkillDetail; list: SkillsList }) {
+function Origin({ detail, list, folder }: { detail: SkillDetail; list: SkillsList; folder: string | null }) {
   const latest = detail.revisions[0];
   const first = detail.revisions.at(-1);
   const charms = latest?.charms ?? [];
@@ -98,7 +107,17 @@ function Origin({ detail, list }: { detail: SkillDetail; list: SkillsList }) {
       <h3 className="lbl m-0 text-label">{copy.skill.origin}</h3>
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-detail">
         <dt className="text-label">{copy.skill.sourceLabel}</dt>
-        <dd className="m-0 break-words">{originText(originOf(detail.skill.sourceId, list.sources))}</dd>
+        <dd className="m-0 break-words">
+          {folder === null ? originText(originOf(detail.skill.sourceId, list.sources)) : copy.agents.source({ folder })}
+        </dd>
+        {folder !== null && (
+          <>
+            <dt className="text-label">{copy.agents.revisions}</dt>
+            <dd className="m-0">{copy.agents.revisionsText}</dd>
+            <dt className="text-label">{copy.agents.backups}</dt>
+            <dd className="m-0">{copy.agents.backupsText}</dd>
+          </>
+        )}
         {latest?.commit != null && (
           <>
             <dt className="text-label">{copy.skill.commit}</dt>
@@ -132,7 +151,10 @@ function Origin({ detail, list }: { detail: SkillDetail; list: SkillsList }) {
   );
 }
 
-/** Beside a skill: Edit, Also give it to, Remove, and where it came from. */
+/**
+ * Beside a skill: Edit, Make a copy, Also give it to, Remove, and where it came from. A skill from
+ * `~/.agents/skills` has no Edit or Remove (ADR 029): it changes in that folder, or as a copy.
+ */
 export function SkillAside({
   detail,
   list,
@@ -146,19 +168,28 @@ export function SkillAside({
   active: ReadonlyArray<Agent>;
   say: Say;
 }) {
+  const folder = agentsFolderOf(detail.skill, list.sources, detail.revisions);
   return (
     <aside aria-label={copy.skill.aside} className="flex w-[280px] flex-none flex-col gap-4">
       <MemoryCard label={copy.skill.actions}>
         <h3 className="lbl m-0 text-label">{copy.skill.actions}</h3>
-        <Button asChild variant="outline">
-          <Link to="/skills" search={skillsSearchOf({ _tag: "Edit", skillId: detail.skill.id })}>
-            {copy.skill.edit}
-          </Link>
-        </Button>
+        {folder === null ? (
+          <Button asChild variant="outline">
+            <Link to="/skills" search={skillsSearchOf({ _tag: "Edit", skillId: detail.skill.id })}>
+              {copy.skill.edit}
+            </Link>
+          </Button>
+        ) : (
+          <SkillCopy detail={detail} list={list} active={active} say={say} />
+        )}
         <GiveTo detail={detail} list={list} hobs={hobs} active={active} say={say} />
-        <SkillRemove detail={detail} hobs={hobs} say={say} />
+        {folder === null ? (
+          <SkillRemove detail={detail} hobs={hobs} say={say} />
+        ) : (
+          <span className="text-detail text-text-secondary">{copy.agents.noEdit}</span>
+        )}
       </MemoryCard>
-      <Origin detail={detail} list={list} />
+      <Origin detail={detail} list={list} folder={folder} />
     </aside>
   );
 }

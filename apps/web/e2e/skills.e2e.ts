@@ -311,3 +311,61 @@ test("[TC-UX-1064] Skills: export a set with skills.lock.json, import it on a fr
     removeDataDir(home);
   }
 });
+
+test("[TC-UX-1139] a skill from ~/.agents/skills is read-only with Make a copy, and Export leaves it out", async ({
+  page,
+}) => {
+  await hubWithHobs();
+  // The hub reads a ~/.agents/skills of its own, with one skill in it.
+  await hub?.stop();
+  const agents = join(dataDir, "agents-skills");
+  mkdirSync(join(agents, "pdf-forms"), { recursive: true });
+  writeFileSync(
+    join(agents, "pdf-forms", "SKILL.md"),
+    "---\nname: pdf-forms\ndescription: Use when filling in or reading a PDF form.\n---\n\nList the fields first.\n",
+  );
+  const home = emptyDataDir();
+  mkdirSync(join(home, "Downloads"), { recursive: true });
+  hub = await startHub(dataDir, { HOME: home, HOBBOTS_AGENTS_SKILLS: agents });
+  try {
+    await page.goto(`${hub.url}/#/skills`);
+    const main = page.getByRole("main", { name: "Skills" });
+    await main
+      .getByRole("link", { name: /Pdf forms/ })
+      .first()
+      .click();
+    await expect(main.getByRole("heading", { name: "Pdf forms", level: 2 })).toBeVisible();
+    await expect(main.getByRole("note")).toContainText("~/.agents/skills/pdf-forms");
+    const aside = main.getByRole("complementary", { name: "About this skill" });
+    await expect(aside.getByRole("link", { name: "Edit" })).toHaveCount(0);
+    await expect(aside.getByRole("button", { name: "Remove from the library…" })).toHaveCount(0);
+    await expect(aside).toContainText("Not in backups or exports.");
+
+    await aside.getByRole("button", { name: "Make a copy…" }).click();
+    const form = aside.getByRole("form", { name: "Make a copy of Pdf forms" });
+    await expect(form.getByRole("textbox", { name: "Typed as" })).toHaveValue("pdf-forms-copy");
+    await expect(form.getByRole("radio", { name: "Nobody yet" })).toBeChecked();
+    await expectAccessible(page, main);
+    await form.getByRole("button", { name: "Make the copy" }).click();
+    await expect(main).toContainText(
+      "Pdf forms copy is in your library at r1, and you can edit it. The original in ~/.agents/skills is unchanged.",
+    );
+    // The copy is yours to edit.
+    await expect(main.getByRole("heading", { name: "Pdf forms copy", level: 2 })).toBeVisible();
+    await expect(
+      main.getByRole("complementary", { name: "About this skill" }).getByRole("link", { name: "Edit" }),
+    ).toBeVisible();
+
+    // Export lists the copy and leaves the original out, saying why.
+    await page.goto(`${hub.url}/#/skills`);
+    await main.getByRole("link", { name: "Export…" }).click();
+    await expect(main.getByRole("checkbox", { name: /Export Pdf forms copy/ })).toBeChecked();
+    await expect(main.getByRole("checkbox", { name: "Export Pdf forms", exact: true })).toHaveCount(0);
+    const left = main.getByRole("region", { name: "Not exported" });
+    await expect(left).toContainText("Pdf forms");
+    await expect(left).toContainText("Another computer's Hobbots reads its own ~/.agents/skills.");
+    await expectAccessible(page, main);
+  } finally {
+    removeDataDir(home);
+  }
+});

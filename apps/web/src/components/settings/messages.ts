@@ -226,12 +226,14 @@ export const messages = {
         "Settings, folders and Always allowed rules",
         "GitHub and the other devices you allowed",
         "Workbench files and logs",
+        "The skills library and its history",
       ],
     },
     staysItems: [
       "Your folders and the files hobs made in them",
       "Your Claude account and plan",
       "Backups you saved somewhere else",
+      "Skills in ~/.agents/skills",
     ],
     working: ({ names, count }: { names: string; count: number }) =>
       plural(count, {

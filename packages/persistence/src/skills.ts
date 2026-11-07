@@ -23,6 +23,7 @@ import {
   SkillNotFound,
   type SkillOptOut,
   SkillOrigin,
+  SkillReadOnly,
   SkillRevision,
   type SkillRevisionHash,
   SkillScope,
@@ -271,6 +272,21 @@ export const SkillLibraryLive = Layer.effect(
             revision = ${skill.revision}
           WHERE id = ${skill.id}`;
 
+    /**
+     * A skill from `~/.agents/skills` takes new revisions only from that folder (ADR 029): an edit,
+     * a proposal or an import of other content is refused, so Hobbots never forks it.
+     */
+    const onlyFromItsFolder = (skill: Skill, input: SkillRevisionInput) =>
+      Effect.gen(function* () {
+        if (skill.sourceId === null || input.origin?._tag === "AgentsFolder") return;
+        const [row] = yield* sql<SourceRow>`SELECT * FROM skill_sources WHERE id = ${skill.sourceId}`;
+        const source = row === undefined ? null : yield* sourceOf(row);
+        if (source?.origin._tag !== "AgentsFolder") return;
+        const latest = yield* revisionRow(skill.id, skill.latest);
+        const folder = `${source.origin.path}/${latest?.path ?? skill.name}`;
+        return yield* new SkillReadOnly({ skillId: skill.id, name: skill.name, folder });
+      });
+
     /** The skill a revision goes to, or the revision it already is. */
     const targetOf = (skillId: SkillId | null, input: SkillRevisionInput) =>
       Effect.gen(function* () {
@@ -292,13 +308,14 @@ export const SkillLibraryLive = Layer.effect(
         if (skill.name !== input.name) {
           return yield* new SkillNameChanged({ skillId: skill.id, name: skill.name, given: input.name });
         }
+        yield* onlyFromItsFolder(skill, input);
         return { _tag: "Next" as const, skill };
       });
 
     const addRevision = (skillId: SkillId | null, input: SkillRevisionInput) =>
       change<
         { skill: Skill; revision: SkillRevision; added: boolean },
-        SkillNotFound | SkillNameTaken | SkillNameChanged | SkillMovedOn | SqlError.SqlError
+        SkillNotFound | SkillNameTaken | SkillNameChanged | SkillMovedOn | SkillReadOnly | SqlError.SqlError
       >((first) =>
         Effect.gen(function* () {
           const target = yield* targetOf(skillId, input);

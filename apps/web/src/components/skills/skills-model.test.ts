@@ -16,6 +16,7 @@ import {
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
+  agentsFolderOf,
   descriptionState,
   draftingHobs,
   exportRows,
@@ -215,22 +216,30 @@ describe("Export skills", () => {
     expect(importable({ refusal: null, existing: null, exported: null })).toBe(true);
   });
 
-  // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("opens from its own address and lists each skill once, under the first scope it has", () => {
+  // covers ADR 029 (Backups, exports and Diagnostics), #1064, #1139
+  it("opens from its own address and lists each skill once, under the first scope it has, ~/.agents ones apart", () => {
     expect(skillsViewOf({ export: "skills" })).toEqual({ _tag: "Export" });
     expect(skillsSearchOf({ _tag: "Export" })).toEqual({ export: "skills" });
     const site = MemoryProjectIdentity.make("github.com/acme/site");
-    const rows = exportRows(
+    const agents = new SkillSource({
+      id: SkillSourceId.make("agents"),
+      origin: { _tag: "AgentsFolder", path: "/home/me/.agents/skills" },
+      addedAt: AT,
+    });
+    const { rows, notExported } = exportRows(
       list({
         skills: [
           skill("s1", "release-steps", "How releases go", hash(5), 5),
           skill("s2", "commit-style", "How commits read"),
           skill("s3", "support-replies", "How to answer"),
+          skill("s4", "pdf-forms", "Forms", hash(1), 1, "agents"),
         ],
+        sources: [agents],
         assignments: [
           assignment("a1", "s1", { _tag: "Project", identity: site }, hash(5)),
           assignment("a2", "s1", { _tag: "Hob", agentId: pip.id }, hash(4), true),
           assignment("a3", "s2", { _tag: "Everyone" }),
+          assignment("a4", "s4", { _tag: "Everyone" }),
         ],
       }),
       hobs,
@@ -240,6 +249,20 @@ describe("Export skills", () => {
       ["release-steps", "Project", "site project +1"],
       ["support-replies", null, "Not given to anyone yet"],
     ]);
+    expect(notExported.map((one) => one.name)).toEqual(["pdf-forms"]);
+  });
+
+  // covers ADR 029 (~/.agents/skills), #1139
+  it("names the ~/.agents/skills folder a skill lives in, and none for a skill of any other source", () => {
+    const agents = new SkillSource({
+      id: SkillSourceId.make("agents"),
+      origin: { _tag: "AgentsFolder", path: "/home/me/.agents/skills" },
+      addedAt: AT,
+    });
+    const pdf = skill("s1", "pdf-forms", "Forms", hash(1), 1, "agents");
+    expect(agentsFolderOf(pdf, [agents], [{ path: "pdf" }])).toBe("~/.agents/skills/pdf");
+    expect(agentsFolderOf(pdf, [agents])).toBe("~/.agents/skills/pdf-forms");
+    expect(agentsFolderOf(skill("s2", "mine", "Mine"), [agents])).toBeNull();
   });
 
   // covers ADR 029 (Proactive hobs), #1144

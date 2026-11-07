@@ -446,6 +446,21 @@ export class SkillMovedOn extends Schema.TaggedError<SkillMovedOn>()("SkillMoved
   latest: SkillRevisionHash,
 }) {}
 
+/**
+ * A skill from `~/.agents/skills` is read-only in Hobbots (ADR 029): it is edited in its folder,
+ * which other tools use too, and only a change there makes a new revision. Make a copy to change it
+ * in Hobbots. `folder` is the skill's folder there.
+ */
+export class SkillReadOnly extends Schema.TaggedError<SkillReadOnly>()("SkillReadOnly", {
+  skillId: SkillId,
+  name: SkillName,
+  folder: Schema.String,
+}) {}
+
+/** Whether a source is the shared `~/.agents/skills`, whose skills Hobbots only reads. */
+export const isAgentsFolderSource = (source: SkillSource | undefined | null): boolean =>
+  source?.origin._tag === "AgentsFolder";
+
 /** A skill something still assigns cannot be removed; `assignments` says who uses it. */
 export class SkillInUse extends Schema.TaggedError<SkillInUse>()("SkillInUse", {
   skillId: SkillId,

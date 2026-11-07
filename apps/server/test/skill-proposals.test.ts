@@ -37,7 +37,9 @@ import {
   SKILL_PROPOSE_TOOL,
   SKILL_REQUEST_TOOL,
   SKILL_SEARCH_TOOL,
+  SkillName,
   SkillProposal,
+  SkillRevisionHash,
   type SkillScope,
   type ThreadId,
 } from "@hobbots/domain";
@@ -395,6 +397,35 @@ describe("hobs proposing skills", () => {
     );
     const [item] = await told();
     expect(item?.payload).toMatchObject({ proposal: { state: "added", edited: true } });
+  });
+
+  // covers ADR 029 (Proactive hobs; ~/.agents/skills stays, through Hobbots), #1139
+  it("[TC-AG-164] a change to a skill from ~/.agents/skills is refused, with a hint to propose a copy", async () => {
+    await runtime.runPromise(
+      SkillLibrary.use((skills) =>
+        skills.addRevision(null, {
+          hash: SkillRevisionHash.make("d".repeat(64)),
+          name: SkillName.make("pdf-forms"),
+          description: "Use when filling in a PDF form.",
+          charms: [],
+          files: [{ path: "SKILL.md", mode: "regular", size: 10, sha256: "0".repeat(64) }],
+          flags: [],
+          dropped: [],
+          origin: { _tag: "AgentsFolder", path: "/home/me/.agents/skills" },
+          commit: null,
+          path: "pdf-forms",
+          label: null,
+          addedBy: { _tag: "You" },
+        }),
+      ),
+    );
+    const answer = await propose("pdf-forms", { basedOn: 1, body: "Fill, then check." });
+    expect(answer).toEqual({
+      text: "pdf-forms comes from ~/.agents/skills, which Hobbots only reads, so it cannot change here. Propose a skill under a new name instead, such as pdf-forms-copy, without basedOn, starting from the files you read.",
+      refused: true,
+    });
+    expect(await proposals()).toEqual([]);
+    expect(await propose("pdf-forms-copy", { body: "Fill, then check." })).toMatchObject({ refused: false });
   });
 
   // covers ADR 029 (Proactive hobs), #1063

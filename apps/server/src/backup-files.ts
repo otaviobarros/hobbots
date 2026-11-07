@@ -217,16 +217,20 @@ const modeOf = async (source: string) => (((await lstat(source)).mode & 0o100) =
  * Copies each revision's folder of the skills object store into `target`, owner-only, and returns
  * each file's entry for the manifest under `skills/`. A file that runs stays one, since the
  * revision's hash covers it. A folder still being written, which is not named by its hash yet, is
- * left out: no record names it.
+ * left out: no record names it. With `only`, so is each revision not in it: the backup holds the
+ * revisions its snapshot of the database names, never those of skills from `~/.agents/skills`, which
+ * stay in that folder (ADR 029), nor one written after the snapshot.
  */
 export const copySkillObjects = async (
   source: string,
   target: string,
   onBytes: (n: number) => void = () => {},
+  only: ReadonlySet<string> | null = null,
 ): Promise<ReadonlyArray<ManifestFile>> => {
   const entries: Array<ManifestFile> = [];
   for (const file of await listFiles(source)) {
-    if (!REVISION_FOLDER.test(file.split(sep)[0] ?? "")) continue;
+    const revision = file.split(sep)[0] ?? "";
+    if (!REVISION_FOLDER.test(revision) || (only !== null && !only.has(revision))) continue;
     const from = join(source, file);
     const copied = await copyFile(from, join(target, file), onBytes, await modeOf(from));
     entries.push({ path: join(SKILLS_PART.backup, file).split(sep).join("/"), ...copied });

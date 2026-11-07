@@ -39,7 +39,6 @@ function FileList({ view, revision }: { view: SkillViewOf; revision: SkillRevisi
               <Link
                 to="/skills"
                 search={skillsSearchOf({ ...view, file: open ? null : file.path })}
-                aria-label={copy.skill.fileOpen({ path: file.path })}
                 aria-expanded={open}
                 className={cn(
                   "flex w-full items-center gap-2.5 px-3 py-2 text-ui text-text no-underline hover:bg-hover",
@@ -55,6 +54,7 @@ function FileList({ view, revision }: { view: SkillViewOf; revision: SkillRevisi
                 >
                   {script ? "SH" : "MD"}
                 </span>
+                <span className="sr-only">{copy.skill.fileOpen}</span>
                 <code className="min-w-0 flex-1 truncate font-mono text-detail text-moonlight">{file.path}</code>
                 {script && <span className="text-meta text-label">{copy.skill.script}</span>}
               </Link>
@@ -67,7 +67,17 @@ function FileList({ view, revision }: { view: SkillViewOf; revision: SkillRevisi
 }
 
 /** One file of a revision, read-only: its text, or why it is not shown. */
-function FileView({ view, revision, path }: { view: SkillViewOf; revision: SkillRevision; path: string }) {
+function FileView({
+  view,
+  revision,
+  path,
+  fromFolder,
+}: {
+  view: SkillViewOf;
+  revision: SkillRevision;
+  path: string;
+  fromFolder: boolean;
+}) {
   const read = useQuery(skillFileQuery(revision.skillId, revision.hash, path));
   return (
     <section
@@ -76,7 +86,7 @@ function FileView({ view, revision, path }: { view: SkillViewOf; revision: Skill
     >
       <div className="flex items-center gap-2 border-b border-line bg-deep px-3 py-2 text-detail">
         <code className="min-w-0 flex-1 truncate font-mono text-moonlight">{path}</code>
-        <span className="text-meta text-label">{copy.file.readOnly}</span>
+        <span className="text-meta text-label">{fromFolder ? copy.agents.fileReadOnly : copy.file.readOnly}</span>
         <Button asChild variant="quiet" size="xs">
           <Link to="/skills" search={skillsSearchOf({ ...view, file: null })}>
             {copy.file.close}
@@ -107,8 +117,19 @@ function FileView({ view, revision, path }: { view: SkillViewOf; revision: Skill
   );
 }
 
-/** The Instructions tab: the newest revision's SKILL.md, what to look at in it, and its files. */
-export function SkillInstructions({ view, detail }: { view: SkillViewOf; detail: SkillDetail }) {
+/**
+ * The Instructions tab: the newest revision's SKILL.md, what to look at in it, and its files. A skill
+ * `fromFolder` (`~/.agents/skills`) is changed in that folder, never here (ADR 029).
+ */
+export function SkillInstructions({
+  view,
+  detail,
+  fromFolder,
+}: {
+  view: SkillViewOf;
+  detail: SkillDetail;
+  fromFolder: boolean;
+}) {
   const latest = detail.revisions[0];
   const read = useQuery({
     ...skillRevisionQuery(detail.skill.id, detail.skill.latest),
@@ -130,7 +151,7 @@ export function SkillInstructions({ view, detail }: { view: SkillViewOf; detail:
       )}
       <FlagList revision={latest} />
       <FileList view={view} revision={latest} />
-      {view.file !== null && <FileView view={view} revision={latest} path={view.file} />}
+      {view.file !== null && <FileView view={view} revision={latest} path={view.file} fromFolder={fromFolder} />}
     </div>
   );
 }

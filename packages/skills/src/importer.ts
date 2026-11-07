@@ -29,7 +29,7 @@ import {
 } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
 import { type CheckedSkill, type CheckResult, checkSkill } from "./check.ts";
-import { editedTree, type SkillEdit } from "./edit.ts";
+import { copiedTree, editedTree, type SkillEdit } from "./edit.ts";
 import {
   decodeSkillsLock,
   type LockedSkill as ExportedSkill,
@@ -63,7 +63,17 @@ export type SkillImportSource =
        * an `agents/openai.yaml` the import left out: the edit keeps it.
        */
       readonly carried: { readonly charms: ReadonlyArray<string>; readonly dropped: ReadonlyArray<SkillDropped> };
-    } & SkillEdit);
+    } & SkillEdit)
+  /**
+   * A copy of a revision under a new name (ADR 029, Make a copy): its files as they are, its
+   * `SKILL.md` renamed, written in Hobbots with no source.
+   */
+  | {
+      readonly _tag: "Copied";
+      readonly folder: string;
+      readonly name: SkillName;
+      readonly carried: { readonly charms: ReadonlyArray<string>; readonly dropped: ReadonlyArray<SkillDropped> };
+    };
 
 /** One skill a source holds, as import would take it, or the rule it broke. */
 export interface SkillCandidate {
@@ -234,6 +244,8 @@ const openTree = (source: SkillImportSource) => {
         return Promise.resolve(writtenTree(source.files));
       case "Edited":
         return editedTree(source.folder, source);
+      case "Copied":
+        return copiedTree(source.folder, source.name);
     }
   };
   return Effect.acquireRelease(
@@ -337,11 +349,16 @@ const originOf = (source: SkillImportSource, locked: LockedSkill | null): SkillO
       return { _tag: "Git", url: source.url, ref: source.ref };
     case "Written":
     case "Edited":
+    case "Copied":
       return null;
   }
 };
 
-type Carried = Extract<SkillImportSource, { readonly _tag: "Edited" }>["carried"];
+type Carried = Extract<SkillImportSource, { readonly _tag: "Edited" | "Copied" }>["carried"];
+
+/** What the source carries over from the revision it was made from, when it was made from one. */
+const carriedOf = (source: SkillImportSource): Carried | null =>
+  source._tag === "Edited" || source._tag === "Copied" ? source.carried : null;
 
 /** An edit's Charms: what its files name now, and what its base recorded from files it left out. */
 const carriedCharms = (skill: CheckedSkill, carried: Carried) =>
@@ -624,9 +641,10 @@ export const SkillImporterLive = Layer.effect(
               exported.push({ skillId: added.skill.id, skill: fromExport.skill });
               return added;
             }
+            const carried = carriedOf(source);
             return yield* addOne(options.skillId ?? null, skill, {
-              charms: source._tag === "Edited" ? carriedCharms(skill, source.carried) : skill.charms,
-              dropped: source._tag === "Edited" ? carriedDropped(skill, source.carried) : skill.dropped,
+              charms: carried === null ? skill.charms : carriedCharms(skill, carried),
+              dropped: carried === null ? skill.dropped : carriedDropped(skill, carried),
               origin: originOf(source, locked),
               commit: locked?.url != null ? null : tree.commit,
               path: locked?.url != null ? locked.path : skill.folder === "" ? null : skill.folder,

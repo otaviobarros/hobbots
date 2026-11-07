@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { SkillLibrary } from "@hobbots/agents";
 import {
   type AgentId,
+  isAgentsFolderSource,
   type SkillAssignment,
   SkillDropped,
   type SkillId,
@@ -124,8 +125,9 @@ const copyRevision = async (from: string, target: string, revision: SkillRevisio
 
 /**
  * Writes an export into `folder`, which must be new and empty: each skill's revisions and the lock.
- * Answers how many skills it holds. A skill whose files the hub no longer has is left out, and so is
- * a skill that is not in the library.
+ * Answers how many skills it holds, and the skills from `~/.agents/skills` it left out: they stay in
+ * that folder, and another hub reads its own (ADR 029). A skill whose files the hub no longer has is
+ * left out too, and so is a skill that is not in the library.
  */
 export const writeSkillExport = (folder: string, options: SkillExportOptions) =>
   Effect.gen(function* () {
@@ -135,7 +137,12 @@ export const writeSkillExport = (folder: string, options: SkillExportOptions) =>
     const wanted = options.skillIds === undefined ? null : new Set(options.skillIds);
     const skills = (yield* library.list).filter((skill) => wanted === null || wanted.has(skill.id));
     const locked: Array<LockedSkill> = [];
+    const leftOut: Array<SkillName> = [];
     for (const skill of skills) {
+      if (isAgentsFolderSource(sources.find((source) => source.id === skill.sourceId))) {
+        leftOut.push(skill.name);
+        continue;
+      }
       const assignments = options.assignments ? yield* library.assignments(skill.id) : [];
       const exported: Array<LockedRevision> = [];
       for (const revision of revisionsToExport(yield* library.revisions(skill.id), assignments)) {
@@ -180,5 +187,5 @@ export const writeSkillExport = (folder: string, options: SkillExportOptions) =>
         mode: 0o600,
       }),
     );
-    return { skills: locked.length };
+    return { skills: locked.length, leftOut };
   });

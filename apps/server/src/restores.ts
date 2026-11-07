@@ -1,8 +1,10 @@
 import { readFile, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
-import { ChatService, HobbotsRepository, WorkHold } from "@hobbots/agents";
+import { ChatService, HobbotsRepository, SkillFiles, SkillLibrary, WorkHold } from "@hobbots/agents";
 import { RestoreRefused, type RestoreStatus, RestoreSummary } from "@hobbots/api";
+import { isAgentsFolderSource, type SkillName } from "@hobbots/domain";
 import { applyRestoreRules, knownSchemaVersion, type RestoreRecord, RestoreRepository } from "@hobbots/persistence";
+import { AgentsFolder } from "@hobbots/skills";
 import { Context, DateTime, Effect, Layer, Option, Ref } from "effect";
 import {
   type BackupManifest,
@@ -98,6 +100,29 @@ export const WorkHoldLive = Layer.effect(
   }),
 );
 
+/**
+ * Skills from `~/.agents/skills` this computer no longer has (ADR 029): a backup holds none of their
+ * files, so a skill counts as here only when the folder holds it now, as its last read found. A
+ * skill's newest revision says nothing of this: a folder put back to an earlier copy keeps it. With
+ * no read of the folder yet, a skill whose newest revision has no files here is gone. Empty on a hub
+ * without skills.
+ */
+export const skillsNotHere = Effect.gen(function* () {
+  const library = yield* Effect.serviceOption(SkillLibrary);
+  const files = yield* Effect.serviceOption(SkillFiles);
+  if (Option.isNone(library) || Option.isNone(files)) return [];
+  const folder = yield* Effect.serviceOption(AgentsFolder);
+  const current = Option.isSome(folder) ? yield* folder.value.current : null;
+  const sources = yield* library.value.sources;
+  const gone: Array<SkillName> = [];
+  for (const skill of yield* library.value.list) {
+    if (!isAgentsFolderSource(sources.find((source) => source.id === skill.sourceId))) continue;
+    const here = current !== null ? current.has(skill.name) : (yield* files.value.folder(skill.latest)) !== null;
+    if (!here) gone.push(skill.name);
+  }
+  return gone;
+});
+
 /** Settings › Backup & export › Restore, and what the latest restore left (ADR 026). */
 export class HubRestores extends Context.Service<
   HubRestores,
@@ -120,6 +145,17 @@ export class HubRestores extends Context.Service<
       const restart = yield* Effect.serviceOption(HubRestart);
       const outcome = yield* Effect.serviceOption(RestoreOutcome);
       const failed = Option.isSome(outcome) ? outcome.value.failed : null;
+      const context = yield* Effect.context<never>();
+
+      /** Each move with the hob's name, for a hob's assignment. */
+      const skillMovesOf = (restore: RestoreRecord) =>
+        Effect.forEach(restore.skillMoves, (move) =>
+          Effect.gen(function* () {
+            if (move.scope._tag !== "Hob") return { ...move, hob: null };
+            const hob = yield* hobs.findAgent(move.scope.agentId);
+            return { ...move, hob: Option.isSome(hob) ? hob.value.name : null };
+          }),
+        );
 
       const status: Effect.Effect<RestoreStatus> = Effect.gen(function* () {
         const latest = yield* repo.latest;
@@ -136,6 +172,8 @@ export class HubRestores extends Context.Service<
             backupVersion: restore.backupVersion,
             setAside,
             missingFolders: restore.missingFolders,
+            skillsNotHere: yield* skillsNotHere.pipe(Effect.provideContext(context)),
+            skillMoves: yield* skillMovesOf(restore),
             workHeld: yield* hold.held,
           },
           failed,

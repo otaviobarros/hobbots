@@ -13,6 +13,7 @@ import type {
   SkillProposalClosed,
   SkillProposalNotFound,
   SkillProposalState,
+  SkillReadOnly,
   SkillRefused,
   SkillSourceChanged,
   SkillSourceUnreadable,
@@ -101,6 +102,7 @@ export type SkillReviewError =
   | SkillNameTaken
   | SkillNameChanged
   | SkillMovedOn
+  | SkillReadOnly
   | SkillSourceChanged;
 
 /**

@@ -19,6 +19,7 @@ import type {
   SkillNotFound,
   SkillOptOut,
   SkillOrigin,
+  SkillReadOnly,
   SkillRefused,
   SkillRevision,
   SkillRevisionHash,
@@ -118,11 +119,15 @@ export interface SkillLibraryShape {
    * skill of that name already has answers that one. Otherwise a new skill fails on a name the
    * library has (`SkillNameTaken`), and a revision on a name that is not its skill's (`SkillNameChanged`)
    * or made from a revision that is no longer the newest (`SkillMovedOn`), checked as it is written.
+   * A skill from `~/.agents/skills` takes a new revision only from that folder (`SkillReadOnly`).
    */
   readonly addRevision: (
     skillId: SkillId | null,
     input: SkillRevisionInput,
-  ) => Library<Committed<SkillRevisionAdded>, SkillNotFound | SkillNameTaken | SkillNameChanged | SkillMovedOn>;
+  ) => Library<
+    Committed<SkillRevisionAdded>,
+    SkillNotFound | SkillNameTaken | SkillNameChanged | SkillMovedOn | SkillReadOnly
+  >;
   /** Every assignment, or a skill's. */
   readonly assignments: (skillId?: SkillId) => Library<ReadonlyArray<SkillAssignment>>;
   /** Assigns a skill to a scope, or changes its assignment there; a skill has one per scope. */
@@ -228,6 +233,7 @@ export type SkillImportError =
   | SkillNameTaken
   | SkillNameChanged
   | SkillMovedOn
+  | SkillReadOnly
   | SkillSourceChanged;
 
 /**
