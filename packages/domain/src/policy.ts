@@ -340,3 +340,19 @@ export const EMPTY_HOB_POLICY: HobPolicy = { ownFolders: [], hiddenSharedFolders
 
 /** The hob's own answers for every operation: its built-in overrides and its Charm overrides. */
 export const hobAnswers = (hob: HobPolicy): PolicyLayer => ({ ...hob.charms?.overrides, ...hob.overrides });
+
+/**
+ * The answer a hob gets for one operation, built-in or declared by a Charm in `declared`: the
+ * narrower of the preset's and the hob's own, so an override stored under one preset never widens a
+ * stricter preset picked later.
+ */
+export const effectiveDecision = (
+  preset: SafetyPreset,
+  answers: PolicyLayer,
+  operation: AnyOperation,
+  declared: ReadonlyArray<CharmOperation> = [],
+): PolicyDecision => {
+  const answer = presetDecision(preset, operation, declared);
+  const override = answers[operation];
+  return override === undefined ? answer : narrowest(answer, override);
+};
