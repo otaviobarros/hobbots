@@ -691,7 +691,7 @@ describe("GitHub reads", () => {
 describe("policy version", () => {
   it("changes with any policy input and not with key order", () => {
     const base = contextFor(home, "balanced");
-    expect(policyVersion(base)).toMatch(/^r3-[0-9a-f]{16}$/);
+    expect(policyVersion(base)).toMatch(/^r4-[0-9a-f]{16}$/);
     expect(policyVersion({ ...base })).toBe(policyVersion(base));
     const reordered = Object.fromEntries(Object.entries(base).reverse()) as unknown as typeof base;
     expect(policyVersion(reordered)).toBe(policyVersion(base));
@@ -711,5 +711,82 @@ describe("policy version", () => {
     expect(evaluate(context, scope, request).decision).toBe("allow");
     const sensitive = { ...request, targets: [{ input: "a", canonical: { path: "/WORK/a", caseSensitive: true } }] };
     expect(evaluate(context, scope, sensitive).decision).toBe("deny");
+  });
+});
+
+describe("the runtime's saved output (#1153)", () => {
+  /** A hob's runtime folder beside the folders, with two sessions' saved output in it. */
+  const runtime = async () => {
+    const hob = path.join(home.root, "runtimes", "hob");
+    const saved = path.join(hob, "projects", "p", "s1", "tool-results");
+    const other = path.join(hob, "projects", "p", "s2", "tool-results");
+    await fs.mkdir(saved, { recursive: true });
+    await fs.mkdir(other, { recursive: true });
+    await fs.writeFile(path.join(saved, "b1.txt"), "whole output");
+    await fs.writeFile(path.join(other, "b2.txt"), "another session");
+    return { hob, saved, other };
+  };
+
+  it("lets a hob read its session's saved output and run commands there, in every preset", async () => {
+    const { saved } = await runtime();
+    for (const preset of SafetyPreset.literals) {
+      const context = contextFor(home, preset, { runtimeOutputs: [saved] });
+      const read = await decide(context, files("read-files", home.project, path.join(saved, "b1.txt")));
+      expect(read).toMatchObject({ decision: "allow", operation: "read-files", grantable: false });
+      const command = await decide(context, { _tag: "Command", operation: "run-commands", cwd: saved });
+      expect(command.decision).toBe(PRESET_DECISIONS[preset]["run-commands"]);
+      expect(command).toMatchObject({ operation: "run-commands", grantable: false, rules: [] });
+    }
+  });
+
+  it("never lets a hob change it", async () => {
+    const { saved } = await runtime();
+    const context = contextFor(home, "trusting", { runtimeOutputs: [saved] });
+    for (const operation of ["edit-files", "delete-files"] as const) {
+      const verdict = await decide(context, files(operation, home.project, path.join(saved, "b1.txt")));
+      expect(verdict).toMatchObject({ decision: "deny", operation, reason: { code: "runtime-output" } });
+    }
+  });
+
+  it("opens only that session's folder, never the rest of the runtime folder", async () => {
+    const { hob, saved, other } = await runtime();
+    const context = contextFor(home, "trusting", { runtimeOutputs: [saved] });
+    for (const target of [path.join(other, "b2.txt"), hob, path.join(saved, "..", "..", "s1.jsonl")]) {
+      const verdict = await decide(context, files("read-files", home.project, target));
+      expect(verdict).toMatchObject({ decision: "deny", reason: { code: "outside-folders" } });
+    }
+    const without = await decide(
+      contextFor(home, "trusting"),
+      files("read-files", home.project, path.join(saved, "b1.txt")),
+    );
+    expect(without).toMatchObject({ decision: "deny", reason: { code: "outside-folders" } });
+  });
+
+  it("does not follow a link laid in it to another place", async () => {
+    const { saved } = await runtime();
+    await fs.symlink(home.secret, path.join(saved, "planted.txt")).catch(() => undefined);
+    const context = contextFor(home, "trusting", { runtimeOutputs: [saved] });
+    const verdict = await decide(context, files("read-files", home.project, path.join(saved, "planted.txt")));
+    expect(verdict).toMatchObject({ decision: "deny", reason: { code: "outside-folders" } });
+  });
+
+  it("is no folder a push or a Charm starts from", async () => {
+    const { saved } = await runtime();
+    const context = contextFor(home, "trusting", { runtimeOutputs: [saved] });
+    expect((await decide(context, githubRead(saved))).reason.code).toBe("outside-folders");
+    const push = await decide(context, {
+      _tag: "Push",
+      remote: "origin",
+      branch: "feature",
+      force: false,
+      toDefaultBranch: false,
+      cwd: saved,
+    });
+    expect(push.rules).toEqual([]);
+  });
+
+  it("leaves the policy version as it is", () => {
+    const base = contextFor(home, "balanced");
+    expect(policyVersion({ ...base, runtimeOutputs: ["/somewhere"] })).toBe(policyVersion(base));
   });
 });

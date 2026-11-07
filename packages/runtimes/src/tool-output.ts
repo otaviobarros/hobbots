@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
-import { dirname, sep } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 
 /**
  * What a Claude Code tool call printed, as text, from the `tool_response` its PostToolUse hook gets.
@@ -107,4 +107,21 @@ export const fullToolOutput = async (
     if (whole !== undefined && whole !== "") return whole;
   }
   return toolOutputText(tool, response);
+};
+
+/**
+ * Where Claude Code saves this session's outputs too large to return inline, `tool-results` beside
+ * its transcript (`<config>/projects/<project>/<session>.jsonl`), which it tells the hob to read
+ * from. Only a session of the hob's own configuration folder counts, so no other hob's or the
+ * user's folder is ever named, and only its own session, never the others in the folder.
+ */
+export const savedOutputFolder = (
+  runtimeFolder: string,
+  session: { readonly session_id: string; readonly transcript_path: string },
+): string | undefined => {
+  const { session_id: id, transcript_path: transcript } = session;
+  const project = relative(join(runtimeFolder, "projects"), dirname(transcript));
+  const oneName = (name: string) => name !== "" && name !== "." && name !== ".." && !name.includes(sep);
+  if (!oneName(id) || !oneName(project) || basename(transcript) !== `${id}.jsonl`) return undefined;
+  return join(dirname(transcript), id, "tool-results");
 };
