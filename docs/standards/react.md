@@ -170,6 +170,16 @@ Change server data with TanStack Query mutations, not React form actions. While 
 - **Enforced by:** review, and end-to-end tests of the pending and failure paths.
 - **Applies to:** `apps/web`.
 
+### STD-REACT-027 Query hooks own an async call's lifecycle
+
+When something async runs, such as a read, a save or a run of several saves, let a TanStack Query hook track it: `useQuery` for a read, `useMutation` for a change. Read whether it is pending, done or failed, and its data and error, from the hook. Do not keep that in `useState`, `useRef` or a flag set by hand around an `await`. When another component needs to know that the work is running, give the mutation a `mutationKey` and read it with `useIsMutating` or `useMutationState`. Do not lift a flag up through a callback. `useState` stays for state the user owns, such as a draft, a choice or a toggle (STD-REACT-003).
+
+- ✅ `const importing = useMutation({ mutationKey: importRunKey, mutationFn: run })`, then `disabled={importing.isPending}`, and `useIsMutating({ mutationKey: importRunKey }) > 0` elsewhere
+- ❌ `const [running, setRunning] = useState(false)` with `setRunning(true)` before an `await` and `setRunning(false)` in a `finally`
+- **Why:** the query cache already tracks pending, success and error, keeps tracking after the component that started the work unmounts, and lets any component read it by key. A flag kept by hand drifts from the real request and is lost on unmount.
+- **Enforced by:** review.
+- **Applies to:** `apps/web`.
+
 ### STD-REACT-017 Forms validate with an Effect Schema
 
 Each form keeps its field rules in an Effect Schema next to it, and checks them in the client before it sends. A field shows its error inline, in plain words, when it loses focus and again on submit. Server errors map to the field they belong to when they can.
