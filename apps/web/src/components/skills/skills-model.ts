@@ -2,8 +2,10 @@ import type { SkillsList } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
+  effectiveDecision,
   memoryScopeKey,
   memoryScopeOfKey,
+  type SafetyPreset,
   SKILL_DESCRIPTION_MAX,
   type Skill,
   type SkillAssignment,
@@ -18,6 +20,13 @@ import { Schema } from "effect";
 import { messages } from "./messages.ts";
 
 const copy = messages;
+
+/**
+ * The hobs Draft it with a hob offers: those whose permissions let them suggest a skill under the
+ * preset. Ask still lets one, since you answer it in the chat; Never does not.
+ */
+export const draftingHobs = (active: ReadonlyArray<Agent>, preset: SafetyPreset): ReadonlyArray<Agent> =>
+  active.filter((hob) => effectiveDecision(preset, hob.policy.overrides, "propose-skill") !== "deny");
 
 /** Where Add a skill takes it from. */
 export const ImportFrom = Schema.Literals(["git", "file", "write"]);

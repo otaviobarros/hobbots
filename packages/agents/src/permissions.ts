@@ -1,12 +1,11 @@
 import type { HobPermissions } from "@hobbots/api";
 import {
   type Agent,
+  effectiveDecision,
   type HobPolicy,
-  narrowest,
   POLICY_OPERATIONS,
   type PolicyDecision,
   type PolicyOperation,
-  PRESET_DECISIONS,
   type SafetyPreset,
 } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
@@ -32,20 +31,13 @@ export const hobFoldersNow = (folders: FolderChecksShape, sharedFolders: Readonl
     Effect.map(Effect.forEach(each, folders.identity), (canonical) => [...new Set(canonical)]),
   );
 
-/**
- * Per operation, the narrower of the preset and the hob's override. Taking the narrower one keeps an
- * override stored under one preset from widening a stricter preset picked later.
- */
+/** Per operation, the answer the hob gets under the preset (`effectiveDecision`). */
 const effectiveDecisions = (
   preset: SafetyPreset,
   overrides: HobPolicy["overrides"],
 ): Record<PolicyOperation, PolicyDecision> =>
   Object.fromEntries(
-    POLICY_OPERATIONS.map((operation) => {
-      const override = overrides[operation];
-      const answer = PRESET_DECISIONS[preset][operation];
-      return [operation, override === undefined ? answer : narrowest(answer, override)];
-    }),
+    POLICY_OPERATIONS.map((operation) => [operation, effectiveDecision(preset, overrides, operation)]),
   ) as Record<PolicyOperation, PolicyDecision>;
 
 /**

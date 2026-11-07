@@ -176,6 +176,20 @@ export const PolicyOverrides = Schema.Struct({
 export type PolicyOverrides = typeof PolicyOverrides.Type;
 
 /**
+ * The answer a hob gets for one operation: the narrower of the preset's and its own override, so an
+ * override stored under one preset never widens a stricter preset picked later.
+ */
+export const effectiveDecision = (
+  preset: SafetyPreset,
+  overrides: PolicyOverrides,
+  operation: PolicyOperation,
+): PolicyDecision => {
+  const answer = PRESET_DECISIONS[preset][operation];
+  const override = overrides[operation];
+  return override === undefined ? answer : narrowest(answer, override);
+};
+
+/**
  * A hob's own policy configuration. Folders are stored canonical. `hiddenSharedFolders` hides
  * shared folders from this hob only; a hob cannot add a folder to itself. `signCommits` lets the
  * hob's commands sign Git commits with the user's 1Password SSH key, which opens 1Password's SSH

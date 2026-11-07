@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { scanSkills, skillsErrorTag } from "../../api/skills.ts";
+import { WriteOne } from "./draft-with-hob.tsx";
 import { GiveChoice, type GiveTo } from "./give-choice.tsx";
 import { ImportCandidates, ImportRefused } from "./import-candidates.tsx";
 import { FileSource, GitSource } from "./import-sources.tsx";
@@ -178,7 +179,7 @@ function ScanResult({
   );
 }
 
-/** Add a skill: from Git, a folder or a .zip, or written here. A source is scanned first, writing nothing. */
+/** Add a skill: from Git, a folder or a .zip, or written here or by a hob. A source is scanned first, writing nothing. */
 export function SkillsImport({
   from,
   active,
@@ -208,16 +209,7 @@ export function SkillsImport({
       <SourceTabs from={from} />
       {from === "git" && <GitSource looking={scan.isPending} onLook={look} />}
       {from === "file" && <FileSource looking={scan.isPending} onLook={look} />}
-      {from === "write" && (
-        <Link
-          to="/skills"
-          search={skillsSearchOf({ _tag: "New" })}
-          className="flex max-w-[420px] flex-col gap-1 rounded-card border-(length:--edge) border-solid border-line-2 bg-card p-3.5 text-start text-text-strong no-underline hover:border-control"
-        >
-          <span className="text-body font-semibold">{copy.import.blank}</span>
-          <span className="text-detail text-text-secondary">{copy.import.blankHint}</span>
-        </Link>
-      )}
+      {from === "write" && <WriteOne active={active} />}
       {scan.isError && from !== "write" && (
         <p role="alert" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
           {copy.import.unreadable}
