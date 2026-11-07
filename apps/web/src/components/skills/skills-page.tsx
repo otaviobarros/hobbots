@@ -4,6 +4,7 @@ import { FlashLine } from "../memory/memory-parts.tsx";
 import { PageSearch } from "../shell/page-search.tsx";
 import { PageHeader } from "../shell/pages.tsx";
 import { messages } from "./messages.ts";
+import { SkillChanges } from "./skill-changes.tsx";
 import { SkillEditor } from "./skill-editor.tsx";
 import { SkillNew } from "./skill-new.tsx";
 import { SkillPage } from "./skill-page.tsx";
@@ -54,6 +55,8 @@ function ViewBody({ view, reads, say, now }: { view: SkillsView; reads: SkillsRe
     );
   }
   switch (view._tag) {
+    case "Changes":
+      return <SkillChanges hobs={reads.hobs} say={say} now={now} />;
     case "Skill":
       return <SkillPage view={view} list={list} hobs={reads.hobs} active={reads.active} say={say} />;
     case "Search":

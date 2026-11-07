@@ -1,8 +1,9 @@
 import type { SkillsList } from "@hobbots/api";
-import { memoryScopeKey, type SkillScope } from "@hobbots/domain";
+import { type Agent, memoryScopeKey, type SkillScope } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Link } from "@tanstack/react-router";
+import { HobSkillsManage } from "../hob-skills/profile-skills.tsx";
 import { RowList, StepCards } from "../memory/memory-overview.tsx";
 import { messages } from "./messages.ts";
 import {
@@ -48,6 +49,8 @@ export function SkillsScope({
   hobs: HobDirectory;
   now: Date;
 }) {
+  const hob = scope._tag === "Hob" ? hobs.get(scope.agentId) : undefined;
+  if (hob !== undefined) return <HobScope hob={hob} />;
   const key = memoryScopeKey(scope);
   const rows = libraryGroups(list, hobs).find((group) => group.key === key)?.rows ?? [];
   const { title, line } = titleOf(scope, hobs);
@@ -78,6 +81,30 @@ export function SkillsScope({
         </RowList>
       )}
       {scope._tag !== "Hob" && <p className="m-0 text-detail text-label">{copy.scope.foot}</p>}
+    </div>
+  );
+}
+
+/** What a hob carries, from every scope, with a switch to turn a shared skill off for it alone. */
+function HobScope({ hob }: { hob: Agent }) {
+  return (
+    <div className="flex max-w-[900px] flex-col gap-5">
+      <header className="flex items-start gap-3.5">
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="self-start">
+            <ScopeTag scope={{ _tag: "Hob", agentId: hob.id }} label={copy.scopes.hobKind} />
+          </span>
+          <h2 className="m-0 font-heading text-[26px] leading-8 font-bold text-text-strong">
+            {copy.scope.title({ name: hob.name })}
+          </h2>
+        </span>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/hobs/$hobId" params={{ hobId: hob.id }} search={{ tab: "skills" }}>
+            {copy.scope.openPage({ name: hob.name })}
+          </Link>
+        </Button>
+      </header>
+      <HobSkillsManage hob={hob} />
     </div>
   );
 }

@@ -24,7 +24,7 @@ export const ImportFrom = Schema.Literals(["git", "file", "write"]);
 export type ImportFrom = typeof ImportFrom.Type;
 
 /** A skill's tabs. Instructions is the default and has no value in the address. */
-export const SkillTab = Schema.Literals(["who", "history"]);
+export const SkillTab = Schema.Literals(["who", "history", "activity"]);
 export type SkillTab = typeof SkillTab.Type;
 
 /** What the Skills page's address holds (STD-REACT-002). */
@@ -43,10 +43,13 @@ export interface SkillsSearch {
   /** Add a skill, from where. */
   readonly add?: ImportFrom | undefined;
   readonly q?: string | undefined;
+  /** `changes` opens What changed. */
+  readonly view?: "changes" | undefined;
 }
 
 export type SkillsView =
   | { readonly _tag: "Overview" }
+  | { readonly _tag: "Changes" }
   | { readonly _tag: "Scope"; readonly scope: SkillScope }
   | { readonly _tag: "Add"; readonly from: ImportFrom }
   | { readonly _tag: "New" }
@@ -60,7 +63,7 @@ export type SkillsView =
   | { readonly _tag: "Edit"; readonly skillId: SkillId }
   | { readonly _tag: "Search"; readonly q: string };
 
-/** The view an address names. A search wins, then the editor, a skill, Add and a scope; anything else opens the overview. */
+/** The view an address names. A search wins, then the editor, a skill, Add, What changed and a scope; anything else opens the overview. */
 export const skillsViewOf = (search: SkillsSearch): SkillsView => {
   const q = search.q?.trim() ?? "";
   if (q !== "") return { _tag: "Search", q };
@@ -77,6 +80,7 @@ export const skillsViewOf = (search: SkillsSearch): SkillsView => {
     };
   }
   if (search.add !== undefined) return { _tag: "Add", from: search.add };
+  if (search.view === "changes") return { _tag: "Changes" };
   const scope = search.scope === undefined ? null : memoryScopeOfKey(search.scope);
   return scope === null ? { _tag: "Overview" } : { _tag: "Scope", scope };
 };
@@ -86,6 +90,8 @@ export const skillsSearchOf = (view: SkillsView): SkillsSearch => {
   switch (view._tag) {
     case "Overview":
       return {};
+    case "Changes":
+      return { view: "changes" };
     case "Scope":
       return { scope: memoryScopeKey(view.scope) };
     case "Add":

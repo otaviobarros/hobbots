@@ -48,8 +48,10 @@ import {
   SkillObjectsLive,
   SkillWriterLive,
 } from "@hobbots/skills";
+import { EventJournal } from "@hobbots/persistence";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
+import { SKILL_CHANGE_TYPES, skillChangesOf, skillIdOfChange } from "./skill-changes.ts";
 
 /**
  * The skills library's routes (ADR 029, Import). Every change here is yours: a device session
@@ -97,6 +99,10 @@ const textOf = (bytes: Uint8Array): string | null => {
   }
 };
 
+/** How many journal entries What changed reads, and how many changes it shows. */
+const CHANGES_READ = 500;
+const CHANGES_SHOWN = 60;
+
 /** How many skills a hob's view lists as last used. */
 const LAST_USED = 20;
 
@@ -136,9 +142,18 @@ const libraryOff = {
   unassign: ({ params }: { readonly params: { readonly assignmentId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.assignmentId })),
   hob: ({ params }: { readonly params: { readonly agentId: AgentId } }) =>
-    Effect.succeed({ agentId: params.agentId, skills: [], replaced: [], clashes: [], optedOut: [], lastUsed: [] }),
+    Effect.succeed({
+      agentId: params.agentId,
+      skills: [],
+      replaced: [],
+      clashes: [],
+      optedOut: [],
+      projects: [],
+      lastUsed: [],
+    }),
   uses: ({ params }: { readonly params: { readonly skillId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.skillId })),
+  changes: () => Effect.succeed({ changes: [] }),
   optOut: ({ params }: { readonly params: { readonly skillId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.skillId })),
 };
@@ -170,6 +185,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
     if (Option.isNone(services)) return handlers.handleAll(libraryOff);
     const [library, importer, files] = services.value;
     const agentsFolder = yield* Effect.serviceOption(AgentsFolder);
+    const journal = yield* Effect.serviceOption(EventJournal);
     const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a skill change");
 
     const repo = yield* Effect.serviceOption(HobbotsRepository);
@@ -203,6 +219,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           agentId,
           ...resolved,
           optedOut: (yield* library.optOuts(agentId)).map((one) => one.skillId),
+          projects: (yield* memoryActorFor(projects, agentId, folders)).projects,
           lastUsed: yield* library.lastUses(agentId, LAST_USED),
         };
       });
@@ -240,6 +257,26 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           })),
         },
         usesThisWeek: yield* library.usesSince(skillUseWeekStart(DateTime.formatIso(yield* DateTime.now))),
+      };
+    });
+
+    /** What changed (ADR 029, The Skills page): the journal's latest skill changes, with names and revision numbers. */
+    const changes = Effect.gen(function* () {
+      if (Option.isNone(journal)) return { changes: [] };
+      const envelopes = yield* journal.value.latestOf(SKILL_CHANGE_TYPES, CHANGES_READ);
+      const names = new Map((yield* library.list).map((skill) => [skill.id, skill.name]));
+      const ids = [...new Set(envelopes.flatMap((one) => skillIdOfChange(one.payload) ?? []))];
+      const revisions = new Map(yield* Effect.forEach(ids, (id) => Effect.map(library.revisions(id), (all) => [id, all] as const)));
+      return {
+        changes: skillChangesOf(
+          envelopes,
+          {
+            name: (skillId) => names.get(skillId) ?? null,
+            number: (skillId, hash) => revisions.get(skillId)?.find((one) => one.hash === hash)?.number ?? null,
+            before: (skillId, number) => revisions.get(skillId)?.find((one) => one.number === number - 1)?.hash ?? null,
+          },
+          CHANGES_SHOWN,
+        ),
       };
     });
 
@@ -369,6 +406,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
             ),
           ),
       hob: ({ params }) => hobView(params.agentId),
+      changes: () => changes,
       uses: ({ params }) =>
         Effect.gen(function* () {
           const skill = yield* skillOf(params.skillId);

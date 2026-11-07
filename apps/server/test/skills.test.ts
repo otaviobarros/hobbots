@@ -267,4 +267,57 @@ describe("skills routes", () => {
     expect(again.body).toMatchObject({ added: false, revision: { number: 3 }, rolledOut: [] });
     expect(await place()).toMatchObject({ pin: r2.body.revision.hash, held: false });
   });
+
+  // covers ADR 029 (The Skills page, Journal events), #1062
+  it("[TC-AG-151] What changed lists each save with what its rollout moved and held, rollbacks, and skills given or removed", async () => {
+    const folder = await folderWith({ "SKILL.md": skillMd("release") });
+    const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
+    const [{ skill, revision }] = imported.body.imported;
+    const everyone = await request("POST", `/api/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+    const edit = { base: revision.hash, description: "Use when releasing.", instructions: "Tag it." };
+    const r2 = await request("POST", `/api/skills/${skill.id}/edits`, edit);
+    const r3 = await request("POST", `/api/skills/${skill.id}/edits`, {
+      ...edit,
+      base: r2.body.revision.hash,
+      instructions: "Tag, then push.",
+      holds: [{ assignmentId: everyone.body.id, held: true }],
+    });
+    expect(r3.body.revision.number).toBe(3);
+    await request("POST", `/api/skills/assignments/${everyone.body.id}/roll-out`, { pin: revision.hash });
+    const gone = await folderWith({ "SKILL.md": skillMd("gone") });
+    const added = await request("POST", "/api/skills", { source: { _tag: "Folder", path: gone } });
+    await request("DELETE", `/api/skills/${added.body.imported[0].skill.id}`);
+
+    const { status, body } = await request("GET", "/api/skills/changes");
+    expect(status).toBe(200);
+    // A removed skill keeps its name, newest first.
+    expect(body.changes.slice(0, 2).map((one: { kind: string; name: string }) => [one.kind, one.name])).toEqual([
+      ["removed", "gone"],
+      ["saved", "gone"],
+    ]);
+    const release = body.changes.filter((one: { skillId: string }) => one.skillId === skill.id);
+    const everyoneScope = { _tag: "Everyone" };
+    expect(
+      release.map((one: { kind: string; number: number | null; scopes: unknown; held: unknown }) => ({
+        kind: one.kind,
+        number: one.number,
+        scopes: one.scopes,
+        held: one.held,
+      })),
+    ).toEqual([
+      { kind: "rolledOut", number: 1, scopes: [everyoneScope], held: [] },
+      { kind: "saved", number: 3, scopes: [], held: [everyoneScope] },
+      { kind: "saved", number: 2, scopes: [everyoneScope], held: [] },
+      { kind: "assigned", number: 1, scopes: [everyoneScope], held: [] },
+      { kind: "saved", number: 1, scopes: [], held: [] },
+    ]);
+    // A save's Roll back goes to the revision before it, for the places its rollout moved.
+    expect(release[2]).toMatchObject({
+      moved: [everyone.body.id],
+      previous: revision.hash,
+      previousNumber: 1,
+      by: { _tag: "You" },
+    });
+    expect(release[0]).toMatchObject({ previous: r2.body.revision.hash, previousNumber: 2 });
+  });
 });
