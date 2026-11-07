@@ -1,4 +1,11 @@
-import { AgentId, ApprovalId, type CharmDeclaration, EMPTY_HOB_POLICY, type PolicyDecision } from "@hobbots/domain";
+import {
+  AgentId,
+  ApprovalId,
+  type CharmDeclaration,
+  EMPTY_HOB_POLICY,
+  type PolicyDecision,
+  type ReplyStep,
+} from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {
@@ -13,6 +20,7 @@ import {
   hubCallStep,
   makeHubActions,
   makeRedactor,
+  nextSteps,
   outsideDataLine,
   type RuntimeEvent,
   type ToolAccess,
@@ -72,6 +80,8 @@ interface Scenario {
   readonly decisions?: ReadonlyArray<PolicyDecision>;
   /** What the hob's access is when the call is made. */
   readonly now?: ToolAccess | null;
+  /** The user takes the Charm away while they are asked. */
+  readonly offWhileAsking?: boolean;
   /** The request the action plans. */
   readonly request?: HubRequest;
   readonly effect?: "read" | "write";
@@ -90,6 +100,8 @@ const callPip = (input: unknown, scenario: Scenario = {}) => {
   const asked: Array<ApprovalAction> = [];
   const events: Array<RuntimeEvent> = [];
   const decisions = [...(scenario.decisions ?? ["allow"])];
+  let now = scenario.now === undefined ? access() : scenario.now;
+  const contexts: Array<unknown> = [];
   const approvals: TurnApprovals | null =
     scenario.answer === null
       ? null
@@ -98,6 +110,7 @@ const callPip = (input: unknown, scenario: Scenario = {}) => {
             Effect.gen(function* () {
               asked.push(action);
               happened.push("asked");
+              if (scenario.offWhileAsking) now = access(false);
               const decision: ApprovalOutcome =
                 (scenario.answer ?? "approve") === "approve"
                   ? {
@@ -129,6 +142,7 @@ const callPip = (input: unknown, scenario: Scenario = {}) => {
         plan: (decoded, context) =>
           Effect.gen(function* () {
             happened.push(`planned ${decoded.shelf} for ${context.turn.agentId}`);
+            contexts.push(context);
             if (decoded.shelf === "locked") return yield* new HubRefusal({ message: "That shelf is locked." });
             return {
               request: scenario.request ?? {
@@ -156,7 +170,7 @@ const callPip = (input: unknown, scenario: Scenario = {}) => {
     threadId: null,
     messageId: null,
     scope: () => "",
-    currentAccess: Effect.succeed(scenario.now === undefined ? access() : scenario.now),
+    currentAccess: Effect.sync(() => now),
     redactor: makeRedactor(),
     approvals,
   });
@@ -177,6 +191,7 @@ const callPip = (input: unknown, scenario: Scenario = {}) => {
     happened,
     asked,
     events,
+    contexts,
     offered: tools.tools.map((tool) => tool.name),
   }));
 };
@@ -260,6 +275,27 @@ describe("the hub action pipeline (ADR 031)", () => {
       refused: true,
     });
     expect(denied.happened).not.toContain("sent");
+    // The step the user was asked on ends denied, by them, with their reason, so the reply shows it.
+    const toolEvents = denied.events.filter((event) => event._tag !== "ToolAwaitingApproval");
+    expect(toolEvents).toEqual([
+      {
+        _tag: "ToolDenied",
+        id: "toolu_1",
+        tool: "pip_read",
+        operation: "pip.read",
+        targets: ["top"],
+        label: "Reading Pip",
+        reason: "The user denied this call, so it did not run. Their reason: Not now.",
+        decidedBy: "user",
+      },
+    ]);
+    const steps = [
+      { _tag: "StepStarted", id: "toolu_1", kind: "tool", label: "Reading Pip" } as const,
+      ...denied.events,
+    ].reduce<ReadonlyArray<ReplyStep>>((current, event) => nextSteps(current, 0, event) ?? current, []);
+    expect(steps).toMatchObject([
+      { id: "toolu_1", state: "denied", decidedBy: "user", reason: expect.stringContaining("Not now.") },
+    ]);
 
     const nobody = await callPip({ shelf: "top" }, { decisions: ["ask"], answer: null });
     expect(nobody.answer).toEqual({ text: `The policy answers ask. ${UNASKABLE}`, refused: true });
@@ -313,5 +349,20 @@ describe("the hub action pipeline (ADR 031)", () => {
     const write = await callPip({ shelf: "top" }, { effect: "write" });
     expect(write.answer.refused).toBe(true);
     expect(write.happened).toEqual(["planned top for hob"]);
+  });
+
+  // covers PE-008, ADR 031
+  it("[TC-PE-474] stops a call whose Charm was taken away while you decided, and plans with the turn's ids alone", async () => {
+    const off = await callPip({ shelf: "top" }, { decisions: ["ask", "ask"], offWhileAsking: true });
+    expect(off.answer).toEqual({ text: "The Pip Charm is off for you now, so Pip cannot be read.", refused: true });
+    expect(off.happened).toEqual(["planned top for hob", "decided", "asked", "decided"]);
+    expect(off.events.at(-1)).toMatchObject({ _tag: "ToolDenied", decidedBy: "policy", id: "toolu_1" });
+
+    // The plan context is built for the call: no approvals, grants, recorder or redactor ride along.
+    const { contexts } = await callPip({ shelf: "top" });
+    expect(contexts).toHaveLength(1);
+    const [context] = contexts as Array<Record<string, Record<string, unknown>>>;
+    expect(Object.keys(context ?? {}).sort()).toEqual(["access", "turn"]);
+    expect(Object.keys(context?.turn ?? {}).sort()).toEqual(["agentId", "messageId", "scope", "threadId"]);
   });
 });

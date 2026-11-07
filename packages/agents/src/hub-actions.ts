@@ -134,6 +134,22 @@ export interface HubActionsOptions<R extends HubRequest, V extends AskableVerdic
   ) => (fresh: ToolAccess | null) => Effect.Effect<V>;
 }
 
+/**
+ * What an action is given to plan, built afresh for each call: only the turn's ids and the access,
+ * so the turn's approvals, grants and redactor never reach an action, whatever it reads at run time.
+ */
+const planContext = (turn: CharmTurn, access: ToolAccess): HubPlanContext => ({
+  turn: {
+    agentId: turn.agentId,
+    threadId: turn.threadId,
+    messageId: turn.messageId,
+    scope: turn.scope,
+    ...(turn.attemptId === undefined ? {} : { attemptId: turn.attemptId }),
+    ...(turn.also === undefined ? {} : { also: turn.also }),
+  },
+  access,
+});
+
 /** Refuses with `message`. */
 const refuse = (message: string) => Effect.fail(new HubRefusal({ message }));
 
@@ -178,6 +194,33 @@ export const makeHubActions =
         return access;
       });
 
+    /**
+     * Ends an asked or decided call's step as refused, with who refused it, so the reply shows why it
+     * never ran rather than leaving it waiting, and answers the hob with the reason.
+     */
+    const deny = (
+      step: HubCallStep | undefined,
+      tool: HubTool,
+      verdict: Pick<AskableVerdict, "operation" | "targets"> | undefined,
+      reason: string,
+      decidedBy: "policy" | "user" = "policy",
+    ) =>
+      Effect.gen(function* () {
+        if (step !== undefined && verdict !== undefined) {
+          step.report({
+            _tag: "ToolDenied",
+            id: step.id,
+            tool: tool.name,
+            operation: verdict.operation,
+            targets: verdict.targets,
+            label: tool.label,
+            reason: turn.redactor.text(reason),
+            decidedBy,
+          });
+        }
+        return yield* refuse(reason);
+      });
+
     /** Records the call's step before anything is sent (EX-004); a call that cannot be recorded never runs. */
     const record = (step: HubCallStep | undefined, tool: HubTool, verdict: V) =>
       Effect.gen(function* () {
@@ -194,16 +237,17 @@ export const makeHubActions =
                   label: tool.label,
                 })
                 .pipe(Effect.catchDefect(() => Effect.succeed(false)));
-        if (!recorded) return yield* refuse(UNRECORDED_TOOL_CALL);
+        if (!recorded) return yield* deny(step, tool, verdict, UNRECORDED_TOOL_CALL);
       });
 
-    const run = (action: HubAction<R>, raw: unknown, step: HubCallStep | undefined) =>
+    /** The decoded input and its plan, refused when the owner may not plan its request. */
+    const planned = (action: HubAction<R>, raw: unknown) =>
       Effect.gen(function* () {
         const input = yield* action
           .decode(raw)
           .pipe(Effect.mapError((error) => new HubRefusal({ message: describe(error) })));
         const access = yield* accessNow(action);
-        const plan = yield* action.plan(input, { turn, access });
+        const plan = yield* action.plan(input, planContext(turn, access));
         if (!mayPlan(owner, plan.request)) {
           return yield* Effect.die(
             new Error(`${action.tool.name} planned a ${plan.request._tag} request its owner does not declare.`),
@@ -213,6 +257,12 @@ export const makeHubActions =
         if (owner._tag === "Charm" && action.effect === "write") {
           return yield* Effect.die(new Error(`${action.tool.name} is a Charm write, which needs its keyed record.`));
         }
+        return { access, plan };
+      });
+
+    const run = (action: HubAction<R>, raw: unknown, step: HubCallStep | undefined) =>
+      Effect.gen(function* () {
+        const { access, plan } = yield* planned(action, raw);
         const { summary } = plan.card;
         const decision = yield* askOnStep({
           call: {
@@ -225,7 +275,14 @@ export const makeHubActions =
           approvals: turn.approvals,
           decide: options.decide(turn.approvals, access, plan.request),
         });
-        if (decision._tag === "Refuse") return yield* refuse(decision.reason);
+        if (decision._tag === "Refuse") {
+          return yield* deny(step, action.tool, decision.verdict, decision.reason, decision.decidedBy);
+        }
+        // The hob's access is read again once the call may run, so a Charm taken away while you
+        // decided stops it, whatever the policy says (PE-008).
+        yield* accessNow(action).pipe(
+          Effect.catch((refused) => deny(step, action.tool, decision.verdict, refused.message)),
+        );
         yield* record(step, action.tool, decision.verdict);
         const sent = yield* plan.send;
         const text = owner._tag === "Charm" ? `${outsideDataLine(owner.name)}\n${sent}` : sent;
