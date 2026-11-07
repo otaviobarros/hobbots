@@ -57,22 +57,74 @@ export const copiedTree = (folder: string, name: string): Promise<SkillTree> =>
 /** Where a copy of a set's skill keeps the set's files it links to, beside its own. */
 const LINKED = "linked";
 
-/** The text of a file, or null when it is not text. */
+const strict = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+/** The text of a file, or null when it is not UTF-8 text, so its bytes are copied as they are. */
 const textOf = (bytes: Uint8Array): string | null => {
-  const text = decoder.decode(bytes);
-  return text.includes("\u0000") ? null : text;
+  try {
+    const text = strict.decode(bytes);
+    return text.includes("\u0000") ? null : text;
+  } catch {
+    return null;
+  }
+};
+
+/** The folder for the set's files in a copy of `member`: `linked`, or `linked-2` and on when the skill has its own. */
+const linkedRootOf = (paths: ReadonlyArray<string>, member: SkillSetSkill): string => {
+  const own = paths
+    .filter((path) => path.startsWith(`${member.path}/`))
+    .map((path) => path.slice(member.path.length + 1));
+  const taken = (root: string) => own.some((path) => path === root || path.startsWith(`${root}/`));
+  let root = LINKED;
+  for (let n = 2; taken(root); n += 1) root = `${LINKED}-${n}`;
+  return root;
 };
 
 /**
- * Where a file of the set goes in a copy of `member`: the skill's own files at the copy's top, and
- * every other file under `linked/` as the set lays it out. Another skill's `SKILL.md` is renamed
- * after its folder, so no runtime takes it for a second skill.
+ * Where a file of the set goes in a copy of `member`, before clashes: the skill's own files at the
+ * copy's top, and every other file under `root` as the set lays it out. Another skill's `SKILL.md`
+ * is renamed after its folder, so no runtime takes it for a second skill.
  */
-const placeIn = (member: SkillSetSkill) => (path: string) => {
+const naturalPlace = (member: SkillSetSkill, root: string, path: string) => {
   if (path.startsWith(`${member.path}/`)) return path.slice(member.path.length + 1);
   const parent = posix.dirname(path);
   const name = posix.basename(path) === "SKILL.md" && parent !== "." ? `${posix.basename(parent)}.md` : null;
-  return `${LINKED}/${name === null ? path : `${parent}/${name}`}`;
+  return `${root}/${name === null ? path : `${parent}/${name}`}`;
+};
+
+/** `at`, or `at` with `-2`, `-3` and on before its extension, whichever no other file of the copy holds. */
+const freePlace = (at: string, taken: ReadonlySet<string>): string => {
+  const clash = (one: string) =>
+    [...taken].some((held) => held === one || held.startsWith(`${one}/`) || one.startsWith(`${held}/`));
+  const extension = posix.extname(at);
+  const stem = at.slice(0, at.length - extension.length);
+  let place = at;
+  for (let n = 2; clash(place); n += 1) place = `${stem}-${n}${extension}`;
+  return place;
+};
+
+/**
+ * Where each file a copy of `member` brings goes: one place each, so no file is lost. Files that keep
+ * their name are placed first; a renamed `SKILL.md` that would land on another file gets a numbered name.
+ */
+const placesOf = (paths: ReadonlyArray<string>, member: SkillSetSkill, root: string): ReadonlyMap<string, string> => {
+  const renamed = (path: string) => !path.startsWith(`${member.path}/`) && posix.basename(path) === "SKILL.md";
+  const ordered = [...paths].sort((a, b) => Number(renamed(a)) - Number(renamed(b)) || a.localeCompare(b));
+  const places = new Map<string, string>();
+  const taken = new Set<string>();
+  for (const path of ordered) {
+    const place = freePlace(naturalPlace(member, root, path), taken);
+    places.set(path, place);
+    taken.add(place);
+  }
+  return places;
+};
+
+/** Where a folder of the set goes in a copy of `member`. */
+const placeFolder = (member: SkillSetSkill, root: string, linked: string): string => {
+  if (linked === member.path) return ".";
+  if (linked.startsWith(`${member.path}/`)) return linked.slice(member.path.length + 1);
+  return `${root}/${linked}`;
 };
 
 /**
@@ -104,25 +156,31 @@ const linkedClosure = async (
 /**
  * A copy of one skill of a set (ADR 029, Skill sets), named `name`: its folder at the top, its
  * `SKILL.md` renamed, and the set's files it links to under `linked/`, with the links that lead to
- * them pointed at their new places, so the copy works without the set.
+ * them pointed at their new places, so the copy works without the set. A file that is not text, or
+ * that no link in it changes, keeps its bytes.
  */
 export const memberCopyTree = async (folder: string, member: SkillSetSkill, name: string): Promise<SkillTree> => {
   const tree = await folderTree(folder);
   const kept = await linkedClosure(tree, member);
-  const place = placeIn(member);
-  const files = new Map<string, { readonly entry: TreeEntry; readonly bytes: Uint8Array | null }>();
+  const root = linkedRootOf([...tree.entries.map((entry) => entry.path)], member);
+  const places = placesOf([...kept.keys()], member, root);
+  const place = (path: string) => places.get(path) ?? path;
+  const files = new Map<
+    string,
+    { readonly source: string; readonly entry: TreeEntry; readonly bytes: Uint8Array | null }
+  >();
   for (const [path, { entry, text }] of kept) {
     const at = place(path);
     const to = (linked: string) => {
       const folderKept = [...kept.keys()].some((one) => one.startsWith(`${linked}/`));
-      const target = kept.has(linked) ? place(linked) : folderKept ? placeFolder(member, linked) : null;
+      const target = kept.has(linked) ? place(linked) : folderKept ? placeFolder(member, root, linked) : null;
       // A link inside the skill's own folder, or to a file the copy does not bring, stays as written.
       if (target === null || (path.startsWith(`${member.path}/`) && linked.startsWith(`${member.path}/`))) return null;
       return posix.relative(posix.dirname(at), target) || posix.basename(target);
     };
     const changed = text === null ? null : rewriteSetLinks(path, text, to);
     const named = at === "SKILL.md" && changed !== null ? renameSkillFile(changed, name) : changed;
-    files.set(at, { entry, bytes: named === null ? null : encoder.encode(named) });
+    files.set(at, { source: path, entry, bytes: named === null || named === text ? null : encoder.encode(named) });
   }
   return {
     commit: null,
@@ -130,16 +188,7 @@ export const memberCopyTree = async (folder: string, member: SkillSetSkill, name
     read: (path) => {
       const file = files.get(path);
       if (file === undefined) return Promise.reject(new Error(`${path} is not in the copy.`));
-      if (file.bytes !== null) return Promise.resolve(file.bytes);
-      const source = [...kept.keys()].find((one) => place(one) === path) ?? path;
-      return tree.read(source);
+      return file.bytes === null ? tree.read(file.source) : Promise.resolve(file.bytes);
     },
   };
-};
-
-/** Where a folder of the set goes in a copy of `member`. */
-const placeFolder = (member: SkillSetSkill, linked: string): string => {
-  if (linked === member.path) return ".";
-  if (linked.startsWith(`${member.path}/`)) return linked.slice(member.path.length + 1);
-  return `${LINKED}/${linked}`;
 };
