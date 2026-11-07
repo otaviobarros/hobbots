@@ -188,7 +188,7 @@ test("[TC-UI-1096-12] with the list open, Shift+Enter adds a line, Shift+Tab mov
 });
 
 // covers ADR 029 (Scopes, Explicit use), STD-REACT-012
-test("[TC-UI-1096-13] the list follows the hob's own and shared folders when another window changes them", async ({ page }) => {
+test("[TC-UI-1096-13] the list follows own and shared folders another window changes", async ({ page }) => {
   const { url, pip, api, addSkill } = await hubWithSkill();
   const siteA = join(dataDir, "folders", "site-a");
   const siteB = join(dataDir, "folders", "site-b");
