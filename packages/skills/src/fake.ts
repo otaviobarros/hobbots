@@ -14,6 +14,7 @@ import {
   SkillNotFound,
   type SkillOptOut,
   type SkillOrigin,
+  SkillReadOnly,
   SkillRevision,
   type SkillScope,
   SkillSource,
@@ -63,6 +64,16 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
     return committed(assignment);
   };
 
+  /** A skill from `~/.agents/skills` changes only from its folder (ADR 029). */
+  const onlyFromItsFolder = (target: Skill, input: SkillRevisionInput) => {
+    const source = sources.find((one) => one.id === target.sourceId);
+    if (source?.origin._tag !== "AgentsFolder" || input.origin?._tag === "AgentsFolder") return Effect.void;
+    const path = revisionOf(target.id, target.latest)?.path ?? target.name;
+    return Effect.fail(
+      new SkillReadOnly({ skillId: target.id, name: target.name, folder: `${source.origin.path}/${path}` }),
+    );
+  };
+
   /** The skill a revision goes to, or the revision it already is, as the port's rules say. */
   const targetOf = (skillId: SkillId | null, input: SkillRevisionInput) =>
     Effect.gen(function* () {
@@ -79,6 +90,7 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
       if (target.name !== input.name) {
         return yield* new SkillNameChanged({ skillId: target.id, name: target.name, given: input.name });
       }
+      yield* onlyFromItsFolder(target, input);
       return { _tag: "Next" as const, skill: target };
     });
 

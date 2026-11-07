@@ -30,7 +30,7 @@ A backup is a folder named `Hobbots backup <date> <time>.hobbots-backup`. It hol
 | `activity/` | The Workbench contents: redacted text, images and folded command logs, stored once per hash. |
 | `tool-logs/` | The full logs of tool steps, already redacted when the hub wrote them. |
 | `memory/` | Memory pages, their history and their index, made with ai-memory's own backup ([ADR 028](028-memory.md)). |
-| `skills/` | The skills library's revisions, one folder per revision hash, each file keeping whether it runs. The library's sources, assignments, holds and pins are database rows ([ADR 029](029-skills.md)). |
+| `skills/` | The skills library's revisions, one folder per revision hash, each file keeping whether it runs, except those of skills from `~/.agents/skills`, which stay in that folder. The library's sources, assignments, holds, pins and opt-outs are database rows, those skills' included ([ADR 029](029-skills.md)). |
 | `workspace/` | The default workspace from `workspaces/default`, where a hob without folders of its own works. |
 | `settings/network.json` | The port. Remote access is always off in a backup. |
 | `settings/memory-settings.json` | The memory model you chose ([ADR 028](028-memory.md)). It holds no credential. |
@@ -56,7 +56,7 @@ A backup holds your conversations as they are stored. A token you pasted into a 
 4. It copies the database with `backup()` from `node:sqlite` on the hub's own writing connection, a few hundred pages at a time, so the hub keeps serving. Writes through that connection land in the copy; the search worker's connection only reads. The copy is a consistent snapshot of the moment it finishes.
 5. It copies the default workspace, then releases the workspace hold. Nothing wrote to it between the snapshot and the copy, so its files match the records in the snapshot.
 6. It opens the copy, runs the scrub and checks it with `PRAGMA integrity_check`.
-7. It copies `activity`, `tool-logs` and the skills library's revisions (`skills/objects`), which are also written once, by hash, and never rewritten. Their files are written once, named by hash or by step, and never rewritten. Nothing is deleted while the cleanup hold stands, so every file the snapshot names is still there. Files written after the snapshot are copied too, and are harmless: the next sweep after a restore deletes them, since no record names them.
+7. It copies `activity`, `tool-logs` and the skills library's revisions (`skills/objects`), which are also written once, by hash, and never rewritten. It leaves out each revision that only skills from `~/.agents/skills` have, as the snapshot names them: that folder is not Hobbots' own, and a restore reads it again ([ADR 029](029-skills.md)). Their files are written once, named by hash or by step, and never rewritten. Nothing is deleted while the cleanup hold stands, so every file the snapshot names is still there. Files written after the snapshot are copied too, and are harmless: the next sweep after a restore deletes them, since no record names them.
 8. It writes `manifest.json` last, then releases the cleanup hold. A backup folder without a manifest is incomplete and a restore refuses it.
 
 Both holds live only in the hub's memory on SQLite: a hub that stops during a backup releases them, and the half-written backup has no manifest.
@@ -88,6 +88,7 @@ On its first start after a restore the hub applies these rules in one transactio
 - **A hob's own GitHub App** whose key is not in this computer's keychain needs a reconnect, with the reason "The app's key is not on this computer" (ADR 022). Its GitHub actions fail with that reason and never run as you.
 - **Runtime sessions.** A thread keeps its runtime session IDs. A session the runtime no longer has starts fresh, with the briefing a thread gets on a new runtime ([ADR 017](017-switching-brains.md)).
 - **Memory** gets new bearers, so the old ones no longer work ([ADR 028](028-memory.md)).
+- **Skills from `~/.agents/skills`** are read from that folder again, since the backup holds none of their files ([ADR 029](029-skills.md)). A skill still there gets the folder's content and keeps every assignment, opt-out and hold. An assignment pinned to a revision the folder no longer has, a held one included, moves to the folder's current revision, and the restore summary in Settings › Your data names the skill and who moved. A skill no longer in the folder is listed there as not on this computer, as missing hob folders are, and is not delivered.
 - **Backup holds.** A cleanup or workspace hold recorded in the database is cleared.
 - **Hob folders.** The restore summary lists each hob folder that is not on this computer, so you can set that hob's folders again.
 

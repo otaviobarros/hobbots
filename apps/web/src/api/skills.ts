@@ -1,5 +1,5 @@
 import type { SkillSourcePayload } from "@hobbots/api";
-import type { SkillAssignmentId, SkillId, SkillRevisionHash, SkillScope } from "@hobbots/domain";
+import type { SkillAssignmentId, SkillId, SkillName, SkillRevisionHash, SkillScope } from "@hobbots/domain";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
 
@@ -102,6 +102,13 @@ export const editSkill = (input: {
       },
     }),
   );
+
+/**
+ * Make a copy (ADR 029): a skill written in Hobbots named `name`, with the files of the skill's newest
+ * revision at r1, given to `scope` when one is picked.
+ */
+export const copySkill = ({ skillId, ...payload }: { skillId: SkillId; name: SkillName; scope?: SkillScope }) =>
+  call((c) => c.skills.copy({ params: { skillId }, payload }));
 
 /** Gives a skill to a scope, pinned to its newest revision unless `pin` names one, or changes it there. */
 export const assignSkill = ({

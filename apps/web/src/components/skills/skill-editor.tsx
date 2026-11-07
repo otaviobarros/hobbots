@@ -121,9 +121,12 @@ function EditForm({
             void navigate({ to: "/skills", search: skillsSearchOf(back) });
           })
           .catch((error: unknown) => {
-            const stale = skillsErrorTag(error) === "SkillEditStale";
-            setSent(stale ? null : input);
-            setFailure(stale ? copy.editor.stale : copy.editor.failed);
+            const tag = skillsErrorTag(error);
+            const refused = tag === "SkillEditStale" || tag === "SkillIsReadOnly";
+            setSent(refused ? null : input);
+            setFailure(
+              tag === "SkillEditStale" ? copy.editor.stale : refused ? copy.editor.readOnly : copy.editor.failed,
+            );
           });
       }}
     >

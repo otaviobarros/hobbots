@@ -84,7 +84,7 @@ describe("skill export", () => {
     await runWith(layer)(
       Effect.gen(function* () {
         const seeded = yield* seedLibrary;
-        expect(yield* exportTo(folder)).toEqual({ skills: 2 });
+        expect(yield* exportTo(folder)).toEqual({ skills: 2, leftOut: [] });
         expect(yield* Effect.promise(() => filesIn(folder))).toEqual([
           ".revisions/release/r1/SKILL.md",
           ".revisions/release/r1/scripts/tag.sh",
@@ -117,7 +117,10 @@ describe("skill export", () => {
 
         // A chosen set without who gets each skill: only its newest revision, and no assignments.
         const picked = yield* Effect.promise(() => temp("picked"));
-        expect(yield* exportTo(picked, { skillIds: [seeded.release], assignments: false })).toEqual({ skills: 1 });
+        expect(yield* exportTo(picked, { skillIds: [seeded.release], assignments: false })).toEqual({
+          skills: 1,
+          leftOut: [],
+        });
         expect(yield* Effect.promise(() => filesIn(picked))).toEqual([
           "release/SKILL.md",
           "release/scripts/tag.sh",

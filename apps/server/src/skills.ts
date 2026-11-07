@@ -22,6 +22,7 @@ import {
   SKILL_FILE_SHOWN_MAX,
   SkillEditStale,
   SkillImportRefused,
+  SkillIsReadOnly,
   SkillMissing,
   SkillNameConflict,
   SkillScanOutdated,
@@ -41,10 +42,11 @@ import {
   type SkillRevisionHash,
   skillUseWeekStart,
 } from "@hobbots/domain";
-import { EventJournal } from "@hobbots/persistence";
+import { EventJournal, RestoreRepository } from "@hobbots/persistence";
 import {
   AgentsFolder,
   AgentsFolderLive,
+  AgentsFolderMoves,
   defaultAgentsFolder,
   type ExportedHob,
   type SkillImportError,
@@ -91,6 +93,8 @@ export const importError = (error: SkillImportError) => {
       return new SkillEditStale({ skillId: error.skillId, latest: error.latest });
     case "SkillSourceChanged":
       return new SkillScanOutdated({ folder: error.folder });
+    case "SkillReadOnly":
+      return new SkillIsReadOnly({ skillId: error.skillId, name: error.name, folder: error.folder });
   }
 };
 
@@ -138,6 +142,7 @@ const libraryOff = {
   export: () => Effect.fail(new ExportFailed({ message: NO_LIBRARY })),
   revise: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   edit: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
+  copy: () => Effect.fail(new SkillSourceNotRead({ message: NO_LIBRARY })),
   syncAgentsFolder: () => Effect.succeed(NO_SKILLS),
   remove: ({ params }: { readonly params: { readonly skillId: string } }) =>
     Effect.fail(new SkillMissing({ id: params.skillId })),
@@ -368,7 +373,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           Effect.catchDefect(() => Effect.fail(new ExportFailed({ message: `Hobbots could not write ${folder}` }))),
           Effect.tapError(() => folders.value.remove(folder)),
         );
-        return { folder, name: basename(folder), skills: written.skills };
+        return { folder, name: basename(folder), skills: written.skills, leftOut: written.leftOut };
       });
 
     return handlers.handleAll({
@@ -502,6 +507,38 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           const source = { _tag: "Edited", folder, description, instructions, carried } as const;
           return yield* revised(skill.id, source, { after: payload.base }, payload.holds);
         }),
+      // Make a copy (ADR 029): a skill written in Hobbots with the files of `base`, under a new name,
+      // at r1 and with no source. It goes to `scope` only when you picked one; the original stays as it is.
+      copy: ({ params, payload }) =>
+        Effect.gen(function* () {
+          const skill = yield* skillOf(params.skillId);
+          const hash = payload.base ?? skill.latest;
+          const base = yield* library.revision(skill.id, hash);
+          const folder = yield* files.folder(hash);
+          if (base === null || folder === null) return yield* new SkillMissing({ id: hash });
+          if (payload.scope?._tag === "Hob" && Option.isNone(yield* hobOf(payload.scope.agentId)))
+            return yield* new SkillMissing({ id: payload.scope.agentId });
+          const carried = { charms: base.charms, dropped: base.dropped };
+          const source = { _tag: "Copied", folder, name: payload.name, carried } as const;
+          const [copied] = yield* importer.add(source, { by: YOU }).pipe(Effect.mapError(importError));
+          if (copied === undefined) return yield* new SkillMissing({ id: skill.id });
+          // Content a skill of that name already has is that skill, not a new copy.
+          if (!copied.added) return yield* new SkillNameConflict({ name: payload.name, skillId: copied.skill.id });
+          const assignment =
+            payload.scope === undefined
+              ? null
+              : yield* committedValue(
+                  library.assign({
+                    skillId: copied.skill.id,
+                    scope: payload.scope,
+                    pin: copied.revision.hash,
+                    held: false,
+                    onlyWhenAsked: false,
+                    by: YOU,
+                  }),
+                );
+          return { ...copied, assignment };
+        }),
       syncAgentsFolder: () =>
         Effect.gen(function* () {
           if (Option.isSome(agentsFolder)) yield* agentsFolder.value.sync;
@@ -573,5 +610,18 @@ export const SkillsLive = (dataDir: string, agentsFolder: string | null) => {
     Layer.provideMerge(SkillImporterLive),
     Layer.provideMerge(SkillObjectsLive(dataDir)),
   );
-  return agentsFolder === null ? services : AgentsFolderLive(agentsFolder).pipe(Layer.provideMerge(services));
+  return agentsFolder === null
+    ? services
+    : AgentsFolderLive(agentsFolder).pipe(Layer.provide(RestoreMovesLive), Layer.provideMerge(services));
 };
+
+/** What reading `~/.agents/skills` moved goes in the latest restore's summary (ADR 026, ADR 029). */
+const RestoreMovesLive = Layer.effect(
+  AgentsFolderMoves,
+  Effect.gen(function* () {
+    const restores = yield* Effect.serviceOption(RestoreRepository);
+    return AgentsFolderMoves.of({
+      moved: (moves) => (Option.isSome(restores) ? restores.value.noteSkillMoves(moves) : Effect.void),
+    });
+  }),
+);

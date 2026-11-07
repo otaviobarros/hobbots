@@ -14,8 +14,15 @@ import { SkillHistory } from "./skill-history.tsx";
 import { SkillInstructions } from "./skill-instructions.tsx";
 import { SkillWho } from "./skill-who.tsx";
 import type { Say } from "./skills-flash.ts";
-import { type HobDirectory, type SkillsView, type SkillTab, skillsSearchOf, skillTitle } from "./skills-model.ts";
-import { RevTag } from "./skills-parts.tsx";
+import {
+  agentsFolderOf,
+  type HobDirectory,
+  type SkillsView,
+  type SkillTab,
+  skillsSearchOf,
+  skillTitle,
+} from "./skills-model.ts";
+import { RevTag, SkillChip, SkillsIcon } from "./skills-parts.tsx";
 
 const copy = messages;
 
@@ -32,11 +39,13 @@ function SkillTabs({
   view,
   detail,
   hobs,
+  fromFolder,
   say,
 }: {
   view: SkillViewOf;
   detail: SkillDetail;
   hobs: HobDirectory;
+  fromFolder: boolean;
   say: Say;
 }) {
   const navigate = useNavigate();
@@ -72,7 +81,7 @@ function SkillTabs({
         ))}
       </TabsList>
       <TabsContent value={view.tab ?? "instructions"} className="mt-2">
-        <SkillBody view={view} detail={detail} hobs={hobs} say={say} />
+        <SkillBody view={view} detail={detail} hobs={hobs} fromFolder={fromFolder} say={say} />
       </TabsContent>
     </Tabs>
   );
@@ -82,17 +91,19 @@ function SkillBody({
   view,
   detail,
   hobs,
+  fromFolder,
   say,
 }: {
   view: SkillViewOf;
   detail: SkillDetail;
   hobs: HobDirectory;
+  fromFolder: boolean;
   say: Say;
 }) {
   if (view.tab === "who") return <SkillWho detail={detail} hobs={hobs} say={say} />;
   if (view.tab === "history") return <SkillHistory view={view} detail={detail} say={say} />;
   if (view.tab === "activity") return <SkillActivity detail={detail} hobs={hobs} />;
-  return <SkillInstructions view={view} detail={detail} />;
+  return <SkillInstructions view={view} detail={detail} fromFolder={fromFolder} />;
 }
 
 /** A skill: its instructions and files, who uses it and its history, with what you can do beside it. */
@@ -116,6 +127,7 @@ export function SkillPage({
   const detail = read.data;
   const { skill } = detail;
   const title = skillTitle(skill.name);
+  const folder = agentsFolderOf(skill, list.sources, detail.revisions);
   return (
     <div className="flex flex-wrap items-start gap-7">
       <article className="flex min-w-0 max-w-[700px] flex-[1_1_520px] flex-col gap-4">
@@ -129,17 +141,35 @@ export function SkillPage({
         <header className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <RevTag label={skillRevisionLabel({ number: skill.revisions })} />
+            {folder !== null && <SkillChip tone="later">{copy.chips.agents}</SkillChip>}
           </div>
           <h2 className="m-0 font-heading text-[28px] leading-[34px] font-bold text-text-strong">{title}</h2>
           <p className="m-0 text-body text-text">{skill.description}</p>
           <p className="m-0 text-detail text-label">
             <code className="font-mono">{skill.name}</code>
-            {` · ${copy.skill.byline({ who: addedByOf(detail), when: formatDay(skill.createdAt) })}`}
+            {` · ${
+              folder === null
+                ? copy.skill.byline({ who: addedByOf(detail), when: formatDay(skill.createdAt) })
+                : copy.agents.byline({ when: formatDay(skill.createdAt) })
+            }`}
           </p>
         </header>
-        <SkillTabs view={view} detail={detail} hobs={hobs} say={say} />
+        {folder !== null && <ReadOnlyNote folder={folder} />}
+        <SkillTabs view={view} detail={detail} hobs={hobs} fromFolder={folder !== null} say={say} />
       </article>
       <SkillAside detail={detail} list={list} hobs={hobs} active={active} say={say} />
+    </div>
+  );
+}
+
+/** Why a skill from `~/.agents/skills` has no editor, and where it is changed instead (ADR 029). */
+function ReadOnlyNote({ folder }: { folder: string }) {
+  return (
+    <div role="note" className="flex items-start gap-2.5 rounded-card bg-panel px-3.5 py-3 text-ui text-text-secondary">
+      <span className="mt-0.5 flex-none">
+        <SkillsIcon name="lock" />
+      </span>
+      <span>{copy.agents.note({ folder })}</span>
     </div>
   );
 }

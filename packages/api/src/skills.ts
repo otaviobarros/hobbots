@@ -82,6 +82,16 @@ export class SkillStillAssigned extends Schema.TaggedError<SkillStillAssigned>()
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * The skill comes from `~/.agents/skills`, which Hobbots only reads (ADR 029): change it in
+ * `folder`, or make a copy to change it in Hobbots. Nothing was saved.
+ */
+export class SkillIsReadOnly extends Schema.TaggedError<SkillIsReadOnly>()(
+  "SkillIsReadOnly",
+  { skillId: SkillId, name: SkillName, folder: Schema.String },
+  { httpApiStatus: 409 },
+) {}
+
 /** The most an archive may be, as base64 text: 50 MB of archive. */
 const ARCHIVE_BASE64_MAX = Math.ceil((50 * 1024 * 1024) / 3) * 4;
 
@@ -305,8 +315,16 @@ export const ExportSkillsPayload = Schema.Struct({
   assignments: Schema.Boolean,
 });
 
-/** An export of skills: the folder made on the hub, its name, and how many skills it holds. */
-export const SkillsExported = Schema.Struct({ folder: Schema.String, name: Schema.String, skills: Schema.Int });
+/**
+ * An export of skills: the folder made on the hub, its name, how many skills it holds, and the
+ * skills from `~/.agents/skills` it left out, which stay in that folder (ADR 029).
+ */
+export const SkillsExported = Schema.Struct({
+  folder: Schema.String,
+  name: Schema.String,
+  skills: Schema.Int,
+  leftOut: Schema.Array(SkillName),
+});
 export type SkillsExported = typeof SkillsExported.Type;
 
 /** A skill in `~/.agents/skills` the hub did not take, and why; `folder` is "" when the folder itself could not be read. */
@@ -369,6 +387,23 @@ export const EditSkillPayload = Schema.Struct({
   holds: Schema.optionalKey(Schema.Array(Schema.Struct({ assignmentId: SkillAssignmentId, held: Schema.Boolean }))),
 });
 
+/**
+ * Make a copy (ADR 029): a new skill written in Hobbots, named `name`, with the files of `base` (the
+ * skill's newest revision when absent) at r1. It has no source and goes to `scope` only when given.
+ */
+export const CopySkillPayload = Schema.Struct({
+  name: SkillName,
+  base: Schema.optionalKey(SkillRevisionHash),
+  scope: Schema.optionalKey(SkillScope),
+});
+
+/** The copy, and the assignment it was given, if any. */
+export const CopiedSkill = Schema.Struct({
+  ...ImportedSkill.fields,
+  assignment: Schema.NullOr(SkillAssignment),
+});
+export type CopiedSkill = typeof CopiedSkill.Type;
+
 const skillParams = { skillId: SkillId };
 const assignmentParams = { assignmentId: SkillAssignmentId };
 const hobParams = { agentId: AgentId };
@@ -379,6 +414,7 @@ const importErrors = [
   SkillNameConflict,
   SkillEditStale,
   SkillScanOutdated,
+  SkillIsReadOnly,
 ];
 
 export class SkillsGroup extends HttpApiGroup.make("skills")
@@ -495,6 +531,14 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
       params: skillParams,
       payload: EditSkillPayload,
       success: RevisedSkill,
+      error: importErrors,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("copy", "/skills/:skillId/copies", {
+      params: skillParams,
+      payload: CopySkillPayload,
+      success: CopiedSkill,
       error: importErrors,
     }),
   )

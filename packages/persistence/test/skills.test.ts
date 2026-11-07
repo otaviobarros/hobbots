@@ -121,6 +121,29 @@ describe("skills library", () => {
       }),
     ));
 
+  // covers ADR 029 (~/.agents/skills stays, through Hobbots), #1139
+  it("[TC-DP-285] takes a new revision of a ~/.agents/skills skill only from that folder", () =>
+    run(
+      Effect.gen(function* () {
+        const library = yield* SkillLibrary;
+        const agents = { _tag: "AgentsFolder", path: "/home/me/.agents/skills" } as const;
+        const { value } = yield* library.addRevision(null, input(H1, { origin: agents, path: "release" }));
+        const edited = yield* Effect.flip(library.addRevision(value.skill.id, input(H2, { origin: null })));
+        expect(edited).toMatchObject({
+          _tag: "SkillReadOnly",
+          skillId: value.skill.id,
+          name: "release",
+          folder: "/home/me/.agents/skills/release",
+        });
+        const forked = yield* Effect.flip(library.addRevision(value.skill.id, input(H2)));
+        expect(forked._tag).toBe("SkillReadOnly");
+        // The same content answers its revision, and the folder itself still adds one.
+        expect((yield* library.addRevision(value.skill.id, input(H1, { origin: null }))).value.added).toBe(false);
+        const next = yield* library.addRevision(value.skill.id, input(H2, { origin: agents, path: "release" }));
+        expect(next.value.revision.number).toBe(2);
+      }),
+    ));
+
   it("[TC-DP-278] assigns a skill once per scope, rolls it out, holds it and takes it off", () =>
     run(
       Effect.gen(function* () {

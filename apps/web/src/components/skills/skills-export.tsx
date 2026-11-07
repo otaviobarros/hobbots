@@ -1,5 +1,5 @@
 import type { SkillsList } from "@hobbots/api";
-import type { SkillId } from "@hobbots/domain";
+import type { Skill, SkillId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Switch } from "@hobbots/ui/components/switch";
 import { useMutation } from "@tanstack/react-query";
@@ -9,7 +9,7 @@ import { exportSkills, skillsErrorTag } from "../../api/skills.ts";
 import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
 import { exportRows, type HobDirectory, skillTitle } from "./skills-model.ts";
-import { RevTag, ScopeTag } from "./skills-parts.tsx";
+import { RevTag, ScopeTag, SkillsIcon } from "./skills-parts.tsx";
 
 const copy = messages;
 
@@ -19,13 +19,35 @@ const parentName = (folder: string, name: string) => {
   return parent.split(/[/\\]/).filter(Boolean).at(-1) ?? parent;
 };
 
+/** Skills from `~/.agents/skills`, which an export leaves out: they stay in that folder (ADR 029). */
+function NotExported({ skills }: { skills: ReadonlyArray<Skill> }) {
+  return (
+    <section aria-label={copy.export.notExported} className="flex flex-col gap-2 rounded-card bg-card px-3.5 py-3">
+      <span className="flex items-center gap-2 text-text-secondary">
+        <SkillsIcon name="lock" />
+        <h3 className="m-0 flex-1 text-ui font-semibold text-text-strong">{copy.export.notExported}</h3>
+        <ScopeTag scope={{ _tag: "Everyone" }} label={copy.export.notExportedScope} />
+      </span>
+      <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0">
+        {skills.map((skill) => (
+          <li key={skill.id} className="flex items-center gap-2 text-ui text-text-strong">
+            {skillTitle(skill.name)}
+            <RevTag label={copy.revision({ number: skill.revisions })} />
+          </li>
+        ))}
+      </ul>
+      <span className="text-detail text-text-secondary">{copy.export.notExportedNote}</span>
+    </section>
+  );
+}
+
 /**
  * Export skills (ADR 029): pick the skills, and whether to keep who gets each one, then the hub
  * writes a folder with each skill and `skills.lock.json` in your Downloads folder.
  */
 export function SkillsExport({ list, hobs, say }: { list: SkillsList; hobs: HobDirectory; say: Say }) {
   const navigate = useNavigate();
-  const rows = exportRows(list, hobs);
+  const { rows, notExported } = exportRows(list, hobs);
   const [off, setOff] = useState<ReadonlySet<SkillId>>(() => new Set());
   const [assignments, setAssignments] = useState(true);
   const [failure, setFailure] = useState<string | null>(null);
@@ -93,6 +115,7 @@ export function SkillsExport({ list, hobs, say }: { list: SkillsList; hobs: HobD
           );
         })}
       </ul>
+      {notExported.length > 0 && <NotExported skills={notExported} />}
       <div className="flex items-center gap-3 rounded-card bg-card px-3.5 py-3">
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="text-ui font-semibold text-text-strong">{copy.export.assignments}</span>

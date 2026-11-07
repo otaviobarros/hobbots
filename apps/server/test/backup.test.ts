@@ -24,6 +24,7 @@ import {
   MessageId,
   PairingRequest,
   QuestId,
+  SkillName,
   TaskId,
   Thread,
   ThreadId,
@@ -47,7 +48,7 @@ import {
   SqliteLive,
   TaskRepositoryLive,
 } from "@hobbots/persistence";
-import { SkillImporter, SkillObjects } from "@hobbots/skills";
+import { AgentsFolder, SkillImporter, SkillObjects } from "@hobbots/skills";
 import { Effect, Exit, Fiber, Latch, Layer, Option, Redacted, Ref, Stream } from "effect";
 import { SqlClient } from "effect/sql";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -67,7 +68,7 @@ import { Installation } from "../src/installation.ts";
 import { readMemorySettings } from "../src/memory-settings.ts";
 import { backupBeforeMigrations, migrationBackupsFolder } from "../src/migration-backup.ts";
 import { wipeHubData } from "../src/resets.ts";
-import { performRestore, RestoreRulesLive, WorkHoldLive } from "../src/restores.ts";
+import { performRestore, RestoreRulesLive, skillsNotHere, WorkHoldLive } from "../src/restores.ts";
 import { SkillsLive } from "../src/skills.ts";
 
 // Backup and restore (ADR 026), on real SQLite files in real data folders: a backup made from a
@@ -781,5 +782,84 @@ describe("backup and restore", () => {
     // Start over deletes the library too, read-only revisions and all.
     await wipeHubData(dataDir);
     await expect(lstat(join(dataDir, "skills"))).rejects.toThrow();
+  });
+
+  // covers ADR 029 (Backups, exports and Diagnostics), ADR 026, #1139
+  it("[TC-OP-125] holds no file from ~/.agents/skills, and a restore reads the folder again for them", async () => {
+    await onHub(dataDir, seed);
+    const agents = join(root, "agents-skills");
+    const skillFile = (name: string, text: string) =>
+      writeFile(
+        join(agents, name, "SKILL.md"),
+        `---\nname: ${name}\ndescription: What ${name} is for.\n---\n${text}\n`,
+      );
+    for (const name of ["pdf-forms", "gone"]) await mkdir(join(agents, name), { recursive: true });
+    await skillFile("pdf-forms", "Fill the fields.");
+    await skillFile("gone", "Soon gone.");
+    const mine = join(root, "release");
+    await mkdir(mine);
+    await writeFile(join(mine, "SKILL.md"), "---\nname: release\ndescription: How releases go.\n---\nTag.\n");
+    const skills = SkillsLive(dataDir, agents).pipe(Layer.provideMerge(SkillLibraryLive));
+    const before = await onHub(
+      dataDir,
+      Effect.gen(function* () {
+        const importer = yield* SkillImporter;
+        const library = yield* SkillLibrary;
+        const [release] = yield* importer.add({ _tag: "Folder", path: mine }, { by: { _tag: "You" } });
+        const pdf = yield* library.byName(SkillName.make("pdf-forms"));
+        if (release === undefined || pdf === null) throw new Error("nothing to back up");
+        // Frodo is held on r1 while the folder moves Everyone to r2.
+        const hold = { onlyWhenAsked: false, by: { _tag: "You" } } as const;
+        const frodo = { _tag: "Hob", agentId: FRODO } as const;
+        yield* library.assign({ ...hold, skillId: pdf.id, scope: frodo, pin: pdf.latest, held: true });
+        yield* Effect.promise(() => skillFile("pdf-forms", "Fill the fields, then read them back."));
+        // SkillsLive reads the folder only when it is given one, as here.
+        const folder = yield* Effect.serviceOption(AgentsFolder);
+        if (Option.isNone(folder)) throw new Error("the hub reads no ~/.agents/skills");
+        yield* folder.value.sync;
+        const revisions = yield* library.revisions(pdf.id);
+        const gone = yield* library.byName(SkillName.make("gone"));
+        return {
+          pdf: pdf.id,
+          agentsHashes: [...revisions.map((one) => one.hash), gone?.latest ?? ""],
+          release: release.revision.hash,
+          r2: revisions[0]?.hash,
+        };
+      }).pipe(Effect.provide(skills)),
+    );
+    const folder = join(destination, "agents.hobbots-backup");
+    await backUp(dataDir, folder);
+    const manifest = await readBackup(folder, knownSchemaVersion());
+    expect(manifest.counts.skills).toBe(3);
+    const paths = manifest.files.map((file) => file.path);
+    expect(paths).toContain(`skills/${before.release}/SKILL.md`);
+    for (const hash of before.agentsHashes) expect(paths.some((path) => path.includes(hash))).toBe(false);
+
+    // On this computer the folder no longer holds one of them.
+    await removeTree(join(agents, "gone"));
+    await removeTree(dataDir);
+    await Effect.runPromise(performRestore(dataDir, folder));
+    const after = await onHub(
+      dataDir,
+      Effect.gen(function* () {
+        const library = yield* SkillLibrary;
+        const objects = yield* SkillObjects;
+        const restore = Option.getOrThrow(yield* (yield* RestoreRepository).latest);
+        return {
+          assignments: yield* library.assignments(before.pdf),
+          current: before.r2 === undefined ? null : yield* objects.folder(before.r2),
+          notHere: yield* skillsNotHere,
+          moves: restore.skillMoves,
+        };
+      }).pipe(Effect.provide(skills)),
+    );
+    // Every assignment and hold came back, on the folder's revision now, with its files read from it.
+    expect(after.assignments.map((one) => [one.scope._tag, one.pin === before.r2, one.held]).sort()).toEqual([
+      ["Everyone", true, false],
+      ["Hob", true, true],
+    ]);
+    expect(after.current).not.toBeNull();
+    expect(after.moves).toEqual([{ skill: "pdf-forms", scope: { _tag: "Hob", agentId: FRODO } }]);
+    expect(after.notHere).toEqual(["gone"]);
   });
 });

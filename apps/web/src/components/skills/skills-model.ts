@@ -161,6 +161,20 @@ export const scopeName = (scope: SkillScope, hobs: HobDirectory): string => {
 export const originOf = (sourceId: Skill["sourceId"], sources: ReadonlyArray<SkillSource>): SkillOrigin | null =>
   sourceId === null ? null : (sources.find((source) => source.id === sourceId)?.origin ?? null);
 
+/**
+ * A skill from `~/.agents/skills` (ADR 029): read-only in Hobbots, and out of backups and exports.
+ * Its folder there, as `~/.agents/skills/pdf-forms`, or null for any other skill.
+ */
+export const agentsFolderOf = (
+  skill: Pick<Skill, "sourceId" | "name">,
+  sources: ReadonlyArray<SkillSource>,
+  revisions: ReadonlyArray<Pick<SkillRevision, "path">> = [],
+): string | null => {
+  const origin = originOf(skill.sourceId, sources);
+  if (origin?._tag !== "AgentsFolder") return null;
+  return `${copy.source.agents}/${revisions[0]?.path ?? skill.name}`;
+};
+
 /** A Git address without its scheme and `.git`, as `github.com/acme/skills`. */
 const shortGit = (url: string) =>
   url
@@ -246,33 +260,41 @@ export const libraryGroups = (list: SkillsList, hobs: HobDirectory): ReadonlyArr
 export interface ExportRow {
   readonly skill: Skill;
   readonly scope: SkillScope | null;
-  /** The scope's name, with how many more scopes it has, and "~/.agents" for a skill from that folder. */
+  /** The scope's name, with how many more scopes it has. */
   readonly where: string;
 }
 
 /**
  * Every skill once, as Export skills lists it: in the overview's order, Everyone, each project and
- * each hob, then those no one has, each under the first scope it has.
+ * each hob, then those no one has, each under the first scope it has. Skills from `~/.agents/skills`
+ * are listed apart, as not exported: they stay in that folder (ADR 029).
  */
-export const exportRows = (list: SkillsList, hobs: HobDirectory): ReadonlyArray<ExportRow> => {
+export const exportRows = (
+  list: SkillsList,
+  hobs: HobDirectory,
+): { readonly rows: ReadonlyArray<ExportRow>; readonly notExported: ReadonlyArray<Skill> } => {
   const groups = libraryGroups(list, hobs);
   const seen = new Set<SkillId>();
   const rows: Array<ExportRow> = [];
+  const notExported: Array<Skill> = [];
   for (const group of groups) {
     for (const row of group.rows) {
       if (seen.has(row.skill.id)) continue;
       seen.add(row.skill.id);
+      if (row.origin?._tag === "AgentsFolder") {
+        notExported.push(row.skill);
+        continue;
+      }
       const more = groups.filter((other) => other !== group && other.rows.some((one) => one.skill.id === row.skill.id));
       const name = group.scope === null ? copy.scopes.none : scopeName(group.scope, hobs);
-      const parts = [
-        more.length === 0 ? name : copy.export.more({ name, count: more.length }),
-        ...(row.origin?._tag === "AgentsFolder" ? [copy.export.agents] : []),
-      ];
-      rows.push({ skill: row.skill, scope: group.scope, where: parts.join(" · ") });
+      const where = more.length === 0 ? name : copy.export.more({ name, count: more.length });
+      rows.push({ skill: row.skill, scope: group.scope, where });
     }
   }
-  return rows;
+  return { rows, notExported: sortSkills(notExported) };
 };
+
+const sortSkills = (all: ReadonlyArray<Skill>) => [...all].sort((a, b) => a.name.localeCompare(b.name));
 
 const sortRows = (rows: ReadonlyArray<SkillRow>) => [...rows].sort((a, b) => a.skill.name.localeCompare(b.skill.name));
 

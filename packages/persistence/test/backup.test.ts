@@ -1,5 +1,5 @@
 import { DeviceRepository } from "@hobbots/agents";
-import { Device, DeviceId, PairingRequest, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { AgentId, Device, DeviceId, PairingRequest, SkillName, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -158,10 +158,36 @@ describe("backup and restore in the database", () => {
     expect(Option.getOrThrow(result.cleared)).toMatchObject({ setAside: null, resumedAt: "2026-11-03T13:00:00.000Z" });
   });
 
+  // covers ADR 029 (Backups, exports and Diagnostics), #1139
+  it("[TC-OP-124] notes on the latest restore what reading ~/.agents/skills again moved, and nothing without one", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const restores = yield* RestoreRepository;
+        const move = {
+          skill: SkillName.make("release"),
+          scope: { _tag: "Hob", agentId: AgentId.make("pip") },
+        } as const;
+        yield* restores.noteSkillMoves([move]);
+        const none = yield* restores.latest;
+        yield* applyRestoreRules(restore("rs_1"));
+        const fresh = Option.getOrThrow(yield* restores.latest).skillMoves;
+        yield* restores.noteSkillMoves([move]);
+        yield* restores.noteSkillMoves([{ skill: SkillName.make("pdf-forms"), scope: { _tag: "Everyone" } }]);
+        return { none, fresh, noted: Option.getOrThrow(yield* restores.latest).skillMoves };
+      }),
+    );
+    expect(Option.isNone(result.none)).toBe(true);
+    expect(result.fresh).toEqual([]);
+    expect(result.noted).toEqual([
+      { skill: "release", scope: { _tag: "Hob", agentId: "pip" } },
+      { skill: "pdf-forms", scope: { _tag: "Everyone" } },
+    ]);
+  });
+
   // covers OP-003
   it("[TC-OP-020] knows the schema version it applied and the highest one it can open", async () => {
     const applied = await run(schemaVersion);
-    expect(knownSchemaVersion()).toBe(70);
+    expect(knownSchemaVersion()).toBe(71);
     expect(applied).toBe(knownSchemaVersion(migrations));
     expect(knownSchemaVersion({ "0002_two": 0, "0011_eleven": 0 })).toBe(11);
     expect(knownSchemaVersion({})).toBe(0);

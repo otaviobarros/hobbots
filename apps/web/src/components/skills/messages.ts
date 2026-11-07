@@ -46,11 +46,14 @@ export const messages = {
   export: {
     title: "Export skills",
     intro:
-      "Makes a folder with each skill and a skills.lock.json that names its source and revision, so another hub gets exactly the same ones. Backups already include your whole library.",
+      "Makes a folder with each skill and a skills.lock.json that names its source and revision, so another hub gets exactly the same ones. Backups already include your whole library, except skills in ~/.agents/skills.",
     list: "Skills to export",
     pick: ({ name }: { name: string }) => `Export ${name}`,
     more: ({ name, count }: { name: string; count: number }) => `${name} +${formatCount(count)}`,
-    agents: "~/.agents",
+    notExported: "Not exported",
+    notExportedScope: "Everyone · ~/.agents",
+    notExportedNote:
+      "Skills in ~/.agents/skills stay in that folder. Another computer's Hobbots reads its own ~/.agents/skills. Make a copy first if you want to take one with you.",
     assignments: "Include who gets each skill",
     assignmentsHint:
       "Keeps Everyone, project and hob assignments, and held revisions. A hub without those hobs or projects keeps the skills in its library only.",
@@ -221,7 +224,8 @@ export const messages = {
     addedBySource: "added from its source",
     files: ({ rev }: { rev: string }) => `Files in ${rev}`,
     filesSize: ({ count, bytes }: { count: number; bytes: number }) => `${files(count)} · ${formatBytes(bytes)}`,
-    fileOpen: ({ path }: { path: string }) => `Open ${path}`,
+    // Read before the path, so a file link is named "Open SKILL.md" and its visible text is in its name.
+    fileOpen: "Open ",
     script: "Runs as the hob's own command",
     aside: "About this skill",
     actions: "Actions",
@@ -238,6 +242,43 @@ export const messages = {
     grants: "Grants",
     grantsNothing: "Nothing. Its scripts run as the hob's own commands, under its permissions.",
     leftOut: "Left out",
+  },
+  agents: {
+    byline: ({ when }: { when: string }) => `from ~/.agents/skills on this computer · picked up ${when}`,
+    note: ({ folder }: { folder: string }) =>
+      `This skill lives in ${folder}, which other tools on this computer use too, so Hobbots only reads it. Change it in that folder: each change becomes a new revision here and rolls out to every hob. To change it just for your hobs, make a copy.`,
+    readOnly: "read-only",
+    fileReadOnly: "Read-only. Change it in its folder in ~/.agents/skills.",
+    noEdit:
+      "No Edit or Remove here: delete its folder in ~/.agents/skills to remove it, or turn it off for one hob on that hob's skills list.",
+    source: ({ folder }: { folder: string }) => `${folder} on this computer`,
+    revisions: "Revisions",
+    revisionsText: "Made when the folder changes. Roll back and holding a hob back still work.",
+    backups: "Backups",
+    backupsText: "Not in backups or exports. Another computer reads its own folder.",
+  },
+  copySkill: {
+    open: "Make a copy…",
+    label: ({ name }: { name: string }) => `Make a copy of ${name}`,
+    name: "Typed as",
+    nameHint: "Lowercase letters, digits and hyphens, as you type it after /",
+    who: "Who gets it",
+    nobody: "Nobody yet",
+    nobodyNote: "Nobody gets the copy until you give it to someone. The original keeps following the folder.",
+    everyoneNote: "Every hob gets both. Turn the original off on a hob's skills list if the copy should replace it.",
+    projectNote: "Hobs in its folders get both. Turn the original off for them if the copy should replace it.",
+    hobNote: ({ name }: { name: string }) =>
+      `${name} gets both. Turn the original off for ${name} if the copy should replace it.`,
+    starts: ({ count }: { count: number }) =>
+      `The copy starts at r1 with the same ${files(count)}, and you can edit it.`,
+    confirm: "Make the copy",
+    copying: "Copying…",
+    cancel: "Cancel",
+    done: ({ name }: { name: string }) =>
+      `${name} is in your library at r1, and you can edit it. The original in ~/.agents/skills is unchanged.`,
+    taken: "Your library has a skill of that name. Pick another name.",
+    invalid: "Use lowercase letters, digits and hyphens, up to 64.",
+    failed: "The copy was not made. Try again.",
   },
   file: {
     label: ({ path }: { path: string }) => `The file ${path}`,
@@ -380,6 +421,8 @@ export const messages = {
     same: ({ rev }: { rev: string }) => `That is ${rev} already, so nothing new was saved.`,
     taken: "Your library has a skill of that name. Pick another name, or edit that one.",
     failed: "It was not saved. Your text is still here; try again.",
+    readOnly:
+      "This skill comes from ~/.agents/skills, which Hobbots only reads, so it was not saved. Change it in that folder, or make a copy to edit it here.",
     newer: ({ rev, base }: { rev: string; base: string }) =>
       `${rev} was saved while you edited ${base}, so this edit cannot be saved over it. Your text is still here: copy it, then edit ${rev}.`,
     unfinished: ({ rev }: { rev: string }) =>

@@ -73,6 +73,8 @@ describe("waiting for the restored hub", () => {
       backupVersion: "0.15.0",
       setAside: null,
       missingFolders: [],
+      skillsNotHere: [],
+      skillMoves: [],
     };
     expect(workHeld({ latest: { ...latest, workHeld: true }, failed: null })).toBe(true);
     expect(workHeld({ latest: { ...latest, workHeld: false }, failed: null })).toBe(false);
