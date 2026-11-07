@@ -1,5 +1,5 @@
 import { type AnyOperation, type CharmDeclaration, CharmWriteKey, toolInputJsonSchema } from "@hobbots/domain";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema, type Scope } from "effect";
 import { type AskableVerdict, approvalNote, askOnStep } from "./asking.ts";
 import { type CharmCallRunner, type ReadBack, scopesOf, type WriteOutcome } from "./charm-calls.ts";
 import type { CharmTurn } from "./charms.ts";
@@ -145,7 +145,14 @@ export interface HubAction<R extends HubRequest> {
   readonly keyed: { readonly decode: Decode; readonly inputSchema: Record<string, unknown> } | null;
   /** For a Charm write, how the Charm is read back for one of its calls that ended uncertain. */
   readonly readBack?: ReadBack;
-  readonly plan: (input: unknown, context: HubPlanContext) => Effect.Effect<HubPlan<R> | HubNoCall, HubRefusal>;
+  /**
+   * Plans a call. What it acquires in its scope, such as a branch it staged to show and send, is
+   * released once the call has ended, whether it was sent, refused or never decided.
+   */
+  readonly plan: (
+    input: unknown,
+    context: HubPlanContext,
+  ) => Effect.Effect<HubPlan<R> | HubNoCall, HubRefusal, Scope.Scope>;
 }
 
 /** The fields of `schema` when it is a struct. */
@@ -163,7 +170,10 @@ export const hubAction = <S extends Schema.Top & { readonly DecodingServices: ne
   readonly operation?: AnyOperation;
   readonly unreadable?: (error: Schema.SchemaError) => string;
   readonly readBack?: ReadBack;
-  readonly plan: (input: S["Type"], context: HubPlanContext) => Effect.Effect<HubPlan<R> | HubNoCall, HubRefusal>;
+  readonly plan: (
+    input: S["Type"],
+    context: HubPlanContext,
+  ) => Effect.Effect<HubPlan<R> | HubNoCall, HubRefusal, Scope.Scope>;
 }): HubAction<R> => {
   const fields = fieldsOf(action.input);
   const withKey = fields === null ? null : Schema.Struct({ ...fields, key: CharmWriteKey });
@@ -508,7 +518,7 @@ export const makeHubActions =
         if ("_tag" in plan) return plan.text;
         const rest = decideAndSend(action, plan, access, keyed, step);
         return yield* plan.pinned === undefined ? rest : plan.pinned(rest);
-      });
+      }).pipe(Effect.scoped);
 
     const call = (name: string, raw: unknown, step?: HubCallStep): Effect.Effect<HubToolAnswer> => {
       const action = byName.get(name);
