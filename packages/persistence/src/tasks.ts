@@ -573,7 +573,10 @@ export const TaskRepositoryLive = Layer.effect(
             const by = yield* ledger.consumer(task.currentAttemptId);
             events.push(...(yield* ledger.consume(consumes, by, revision + events.length)));
           }
-          if (isTerminalTask(task.state)) events.push(...(yield* withdrawQuestions(task, revision + events.length)));
+          if (isTerminalTask(task.state)) {
+            events.push(...(yield* withdrawQuestions(task, revision + events.length)));
+            events.push(...(yield* ledger.closeStuck(task, null, revision + events.length)));
+          }
           return { value: task, events };
         }),
       );
@@ -662,9 +665,15 @@ export const TaskRepositoryLive = Layer.effect(
             delegation: new Delegation({ ...delegation, memberId: ownerId }),
           } as const;
           const late = yield* ledger.retire(yield* ledger.staleItems(before, before.ownerId), revision + 1);
+          // What the earlier owner was stuck on about the Task is no longer its to retry (#1087).
+          const unstuck = yield* ledger.closeStuck(before, before.ownerId, revision + 1 + late.length);
           return {
             value: task,
-            events: [{ _tag: "TaskStateChanged", task, attempt: null, quest, wait: null, control }, ...late],
+            events: [
+              { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null, control },
+              ...late,
+              ...unstuck,
+            ],
           };
         }),
       );
@@ -738,6 +747,7 @@ export const TaskRepositoryLive = Layer.effect(
           const by = yield* ledger.consumer(completion.attemptId);
           events.push(...(yield* ledger.consume(settles.consumes, by, revision + events.length)));
           events.push(...(yield* ledger.retire(settles.superseded, revision + events.length)));
+          events.push(...(yield* ledger.closeStuck(task, null, revision + events.length)));
           return { value: task, events };
         }),
       );

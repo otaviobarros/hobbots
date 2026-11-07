@@ -71,8 +71,8 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck in the chat's Needs-
   await stuck.getByText("Tries and the error").click();
   await expect(stuck).toContainText("It was tried 1 time, and the turn ended early. The last try was cut off.");
   await expect(stuck.getByRole("button", { name: "Retry" })).toBeVisible();
-  // Reassign does not exist yet, so the tray leaves it out.
-  await expect(stuck.getByRole("button", { name: "Reassign" })).toHaveCount(0);
+  // The tray keeps to Retry and Dismiss; Reassign… is on the card in the Inbox and the Quest room.
+  await expect(stuck.getByRole("button", { name: "Reassign…" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible();
 
   // Help and about's plain check counts it as the Inbox does, and opens the Inbox.

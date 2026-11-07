@@ -238,7 +238,7 @@ function StuckBody({ entry, asker }: { entry: Extract<TrayEntry, { kind: "stuck"
   return (
     <>
       <p className="m-0 text-text">{blockerWhat(entry.item)}</p>
-      <BlockerChoices item={entry.item} hob={asker} held={false} targets={trayTargets} />
+      <BlockerChoices item={entry.item} hob={asker} reassign={false} targets={trayTargets} />
       <Details summary={copy.details.stuck}>
         {blockerWhy(entry.item, choice.blocker, asker.name)}
         {choice.blocker.diagnostic !== null && (

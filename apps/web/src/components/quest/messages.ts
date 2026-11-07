@@ -163,7 +163,7 @@ export const messages = {
       other: ({ message }: { message: string }) => `The hub refused this: ${message}`,
       failed: "This could not reach the hub. Try again.",
     },
-    status: { cancelling: "Cancelling…", cancelled: "Cancelled", unresolved: "Not confirmed" },
+    status: { cancelling: "Cancelling…", cancelled: "Cancelled", unresolved: "Not confirmed", stuck: "Stuck" },
   },
   someHob: "A hob",
   /** Names joined as a list in the reader's language: "Quill and Ada". */

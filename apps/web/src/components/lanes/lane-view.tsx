@@ -26,6 +26,7 @@ const MOOD: Readonly<Record<RoomStatus, HobState>> = {
   cancelling: "waiting",
   cancelled: "idle",
   unresolved: "waiting",
+  stuck: "needs-you",
 };
 
 const roleText = (role: LaneRole, hobs: HobLookup): string | null =>
@@ -37,13 +38,13 @@ const roleText = (role: LaneRole, hobs: HobLookup): string | null =>
         : messages.role.leads({ names: messages.names(role.members.map((id) => hobs(id).name)) })
       : null;
 
-/** The lane's frame: lit in focus while it filters the Workbench, lantern while it needs you, rose once it failed. */
+/** The lane's frame: lit in focus while it filters the Workbench, lantern while it needs you, rose once it failed or is stuck. */
 const frame = (lane: Lane, picked: boolean) =>
   picked
     ? "border-focus-ring"
     : lane.status === "needs-you"
       ? "border-lantern"
-      : lane.status === "failed"
+      : lane.status === "failed" || lane.status === "stuck"
         ? "border-rose"
         : "border-transparent";
 
