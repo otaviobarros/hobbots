@@ -5,7 +5,7 @@
 - **Pull request:** [#1141](https://github.com/otaviobarros/hobbots/pull/1141)
 - **Commit:** `a9a3c20` on `claude/project-thread-tvvx92`, with a clean tree
 - **Setup:** Apple M1 Pro, macOS 27.0.1, arm64, an ad hoc signed `pnpm package:mac` build, Claude Code 2.1.316 on a signed-in subscription with the `haiku` model, Codex 0.166.0 on a signed-in subscription with the `gpt-6-luna` model, both on low effort. The app ran on a new data folder (`--user-data-dir`) with `HOBBOTS_MODE=hub`, opening at login off and its own port, never the Mac's Hobbots data, under the Balanced preset, with one approved Git clone with an origin, `skills-1065`. Hobs: Pip on Claude Code, Quill on Codex. A second run on the same build, with a new data folder and clone, read the default `~/.agents/skills` with `HOBBOTS_AGENTS_SKILLS` unset, once that Mac's other Hobbots hub was stopped. That folder held 40 skills of the owner's besides `qa-house-style`.
-- **Result:** Passed with gaps. Import, scopes, the clean runtime, shared files, read-only folder skills, rollout past a held assignment, Roll back, proposals and Draft it with a hob all held on real turns on both runtimes. The default `~/.agents/skills` folder held on both runtimes too. Two expectations failed: the use line names a set's skill and its revision, but not its set, and neither hob loaded `qa-house-style` from a plain request, though both did when it was asked for by name.
+- **Result:** Passed with gaps. Import, scopes, the clean runtime, shared files, read-only folder skills, rollout past a held assignment, Roll back, proposals and Draft it with a hob all held on real turns on both runtimes. The default `~/.agents/skills` folder held on both runtimes too. Two expectations failed on that commit. The use line named a set's skill and its revision, but not its set, and neither hob loaded `qa-house-style` from a plain request, though both did when it was asked for by name. A recheck on `65d16af` passed the use line on both runtimes (see Recheck of the use line). The plain request has its own record, [Hobs pick a well-described skill on their own](2026-11-07-skill-picked-on-its-own.md).
 
 ## Checks
 
@@ -18,7 +18,7 @@ Replies came from real turns, each in a new thread. Chats, scopes, edits, rollou
 | A. Scopes | `release` on Everyone, the project and Quill, kept on r1. The Git skill on Pip alone. The set on the project, with `plan-change` off for Quill | ✅ Pip's tab: 12 skills | ✅ Quill's tab: 11, then 10; `release` from the shared scopes reads "Replaced by Quill" |
 | B. Clean runtime | A new thread lists exactly the skills its tab shows, `qa-house-style` among them, and names a fruit. No PLUM or FIG | ✅ 12, with `plan-change`; "Apple" | ✅ 10, no `plan-change`, no Git skill; "Mango" |
 | C. Shared files | `/deliver-change` and `/agent-engineering:deliver-change` read `references/workflow-contract.md` | ✅ Read it and quoted its Terms | ✅ on the second try (see Findings). A command read the file and the reply quoted its Terms word for word |
-| C. Use line | Names the skill with its set and revision | ❌ "Used Deliver change (r1)", with no set | ❌ The same |
+| C. Use line | Names the skill with its set and revision | ✅ On the recheck, "Used Deliver change from agent-engineering (r1)". First run: ❌ "Used Deliver change (r1)", with no set | ✅ On the recheck, the same line. First run: ❌ the same as Claude Code |
 | D. Read-only | The folder skill's page has no editor and no Remove. Make a copy gives `qa-house-style-copy` to Pip, and an edit to BADGER saves r2. Pip's next thread lists both, and the folder's `SKILL.md` has the same hash | ✅ | Not run: this check is for Pip |
 | E. Use line | "How do I cut a release?" answers HERON with "Used Release (r1)" | ✅ | ✅ |
 | E. Rollout | The edit to EGRET rolls out to Everyone and the project and leaves Quill on r1. New threads follow | ✅ EGRET, "Used Release (r2)" | ✅ HERON, "Used Release (r1)", and the tab reads "Kept on an older revision · r2 available" |
@@ -34,7 +34,7 @@ Replies came from real turns, each in a new thread. Chats, scopes, edits, rollou
 
 ## Findings
 
-- [#1192](https://github.com/otaviobarros/hobbots/issues/1192): the use line leaves out the set. The reply's `skillsUsed` records `set: agent-engineering`, but the line reads "Used Deliver change (r1)". The issue asks for the revision, which it shows.
+- [#1192](https://github.com/otaviobarros/hobbots/issues/1192): the use line left out the set. The reply's `skillsUsed` recorded `set: agent-engineering`, but the line read "Used Deliver change (r1)". The issue asks for the revision, which it showed. Fixed, and the recheck below passed.
 - [#1193](https://github.com/otaviobarros/hobbots/issues/1193): What changed reads "Agent engineering is off for Quill" after only `plan-change` was turned off, and the change it records names the set, not the skill.
 - [#1194](https://github.com/otaviobarros/hobbots/issues/1194): a skill's Activity says the line shows "with Open beside it". The line in a chat has no Open.
 - [#1195](https://github.com/otaviobarros/hobbots/issues/1195): a set from Git took more than three seconds to import, with the add form still on screen. Adding it again meanwhile left one assignment and two Given rows in What changed.
@@ -43,6 +43,22 @@ Replies came from real turns, each in a new thread. Chats, scopes, edits, rollou
 - The folder held two skills Hobbots refused. `react-native-best-practices` is larger than 5 MB, and `upgrading-react-native` links outside its folder. The Skills page says each was not added, as designed.
 - Each hob listed 25 of the 39 skills it was given. The other 14 set `disable-model-invocation: true`, so the runtimes keep them out of a model's list.
 - [#1196](https://github.com/otaviobarros/hobbots/issues/1196): a data folder's skill objects are read-only, so a plain `rm -rf` of it fails until they are made writable.
+
+## Recheck of the use line
+
+- **Commit:** `65d16af` on `claude/project-thread-tvvx92`, with a clean tree. It holds every fix merged to `main` for this record's findings.
+- **Setup:** the same Mac and kind of build, Claude Code 2.1.316 with `haiku`, Codex 0.166.0 with `gpt-6-luna`, both on low effort. The app ran on a new data folder with `HOBBOTS_MODE=hub`, opening at login off, its own port and `--use-mock-keychain`, under the Balanced preset. `HOBBOTS_AGENTS_SKILLS` named an empty folder, so `~/.agents/skills` was not read.
+- **Result:** Passed on both runtimes.
+
+Each message was typed in a new thread in the app's own window, driven over its debugging port. Setup, summoning and both imports went through the hub's API. The set was `agent-engineering` v0.5.0 from Git, given to Everyone, and the loose skill was `qa-loose-note`, written in Hobbots and given to Everyone.
+
+| Hob | Message | Line under the reply | Result |
+|---|---|---|---|
+| Pip on Claude Code | `/deliver-change Say hi in one line.` | "Used Deliver change from agent-engineering (r1)", with Open beside it | ✅ |
+| Quill on Codex | `/agent-engineering:deliver-change Say hi in one line.` | "Used Deliver change from agent-engineering (r1)", with Open beside it. `skillsUsed` records `set: agent-engineering` and number 1 | ✅ |
+| Pip on Claude Code | `/qa-loose-note Say hi in one line.` | "Used Qa loose note (r1)", with Open beside it and no set. The reply ended in KESTREL, as the skill says | ✅ |
+
+The loose skill was run on Claude Code only.
 
 ## Gaps
 
