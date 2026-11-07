@@ -1,6 +1,6 @@
 # ADR 014 — Tool policy and enforcement
 
-Status: **Accepted.** Refines the [permissions contract](../architecture/permissions.md) and the [runtime adapters](../architecture/runtime-adapters.md) for Slice 7, and closes the open preset mapping of [ADR 003](003-autonomy.md). [ADR 020](020-github-charm.md) extends its Charms section for the GitHub Charm.
+Status: **Accepted.** Refines the [permissions contract](../architecture/permissions.md) and the [runtime adapters](../architecture/runtime-adapters.md) for Slice 7, and closes the open preset mapping of [ADR 003](003-autonomy.md). [ADR 020](020-github-charm.md) extends its Charms section for the GitHub Charm. Amended by [ADR 031](031-charm-actions-and-registry.md): Charm operations are declared by their Charm, every hub tool call runs through one pipeline and is recorded before it runs, and Read GitHub can ask.
 
 ## Context
 

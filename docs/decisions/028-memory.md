@@ -1,6 +1,6 @@
 # ADR 028 — Memory
 
-Status: **Accepted.** Adds an exception to the journal retention of [ADR 013](013-event-journal.md), a second data store beside the database of [ADR 011](011-sqlite-storage.md), a Memory group to the tool policy of [ADR 014](014-tool-policy-and-enforcement.md), a memory brief beside the briefing of [ADR 017](017-switching-brains.md), and a `memory/` entry to the backups of [ADR 026](026-backup-export-diagnostics.md). Records the design of [#937](https://github.com/otaviobarros/hobbots/issues/937) for the Hobs remember slice ([#951](https://github.com/otaviobarros/hobbots/issues/951)), and refines it in the places listed under Rationale.
+Status: **Accepted.** Adds an exception to the journal retention of [ADR 013](013-event-journal.md), a second data store beside the database of [ADR 011](011-sqlite-storage.md), a Memory group to the tool policy of [ADR 014](014-tool-policy-and-enforcement.md), a memory brief beside the briefing of [ADR 017](017-switching-brains.md), and a `memory/` entry to the backups of [ADR 026](026-backup-export-diagnostics.md). Records the design of [#937](https://github.com/otaviobarros/hobbots/issues/937) for the Hobs remember slice ([#951](https://github.com/otaviobarros/hobbots/issues/951)), and refines it in the places listed under Rationale. Amended by [ADR 031](031-charm-actions-and-registry.md): the Memory tools run through the hub action pipeline and record their step before they run.
 
 ## Context
 
