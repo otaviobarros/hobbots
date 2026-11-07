@@ -148,7 +148,7 @@ function Happened({ line, hobs, onOpen }: { line: HappenedLine; hobs: HobLookup;
       </div>
     );
   }
-  const more = moreOf(line);
+  const more = moreOf(line, hobs);
   return (
     <div className={row}>
       {mark}
@@ -176,14 +176,19 @@ const textOf = (line: PlainLine): string =>
 
 /**
  * What the line adds under it: what the hob had to say beyond its checkpoint's short beat, which the
- * Workbench shows and a lane never does (#901), or why an Attempt ended.
+ * Workbench shows and a lane never does (#901), the hob whose work reached a milestone when it is not
+ * the Task's owner (#743), or why an Attempt ended.
  */
-const moreOf = (line: PlainLine): string | null =>
+const moreOf = (line: PlainLine, hobs: HobLookup): string | null =>
   line.kind === "checkpoint"
     ? line.checkpoint.detail
-    : line.kind === "ended" && line.attempt.outcome !== null
-      ? copy.endedWhy({ why: line.attempt.outcome })
-      : null;
+    : line.kind === "milestone"
+      ? line.by === null
+        ? null
+        : copy.reachedBy({ name: hobs(line.by).name })
+      : line.kind === "ended" && line.attempt.outcome !== null
+        ? copy.endedWhy({ why: line.attempt.outcome })
+        : null;
 
 /** A Task tool call the hub refused: the step it was, what the hob was told, and how many times it tried. */
 function Refused({

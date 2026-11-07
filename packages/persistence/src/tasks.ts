@@ -285,6 +285,7 @@ export const TaskRepositoryLive = Layer.effect(
               title: milestone.title,
               position: milestone.position,
               reached_at: null,
+              reached_by: null,
               created_at: milestone.createdAt,
             })}`;
           }
@@ -752,11 +753,18 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
-    /** The milestone a planned checkpoint reaches, marked reached; null for any other checkpoint. */
-    const reach = (input: Parameters<TaskRepository["Service"]["recordCheckpoint"]>[0]) =>
+    /**
+     * The milestone a planned checkpoint reaches, marked reached by the hob whose work reached it:
+     * the one the checkpoint names, or else `owner`, the Task's owner that reports it (#743). Null for
+     * any other checkpoint.
+     */
+    const reach = (input: Parameters<TaskRepository["Service"]["recordCheckpoint"]>[0], owner: AgentId) =>
       Effect.gen(function* () {
         if (input.kind !== "milestone") {
           if (input.milestoneId !== null) return yield* refuse("milestone-mismatch", "Only a milestone names one");
+          if ((input.reachedBy ?? null) !== null) {
+            return yield* refuse("milestone-mismatch", "Only a milestone names who reached it");
+          }
           return null;
         }
         const [row] =
@@ -771,13 +779,16 @@ export const TaskRepositoryLive = Layer.effect(
             "A milestone checkpoint reaches one of its Task's open milestones",
           );
         }
-        yield* sql`UPDATE milestones SET reached_at = ${input.createdAt} WHERE id = ${input.milestoneId}`;
+        const reachedBy = input.reachedBy ?? owner;
+        yield* sql`UPDATE milestones SET reached_at = ${input.createdAt}, reached_by = ${reachedBy}
+          WHERE id = ${input.milestoneId}`;
         return new Milestone({
           id: input.milestoneId,
           taskId: input.taskId,
           title: row.title,
           position: Number(row.position),
           reachedAt: input.createdAt,
+          reachedBy,
           createdAt: row.createdAt,
         });
       });
@@ -794,9 +805,10 @@ export const TaskRepositoryLive = Layer.effect(
           ) {
             return yield* refuse("checkpoint-kind", `A ${input.source} checkpoint is not a ${input.kind}`);
           }
-          const milestone = yield* reach(input);
+          const { reachedBy: _reachedBy, ...recorded } = input;
+          const milestone = yield* reach(input, task.ownerId);
           const checkpoint = new Checkpoint({
-            ...input,
+            ...recorded,
             detail: input.detail ?? null,
             aboutTaskId: input.aboutTaskId ?? null,
             attemptId: task.currentAttemptId,

@@ -169,6 +169,7 @@ export const messages = {
     lineLabel: ({ line, mark, title }: { line: string; mark: string; title: string }) =>
       `${line}, ${mark}. Open ${title} in Workbench`,
     milestone: ({ title }: { title: string }) => `Milestone: ${title}`,
+    reachedBy: ({ name }: { name: string }) => `Reached by ${name}`,
     refused: ({ label }: { label: string }) => `${label}: refused`,
     refusedTold: ({ name, message }: { name: string; message: string }) => `Hobbots told ${name}: ${message}`,
     endedFailed: "This attempt failed.",

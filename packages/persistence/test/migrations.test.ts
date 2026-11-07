@@ -20,6 +20,7 @@ import withdrawnQuestions from "../src/migrations/0033_withdrawn_questions.ts";
 import taskGrants from "../src/migrations/0035_task_grants.ts";
 import versionedName from "../src/migrations/0047_versioned_name.ts";
 import threadReads from "../src/migrations/0053_thread_reads.ts";
+import milestoneReachedBy from "../src/migrations/0074_milestone_reached_by.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1132,6 +1133,50 @@ describe("0053_thread_reads", () => {
     expect(threads).toEqual([
       { id: "t1", readRevision: 9 },
       { id: "t2", readRevision: null },
+    ]);
+  });
+});
+
+describe("0074_milestone_reached_by", () => {
+  // covers DP-003, OR-002 (#743)
+  it("[TC-DP-289] credits every milestone reached before it to its Task's owner, and leaves the rest unreached", async () => {
+    const rows = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const at = "2026-11-01T00:00:00.000Z";
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "nettle",
+        name: "Nettle",
+        roleTitle: "Builder",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        configVersion: 1,
+        createdAt: at,
+      })}`;
+      yield* sql`INSERT INTO tasks ${sql.insert({
+        id: "build",
+        ownerId: "nettle",
+        rootId: "build",
+        brief: "Build",
+        state: "active",
+        createdAt: at,
+        updatedAt: at,
+      })}`;
+      for (const [id, position, reachedAt] of [
+        ["built", 0, at],
+        ["committed", 1, null],
+      ] as const) {
+        yield* sql`INSERT INTO milestones ${sql.insert({ id, taskId: "build", title: id, position, reachedAt, createdAt: at })}`;
+      }
+      yield* milestoneReachedBy;
+      return yield* sql<{ readonly id: string; readonly reachedBy: string | null }>`
+        SELECT id, reached_by FROM milestones ORDER BY position`;
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0074"))), Effect.runPromise);
+
+    expect(rows.map(({ id, reachedBy }) => ({ id, reachedBy }))).toEqual([
+      { id: "built", reachedBy: "nettle" },
+      { id: "committed", reachedBy: null },
     ]);
   });
 });
