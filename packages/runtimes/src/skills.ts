@@ -19,6 +19,15 @@ import { Document, isMap, parseDocument } from "yaml";
 /** The plugin a Claude Code turn loads its skills from, so each is listed as `hobbots-skills:<name>`. */
 export const SKILLS_PLUGIN = "hobbots-skills";
 
+/**
+ * The skill you picked for the turn with `/` (ADR 029, Explicit use), when the turn mounted it; null
+ * otherwise, so a turn never mentions a skill it does not have.
+ */
+export const askedMount = (
+  asked: string | null | undefined,
+  mounts: ReadonlyArray<SkillMount> | null | undefined,
+): SkillMount | null => (asked ? ((mounts ?? []).find((mount) => mount.name === asked) ?? null) : null);
+
 /** The folder, inside a runtime folder, that holds the turns' skill folders (ADR 029). */
 export const SKILL_MOUNTS = "skill-mounts";
 

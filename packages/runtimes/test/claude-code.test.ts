@@ -26,6 +26,7 @@ import {
   brainOptions,
   type ClaudeCodeConfig,
   claudeCandidates,
+  claudeTurnStart,
   exited,
   fallbackModels,
   findClaudeCode,
@@ -534,6 +535,38 @@ describe("one turn over several runs of Claude Code", () => {
         },
       },
     ]);
+  });
+
+  // covers ADR 029
+  it("[TC-RT-529] reports the skill you picked as used once, as the session starts", () => {
+    const whole = wholeTurn("release-steps");
+    expect([started, completed("Waiting."), started].flatMap(whole.read)).toEqual([
+      started,
+      { _tag: "SkillUsed", source: "library", name: "release-steps", explicit: true },
+    ]);
+  });
+
+  // covers ADR 029
+  it("[TC-RT-530] mentions the skill you picked ahead of the prompt, only when the turn mounted it", () => {
+    const mount = { name: "release-steps", revision: "r", folder: "/f", implicit: false };
+    const request = {
+      prompt: "Ship it.",
+      sessionId: null,
+      instructions: "You are Pip.",
+      instructionsChanged: false,
+      model: null,
+      effort: null,
+      skills: [mount],
+    };
+    const on = "unavailable" as const;
+    expect(claudeTurnStart({ ...request, askedSkill: "release-steps" }, on, false)).toMatchObject({
+      prompt: "/hobbots-skills:release-steps Ship it.",
+      asked: "release-steps",
+    });
+    expect(claudeTurnStart({ ...request, askedSkill: "other" }, on, false)).toMatchObject({
+      prompt: "Ship it.",
+      asked: null,
+    });
   });
 
   it("completes nothing when no run finished", () => {

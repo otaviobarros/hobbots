@@ -68,7 +68,7 @@ import {
   isExecutable,
   runnableBinary,
 } from "./binary.ts";
-import { SKILL_TOOL, withSkills } from "./claude-code-skills.ts";
+import { askedSkillPrompt, SKILL_TOOL, withSkills } from "./claude-code-skills.ts";
 import { COMMAND_ENV_FILE_VARIABLE, commandColorFile, plainBashResponse } from "./command-color.ts";
 import { toolFinished } from "./command-exit.ts";
 import { turnCommits } from "./git-config.ts";
@@ -81,7 +81,7 @@ import {
   TEMP_NOTE,
   withCommitIdentity,
 } from "./sandbox.ts";
-import { holdSkillFolder, skillFolderScope } from "./skills.ts";
+import { askedMount, holdSkillFolder, skillFolderScope } from "./skills.ts";
 import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
 import { fullToolOutput } from "./tool-output.ts";
 
@@ -710,7 +710,7 @@ export const wholeUsage = (earlier: ReplyUsage | undefined, later: ReplyUsage | 
  * announced as `init` again, with its own `result`. So the session starts once, and the turn
  * completes when Claude Code stops, with what each run replied and what all of them used.
  */
-export const wholeTurn = () => {
+export const wholeTurn = (asked: string | null = null) => {
   let started = false;
   let completed: Extract<RuntimeEvent, { _tag: "Completed" }> | null = null;
   return {
@@ -718,6 +718,8 @@ export const wholeTurn = () => {
       if (event._tag === "SessionStarted") {
         if (started) return [];
         started = true;
+        // The skill you picked loads with the prompt, as Claude Code's own mention (ADR 029).
+        if (asked !== null) return [event, { _tag: "SkillUsed", source: "library", name: asked, explicit: true }];
       }
       if (event._tag !== "Completed") return [event];
       const earlier = completed?.text ?? "";
@@ -775,7 +777,9 @@ export const claudeTurnStart = (request: PromptRequest, policySandboxState: Sand
     tools?.commitAs,
     commits.note,
   );
-  return { tools, commits, instructions, prompt: turnPrompt(request, instructions, commits.now) };
+  const asked = askedMount(request.askedSkill, request.skills);
+  const prompt = askedSkillPrompt(turnPrompt(request, instructions, commits.now), asked);
+  return { tools, commits, instructions, prompt, asked: asked?.name ?? null };
 };
 
 /** A turn with tools: the context every call is decided under, its folders and the tools offered. */
@@ -1268,7 +1272,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               ),
           );
           const toEvents = turnEvents(tools);
-          const whole = wholeTurn();
+          const whole = wholeTurn(start.asked);
           // Tool events arrive from the hooks while the turn runs, so the turn's own events share their queue.
           yield* Stream.fromAsyncIterable(turn, errorMessage).pipe(
             // A background command's end arrives as its task's notification.

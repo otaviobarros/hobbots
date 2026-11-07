@@ -2,6 +2,7 @@ import type {
   AgentId,
   Committed,
   MemoryProjectIdentity,
+  MessageId,
   Skill,
   SkillAssignment,
   SkillAssignmentId,
@@ -21,6 +22,8 @@ import type {
   SkillRevisionHash,
   SkillScope,
   SkillSource,
+  SkillUse,
+  SkillUseCounts,
 } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 
@@ -130,6 +133,24 @@ export interface SkillLibraryShape {
   ) => Library<Committed<SkillOptOut> | null, SkillNotFound>;
   /** Removes a skill with no assignment left; one that something still assigns is refused with them. */
   readonly remove: (id: SkillId) => Library<Committed<Skill>, SkillNotFound | SkillInUse>;
+  /** Records that a hob used a skill in a turn (ADR 029, The use line), journaled as `SkillUsed`. */
+  readonly recordUse: (use: SkillUse) => Library<Committed<SkillUse>>;
+  /** Uses of one skill, by one hob, or in one reply, the most recent first, at most `limit` (100 unless given). */
+  readonly uses: (filter: SkillUseFilter) => Library<ReadonlyArray<SkillUse>>;
+  /** A skill's uses counted in all, since `since`, per hob and per thread, as its Activity shows them. */
+  readonly useCounts: (skillId: SkillId, since: string) => Library<SkillUseCounts>;
+  /** How often each library skill was used since `since`, as the scope lists show "this week". */
+  readonly usesSince: (since: string) => Library<ReadonlyArray<{ readonly skillId: SkillId; readonly count: number }>>;
+  /** A hob's most recent use of each skill it used, the most recent first, at most `limit`. */
+  readonly lastUses: (agentId: AgentId, limit: number) => Library<ReadonlyArray<SkillUse>>;
+}
+
+/** Which uses to read: a skill's, a hob's, a reply's, or those they share when several are given. */
+export interface SkillUseFilter {
+  readonly skillId?: SkillId;
+  readonly agentId?: AgentId;
+  readonly messageId?: MessageId;
+  readonly limit?: number;
 }
 
 export class SkillLibrary extends Context.Service<SkillLibrary, SkillLibraryShape>()("@hobbots/agents/SkillLibrary") {}

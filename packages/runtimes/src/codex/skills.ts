@@ -1,11 +1,12 @@
 import { type Dirent, existsSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
-import { RuntimeError } from "@hobbots/agents";
+import { RuntimeError, type SkillMount } from "@hobbots/agents";
 import { Effect } from "effect";
 import type { SkillFolder } from "../skills.ts";
 import type { AppServer } from "./app-server.ts";
 import type { SkillMetadata } from "./protocol.ts";
+import type { SkillFile } from "./skill-reads.ts";
 
 /** How deep Hobbots looks for a `SKILL.md` under a root Codex scans; the check catches anything deeper. */
 const MAX_DEPTH = 6;
@@ -88,6 +89,8 @@ export const unexpectedSkillsMessage = (skills: ReadonlyArray<SkillMetadata>) =>
 /** What `skills/list` showed before the turn: the skills an administrator's settings bring. */
 export interface AdmittedSkills {
   readonly organization: ReadonlyArray<string>;
+  /** Their `SKILL.md` files, as listed and as resolved, so a read of one counts as its use. */
+  readonly organizationFiles: ReadonlyArray<SkillFile>;
 }
 
 /**
@@ -121,5 +124,26 @@ export const admitSkills = (
     );
     if (unexpected.length > 0)
       return yield* Effect.fail(new RuntimeError({ message: unexpectedSkillsMessage(unexpected) }));
-    return { organization: [...new Set(organization.map((skill) => skill.name))].sort() };
+    return {
+      organization: [...new Set(organization.map((skill) => skill.name))].sort(),
+      organizationFiles: organization.flatMap((skill) =>
+        [...new Set([skill.path, realOrSelf(skill.path)])].map((path) => ({ name: skill.name, path })),
+      ),
+    };
   });
+
+/** The turn's skill folder as given and as resolved, so a read through either path counts as a use. */
+export const skillRootsOf = (folder: SkillFolder | null): ReadonlyArray<string> =>
+  folder === null ? [] : [...new Set([folder.skills, realOrSelf(folder.skills)])];
+
+/**
+ * The input that has Codex load the skill you picked (ADR 029, Explicit use): its `SKILL.md` in the
+ * turn's folder. Null when the turn has no such skill.
+ */
+export const askedSkillInput = (
+  folder: SkillFolder | null,
+  asked: SkillMount | null,
+): { readonly type: "skill"; readonly name: string; readonly path: string } | null =>
+  folder === null || asked === null
+    ? null
+    : { type: "skill", name: asked.name, path: join(folder.skills, asked.name, "SKILL.md") };

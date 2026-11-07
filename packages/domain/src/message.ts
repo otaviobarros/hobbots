@@ -3,7 +3,7 @@ import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
 import { PolicyOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
-import { TurnSkill } from "./skills.ts";
+import { SkillName, TurnSkill, UsedSkill } from "./skills.ts";
 import { ToolOutput } from "./tool-output.ts";
 
 export const MessageRole = Schema.Literals(["user", "assistant"]);
@@ -183,6 +183,22 @@ export class Message extends Schema.Class<Message>("Message")({
   skills: Schema.NullOr(Schema.Array(TurnSkill)).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
+   * On your message, the skill you picked for it with `/` (ADR 029, Explicit use), which its turn
+   * hands the runtime as the runtime's own mention. Null when you picked none.
+   */
+  askedSkill: Schema.NullOr(SkillName).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
+   * On a reply, the skills its turns used, each once, in the order they were first used (ADR 029, The
+   * use line). Empty for your messages, for a reply that used none, and for replies from before.
+   */
+  skillsUsed: Schema.Array(UsedSkill).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
   ),
   createdAt: Schema.String,
   revision: Revision,

@@ -33,6 +33,8 @@ const ICONS = {
   project: "M2 4.5V12.5h12V6H8L6.5 4.5z",
   notice: "M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 5v3.5M8 11v.1",
   book: "M3 2.5h8.5a1.5 1.5 0 0 1 1.5 1.5v9.5H4.5A1.5 1.5 0 0 1 3 12zM3 12a1.5 1.5 0 0 1 1.5-1.5H13M6 5.5h4M6 8h2.5",
+  skill:
+    "M2.5 13.5 9 7M10 2.5l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6zM12.5 8.5l.4 1 1 .4-1 .4-.4 1-.4-1-1-.4 1-.4z",
 } as const;
 
 export type MemoryIconName = keyof typeof ICONS;

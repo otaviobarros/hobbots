@@ -16,6 +16,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { useActivity } from "../../api/activity.ts";
 import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../../api/drafts.ts";
+import { useHobSkills } from "../../api/hob-skills.ts";
 import { useConnection } from "../../api/live.ts";
 import { threadMemorySavesQuery } from "../../api/memory-saves.ts";
 import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../../api/outbox.ts";
@@ -55,6 +56,8 @@ import { PinNotes } from "../quest/pin-notes.tsx";
 import { ThreadQuestButton, useWorkMoments } from "../quest/thread-work.tsx";
 import type { Pins } from "../quest/use-work.ts";
 import { ReconnectingCard } from "../shell/reconnecting.tsx";
+import { skillPicking } from "../skill-line/skill-picker-model.ts";
+import { SkillUsedLines } from "../skill-line/skill-used-line.tsx";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { BackIcon } from "./chat-icons.tsx";
 import { ChatTitle } from "./chat-title.tsx";
@@ -107,6 +110,8 @@ export function ChatView({
     select: (threads) => threads.find((t) => t.id === threadId),
   });
   const threadCount = useQuery({ ...threadsQuery(hobId), select: (threads) => threads.length });
+  // The hob's skills, which `/` in the composer picks one of (ADR 029).
+  const skills = useHobSkills(hobId, hob.data?.configVersion);
   const messages = useQuery({ ...messagesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
   // What waits on you in this chat shows in the tray above the composer.
   const needs = useThreadNeeds(threadId);
@@ -428,6 +433,7 @@ export function ChatView({
             sending={start.isPending || send.isPending}
             onSend={sendDraft}
             onStop={() => interrupt.mutate()}
+            skills={skillPicking(skills, current.name)}
             paused={
               paused
                 ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: threadId !== undefined }
@@ -518,7 +524,12 @@ function Transcript({
               hob={hob}
               focused={message.id === focusMessageId}
               resume={resume(message)}
-              after={<MemorySavedLines saves={replySaves(saves.data, message.id)} hob={hob} />}
+              after={
+                <>
+                  <SkillUsedLines message={message} hob={hob} />
+                  <MemorySavedLines saves={replySaves(saves.data, message.id)} hob={hob} />
+                </>
+              }
             >
               <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
             </MessageRow>

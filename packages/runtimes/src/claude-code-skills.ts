@@ -40,12 +40,10 @@ export const withSkills = (
     // Claude Code refuses a skill the list leaves out; the hook lets it say so.
     if (skill === undefined || !known.has(skill)) return {};
     started.add(input.tool_use_id);
-    report({
-      _tag: "StepStarted",
-      id: input.tool_use_id,
-      kind: "tool",
-      label: `Reading the ${skill.slice(SKILLS_PLUGIN.length + 1)} skill`,
-    });
+    const name = skill.slice(SKILLS_PLUGIN.length + 1);
+    report({ _tag: "StepStarted", id: input.tool_use_id, kind: "tool", label: `Reading the ${name} skill` });
+    // The model picked the skill: the reply shows it used it (ADR 029, The use line).
+    report({ _tag: "SkillUsed", source: "library", name, explicit: false });
     return {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
@@ -72,3 +70,10 @@ export const withSkills = (
     },
   };
 };
+
+/**
+ * The prompt for a turn you picked a skill for: Claude Code's own mention, `/hobbots-skills:<name>`,
+ * ahead of the rest, which Claude Code hands the skill as its arguments.
+ */
+export const askedSkillPrompt = (prompt: string, asked: SkillMount | null): string =>
+  asked === null ? prompt : `/${pluginSkill(asked.name)} ${prompt}`;

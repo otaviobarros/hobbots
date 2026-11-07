@@ -1,0 +1,83 @@
+# A reply shows which skills it used, on Claude Code and Codex, with stand-in models
+
+- **Date:** 2026-11-06
+- **Issue:** [#1096](https://github.com/otaviobarros/hobbots/issues/1096)
+- **Pull request:** the pull request that shows which skills a reply used
+- **Commit:** `cee4116c` on `claude/project-thread-7bu5nj`, with a clean tree
+- **Setup:** Linux x86_64 container (Node 22), running as root. Codex 0.166.0 (`@openai/codex` from npm) through `runCodexTurn`, with a stand-in for the Responses API set as a custom model provider. Claude Code 2.1.311 (the Agent SDK's own binary) through the adapter's `sendPrompt`, with a stand-in for the Messages API (`ANTHROPIC_BASE_URL`, a throwaway token) and every `CLAUDE*` and `ANTHROPIC*` variable of the machine removed. Both used the clean-runtime fixture, `packages/runtimes/test/clean-runtime.ts`, with a fake home folder. The hub-level tests ran on SQLite and on PostgreSQL 16 with the fake runtime. No account and no real model on either runtime.
+- **Result:** Passed. On both runtimes, a skill the model picked and a skill you picked were each reported once as used, a skill the turn was not given never was, and a skill you picked reached the model through the runtime's own mention, an Only when asked one included. Through the hub, each reply recorded the revision its turn mounted, and the counts matched the recorded uses.
+
+## Codex 0.166.0
+
+`HOBBOTS_CODEX=<codex> pnpm --filter @hobbots/runtimes exec vitest run test/clean-runtime-codex.test.ts`
+
+| Case | Check | Result |
+|---|---|---|
+| TC-RT-526 | The turn's `askedSkill` is an Only when asked skill, sent as a `skill` input item beside the text | ✅ The skill's instructions reached the model; `SkillUsed` reported once, `explicit: true` |
+| TC-RT-527 | With tools, the model runs `cat` on the mounted skill's `SKILL.md`, then on a repository skill's `SKILL.md` | ✅ Codex reported both as `read` command actions; only the mounted skill was reported as used |
+| TC-RT-510 to TC-RT-513 | The clean-runtime checks of #1061, again | ✅ Unchanged |
+
+## Claude Code 2.1.311
+
+`HOBBOTS_CLAUDE_CODE=<claude> pnpm --filter @hobbots/runtimes exec vitest run test/clean-runtime-claude-code.test.ts`
+
+| Case | Check | Result |
+|---|---|---|
+| TC-RT-516 | The model calls `Skill` for the mounted skill, then for a home folder skill | ✅ `SkillUsed` reported once, for the mounted skill; the refused one never |
+| TC-RT-525 | The turn's `askedSkill` is an Only when asked skill, sent as `/hobbots-skills:<name>` ahead of the prompt | ✅ The skill's instructions reached the model; `SkillUsed` reported once, `explicit: true` |
+| TC-RT-514, TC-RT-515, TC-RT-517, TC-RT-518 | The clean-runtime checks of #1061, again | ✅ Unchanged |
+
+## Through the hub
+
+`pnpm --filter @hobbots/server exec vitest run test/skill-assignments.test.ts test/task-steps.test.ts`, and the same with `HOBBOTS_TEST_DB=postgres`
+
+| Case | Check | Result |
+|---|---|---|
+| TC-AG-144 | A hob uses its skill twice in one turn after a rollout to r2, and names a skill it does not have | ✅ The reply records the skill once, at r2; nothing for the other; a later reply that used none records none |
+| TC-AG-145 | You pick a skill with the `skill` field, with `/release-steps` typed at the start, and name one the hob lacks | ✅ Recorded as yours both times, the runtime got the prompt without `/release-steps`, and the unknown name was not handed to the turn. The skill's uses counted 3 in all and this week, per hob and per thread, and the hob's view listed it as last used |
+| TC-OR-647 | A Task step uses the hob's skill | ✅ Counted for the hob, with no thread or reply |
+| TC-DP-282 | Uses on SQLite and PostgreSQL | ✅ Each journaled as `SkillUsed` with its hob, thread and reply; read per skill, per hob and in all, newest first |
+
+## After review
+
+A review of the pull request found five problems, fixed with these checks:
+
+| Case | Check | Result |
+|---|---|---|
+| TC-UI-1096-06 | In a browser, you write a message, press Use a skill, close the list with Escape, press it again, type `rel` and pick with Enter, then send and reload | ✅ The message stayed after the `/` each time and came back as it was on Escape; the reply's line read "Used Release steps (r1)" before and after the reload; no serious or critical accessibility violations in the list or the line |
+| TC-UI-1096-07 | In a browser, the hob's skills fail to load, then load on Try again | ✅ The list said it was loading, then that Hobbots could not read the skills, never that the hob has none; Try again showed the skill |
+| TC-RT-533 | Codex refuses `turn/start` for a turn with a skill you picked | ✅ No `SkillUsed`; with a Codex that takes the turn, one, after `turn/start` |
+| TC-RT-531, TC-RT-532 | A Codex command reads an administrator's skill's `SKILL.md` that admission let through | ✅ Reported as used; another `SKILL.md` and another file of that skill are not |
+
+A second review found five more problems, fixed with these checks:
+
+| Case | Check | Result |
+|---|---|---|
+| TC-AG-146, TC-AG-147, TC-RT-534 | A library skill and an organization skill share a name; Codex reads both in one turn | ✅ Each reported with its source, recorded once each: the library one at its revision, the organization one without |
+| TC-UI-1096-08 to -10 | A skill is assigned and another taken off while the chat is open | ✅ The `/` list shows the new one and drops the other without a reload; the browser test fails without the fix |
+| TC-UI-1096-11 | 31 skills in a 640-pixel-high window | ✅ The list stays under half the window and scrolls; ↑ to the last skill brings it into view; the composer stays on screen |
+| TC-DP-283 | Counts, this week, a hob's last uses and a reply's uses, on SQLite and PostgreSQL 16 | ✅ Counted in the database, one row per answer, with a limit on every list |
+
+A third review found four more problems, fixed with these checks:
+
+| Case | Check | Result |
+|---|---|---|
+| TC-DP-284 | A reply's Used line and its use are saved together, then a second save fails on the use | ✅ Both journaled in one commit; the failed save kept neither the use nor the reply's new text, on SQLite and PostgreSQL 16 |
+| TC-AG-149 | A reply is stopped right after its skill was used | ✅ Stopped with its line, and the use counted once |
+| TC-UI-1096-12 | With the list open, Shift+Enter, Shift+↓ and Shift+Tab | ✅ A new line, no move in the list, focus moves back; the draft is not rewritten. Fails without the fix |
+| TC-UI-1096-13 | Another window moves the hob from one folder to another, each with its own project's skill | ✅ The list swaps the skills without a reload. Fails without the fix |
+| TC-DP-283 | A skill's total, week, hobs and threads | ✅ Counted in one statement, so a use recorded meanwhile is in all of them or none. No test runs a concurrent writer |
+
+A fourth review found two of those fixes incomplete, fixed with these checks:
+
+| Case | Check | Result |
+|---|---|---|
+| TC-AG-150 | The hob is retired with Stop while a reply's save with its skill use is held | ✅ The reply ends interrupted with its line, and the use counted once. Without the fix the line was kept and the use lost |
+| TC-UI-1096-13 | Another window also adds and removes a shared folder in the setup | ✅ The list adds the shared folder's project skill and drops it again without a reload. Fails without the fix |
+
+## Gaps
+
+- No real model ran, so whether a real model picks a skill, and how often, was not observed.
+- On Codex, a skill the model reads by any way other than a command Codex parses as a read (such as a script that prints it) is not counted.
+- The Used line's Open, and the Activity tab, scope lists and hob Skills tab that show the counts, wait for the Skills page ([#1062](https://github.com/otaviobarros/hobbots/issues/1062)). The routes are in place.
+- A skill from an administrator's settings is recorded as the organization's when the runtime names it. On Codex a read of its `SKILL.md` names it, checked with a scripted App Server (TC-RT-531, TC-RT-532), not with Codex itself; no installed runtime here had one.

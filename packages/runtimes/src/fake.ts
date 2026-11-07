@@ -136,6 +136,32 @@ export const FAKE_ONCE_DIRECTIVE = "fake:once";
  */
 const FAKE_COMPACT_DIRECTIVE = "fake:compact";
 
+/**
+ * A prompt line `fake:skill <name>` makes the fake use that skill, as a model picks one on its own
+ * (ADR 029, The use line): it reports `SkillUsed` when the turn mounted the skill, and nothing
+ * otherwise, as a runtime refuses a skill it was not given. The skill you picked for the message
+ * (`askedSkill`) is reported as used once the turn starts, as Claude Code and Codex load it.
+ */
+const FAKE_SKILL_DIRECTIVE = "fake:skill ";
+
+/** The skills the fake uses in a turn: the one you picked, then those its prompt names, each once and only if mounted. */
+const fakeSkillUses = (request: PromptRequest, scripted: string): ReadonlyArray<RuntimeEvent> => {
+  const mounted = new Set((request.skills ?? []).map((skill) => skill.name));
+  const asked = request.askedSkill && mounted.has(request.askedSkill) ? [request.askedSkill] : [];
+  const named = scripted
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith(FAKE_SKILL_DIRECTIVE))
+    .map((line) => line.slice(FAKE_SKILL_DIRECTIVE.length).trim())
+    .filter((name) => mounted.has(name) && !asked.includes(name));
+  return [
+    ...asked.map((name): RuntimeEvent => ({ _tag: "SkillUsed", source: "library", name, explicit: true })),
+    ...[...new Set(named)].map(
+      (name): RuntimeEvent => ({ _tag: "SkillUsed", source: "library", name, explicit: false }),
+    ),
+  ];
+};
+
 /** The prompt with each `fake:once` line run the first time and dropped after, remembering it in `seen`. */
 const onceOnly = (prompt: string, seen: Set<string>) =>
   prompt
@@ -706,6 +732,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
       ...(scripted.split("\n").some((line) => line.trim() === FAKE_COMPACT_DIRECTIVE)
         ? [{ _tag: "SessionCompacted" } as const]
         : []),
+      ...fakeSkillUses(request, scripted),
       // Every reply thinks first, so the step display can be seen and tested.
       { _tag: "StepStarted", id: "thinking-1", kind: "thinking", label: "Thinking" },
       { _tag: "StepEnded", id: "thinking-1" },
