@@ -40,6 +40,17 @@ import {
 import { namedFolders, requestedFolders, withFolders } from "./default-folders.ts";
 import type { WrapUp, WrapUpPolicy } from "./wrap-up.ts";
 
+/**
+ * Why a Quest's lead may not complete it yet (#1181): it said nothing about delivering what the user
+ * asked for, or said it did not. A Quest that reads done must have delivered it.
+ */
+const notDelivered = (task: Task, delivered: boolean | undefined) =>
+  delivered === false
+    ? `Task ${task.id} is not complete: you said its result does not deliver everything the user asked for. ` +
+      "Finish what is missing, or ask the user with ask what to do instead. The Quest stays open meanwhile."
+    : `Task ${task.id} is not complete yet. Say whether its result delivers everything the user asked for, where they asked for it: ` +
+      "call complete_task again with delivered: true if it does. If it does not, finish what is missing, or ask the user with ask what to do, and leave the Quest open.";
+
 /** Longest reason a lead's `leave_uncommitted` keeps on the Task (#665). */
 const REASON_LIMIT = 600;
 
@@ -63,6 +74,31 @@ interface Deps {
   readonly authority: (scope: CallScope, task: Task) => Effect.Effect<Authority>;
   readonly separator: PathSeparator;
 }
+
+/** Whether a Task is a Quest's own top Task, whose result is the user's. */
+const isQuestTop = (scope: CallScope, task: Task) =>
+  task.parentId === null && scope.tree.quests.some((quest) => quest.taskId === task.id);
+
+/**
+ * Refuses a completion that would read done without the delivery: a Quest whose lead does not say
+ * it delivered what the user asked for (#1181), or a file no one could open afterwards (#1180).
+ */
+const deliveredOrRefused = (
+  { delivered, authority }: Pick<Deps, "delivered" | "authority">,
+  scope: CallScope,
+  task: Task,
+  questTop: boolean,
+  input: Pick<TaskToolInput<"complete_task">, "delivered" | "artifacts">,
+) =>
+  Effect.gen(function* () {
+    if (questTop && input.delivered !== true) {
+      return yield* refuse("not-delivered", notDelivered(task, input.delivered));
+    }
+    const undelivered = yield* delivered((yield* authority(scope, task)).folders, input.artifacts ?? []);
+    if (undelivered !== null) {
+      return yield* refuse("artifact-unreachable", `Task ${task.id} is not complete yet. ${undelivered}`);
+    }
+  });
 
 /**
  * What a hob reads after it waits. wait_for does not block, so a hob told it may keep working calls
@@ -353,16 +389,13 @@ export const makePlanning = ({
       if (task.currentAttemptId === null) {
         return yield* refuse("no-attempt", `Task ${task.id} has not started, so it has no result yet.`);
       }
-      // Done means delivered: a file the Task returns must still be there for whoever reads its result.
-      const undelivered = yield* delivered((yield* authority(scope, task)).folders, input.artifacts ?? []);
-      if (undelivered !== null) {
-        return yield* refuse("artifact-unreachable", `Task ${task.id} is not complete yet. ${undelivered}`);
-      }
+      const questTop = isQuestTop(scope, task);
+      yield* deliveredOrRefused({ delivered, authority }, scope, task, questTop, input);
       const artifacts = (input.artifacts ?? []).map((artifact) => ({ ...artifact, id: ArtifactId.make(newId()) }));
       // The Quest's own result is the user's, so its lead commits what it changed or says why not (#665).
       const attempts = scope.tree.attempts.filter((each) => each.taskId === task.id).map((each) => each.id);
       const left = yield* wrapUp(task, attempts, {
-        hold: task.parentId === null && scope.tree.quests.some((quest) => quest.taskId === task.id),
+        hold: questTop,
         // A blank reason is none; a long one is cut, as every text the Summary shows is.
         reason: input.leave_uncommitted?.trim() ? cut(input.leave_uncommitted, REASON_LIMIT) : undefined,
       });

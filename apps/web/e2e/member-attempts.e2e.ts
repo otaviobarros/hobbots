@@ -102,7 +102,7 @@ test("[TC-OR-454] a nested lead woken several times on its Task shows Attempt 1 
             milestone_id: "$review.milestones.0",
           }),
         ),
-        later(3, hubCall("complete_task", { key: "review-done", summary: "Reviewed the project" })),
+        later(3, hubCall("complete_task", { delivered: true, key: "review-done", summary: "Reviewed the project" })),
       ].join("\n"),
     }),
     hubCall("wait_for", { key: "wait", tasks: ["$review.task_id"] }),

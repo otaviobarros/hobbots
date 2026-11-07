@@ -165,14 +165,14 @@ describe("waiting on a Task that asks", () => {
           brief: [
             "Draft the copy",
             hub("ask", { key: "tone", question: "Playful or formal?" }),
-            `fake:then ${hub("complete_task", { key: "copy-done", summary: "Playful copy drafted" })}`,
+            `fake:then ${hub("complete_task", { delivered: true, key: "copy-done", summary: "Playful copy drafted" })}`,
           ].join("\n"),
         }),
         hub("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
         // The turn after this one waits again, reads the question there, and answers it.
         `fake:then ${hub("wait_for", { key: "wait-again", tasks: ["$copy.task_id"] })}`,
         `fake:then ${hub("answer", { key: "reply", question_id: "$tone.question_id", answer: "Playful" })}`,
-        `fake:then fake:then ${hub("complete_task", { key: "wrap", summary: "Release planned" })}`,
+        `fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "Release planned" })}`,
       ]),
     );
 

@@ -33,7 +33,10 @@ const plan = hub("plan_steps", {
       ].join("\n"),
     },
     {
-      brief: ["Write the notes", hub("complete_task", { key: "notes", summary: "Notes written" })].join("\n"),
+      brief: [
+        "Write the notes",
+        hub("complete_task", { delivered: true, key: "notes", summary: "Notes written" }),
+      ].join("\n"),
       after: [1],
     },
   ],
@@ -79,6 +82,7 @@ describe("a step that stops on a finding holds the steps after it", () => {
       on: BLOCKED_ARRIVAL,
       lines: [
         hub("complete_task", {
+          delivered: true,
           key: "go-on",
           task_id: "$plan.steps.0.task_id",
           summary: "Keep the README and SPEC as they are",
@@ -120,7 +124,12 @@ describe("a step that stops on a finding holds the steps after it", () => {
         hub("plan_steps", {
           key: "replan",
           steps: [
-            { brief: ["Start clean", hub("complete_task", { key: "clean", summary: "Started clean" })].join("\n") },
+            {
+              brief: [
+                "Start clean",
+                hub("complete_task", { delivered: true, key: "clean", summary: "Started clean" }),
+              ].join("\n"),
+            },
           ],
         }),
       ],

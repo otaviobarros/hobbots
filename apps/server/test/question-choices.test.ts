@@ -30,7 +30,7 @@ describe("a question with choices, through the tools", () => {
       },
       {
         on: 'was answered by the user: "Formal" (choice 2 of 2)',
-        lines: [hub("complete_task", { key: "copy-done", summary: "Formal copy drafted" })],
+        lines: [hub("complete_task", { delivered: true, key: "copy-done", summary: "Formal copy drafted" })],
       },
     );
     await run(

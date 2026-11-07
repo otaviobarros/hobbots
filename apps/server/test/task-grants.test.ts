@@ -386,7 +386,11 @@ describe("an approval for This Task", () => {
           hub("delegate_task", {
             key,
             hob: "Quill",
-            brief: ["Push the copy", push, hub("complete_task", { key: `${key}-done`, summary: "Pushed" })].join("\n"),
+            brief: [
+              "Push the copy",
+              push,
+              hub("complete_task", { delivered: true, key: `${key}-done`, summary: "Pushed" }),
+            ].join("\n"),
           }),
         ].join("\n"),
       );

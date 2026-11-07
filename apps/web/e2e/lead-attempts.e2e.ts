@@ -34,7 +34,10 @@ test("[TC-OR-315] the lead's later turns on its Task stay in Attempt 1, and its 
     'fake:write CHANGELOG.md "## 1.0.0\\n"',
     script("report_checkpoint", { key: "found", kind: "finding", summary: "The notes needed a changelog." }),
   ]);
-  await send(page, ["Wrap it up", script("complete_task", { key: "done", summary: "The notes are tidy." })]);
+  await send(page, [
+    "Wrap it up",
+    script("complete_task", { delivered: true, key: "done", summary: "The notes are tidy." }),
+  ]);
   const questTicket = ticket(page, "Tidy the notes");
   await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
 

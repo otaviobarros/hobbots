@@ -365,7 +365,12 @@ describe("hob tools for Tasks and Quests", () => {
     expect(notOwner.reason).toBe("outside-subtree");
     const sibling = await refused(QUILL, quill, "cancel_task", { key: "k2", task_id: ada });
     expect(sibling.reason).toBe("outside-subtree");
-    const members = await refused(ALDRIC, TOP, "complete_task", { key: "k9", task_id: quill, summary: "Mine" });
+    const members = await refused(ALDRIC, TOP, "complete_task", {
+      delivered: true,
+      key: "k9",
+      task_id: quill,
+      summary: "Mine",
+    });
     expect(members.reason).toBe("not-owner");
     const turn = await refused(QUILL, TOP, "plan_steps", { key: "k3", steps: [{ brief: "Take over" }] });
     expect(turn.reason).toBe("not-owner");
@@ -537,6 +542,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(started.value.task.state).toBe("active");
     const finished = (await run(
       carrying(QUILL, quill, "complete_task", {
+        delivered: true,
         key: "c",
         summary: "Copy drafted",
         artifacts: [{ kind: "text", label: "Copy", value: "Shop the deals" }],
@@ -592,12 +598,20 @@ describe("hob tools for Tasks and Quests", () => {
       }),
     );
     // A turn that never took up Quill's Task item cannot finish it either.
-    const untaken = await refused(QUILL, quill, "complete_task", { key: "c0", summary: "Copy drafted" });
+    const untaken = await refused(QUILL, quill, "complete_task", {
+      delivered: true,
+      key: "c0",
+      summary: "Copy drafted",
+    });
     expect(untaken.reason).toBe("items-open");
-    await run(carrying(QUILL, quill, "complete_task", { key: "c", summary: "Copy drafted" }));
+    await run(carrying(QUILL, quill, "complete_task", { delivered: true, key: "c", summary: "Copy drafted" }));
 
     // Quill's result sits in Aldric's backpack, unread: a final sentence alone does not close the Quest.
-    const unread = await refused(ALDRIC, TOP, "complete_task", { key: "done-1", summary: "Campaign launched" });
+    const unread = await refused(ALDRIC, TOP, "complete_task", {
+      delivered: true,
+      key: "done-1",
+      summary: "Campaign launched",
+    });
     expect(unread.reason).toBe("items-open");
     expect(unread.message).toContain(`the result of Task ${quill} (Work for Quill) is in your backpack, not yet read`);
     const ledger = Option.getOrThrow(await run(tasks.readLedger(TOP)));
@@ -607,7 +621,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await tree()).quests[0]?.state).toBe("active");
 
     // The turn that carries the result completes the Quest and consumes the result with it.
-    await run(carrying(ALDRIC, TOP, "complete_task", { key: "done-2", summary: "Campaign launched" }));
+    await run(carrying(ALDRIC, TOP, "complete_task", { delivered: true, key: "done-2", summary: "Campaign launched" }));
     const after = await tree();
     expect(after.tasks[0]?.state).toBe("completed");
     expect(after.quests[0]?.state).toBe("completed");
@@ -622,7 +636,11 @@ describe("hob tools for Tasks and Quests", () => {
     const ada = await delegate(ALDRIC, TOP, "Ada", "art");
     // Ada's Task is cancelled from an earlier turn, so its failure waits unread in Aldric's backpack.
     await done(ALDRIC, TOP, "cancel_task", { key: "drop-art", task_id: ada });
-    const lone = await refused(ALDRIC, TOP, "complete_task", { key: "early", summary: "Campaign launched" });
+    const lone = await refused(ALDRIC, TOP, "complete_task", {
+      delivered: true,
+      key: "early",
+      summary: "Campaign launched",
+    });
     expect(lone.message).toContain(`Task ${ada} (Work for Ada) cancelled, and you have not read it yet`);
     expect(lone.message).toContain("Call read_tasks to read what ended");
     expect(lone.message).toContain("or end your turn");
@@ -632,7 +650,7 @@ describe("hob tools for Tasks and Quests", () => {
       "Wrap up the campaign",
       'fake:hub read_tasks {"key":"look"}',
       `fake:hub cancel_task {"key":"drop-copy","task_id":"${quill}"}`,
-      'fake:hub complete_task {"key":"wrap","summary":"Campaign launched without copy or art"}',
+      'fake:hub complete_task {"delivered":true,"key":"wrap","summary":"Campaign launched without copy or art"}',
     ].join("\n");
     const turn = Effect.gen(function* () {
       const tools = yield* TaskTools;
@@ -733,6 +751,7 @@ describe("hob tools for Tasks and Quests", () => {
     const [step] = planned.details.steps as Array<{ readonly task_id: string }>;
     // A step that has not started has no result to return.
     const unstarted = await refused(ALDRIC, TOP, "complete_task", {
+      delivered: true,
       key: "c",
       task_id: step?.task_id,
       summary: "Done",

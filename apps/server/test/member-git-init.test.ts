@@ -97,7 +97,7 @@ describe("member and step sessions offer git_init", () => {
             hub(GIT_INIT_TOOL, { folder }),
             // Already a repository now, so the second is refused.
             hub(GIT_INIT_TOOL, { folder }),
-            hub("complete_task", { key: "repo-done", summary: "The repository is ready" }),
+            hub("complete_task", { delivered: true, key: "repo-done", summary: "The repository is ready" }),
           ].join("\n"),
           authority: OPENS,
         }),
@@ -148,7 +148,7 @@ describe("member and step sessions offer git_init", () => {
           brief: [
             "Push the app",
             hub(GITHUB_PUSH_TOOL, { key: "push-it", folder: project }),
-            hub("complete_task", { key: "push-done", summary: "Could not push" }),
+            hub("complete_task", { delivered: true, key: "push-done", summary: "Could not push" }),
           ].join("\n"),
           authority: OPENS,
         }),

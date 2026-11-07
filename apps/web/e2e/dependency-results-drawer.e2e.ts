@@ -81,6 +81,7 @@ test("[TC-OR-215] Rook's Task drawer shows Quill's result and core.py under Hand
         brief: [
           "Write the backend",
           script("complete_task", {
+            delivered: true,
             key: "backend-done",
             summary: "Stores amounts as integer cents.",
             artifacts: [{ kind: "file", label: "core.py", value: join(shared, "core.py") }],
@@ -92,7 +93,7 @@ test("[TC-OR-215] Rook's Task drawer shows Quill's result and core.py under Hand
         hob: "Rook",
         brief: [
           "Write the frontend",
-          script("complete_task", { key: "frontend-done", summary: "Frontend ready." }),
+          script("complete_task", { delivered: true, key: "frontend-done", summary: "Frontend ready." }),
         ].join("\n"),
         depends_on: ["$backend.task_id"],
       }),

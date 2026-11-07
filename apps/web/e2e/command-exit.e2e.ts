@@ -25,7 +25,7 @@ test("[TC-RT-105] a command that exits non-zero shows as Failed with its exit co
       run({ command: "pytest", output: "ImportError: cannot import name 'notes'\n", exitCode: 1 }),
       run({ command: "pytest", output: "1 passed\n", exitCode: 0 }),
       script("start_quest", { key: "quest", goal: "Write the test first" }),
-      script("complete_task", { key: "done", summary: "Red, then green." }),
+      script("complete_task", { delivered: true, key: "done", summary: "Red, then green." }),
     ].join("\n"),
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
@@ -69,7 +69,7 @@ test("[TC-RT-500] a line of commands run one after another that exits 0 shows as
       }),
       run({ command: "ls && echo listed", output: "README.md\nlisted\n", exitCode: 0 }),
       script("start_quest", { key: "quest", goal: "Set up the repository" }),
-      script("complete_task", { key: "done", summary: "Initialized." }),
+      script("complete_task", { delivered: true, key: "done", summary: "Initialized." }),
     ].join("\n"),
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();

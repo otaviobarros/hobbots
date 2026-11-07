@@ -44,12 +44,12 @@ describe("answering a question before it is delivered", () => {
           brief: [
             "Draft the copy",
             hub("ask", { key: "tone", question: "Playful or formal?" }),
-            `fake:then ${hub("complete_task", { key: "copy-done", summary: "Playful copy drafted" })}`,
+            `fake:then ${hub("complete_task", { delivered: true, key: "copy-done", summary: "Playful copy drafted" })}`,
           ].join("\n"),
         }),
         hub("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
         hub("answer", { key: "reply", question_id: "$tone.question_id", answer: "Playful" }),
-        `fake:then ${hub("complete_task", { key: "wrap", summary: "Release planned" })}`,
+        `fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "Release planned" })}`,
       ]),
     );
 

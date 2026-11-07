@@ -339,7 +339,9 @@ describe("a Task's steps in fresh sessions", () => {
     expect(asked[0]?.prompt).not.toContain("returned:");
 
     // The owner returns one result for the Task.
-    await run(send(thread.id, hub("complete_task", { key: "done", summary: "The launch plan is ready" })));
+    await run(
+      send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "The launch plan is ready" })),
+    );
     const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
     expect(finished.tasks[0]?.result?.summary).toBe("The launch plan is ready");
     expect(finished.tasks.filter((task) => task.parentId === null)).toHaveLength(1);
@@ -414,9 +416,9 @@ describe("a Task's steps in fresh sessions", () => {
     const thread = await run(seed);
     const steps = [
       {
-        brief: `Research keywords\n${hub("report_checkpoint", { key: "found", kind: "finding", summary: "Shoppers search for bundles" })}\n${hub("complete_task", { key: "kw", summary: "Twelve keywords chosen" })}`,
+        brief: `Research keywords\n${hub("report_checkpoint", { key: "found", kind: "finding", summary: "Shoppers search for bundles" })}\n${hub("complete_task", { delivered: true, key: "kw", summary: "Twelve keywords chosen" })}`,
       },
-      { brief: `Draft the copy\n${hub("complete_task", { key: "copy", summary: "Copy drafted" })}` },
+      { brief: `Draft the copy\n${hub("complete_task", { delivered: true, key: "copy", summary: "Copy drafted" })}` },
     ];
     await run(send(thread.id, `Write the campaign\n${hub("plan_steps", { key: "plan", steps })}`));
     await run(control.open("Research keywords"));
@@ -452,6 +454,7 @@ describe("a Task's steps in fresh sessions", () => {
     const steps = [
       {
         brief: `Outline the channels\n${hub("complete_task", {
+          delivered: true,
           key: "outline",
           summary: outline,
           artifacts: [{ kind: "text", label: "Draft", value: draft }],
@@ -487,7 +490,7 @@ describe("a Task's steps in fresh sessions", () => {
     const briefs = [1, 2, 3, 4, 5].map((n) => `Write part ${n}`);
     const steps = [
       ...briefs.map((brief, index) => ({
-        brief: `${brief}\n${hub("complete_task", { key: brief, summary: result(index + 1) })}`,
+        brief: `${brief}\n${hub("complete_task", { delivered: true, key: brief, summary: result(index + 1) })}`,
       })),
       { brief: "Join the parts", after: [1, 2, 3, 4, 5] },
     ];
@@ -664,7 +667,7 @@ describe("a Task's steps in fresh sessions", () => {
     await run(send(thread.id, `First request\n${plan}`));
     await run(control.open("Draft"));
     await run(treeWhen(thread.id, (tree) => states(tree)[0] === "completed"));
-    await run(send(thread.id, hub("complete_task", { key: "done", summary: "First done" })));
+    await run(send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "First done" })));
     const again = await run(send(thread.id, `Second request\n${plan}`));
     expect(again.content).not.toContain("Refused");
     const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(thread.id)));
@@ -734,7 +737,7 @@ describe("a Task's steps in fresh sessions", () => {
   it("[TC-OR-051] a request whose hob asked you a question completes once the next turn is briefed with your answer", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
-    const steps = [{ brief: `Outline\n${hub("complete_task", { key: "o", summary: "Outlined" })}` }];
+    const steps = [{ brief: `Outline\n${hub("complete_task", { delivered: true, key: "o", summary: "Outlined" })}` }];
     await run(
       send(
         thread.id,
@@ -752,7 +755,7 @@ describe("a Task's steps in fresh sessions", () => {
     if (question === undefined) throw new Error("no question");
     await run(TaskRepository.use((tasks) => tasks.answerQuestion(question.id, { _tag: "User" }, "Friday", now)));
 
-    await run(send(thread.id, hub("complete_task", { key: "done", summary: "Launch on Friday" })));
+    await run(send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "Launch on Friday" })));
     expect(control.requests.at(-1)?.briefing).toContain("Which date? Answer: Friday");
     const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
     expect(finished.tasks[0]?.result?.summary).toBe("Launch on Friday");
@@ -766,10 +769,10 @@ describe("a Task's steps in fresh sessions", () => {
     const thread = await run(seed);
     const steps = [
       {
-        brief: `Draft\n${hub("complete_task", { key: "d", summary: "Drafted", artifacts: [{ kind: "text", label: "Doc", value: "The draft" }] })}`,
+        brief: `Draft\n${hub("complete_task", { delivered: true, key: "d", summary: "Drafted", artifacts: [{ kind: "text", label: "Doc", value: "The draft" }] })}`,
       },
-      { brief: `Review\n${hub("complete_task", { key: "r", summary: "Reviewed" })}`, after: [1] },
-      { brief: `Publish\n${hub("complete_task", { key: "p", summary: "Published" })}`, after: [2] },
+      { brief: `Review\n${hub("complete_task", { delivered: true, key: "r", summary: "Reviewed" })}`, after: [1] },
+      { brief: `Publish\n${hub("complete_task", { delivered: true, key: "p", summary: "Published" })}`, after: [2] },
     ];
     await run(send(thread.id, `Write the post\n${hub("plan_steps", { key: "plan", steps })}`));
     await run(control.open("Draft"));
@@ -785,7 +788,7 @@ describe("a Task's steps in fresh sessions", () => {
     const prompt = control.requests.find((request) => request.prompt.startsWith("Publish"))?.prompt ?? "";
     expect(prompt).toContain("Handed to this step:");
 
-    await run(send(thread.id, hub("complete_task", { key: "done", summary: "The post is out" })));
+    await run(send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "The post is out" })));
     const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
     expect(finished.tasks[0]?.result?.summary).toBe("The post is out");
   });
@@ -794,7 +797,7 @@ describe("a Task's steps in fresh sessions", () => {
   it("[TC-OR-054] a result that lands after the turn's briefing was read is not settled by that turn", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
-    const steps = [{ brief: `Outline\n${hub("complete_task", { key: "o", summary: "Outlined" })}` }];
+    const steps = [{ brief: `Outline\n${hub("complete_task", { delivered: true, key: "o", summary: "Outlined" })}` }];
     await run(send(thread.id, `Plan the launch\n${hub("plan_steps", { key: "plan", steps })}`));
     // The planning turn has ended its Attempt, so its own end-of-turn ledger read does not take the hook.
     const planned = await run(
@@ -818,7 +821,9 @@ describe("a Task's steps in fresh sessions", () => {
           }).pipe(Effect.asVoid, Effect.orDie),
         ),
     };
-    const refused = await run(send(thread.id, hub("complete_task", { key: "done", summary: "Launched" })));
+    const refused = await run(
+      send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "Launched" })),
+    );
     expect(control.requests.at(-1)?.briefing).toContain(", active: Outline.");
     expect(refused.content).toContain("Refused (items-open)");
     expect(refused.content).toContain("is in your backpack, not yet read");
@@ -826,7 +831,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(Option.getOrThrow(open).open.map((entry) => entry._tag)).toEqual(["Item"]);
 
     // The next turn is briefed with the result, so it carries it and completes.
-    await run(send(thread.id, hub("complete_task", { key: "again", summary: "Launched" })));
+    await run(send(thread.id, hub("complete_task", { delivered: true, key: "again", summary: "Launched" })));
     expect(control.requests.at(-1)?.briefing).toContain("Result: Outlined");
     const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
     expect(finished.tasks[0]?.result?.summary).toBe("Launched");
@@ -838,9 +843,9 @@ describe("a Task's steps in fresh sessions", () => {
     const thread = await run(seed);
     const steps = [
       {
-        brief: `Draft\n${hub("complete_task", { key: "d", summary: "Drafted", artifacts: [{ kind: "text", label: "Doc", value: "The draft" }] })}`,
+        brief: `Draft\n${hub("complete_task", { delivered: true, key: "d", summary: "Drafted", artifacts: [{ kind: "text", label: "Doc", value: "The draft" }] })}`,
       },
-      { brief: `Publish\n${hub("complete_task", { key: "p", summary: "Published" })}`, after: [1] },
+      { brief: `Publish\n${hub("complete_task", { delivered: true, key: "p", summary: "Published" })}`, after: [1] },
     ];
     await run(send(thread.id, `Write the post\n${hub("plan_steps", { key: "plan", steps })}`));
     const planned = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
@@ -876,7 +881,7 @@ describe("a Task's steps in fresh sessions", () => {
     await run(send(thread.id, hub("cancel_task", { key: "stop", task_id: survey.id })));
     await run(treeWhen(thread.id, (tree) => states(tree).join() === "cancelled,cancelled"));
 
-    await run(send(thread.id, hub("complete_task", { key: "done", summary: "Dropped the research" })));
+    await run(send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "Dropped the research" })));
     const briefing = control.requests.at(-1)?.briefing ?? "";
     expect(briefing).toContain(`1. Step ${survey.id}, cancelled: Survey.`);
     expect(briefing).toMatch(/\n {2}1\.1\. Step \S+, cancelled: Dig\./);

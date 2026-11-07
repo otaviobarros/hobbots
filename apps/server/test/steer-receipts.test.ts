@@ -283,7 +283,7 @@ describe("a steer receipt for a message you send the lead", () => {
     const { run, reactions } = hubbed;
     reactions.push({
       on: "Hob frodo sent you a message",
-      lines: [hub("complete_task", { key: "ship-done", summary: "Shipped with the new name" })],
+      lines: [hub("complete_task", { delivered: true, key: "ship-done", summary: "Shipped with the new name" })],
     });
     await run(
       send([

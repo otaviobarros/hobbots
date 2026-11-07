@@ -21,7 +21,10 @@ test("[TC-OR-402] the Quest room shows a step that stopped on a finding as block
     {
       brief: `Write the README and SPEC\n${script("report_checkpoint", { key: "found", kind: "finding", summary: FINDING })}`,
     },
-    { brief: `Write the notes\n${script("complete_task", { key: "notes", summary: "Notes written" })}`, after: [1] },
+    {
+      brief: `Write the notes\n${script("complete_task", { delivered: true, key: "notes", summary: "Notes written" })}`,
+      after: [1],
+    },
   ];
   await composer.fill(["Write the docs", script("plan_steps", { key: "plan", steps })].join("\n"));
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
