@@ -724,13 +724,13 @@ describe("the runtime's saved output (#1153)", () => {
     await fs.mkdir(other, { recursive: true });
     await fs.writeFile(path.join(saved, "b1.txt"), "whole output");
     await fs.writeFile(path.join(other, "b2.txt"), "another session");
-    return { hob, saved, other };
+    return { hob, saved, other, output: [{ root: hob, folder: saved }] };
   };
 
   it("lets a hob read its session's saved output and run commands there, in every preset", async () => {
-    const { saved } = await runtime();
+    const { saved, output } = await runtime();
     for (const preset of SafetyPreset.literals) {
-      const context = contextFor(home, preset, { runtimeOutputs: [saved] });
+      const context = contextFor(home, preset, { runtimeOutputs: output });
       const read = await decide(context, files("read-files", home.project, path.join(saved, "b1.txt")));
       expect(read).toMatchObject({ decision: "allow", operation: "read-files", grantable: false });
       const command = await decide(context, { _tag: "Command", operation: "run-commands", cwd: saved });
@@ -740,8 +740,8 @@ describe("the runtime's saved output (#1153)", () => {
   });
 
   it("never lets a hob change it", async () => {
-    const { saved } = await runtime();
-    const context = contextFor(home, "trusting", { runtimeOutputs: [saved] });
+    const { saved, output } = await runtime();
+    const context = contextFor(home, "trusting", { runtimeOutputs: output });
     for (const operation of ["edit-files", "delete-files"] as const) {
       const verdict = await decide(context, files(operation, home.project, path.join(saved, "b1.txt")));
       expect(verdict).toMatchObject({ decision: "deny", operation, reason: { code: "runtime-output" } });
@@ -749,8 +749,8 @@ describe("the runtime's saved output (#1153)", () => {
   });
 
   it("opens only that session's folder, never the rest of the runtime folder", async () => {
-    const { hob, saved, other } = await runtime();
-    const context = contextFor(home, "trusting", { runtimeOutputs: [saved] });
+    const { hob, saved, other, output } = await runtime();
+    const context = contextFor(home, "trusting", { runtimeOutputs: output });
     for (const target of [path.join(other, "b2.txt"), hob, path.join(saved, "..", "..", "s1.jsonl")]) {
       const verdict = await decide(context, files("read-files", home.project, target));
       expect(verdict).toMatchObject({ decision: "deny", reason: { code: "outside-folders" } });
@@ -763,16 +763,51 @@ describe("the runtime's saved output (#1153)", () => {
   });
 
   it("does not follow a link laid in it to another place", async () => {
-    const { saved } = await runtime();
+    const { saved, output } = await runtime();
     await fs.symlink(home.secret, path.join(saved, "planted.txt")).catch(() => undefined);
-    const context = contextFor(home, "trusting", { runtimeOutputs: [saved] });
+    const context = contextFor(home, "trusting", { runtimeOutputs: output });
     const verdict = await decide(context, files("read-files", home.project, path.join(saved, "planted.txt")));
     expect(verdict).toMatchObject({ decision: "deny", reason: { code: "outside-folders" } });
   });
 
+  it("names no folder when a link lies on the way from its root, so another session's never opens", async () => {
+    const hob = path.join(home.root, "runtimes", "linked");
+    const sessions = path.join(hob, "projects", "p");
+    const older = path.join(sessions, "s0", "tool-results");
+    await fs.mkdir(older, { recursive: true });
+    await fs.writeFile(path.join(older, "b0.txt"), "an older session");
+    // The session's output folder is a link to the older session's.
+    await fs.mkdir(path.join(sessions, "s1"), { recursive: true });
+    await fs.symlink(older, path.join(sessions, "s1", "tool-results"));
+    // The session folder itself is a link to the older session's.
+    await fs.symlink(path.join(sessions, "s0"), path.join(sessions, "s2"));
+    // The project folder is a link to another one holding the older session.
+    await fs.symlink(sessions, path.join(hob, "projects", "q"));
+    for (const folder of [
+      path.join(sessions, "s1", "tool-results"),
+      path.join(sessions, "s2", "tool-results"),
+      path.join(hob, "projects", "q", "s0", "tool-results"),
+    ]) {
+      const context = contextFor(home, "trusting", { runtimeOutputs: [{ root: hob, folder }] });
+      const verdict = await decide(context, files("read-files", home.project, path.join(folder, "b0.txt")));
+      expect(verdict).toMatchObject({ decision: "deny", reason: { code: "outside-folders" } });
+      const command = await decide(context, { _tag: "Command", operation: "run-commands", cwd: folder });
+      expect(command).toMatchObject({ decision: "deny", reason: { code: "outside-folders" } });
+    }
+    // A folder that is not below its root names nothing either.
+    for (const output of [
+      { root: older, folder: older },
+      { root: path.join(sessions, "s1"), folder: older },
+    ]) {
+      const context = contextFor(home, "trusting", { runtimeOutputs: [output] });
+      const verdict = await decide(context, files("read-files", home.project, path.join(older, "b0.txt")));
+      expect(verdict.reason.code).toBe("outside-folders");
+    }
+  });
+
   it("is no folder a push or a Charm starts from", async () => {
-    const { saved } = await runtime();
-    const context = contextFor(home, "trusting", { runtimeOutputs: [saved] });
+    const { saved, output } = await runtime();
+    const context = contextFor(home, "trusting", { runtimeOutputs: output });
     expect((await decide(context, githubRead(saved))).reason.code).toBe("outside-folders");
     const push = await decide(context, {
       _tag: "Push",
@@ -787,6 +822,6 @@ describe("the runtime's saved output (#1153)", () => {
 
   it("leaves the policy version as it is", () => {
     const base = contextFor(home, "balanced");
-    expect(policyVersion({ ...base, runtimeOutputs: ["/somewhere"] })).toBe(policyVersion(base));
+    expect(policyVersion({ ...base, runtimeOutputs: [{ root: "/r", folder: "/r/s" }] })).toBe(policyVersion(base));
   });
 });

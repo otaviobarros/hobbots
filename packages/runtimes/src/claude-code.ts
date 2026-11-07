@@ -48,7 +48,13 @@ import {
   stableJson,
   unreportedPlan,
 } from "@hobbots/domain";
-import { type PolicyContext, PolicyEngine, type PolicyVerdict, policyVersion } from "@hobbots/permissions";
+import {
+  type PolicyContext,
+  PolicyEngine,
+  type PolicyVerdict,
+  policyVersion,
+  type RuntimeOutput,
+} from "@hobbots/permissions";
 import { type Duration, Effect, Layer, Queue, Stream } from "effect";
 import {
   type CallDecision,
@@ -879,7 +885,7 @@ export const policyHooks = (
   // Each call as the hook saw it, so the permission callback decides the same call in the same folder.
   const seen = new Map<string, ToolCall>();
   // Where Claude Code saves this session's large outputs, which the hob may read (#1153).
-  let outputs: ReadonlyArray<string> = [];
+  let outputs: ReadonlyArray<RuntimeOutput> = [];
   const context = (): PolicyContext =>
     outputs.length === 0 ? turn.context : { ...turn.context, runtimeOutputs: outputs };
   // Answers whether the call may run: it is recorded first when the turn records calls (EX-004).
@@ -929,7 +935,7 @@ export const policyHooks = (
   const preToolUse: HookCallback = async (input): Promise<HookJSONOutput> => {
     if (input.hook_event_name !== "PreToolUse") return {};
     const saved = savedOutputFolder(turn.runtimeFolder, input);
-    if (saved !== undefined) outputs = [saved];
+    if (saved !== undefined) outputs = [{ root: turn.runtimeFolder, folder: saved }];
     const tool = input.tool_name;
     // The hub decides its own tools' calls (ADR 018); the turn allows them by name.
     if (hubToolOf(tool) !== null) return {};

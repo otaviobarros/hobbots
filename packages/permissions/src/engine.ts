@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import {
   AnyOperation,
   CharmId,
@@ -69,12 +69,22 @@ export interface PolicyContext {
    */
   readonly grants?: ReadonlyArray<Grant>;
   /**
-   * The folders where the runtime keeps this session's own saved output: a command's or tool's
-   * output too large to return inline, which the runtime tells the hob to read from there (Claude
-   * Code's `tool-results`). The hob may read them and run commands in them, never change them. They
-   * name the session, not the policy, so they are left out of the policy version.
+   * Where the runtime keeps this session's own saved output: a command's or tool's output too large
+   * to return inline, which the runtime tells the hob to read from there (Claude Code's
+   * `tool-results`). The hob may read files there and run commands in it, never change them with its
+   * file tools. They name the session, not the policy, so they are left out of the policy version.
    */
-  readonly runtimeOutputs?: ReadonlyArray<string>;
+  readonly runtimeOutputs?: ReadonlyArray<RuntimeOutput>;
+}
+
+/**
+ * A folder of the runtime's saved output, below a root the hob's commands cannot replace (its
+ * runtime folder). Everything between the two may be the hob's to write, so the folder counts only
+ * when no link lies on the way from the root to it: a link there could name another session's.
+ */
+export interface RuntimeOutput {
+  readonly root: string;
+  readonly folder: string;
 }
 
 export const FileOperation = Schema.Literals(["read-files", "edit-files", "delete-files"]);
@@ -784,12 +794,28 @@ export class PolicyEngine extends Context.Service<
               Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
             );
 
+      /**
+       * A saved-output folder's canonical path, or null when it is not below its root or a link lies
+       * on the way to it, so its canonical path is not its root's followed by the same names.
+       */
+      const output = Effect.fnUntraced(function* ({ root, folder: path }: RuntimeOutput) {
+        const below = relative(root, path);
+        if (!isAbsolute(root) || below === "" || below.startsWith("..") || isAbsolute(below)) return null;
+        const [base, resolved] = yield* Effect.all([folder(root), folder(path)]);
+        if (base.canonical === null || resolved.canonical === null) return null;
+        const expected = join(base.canonical.path, below);
+        const exact =
+          isInside(resolved.canonical, expected) &&
+          isInside({ ...resolved.canonical, path: expected }, resolved.canonical.path);
+        return exact ? resolved.canonical.path : null;
+      });
+
       const scopeOf = Effect.fnUntraced(function* (context: PolicyContext) {
         const shared = yield* Effect.forEach(context.sharedFolders, folder);
         const hidden = yield* Effect.forEach(context.hob.hiddenSharedFolders, folder);
         const own = yield* Effect.forEach(context.hob.ownFolders, folder);
         const data = yield* folder(context.dataFolder);
-        const outputs = yield* Effect.forEach(context.runtimeOutputs ?? [], folder);
+        const outputs = yield* Effect.forEach(context.runtimeOutputs ?? [], output);
         const same = (a: CanonicalPath, b: CanonicalPath | null) =>
           b !== null && isInside(a, b.path) && isInside(b, a.path);
         const visible = shared.filter(
@@ -802,7 +828,7 @@ export class PolicyEngine extends Context.Service<
         const scope = {
           folders,
           dataFolder: data.canonical?.path ?? context.dataFolder,
-          runtimeOutputs: outputs.flatMap((f) => (f.canonical === null ? [] : [f.canonical.path])),
+          runtimeOutputs: outputs.flatMap((path) => (path === null ? [] : [path])),
         } satisfies ResolvedScope;
         return { scope, canonicalFolders };
       });

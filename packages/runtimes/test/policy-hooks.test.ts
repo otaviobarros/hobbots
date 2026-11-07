@@ -185,7 +185,8 @@ describe("Claude Code tool calls under the policy hook", () => {
     }
   });
 
-  it("[#1153] lets a hob read the output Claude Code saved for its session, and nothing else in its runtime folder", async () => {
+  // covers PE-002, PE-005
+  it("[TC-PE-463] lets a hob read the output Claude Code saved for its session, and nothing else in its runtime folder", async () => {
     const turn = toolTurn(access(), "on");
     if (turn === null) throw new Error("expected a tool turn");
     const sessions = join(turn.runtimeFolder, "projects", "-project");
@@ -226,6 +227,11 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(await canUseTool("Read", { file_path: join(saved, "b1.txt") }, options)).toMatchObject({
       behavior: "allow",
     });
+    // A session folder a command made a link to an older session's opens nothing.
+    symlinkSync(join(sessions, "s0"), join(sessions, "s9"));
+    expect(
+      await decided("Read", { file_path: join(sessions, "s9", "tool-results", "b0.txt") }, join(sessions, "s9.jsonl")),
+    ).toBe("deny");
     // A session outside the hob's own configuration folder names no folder.
     const elsewhere = toolTurn(access(), "on");
     if (elsewhere === null) throw new Error("expected a tool turn");
