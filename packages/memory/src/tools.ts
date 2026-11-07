@@ -2,23 +2,22 @@ import { createHash } from "node:crypto";
 import { sep } from "node:path";
 import {
   announcer,
-  type CharmTurn,
   EventPublisher,
-  type HubCallStep,
+  type HubPlanContext,
+  HubRefusal,
   type HubTool,
   type HubToolAnswer,
-  hubAnswer,
+  hubAction,
   MemoryProjects,
   MemorySaves,
   MemoryShares,
   MemoryStore,
   MemoryTools,
-  offeredHubTools,
-  runWhenAllowed,
+  offerHubActions,
+  type Redactor,
   type ToolAccess,
 } from "@hobbots/agents";
 import {
-  isMemoryToolName,
   MEMORY_SAVE_DESCRIPTION,
   MEMORY_SAVE_LABEL,
   MEMORY_SAVE_TOOL,
@@ -36,14 +35,13 @@ import {
   MemorySaveInput,
   type MemoryScope,
   MemorySearchInput,
-  type MemoryToolName,
   memoryKeptText,
   memorySavedText,
   memoryToolJsonSchema,
   stableJson,
 } from "@hobbots/domain";
-import { decideHubCall, PolicyEngine } from "@hobbots/permissions";
-import { Data, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
+import { DateTime, Effect, Layer, Option } from "effect";
 
 /**
  * The memory tools (ADR 028), served on the hub beside the Task tools on every runtime that serves hub
@@ -53,29 +51,30 @@ import { Data, DateTime, Effect, Layer, Option, Schema } from "effect";
  * deny, never reaches `MemoryStore`. A save to the hob's own memory is recorded and journaled before
  * it is sent, so a retried key returns the first answer and a save made while memory is down is kept
  * for the capture worker to send. A share is handed to `MemoryShares`, which follows the preset.
+ * Both tools run through the hub action pipeline (ADR 031), which decides, asks and records each call
+ * before it is sent.
  */
 
-class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> {}
-
-const OPERATIONS: Record<MemoryToolName, MemoryOperation> = {
-  [MEMORY_SEARCH_TOOL]: "search-memory",
-  [MEMORY_SAVE_TOOL]: "save-memory",
+const SEARCH_TOOL: HubTool = {
+  name: MEMORY_SEARCH_TOOL,
+  description: MEMORY_SEARCH_DESCRIPTION,
+  label: MEMORY_SEARCH_LABEL,
+  inputSchema: memoryToolJsonSchema(MEMORY_SEARCH_TOOL),
 };
 
-const TOOLS: ReadonlyArray<HubTool> = [
-  {
-    name: MEMORY_SEARCH_TOOL,
-    description: MEMORY_SEARCH_DESCRIPTION,
-    label: MEMORY_SEARCH_LABEL,
-    inputSchema: memoryToolJsonSchema(MEMORY_SEARCH_TOOL),
-  },
-  {
-    name: MEMORY_SAVE_TOOL,
-    description: MEMORY_SAVE_DESCRIPTION,
-    label: MEMORY_SAVE_LABEL,
-    inputSchema: memoryToolJsonSchema(MEMORY_SAVE_TOOL),
-  },
-];
+const SAVE_TOOL: HubTool = {
+  name: MEMORY_SAVE_TOOL,
+  description: MEMORY_SAVE_DESCRIPTION,
+  label: MEMORY_SAVE_LABEL,
+  inputSchema: memoryToolJsonSchema(MEMORY_SAVE_TOOL),
+};
+
+/** The `Memory` request a call is decided as, under the hob's Memory group. */
+const memoryRequest = (operation: MemoryOperation, scope: MemoryScope): PolicyRequest => ({
+  _tag: "Memory",
+  operation,
+  scope: memoryScopeWords(scope),
+});
 
 /** The memory a scope names, in words for the hob and the approval card. */
 export const memoryScopeWords = (scope: MemoryScope): string => {
@@ -138,12 +137,15 @@ const identityOf = (input: MemorySaveInput) => {
 };
 
 /** The page a save writes, redacted before it is recorded, as everything the journal holds is. */
-const draftOf = (turn: CharmTurn, input: MemorySaveInput): MemoryDraft => ({
+const draftOf = (redactor: Redactor, input: MemorySaveInput): MemoryDraft => ({
   path: input.path,
-  markdown: turn.redactor.text(input.markdown),
-  tags: (input.tags ?? []).map((tag) => turn.redactor.text(tag)),
+  markdown: redactor.text(input.markdown),
+  tags: (input.tags ?? []).map((tag) => redactor.text(tag)),
   pinned: false,
 });
+
+/** The turn a call is planned for: its ids, as the pipeline gives them. */
+type PlannedTurn = HubPlanContext["turn"];
 
 /** The folder of the hob's that holds `folder`, when one does. */
 const holderOf = (folders: ReadonlyArray<string>, folder: string) =>
@@ -167,62 +169,25 @@ export const MemoryToolsLive = Layer.effect(
     const projectsOf = (folders: ReadonlyArray<string>) =>
       Effect.forEach(folders, (folder) => Effect.map(projects.of(folder), (identity) => ({ folder, identity })));
 
-    const actorOf = (turn: CharmTurn, of: ReadonlyArray<{ readonly identity: MemoryProjectIdentity }>) =>
+    const actorOf = (turn: PlannedTurn, of: ReadonlyArray<{ readonly identity: MemoryProjectIdentity }>) =>
       ({
         _tag: "Hob",
         agentId: turn.agentId,
         projects: [...new Set(of.map((project) => project.identity))],
       }) satisfies MemoryActor;
 
-    /** Runs `run` once the policy, or you, let the call run; refuses it before anything else otherwise. */
-    const decided = <A>(
-      turn: CharmTurn,
-      access: ToolAccess,
-      name: MemoryToolName,
-      scope: MemoryScope,
-      args: Readonly<Record<string, unknown>>,
-      step: HubCallStep | undefined,
-      run: Effect.Effect<HubToolAnswer, Refused, A>,
-    ) =>
-      runWhenAllowed({
-        call: {
-          id: step?.id ?? name,
-          tool: name,
-          arguments: args,
-          label: name === MEMORY_SEARCH_TOOL ? MEMORY_SEARCH_LABEL : MEMORY_SAVE_LABEL,
-        },
-        step,
-        approvals: turn.approvals,
-        // Under the hob's Memory group, with its live grants, as every hub tool's call is.
-        decide: decideHubCall(engine, turn.approvals, access, {
-          _tag: "Memory",
-          operation: OPERATIONS[name],
-          scope: memoryScopeWords(scope),
-        }),
-        refuse: (message) => new Refused({ message }),
-        run,
-      });
-
-    const search = (turn: CharmTurn, access: ToolAccess, input: MemorySearchInput, step: HubCallStep | undefined) =>
+    /** Searches the scopes the hub worked out: the hob's own, its folders' projects and everyone's. */
+    const search = (turn: PlannedTurn, access: ToolAccess, input: MemorySearchInput) =>
       Effect.gen(function* () {
-        const own: MemoryScope = { _tag: "Hob", agentId: turn.agentId };
-        const run = Effect.gen(function* () {
-          const actor = actorOf(turn, yield* projectsOf(access.folders));
-          // Only the scopes the hub worked out: the hob's own, its folders' projects and everyone's.
-          const scopes: ReadonlyArray<MemoryScope> = [
-            own,
-            ...actor.projects.map((identity) => ({ _tag: "Project", identity }) as const),
-            { _tag: "Everyone" },
-          ];
-          const hits = yield* store.search(actor, scopes, input.query, input.limit ?? MEMORY_SEARCH_LIMIT.default);
-          return { text: searchText(input.query, hits), refused: false };
-        }).pipe(
-          Effect.catchTag("MemoryUnavailable", () =>
-            Effect.succeed<HubToolAnswer>({ text: MEMORY_UNAVAILABLE_TEXT, refused: false }),
-          ),
-        );
-        return yield* decided(turn, access, MEMORY_SEARCH_TOOL, own, { ...input }, step, run);
-      });
+        const actor = actorOf(turn, yield* projectsOf(access.folders));
+        const scopes: ReadonlyArray<MemoryScope> = [
+          { _tag: "Hob", agentId: turn.agentId },
+          ...actor.projects.map((identity) => ({ _tag: "Project", identity }) as const),
+          { _tag: "Everyone" },
+        ];
+        const hits = yield* store.search(actor, scopes, input.query, input.limit ?? MEMORY_SEARCH_LIMIT.default);
+        return searchText(input.query, hits);
+      }).pipe(Effect.catchTag("MemoryUnavailable", () => Effect.succeed(MEMORY_UNAVAILABLE_TEXT)));
 
     /** Writes a recorded save to the hob's own memory, and settles it with what memory answered. */
     const send = (actor: MemoryActor, save: MemorySave, draft: MemoryDraft, shownKey: string) =>
@@ -245,14 +210,14 @@ export const MemoryToolsLive = Layer.effect(
       });
 
     /** A save to the hob's own memory: recorded, journaled, then sent, once per key. */
-    const saveOwn = (turn: CharmTurn, access: ToolAccess, input: MemorySaveInput) =>
+    const saveOwn = (redactor: Redactor, turn: PlannedTurn, access: ToolAccess, input: MemorySaveInput) =>
       Effect.gen(function* () {
         const identity = identityOf(input);
         // The key as the hob is told it, should it be refused: redacted, as every answer is.
-        const shownKey = turn.redactor.text(input.key);
+        const shownKey = redactor.text(input.key);
         const actor = actorOf(turn, yield* projectsOf(access.folders));
         const at = DateTime.formatIso(yield* DateTime.now);
-        const draft = draftOf(turn, input);
+        const draft = draftOf(redactor, input);
         const save = new MemorySave({
           id: crypto.randomUUID(),
           agentId: turn.agentId,
@@ -283,13 +248,13 @@ export const MemoryToolsLive = Layer.effect(
         if (folder !== undefined) {
           const holder = holderOf(access.folders, folder);
           if (holder === undefined) {
-            return yield* new Refused({ message: `${folder} is not one of your folders, so nothing was shared.` });
+            return yield* new HubRefusal({ message: `${folder} is not one of your folders, so nothing was shared.` });
           }
           return yield* projects.of(holder);
         }
         const identities = [...new Set((yield* projectsOf(access.folders)).map((project) => project.identity))];
         if (identities.length === 1) return identities[0] as MemoryProjectIdentity;
-        return yield* new Refused({
+        return yield* new HubRefusal({
           message:
             identities.length === 0
               ? "You have no folders this turn, so there is no project to share with."
@@ -304,19 +269,20 @@ export const MemoryToolsLive = Layer.effect(
         : Effect.succeed({ _tag: "Everyone" } as const);
 
     const share = (
-      turn: CharmTurn,
+      redactor: Redactor,
+      turn: PlannedTurn,
       access: ToolAccess,
       input: MemorySaveInput,
       scope: Exclude<MemoryScope, { readonly _tag: "Hob" }>,
     ) =>
       Effect.gen(function* () {
-        if (Option.isNone(shares)) return yield* new Refused({ message: NO_SHARES });
+        if (Option.isNone(shares)) return yield* new HubRefusal({ message: NO_SHARES });
         const actor = actorOf(turn, yield* projectsOf(access.folders));
         const identity = identityOf(input);
         return yield* shares.value.share({
           actor,
           scope,
-          draft: draftOf(turn, input),
+          draft: draftOf(redactor, input),
           key: identity.key,
           input: identity.input,
           preset: access.policy.preset,
@@ -324,54 +290,72 @@ export const MemoryToolsLive = Layer.effect(
         });
       });
 
-    const save = (turn: CharmTurn, access: ToolAccess, input: MemorySaveInput, step: HubCallStep | undefined) =>
-      Effect.gen(function* () {
-        const { key: _key, markdown: _markdown, ...shown } = input;
-        // The card shows where the page goes and how long it is; its words are on the step once it runs.
-        const args = { ...shown, characters: input.markdown.length };
-        if (input.scope === "mine") {
-          const own: MemoryScope = { _tag: "Hob", agentId: turn.agentId };
-          return yield* decided(turn, access, MEMORY_SAVE_TOOL, own, args, step, saveOwn(turn, access, input));
-        }
-        const scope = yield* shareScope(access, input);
-        return yield* decided(turn, access, MEMORY_SAVE_TOOL, scope, args, step, share(turn, access, input, scope));
-      });
-
-    const call = (turn: CharmTurn, name: string, raw: unknown, step: HubCallStep | undefined) =>
-      hubAnswer(
-        turn.redactor,
+    /** A save, planned: where it goes, decided under that scope, and the save or share as `send`. */
+    const planSave =
+      (redactor: Redactor) =>
+      (input: MemorySaveInput, { turn, access }: HubPlanContext) =>
         Effect.gen(function* () {
-          if (!isMemoryToolName(name)) return yield* new Refused({ message: `Hobbots has no tool named ${name}.` });
-          const access = yield* turn.currentAccess;
-          if (access === null)
-            return yield* new Refused({ message: "You have no tools this turn, so memory is closed." });
-          if (name === MEMORY_SEARCH_TOOL) {
-            const input = yield* Schema.decodeUnknownEffect(MemorySearchInput)(raw).pipe(
-              Effect.mapError(() => new Refused({ message: "Give the words to search for as `query`." })),
-            );
-            return yield* search(turn, access, input, step);
+          const { key: _key, markdown: _markdown, ...shown } = input;
+          // The card shows where the page goes and how long it is; its words are on the step once it runs.
+          const card = { arguments: { ...shown, characters: input.markdown.length } };
+          if (input.scope === "mine") {
+            return {
+              request: memoryRequest("save-memory", { _tag: "Hob", agentId: turn.agentId }),
+              card,
+              send: saveOwn(redactor, turn, access, input),
+            };
           }
-          const input = yield* Schema.decodeUnknownEffect(MemorySaveInput)(raw).pipe(
-            Effect.mapError(
-              (error) =>
-                new Refused({
-                  message: `Hobbots could not read this save: ${error.message.split("\n").slice(0, 4).join(" ")}`,
-                }),
-            ),
-          );
-          return yield* save(turn, access, input, step);
-        }),
-      ).pipe(Effect.provideContext(context));
+          const scope = yield* shareScope(access, input);
+          return {
+            request: memoryRequest("save-memory", scope),
+            card,
+            send: share(redactor, turn, access, input, scope),
+          };
+        });
+
+    /** The two tools as hub actions, for a turn whose redactor redacts what a save records. */
+    const actions = (redactor: Redactor) => [
+      hubAction({
+        tool: SEARCH_TOOL,
+        input: MemorySearchInput,
+        effect: "read",
+        operation: "search-memory",
+        otherwise: "memory is closed",
+        unreadable: () => "Give the words to search for as `query`.",
+        plan: (input, { turn, access }) =>
+          Effect.succeed({
+            request: memoryRequest("search-memory", { _tag: "Hob", agentId: turn.agentId }),
+            card: { arguments: { ...input } },
+            send: search(turn, access, input),
+          }),
+      }),
+      hubAction({
+        tool: SAVE_TOOL,
+        input: MemorySaveInput,
+        effect: "write",
+        operation: "save-memory",
+        otherwise: "memory is closed",
+        unreadable: (error) => `Hobbots could not read this save: ${error.message.split("\n").slice(0, 4).join(" ")}`,
+        plan: planSave(redactor),
+      }),
+    ];
 
     return MemoryTools.of({
       // Offered only where its Memory group opens it; a tool it answers Never for is not offered at all.
       forTurn: (turn) =>
-        Effect.map(turn.currentAccess, (access) =>
-          offeredHubTools(
-            access,
-            TOOLS,
-            (tool) => OPERATIONS[tool as MemoryToolName],
-            (name, input, step) => call(turn, name, input, step),
+        offerHubActions({
+          owner: { _tag: "BuiltIn" },
+          actions: actions(turn.redactor),
+          // Under the hob's Memory group, with its live grants, as every hub tool's call is.
+          decide: (approvals, base, request: PolicyRequest) => decideHubCall(engine, approvals, base, request),
+        })(turn).pipe(
+          Effect.map((tools) =>
+            tools === null
+              ? null
+              : {
+                  ...tools,
+                  call: (name, input, step) => tools.call(name, input, step).pipe(Effect.provideContext(context)),
+                },
           ),
         ),
     });

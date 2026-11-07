@@ -24,6 +24,7 @@ import {
   SkillWriter,
   type ToolAccess,
   TurnSkillsInUse,
+  UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import type { SkillProposalView } from "@hobbots/api";
 import {
@@ -269,6 +270,36 @@ const call = (name: string, input: unknown, access: ToolAccess = accessFor("bala
         name,
         input,
         hubCallStep("step-1", () => undefined),
+      );
+    }),
+  );
+
+/**
+ * Ada calls a skill tool under Trusting with a step whose record answers `records`, as the turn's
+ * `recordToolStart` would (ADR 031). Each record lands in `seen` with how many assignments the
+ * library held then.
+ */
+const callRecorded = (name: string, input: unknown, records: boolean, seen: Array<string>) =>
+  runtime.runPromise(
+    Effect.gen(function* () {
+      const skills = yield* SkillLibrary;
+      const tools = yield* (yield* SkillTools).forTurn(turnFor(accessFor("trusting")));
+      if (tools === null) throw new Error("No skill tools");
+      return yield* tools.call(
+        name,
+        input,
+        hubCallStep(
+          "step-1",
+          () => undefined,
+          (event) =>
+            skills.assignments().pipe(
+              Effect.orDie,
+              Effect.map((assignments) => {
+                seen.push(`recorded ${event.tool} with ${assignments.length} assignments`);
+                return records;
+              }),
+            ),
+        ),
       );
     }),
   );
@@ -687,11 +718,12 @@ describe("hobs proposing skills", () => {
           { _tag: "You" },
           "pending",
         );
-        return yield* tools?.call(SKILL_FEEDBACK_TOOL, {
-          name: "release-steps",
-          kind: "unclear",
-          note: "Step 2 is unclear.",
-        }) ?? Effect.die("No tools");
+        // Every call shows as a step, which records it before it runs (ADR 031).
+        return yield* tools?.call(
+          SKILL_FEEDBACK_TOOL,
+          { name: "release-steps", kind: "unclear", note: "Step 2 is unclear." },
+          hubCallStep("step-1", () => undefined),
+        ) ?? Effect.die("No tools");
       }),
     );
     expect(noted.refused).toBe(false);
@@ -842,6 +874,43 @@ describe("hobs proposing skills", () => {
       ]),
     );
     expect(pins).toEqual({ Hob: r1, Everyone: r1, Project: r2 });
+  });
+
+  // covers EX-004, ADR 029 (Proactive hobs), ADR 031
+  it("[TC-PE-493] records each call's step before the library changes, and changes nothing when it cannot", async () => {
+    await importSkill("release-steps");
+    const calls = [
+      [SKILL_SEARCH_TOOL, { query: "release" }],
+      [SKILL_REQUEST_TOOL, { name: "release-steps", why: "To release." }],
+      [SKILL_FEEDBACK_TOOL, { name: "release-steps", kind: "unclear", note: "Step 2 is unclear." }],
+      [
+        SKILL_PROPOSE_TOOL,
+        { key: "deploy", name: "deploy-steps", instructions: skillMd("deploy-steps"), why: "I deploy every week." },
+      ],
+    ] as const;
+    const unrecorded: Array<string> = [];
+    for (const [name, input] of calls) {
+      expect(await callRecorded(name, input, false, unrecorded)).toEqual({ text: UNRECORDED_TOOL_CALL, refused: true });
+    }
+    expect(unrecorded).toEqual(calls.map(([name]) => `recorded ${name} with 0 assignments`));
+    // Nothing was assigned, noted or proposed.
+    const [skill] = await library();
+    expect(await runtime.runPromise(SkillLibrary.use((skills) => skills.assignments()))).toEqual([]);
+    expect((await request("GET", `/api/skills/${skill?.id}/feedback`)).body.feedback).toEqual([]);
+    expect(await proposals()).toEqual([]);
+
+    // Recorded, each runs once its step is: the request is recorded before it assigns the skill.
+    const recorded: Array<string> = [];
+    for (const [name, input] of calls) {
+      expect(await callRecorded(name, input, true, recorded)).toMatchObject({ refused: false });
+    }
+    expect(recorded).toEqual([
+      `recorded ${SKILL_SEARCH_TOOL} with 0 assignments`,
+      `recorded ${SKILL_REQUEST_TOOL} with 0 assignments`,
+      `recorded ${SKILL_FEEDBACK_TOOL} with 1 assignments`,
+      `recorded ${SKILL_PROPOSE_TOOL} with 1 assignments`,
+    ]);
+    expect(await proposals()).toHaveLength(1);
   });
 
   // covers ADR 029 (Proactive hobs), #1063
