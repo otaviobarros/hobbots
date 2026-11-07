@@ -119,6 +119,13 @@ export class UndeclaredOperation extends Schema.TaggedError<UndeclaredOperation>
   { httpApiStatus: 400 },
 ) {}
 
+/** A Charm granted to a hob that the hub does not hold (ADR 031). */
+export class UnknownCharm extends Schema.TaggedError<UnknownCharm>()(
+  "UnknownCharm",
+  { charms: Schema.Array(Schema.String), message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
+
 export class ApprovalNotFound extends Schema.TaggedError<ApprovalNotFound>()(
   "ApprovalNotFound",
   { approvalId: ApprovalId },

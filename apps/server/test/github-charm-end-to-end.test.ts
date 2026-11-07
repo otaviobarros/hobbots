@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer, NodeServices } from "@effect/platform-node";
 import {
+  Charms as AgentCharms,
   ApprovalService,
   CharmCallService,
   CharmDeclarations,
@@ -20,7 +21,7 @@ import {
   GITHUB_CHARM,
   GitHubAccountLive,
   GitHubApiNode,
-  GitHubCharmTools,
+  GitHubCharm,
   GitHubSignInNode,
   GitPushLive,
   GitRemotes,
@@ -169,7 +170,7 @@ beforeAll(async () => {
       Layer.mergeAll(KeychainMemory, GitHubSignInNode(github.hosts), LocalGitHubSignInsNone, GitHubAccountRepository),
     ),
   );
-  const Charms = GitHubCharmTools.pipe(
+  const Charms = AgentCharms.layer([GitHubCharm]).pipe(
     Layer.provide(
       Layer.mergeAll(
         GitHubApiNode(github.hosts.api),

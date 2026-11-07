@@ -5,6 +5,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
   CharmDeclarations,
+  Charms,
   ChatService,
   GrantService,
   HobAdmission,
@@ -14,6 +15,7 @@ import {
   PermissionSummary,
   RuntimeAdapter,
 } from "@hobbots/agents";
+import { fakeCharm, memoryCharmCalls } from "@hobbots/agents/testing";
 import { GITHUB_CHARM } from "@hobbots/charms";
 import { type Agent, type Message, PRESET_DECISIONS, roleFields } from "@hobbots/domain";
 import {
@@ -78,8 +80,16 @@ let replyGate: Promise<void>;
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
+// The Charms the hub declares to the policy: the GitHub Charm's declaration alone, unless a test
+// registers its own Charms.
+const GITHUB_DECLARED = Layer.succeed(CharmDeclarations, [GITHUB_CHARM]);
+
 // Starts the hub; `legacyFolders` are shared folders stored as an earlier version saved them, as typed.
-const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailable" = "on") => {
+const start = (
+  legacyFolders?: ReadonlyArray<string>,
+  sandbox: "on" | "unavailable" = "on",
+  charms: typeof GITHUB_DECLARED | Layer.Layer<Charms> = GITHUB_DECLARED,
+) => {
   replyGate = Promise.resolve();
   const fake = makeFakeRuntime({ sandbox });
   const runtime = Layer.succeed(RuntimeAdapter, {
@@ -128,7 +138,7 @@ const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailab
           ),
           EventBus.layer,
           HobAdmission.layer,
-          Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
+          charms,
           NodeFolderChecks,
           runtime,
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
@@ -184,7 +194,8 @@ describe("a hob's folders", () => {
         configVersion: 1,
         preset: "balanced",
         sharedFolders: [shared, notes],
-        policy: { ownFolders: [], hiddenSharedFolders: [], overrides: {} },
+        // A new hob holds the GitHub Charm, which its policy names by id (ADR 031).
+        policy: { ownFolders: [], hiddenSharedFolders: [], overrides: {}, charms: { granted: ["github"] } },
         folders: [shared, notes],
         // The built-in answers, then each one the GitHub Charm declares, by its id (ADR 031).
         decisions: BALANCED_WITH_GITHUB,
@@ -235,27 +246,89 @@ describe("a hob's folders", () => {
     expect((await request("PATCH", permissions(agent), { signCommits: true })).body.configVersion).toBe(3);
     const off = await request("PATCH", permissions(agent), { signCommits: false });
     expect(off.body.configVersion).toBe(4);
-    expect(off.body.policy).toEqual({ ownFolders: [], hiddenSharedFolders: [notes], overrides: {} });
+    expect(off.body.policy).toEqual({
+      ownFolders: [],
+      hiddenSharedFolders: [notes],
+      overrides: {},
+      charms: { granted: ["github"] },
+    });
   });
 
   // covers AG-004, PE-002
   it("[TC-PE-146] grants the GitHub Charm to every hob, and takes it away and back as new versions", async () => {
     const agent = await newHob();
-    // A new hob has the Charm: the policy leaves it out.
+    // A new hob has the Charm: its policy names it among its Charms (ADR 031).
     expect((await request("GET", permissions(agent))).body.policy).toEqual({
       ownFolders: [],
       hiddenSharedFolders: [],
       overrides: {},
+      charms: { granted: ["github"] },
     });
+    // A client that switches it as before ADR 031 takes the Charm out of the set.
     const off = await request("PATCH", permissions(agent), { githubCharm: false });
-    expect(off).toMatchObject({ status: 200, body: { configVersion: 2, policy: { githubCharm: false } } });
+    expect(off).toMatchObject({ status: 200, body: { configVersion: 2, policy: { charms: { granted: [] } } } });
     // Other policy changes keep it off, and the same answer again adds no version.
     const hidden = await request("PATCH", permissions(agent), { hiddenSharedFolders: [notes] });
-    expect(hidden.body).toMatchObject({ configVersion: 3, policy: { githubCharm: false } });
+    expect(hidden.body).toMatchObject({ configVersion: 3, policy: { charms: { granted: [] } } });
     expect((await request("PATCH", permissions(agent), { githubCharm: false })).body.configVersion).toBe(3);
+    expect((await request("PATCH", permissions(agent), { charms: { granted: [] } })).body.configVersion).toBe(3);
     const on = await request("PATCH", permissions(agent), { githubCharm: true });
     expect(on.body.configVersion).toBe(4);
-    expect(on.body.policy).toEqual({ ownFolders: [], hiddenSharedFolders: [notes], overrides: {} });
+    expect(on.body.policy).toEqual({
+      ownFolders: [],
+      hiddenSharedFolders: [notes],
+      overrides: {},
+      charms: { granted: ["github"] },
+    });
+  });
+
+  // covers AG-004, PE-002, ADR 031
+  it("[TC-PE-507] grants a hob the Charms it is given by id, and refuses a Charm the hub does not hold", async () => {
+    const agent = await newHob();
+    const off = await request("PATCH", permissions(agent), { charms: { granted: [] } });
+    expect(off).toMatchObject({ status: 200, body: { configVersion: 2, policy: { charms: { granted: [] } } } });
+    // Granting keeps the Charm overrides, and a repeated id is held once.
+    const narrowed = await request("PATCH", permissions(agent), {
+      charms: { overrides: { "github.comment": "deny" } },
+    });
+    expect(narrowed.body.policy.charms).toEqual({ granted: [], overrides: { "github.comment": "deny" } });
+    const on = await request("PATCH", permissions(agent), { charms: { granted: ["github", "github"] } });
+    expect(on.body).toMatchObject({ configVersion: 4 });
+    expect(on.body.policy.charms).toEqual({ granted: ["github"], overrides: { "github.comment": "deny" } });
+    // A Charm the hub does not hold is never stored.
+    const unknown = await request("PATCH", permissions(agent), { charms: { granted: ["github", "pip"] } });
+    expect(unknown).toMatchObject({ status: 400, body: { _tag: "UnknownCharm", charms: ["pip"] } });
+    expect((await request("GET", permissions(agent))).body).toMatchObject({
+      configVersion: 4,
+      policy: { charms: { granted: ["github"] } },
+    });
+  });
+
+  // covers AG-004, PE-002, ADR 031
+  it("[TC-PE-511] lets a hob be granted a Charm that is only registered, and rules on the operations it declares", async () => {
+    await dispose();
+    // Rook is registered with the Charm registry and declared nowhere else.
+    start(
+      undefined,
+      "on",
+      Charms.layer([fakeCharm({ id: "rook", name: "Rook" })]).pipe(Layer.provide(memoryCharmCalls())),
+    );
+    const agent = await newHob();
+    const granted = await request("PATCH", permissions(agent), { charms: { granted: ["rook"] } });
+    expect(granted).toMatchObject({ status: 200, body: { policy: { charms: { granted: ["rook"] } } } });
+    // Its operations are the policy's: each has its preset's answer, and an override that narrows one is kept.
+    const narrowed = await request("PATCH", permissions(agent), { charms: { overrides: { "rook.write": "ask" } } });
+    expect(narrowed).toMatchObject({
+      status: 200,
+      body: { policy: { charms: { overrides: { "rook.write": "ask" } } } },
+    });
+    expect((await request("GET", permissions(agent))).body.decisions).toMatchObject({
+      "rook.read": "allow",
+      "rook.write": "ask",
+    });
+    // A Charm the registry does not hold is refused, the GitHub Charm included.
+    const github = await request("PATCH", permissions(agent), { charms: { granted: ["rook", "github"] } });
+    expect(github).toMatchObject({ status: 400, body: { _tag: "UnknownCharm", charms: ["github"] } });
   });
 
   // covers AG-004

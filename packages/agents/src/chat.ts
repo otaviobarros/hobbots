@@ -45,7 +45,7 @@ import { Context, DateTime, Deferred, Effect, Fiber, FiberMap, Layer, Option, Re
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing } from "./briefing.ts";
-import { type CharmTurn, charmOffer, combineHubTools } from "./charms.ts";
+import { type CharmTurn, hubToolOffer, joinHubTools } from "./charms.ts";
 import { stoppableWait } from "./command-wait.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
@@ -343,7 +343,7 @@ export class ChatService extends Context.Service<
       // Without Task work, turns offer no Task tools and hobs run no steps.
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
       // Without Charms or local Git tools, turns offer only the Task tools.
-      const charmsFor = yield* charmOffer;
+      const charmsFor = yield* hubToolOffer;
       // Without memory, turns are told nothing from it (ADR 028).
       const memoryStore = yield* Effect.serviceOption(MemoryStore);
       // Without project identities, each folder is the project of its name.
@@ -896,7 +896,10 @@ export class ChatService extends Context.Service<
                   };
                   // A Charm call's refusal is recorded as a Task tool's is, when the turn has Task tools.
                   const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);
-                  return combineHubTools(taskTurn?.hubTools ?? null, recorded(yield* charmsFor(charmTurn)));
+                  return joinHubTools([
+                    { owner: "the Task tools", tools: taskTurn?.hubTools ?? null },
+                    { owner: "the hub's other tools", tools: recorded(yield* charmsFor(charmTurn)) },
+                  ]);
                 }).pipe(Effect.provideService(TurnSkillsInUse, skills.recorded)),
               },
               // Stop waiting ends the runtime's stream inside the activity's, so the Workbench hears which

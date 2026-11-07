@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import {
   ApprovalService,
-  type CharmTools,
+  type Charms as CharmRegistry,
   ChatService,
   HobAdmission,
   HobbotsRepository,
@@ -218,7 +218,7 @@ const party = Effect.gen(function* () {
 type Database = Layer.Layer<Layer.Success<typeof TestDatabase>>;
 
 /** Charms a test offers its hobs, beside the local Git tools; none by default. */
-type Charms = Layer.Layer<CharmTools> | typeof Layer.empty;
+type Charms = Layer.Layer<CharmRegistry> | typeof Layer.empty;
 
 const makeHub = (database: Database, script: Script, charms: Charms) =>
   Layer.mergeAll(WakeOnArrival, HobLifecycle.layer, TaskControls.layer).pipe(

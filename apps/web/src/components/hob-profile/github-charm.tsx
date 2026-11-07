@@ -1,5 +1,5 @@
 import type { GitHubStatus, HobGitHubAppStatus, HobPermissions } from "@hobbots/api";
-import type { Agent } from "@hobbots/domain";
+import { type Agent, holdsCharm } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Skeleton, WaitNote } from "@hobbots/ui/components/skeleton";
 import { Switch } from "@hobbots/ui/components/switch";
@@ -11,6 +11,7 @@ import { useId } from "react";
 import { githubStatusQuery } from "../../api/github.ts";
 import { hobGitHubAppQuery } from "../../api/hob-github-app.ts";
 import { useUpdatePermissions } from "../../api/queries.ts";
+import { sendingCharm, switchCharm } from "../../api/safety.ts";
 import { messages } from "../messages.ts";
 import { GitHubRules } from "./github-rules.tsx";
 import { HobGitHubApp } from "./hob-github-app.tsx";
@@ -52,7 +53,7 @@ export function GitHubCharm({
   const update = useUpdatePermissions(hob.id);
   const switchId = useId();
   const sending = update.isPending ? update.variables : undefined;
-  const charm = useCharmStatus(hob, permissions, sending?.githubCharm);
+  const charm = useCharmStatus(hob, permissions, sendingCharm(sending, "github"));
   const { granted, waiting } = charm;
   const wait = useWaitStage(waiting);
 
@@ -78,7 +79,7 @@ export function GitHubCharm({
             aria-label={copy.grant({ name: hob.name })}
             checked={granted}
             disabled={update.isPending}
-            onCheckedChange={(on) => update.mutate({ githubCharm: on })}
+            onCheckedChange={(on) => update.mutate(switchCharm(permissions, "github", on))}
           />
         )}
       </div>
@@ -142,7 +143,7 @@ const useCharmStatus = (hob: Agent, permissions: HobPermissions | undefined, sen
   const ownApp = ownAppStatus.data;
   const waiting = permissions === undefined || github.isPending || ownAppStatus.isPending;
   // Until the hub answers, the card is drawn as the Charm starts: on, unless turned off.
-  const granted = sending ?? permissions?.policy.githubCharm !== false;
+  const granted = sending ?? (permissions === undefined || holdsCharm(permissions.policy, "github"));
   const bot = ownApp?._tag === "Connected" ? ownApp.bot : null;
   const connected = bot !== null || accountReady(github.data);
   const reads = bot === null ? copy.reads({ name: hob.name }) : copy.readsAsBot({ name: hob.name, bot });

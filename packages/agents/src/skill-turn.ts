@@ -1,6 +1,7 @@
 import {
   type AgentId,
   type HobPolicy,
+  heldCharms,
   type MessageId,
   type SkillAssignment,
   type SkillMention,
@@ -38,11 +39,8 @@ export const TurnSkillsInUse = Context.Reference<ReadonlyArray<TurnSkill> | null
   defaultValue: () => null,
 });
 
-/**
- * The Charm ids in a hob's configuration, which a skill's Charm hint is compared with. The GitHub
- * Charm is the only one today, and a hob has it unless its policy turns it off (ADR 020).
- */
-export const hobCharms = (policy: HobPolicy): ReadonlyArray<string> => (policy.githubCharm === false ? [] : ["github"]);
+/** The Charm ids a hob holds (ADR 031), which a skill's Charm hint is compared with. */
+export const hobCharms = (policy: HobPolicy): ReadonlyArray<string> => heldCharms(policy);
 
 /** Each assignment with what resolving reads of the revision it pins; one whose revision is gone is left out. */
 export const pinnedSkills = (

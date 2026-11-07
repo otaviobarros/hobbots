@@ -1,8 +1,8 @@
 import {
   AgentId,
   AnyOperation,
-  CharmOverrides,
   ConfigVersion,
+  HobCharms,
   HobPolicy,
   PolicyDecision,
   PolicyOverrides,
@@ -11,7 +11,7 @@ import {
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { AgentNotFound, InvalidFolder, OverrideWidens, UndeclaredOperation } from "./errors.ts";
+import { AgentNotFound, InvalidFolder, OverrideWidens, UndeclaredOperation, UnknownCharm } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**
@@ -46,22 +46,26 @@ export type HobPermissions = typeof HobPermissions.Type;
 /**
  * A change to a hob's policy; fields left out keep their value, and the ones given replace it. Own
  * folders are paths on the hub, absolute or starting with `~`, stored canonical. A hidden folder
- * must be one of the shared folders. An override may only narrow the preset. Signing and the GitHub
- * Charm are the user's own grants, so they may widen. Each change that
- * changes something becomes the hob's next configuration version.
+ * must be one of the shared folders. An override may only narrow the preset. Signing and the Charms
+ * are the user's own grants, so they may widen. Each change that changes something becomes the hob's
+ * next configuration version.
  */
 export const UpdateHobPermissionsPayload = Schema.Struct({
   ownFolders: Schema.optionalKey(Schema.Array(Schema.NonEmptyString)),
   hiddenSharedFolders: Schema.optionalKey(Schema.Array(Schema.NonEmptyString)),
   overrides: Schema.optionalKey(PolicyOverrides),
   /**
-   * The hob's overrides for Charm operations, keyed by id (ADR 031). Each must be an operation a Charm
-   * the hub holds declares, and may only narrow its preset answer.
+   * The Charms granted to the hob, and its overrides for their operations, keyed by id (ADR 031).
+   * Each granted id must be a Charm the hub holds. Each override must be an operation such a Charm
+   * declares, and may only narrow its preset answer. A field left out keeps its value.
    */
-  charms: Schema.optionalKey(Schema.Struct({ overrides: CharmOverrides })),
+  charms: Schema.optionalKey(HobCharms),
   /** Whether the hob signs commits with the user's 1Password SSH key, which also opens SSH logins. */
   signCommits: Schema.optionalKey(Schema.Boolean),
-  /** Whether the hob has the GitHub Charm (ADR 020): the user's own grant, so it may widen. */
+  /**
+   * Whether the hob has the GitHub Charm (ADR 020), as clients asked before the Charm-id grant (ADR
+   * 031): on adds `github` to the hob's Charms, off takes it away. `charms.granted` wins when both are given.
+   */
   githubCharm: Schema.optionalKey(Schema.Boolean),
 });
 export type UpdateHobPermissionsPayload = typeof UpdateHobPermissionsPayload.Type;
@@ -77,7 +81,7 @@ export class PermissionsGroup extends HttpApiGroup.make("permissions")
       params: { agentId: AgentId },
       payload: UpdateHobPermissionsPayload,
       success: HobPermissions,
-      error: [AgentNotFound, InvalidFolder, OverrideWidens, UndeclaredOperation],
+      error: [AgentNotFound, InvalidFolder, OverrideWidens, UndeclaredOperation, UnknownCharm],
     }),
   )
   .middleware(DeviceSession)

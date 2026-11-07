@@ -429,6 +429,7 @@ export const makeHubActions =
         const outcome = yield* runner
           .run(
             {
+              charm: owner._tag === "Charm" ? owner.name : "Hobbots",
               agentId: turn.agentId,
               scope: turn.scope(),
               also: turn.also,

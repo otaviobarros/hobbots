@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer, NodeServices } from "@effect/platform-node";
 import {
+  Charms as AgentCharms,
   ApprovalService,
   accessNow,
   CharmCallService,
@@ -23,7 +24,7 @@ import {
   GITHUB_CHARM,
   GitHubAccountLive,
   GitHubApiNode,
-  GitHubCharmTools,
+  GitHubCharm,
   GitHubCredentialPerHob,
   GitHubSignInNode,
   GitPushLive,
@@ -194,7 +195,7 @@ beforeAll(async () => {
     Layer.provideMerge(HobApp),
     Layer.provideMerge(HobGitHubAppRepository),
   );
-  const Charms = GitHubCharmTools.pipe(
+  const Charms = AgentCharms.layer([GitHubCharm]).pipe(
     Layer.provide(
       Layer.mergeAll(
         GitHubApiNode(github.hosts.api),

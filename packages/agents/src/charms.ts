@@ -1,7 +1,30 @@
-import type { AgentId, AttemptId, MessageId, ThreadId } from "@hobbots/domain";
-import { Context, Effect, Option, Schema, type Scope } from "effect";
+import {
+  type AgentId,
+  type AttemptId,
+  type CharmDeclaration,
+  GIT_INIT_TOOL,
+  holdsCharm,
+  MEMORY_SAVE_TOOL,
+  MEMORY_SEARCH_TOOL,
+  type MessageId,
+  SKILL_TOOL_DESCRIPTIONS,
+  TASK_TOOLS,
+  type ThreadId,
+} from "@hobbots/domain";
+import { Context, Effect, Layer, Option, Schema, type Scope } from "effect";
+import type { AskableVerdict } from "./asking.ts";
+import { type CharmCallRunner, makeCharmCallRunner, type ReadBack } from "./charm-calls.ts";
+import { CharmDeclarations } from "./grants.ts";
+import {
+  type HubAction,
+  type HubActionEffect,
+  type HubActionsOptions,
+  type HubRequest,
+  makeHubActions,
+  readBacksOf,
+} from "./hub-actions.ts";
 import { MemoryTools } from "./memory.ts";
-import type { HubToolAnswer, HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
+import type { HubCallStep, HubToolAnswer, HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
 import { SkillTools } from "./skill-proposals.ts";
 
@@ -25,21 +48,260 @@ export interface CharmTurn {
   readonly approvals: TurnApprovals | null;
 }
 
+/** The longest name a hub tool may have (ADR 031). A longer one is refused, never cut. */
+export const HUB_TOOL_NAME_MAX = 64;
+
+/** Who offers some hub tools, and their names, for checking that no two offer the same name. */
+export interface HubToolOwner {
+  /** Who offers them, as an error names it, such as "the GitHub Charm" or "Memory". */
+  readonly owner: string;
+  readonly names: ReadonlyArray<string>;
+}
+
 /**
- * The Charms a turn offers its runtime (ADR 014), served on the hub outside the sandbox, which
- * holds their credentials. The hub decides every call under the hob's policy. Absent, a turn
- * offers none.
+ * The hub's built-in tool sets beside the Charms (ADR 031), whose names no Charm may take: Local Git,
+ * Memory, Skills and the Task tools.
  */
-export class CharmTools extends Context.Service<
-  CharmTools,
-  {
-    /**
-     * The Charm tools the turn offers, read at its start: none (null) for a hob without the Charm
-     * or while its app is not connected, so a change applies from the next turn.
-     */
-    readonly forTurn: (turn: CharmTurn) => Effect.Effect<HubTools | null>;
+export const BUILT_IN_HUB_TOOLS: ReadonlyArray<HubToolOwner> = [
+  { owner: "Local Git", names: [GIT_INIT_TOOL] },
+  { owner: "Memory", names: [MEMORY_SEARCH_TOOL, MEMORY_SAVE_TOOL] },
+  { owner: "Skills", names: Object.keys(SKILL_TOOL_DESCRIPTIONS) },
+  { owner: "the Task tools", names: TASK_TOOLS.map((tool) => tool.name) },
+];
+
+/**
+ * Why a set of hub tool names cannot be served, or null when it can: a name longer than
+ * `HUB_TOOL_NAME_MAX`, which is never cut so two long names never become one, or a name two owners
+ * offer, naming both.
+ */
+export const hubToolNameProblem = (owners: ReadonlyArray<HubToolOwner>): string | null => {
+  const seen = new Map<string, string>();
+  for (const { owner, names } of owners) {
+    for (const name of names) {
+      if (name.length > HUB_TOOL_NAME_MAX) {
+        return `The hub tool name ${name}, from ${owner}, is longer than ${HUB_TOOL_NAME_MAX} characters.`;
+      }
+      const first = seen.get(name);
+      if (first === owner) return `The hub tool ${name} is offered twice by ${owner}.`;
+      if (first !== undefined) return `The hub tool ${name} is offered by both ${first} and ${owner}.`;
+      seen.set(name, owner);
+    }
   }
->()("@hobbots/agents/CharmTools") {}
+  return null;
+};
+
+/** The hub tools one owner offers a turn, or null when it offers none. */
+export interface HubToolSet {
+  readonly owner: string;
+  readonly tools: HubTools | null;
+}
+
+/** The first answer any of `sets` gives for a folder that is not null, or null when none does. */
+const firstOf =
+  (
+    sets: ReadonlyArray<HubTools>,
+    pick: (set: HubTools) => ((cwd: string) => Effect.Effect<string | null>) | undefined,
+  ) =>
+  (cwd: string): Effect.Effect<string | null> =>
+    Effect.gen(function* () {
+      for (const set of sets) {
+        const answer = pick(set);
+        const found = answer ? yield* answer(cwd) : null;
+        if (found !== null) return found;
+      }
+      return null;
+    });
+
+/**
+ * Every tool of several sets, as one, in their order: a call goes to the set that offers its tool.
+ * Null when no set offers any. The names were checked when the hub started (`Charms.layer`), so a
+ * name two sets offer is a defect, named with both owners, and never goes to either.
+ */
+export const joinHubTools = (sets: ReadonlyArray<HubToolSet>): HubTools | null => {
+  const given = sets.filter((set): set is HubToolSet & { readonly tools: HubTools } => set.tools !== null);
+  const problem = hubToolNameProblem(
+    given.map((set) => ({ owner: set.owner, names: set.tools.tools.map((tool) => tool.name) })),
+  );
+  if (problem !== null) throw new Error(problem);
+  if (given.length <= 1) return given[0]?.tools ?? null;
+  const owner = new Map(given.flatMap((set) => set.tools.tools.map((tool) => [tool.name, set.tools] as const)));
+  const all = given.map((set) => set.tools);
+  return {
+    tools: all.flatMap((set) => set.tools),
+    // A tool no set offers goes to the first, which refuses it in its own words.
+    call: (name, input, step) => (owner.get(name) ?? (all[0] as HubTools)).call(name, input, step),
+    steersPush: firstOf(all, (set) => set.steersPush),
+    holdsCommit: firstOf(all, (set) => set.holdsCommit),
+  };
+};
+
+/** What a Charm says of itself, as it defines itself and as the registry holds it. */
+interface CharmIdentity {
+  /** Its id, its operations and the built-in requests it takes over. */
+  readonly declaration: CharmDeclaration;
+  /** Its name as the hob and the user read it, such as "GitHub". */
+  readonly name: string;
+  /** Whether the Charm can act for the hob now, such as while GitHub is connected for it. */
+  readonly connected: (agentId: AgentId) => Effect.Effect<boolean>;
+  /**
+   * The hub tool a `git push` run in `cwd` is made with instead, for a hob that holds the Charm, or
+   * null when the push is decided as a push.
+   */
+  readonly steersPush?: (turn: CharmTurn, cwd: string) => Effect.Effect<string | null>;
+  /** The hub's services each call runs with, its logger included, since a runtime runs it on its own. */
+  readonly context?: Context.Context<never>;
+}
+
+/**
+ * A Charm as the hub registers it (ADR 031): how it declares itself to the policy, its name, its
+ * actions, which the hub action pipeline decides and runs, how its requests are decided, and whether
+ * it can act for a hob now. Signing in and storing credentials stay with the Charm.
+ */
+export interface CharmDefinition<R extends HubRequest, V extends AskableVerdict> extends CharmIdentity {
+  /** Its actions, in the order a hob is offered them, each with its read-back when it has one. */
+  readonly actions: ReadonlyArray<HubAction<R>>;
+  readonly decide: HubActionsOptions<R, V>["decide"];
+}
+
+/** A registered Charm, with what the registry needs of it whatever its requests are. */
+export interface Charm extends CharmIdentity {
+  /** Its tools' names, and which of them write. */
+  readonly tools: ReadonlyArray<{ readonly name: string; readonly effect: HubActionEffect }>;
+  readonly readBacks: Readonly<Record<string, ReadBack>>;
+  /** Its actions for a turn, run through the pipeline with the hub's one never-twice runner. */
+  readonly serve: (calls: CharmCallRunner) => (turn: CharmTurn) => HubTools;
+}
+
+/** Whether the hob still holds `charm` (ADR 031). */
+const holder = (charm: CharmDeclaration) => (access: ToolAccess) => holdsCharm(access.policy.hob, charm.id);
+
+/** A Charm, ready to register with `Charms.layer`. */
+export const defineCharm = <R extends HubRequest, V extends AskableVerdict>(
+  definition: CharmDefinition<R, V>,
+): Charm => {
+  const { actions, decide, ...identity } = definition;
+  const { declaration, name } = identity;
+  return {
+    ...identity,
+    tools: actions.map((action) => ({ name: action.tool.name, effect: action.effect })),
+    readBacks: readBacksOf(actions),
+    serve: (calls) =>
+      makeHubActions({
+        owner: { _tag: "Charm", declaration, name, holds: holder(declaration) },
+        actions,
+        decide,
+        calls,
+      }),
+  };
+};
+
+/** The prefix a built-in Charm's tool names start with: its id, as `<charm>_<action>` (ADR 031). */
+const toolPrefix = (charm: CharmDeclaration) => `${charm.id.replaceAll("-", "_")}_`;
+
+/** Why the Charms cannot be registered together, or null when they can (ADR 031). */
+export const charmsProblem = (charms: ReadonlyArray<Charm>): string | null => {
+  const ids = new Set<string>();
+  for (const charm of charms) {
+    if (ids.has(charm.declaration.id)) return `Two Charms are called ${charm.declaration.id}.`;
+    ids.add(charm.declaration.id);
+    const misnamed = charm.tools.find((tool) => !tool.name.startsWith(toolPrefix(charm.declaration)));
+    if (misnamed !== undefined) {
+      return `The ${charm.name} Charm's tool ${misnamed.name} does not start with ${toolPrefix(charm.declaration)}.`;
+    }
+  }
+  return hubToolNameProblem([
+    ...BUILT_IN_HUB_TOOLS,
+    ...charms.map((charm) => ({ owner: `the ${charm.name} Charm`, names: charm.tools.map((tool) => tool.name) })),
+  ]);
+};
+
+/** What a turn is offered of the Charms: with `writes` false, none of their writes. */
+export interface CharmOffer {
+  readonly writes?: boolean;
+}
+
+/**
+ * The Charm registry (ADR 031): the Charms the hub holds, registered once, in its composition, and
+ * served on the hub outside the sandbox, which holds their credentials. A turn is offered the
+ * actions of each Charm its hob holds that is connected, each Charm's tools as a list of their own.
+ * Absent, a turn offers none.
+ */
+export class Charms extends Context.Service<
+  Charms,
+  {
+    readonly charms: ReadonlyArray<Charm>;
+    /**
+     * The tools of each Charm the turn's hob holds and that is connected, read at its start, so a
+     * change applies from the next turn.
+     */
+    readonly forTurn: (turn: CharmTurn, offer?: CharmOffer) => Effect.Effect<ReadonlyArray<HubToolSet>>;
+  }
+>()("@hobbots/agents/Charms") {
+  /**
+   * Registers `charms`, with one never-twice runner for all of them, built from every Charm's
+   * read-backs. A tool name two of them share, or a built-in hub tool's, or one longer than
+   * `HUB_TOOL_NAME_MAX`, stops the hub with an error that names it. It also provides
+   * `CharmDeclarations` from the same Charms, so a Charm registered here is the policy's too: its id
+   * can be granted, and its operations can be ruled on, without being declared anywhere else.
+   */
+  static readonly layer = <R>(charms: ReadonlyArray<Effect.Effect<Charm, never, R>>) =>
+    Layer.effectContext(
+      Effect.gen(function* () {
+        const registered = yield* Effect.all(charms);
+        const problem = charmsProblem(registered);
+        if (problem !== null) return yield* Effect.die(new Error(problem));
+        const runner = yield* makeCharmCallRunner(
+          Object.assign({}, ...registered.map((charm) => charm.readBacks)) as Record<string, ReadBack>,
+        );
+        const served = registered.map((charm) => ({ charm, serve: charm.serve(runner) }));
+        const within =
+          (charm: Charm) =>
+          <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+            charm.context === undefined ? effect : Effect.provideContext(effect, charm.context);
+
+        const setFor = (charm: Charm, serve: (turn: CharmTurn) => HubTools, turn: CharmTurn, offer?: CharmOffer) => {
+          const run = within(charm);
+          const hub = serve(turn);
+          const writes = new Set(charm.tools.filter((tool) => tool.effect === "write").map((tool) => tool.name));
+          const tools = offer?.writes === false ? hub.tools.filter((tool) => !writes.has(tool.name)) : hub.tools;
+          const { steersPush } = charm;
+          return {
+            owner: `the ${charm.name} Charm`,
+            tools:
+              tools.length === 0
+                ? null
+                : {
+                    tools,
+                    call: (name: string, input: unknown, step?: HubCallStep) => run(hub.call(name, input, step)),
+                    ...(steersPush === undefined ? {} : { steersPush: (cwd: string) => run(steersPush(turn, cwd)) }),
+                  },
+          };
+        };
+
+        const service = Charms.of({
+          charms: registered,
+          forTurn: (turn, offer) =>
+            Effect.gen(function* () {
+              const access = yield* turn.currentAccess;
+              if (access === null) return [];
+              const sets: Array<HubToolSet> = [];
+              for (const { charm, serve } of served) {
+                if (!holdsCharm(access.policy.hob, charm.declaration.id)) continue;
+                if (!(yield* within(charm)(charm.connected(turn.agentId)))) continue;
+                sets.push(setFor(charm, serve, turn, offer));
+              }
+              return sets;
+            }),
+        });
+        return Context.make(Charms, service).pipe(
+          Context.add(
+            CharmDeclarations,
+            registered.map((charm) => charm.declaration),
+          ),
+        );
+      }),
+    );
+}
 
 /**
  * The local Git work a turn's hob asks the hub to do outside its turn's sandbox (ADR 014), such as creating
@@ -67,41 +329,6 @@ export const hubAnswer = <R>(
     Effect.map((answer) => ({ ...answer, text: redactor.text(answer.text) })),
   );
 
-/** The first answer any of `sets` gives for a folder that is not null, or null when none does. */
-const firstOf =
-  (
-    sets: ReadonlyArray<HubTools>,
-    pick: (set: HubTools) => ((cwd: string) => Effect.Effect<string | null>) | undefined,
-  ) =>
-  (cwd: string): Effect.Effect<string | null> =>
-    Effect.gen(function* () {
-      for (const set of sets) {
-        const answer = pick(set);
-        const found = answer ? yield* answer(cwd) : null;
-        if (found !== null) return found;
-      }
-      return null;
-    });
-
-/**
- * Every tool of several sets, as one: a call goes to the set that offers its tool. A name two sets
- * offer goes to the first. Null when no set is given.
- */
-export const combineHubTools = (...sets: ReadonlyArray<HubTools | null>): HubTools | null => {
-  const given = sets.filter((set): set is HubTools => set !== null);
-  if (given.length <= 1) return given[0] ?? null;
-  const owner = new Map<string, HubTools>();
-  for (const set of given) for (const tool of set.tools) if (!owner.has(tool.name)) owner.set(tool.name, set);
-  const tools = given.flatMap((set) => set.tools.filter((tool) => owner.get(tool.name) === set));
-  return {
-    tools,
-    // A tool no set offers goes to the first, which refuses it in its own words.
-    call: (name, input, step) => (owner.get(name) ?? (given[0] as HubTools)).call(name, input, step),
-    steersPush: firstOf(given, (set) => set.steersPush),
-    holdsCommit: firstOf(given, (set) => set.holdsCommit),
-  };
-};
-
 /**
  * The local Git, Charm, memory and skill tools a turn offers, read at its start under the access the turn
  * reads (ADR 014): a chat turn's, a party member's or a step's, each narrowed by its Delegations.
@@ -109,22 +336,32 @@ export const combineHubTools = (...sets: ReadonlyArray<HubTools | null>): HubToo
  * promises are the tools its member gets (#699), and every runtime that serves hub tools serves
  * memory (ADR 028) and skills (ADR 029). Without a service, a turn offers none of its tools.
  */
-export const charmOffer = Effect.gen(function* () {
+export const hubToolOffer = Effect.gen(function* () {
   const localGit = yield* Effect.serviceOption(LocalGitTools);
-  const charms = yield* Effect.serviceOption(CharmTools);
+  const charms = yield* Effect.serviceOption(Charms);
   const memory = yield* Effect.serviceOption(MemoryTools);
   const skills = yield* Effect.serviceOption(SkillTools);
+  const none = Effect.succeed(null);
   // Each reads the turn's access itself, so they are read side by side.
-  return (turn: CharmTurn) =>
+  return (turn: CharmTurn, offer?: CharmOffer) =>
     Effect.all(
       [
-        Option.isSome(localGit) ? localGit.value.forTurn(turn) : Effect.succeed(null),
-        Option.isSome(charms) ? charms.value.forTurn(turn) : Effect.succeed(null),
-        Option.isSome(memory) ? memory.value.forTurn(turn) : Effect.succeed(null),
-        Option.isSome(skills) ? skills.value.forTurn(turn) : Effect.succeed(null),
+        Option.isSome(localGit) ? localGit.value.forTurn(turn) : none,
+        Option.isSome(charms) ? charms.value.forTurn(turn, offer) : Effect.succeed([]),
+        Option.isSome(memory) ? memory.value.forTurn(turn) : none,
+        Option.isSome(skills) ? skills.value.forTurn(turn) : none,
       ],
       { concurrency: "unbounded" },
-    ).pipe(Effect.map((sets) => combineHubTools(...sets)));
+    ).pipe(
+      Effect.map(([git, charmSets, memoryTools, skillTools]) =>
+        joinHubTools([
+          { owner: "Local Git", tools: git },
+          ...charmSets,
+          { owner: "Memory", tools: memoryTools },
+          { owner: "Skills", tools: skillTools },
+        ]),
+      ),
+    );
 });
 
 /**

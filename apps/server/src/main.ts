@@ -7,7 +7,7 @@ import {
   ActivityRecorder,
   ApprovalService,
   CharmCallService,
-  CharmDeclarations,
+  Charms,
   ChatService,
   CommitIdentityQuestions,
   DataExport,
@@ -28,10 +28,9 @@ import {
   TaskFiles,
 } from "@hobbots/agents";
 import {
-  GITHUB_CHARM,
   GitHubAccountLive,
   GitHubApiNode,
-  GitHubCharmTools,
+  GitHubCharm,
   GitHubCredentialPerHob,
   GitHubPushSettings,
   GitHubSignInFake,
@@ -375,7 +374,10 @@ const ServerLive = Layer.unwrap(
       Layer.provideMerge(HobGitHubAppRepository.pipe(Layer.provide(Sqlite))),
     );
     const charmFolder = join(dataDir, "charms", "github");
-    const Charms = GitHubCharmTools.pipe(
+    // The Charm registry (ADR 031): every Charm the hub holds, registered once, with one never-twice
+    // runner for all of them. It declares them to the policy too, so registering a Charm here is all
+    // it takes for a hob to be granted it. The GitHub Charm is the only one yet.
+    const HubCharms = Charms.layer([GitHubCharm]).pipe(
       Layer.provide(
         Layer.mergeAll(
           GitRemotes.layer,
@@ -518,7 +520,9 @@ const ServerLive = Layer.unwrap(
       // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
       .pipe(Layer.provideMerge(HubQuestions.layer))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
-      .pipe(Layer.provideMerge(Layer.mergeAll(Charms, LocalGit, MemoryTooling, SkillTooling, CharmCallService.layer)))
+      .pipe(
+        Layer.provideMerge(Layer.mergeAll(HubCharms, LocalGit, MemoryTooling, SkillTooling, CharmCallService.layer)),
+      )
       // Before approvals, so a decision can save grants and every call reads the hob's live ones; before
       // the hob's own GitHub app, which revokes GitHub grants whenever the hob's identity changes (ADR 022).
       .pipe(Layer.provideMerge(GrantService.layer))
@@ -564,8 +568,6 @@ const ServerLive = Layer.unwrap(
             ]),
             // The whole output of long tool calls, which their steps show cut.
             ToolLogsLive(join(dataDir, "tool-logs")),
-            // The Charms the hub holds, as they declare themselves to the policy (ADR 031).
-            Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
           ),
         ),
       );
