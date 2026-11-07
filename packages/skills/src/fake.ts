@@ -148,12 +148,18 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
         if (revisionOf(before.skillId, pin) === null) return yield* new SkillNotFound({ id: pin });
         return save(new SkillAssignment({ ...before, pin, by, revision: ++sequence }));
       }),
-    rollOutRevision: (skillId, pin, by, when) =>
+    rollOutRevision: (skillId, pin, by, when, holds = []) =>
       Effect.gen(function* () {
         const revision = revisionOf(skillId, pin);
         if (revision === null) return yield* new SkillNotFound({ id: pin });
         const pending = revision.rolledOutAt === null && skills.get(skillId)?.latest === pin;
         if (when === "pending" && !pending) return committed([]);
+        for (const hold of when === "pending" ? holds : []) {
+          const one = assignments.get(hold.assignmentId);
+          if (one?.skillId === skillId && one.held !== hold.held) {
+            save(new SkillAssignment({ ...one, held: hold.held, revision: ++sequence }));
+          }
+        }
         const moved = rolloutTargets([...assignments.values()], skillId, pin).map(
           (one) => save(new SkillAssignment({ ...one, pin, by, revision: ++sequence })).value,
         );

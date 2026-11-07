@@ -4,7 +4,7 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { skillQuery, skillRevisionQuery, skillsErrorTag } from "../../api/skills.ts";
+import { type editSkill, skillQuery, skillRevisionQuery, skillsErrorTag } from "../../api/skills.ts";
 import { messages } from "./messages.ts";
 import { DescriptionField, EditorFooter, InstructionsField } from "./skill-fields.tsx";
 import { movesWith, RollOut, type RollOutChoice } from "./skill-rollout.tsx";
@@ -21,6 +21,15 @@ import {
 import { useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
+
+type EditInput = Parameters<typeof editSkill>[0];
+
+/** The holds you switched that differ from each place's now: the only ones a save changes. */
+const holdsOf = (detail: SkillDetail, choice: RollOutChoice) =>
+  detail.assignments.flatMap((one) => {
+    const on = choice.get(one.id);
+    return on === undefined || !on === one.held ? [] : [{ assignmentId: one.id, held: !on }];
+  });
 
 /** Said once the hub answers a save: a new revision, or the same edit sent again, which finishes its rollout. */
 const savedLine = (saved: { added: boolean; revision: { number: number }; rolledOut: ReadonlyArray<unknown> }) => {
@@ -55,11 +64,14 @@ function EditForm({
   const [body, setBody] = useState(() => instructionsOf(instructions));
   const [choice, setChoice] = useState<RollOutChoice>(new Map());
   const [failure, setFailure] = useState<string | null>(null);
+  // A save whose answer never came: it may have reached the hub, so it is sent again as it was.
+  const [sent, setSent] = useState<EditInput | null>(null);
   const title = skillTitle(skill.name);
   const baseNumber = numberOfPin(detail.revisions, base);
   const now = skillRevisionLabel({ number: baseNumber });
   const next = skillRevisionLabel({ number: baseNumber + 1 });
   const newer = skill.latest === base ? null : skillRevisionLabel({ number: skill.revisions });
+  const finishing = newer !== null && sent !== null;
   const back = skillView(skill.id);
   const moves = movesWith(choice);
   const moving = detail.assignments.filter(moves).length;
@@ -74,17 +86,27 @@ function EditForm({
         event.preventDefault();
         if (!valid || pending) return;
         setFailure(null);
-        // One request: the hub saves the revision, then the holds, then rolls it out to the rest.
-        const keep = detail.assignments.filter((one) => !moves(one)).map((one) => one.id);
+        // One request: the hub saves the revision, and its rollout sets the holds you switched.
+        const input = finishing
+          ? sent
+          : {
+              skillId: skill.id,
+              base,
+              description: description.trim(),
+              instructions: body,
+              holds: holdsOf(detail, choice),
+            };
         writes.edit
-          .mutateAsync({ skillId: skill.id, base, description: description.trim(), instructions: body, keep })
+          .mutateAsync(input)
           .then((saved) => {
             say({ tone: "done", message: savedLine(saved) }, back);
             void navigate({ to: "/skills", search: skillsSearchOf(back) });
           })
-          .catch((error: unknown) =>
-            setFailure(skillsErrorTag(error) === "SkillEditStale" ? copy.editor.stale : copy.editor.failed),
-          );
+          .catch((error: unknown) => {
+            const stale = skillsErrorTag(error) === "SkillEditStale";
+            setSent(stale ? null : input);
+            setFailure(stale ? copy.editor.stale : copy.editor.failed);
+          });
       }}
     >
       <header className="flex flex-col gap-1">
@@ -96,7 +118,7 @@ function EditForm({
       </header>
       {newer !== null && (
         <p role="status" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
-          {copy.editor.newer({ rev: newer, base: now })}
+          {finishing ? copy.editor.unfinished({ rev: newer }) : copy.editor.newer({ rev: newer, base: now })}
         </p>
       )}
       <DescriptionField value={description} onChange={setDescription} />
@@ -113,8 +135,14 @@ function EditForm({
       )}
       <EditorFooter
         failure={failure}
-        saveLabel={pending ? copy.editor.saving : copy.rollout.save({ count: moving, rev: next })}
-        disabled={!valid || pending || newer !== null}
+        saveLabel={
+          pending
+            ? copy.editor.saving
+            : finishing
+              ? copy.editor.finish
+              : copy.rollout.save({ count: moving, rev: next })
+        }
+        disabled={pending || (finishing ? false : !valid || newer !== null)}
         back={back}
       />
     </form>

@@ -157,3 +157,36 @@ test("[TC-UX-1062-02] a save from another device while you edit keeps your text 
   await expect(main.getByRole("button", { name: /Save/ })).toBeDisabled();
   await expectAccessible(page, main);
 });
+
+// covers ADR 029 (Editing), #1062
+test("[TC-UX-1062-03] a save whose answer is lost is finished from the editor, not read as someone else's", async ({
+  page,
+}) => {
+  const { url, folder, api } = await hubWithHobs();
+  const imported = (await api("POST", "/skills", { source: { _tag: "Folder", path: folder } })) as unknown as {
+    imported: ReadonlyArray<{ skill: { id: string } }>;
+  };
+  const first = imported.imported[0];
+  if (first === undefined) throw new Error("Nothing was imported.");
+  await page.goto(`${url}/#/skills?skill=${first.skill.id}&edit=skill`);
+  const main = page.getByRole("main", { name: "Skills" });
+  await main.getByLabel("Instructions").fill("Read the diff three times.");
+
+  // The hub saves r2, and its answer never reaches the page.
+  let lose = true;
+  await page.route("**/api/skills/*/edits", async (route) => {
+    if (!lose) return route.continue();
+    lose = false;
+    await route.fetch();
+    await route.abort("connectionreset");
+  });
+  await main.getByRole("button", { name: /Save/ }).click();
+  await expect(main.getByRole("status").filter({ hasText: "your save may have reached the hub" })).toBeVisible();
+  await expect(main.getByLabel("Instructions")).toHaveValue("Read the diff three times.");
+  await expectAccessible(page, main);
+
+  // Finish saving sends it again as it was: the hub answers with r2, its own save.
+  await main.getByRole("button", { name: "Finish saving" }).click();
+  await expect(main.getByRole("heading", { name: "Review checklist", level: 2 })).toBeVisible();
+  await expect(main).toContainText("Read the diff three times.");
+});

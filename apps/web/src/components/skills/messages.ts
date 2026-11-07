@@ -270,6 +270,9 @@ export const messages = {
     failed: "It was not saved. Your text is still here; try again.",
     newer: ({ rev, base }: { rev: string; base: string }) =>
       `${rev} was saved while you edited ${base}, so this edit cannot be saved over it. Your text is still here: copy it, then edit ${rev}.`,
+    unfinished: ({ rev }: { rev: string }) =>
+      `${rev} is now the newest: your save may have reached the hub before it failed. Finish saving sends it again as it was, which finishes it, or is refused if someone else saved ${rev}.`,
+    finish: "Finish saving",
     stale:
       "A newer revision was saved while you edited, so this was not saved. Your text is still here: copy it, then edit the newest revision.",
   },
@@ -334,7 +337,8 @@ export const messages = {
     already: "Already in your library",
     alreadyLine: ({ rev }: { rev: string }) => `Same content as ${rev}, nothing new to add`,
     newRevision: "A new revision of a skill you have",
-    newRevisionLine: "Open that skill and add it from there, so it keeps its history",
+    newRevisionLine:
+      "Hobbots cannot add a source's new content to a skill you have yet. Edit on that skill changes its description and instructions.",
     passed: ({ count, bytes }: { count: number; bytes: number }) =>
       `Checks passed · ${files(count)}, ${formatBytes(bytes)}`,
     passedNoSize: "Checks passed",
@@ -359,7 +363,7 @@ export const messages = {
     giveAgain: "Give again",
     moved: "The source changed since you looked, so nothing was imported. Look again to see what it holds now.",
     taken: ({ name }: { name: string }) =>
-      `Your library already has ${name}. Open it and add the new content as a revision there.`,
+      `Your library already has ${name}. Hobbots cannot add a source's new content to it yet; Edit on that skill changes its description and instructions.`,
   },
   checks: {
     "front-matter": "SKILL.md needs front matter with a name and a description between --- lines.",

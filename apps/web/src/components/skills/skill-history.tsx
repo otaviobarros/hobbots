@@ -83,7 +83,8 @@ function RevisionChanges({
               // biome-ignore lint/suspicious/noArrayIndexKey: a diff's lines have no identity but their place (STD-REACT-020).
               key={at}
               className={cn(
-                "flex gap-2.5 px-3 py-1 font-mono text-detail",
+                // Only the lines near the viewport are laid out, however long the diff (STD-REACT-024).
+                "flex gap-2.5 px-3 py-1 font-mono text-detail [contain-intrinsic-size:auto_26px] [content-visibility:auto]",
                 line.op === "add" && "bg-[color-mix(in_srgb,var(--color-mint)_12%,transparent)] text-text-strong",
                 line.op === "remove" &&
                   "bg-[color-mix(in_srgb,var(--color-rose)_10%,transparent)] text-text-secondary line-through",
@@ -126,7 +127,8 @@ export function SkillHistory({ view, detail, say }: { view: SkillViewOf; detail:
             <li
               key={revision.hash}
               className={cn(
-                "flex flex-wrap items-start gap-2.5 rounded-card px-3.5 py-3",
+                // A history grows with every save: only the rows near the viewport are laid out (STD-REACT-024).
+                "flex flex-wrap items-start gap-2.5 rounded-card px-3.5 py-3 [contain-intrinsic-size:auto_64px] [content-visibility:auto]",
                 at === 0 ? "bg-[color-mix(in_srgb,var(--color-mint)_8%,var(--color-card))]" : "bg-card",
               )}
             >

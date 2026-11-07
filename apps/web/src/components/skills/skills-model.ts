@@ -300,8 +300,12 @@ export const searchHits = (skills: ReadonlyArray<Skill>, q: string): ReadonlyArr
 
 const FRONT_MATTER = /^﻿?---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;
 
-/** A `SKILL.md`'s instructions: the text after its front matter. */
-export const instructionsOf = (skillFile: string): string => skillFile.replace(FRONT_MATTER, "").replace(/^\s+/, "");
+/**
+ * A `SKILL.md`'s instructions: the text after its front matter, less the blank lines that set it
+ * apart. The first line keeps its indentation, which can open a Markdown code block.
+ */
+export const instructionsOf = (skillFile: string): string =>
+  skillFile.replace(FRONT_MATTER, "").replace(/^(?:[ \t]*\r?\n)+/, "");
 
 /** How well a description says when to use the skill, as the editor checks it while you type. */
 export const descriptionState = (description: string): "short" | "long" | "good" => {

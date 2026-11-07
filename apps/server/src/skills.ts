@@ -10,6 +10,7 @@ import {
   memoryActorFor,
   PermissionSummary,
   SkillFiles,
+  type SkillHoldChange,
   SkillLibrary,
   type SkillLibraryShape,
 } from "@hobbots/agents";
@@ -30,7 +31,6 @@ import type {
   AgentId,
   Committed,
   SkillAssignment,
-  SkillAssignmentId,
   SkillBy,
   SkillId,
   SkillNotFound,
@@ -151,8 +151,9 @@ const rollOutAll = (
   skillId: SkillId,
   pin: SkillRevisionHash,
   when: "pending" | "always",
+  holds: ReadonlyArray<SkillHoldChange> = [],
 ) =>
-  library.rollOutRevision(skillId, pin, YOU, when).pipe(
+  library.rollOutRevision(skillId, pin, YOU, when, holds).pipe(
     Effect.tap((committed) => announce(committed.entries)),
     Effect.map((committed) => committed.value),
   );
@@ -249,32 +250,17 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
      * in the middle of, and content already rolled out, or no longer the newest, moves none, so a
      * rollback stays.
      */
-    /**
-     * Keeps the skill's assignments in `keep` on their revision and lets every other one follow edits.
-     * Each hold that already is as asked is left alone, so sending a save again changes nothing more.
-     */
-    const holdsFor = (skillId: SkillId, keep: ReadonlyArray<SkillAssignmentId> | undefined) =>
-      keep === undefined
-        ? Effect.void
-        : Effect.gen(function* () {
-            for (const assignment of yield* library.assignments(skillId)) {
-              const held = keep.includes(assignment.id);
-              if (held !== assignment.held) yield* committedValue(library.hold(assignment.id, held));
-            }
-          });
-
     const revised = (
       skillId: SkillId,
       source: SkillImportSource,
       options: { readonly folders?: Array<string>; readonly after?: SkillRevisionHash },
-      // What else the save changes, once its revision is saved and before it rolls out.
-      settle: Effect.Effect<void, SkillMissing> = Effect.void,
+      // The holds the save changes, set by its own rollout (`rollOutRevision`).
+      holds: ReadonlyArray<SkillHoldChange> = [],
     ) =>
       Effect.gen(function* () {
         const [one] = yield* importer.add(source, { by: YOU, skillId, ...options }).pipe(Effect.mapError(importError));
         if (one === undefined) return yield* new SkillMissing({ id: skillId });
-        yield* settle;
-        const rolledOut = yield* missing(rollOutAll(library, announce, skillId, one.revision.hash, "pending"));
+        const rolledOut = yield* missing(rollOutAll(library, announce, skillId, one.revision.hash, "pending", holds));
         return { ...one, rolledOut };
       });
 
@@ -397,7 +383,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           const { description, instructions } = payload;
           const carried = { charms: base.charms, dropped: base.dropped };
           const source = { _tag: "Edited", folder, description, instructions, carried } as const;
-          return yield* revised(skill.id, source, { after: payload.base }, holdsFor(skill.id, payload.keep));
+          return yield* revised(skill.id, source, { after: payload.base }, payload.holds);
         }),
       syncAgentsFolder: () =>
         Effect.gen(function* () {

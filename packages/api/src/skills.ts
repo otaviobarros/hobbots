@@ -247,11 +247,11 @@ export const EditSkillPayload = Schema.Struct({
   /** The `SKILL.md` text after its front matter. */
   instructions: Schema.String.check(Schema.isMaxLength(1024 * 1024)),
   /**
-   * The skill's assignments to keep on their revision; every other one follows the edit. Applied once
-   * the revision is saved and before it rolls out, so an edit that is refused changes no hold, and the
-   * same save sent again finishes what it started. Absent, every hold stays as it is.
+   * The holds you switched along with the edit. They are set by the edit's own rollout, in its
+   * transaction: never by an edit that is refused, and never again by the same save sent after its
+   * rollout ran, so a Keep on made since stays.
    */
-  keep: Schema.optionalKey(Schema.Array(SkillAssignmentId)),
+  holds: Schema.optionalKey(Schema.Array(Schema.Struct({ assignmentId: SkillAssignmentId, held: Schema.Boolean }))),
 });
 
 const skillParams = { skillId: SkillId };

@@ -64,8 +64,8 @@ export const editSkill = (input: {
   base: SkillRevisionHash;
   description: string;
   instructions: string;
-  /** The skill's places to keep on their revision; the hub lets every other one follow the edit. */
-  keep: ReadonlyArray<SkillAssignmentId>;
+  /** The holds switched along with the edit, which its own rollout sets. */
+  holds: ReadonlyArray<{ assignmentId: SkillAssignmentId; held: boolean }>;
 }) =>
   call((c) =>
     c.skills.edit({
@@ -74,7 +74,7 @@ export const editSkill = (input: {
         base: input.base,
         description: input.description,
         instructions: input.instructions,
-        keep: input.keep,
+        holds: input.holds,
       },
     }),
   );

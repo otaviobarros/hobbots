@@ -233,34 +233,38 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (Pins and rollout, The Skills page), #1062
-  it("[TC-AG-149] keeps the places an edit holds back, changes no hold when the edit is refused, and settles a save sent again", async () => {
+  it("[TC-AG-149] keeps the places an edit holds back, changes no hold when it is refused, and never replays its holds", async () => {
     const folder = await folderWith({ "SKILL.md": skillMd("release") });
     const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
     const [{ skill, revision }] = imported.body.imported;
     const everyone = await request("POST", `/api/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" } });
-    const pinOf = async () => (await request("GET", `/api/skills/${skill.id}`)).body.assignments[0];
-
-    // Saved as r2, with Everyone kept on r1.
-    const edit = {
-      base: revision.hash,
-      description: "Use when releasing.",
-      instructions: "Tag it.",
-      keep: [everyone.body.id],
-    };
-    const kept = await request("POST", `/api/skills/${skill.id}/edits`, edit);
-    expect(kept.body).toMatchObject({ added: true, revision: { number: 2 }, rolledOut: [] });
-    expect(await pinOf()).toMatchObject({ pin: revision.hash, held: true });
+    const place = async () => (await request("GET", `/api/skills/${skill.id}`)).body.assignments[0];
+    const keep = [{ assignmentId: everyone.body.id, held: true }];
+    const edit = { base: revision.hash, description: "Use when releasing.", instructions: "Tag it." };
 
     // A refused edit changes no hold.
-    const stale = await request("POST", `/api/skills/${skill.id}/edits`, { ...edit, instructions: "Push.", keep: [] });
+    const r2 = await request("POST", `/api/skills/${skill.id}/edits`, edit);
+    expect(r2.body.rolledOut).toHaveLength(1);
+    const stale = await request("POST", `/api/skills/${skill.id}/edits`, {
+      ...edit,
+      instructions: "Push.",
+      holds: keep,
+    });
     expect(stale.status).toBe(409);
-    expect(await pinOf()).toMatchObject({ pin: revision.hash, held: true });
+    expect(await place()).toMatchObject({ pin: r2.body.revision.hash, held: false });
 
-    // The same save sent again, now letting Everyone follow, is r2 and settles the hold. Its rollout
-    // already ran, so nothing moves: Move to r2 does that (the interrupted rollout is TC-AG-147).
-    const again = await request("POST", `/api/skills/${skill.id}/edits`, { ...edit, keep: [] });
+    // Saved as r3 with Everyone kept on r2.
+    const next = { ...edit, base: r2.body.revision.hash, instructions: "Tag, then push.", holds: keep };
+    const r3 = await request("POST", `/api/skills/${skill.id}/edits`, next);
+    expect(r3.body).toMatchObject({ added: true, revision: { number: 3 }, rolledOut: [] });
+    expect(await place()).toMatchObject({ pin: r2.body.revision.hash, held: true });
+
+    // Its answer was lost, Everyone was let go on another device, and the save is sent again: it is
+    // r3, and the hold it carried is not set over the newer choice.
+    await request("POST", `/api/skills/assignments/${everyone.body.id}/hold`, { held: false });
+    const again = await request("POST", `/api/skills/${skill.id}/edits`, next);
     expect(again.status).toBe(200);
-    expect(again.body).toMatchObject({ added: false, revision: { number: 2 }, rolledOut: [] });
-    expect(await pinOf()).toMatchObject({ pin: revision.hash, held: false });
+    expect(again.body).toMatchObject({ added: false, revision: { number: 3 }, rolledOut: [] });
+    expect(await place()).toMatchObject({ pin: r2.body.revision.hash, held: false });
   });
 });

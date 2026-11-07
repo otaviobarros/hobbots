@@ -158,6 +158,8 @@ describe("skill names, descriptions and files", () => {
     const file = newSkillFile("release", 'Use when: "shipping"', "Tag it.");
     expect(file).toBe('---\nname: release\ndescription: "Use when: \\"shipping\\""\n---\n\nTag it.\n');
     expect(instructionsOf(file)).toBe("Tag it.\n");
+    // An indented first line opens a code block: it keeps its indentation, so an edit saves it as it was.
+    expect(instructionsOf("---\nname: a\ndescription: A.\n---\n\n  \n    git tag v1\n")).toBe("    git tag v1\n");
   });
 
   it("finds a search in what a skill is for, then in its name", () => {

@@ -32,6 +32,12 @@ import { Context, type Effect } from "effect";
  * (`resolveSkills`), never inside it.
  */
 
+/** A hold a save changes: keep the assignment on its revision, or let it follow edits again. */
+export interface SkillHoldChange {
+  readonly assignmentId: SkillAssignmentId;
+  readonly held: boolean;
+}
+
 /** A revision to add, already checked: its hash is the content's, and its files are in `SkillFiles`. */
 export interface SkillRevisionInput {
   readonly hash: SkillRevisionHash;
@@ -118,12 +124,17 @@ export interface SkillLibraryShape {
    * out only a revision that is still its skill's newest and was never rolled out, so two saves of
    * one content roll it out once and a rollback made between them stays. `always` is a rollout you
    * ask for, such as Roll back, which goes ahead whatever the revision's past.
+   *
+   * `holds` are the holds a save changed along with its edit: applied only by the `pending` rollout
+   * that claims the revision, in its transaction and before anything moves. A save sent again after
+   * its rollout ran claims nothing, so it never replays them over a Keep on made since.
    */
   readonly rollOutRevision: (
     skillId: SkillId,
     pin: SkillRevisionHash,
     by: SkillBy,
     when: "pending" | "always",
+    holds?: ReadonlyArray<SkillHoldChange>,
   ) => Library<Committed<ReadonlyArray<SkillAssignment>>, SkillNotFound>;
   /** Holds an assignment on its revision, or lets it follow rollouts again. */
   readonly hold: (id: SkillAssignmentId, held: boolean) => Library<Committed<SkillAssignment>, SkillNotFound>;
