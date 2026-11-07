@@ -10,6 +10,44 @@ const copy = messages.approval.rule;
 export const offersAlways = (approval: ApprovalRequest): boolean =>
   approval.grantable && !approval.onceOnly && approval.rules.length > 0;
 
+type AlwaysLabel = keyof typeof messages.approval.always;
+
+/** What one rule covers, as Always names it. */
+const covers = (rule: GrantRule): "folder" | "file" | "command" | "branch" | "repository" | "site" => {
+  switch (rule._tag) {
+    case "Folder":
+      return "folder";
+    case "Paths":
+      return "file";
+    case "Command":
+      return "command";
+    case "Push":
+      return "branch";
+    case "Host":
+      return "site";
+    case "CharmSite":
+      return rule.site.repository === undefined ? "site" : "repository";
+  }
+};
+
+/**
+ * Always's label (ADR 015), named for what the request's rules cover: "Always for this folder" for a
+ * file action, "Always for this branch" for a push, "Always for this site" for a web host. Rules that
+ * cover different kinds of thing read plain "Always".
+ */
+export const alwaysLabel = (approval: Pick<ApprovalRequest, "rules">): string => {
+  const words = messages.approval.always;
+  const kinds = new Set(approval.rules.map(covers));
+  const [kind] = kinds;
+  if (kind === undefined || kinds.size > 1) return words.mixed;
+  const count =
+    kind === "file"
+      ? approval.rules.flatMap((rule) => (rule._tag === "Paths" ? rule.paths : [])).length
+      : approval.rules.length;
+  const plural: Partial<Record<AlwaysLabel, AlwaysLabel>> = { folder: "folders", file: "files", command: "commands" };
+  return words[count > 1 ? (plural[kind] ?? kind) : kind];
+};
+
 /**
  * How the card names the middle lifetime (ADR 018): This Quest once a party joined the request's top
  * Task, which then holds the Quest, and This Task before. Both bind the grant to that Task.

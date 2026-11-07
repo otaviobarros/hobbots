@@ -92,7 +92,7 @@ test("[TC-IN-152] a request made in a Task offers This task, shows the rule it s
   await composer.press("Enter");
   const card = page.getByRole("region", { name: "Aldric asks permission" });
   await expect(card).toBeVisible();
-  await expect(card.getByRole("button")).toHaveText(["Allow once", "This task", "Always for this site", "Deny"]);
+  await expect(card.getByRole("button")).toHaveText(["Allow once", "This task", "Always for this branch", "Deny"]);
   await card.getByRole("button", { name: "This task" }).click();
   const form = card.getByRole("form", { name: "This task" });
   await expect(form).toContainText("Hobbots saves this rule for this task only.");

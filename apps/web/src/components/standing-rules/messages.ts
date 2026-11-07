@@ -11,7 +11,7 @@ export const messages = {
       "Things you told a hob it can always do, in one place. Remove one and that hob asks again next time. Also listed in Inbox › History.",
   },
   empty: "No standing rules",
-  emptyHint: "When you pick “Always for this site” on a request, the rule it saves shows here.",
+  emptyHint: "When you pick Always on a request, the rule it saves shows here.",
   failed: "Hobbots could not read the standing rules.",
   retry: "Try again",
   unknownHob: "A hob",

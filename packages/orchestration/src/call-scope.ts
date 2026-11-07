@@ -194,14 +194,17 @@ export const ownTask = (scope: CallScope, id: string | undefined): Effect.Effect
       : refuse("not-owner", `Task ${task.id} is not yours; only its owner can do this.`),
   );
 
-/** A Task the caller leads from this turn: it owns a Task above it, the turn's own or one under it. */
+/** Whether the caller leads `task` from this turn: it owns a Task above it, the turn's own or one under it. */
+export const leads = (scope: CallScope, task: Task): boolean =>
+  withinTurn(scope, task) &&
+  ancestorsOf(task, scope.tree.tasks).some(
+    (above) => above.ownerId === scope.caller.agentId && withinTurn(scope, above),
+  );
+
+/** A Task the caller leads from this turn, or a refusal naming it. */
 export const ledTask = (scope: CallScope, id: string): Effect.Effect<Task, TaskToolRefused> =>
   Effect.flatMap(taskIn(scope, id), (task) =>
-    ancestorsOf(task, scope.tree.tasks).some(
-      (above) => above.ownerId === scope.caller.agentId && withinTurn(scope, above),
-    )
-      ? Effect.succeed(task)
-      : refuse("not-lead", `Task ${task.id} is not under any Task of yours.`),
+    leads(scope, task) ? Effect.succeed(task) : refuse("not-lead", `Task ${task.id} is not under any Task of yours.`),
   );
 
 /** A Quest's deadline: the one asked for, never later than the one above it, and not passed. */

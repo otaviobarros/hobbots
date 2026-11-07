@@ -107,7 +107,7 @@ const inInbox = async (inbox: Page, current: Hub, title: RegExp) => {
 };
 
 const saveAlways = async (card: Locator) => {
-  await card.getByRole("button", { name: "Always for this site" }).click();
+  await card.getByRole("button", { name: "Always for this file" }).click();
   await card.getByRole("button", { name: "Save the rule and allow" }).click();
 };
 
@@ -131,7 +131,7 @@ test("[TC-PE-129] double-clicking Allow once or Save the rule runs the action on
   await expect(replySteps(page).locator('[data-state="done"]', { hasText: "git push" })).toHaveCount(1);
 
   const tidy = await ask(page, remove("old.txt"));
-  await tidy.getByRole("button", { name: "Always for this site" }).click();
+  await tidy.getByRole("button", { name: "Always for this file" }).click();
   await tidy.getByRole("button", { name: "Save the rule and allow" }).dblclick();
   await expect(tidy.getByRole("status")).toHaveText("✓ Allowed, and the rule is saved. Pip carries on.");
   await expect(page.getByText(/^Echo: Tidy up/)).toBeVisible();
