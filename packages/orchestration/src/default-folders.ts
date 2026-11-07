@@ -97,12 +97,7 @@ const parentOf = (path: string, separator: PathSeparator): string | null => {
  * the work writes or reads: as the hub stores it, when it exists inside one of `lead`. Only the
  * folder right above it counts, so a path never widens to a folder far above what it names (#1181).
  */
-const namedParents = (
-  checks: FolderChecksShape,
-  lead: ReadonlyArray<string>,
-  text: string,
-  separator: PathSeparator,
-) =>
+const namedParents = (checks: FolderChecksShape, lead: ReadonlyArray<string>, text: string, separator: PathSeparator) =>
   Effect.gen(function* () {
     const found = yield* Effect.forEach(
       pathsIn(text, separator),
