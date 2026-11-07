@@ -1,4 +1,4 @@
-import type { HobSkills, SkillsList } from "@hobbots/api";
+import type { HobSkills } from "@hobbots/api";
 import { type Agent, skillRevisionLabel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
@@ -47,7 +47,9 @@ export function HobSkillsTab({ hob }: { hob: Agent }) {
 
   return (
     <div className="flex animate-hb-in flex-col gap-4.5 pt-2">
-      <p className="m-0 text-ui text-text-secondary">{copy.intro({ name: hob.name, count: view.data.skills.length })}</p>
+      <p className="m-0 text-ui text-text-secondary">
+        {copy.intro({ name: hob.name, count: view.data.skills.length })}
+      </p>
       {said !== null && (
         <p role="status" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
           {said}
@@ -207,7 +209,15 @@ function Sources({ hob, groups }: { hob: Agent; groups: ReadonlyArray<CarriedGro
 /** The Skills tab's icon, the sidebar's Skills mark at tab size. */
 export function SkillsTabIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={1.5}>
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      width={14}
+      height={14}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+    >
       <path d={LINE_ICONS.Skills} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );

@@ -35,7 +35,10 @@ export function HobGive({
   const run = (offer: GiveOffer) => {
     setFailure(null);
     const skill = skillTitle(offer.skill.name);
-    const done = { onSuccess: () => onSaid(copy.given({ name: hob.name, skill })), onError: () => setFailure(copy.failed) };
+    const done = {
+      onSuccess: () => onSaid(copy.given({ name: hob.name, skill })),
+      onError: () => setFailure(copy.failed),
+    };
     if (offer._tag === "TurnOn")
       writes.optOut.mutate({ agentId: hob.id, skillId: offer.skill.id, optedOut: false }, done);
     else writes.give.mutate({ skillId: offer.skill.id, scope: ownScope(hob.id) }, done);

@@ -58,8 +58,7 @@ export const messages = {
       held ? `Kept on an older revision · ${rev} available` : `An older revision · ${rev} available`,
     replaced: ({ by }: { by: string }) => `Replaced by ${by}`,
     clash: "Two projects define it",
-    turnedOff: ({ name, skill }: { name: string; skill: string }) =>
-      `${skill} is off for ${name} from its next chat.`,
+    turnedOff: ({ name, skill }: { name: string; skill: string }) => `${skill} is off for ${name} from its next chat.`,
     turnedOn: ({ name, skill }: { name: string; skill: string }) => `${name} gets ${skill} again from its next chat.`,
     failed: "That did not change. Try again.",
     foot: ({ name }: { name: string }) =>

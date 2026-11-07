@@ -59,7 +59,14 @@ const loaded = (name: string, scope: SkillScope, pin = hash(1), missingCharms: R
   missingCharms,
 });
 
-const skills = [skill("commit-style", 2), skill("astro"), skill("deploy"), skill("style"), skill("support"), skill("loose")];
+const skills = [
+  skill("commit-style", 2),
+  skill("astro"),
+  skill("deploy"),
+  skill("style"),
+  skill("support"),
+  skill("loose"),
+];
 const assignments = [
   assignment("commit-style", everyone, hash(1), true),
   assignment("astro", project(site)),
@@ -93,12 +100,7 @@ describe("a hob's skills (ADR 029, Scopes)", () => {
   // covers ADR 029 (Scopes, Pins and rollout), #1062
   it("[TC-UI-1062-01] lists what a hob carries by scope, with skills turned off, replaced, clashing and held back", () => {
     const groups = carriedGroups(view, list);
-    expect(groups.map((group) => group.key)).toEqual([
-      "everyone",
-      `project:${docs}`,
-      `project:${site}`,
-      `hob:${pip}`,
-    ]);
+    expect(groups.map((group) => group.key)).toEqual(["everyone", `project:${docs}`, `project:${site}`, `hob:${pip}`]);
     const rows = groups.map((group) =>
       group.rows.map((row) => [row.skill.name, row.state._tag, row.number, row.newer, row.held]),
     );

@@ -13,7 +13,7 @@ import {
  * Why a skill a hob would get does not load, or loads with a note: it is turned off for the hob, a
  * narrower scope's skill of the same name replaces it, or two projects define its name.
  */
-export type CarriedState =
+type CarriedState =
   | { readonly _tag: "Loads" }
   | { readonly _tag: "Off" }
   | { readonly _tag: "Replaced"; readonly by: SkillScope }
@@ -96,7 +96,15 @@ export const carriedGroups = (hob: HobSkills, list: SkillsList): ReadonlyArray<C
   for (const { assignment, by } of hob.replaced) {
     const skill = skills.get(assignment.skillId);
     if (skill === undefined) continue;
-    add(rowOf(skill, assignment.scope, assignment, assignment.pin, extraOf(assignment, { _tag: "Replaced", by: by.scope })));
+    add(
+      rowOf(
+        skill,
+        assignment.scope,
+        assignment,
+        assignment.pin,
+        extraOf(assignment, { _tag: "Replaced", by: by.scope }),
+      ),
+    );
   }
   for (const clash of hob.clashes) {
     for (const assignment of clash.assignments) {
@@ -168,9 +176,7 @@ export const giveOffers = (hob: HobSkills, list: SkillsList): ReadonlyArray<Give
 
 /** The skills Summon offers a hob that does not exist yet: every one Everyone does not give it already. */
 export const summonOffers = (list: SkillsList): ReadonlyArray<GiveOffer> => {
-  const everyone = new Set(
-    list.assignments.filter((one) => one.scope._tag === "Everyone").map((one) => one.skillId),
-  );
+  const everyone = new Set(list.assignments.filter((one) => one.scope._tag === "Everyone").map((one) => one.skillId));
   return [...list.skills]
     .filter((skill) => !everyone.has(skill.id))
     .sort((a, b) => a.name.localeCompare(b.name))

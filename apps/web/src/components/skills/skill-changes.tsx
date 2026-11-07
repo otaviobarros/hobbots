@@ -111,8 +111,13 @@ export function SkillChanges({ hobs, say, now }: { hobs: HobDirectory; say: Say;
           <section key={day} aria-label={day} className="flex flex-col gap-1.5">
             <h3 className="lbl m-0 text-label">{day}</h3>
             <RowList label={day}>
-              {those.map((change, index) => (
-                <ChangeRow key={`${change.at}-${change.skillId}-${index}`} change={change} hobs={hobs} say={say} />
+              {those.map((change) => (
+                <ChangeRow
+                  key={`${change.at}-${change.skillId}-${change.kind}`}
+                  change={change}
+                  hobs={hobs}
+                  say={say}
+                />
               ))}
             </RowList>
           </section>

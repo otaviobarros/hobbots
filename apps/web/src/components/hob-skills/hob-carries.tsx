@@ -2,9 +2,16 @@ import type { HobSkills, SkillsList } from "@hobbots/api";
 import { type Agent, skillRevisionLabel } from "@hobbots/domain";
 import { Switch } from "@hobbots/ui/components/switch";
 import { Link } from "@tanstack/react-router";
-import { messages as shared } from "../messages.ts";
 import { RowList } from "../memory/memory-overview.tsx";
-import { type HobDirectory, projectName, scopeName, skillsSearchOf, skillTitle, skillView } from "../skills/skills-model.ts";
+import { messages as shared } from "../messages.ts";
+import {
+  type HobDirectory,
+  projectName,
+  scopeName,
+  skillsSearchOf,
+  skillTitle,
+  skillView,
+} from "../skills/skills-model.ts";
 import { RevTag, SkillChip } from "../skills/skills-parts.tsx";
 import { type CarriedGroup, type CarriedRow, carriedGroups } from "./hob-skills-model.ts";
 import { messages } from "./messages.ts";

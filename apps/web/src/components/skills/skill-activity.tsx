@@ -1,5 +1,5 @@
 import type { SkillDetail } from "@hobbots/api";
-import { type AgentId, skillRevisionLabel, type Thread, type ThreadId } from "@hobbots/domain";
+import { type AgentId, type SkillUseCounts, skillRevisionLabel, type Thread, type ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQueries, useQuery } from "@tanstack/react-query";
@@ -18,9 +18,55 @@ const copy = messages.activity;
 const useThreadTitles = (agentIds: ReadonlyArray<AgentId>) => {
   const reads = useQueries({ queries: agentIds.map((agentId) => threadsQuery(agentId)) });
   const titles = new Map<ThreadId, string>();
-  for (const read of reads) for (const thread of (read.data ?? []) as ReadonlyArray<Thread>) titles.set(thread.id, thread.title);
+  for (const read of reads)
+    for (const thread of (read.data ?? []) as ReadonlyArray<Thread>) titles.set(thread.id, thread.title);
   return titles;
 };
+
+type SkillUses = typeof SkillUseCounts.Type;
+
+/** A hob's uses of the skill, with when it last used it. */
+function HobUseRow({ use, hobs }: { use: SkillUses["hobs"][number]; hobs: HobDirectory }) {
+  const hob = hobs.get(use.agentId);
+  return (
+    <li className="flex items-center gap-2.5 bg-card px-3.5 py-2.5">
+      <ScopeMark scope={{ _tag: "Hob", agentId: use.agentId }} hob={hob} />
+      <span className="min-w-0 flex-1 truncate text-ui text-text-strong">{hob?.name ?? messages.scopes.formerHob}</span>
+      <span className="text-meta whitespace-nowrap text-label">
+        {copy.times({ count: use.count, when: formatWhen(use.lastAt) })}
+      </span>
+    </li>
+  );
+}
+
+/** A chat the skill was used in, which opens the chat. */
+function ChatUseRow({
+  use,
+  hobs,
+  title,
+}: {
+  use: SkillUses["threads"][number];
+  hobs: HobDirectory;
+  title: string | undefined;
+}) {
+  const hob = hobs.get(use.agentId)?.name ?? messages.scopes.formerHob;
+  return (
+    <li className="[contain-intrinsic-size:auto_44px] [content-visibility:auto]">
+      <Link
+        to="/hobs/$hobId/threads/$threadId"
+        params={{ hobId: use.agentId, threadId: use.threadId }}
+        className="flex items-center gap-3 bg-card px-3.5 py-2.5 text-inherit no-underline hover:bg-hover"
+      >
+        <span className="min-w-0 flex-1 truncate text-ui text-text-strong">
+          {copy.chatLine({ hob, chat: title ?? copy.chat })}
+        </span>
+        <span className="text-meta whitespace-nowrap text-label">
+          {copy.times({ count: use.count, when: formatWhen(use.lastAt) })}
+        </span>
+      </Link>
+    </li>
+  );
+}
 
 /**
  * A skill's Activity (ADR 029, The use line): how the use line reads under a reply, how often hobs
@@ -64,45 +110,17 @@ export function SkillActivity({ detail, hobs }: { detail: SkillDetail; hobs: Hob
           <section aria-label={copy.byHob} className="flex flex-col gap-1">
             <h3 className="lbl m-0 pb-1 text-label">{copy.byHob}</h3>
             <RowList label={copy.byHob}>
-              {uses.data.hobs.map((one) => {
-                const hob = hobs.get(one.agentId);
-                return (
-                  <li key={one.agentId} className="flex items-center gap-2.5 bg-card px-3.5 py-2.5">
-                    <ScopeMark scope={{ _tag: "Hob", agentId: one.agentId }} hob={hob} />
-                    <span className="min-w-0 flex-1 truncate text-ui text-text-strong">
-                      {hob?.name ?? messages.scopes.formerHob}
-                    </span>
-                    <span className="text-meta whitespace-nowrap text-label">
-                      {copy.times({ count: one.count, when: formatWhen(one.lastAt) })}
-                    </span>
-                  </li>
-                );
-              })}
+              {uses.data.hobs.map((one) => (
+                <HobUseRow key={one.agentId} use={one} hobs={hobs} />
+              ))}
             </RowList>
           </section>
           <section aria-label={copy.chats} className="flex flex-col gap-1">
             <h3 className="lbl m-0 pb-1 text-label">{copy.chats}</h3>
             <RowList label={copy.chats}>
-              {uses.data.threads.map((one) => {
-                const hob = hobs.get(one.agentId)?.name ?? messages.scopes.formerHob;
-                const chat = titles.get(one.threadId) ?? copy.chat;
-                return (
-                  <li key={one.threadId} className="[contain-intrinsic-size:auto_44px] [content-visibility:auto]">
-                    <Link
-                      to="/hobs/$hobId/threads/$threadId"
-                      params={{ hobId: one.agentId, threadId: one.threadId }}
-                      className="flex items-center gap-3 bg-card px-3.5 py-2.5 text-inherit no-underline hover:bg-hover"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-ui text-text-strong">
-                        {copy.chatLine({ hob, chat })}
-                      </span>
-                      <span className="text-meta whitespace-nowrap text-label">
-                        {copy.times({ count: one.count, when: formatWhen(one.lastAt) })}
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
+              {uses.data.threads.map((one) => (
+                <ChatUseRow key={one.threadId} use={one} hobs={hobs} title={titles.get(one.threadId)} />
+              ))}
             </RowList>
           </section>
         </>

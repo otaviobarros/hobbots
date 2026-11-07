@@ -44,6 +44,24 @@ const byOf = (change: SkillChange, hobs: HobDirectory) => {
   }
 };
 
+const savedText = (change: SkillChange, hobs: HobDirectory, name: string) => ({
+  kind: copy.saved({ by: byOf(change, hobs) }),
+  line: copy.savedLine({ name, rev: rev(change.number), count: change.scopes.length }),
+  note:
+    change.held.length === 0
+      ? null
+      : copy.heldNote({ who: formatList(change.held.map((scope) => scopeName(scope, hobs))) }),
+});
+
+const rolledOutText = (change: SkillChange, name: string, who: string) => {
+  const back = change.previousNumber !== null && change.number !== null && change.previousNumber > change.number;
+  return {
+    kind: back ? copy.rolledBack : copy.rolledOut,
+    line: copy.movedLine({ name, from: rev(change.previousNumber), to: rev(change.number), who }),
+    note: null,
+  };
+};
+
 /** A change's kind line, its sentence, and the note under it. */
 export const changeText = (change: SkillChange, hobs: HobDirectory) => {
   const name = skillTitle(change.name);
@@ -51,22 +69,9 @@ export const changeText = (change: SkillChange, hobs: HobDirectory) => {
   const hob = change.agentId === null ? "" : (hobs.get(change.agentId)?.name ?? messages.scopes.formerHob);
   switch (change.kind) {
     case "saved":
-      return {
-        kind: copy.saved({ by: byOf(change, hobs) }),
-        line: copy.savedLine({ name, rev: rev(change.number), count: change.scopes.length }),
-        note:
-          change.held.length === 0
-            ? null
-            : copy.heldNote({ who: formatList(change.held.map((scope) => scopeName(scope, hobs))) }),
-      };
-    case "rolledOut": {
-      const back = change.previousNumber !== null && change.number !== null && change.previousNumber > change.number;
-      return {
-        kind: back ? copy.rolledBack : copy.rolledOut,
-        line: copy.movedLine({ name, from: rev(change.previousNumber), to: rev(change.number), who }),
-        note: null,
-      };
-    }
+      return savedText(change, hobs, name);
+    case "rolledOut":
+      return rolledOutText(change, name, who);
     case "assigned":
       return { kind: copy.assigned, line: copy.assignedLine({ name, rev: rev(change.number), who }), note: null };
     case "unassigned":

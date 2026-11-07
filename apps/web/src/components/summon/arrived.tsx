@@ -6,8 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate } from "@tanstack/react-router";
 import { writeDraft } from "../../api/drafts.ts";
 import { agentsQuery } from "../../api/queries.ts";
-import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages as skillsCopy } from "../hob-skills/messages.ts";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { startersFor } from "./summon-model.ts";
 
@@ -47,9 +47,17 @@ function Arrived({ hob, skillsNotGiven }: { hob: Agent; skillsNotGiven: boolean 
         </h1>
         <p className="m-0 max-w-full text-text-secondary break-words">{copy.body({ name, role: hob.roleTitle })}</p>
         {skillsNotGiven && (
-          <p role="status" className="m-0 w-full rounded-card bg-notice px-3.5 py-2.5 text-start text-ui text-text-strong">
+          <p
+            role="status"
+            className="m-0 w-full rounded-card bg-notice px-3.5 py-2.5 text-start text-ui text-text-strong"
+          >
             {skillsCopy.summon.notGiven({ name })}{" "}
-            <Link to="/hobs/$hobId" params={{ hobId: hob.id }} search={{ tab: "skills" }} className="text-link underline">
+            <Link
+              to="/hobs/$hobId"
+              params={{ hobId: hob.id }}
+              search={{ tab: "skills" }}
+              className="text-link underline"
+            >
               {skillsCopy.summon.openTab}
             </Link>
           </p>

@@ -54,6 +54,113 @@ const blank = (at: string, skillId: SkillId, name: SkillName) => ({
 const near = (draft: Draft | undefined, at: string): draft is Draft =>
   draft !== undefined && Date.parse(at) - draft.ms <= SAME_CHANGE_MS;
 
+/** The changes so far, and the latest of each skill, which a rollout or a hold that follows it may join. */
+interface Changes {
+  readonly lookup: SkillChangeLookup;
+  readonly nameOf: (skillId: SkillId) => SkillName | null;
+  readonly list: Array<Draft>;
+  readonly last: Map<SkillId, Draft>;
+}
+
+const push = (changes: Changes, draft: Draft) => {
+  changes.list.push(draft);
+  changes.last.set(draft.skillId, draft);
+};
+
+const ofAssignment = (changes: Changes, kind: SkillChange["kind"], assignment: SkillAssignment, at: string) => {
+  const name = changes.nameOf(assignment.skillId);
+  if (name === null) return;
+  push(changes, {
+    ...blank(at, assignment.skillId, name),
+    kind,
+    number: changes.lookup.number(assignment.skillId, assignment.pin),
+    scopes: [assignment.scope],
+    by: assignment.by,
+  });
+};
+
+const saved = (changes: Changes, event: Extract<JournaledEvent, { _tag: "SkillRevisionAdded" }>, at: string) => {
+  const { skill, revision } = event;
+  const previous = changes.lookup.before(skill.id, revision.number);
+  push(changes, {
+    ...blank(at, skill.id, skill.name),
+    kind: "saved",
+    number: revision.number,
+    pin: revision.hash,
+    previous,
+    previousNumber: previous === null ? null : revision.number - 1,
+    by: revision.addedBy,
+  });
+};
+
+const rolledOut = (changes: Changes, event: Extract<JournaledEvent, { _tag: "SkillRolledOut" }>, at: string) => {
+  const { assignment, from } = event;
+  const before = changes.last.get(assignment.skillId);
+  const joins =
+    near(before, at) &&
+    before.pin === assignment.pin &&
+    (before.kind === "saved" || (before.kind === "rolledOut" && before.previous === from));
+  if (joins) {
+    before.scopes = [...before.scopes, assignment.scope];
+    before.moved = [...before.moved, assignment.id];
+    return;
+  }
+  const name = changes.nameOf(assignment.skillId);
+  if (name === null) return;
+  push(changes, {
+    ...blank(at, assignment.skillId, name),
+    kind: "rolledOut",
+    number: changes.lookup.number(assignment.skillId, assignment.pin),
+    pin: assignment.pin,
+    scopes: [assignment.scope],
+    moved: [assignment.id],
+    previous: from,
+    previousNumber: changes.lookup.number(assignment.skillId, from),
+    by: assignment.by,
+  });
+};
+
+const held = (changes: Changes, assignment: SkillAssignment, at: string) => {
+  const before = changes.last.get(assignment.skillId);
+  // A save holds the places you switched off before its rollout moves the rest.
+  if (assignment.held && near(before, at) && before.kind === "saved" && before.moved.length === 0) {
+    before.held = [...before.held, assignment.scope];
+    return;
+  }
+  ofAssignment(changes, assignment.held ? "held" : "followed", assignment, at);
+};
+
+const optedOut = (changes: Changes, event: Extract<JournaledEvent, { _tag: "SkillOptOutChanged" }>, at: string) => {
+  const name = changes.nameOf(event.optOut.skillId);
+  if (name === null) return;
+  push(changes, {
+    ...blank(at, event.optOut.skillId, name),
+    kind: event.optedOut ? "optedOut" : "optedIn",
+    agentId: event.optOut.agentId,
+  });
+};
+
+const add = (changes: Changes, event: JournaledEvent, at: string) => {
+  switch (event._tag) {
+    case "SkillRevisionAdded":
+      return saved(changes, event, at);
+    case "SkillRolledOut":
+      return rolledOut(changes, event, at);
+    case "SkillHeld":
+      return held(changes, event.assignment, at);
+    case "SkillAssigned":
+      return ofAssignment(changes, "assigned", event.assignment, at);
+    case "SkillUnassigned":
+      return ofAssignment(changes, "unassigned", event.assignment, at);
+    case "SkillOptOutChanged":
+      return optedOut(changes, event, at);
+    case "SkillRemoved":
+      return push(changes, { ...blank(at, event.skill.id, event.skill.name), kind: "removed" });
+    default:
+      return;
+  }
+};
+
 /**
  * The journal's skill entries as What changed lists them (ADR 029, The Skills page), newest first.
  * A save's rollout and the holds it set read as part of the save, and a rollout's moves of one skill
@@ -64,112 +171,23 @@ export const skillChangesOf = (
   lookup: SkillChangeLookup,
   limit: number,
 ): ReadonlyArray<SkillChange> => {
-  const changes: Array<Draft> = [];
-  // The latest change of each skill, which a rollout or a hold that follows it may join.
-  const last = new Map<SkillId, Draft>();
   // A skill removed since keeps the name its last revision or its removal gave it.
   const removed = new Map<SkillId, SkillName>();
   for (const { payload } of envelopes) {
-    if (payload._tag === "SkillRevisionAdded") removed.set(payload.skill.id, payload.skill.name);
-    if (payload._tag === "SkillRemoved") removed.set(payload.skill.id, payload.skill.name);
-  }
-  const nameOf = (skillId: SkillId) => lookup.name(skillId) ?? removed.get(skillId) ?? null;
-  const push = (draft: Draft) => {
-    changes.push(draft);
-    last.set(draft.skillId, draft);
-  };
-  const ofAssignment = (kind: SkillChange["kind"], assignment: SkillAssignment, at: string) => {
-    const name = nameOf(assignment.skillId);
-    if (name === null) return;
-    push({
-      ...blank(at, assignment.skillId, name),
-      kind,
-      number: lookup.number(assignment.skillId, assignment.pin),
-      scopes: [assignment.scope],
-      by: assignment.by,
-    });
-  };
-
-  for (const envelope of [...envelopes].sort((a, b) => a.sequence - b.sequence)) {
-    const event: JournaledEvent = envelope.payload;
-    const at = envelope.occurredAt;
-    switch (event._tag) {
-      case "SkillRevisionAdded": {
-        const { skill, revision } = event;
-        const previous = lookup.before(skill.id, revision.number);
-        push({
-          ...blank(at, skill.id, skill.name),
-          kind: "saved",
-          number: revision.number,
-          pin: revision.hash,
-          previous,
-          previousNumber: previous === null ? null : revision.number - 1,
-          by: revision.addedBy,
-        });
-        break;
-      }
-      case "SkillRolledOut": {
-        const { assignment, from } = event;
-        const before = last.get(assignment.skillId);
-        const joins =
-          near(before, at) &&
-          before.pin === assignment.pin &&
-          (before.kind === "saved" || (before.kind === "rolledOut" && before.previous === from));
-        if (joins) {
-          before.scopes = [...before.scopes, assignment.scope];
-          before.moved = [...before.moved, assignment.id];
-          break;
-        }
-        const name = nameOf(assignment.skillId);
-        if (name === null) break;
-        push({
-          ...blank(at, assignment.skillId, name),
-          kind: "rolledOut",
-          number: lookup.number(assignment.skillId, assignment.pin),
-          pin: assignment.pin,
-          scopes: [assignment.scope],
-          moved: [assignment.id],
-          previous: from,
-          previousNumber: lookup.number(assignment.skillId, from),
-          by: assignment.by,
-        });
-        break;
-      }
-      case "SkillHeld": {
-        const { assignment } = event;
-        const before = last.get(assignment.skillId);
-        // A save holds the places you switched off before its rollout moves the rest.
-        if (assignment.held && near(before, at) && before.kind === "saved" && before.moved.length === 0) {
-          before.held = [...before.held, assignment.scope];
-          break;
-        }
-        ofAssignment(assignment.held ? "held" : "followed", assignment, at);
-        break;
-      }
-      case "SkillAssigned":
-        ofAssignment("assigned", event.assignment, at);
-        break;
-      case "SkillUnassigned":
-        ofAssignment("unassigned", event.assignment, at);
-        break;
-      case "SkillOptOutChanged": {
-        const name = nameOf(event.optOut.skillId);
-        if (name === null) break;
-        push({
-          ...blank(at, event.optOut.skillId, name),
-          kind: event.optedOut ? "optedOut" : "optedIn",
-          agentId: event.optOut.agentId,
-        });
-        break;
-      }
-      case "SkillRemoved":
-        push({ ...blank(at, event.skill.id, event.skill.name), kind: "removed" });
-        break;
-      default:
-        break;
+    if (payload._tag === "SkillRevisionAdded" || payload._tag === "SkillRemoved") {
+      removed.set(payload.skill.id, payload.skill.name);
     }
   }
-  return changes
+  const changes: Changes = {
+    lookup,
+    nameOf: (skillId) => lookup.name(skillId) ?? removed.get(skillId) ?? null,
+    list: [],
+    last: new Map(),
+  };
+  for (const envelope of [...envelopes].sort((a, b) => a.sequence - b.sequence)) {
+    add(changes, envelope.payload, envelope.occurredAt);
+  }
+  return changes.list
     .reverse()
     .slice(0, limit)
     .map(({ pin: _pin, ms: _ms, ...change }) => change);

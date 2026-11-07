@@ -4,15 +4,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useActivity } from "../../api/activity.ts";
-import { useHobSkills } from "../../api/hob-skills.ts";
 import { useIsNewHob } from "../../api/history.ts";
+import { useHobSkills } from "../../api/hob-skills.ts";
 import { hobMemoryScopesQuery } from "../../api/memory-saves.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
 import { PageToastViewport } from "../archive/archive-toast.tsx";
 import type { WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
-import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { HobSkillsTab, SkillsTabIcon } from "../hob-skills/hob-skills-tab.tsx";
+import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { MemoryIcon } from "../memory/memory-parts.tsx";
 import { HobAside } from "./hob-aside.tsx";
 import { ChatsLoading, HobChats } from "./hob-chats.tsx";

@@ -11,7 +11,8 @@ const copy = messages.picker;
 /** Where an offered skill is given now, as its row says it, then the start of what it is for. */
 const subOf = (offer: GiveOffer, name: string, hobs: HobDirectory) => {
   if (offer._tag === "TurnOn") return copy.offFor({ scope: scopeName(offer.scope, hobs), name });
-  const where = offer.given.length === 0 ? copy.notGiven : offer.given.map((scope) => scopeName(scope, hobs)).join(", ");
+  const where =
+    offer.given.length === 0 ? copy.notGiven : offer.given.map((scope) => scopeName(scope, hobs)).join(", ");
   return `${where} · ${offer.skill.description}`;
 };
 

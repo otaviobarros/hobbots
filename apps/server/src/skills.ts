@@ -37,6 +37,7 @@ import {
   type SkillRevisionHash,
   skillUseWeekStart,
 } from "@hobbots/domain";
+import { EventJournal } from "@hobbots/persistence";
 import {
   AgentsFolder,
   AgentsFolderLive,
@@ -48,7 +49,6 @@ import {
   SkillObjectsLive,
   SkillWriterLive,
 } from "@hobbots/skills";
-import { EventJournal } from "@hobbots/persistence";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { SKILL_CHANGE_TYPES, skillChangesOf, skillIdOfChange } from "./skill-changes.ts";
@@ -266,7 +266,9 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
       const envelopes = yield* journal.value.latestOf(SKILL_CHANGE_TYPES, CHANGES_READ);
       const names = new Map((yield* library.list).map((skill) => [skill.id, skill.name]));
       const ids = [...new Set(envelopes.flatMap((one) => skillIdOfChange(one.payload) ?? []))];
-      const revisions = new Map(yield* Effect.forEach(ids, (id) => Effect.map(library.revisions(id), (all) => [id, all] as const)));
+      const revisions = new Map(
+        yield* Effect.forEach(ids, (id) => Effect.map(library.revisions(id), (all) => [id, all] as const)),
+      );
       return {
         changes: skillChangesOf(
           envelopes,
