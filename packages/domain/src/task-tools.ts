@@ -228,7 +228,9 @@ export const TaskToolInputs = {
         Schema.Struct({
           kind: ArtifactKind,
           label: text("A short name for it."),
-          value: text("A file's absolute path, a link, or the text itself."),
+          value: text(
+            "A file's absolute path inside your folders, a link, or the text itself. Never a file in $TMPDIR, which is removed when your turn ends.",
+          ),
         }),
       ),
     ),
@@ -358,6 +360,8 @@ export const TaskToolRefusal = Schema.Literals([
   "task-state",
   "claim-stale",
   "uncommitted-changes",
+  // A file the Task returns that no one could open once it completes, such as one in the turn's $TMPDIR.
+  "artifact-unreachable",
   // A Charm call, such as `git_init` or a GitHub write, the hub refused (#664): its message says why.
   "charm-refused",
 ]);

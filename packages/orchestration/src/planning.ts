@@ -53,6 +53,11 @@ interface Deps {
   readonly limits: TaskToolLimits;
   /** What the Task leaves uncommitted in its folders, read as it completes (#586). */
   readonly wrapUp: (task: Task, attempts: ReadonlyArray<AttemptId>, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
+  /** Why the file artifacts a Task returns could not be opened once it completes, or null (see `delivery.ts`). */
+  readonly delivered: (
+    folders: ReadonlyArray<string>,
+    artifacts: NonNullable<TaskToolInput<"complete_task">["artifacts"]>,
+  ) => Effect.Effect<string | null>;
   readonly folderChecks: FolderChecksShape;
   /** The caller's authority on a Task: its own, narrowed by every Delegation on the way down. */
   readonly authority: (scope: CallScope, task: Task) => Effect.Effect<Authority>;
@@ -204,7 +209,16 @@ const newMilestones = (titles: ReadonlyArray<string> | undefined) =>
  * Tools a Task's owner runs its own work with: steps, a Quest, waits, the result, and cancelling
  * work under it.
  */
-export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, authority, separator }: Deps) => ({
+export const makePlanning = ({
+  tasks,
+  capacity,
+  limits,
+  wrapUp,
+  delivered,
+  folderChecks,
+  authority,
+  separator,
+}: Deps) => ({
   plan_steps: (scope: CallScope, input: Omit<TaskToolInput<"plan_steps">, "key">) =>
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
@@ -338,6 +352,11 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, au
       const task = yield* ownTask(scope, input.task_id);
       if (task.currentAttemptId === null) {
         return yield* refuse("no-attempt", `Task ${task.id} has not started, so it has no result yet.`);
+      }
+      // Done means delivered: a file the Task returns must still be there for whoever reads its result.
+      const undelivered = yield* delivered((yield* authority(scope, task)).folders, input.artifacts ?? []);
+      if (undelivered !== null) {
+        return yield* refuse("artifact-unreachable", `Task ${task.id} is not complete yet. ${undelivered}`);
       }
       const artifacts = (input.artifacts ?? []).map((artifact) => ({ ...artifact, id: ArtifactId.make(newId()) }));
       // The Quest's own result is the user's, so its lead commits what it changed or says why not (#665).

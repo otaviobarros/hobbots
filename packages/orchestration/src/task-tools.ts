@@ -52,6 +52,7 @@ import {
 import { makeCharmRecords } from "./charm-records.ts";
 import { makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeDelegating } from "./delegating.ts";
+import { makeDeliveryCheck } from "./delivery.ts";
 import { flagIdleQuest } from "./empty-quests.ts";
 import { makeLeading } from "./leading.ts";
 import { makePlanning } from "./planning.ts";
@@ -157,9 +158,19 @@ export class TaskTools extends Context.Service<
         const folderChecks = yield* FolderChecks;
         const hobs = yield* HobbotsRepository;
         const wrapUp = yield* makeWrapUp;
+        const delivered = yield* makeDeliveryCheck;
         const settle = yield* makeSettle;
         const handlers: Record<TaskToolName, ToolHandler> = {
-          ...makePlanning({ tasks, capacity, limits, wrapUp, folderChecks, authority: authority.of, separator }),
+          ...makePlanning({
+            tasks,
+            capacity,
+            limits,
+            wrapUp,
+            delivered,
+            folderChecks,
+            authority: authority.of,
+            separator,
+          }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
           ...makeAsking({ tasks }),
           ...makeLeading({ tasks }),
