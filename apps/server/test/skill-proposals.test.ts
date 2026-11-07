@@ -95,6 +95,8 @@ const skillMd = (name: string, body = `Steps for ${name}.`) =>
  * another import or update would land while its files were copied.
  */
 const races: Array<Effect.Effect<unknown, unknown, SkillImporter>> = [];
+/** Whether the hub stops right after the next write of a proposal, before anything else is done. */
+const stop = { afterWrite: false };
 
 /** The library's writer as proposals reach it, with `races` landing first. */
 const RacingWriter = Layer.effect(
@@ -108,7 +110,12 @@ const RacingWriter = Layer.effect(
         Effect.gen(function* () {
           const race = races.shift();
           if (race !== undefined) yield* Effect.orDie(Effect.provideService(race, SkillImporter, importer));
-          return yield* real.write(files, options);
+          const added = yield* real.write(files, options);
+          if (stop.afterWrite) {
+            stop.afterWrite = false;
+            return yield* Effect.die("The hub stopped.");
+          }
+          return added;
         }),
     });
   }),
@@ -169,6 +176,7 @@ let run = 0;
 beforeEach(async () => {
   run += 1;
   races.length = 0;
+  stop.afterWrite = false;
   runtime = ManagedRuntime.make(App(path.join(root, `data-${run}`)));
   await runtime.runPromise(
     HobbotsRepository.use((repo) =>
@@ -676,6 +684,70 @@ describe("hobs proposing skills", () => {
     expect(broken).toMatchObject({ status: 422, body: { _tag: "SkillImportRefused" } });
     expect((await proposals())[0]?.proposal).toMatchObject({ state: "waiting", edited: false });
     expect(await library()).toEqual([]);
+  });
+
+  // covers ADR 029 (Proactive hobs), #1063
+  it("[TC-AG-158] a hub stopped after writing a proposal finishes what it planned, and never undoes a later rollout", async () => {
+    await importSkill("release-steps");
+    const [skill] = await library();
+    const skillId = skill?.id as never;
+    await call(SKILL_REQUEST_TOOL, { name: "release-steps", why: "To release." }, accessFor("trusting"));
+    const pinOf = async () =>
+      (await runtime.runPromise(SkillLibrary.use((skills) => skills.assignments(skillId))))[0]?.pin;
+    const revise = (body: string) =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const [added] = yield* (yield* SkillImporter).add(
+            { _tag: "Written", files: [{ path: "SKILL.md", text: skillMd("release-steps", body) }] },
+            { by: { _tag: "You" }, skillId },
+          );
+          const hash = added?.revision.hash as never;
+          yield* (yield* SkillLibrary).rollOutRevision(skillId, hash, { _tag: "You" }, "pending");
+          return hash;
+        }),
+      );
+
+    // The hub stops after it wrote r2, before r2 rolled out or the proposal was marked added.
+    await propose("release-steps", { basedOn: 1, body: "Tag, then push." });
+    const [waiting] = await proposals();
+    stop.afterWrite = true;
+    expect((await request("POST", `/api/skill-proposals/${waiting?.proposal.id}/add`, {})).status).toBe(500);
+    expect((await proposals())[0]?.proposal).toMatchObject({ state: "adding", planned: { as: "new" } });
+    // Meanwhile you write r3 and roll it out.
+    const r3 = await revise("Your own steps.");
+    expect(await pinOf()).toBe(r3);
+    await runtime.runPromise(SkillReviews.use((reviews) => reviews.recover));
+    expect((await proposals()).find((one) => one.proposal.id === waiting?.proposal.id)?.proposal).toMatchObject({
+      state: "added",
+      added: { number: 2, as: "new" },
+      planned: null,
+    });
+    expect(await pinOf()).toBe(r3);
+
+    // A rollback to r1 that rolled out before the hub stopped is not done again over a later rollout.
+    const r1 = (await runtime.runPromise(SkillLibrary.use((skills) => skills.revisions(skillId)))).find(
+      (one) => one.number === 1,
+    )?.hash as never;
+    await propose("release-steps", { basedOn: 3, body: "Steps for release-steps.", key: "back", work: "reply:m2" });
+    const back = (await proposals()).find((one) => one.proposal.state === "waiting");
+    if (back === undefined) throw new Error("No proposal waits");
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const log = yield* SkillProposalLog;
+        const planned = { hash: r1, after: r3, as: "earlier" as const };
+        yield* log.move(new SkillProposal({ ...back.proposal, state: "adding", planned }), ["waiting"]);
+        yield* (yield* SkillLibrary).rollOutRevision(skillId, r1, { _tag: "Hob", agentId: ada }, { from: r3 });
+      }),
+    );
+    expect(await pinOf()).toBe(r1);
+    const r4 = await revise("Newer steps.");
+    expect(await pinOf()).toBe(r4);
+    await runtime.runPromise(SkillReviews.use((reviews) => reviews.recover));
+    expect((await proposals()).find((one) => one.proposal.id === back.proposal.id)?.proposal).toMatchObject({
+      state: "added",
+      added: { number: 1, as: "earlier" },
+    });
+    expect(await pinOf()).toBe(r4);
   });
 
   // covers ADR 029 (Proactive hobs), #1063

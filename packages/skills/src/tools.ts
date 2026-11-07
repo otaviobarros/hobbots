@@ -338,6 +338,7 @@ export const SkillToolsLive = Layer.effect(
             state: "waiting",
             edited: false,
             added: null,
+            planned: null,
             memoryPages: (input.memoryPages ?? []).map((path) => turn.redactor.text(path)),
             threadId: turn.threadId,
             messageId: turn.messageId,

@@ -6,7 +6,9 @@ import {
   type SkillProposalAddedAs,
   SkillProposalClosed,
   SkillProposalNotFound,
+  type SkillProposalPlan,
   type SkillProposalState,
+  type SkillRevision,
   type SkillRevisionHash,
   SkillSourceUnreadable,
   skillProposalOpen,
@@ -20,6 +22,7 @@ import {
   SkillFiles,
   SkillLibrary,
   type SkillRevisionAdded,
+  type SkillRolloutWhen,
   SkillWriter,
   type WrittenFile,
 } from "./skills.ts";
@@ -145,72 +148,123 @@ export const SkillReviewsLive = Layer.effect(
       });
 
     /**
-     * Writes the files once, built on the skill's newest revision as it is now. When another revision
-     * landed while they were copied, the library refuses them (`SkillMovedOn`), and they are read
-     * again from the new newest, so nothing that revision changed goes back.
+     * What adding the proposal now writes: its files, built on the skill's newest revision as it is
+     * now, and the plan they make, by the revision their content is and how it changes the library.
+     */
+    const planOf = (adding: SkillProposal) =>
+      Effect.gen(function* () {
+        const { files: built, after } = yield* filesOf(adding, adding.instructions);
+        const checked = yield* writer.check(built);
+        const reuse =
+          checked.existing?.number != null && (adding.skillId === null || checked.existing.skillId === adding.skillId)
+            ? checked.existing.number
+            : null;
+        const as: SkillProposalAddedAs =
+          reuse === null ? "new" : after === null || checked.hash === after ? "same" : "earlier";
+        const plan: SkillProposalPlan = { hash: checked.hash, after, as };
+        return { files: built, plan };
+      });
+
+    /** Records the plan on the claimed proposal before anything is written, so a replay finishes it. */
+    const record = (adding: SkillProposal, plan: SkillProposalPlan) =>
+      Effect.gen(function* () {
+        const moved = yield* move(yield* changed(adding, { planned: plan }), ["adding"]);
+        return Option.isSome(moved) ? moved.value : yield* closedNow(adding.id);
+      });
+
+    /**
+     * Writes the files once, built on the skill's newest revision as it is now, after recording what
+     * they are. When another revision landed while they were copied, the library refuses them
+     * (`SkillMovedOn`), and they are planned and read again from the new newest, so nothing that
+     * revision changed goes back.
      */
     const written = (adding: SkillProposal, by: SkillBy, tries: number) =>
       Effect.gen(function* (): Effect.fn.Return<
-        { readonly added: SkillRevisionAdded; readonly after: SkillRevisionHash | null },
+        { readonly added: SkillRevisionAdded; readonly adding: SkillProposal; readonly plan: SkillProposalPlan },
         SkillReviewError
       > {
-        const { files: built, after } = yield* filesOf(adding, adding.instructions);
+        const { files: built, plan } = yield* planOf(adding);
+        const planned = yield* record(adding, plan);
         const added = yield* writer
           .write(built, {
             by,
             ...(adding.skillId === null ? {} : { skillId: adding.skillId }),
-            ...(after === null ? {} : { after }),
+            ...(plan.after === null ? {} : { after: plan.after }),
           })
           .pipe(
             Effect.catchTag("SkillMovedOn", (moved: SkillMovedOn) =>
               tries > 1 ? Effect.succeed(null) : Effect.fail(moved),
             ),
           );
-        if (added === null) return yield* written(adding, by, tries - 1);
-        return { added, after };
+        if (added === null) return yield* written(planned, by, tries - 1);
+        return { added, adding: planned, plan };
       });
 
-    /** How adding it changed the library: a new revision, the newest again, or an earlier one back. */
-    const addedAs = (added: SkillRevisionAdded, after: SkillRevisionHash | null): SkillProposalAddedAs => {
-      if (added.added) return "new";
-      return after === null || added.revision.hash === after ? "same" : "earlier";
-    };
+    /**
+     * The revision a recorded plan wrote, when the library has it: a hub that stopped after writing
+     * it finishes the plan as recorded, never what re-reading the library would make of it now.
+     */
+    const plannedRevision = (adding: SkillProposal) =>
+      Effect.gen(function* () {
+        const plan = adding.planned;
+        if (plan === null) return null;
+        const skillId = adding.skillId ?? (yield* library.byName(adding.name))?.id ?? null;
+        const revision = skillId === null ? null : yield* library.revision(skillId, plan.hash);
+        return revision === null ? null : { revision, plan };
+      });
 
     /**
-     * Writes what a claimed proposal holds into the library, as an approved proposal of its hob, then
-     * records it added. Importing the same content again finds the revision it already is, and an
-     * assignment or a rollout to it moves nothing twice, so a hub stopped part way finishes it whole.
+     * Gives the hob its new skill, or rolls a change out, as the plan says: a new revision as your own
+     * edit does, once; the newest again moves only what it never reached; an earlier one brought back
+     * moves only the assignments still on the revision that was newest when it was planned. Done
+     * again after a stop, each moves nothing that moved since, or that a later decision moved on.
      */
-    const write = (adding: SkillProposal) =>
+    const rollOut = (adding: SkillProposal, revision: SkillRevision, plan: SkillProposalPlan, by: SkillBy) =>
       Effect.gen(function* () {
-        const by: SkillBy = { _tag: "Hob", agentId: adding.agentId };
-        const { added, after } = yield* written(adding, by, MOVED_ON_TRIES);
-        const { revision } = added;
-        const as = addedAs(added, after);
         if (adding.skillId === null) {
+          const scope = { _tag: "Hob", agentId: adding.agentId } as const;
+          const mine = (yield* library.assignments(revision.skillId)).some(
+            (one) => one.scope._tag === "Hob" && one.scope.agentId === adding.agentId,
+          );
+          if (mine) return;
           const assigned = yield* library.assign({
             skillId: revision.skillId,
-            scope: { _tag: "Hob", agentId: adding.agentId },
+            scope,
             pin: revision.hash,
             held: false,
             onlyWhenAsked: false,
             by,
           });
           yield* announce(assigned.entries);
-        } else {
-          // An earlier revision brought back rolls out as Roll back does, whatever its past; a new one
-          // as your own edit does, and the newest again moves only what it never reached.
-          const rolled = yield* library.rollOutRevision(
-            revision.skillId,
-            revision.hash,
-            by,
-            as === "earlier" ? "always" : "pending",
-          );
-          yield* announce(rolled.entries);
+          return;
         }
+        const when: SkillRolloutWhen = plan.as === "earlier" && plan.after !== null ? { from: plan.after } : "pending";
+        const rolled = yield* library.rollOutRevision(revision.skillId, revision.hash, by, when);
+        yield* announce(rolled.entries);
+      });
+
+    /**
+     * Writes what a claimed proposal holds into the library, as an approved proposal of its hob, then
+     * records it added. What it writes is recorded first; a hub stopped after the write finishes that
+     * revision and its rollout, and one stopped before it writes nothing twice.
+     */
+    const write = (claimed: SkillProposal) =>
+      Effect.gen(function* () {
+        const by: SkillBy = { _tag: "Hob", agentId: claimed.agentId };
+        const resumed = yield* plannedRevision(claimed);
+        const { revision, plan, adding } =
+          resumed !== null
+            ? { ...resumed, adding: claimed }
+            : yield* Effect.map(written(claimed, by, MOVED_ON_TRIES), (done) => ({
+                revision: done.added.revision,
+                plan: done.plan,
+                adding: done.adding,
+              }));
+        yield* rollOut(adding, revision, plan, by);
         const done = yield* changed(adding, {
           state: "added",
-          added: { hash: revision.hash, number: revision.number, as },
+          added: { hash: revision.hash, number: revision.number, as: plan.as },
+          planned: null,
           decidedAt: yield* now,
         });
         const moved = yield* move(done, ["adding"]);
@@ -219,7 +273,7 @@ export const SkillReviewsLive = Layer.effect(
 
     /** Sends a proposal whose import was refused back to you, waiting, with your edit kept. */
     const sendBack = (adding: SkillProposal) =>
-      Effect.flatMap(changed(adding, { state: "waiting" }), (back) => move(back, ["adding"]));
+      Effect.flatMap(changed(adding, { state: "waiting", planned: null }), (back) => move(back, ["adding"]));
 
     const add = (id: string, instructions: string | undefined) =>
       Effect.gen(function* () {

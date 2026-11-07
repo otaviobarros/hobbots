@@ -448,6 +448,7 @@ export const SkillLibraryLive = Layer.effect(
             const events: Array<JournaledEvent> = [];
             for (const before of yield* assignmentsOf(skillId)) {
               if (before.held || before.pin === pin) continue;
+              if (typeof when === "object" && before.pin !== when.from) continue;
               // Moved only while it is still not held and still on the pin it was read with, so a
               // Keep on rN that lands meanwhile is never overwritten.
               const [row] = yield* sql<AssignmentRow>`UPDATE skill_assignments

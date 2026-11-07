@@ -66,6 +66,13 @@ export interface SkillRevisionAdded {
   readonly added: boolean;
 }
 
+/**
+ * Which assignments a revision's rollout moves: those its first rollout reaches (`pending`, nothing
+ * once it was rolled out or is not the newest), every one not held (`always`, as Roll back), or only
+ * those still on `from`, so a rollout that is finished again never moves what was decided since.
+ */
+export type SkillRolloutWhen = "pending" | "always" | { readonly from: SkillRevisionHash };
+
 /** A new assignment, or a change to the one a skill already has in that scope. */
 export interface SkillAssignmentInput {
   readonly skillId: SkillId;
@@ -124,7 +131,7 @@ export interface SkillLibraryShape {
     skillId: SkillId,
     pin: SkillRevisionHash,
     by: SkillBy,
-    when: "pending" | "always",
+    when: SkillRolloutWhen,
   ) => Library<Committed<ReadonlyArray<SkillAssignment>>, SkillNotFound>;
   /** Holds an assignment on its revision, or lets it follow rollouts again. */
   readonly hold: (id: SkillAssignmentId, held: boolean) => Library<Committed<SkillAssignment>, SkillNotFound>;

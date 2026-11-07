@@ -6,7 +6,8 @@ import { SqlClient } from "effect/sql";
 // the work and the SHA-256 of the key and of the input). `skill_id` and `base_hash`/`base_number`
 // name the skill and revision a change was made against, and are null for a new skill;
 // `added_hash`/`added_number` the revision it became, and `added_as` whether it was new, the newest
-// already, or an earlier one brought back. `memory_pages` is JSON, and `edited` is 0 or
+// already, or an earlier one brought back. `planned_hash`/`planned_after`/`planned_as` are what an
+// add in progress writes, recorded before it writes anything, so a stopped hub finishes that. `memory_pages` is JSON, and `edited` is 0 or
 // 1. A hob has at most one proposal per name open at once. Feedback is a hob's note on a skill.
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -29,6 +30,9 @@ export default Effect.gen(function* () {
       added_hash TEXT,
       added_number INTEGER,
       added_as TEXT,
+      planned_hash TEXT,
+      planned_after TEXT,
+      planned_as TEXT,
       memory_pages TEXT NOT NULL,
       thread_id TEXT,
       message_id TEXT,

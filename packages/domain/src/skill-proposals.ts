@@ -35,6 +35,18 @@ export type SkillRevisionRef = typeof SkillRevisionRef.Type;
 export const SkillProposalAddedAs = Schema.Literals(["new", "same", "earlier"]);
 export type SkillProposalAddedAs = typeof SkillProposalAddedAs.Type;
 
+/**
+ * What adding a proposal will write, recorded before anything is: the revision its files are (by
+ * content), the skill's newest when they were built (`after`), and how it changes the library. A hub
+ * that stops part way finishes this, not what the library would make of the proposal now.
+ */
+export const SkillProposalPlan = Schema.Struct({
+  hash: SkillRevisionHash,
+  after: Schema.NullOr(SkillRevisionHash),
+  as: SkillProposalAddedAs,
+});
+export type SkillProposalPlan = typeof SkillProposalPlan.Type;
+
 /** The revision a proposal became, and how. */
 export const SkillProposalAdded = Schema.Struct({
   hash: SkillRevisionHash,
@@ -69,6 +81,8 @@ export class SkillProposal extends Schema.Class<SkillProposal>("SkillProposal")(
   edited: Schema.Boolean,
   /** The revision it became, once added, and whether it was new, the newest already, or an earlier one. */
   added: Schema.NullOr(SkillProposalAdded),
+  /** While it is being added: what adding it writes, so a replay finishes that and nothing else. */
+  planned: Schema.NullOr(SkillProposalPlan),
   /** Learned from: the memory pages it names, as the hob gave them. */
   memoryPages: Schema.Array(Schema.String),
   /** Learned from: the reply it was made from, when it came from a chat turn. */

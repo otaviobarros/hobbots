@@ -21,6 +21,7 @@ const proposal = (name: string, state: SkillProposalState = "waiting", agentId =
     state,
     edited: false,
     added: null,
+    planned: null,
     memoryPages: [],
     threadId: null,
     messageId: null,

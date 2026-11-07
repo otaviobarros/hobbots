@@ -35,6 +35,7 @@ const proposal = (fields: Partial<SkillProposal> = {}) =>
     state: "waiting",
     edited: false,
     added: null,
+    planned: null,
     memoryPages: [],
     threadId: null,
     messageId: null,

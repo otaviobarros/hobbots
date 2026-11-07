@@ -23,6 +23,9 @@ interface Row {
   readonly addedHash: string | null;
   readonly addedNumber: number | string | null;
   readonly addedAs: string | null;
+  readonly plannedHash: string | null;
+  readonly plannedAfter: string | null;
+  readonly plannedAs: string | null;
   readonly memoryPages: string;
   readonly threadId: string | null;
   readonly messageId: string | null;
@@ -71,6 +74,7 @@ const fromRow = (row: Row) =>
     state: row.state,
     edited: Boolean(Number(row.edited)),
     added: addedOf(row),
+    planned: row.plannedHash === null ? null : { hash: row.plannedHash, after: row.plannedAfter, as: row.plannedAs },
     memoryPages: JSON.parse(row.memoryPages),
     threadId: row.threadId,
     messageId: row.messageId,
@@ -79,6 +83,16 @@ const fromRow = (row: Row) =>
     updatedAt: row.updatedAt,
     decidedAt: row.decidedAt,
   }).pipe(Effect.orDie);
+
+/** The revision a proposal became, and what an add in progress writes. */
+const addedRow = ({ added, planned }: SkillProposal) => ({
+  added_hash: added?.hash ?? null,
+  added_number: added?.number ?? null,
+  added_as: added?.as ?? null,
+  planned_hash: planned?.hash ?? null,
+  planned_after: planned?.after ?? null,
+  planned_as: planned?.as ?? null,
+});
 
 const toRow = (proposal: SkillProposal) => ({
   id: proposal.id,
@@ -95,9 +109,7 @@ const toRow = (proposal: SkillProposal) => ({
   why: proposal.why,
   state: proposal.state,
   edited: proposal.edited ? 1 : 0,
-  added_hash: proposal.added?.hash ?? null,
-  added_number: proposal.added?.number ?? null,
-  added_as: proposal.added?.as ?? null,
+  ...addedRow(proposal),
   memory_pages: JSON.stringify(proposal.memoryPages),
   thread_id: proposal.threadId,
   message_id: proposal.messageId,
@@ -160,7 +172,8 @@ export const SkillProposalLogLive = Layer.effect(
               UPDATE skill_proposals SET
                 instructions = ${row.instructions}, description = ${row.description}, state = ${row.state},
                 edited = ${row.edited}, added_hash = ${row.added_hash}, added_number = ${row.added_number},
-                added_as = ${row.added_as},
+                added_as = ${row.added_as}, planned_hash = ${row.planned_hash},
+                planned_after = ${row.planned_after}, planned_as = ${row.planned_as},
                 updated_at = ${row.updated_at}, decided_at = ${row.decided_at}
               WHERE id = ${proposal.id} AND ${sql.in("state", [...from])}
               RETURNING *`;
