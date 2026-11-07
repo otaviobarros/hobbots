@@ -17,7 +17,9 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   descriptionState,
+  exportRows,
   fileChanges,
+  importable,
   instructionsOf,
   libraryGroups,
   nameOf,
@@ -196,5 +198,46 @@ describe("skill names, descriptions and files", () => {
     const before = of([file("SKILL.md", "a"), file("a.md", "1"), file("b.md", "2")], 1);
     const after = of([file("SKILL.md", "b"), file("a.md", "9"), file("c.md", "3")], 2);
     expect(fileChanges(after, before)).toEqual({ added: 1, removed: 1, changed: 1 });
+  });
+});
+
+describe("Export skills", () => {
+  // covers ADR 029 (Backups, exports and Diagnostics), #1064
+  it("imports an exported skill only when each older revision it brings passed and is still that revision", () => {
+    const older = { matches: true, refusal: null };
+    const candidate = { refusal: null, existing: null, exported: { older: [older] } };
+    expect(importable(candidate)).toBe(true);
+    expect(importable({ ...candidate, exported: { older: [{ ...older, matches: false }] } })).toBe(false);
+    expect(importable({ ...candidate, exported: { older: [{ ...older, refusal: { check: "front-matter" } }] } })).toBe(
+      false,
+    );
+    expect(importable({ refusal: null, existing: null, exported: null })).toBe(true);
+  });
+
+  // covers ADR 029 (Backups, exports and Diagnostics), #1064
+  it("opens from its own address and lists each skill once, under the first scope it has", () => {
+    expect(skillsViewOf({ export: "skills" })).toEqual({ _tag: "Export" });
+    expect(skillsSearchOf({ _tag: "Export" })).toEqual({ export: "skills" });
+    const site = MemoryProjectIdentity.make("github.com/acme/site");
+    const rows = exportRows(
+      list({
+        skills: [
+          skill("s1", "release-steps", "How releases go", hash(5), 5),
+          skill("s2", "commit-style", "How commits read"),
+          skill("s3", "support-replies", "How to answer"),
+        ],
+        assignments: [
+          assignment("a1", "s1", { _tag: "Project", identity: site }, hash(5)),
+          assignment("a2", "s1", { _tag: "Hob", agentId: pip.id }, hash(4), true),
+          assignment("a3", "s2", { _tag: "Everyone" }),
+        ],
+      }),
+      hobs,
+    );
+    expect(rows.map((row) => [row.skill.name, row.scope?._tag ?? null, row.where])).toEqual([
+      ["commit-style", "Everyone", "Everyone"],
+      ["release-steps", "Project", "site project +1"],
+      ["support-replies", null, "Not given to anyone yet"],
+    ]);
   });
 });

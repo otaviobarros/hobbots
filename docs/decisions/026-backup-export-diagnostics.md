@@ -25,11 +25,12 @@ A backup is a folder named `Hobbots backup <date> <time>.hobbots-backup`. It hol
 
 | Path | What it is |
 |---|---|
-| `manifest.json` | The format (`hobbots.backup`, version 1), when it was made, the Hobbots version, the storage backend, the schema version, the source installation ID, counts of hobs, threads, Quests and Tasks, and each file's size and SHA-256. |
+| `manifest.json` | The format (`hobbots.backup`, version 1), when it was made, the Hobbots version, the storage backend, the schema version, the source installation ID, counts of hobs, threads, Quests, Tasks and skills, and each file's size and SHA-256. |
 | `database.sqlite` | The database, copied with the SQLite online backup API and then scrubbed (below). |
 | `activity/` | The Workbench contents: redacted text, images and folded command logs, stored once per hash. |
 | `tool-logs/` | The full logs of tool steps, already redacted when the hub wrote them. |
 | `memory/` | Memory pages, their history and their index, made with ai-memory's own backup ([ADR 028](028-memory.md)). |
+| `skills/` | The skills library's revisions, one folder per revision hash, each file keeping whether it runs. The library's sources, assignments, holds and pins are database rows ([ADR 029](029-skills.md)). |
 | `workspace/` | The default workspace from `workspaces/default`, where a hob without folders of its own works. |
 | `settings/network.json` | The port. Remote access is always off in a backup. |
 | `settings/memory-settings.json` | The memory model you chose ([ADR 028](028-memory.md)). It holds no credential. |
@@ -55,7 +56,7 @@ A backup holds your conversations as they are stored. A token you pasted into a 
 4. It copies the database with `backup()` from `node:sqlite` on the hub's own writing connection, a few hundred pages at a time, so the hub keeps serving. Writes through that connection land in the copy; the search worker's connection only reads. The copy is a consistent snapshot of the moment it finishes.
 5. It copies the default workspace, then releases the workspace hold. Nothing wrote to it between the snapshot and the copy, so its files match the records in the snapshot.
 6. It opens the copy, runs the scrub and checks it with `PRAGMA integrity_check`.
-7. It copies `activity` and `tool-logs`. Their files are written once, named by hash or by step, and never rewritten. Nothing is deleted while the cleanup hold stands, so every file the snapshot names is still there. Files written after the snapshot are copied too, and are harmless: the next sweep after a restore deletes them, since no record names them.
+7. It copies `activity`, `tool-logs` and the skills library's revisions (`skills/objects`), which are also written once, by hash, and never rewritten. Their files are written once, named by hash or by step, and never rewritten. Nothing is deleted while the cleanup hold stands, so every file the snapshot names is still there. Files written after the snapshot are copied too, and are harmless: the next sweep after a restore deletes them, since no record names them.
 8. It writes `manifest.json` last, then releases the cleanup hold. A backup folder without a manifest is incomplete and a restore refuses it.
 
 Both holds live only in the hub's memory on SQLite: a hub that stops during a backup releases them, and the half-written backup has no manifest.
@@ -165,7 +166,7 @@ Every journal entry carries the IDs that apply (ADR 013). When OpenTelemetry tra
 
 Settings › Diagnostics shows what is wrong now and lets you follow one piece of work:
 
-- **Now:** each runtime's health and its fix, as Settings › Providers shows it; work that stalled, such as an expired claim, a backpack item past its tries or an Attempt with no progress; the errors of the last startup's recovery; and whether work is held after a restore. Each shows what to do.
+- **Now:** each runtime's health and its fix, as Settings › Providers shows it; work that stalled, such as an expired claim, a backpack item past its tries or an Attempt with no progress; the errors of the last startup's recovery; and whether work is held after a restore. Each shows what to do. It also lists the skills each hob has, by name and revision ([ADR 029](029-skills.md)).
 - **Follow a Quest:** pick a Quest, or open Diagnostics from a stalled Task. It shows the tree across hobs, with each Task's Delegations and Attempts, where each ran, the backpack items it waits on and its recent journal events, by type and time.
 
 **Copy report** makes a diagnostics report and shows it in full before it copies it, or saves it as `hobbots-diagnostics-<date>.json`. The hub never sends it.
@@ -176,6 +177,7 @@ A report holds:
 - Each runtime's name, version and health, and whether it is signed in, without the account.
 - For the Quest followed: the IDs above, each Task's hob, state and timestamps, each Attempt's outcome, the tag of each error with its redacted message, each backpack item's kind, state and tries, and the journal entries' sequence, type, time and IDs.
 - The stalled work and recovery errors of the Now view, in the same form.
+- Each hob's skills: name, revision number and hash, the scope that gives each one, and the names that clash, never their content ([ADR 029](029-skills.md)).
 
 A report never holds message text, briefs, prompts, replies, Task results, tool step labels, command lines, tool output, file contents, keychain items, device records or the installation ID. Task titles go in only when you turn on **Include titles**, which is off. Paths become `~` for your home folder and `folder 1`, `folder 2` for each hob folder.
 

@@ -28,6 +28,7 @@ export const messages = {
       workspace: "Copying the default workspace…",
       activity: "Copying the Workbench…",
       "tool-logs": "Copying the tool logs…",
+      skills: "Copying the skills library…",
       memory: "Copying memory…",
       manifest: "Finishing the backup…",
     },
@@ -58,10 +59,22 @@ export const messages = {
     reading: "Reading…",
     summaryTitle: "This backup holds",
     made: ({ when, version }: { when: string; version: string }) => `Made ${when} by Hobbots ${version}`,
-    counts: ({ hobs, threads, quests, tasks }: { hobs: number; threads: number; quests: number; tasks: number }) => {
+    counts: ({
+      hobs,
+      threads,
+      quests,
+      tasks,
+      skills,
+    }: {
+      hobs: number;
+      threads: number;
+      quests: number;
+      tasks: number;
+      skills: number;
+    }) => {
       const count = (n: number, one: string, other: string) =>
         plural(n, { one: `${formatCount(n)} ${one}`, other: `${formatCount(n)} ${other}` });
-      return `${count(hobs, "hob", "hobs")}, ${count(threads, "thread", "threads")}, ${count(quests, "quest", "quests")} and ${count(tasks, "task", "tasks")}`;
+      return `${count(hobs, "hob", "hobs")}, ${count(threads, "thread", "threads")}, ${count(quests, "quest", "quests")}, ${count(tasks, "task", "tasks")} and ${count(skills, "skill", "skills")}`;
     },
     missing: "Not on this computer, so set these hobs' folders again after the restore:",
     notBack:

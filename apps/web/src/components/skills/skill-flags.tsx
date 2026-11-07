@@ -4,7 +4,8 @@ import { SkillsIcon } from "./skills-parts.tsx";
 
 const copy = messages;
 
-const flagLine = (flag: SkillFlag) => {
+/** One thing worth a careful look, with its file. */
+export const flagLine = (flag: SkillFlag) => {
   switch (flag._tag) {
     case "Script":
       return copy.flags.script({ path: flag.path });

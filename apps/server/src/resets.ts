@@ -5,7 +5,7 @@ import { ResetRefused } from "@hobbots/api";
 import { deleteOutcome, GitHubConnection, HobAppKeys, Keychain } from "@hobbots/charms";
 import type { Agent } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
-import { HUB_ENTRIES } from "./backup-files.ts";
+import { HUB_ENTRIES, removeTree } from "./backup-files.ts";
 import { HubRestart } from "./restores.ts";
 import { runtimeFolders } from "./tools.ts";
 
@@ -46,10 +46,10 @@ const setAsideFolders = async (dataDir: string) => {
 export const wipeHubData = async (dataDir: string) => {
   const marker = resetMarkerFile(dataDir);
   await writeFile(marker, `${JSON.stringify({ startedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
-  for (const entry of [...HUB_ENTRIES, ...MEMORY_ENTRIES])
-    await rm(join(dataDir, entry), { recursive: true, force: true });
-  await rm(runtimeFolders(dataDir), { recursive: true, force: true });
-  for (const folder of await setAsideFolders(dataDir)) await rm(folder, { recursive: true, force: true });
+  // The skills library and each turn's skill folder are read-only (ADR 029): `removeTree` opens them first.
+  for (const entry of [...HUB_ENTRIES, ...MEMORY_ENTRIES]) await removeTree(join(dataDir, entry));
+  await removeTree(runtimeFolders(dataDir));
+  for (const folder of await setAsideFolders(dataDir)) await removeTree(folder);
   await rm(marker, { force: true });
 };
 

@@ -378,7 +378,8 @@ const memoryRoute = createRoute({
 });
 // Skills (ADR 029): `?scope=` opens a scope, `?skill=` a skill with `&tab=` its tab, `&file=` a file and
 // `&diff=` what a revision changed; `&edit=skill` opens its editor and `?edit=new` a new skill; `?add=`
-// opens Add a skill from Git, a folder or written here; `?view=changes` What changed; `?q=` searches.
+// opens Add a skill from Git, a folder or written here; `?export=skills` opens Export skills; `?view=changes`
+// What changed; `?q=` searches.
 const skillsRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="home" />,
@@ -392,6 +393,7 @@ const skillsRoute = createRoute({
       diff: searchParam(Schema.String),
       edit: searchParam(Schema.Literals(["skill", "new"])),
       add: searchParam(ImportFrom),
+      export: searchParam(Schema.Literals(["skills"])),
       q: searchParam(SearchText),
       view: searchParam(Schema.Literals(["changes", "review"])),
       item: searchParam(Schema.String),

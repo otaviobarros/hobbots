@@ -10,11 +10,13 @@ import {
   BACKUP_PARTS,
   type BackupManifest,
   backupFolderName,
+  copySkillObjects,
   copyTree,
   hashFile,
   isInside,
   type ManifestFile,
   MEMORY_PART,
+  SKILLS_PART,
   sizeOf,
   writeManifest,
 } from "./backup-files.ts";
@@ -59,8 +61,8 @@ export interface WriteBackupOptions {
 
 /**
  * Makes one backup (ADR 026): the database copied with SQLite's online backup API and scrubbed of
- * every device secret, the default workspace, the Workbench contents, the tool logs, memory as its
- * engine backs it up (ADR 028) and the port, and the manifest written last with each file's size and
+ * every device secret, the default workspace, the Workbench contents, the tool logs, every skill
+ * revision's files (ADR 029), memory as its engine backs it up (ADR 028) and the port, and the manifest written last with each file's size and
  * SHA-256. Owner-only throughout. A failure or
  * an interruption deletes what it wrote. Returns the folder and its size.
  */
@@ -87,9 +89,10 @@ export const writeBackup = (options: WriteBackupOptions) =>
       activity: join(dataDir, BACKUP_PARTS.activity.data),
       toolLogs: join(dataDir, BACKUP_PARTS.toolLogs.data),
       memory: join(dataDir, "memory"),
+      skills: join(dataDir, SKILLS_PART.data),
     };
     const total = yield* attempt("measure the data folder", async () =>
-      [sources.database, sources.workspace, sources.activity, sources.toolLogs, sources.memory]
+      [sources.database, sources.workspace, sources.activity, sources.toolLogs, sources.memory, sources.skills]
         .map((path) => sizeOf(path))
         .reduce(async (sum, next) => (await sum) + (await next), Promise.resolve(0)),
     );
@@ -184,6 +187,15 @@ export const writeBackup = (options: WriteBackupOptions) =>
           BACKUP_PARTS.toolLogs.backup,
           counting("tool-logs"),
         ),
+      )),
+    );
+
+    // Every skill revision's files (ADR 029). Each is written before the row that names it and never
+    // changed or deleted, so every revision the snapshot names is here; one added since is harmless.
+    yield* report("skills");
+    files.push(
+      ...(yield* attempt("copy the skills library", () =>
+        copySkillObjects(sources.skills, join(folder, SKILLS_PART.backup), counting("skills")),
       )),
     );
 

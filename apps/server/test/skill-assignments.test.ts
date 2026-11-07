@@ -373,6 +373,64 @@ describe("skill assignments", () => {
   });
 });
 
+// #1064: an exported skill's assignments on another hub (ADR 029, Backups, exports and Diagnostics).
+describe("skill exports", () => {
+  // covers ADR 029 (Backups, exports and Diagnostics), #1064
+  it("[TC-OP-122] an export's project assignment is given only for a project this hub's hobs work in", async () => {
+    const alpha = join(root, "alpha");
+    await mkdir(alpha);
+    await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [alpha] });
+    await summon("Pip", 966);
+    // The revision another hub exported: the same file, so the same hash, then gone from this library.
+    const made = await importSkill("deploy");
+    expect((await request("DELETE", `/api/skills/${made.skill.id}`)).status).toBe(200);
+    const hash = made.revision.hash;
+    const folder = join(root, "hobbots-skills-2026-11-07");
+    await mkdir(join(folder, "deploy"), { recursive: true });
+    await writeFile(join(folder, "deploy", "SKILL.md"), skillMd("deploy"));
+    const toProject = (identity: string) => ({
+      scope: { _tag: "Project", identity },
+      hob: null,
+      pin: hash,
+      held: false,
+      onlyWhenAsked: false,
+    });
+    const lock = {
+      format: "hobbots.skills",
+      version: 1,
+      exportedAt: "2026-11-07T10:00:00.000Z",
+      skills: [
+        {
+          name: "deploy",
+          source: null,
+          revision: hash,
+          revisions: [
+            { hash, number: 1, folder: "deploy", commit: null, path: null, label: null, charms: [], dropped: [] },
+          ],
+          assignments: [toProject("alpha"), toProject("github.com/acme/elsewhere")],
+        },
+      ],
+    };
+    await writeFile(join(folder, "skills.lock.json"), JSON.stringify(lock));
+
+    const source = { _tag: "Folder", path: folder };
+    const scan = (await request("POST", "/api/skills/scan", { source })).body;
+    expect(scan.candidates.map((one: { exported: unknown }) => one.exported)).toEqual([
+      { matches: true, older: [], assignments: 2 },
+    ]);
+    const imported = await request("POST", "/api/skills", {
+      source,
+      scanned: [{ folder: "deploy", hash }],
+      scannedLock: scan.exported.lock,
+    });
+    expect(imported.status).toBe(200);
+    expect(imported.body.assigned.map((one: { scope: unknown }) => one.scope)).toEqual([
+      { _tag: "Project", identity: "alpha" },
+    ]);
+    expect(imported.body.leftOut).toBe(1);
+  });
+});
+
 // #1096: which skills a reply used, mapped to the revision its turn mounted, and how often (ADR 029, The use line).
 describe("skill uses", () => {
   // covers RT-001, ADR 029 (The use line)

@@ -4,7 +4,15 @@ import { InvalidFolder } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /** What a backup's copy is doing now, so Settings can show its progress. */
-export const BackupStep = Schema.Literals(["database", "workspace", "activity", "tool-logs", "memory", "manifest"]);
+export const BackupStep = Schema.Literals([
+  "database",
+  "workspace",
+  "activity",
+  "tool-logs",
+  "skills",
+  "memory",
+  "manifest",
+]);
 export type BackupStep = typeof BackupStep.Type;
 
 /**
@@ -51,6 +59,8 @@ export class RestoreSummary extends Schema.Class<RestoreSummary>("RestoreSummary
   threads: Schema.Int,
   quests: Schema.Int,
   tasks: Schema.Int,
+  /** Skills in the library, each with every revision, assignment and pin (ADR 029); 0 in a backup from before skills. */
+  skills: Schema.Int,
   /** The hob folders the backup names that are not on this computer. */
   missingFolders: Schema.Array(Schema.String),
 }) {}

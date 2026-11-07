@@ -1,4 +1,4 @@
-import { readFile, rm, unlink } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { ChatService, HobbotsRepository, WorkHold } from "@hobbots/agents";
 import { RestoreRefused, type RestoreStatus, RestoreSummary } from "@hobbots/api";
@@ -10,6 +10,7 @@ import {
   missingFolders,
   NotRestorable,
   readBackup,
+  removeTree,
   restoreInto,
   restoreMarkerFile,
   sizeOf,
@@ -50,6 +51,7 @@ export const summaryOf = (path: string, manifest: BackupManifest) =>
       hobbotsVersion: manifest.hobbotsVersion,
       schemaVersion: manifest.schemaVersion,
       ...manifest.counts,
+      skills: manifest.counts.skills ?? 0,
       missingFolders: await missingFolders(manifest),
     }),
   );
@@ -173,7 +175,8 @@ export class HubRestores extends Context.Service<
           dirname(folder) === dirname(identity.dataDir) &&
           basename(folder).startsWith(`${basename(identity.dataDir)}.before-restore-`)
         ) {
-          yield* Effect.promise(() => rm(folder, { recursive: true, force: true }));
+          // The set-aside skills library is read-only (ADR 029), so its folders are opened first.
+          yield* Effect.promise(() => removeTree(folder));
         }
         yield* repo.clearSetAside;
         return yield* status;

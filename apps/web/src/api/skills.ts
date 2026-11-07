@@ -72,7 +72,15 @@ export const importSkills = (input: {
   source: SkillSourcePayload;
   folders?: ReadonlyArray<string>;
   scanned?: ReadonlyArray<{ folder: string; hash: SkillRevisionHash }>;
+  scannedLock?: string | null;
 }) => call((c) => c.skills.import({ payload: input }));
+
+/**
+ * Exports every skill, or those named, as a folder with `skills.lock.json` in the hub user's
+ * Downloads folder; `assignments` keeps who gets each one.
+ */
+export const exportSkills = (payload: { skillIds?: ReadonlyArray<SkillId>; assignments: boolean }) =>
+  call((c) => c.skills.export({ payload }));
 
 /** A new revision of a skill, from an edit of `base` in Hobbots. */
 export const editSkill = (input: {

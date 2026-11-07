@@ -1,3 +1,4 @@
+import type { SkillsList } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { FlashLine } from "../memory/memory-parts.tsx";
@@ -9,6 +10,7 @@ import { SkillEditor } from "./skill-editor.tsx";
 import { SkillNew } from "./skill-new.tsx";
 import { SkillPage } from "./skill-page.tsx";
 import { SkillReview } from "./skill-review.tsx";
+import { SkillsExport } from "./skills-export.tsx";
 import { type Say, useFlash } from "./skills-flash.ts";
 import { SkillsImport } from "./skills-import.tsx";
 import { type SkillsSearch, type SkillsView, skillsSearchOf, skillsViewOf } from "./skills-model.ts";
@@ -40,6 +42,18 @@ const headLine = (reads: SkillsReads) => {
   return copy.head.full({ count: list.skills.length, revisions });
 };
 
+/** The Overview: the library by who has each skill, or how to start when it is empty. */
+function OverviewBody({ list, hobs, now }: { list: SkillsList; hobs: SkillsReads["hobs"]; now: Date }) {
+  return list.skills.length === 0 ? (
+    <div className="flex max-w-[760px] flex-col gap-5">
+      <SkillsEmpty />
+      <WorthALook list={list} />
+    </div>
+  ) : (
+    <SkillsOverview list={list} hobs={hobs} now={now} />
+  );
+}
+
 /** The view's body: the editors and Add a skill open whatever the library holds; the rest read it. */
 function ViewBody({ view, reads, say, now }: { view: SkillsView; reads: SkillsReads; say: Say; now: Date }) {
   const projects = reads.list.data?.projects ?? [];
@@ -63,17 +77,12 @@ function ViewBody({ view, reads, say, now }: { view: SkillsView; reads: SkillsRe
       return <SkillPage view={view} list={list} hobs={reads.hobs} active={reads.active} say={say} />;
     case "Search":
       return <SkillsSearchResults q={view.q} list={list} />;
+    case "Export":
+      return <SkillsExport list={list} hobs={reads.hobs} say={say} />;
     case "Scope":
       return <SkillsScope scope={view.scope} list={list} hobs={reads.hobs} now={now} />;
     case "Overview":
-      return list.skills.length === 0 ? (
-        <div className="flex max-w-[760px] flex-col gap-5">
-          <SkillsEmpty />
-          <WorthALook list={list} />
-        </div>
-      ) : (
-        <SkillsOverview list={list} hobs={reads.hobs} now={now} />
-      );
+      return <OverviewBody list={list} hobs={reads.hobs} now={now} />;
   }
 }
 

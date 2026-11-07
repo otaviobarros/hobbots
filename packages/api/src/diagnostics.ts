@@ -16,6 +16,7 @@ import {
   RuntimeAvailability,
   RuntimeHealth,
   RuntimeKind,
+  SkillRevisionHash,
   TaskId,
   TaskState,
   TaskTree,
@@ -69,6 +70,28 @@ export const RecoveryError = Schema.Struct({
 export type RecoveryError = typeof RecoveryError.Type;
 
 /**
+ * A skill a hob's next turn gets, as Diagnostics names it (ADR 029): its name, its revision and the
+ * scope it comes from. Never its description, instructions or files.
+ */
+export const DiagnosticsSkill = Schema.Struct({
+  name: Schema.String,
+  /** The revision's number, shown as r4; null when the hub no longer has that revision. */
+  number: Schema.NullOr(Schema.Int),
+  revision: SkillRevisionHash,
+  scope: Schema.Literals(["Everyone", "Project", "Hob"]),
+});
+export type DiagnosticsSkill = typeof DiagnosticsSkill.Type;
+
+/** One hob's skills, on whichever runtime it thinks with: the ones it loads, and names two projects both define. */
+export const DiagnosticsHobSkills = Schema.Struct({
+  agentId: AgentId,
+  runtime: RuntimeKind,
+  skills: Schema.Array(DiagnosticsSkill),
+  clashes: Schema.Array(Schema.String),
+});
+export type DiagnosticsHobSkills = typeof DiagnosticsHobSkills.Type;
+
+/**
  * The Now view: each runtime's health, the memory engine's, stalled work, the last startup's recovery
  * errors and the hold.
  */
@@ -82,6 +105,8 @@ export const DiagnosticsNow = Schema.Struct({
   workHeld: Schema.Boolean,
   /** When this hub process started, which is when its recovery ran. */
   startedAt: Schema.String,
+  /** Each hob that is not retired, with the skills its next turn gets; empty on a hub without skills. */
+  skills: Schema.Array(DiagnosticsHobSkills),
 });
 export type DiagnosticsNow = typeof DiagnosticsNow.Type;
 
@@ -198,7 +223,7 @@ export const ReportQuest = Schema.Struct({
 /**
  * A diagnostics report (ADR 026). The report is encoded from this schema, which names every field
  * it may hold: a field it does not name is never in a report. Message text, briefs, prompts,
- * replies, Task results, tool steps, command lines, tool output, file contents, keychain items,
+ * replies, Task results, tool steps, command lines, tool output, file contents, skill contents, keychain items,
  * device records and the installation ID are not named, so they never reach one.
  */
 export const DiagnosticsReport = Schema.Struct({
@@ -211,6 +236,8 @@ export const DiagnosticsReport = Schema.Struct({
   workHeld: Schema.Boolean,
   stalled: Schema.Array(StalledWork),
   recovery: Schema.Array(RecoveryError),
+  /** Each hob's skills by name and revision, never their contents (ADR 029). */
+  skills: Schema.Array(DiagnosticsHobSkills),
   quest: Schema.NullOr(ReportQuest),
 });
 export type DiagnosticsReport = typeof DiagnosticsReport.Type;

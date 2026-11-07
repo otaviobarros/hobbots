@@ -523,8 +523,13 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(GrantService.layer))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
       .pipe(Layer.provideMerge(CanonicalSharedFolders))
-      // Where exports and backups may be saved: never inside a folder a hob works in (ADR 026).
-      .pipe(Layer.provideMerge(SaveDestinationsLive(join(dataDir, "workspaces", "default"))))
+      // Where exports and backups may be saved: never inside a folder a hob works in (ADR 026), and
+      // the folders a skills export is written in (ADR 029).
+      .pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(SaveDestinationsLive(join(dataDir, "workspaces", "default")), ExportFoldersLive),
+        ),
+      )
       .pipe(
         Layer.provideMerge(
           Layer.mergeAll(

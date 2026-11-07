@@ -41,6 +41,28 @@ export const messages = {
     flagged: ({ name }: { name: string }) => `${name} has something to look at`,
     flaggedHint: "A script, a link or hidden text. Open it to see where.",
     updated: ({ when }: { when: string }) => `Changed ${when}`,
+    export: "Export…",
+  },
+  export: {
+    title: "Export skills",
+    intro:
+      "Makes a folder with each skill and a skills.lock.json that names its source and revision, so another hub gets exactly the same ones. Backups already include your whole library.",
+    list: "Skills to export",
+    pick: ({ name }: { name: string }) => `Export ${name}`,
+    more: ({ name, count }: { name: string; count: number }) => `${name} +${formatCount(count)}`,
+    agents: "~/.agents",
+    assignments: "Include who gets each skill",
+    assignmentsHint:
+      "Keeps Everyone, project and hob assignments, and held revisions. A hub without those hobs or projects keeps the skills in its library only.",
+    exportN: ({ count }: { count: number }) => (count === 0 ? "Pick a skill to export" : `Export ${skills(count)}`),
+    exporting: "Exporting…",
+    cancel: "Cancel",
+    importHint: "Import it on another hub with Add a skill › Folder or .zip",
+    saved: ({ name, where, count }: { name: string; where: string; count: number }) =>
+      `Saved ${name} to ${where}: ${skills(count)} and skills.lock.json.`,
+    failed: "Nothing was exported. Try again.",
+    insideHob:
+      "Your Downloads folder is inside a folder hobs work in, so Hobbots did not save the export there. Move that hob's folder, then try again.",
   },
   scopes: {
     everyone: "Everyone",
@@ -452,6 +474,34 @@ export const messages = {
       `Imported ${skills(count)}, but ${plural(count, { one: "it was", other: "they were" })} not given to ${who} yet. Give ${plural(count, { one: "it", other: "them" })} again: nothing is imported twice.`,
     giveAgain: "Give again",
     moved: "The source changed since you looked, so nothing was imported. Look again to see what it holds now.",
+    exportedNote: ({ when, count }: { when: string; count: number }) =>
+      count === 0
+        ? `A Hobbots export from ${when}. Each skill comes with the revisions it names.`
+        : `A Hobbots export from ${when}. Each skill comes with the revisions it names, and ${formatCount(count)} ${plural(count, { one: "assignment", other: "assignments" })} of who gets it, for the hobs and projects this hub has.`,
+    exportedLine: ({ count }: { count: number }) =>
+      count === 0
+        ? "Exactly the exported revision"
+        : `Exactly the exported revision, with ${formatCount(count)} older ${plural(count, { one: "one", other: "ones" })} an assignment keeps`,
+    exportedChanged: "Changed since it was exported, so it comes in as a new skill of its own",
+    /** An older revision an export brings with a skill, and what import notes of it, as for the newest. */
+    olderNotes: ({ rev, notes }: { rev: string; notes: ReadonlyArray<string> }) =>
+      `${rev}, which an assignment keeps: ${notes.join(" ")}`,
+    olderRefused: ({ rev, rule }: { rev: string; rule: string }) =>
+      `${rev}, which an assignment keeps, cannot be imported: ${rule}`,
+    olderChanged: ({ rev }: { rev: string }) =>
+      `${rev}, which an assignment keeps, is no longer the exported revision, so this skill cannot be imported from here. Export it again.`,
+    importedSet: ({ count, given, left }: { count: number; given: number; left: number }) => {
+      const base = `Imported ${skills(count)} with the revisions the export names`;
+      const assigned =
+        given === 0
+          ? ""
+          : `, and gave out ${formatCount(given)} ${plural(given, { one: "assignment", other: "assignments" })}`;
+      const kept =
+        left === 0
+          ? ""
+          : ` ${formatCount(left)} ${plural(left, { one: "names a hob", other: "name hobs" })} this hub does not have, so ${plural(left, { one: "it stays", other: "they stay" })} out.`;
+      return `${base}${assigned}.${kept}`;
+    },
     taken: ({ name }: { name: string }) =>
       `Your library already has ${name}. Hobbots cannot add a source's new content to it yet; Edit on that skill changes its description and instructions.`,
   },
