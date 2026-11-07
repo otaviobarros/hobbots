@@ -6,6 +6,7 @@ import { NodeHttpServer, NodeServices } from "@effect/platform-node";
 import {
   ApprovalService,
   CharmCallService,
+  CharmDeclarations,
   ChatService,
   FolderSandbox,
   GrantService,
@@ -16,6 +17,7 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import {
+  GITHUB_CHARM,
   GitHubAccountLive,
   GitHubApiNode,
   GitHubCharmTools,
@@ -209,6 +211,8 @@ beforeAll(async () => {
           ).pipe(Layer.provideMerge(TestDatabase)),
           EventBus.layer,
           HobAdmission.layer,
+          // The Charms this hub holds, as the server declares them (ADR 031).
+          Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
           NodeFolderChecks,
           FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),
@@ -479,7 +483,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     );
     expect(asked.pending).toMatchObject({
       tool: "github_open_pull_request",
-      operation: "open-pull-request",
+      operation: "github.open-pull-request",
       arguments: { head: "feat/x", base: "main", draft: true, title: "Add b" },
     });
     const reply = await approveOnce(asked);
@@ -502,7 +506,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     const asked = await turn(
       call("github_comment", { number: 1, body: "I can reproduce this on main.", key: "comment-1" }),
     );
-    expect(asked.pending).toMatchObject({ tool: "github_comment", operation: "comment-github" });
+    expect(asked.pending).toMatchObject({ tool: "github_comment", operation: "github.comment" });
     const reply = await approveOnce(asked);
     expect(toolSteps(reply)).toMatchObject([{ state: "done" }]);
     const [posted] = github.items("octo/workshop").find((item) => item.number === 1)?.comments ?? [];

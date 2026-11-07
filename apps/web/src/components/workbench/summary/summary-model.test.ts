@@ -205,7 +205,7 @@ describe("summaryOf", () => {
   });
 
   it("lists the tool calls of the Attempt's own turns with their marks, in the order they started (#892)", () => {
-    const call = { tool: "mcp__hobbots__github_search", operation: "read-github" as const, targets: ["/work"] };
+    const call = { tool: "mcp__hobbots__github_search", operation: "github.read" as const, targets: ["/work"] };
     const steps = [
       { id: "t0", kind: "thinking" as const, label: "Thinking", state: "done" as const },
       { id: "t1", kind: "tool" as const, label: "Searching GitHub", state: "done" as const, call, startedAt: AT },

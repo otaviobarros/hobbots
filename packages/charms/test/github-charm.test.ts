@@ -10,6 +10,7 @@ import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  GITHUB_CHARM,
   GITHUB_UNASKABLE,
   GitHubApi,
   GitHubApiLive,
@@ -101,11 +102,13 @@ const access = (folders: ReadonlyArray<string>, readGitHub?: PolicyDecision, git
     sharedFolders: [project],
     hob: {
       ...EMPTY_HOB_POLICY,
-      overrides: readGitHub === undefined ? {} : { "read-github": readGitHub },
+      ...(readGitHub === undefined ? {} : { charms: { overrides: { "github.read": readGitHub } } }),
       ...(githubCharm ? {} : { githubCharm: false }),
     },
     dataFolder: path.join(root, "data"),
     restrictions: [],
+    // The hub declares the GitHub Charm's operations, as the server does (ADR 031).
+    charmOperations: GITHUB_CHARM.operations,
   },
   folders,
   runtimeFolder: path.join(root, "runtimes", "hob"),
@@ -268,6 +271,15 @@ describe("GitHub Charm", () => {
     expect(merged.answer.refused).toBe(true);
     const unknown = await callWith({ asked }, access([project]), "github_delete", {});
     expect(unknown.answer).toEqual({ refused: true, text: "Hobbots has no github_delete tool." });
+    // A hub that declares no GitHub operation leaves the read closed: the Charm never declares its own.
+    const undeclared = await callWith(
+      { asked },
+      { ...access([project]), policy: { ...access([project]).policy, charmOperations: [] } },
+      "github_repository",
+      {},
+    );
+    expect(undeclared.answer).toMatchObject({ refused: true });
+    expect(undeclared.answer.text).toContain("No Charm on this hub declares github.read");
     expect(asked).toEqual([]);
   });
 

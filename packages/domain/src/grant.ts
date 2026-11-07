@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { ApprovalId } from "./approval.ts";
 import { GrantLifetime, GrantRule } from "./grant-rule.ts";
 import { AgentId } from "./ids.ts";
-import { PolicyOperation } from "./policy.ts";
+import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { TaskId } from "./task.ts";
 
@@ -38,7 +38,7 @@ export type GrantActor = typeof GrantActor.Type;
 export class Grant extends Schema.Class<Grant>("Grant")({
   id: GrantId,
   agentId: AgentId,
-  operation: PolicyOperation,
+  operation: StoredOperation,
   rule: GrantRule,
   lifetime: GrantLifetime,
   /**

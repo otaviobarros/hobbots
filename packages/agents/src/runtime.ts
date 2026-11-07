@@ -1,6 +1,8 @@
 import {
+  type AnyOperation,
   type ApprovalId,
   type ApprovalLifetime,
+  type CharmOperation,
   type CommitIdentity,
   type CommitsAs,
   type Effort,
@@ -9,8 +11,7 @@ import {
   type GrantRule,
   type HobPolicy,
   type PlanUsage,
-  type PolicyOperation,
-  type PolicyOverrides,
+  type PolicyLayer,
   type ReplyUsage,
   RUNTIME_NAMES,
   type RuntimeEnforcement,
@@ -43,7 +44,7 @@ export interface ToolStartedEvent {
   readonly id: string;
   /** The runtime's own name for the tool, such as `Bash` or `Edit`. */
   readonly tool: string;
-  readonly operation: PolicyOperation;
+  readonly operation: AnyOperation;
   /** The canonical paths, the command's folder, or the remote the call was decided on. */
   readonly targets: ReadonlyArray<string>;
   /** Short words for the step, such as "Running pnpm test". */
@@ -85,7 +86,7 @@ export type RuntimeEvent =
       readonly id: string;
       readonly approvalId: ApprovalId;
       readonly tool: string;
-      readonly operation: PolicyOperation;
+      readonly operation: AnyOperation;
       readonly targets: ReadonlyArray<string>;
       readonly label: string;
     }
@@ -111,7 +112,7 @@ export type RuntimeEvent =
       readonly _tag: "ToolDenied";
       readonly id: string;
       readonly tool: string;
-      readonly operation: PolicyOperation;
+      readonly operation: AnyOperation;
       readonly targets: ReadonlyArray<string>;
       readonly label: string;
       readonly reason: string;
@@ -171,7 +172,9 @@ export interface ToolPolicy {
   /** Hobbots' own data folder, never reachable even when a shared folder contains it. */
   readonly dataFolder: string;
   /** Narrowing added by the thread, Quest, task or delegation. Each may only narrow. */
-  readonly restrictions: ReadonlyArray<PolicyOverrides>;
+  readonly restrictions: ReadonlyArray<PolicyLayer>;
+  /** The operations the Charms the hub holds declare (ADR 031); a Charm operation not among them stays closed. */
+  readonly charmOperations?: ReadonlyArray<CharmOperation>;
 }
 
 /**
@@ -205,7 +208,7 @@ export interface ApprovalAction {
   /** The runtime's id for the call, which is also its reply step's. */
   readonly stepId: string;
   readonly tool: string;
-  readonly operation: PolicyOperation;
+  readonly operation: AnyOperation;
   readonly targets: ReadonlyArray<string>;
   /** The call's concrete arguments, exactly as the runtime would run them. */
   readonly arguments: Readonly<Record<string, unknown>>;

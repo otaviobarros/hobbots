@@ -1,4 +1,4 @@
-import type { ApprovalLifetime, GrantId, GrantRule, PolicyDecision, PolicyOperation } from "@hobbots/domain";
+import type { AnyOperation, ApprovalLifetime, GrantId, GrantRule, PolicyDecision } from "@hobbots/domain";
 import { Effect } from "effect";
 import { actionDigest } from "./approvals.ts";
 import type { HubCallStep, HubToolAnswer, RuntimeEvent, ToolAccess, TurnApprovals } from "./runtime.ts";
@@ -12,7 +12,7 @@ import type { HubCallStep, HubToolAnswer, RuntimeEvent, ToolAccess, TurnApproval
 /** What the loop reads from a policy verdict. The policy engine's own verdict has this shape. */
 export interface AskableVerdict {
   readonly decision: PolicyDecision;
-  readonly operation: PolicyOperation;
+  readonly operation: AnyOperation;
   readonly reason: { readonly message: string };
   readonly targets: ReadonlyArray<string>;
   readonly onceOnly: boolean;

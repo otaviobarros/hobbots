@@ -55,7 +55,8 @@ const agentRows = (rows: ReadonlyArray<AgentRow>) =>
 const policyColumns = (policy: HobPolicy) => ({
   own_folders: JSON.stringify(policy.ownFolders),
   hidden_shared_folders: JSON.stringify(policy.hiddenSharedFolders),
-  policy_overrides: JSON.stringify(policy.overrides),
+  // Built-in and Charm overrides share the column; decoding the policy splits them again (ADR 031).
+  policy_overrides: JSON.stringify({ ...policy.overrides, ...policy.charms?.overrides }),
   sign_commits: policy.signCommits === true ? 1 : 0,
   github_charm: policy.githubCharm === false ? 0 : 1,
 });

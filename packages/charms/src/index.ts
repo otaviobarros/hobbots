@@ -4,6 +4,7 @@ export * from "./github-account.ts";
 export * from "./github-api.ts";
 export * from "./github-app-jwt.ts";
 export * from "./github-charm.ts";
+export * from "./github-operations.ts";
 export * from "./github-push.ts";
 export * from "./github-sign-in.ts";
 export * from "./github-writes.ts";

@@ -7,6 +7,7 @@ import {
   ActivityRecorder,
   ApprovalService,
   CharmCallService,
+  CharmDeclarations,
   ChatService,
   CommitIdentityQuestions,
   DataExport,
@@ -27,6 +28,7 @@ import {
   TaskFiles,
 } from "@hobbots/agents";
 import {
+  GITHUB_CHARM,
   GitHubAccountLive,
   GitHubApiNode,
   GitHubCharmTools,
@@ -563,6 +565,8 @@ const ServerLive = Layer.unwrap(
             ]),
             // The whole output of long tool calls, which their steps show cut.
             ToolLogsLive(join(dataDir, "tool-logs")),
+            // The Charms the hub holds, as they declare themselves to the policy (ADR 031).
+            Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
           ),
         ),
       );
