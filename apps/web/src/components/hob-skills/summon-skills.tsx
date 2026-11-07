@@ -57,7 +57,7 @@ export function SummonSkills({
           empty={copy.picker.empty({ name })}
           failure={null}
           onClose={() => setOpen(false)}
-          action={(offer) => {
+          action={(offer, titleId) => {
             const on = picked.includes(offer.skill.id);
             return (
               <Button
@@ -65,7 +65,7 @@ export function SummonSkills({
                 variant={on ? "default" : "outline"}
                 size="sm"
                 aria-pressed={on}
-                aria-label={copy.picker.pick({ name, skill: skillTitle(offer.skill.name) })}
+                aria-describedby={titleId}
                 onClick={() => toggle(offer.skill.id)}
               >
                 {copy.picker.give({ name })}

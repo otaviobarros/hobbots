@@ -1,11 +1,19 @@
 import type { SkillDetail } from "@hobbots/api";
-import { type AgentId, type SkillUseCounts, skillRevisionLabel, type Thread, type ThreadId } from "@hobbots/domain";
+import {
+  type AgentId,
+  SKILL_FEEDBACK_SUGGESTS_REVISION,
+  type SkillFeedback,
+  type SkillUseCounts,
+  skillRevisionLabel,
+  type Thread,
+  type ThreadId,
+} from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { threadsQuery } from "../../api/queries.ts";
-import { skillUsesQuery } from "../../api/skills.ts";
+import { skillFeedbackQuery, skillUsesQuery } from "../../api/skills.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { RowList } from "../memory/memory-overview.tsx";
 import { messages } from "./messages.ts";
@@ -69,12 +77,44 @@ function ChatUseRow({
 }
 
 /**
+ * The notes hobs left that the skill is wrong, outdated or unclear, newest first, each saying how many
+ * more would suggest a revision (ADR 029, `skill_feedback`). Nothing shows until a hob leaves one.
+ */
+function SkillNotes({ notes, hobs }: { notes: ReadonlyArray<SkillFeedback>; hobs: HobDirectory }) {
+  if (notes.length === 0) return null;
+  const more = Math.max(0, SKILL_FEEDBACK_SUGGESTS_REVISION - notes.length);
+  return (
+    <section aria-label={copy.notes} className="flex flex-col gap-1">
+      <h3 className="lbl m-0 pb-1 text-label">
+        {copy.notes} <span className="tabular-nums">{notes.length}</span>
+      </h3>
+      <RowList label={copy.notes}>
+        {notes.map((one) => (
+          <li key={one.id} className="flex flex-col gap-0.5 bg-card px-3.5 py-2.5">
+            <span className="text-ui text-text-strong">{copy.note({ note: one.note })}</span>
+            <span className="text-meta text-label">
+              {copy.noteBy({
+                hob: hobs.get(one.agentId)?.name ?? messages.scopes.formerHob,
+                kind: copy.noteKind[one.kind],
+                when: formatWhen(one.createdAt),
+                more,
+              })}
+            </span>
+          </li>
+        ))}
+      </RowList>
+    </section>
+  );
+}
+
+/**
  * A skill's Activity (ADR 029, The use line): how the use line reads under a reply, how often hobs
  * used it, and each chat it was used in, the most recent first.
  */
 export function SkillActivity({ detail, hobs }: { detail: SkillDetail; hobs: HobDirectory }) {
   const { skill } = detail;
   const uses = useQuery(skillUsesQuery(skill.id));
+  const notes = useQuery(skillFeedbackQuery(skill.id)).data ?? [];
   const titles = useThreadTitles(uses.data?.hobs.map((one) => one.agentId) ?? []);
   const title = skillTitle(skill.name);
 
@@ -125,6 +165,7 @@ export function SkillActivity({ detail, hobs }: { detail: SkillDetail; hobs: Hob
           </section>
         </>
       )}
+      <SkillNotes notes={notes} hobs={hobs} />
     </div>
   );
 }

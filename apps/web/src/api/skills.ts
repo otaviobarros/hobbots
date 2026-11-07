@@ -18,6 +18,7 @@ const skillsKeys = {
   file: (skillId: SkillId, hash: SkillRevisionHash, path: string) =>
     [...skillsKey, "file", skillId, hash, path] as const,
   uses: (skillId: SkillId) => [...skillsKey, "uses", skillId] as const,
+  feedback: (skillId: SkillId) => [...skillsKey, "feedback", skillId] as const,
   changes: [...skillsKey, "changes"] as const,
 };
 
@@ -130,6 +131,18 @@ export const removeSkill = (skillId: SkillId) => call((c) => c.skills.remove({ p
  * A hob used a skill: its counts, the library's uses this week and the hob's Used lately are read
  * again. A read in flight may have been taken before the use, so it is cancelled first (STD-REACT-012).
  */
+/** The notes hobs left on a skill, newest first (ADR 029, `skill_feedback`). */
+export const skillFeedbackQuery = (skillId: SkillId) =>
+  queryOptions({
+    queryKey: skillsKeys.feedback(skillId),
+    queryFn: () => call((c) => c.skillProposals.feedback({ params: { skillId } })),
+    select: (answer) => answer.feedback,
+  });
+
+/** A hob left a note on a skill: the notes its Activity shows are read again. */
+export const refreshSkillFeedback = (queryClient: QueryClient) =>
+  queryClient.invalidateQueries({ queryKey: [...skillsKey, "feedback"] });
+
 export const refreshSkillUses = async (queryClient: QueryClient) => {
   const counted = {
     queryKey: skillsKey,

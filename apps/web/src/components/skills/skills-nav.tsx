@@ -1,6 +1,7 @@
 import type { SkillsList } from "@hobbots/api";
 import { memoryScopeKey } from "@hobbots/domain";
 import { Link } from "@tanstack/react-router";
+import { useWaitingProposals } from "../../api/skill-proposals.ts";
 import { formatCount } from "../../lib/format.ts";
 import { NavSkeleton } from "../memory/memory-nav.tsx";
 import { messages } from "./messages.ts";
@@ -40,6 +41,7 @@ export function SkillsNav({ view, reads }: { view: SkillsView; reads: SkillsRead
   const list: SkillsList | undefined = reads.list.data;
   const entries = scopeEntries(list, reads.active, reads.hobs);
   const open = view._tag === "Scope" ? memoryScopeKey(view.scope) : null;
+  const waiting = useWaitingProposals().length;
   return (
     <nav
       aria-label={copy.nav.label}
@@ -56,6 +58,18 @@ export function SkillsNav({ view, reads }: { view: SkillsView; reads: SkillsRead
           <SkillsIcon name="overview" />
         </span>
         <span className="flex-1 text-ui">{copy.nav.overview}</span>
+      </Link>
+      <Link
+        to="/skills"
+        search={{ view: "review" }}
+        aria-current={view._tag === "Review" ? "page" : undefined}
+        className={row}
+      >
+        <span className="text-text-secondary">
+          <SkillsIcon name="review" />
+        </span>
+        <span className="flex-1 text-ui">{copy.nav.review}</span>
+        {waiting > 0 && <span className="text-meta text-label tabular-nums">{formatCount(waiting)}</span>}
       </Link>
       <Link
         to="/skills"

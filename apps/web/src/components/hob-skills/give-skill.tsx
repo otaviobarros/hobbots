@@ -1,5 +1,6 @@
 import { skillRevisionLabel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { useId } from "react";
 import { RowList } from "../memory/memory-overview.tsx";
 import { type HobDirectory, scopeName, skillTitle } from "../skills/skills-model.ts";
 import { RevTag } from "../skills/skills-parts.tsx";
@@ -37,8 +38,10 @@ export function GiveSkill({
   empty: string;
   failure: string | null;
   onClose: () => void;
-  action: (offer: GiveOffer) => React.ReactNode;
+  /** The row's action, described by the skill's title, whose element has the id `titleId`. */
+  action: (offer: GiveOffer, titleId: string) => React.ReactNode;
 }) {
+  const ids = useId();
   return (
     <section aria-label={copy.title({ name })} className="flex flex-col gap-2.5 rounded-card bg-card p-4">
       <header className="flex items-center gap-2">
@@ -57,14 +60,14 @@ export function GiveSkill({
             <li key={offer.skill.id} className="flex items-center gap-2.5 bg-panel px-3 py-2.5">
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="flex items-center gap-2">
-                  <span className="truncate text-ui font-semibold text-text-strong">
+                  <span id={`${ids}-${offer.skill.id}`} className="truncate text-ui font-semibold text-text-strong">
                     {skillTitle(offer.skill.name)}
                   </span>
                   <RevTag label={skillRevisionLabel({ number: offer.skill.revisions })} />
                 </span>
                 <span className="truncate text-meta text-label">{subOf(offer, name, hobs)}</span>
               </span>
-              {action(offer)}
+              {action(offer, `${ids}-${offer.skill.id}`)}
             </li>
           ))}
         </RowList>

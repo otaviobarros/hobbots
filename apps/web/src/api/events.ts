@@ -38,7 +38,7 @@ import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
 import { skillProposalsChanged } from "./skill-proposals.ts";
-import { refreshSkills, refreshSkillUses } from "./skills.ts";
+import { refreshSkillFeedback, refreshSkills, refreshSkillUses } from "./skills.ts";
 import {
   newer,
   recordAgent,
@@ -281,8 +281,8 @@ const isProposalEvent = (event: HobbotsEvent): event is ProposalEvent => PROPOSA
 /**
  * A proposal's event, or a change to the skills library: the Inbox reads the proposals again, so a
  * review waiting there shows the library as Add would find it, and a hob's next turn may get other
- * skills, which the composer's `/` list shows (ADR 029). A note on a skill shows on its page, which
- * #1062 builds. Whether the event was one of these.
+ * skills, which the composer's `/` list shows (ADR 029). A note on a skill shows in its Activity.
+ * Whether the event was one of these.
  */
 const applySkillEvent = (
   queryClient: QueryClient,
@@ -297,7 +297,8 @@ const applySkillEvent = (
     return true;
   }
   if (!isProposalEvent(event)) return false;
-  if (event._tag !== "SkillFeedbackLeft") void skillProposalsChanged(queryClient);
+  if (event._tag === "SkillFeedbackLeft") void refreshSkillFeedback(queryClient);
+  else void skillProposalsChanged(queryClient);
   return true;
 };
 

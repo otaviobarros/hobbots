@@ -69,7 +69,6 @@ export const messages = {
     close: "Close",
     give: ({ name }: { name: string }) => `Give to ${name}`,
     turnOn: ({ name }: { name: string }) => `Turn on for ${name}`,
-    pick: ({ name, skill }: { name: string; skill: string }) => `Give ${skill} to ${name}`,
     notGiven: "Not given to anyone yet",
     offFor: ({ scope, name }: { scope: string; name: string }) => `${scope} · off for ${name}`,
     foot: ({ name }: { name: string }) => `${name} gets it from its next chat, pinned to the revision shown.`,

@@ -36,7 +36,12 @@ export function HobGive({
     setFailure(null);
     const skill = skillTitle(offer.skill.name);
     const done = {
-      onSuccess: () => onSaid(copy.given({ name: hob.name, skill })),
+      onSuccess: () =>
+        onSaid(
+          offer._tag === "TurnOn"
+            ? messages.carries.turnedOn({ name: hob.name, skill })
+            : copy.given({ name: hob.name, skill }),
+        ),
       onError: () => setFailure(copy.failed),
     };
     if (offer._tag === "TurnOn")
@@ -58,12 +63,12 @@ export function HobGive({
       empty={list.skills.length === 0 ? copy.emptyLibrary : copy.empty({ name: hob.name })}
       failure={failure}
       onClose={() => setOpen(false)}
-      action={(offer) => (
+      action={(offer, titleId) => (
         <Button
           variant="outline"
           size="sm"
           disabled={writes.busy}
-          aria-label={copy.pick({ name: hob.name, skill: skillTitle(offer.skill.name) })}
+          aria-describedby={titleId}
           onClick={() => run(offer)}
         >
           {offer._tag === "TurnOn" ? copy.turnOn({ name: hob.name }) : copy.give({ name: hob.name })}

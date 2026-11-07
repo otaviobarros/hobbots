@@ -50,6 +50,7 @@ export function SkillChip({ tone, children }: { tone: "later" | "waiting" | "nee
 /** Line icons on a 16 × 16 grid, in the color of the text beside them. */
 const ICONS = {
   overview: "M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z",
+  review: "M2.5 3.5h11v7h-4l-1.5 2-1.5-2h-4zM5.5 7h5",
   changes: "M8 2.5a5.5 5.5 0 1 1-5.2 3.7M2.5 2.5v3.7h3.7M8 5v3l2 1.5",
   everyone:
     "M5.5 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM11 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM1.5 13c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5M9.5 9.6c.5-.1 1-.1 1.5-.1 2.2 0 3.5 1.3 3.5 3.5",

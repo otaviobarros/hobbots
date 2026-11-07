@@ -393,7 +393,8 @@ const skillsRoute = createRoute({
       edit: searchParam(Schema.Literals(["skill", "new"])),
       add: searchParam(ImportFrom),
       q: searchParam(SearchText),
-      view: searchParam(Schema.Literal("changes")),
+      view: searchParam(Schema.Literals(["changes", "review"])),
+      item: searchParam(Schema.String),
     }),
   ),
   component: function Skills() {

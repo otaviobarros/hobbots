@@ -26,6 +26,7 @@ export const messages = {
   nav: {
     label: "Skill scopes",
     overview: "Overview",
+    review: "To review",
     changes: "What changed",
     shared: "Shared",
     hobs: "Hobs",
@@ -64,6 +65,21 @@ export const messages = {
     heldOld: "Kept on an older revision",
     older: "On an older revision",
     onlyWhenAsked: "Only when asked",
+  },
+  review: {
+    title: "To review",
+    intro:
+      "A new skill or a change to one always waits for you, whatever the safety level. Each also shows in your Inbox.",
+    empty: "Nothing to review. When a hob drafts a skill or suggests a change to one, it waits here.",
+    listLabel: "Skills that wait for you",
+    newSkill: "New skill",
+    change: "Change",
+    from: ({ who }: { who: string }) => `${who}, from a chat`,
+    fromMemory: ({ who }: { who: string }) => `${who}, from its memory`,
+    pick: "Pick one to see what it adds or changes.",
+    failed: "To review could not be read.",
+    retry: "Try again",
+    openChat: "Open the chat",
   },
   changes: {
     title: "What changed",
@@ -113,6 +129,13 @@ export const messages = {
     summary: ({ total, week, hobs }: { total: number; week: number; hobs: number }) =>
       `Used ${formatCount(total)} ${plural(total, { one: "time", other: "times" })}, ${formatCount(week)} this week, by ${formatCount(hobs)} ${plural(hobs, { one: "hob", other: "hobs" })}.`,
     byHob: "By hob",
+    notes: "Notes from hobs",
+    note: ({ note }: { note: string }) => `“${note}”`,
+    noteKind: { wrong: "wrong", outdated: "outdated", unclear: "unclear" },
+    noteBy: ({ hob, kind, when, more }: { hob: string; kind: string; when: string; more: number }) =>
+      more > 0
+        ? `${hob}, ${kind} · ${when} · ${formatCount(more)} more ${plural(more, { one: "note suggests", other: "notes suggest" })} a revision`
+        : `${hob}, ${kind} · ${when} · enough notes to suggest a revision`,
     chats: "In chats",
     chat: "A chat",
     chatLine: ({ hob, chat }: { hob: string; chat: string }) => `${hob}: ${chat}`,
