@@ -96,7 +96,7 @@ function StepLine({ step, outcome }: { step: ReplyStep; outcome: StepState }) {
       <span aria-hidden className={cn("w-3.5 text-center", mark.className)}>
         {mark.glyph}
       </span>
-      <span className={outcome === "running" ? "text-text-strong" : undefined}>{words}</span>
+      <span className={cn(outcome === "running" && "text-text-strong")}>{words}</span>
       <span className="sr-only">{waited ? copy.waitedOutcome : copy.outcome[outcome]}</span>
     </span>
   );

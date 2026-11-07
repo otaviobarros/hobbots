@@ -256,11 +256,19 @@ const localeFormatting = (file, lines, program, lineOf) => {
   return problems;
 };
 
+/** `cn(...) || undefined`, which leaves the attribute off when no class is left, rather than building classes. */
+const emptyAsNone = (node) =>
+  node.operator === "||" &&
+  node.left.type === "CallExpression" &&
+  node.left.callee.name === "cn" &&
+  node.right.type === "Identifier" &&
+  node.right.name === "undefined";
+
 /** Whether a className expression builds its classes by hand: a template with holes, a condition, a `+` or a join. */
 const composedByHand = (node) =>
   (node.type === "TemplateLiteral" && node.expressions.length > 0) ||
   node.type === "ConditionalExpression" ||
-  node.type === "LogicalExpression" ||
+  (node.type === "LogicalExpression" && !emptyAsNone(node)) ||
   (node.type === "BinaryExpression" && node.operator === "+") ||
   (node.type === "CallExpression" && node.callee.type === "MemberExpression" && node.callee.property.name === "join");
 

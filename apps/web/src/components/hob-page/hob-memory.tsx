@@ -1,6 +1,7 @@
 import type { Agent, MemoryScope } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { memoryNotAnswering, memoryPagesQuery } from "../../api/memory-pages.ts";
@@ -60,7 +61,7 @@ export function HobMemory({ hob }: { hob: Agent }) {
                 <Link
                   to="/memory"
                   search={memorySearchOf({ _tag: "Page", scope: page.scope, path: page.path, version: null })}
-                  className={`${row} text-inherit no-underline hover:bg-hover`}
+                  className={cn(row, "text-inherit no-underline hover:bg-hover")}
                 >
                   <KindTag kind={page.kind} />
                   <span className="min-w-0 flex-1 truncate text-ui text-text-strong">{page.title}</span>

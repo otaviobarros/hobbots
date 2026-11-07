@@ -1,4 +1,5 @@
 import { Skeleton } from "@hobbots/ui/components/skeleton";
+import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import { MemoryCard } from "../memory/memory-parts.tsx";
@@ -97,7 +98,7 @@ export function OriginRow({
   return (
     <>
       <dt className="text-label">{label}</dt>
-      <dd className={mono ? "m-0 font-mono" : "m-0 break-words"}>{children}</dd>
+      <dd className={cn("m-0", mono ? "font-mono" : "break-words")}>{children}</dd>
     </>
   );
 }

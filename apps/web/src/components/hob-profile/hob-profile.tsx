@@ -552,7 +552,7 @@ function RoleLine({ draft }: { draft: ProfileDraft }) {
         <RoleSigil sigil={draft.sigil} size={24} />
       </span>
       <span className="flex min-w-0 flex-col">
-        <strong className={title ? "text-text-strong" : "text-label"}>{title || copy.noTitle}</strong>
+        <strong className={cn(title ? "text-text-strong" : "text-label")}>{title || copy.noTitle}</strong>
         <span className="text-detail text-text-secondary">
           {draft.role === null ? copy.ownRole : starterRole(draft.role).note}
         </span>

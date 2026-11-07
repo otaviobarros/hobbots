@@ -1,6 +1,7 @@
 import { Button } from "@hobbots/ui/components/button";
 import { DialogDescription, DialogTitle } from "@hobbots/ui/components/dialog";
 import { Progress } from "@hobbots/ui/components/progress";
+import { cn } from "@hobbots/ui/lib/utils";
 import type { StartOverStep } from "../../api/backup.ts";
 import { messages } from "./messages.ts";
 
@@ -21,8 +22,8 @@ export function Deleting({ step }: { step: StartOverStep }) {
       <Progress value={at} max={STEPS.length} aria-label={copy.deletingTitle} />
       <ul role="status" className="m-0 flex list-none flex-col gap-1.5 p-0 text-ui">
         {STEPS.map((each, index) => (
-          <li key={each} className={index <= at ? "flex gap-2 text-text" : "flex gap-2 text-label"}>
-            <span aria-hidden className={index < at ? "w-4 text-mint" : "w-4 text-label"}>
+          <li key={each} className={cn("flex gap-2", index <= at ? "text-text" : "text-label")}>
+            <span aria-hidden className={cn("w-4", index < at ? "text-mint" : "text-label")}>
               {index < at ? "✓" : index === at ? "·" : "○"}
             </span>
             {index === at ? `${copy.steps[each]}…` : copy.steps[each]}

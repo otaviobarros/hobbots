@@ -34,7 +34,7 @@ export function EntryPortrait({
         <svg
           aria-hidden="true"
           viewBox="0 0 20 20"
-          className={large ? "size-5" : "size-4.5"}
+          className={cn(large ? "size-5" : "size-4.5")}
           fill="none"
           stroke="currentColor"
           strokeWidth="1.6"

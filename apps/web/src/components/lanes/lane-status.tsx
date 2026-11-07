@@ -67,7 +67,9 @@ export function LaneStatusRow({
               : "bg-[color-mix(in_srgb,var(--color-rose)_12%,var(--color-card))]",
           )}
         >
-          <b className={item.outcome === "completed" ? "text-mint" : "text-rose"}>{messages.result[item.outcome]}</b>
+          <b className={cn(item.outcome === "completed" ? "text-mint" : "text-rose")}>
+            {messages.result[item.outcome]}
+          </b>
           {item.text !== null && ` · ${item.text}`}
           {item.text === null && item.outcome === "failed" && ` · ${messages.stoppedWhy}`}
         </li>

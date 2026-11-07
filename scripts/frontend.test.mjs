@@ -206,6 +206,7 @@ test("classes that depend on a condition or join others go through cn", () => {
   const [names, read] = files({
     "apps/web/src/components/a/a.tsx": [
       'const A = ({ on }: { on: boolean }) => <i className={cn("flex", on && "gap-2")} />;',
+      'const H = ({ on }: { on: boolean }) => <i className={cn(on && "gap-2") || undefined} />;',
       // A template with a hole, written in two pieces so the test file itself holds no `${`.
       "const B = ({ on }: { on: boolean }) => <i className={`flex $" + '{on ? "gap-2" : ""}`} />;',
       'const C = ({ on }: { on: boolean }) => <i className={on ? "flex" : "grid"} />;',
@@ -217,10 +218,10 @@ test("classes that depend on a condition or join others go through cn", () => {
     ].join("\n"),
   });
   assert.deepEqual(check(names, read), [
-    "apps/web/src/components/a/a.tsx:2: compose the classes with cn, not by hand (STD-UI-012)",
     "apps/web/src/components/a/a.tsx:3: compose the classes with cn, not by hand (STD-UI-012)",
     "apps/web/src/components/a/a.tsx:4: compose the classes with cn, not by hand (STD-UI-012)",
     "apps/web/src/components/a/a.tsx:5: compose the classes with cn, not by hand (STD-UI-012)",
+    "apps/web/src/components/a/a.tsx:6: compose the classes with cn, not by hand (STD-UI-012)",
   ]);
 });
 

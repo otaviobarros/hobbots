@@ -1,6 +1,7 @@
 import { lengthChoice, type RuntimeHealth, type RuntimeModels, type SkillId, voiceChoice } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton, WaitNote } from "@hobbots/ui/components/skeleton";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useWaitStage } from "@hobbots/ui/lib/wait-stage";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -114,7 +115,7 @@ function Row({
   last?: boolean;
 }) {
   return (
-    <div className={`flex items-start gap-4 py-3 max-[720px]:flex-wrap ${last ? "" : "border-b border-line"}`}>
+    <div className={cn("flex items-start gap-4 py-3 max-[720px]:flex-wrap", !last && "border-b border-line")}>
       <dt className="lbl w-[140px] flex-none pt-0.5 text-label">{term}</dt>
       <dd className="m-0 flex min-w-0 flex-1 flex-col">
         <strong title={value ?? undefined} className="truncate">

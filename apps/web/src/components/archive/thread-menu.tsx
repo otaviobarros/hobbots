@@ -9,6 +9,7 @@ import {
   MenuShortcut,
 } from "@hobbots/ui/components/menu";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
+import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { type ComponentType, type ReactNode, useRef, useState } from "react";
 import { usePinThread } from "../../api/thread-settings.ts";
@@ -166,7 +167,7 @@ function BrainItem({ hob, thread, onSelect }: { hob: Agent; thread: Thread | und
         {brain.checking ? (
           <Skeleton width="7ch" />
         ) : (
-          <span className={brain.ready ? "text-mint" : "text-lantern"}>{brain.state}</span>
+          <span className={cn(brain.ready ? "text-mint" : "text-lantern")}>{brain.state}</span>
         )}
       </span>
       {thread === undefined && <span className="ps-6 text-meta">{brainCopy.freshPage}</span>}

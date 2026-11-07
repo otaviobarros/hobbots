@@ -1,4 +1,5 @@
 import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { DesktopConnection } from "../../api/client.ts";
@@ -106,7 +107,7 @@ export function ConnectedHubSettings({ bridge }: { readonly bridge: ConnectionBr
           <div className="cut flex flex-wrap items-center gap-x-3.5 gap-y-2.5 border-(length:--edge) border-mint-deep bg-card px-3.5 py-3">
             <span
               aria-hidden
-              className={`size-2.5 flex-none ${view.state === "connected" ? "bg-mint" : "bg-lantern"}`}
+              className={cn("size-2.5 flex-none", view.state === "connected" ? "bg-mint" : "bg-lantern")}
             />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span role="status" className="font-bold wrap-anywhere">

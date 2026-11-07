@@ -1,3 +1,4 @@
+import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { formatCount } from "../../lib/format.ts";
 import { NeedsTray } from "../needs-tray/needs-tray.tsx";
@@ -29,7 +30,7 @@ export function NeedsYou() {
             {formatCount(entries.length)}
           </span>
         )}
-        <Link to="/inbox" search={{ tab: "needs" }} className={`ms-auto ${moreLink}`}>
+        <Link to="/inbox" search={{ tab: "needs" }} className={cn("ms-auto", moreLink)}>
           {copy.openInbox}
           <span aria-hidden>→</span>
         </Link>

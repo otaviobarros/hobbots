@@ -1,6 +1,7 @@
 import type { Agent, AgentId, Thread, ThreadId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -210,7 +211,7 @@ export function BringBackButton({ hob, chats, quiet = false }: { hob: Agent; cha
       size={quiet ? "sm" : "default"}
       disabled={busy}
       aria-label={copy.hobs.bringBackLabel({ name: hob.name })}
-      className={quiet ? "relative z-[1] flex-none" : "min-w-0 max-w-[260px]"}
+      className={cn(quiet ? "relative z-[1] flex-none" : "min-w-0 max-w-[260px]")}
       onClick={() =>
         actions.bringBack(
           hob,

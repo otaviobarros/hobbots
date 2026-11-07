@@ -167,10 +167,7 @@ function VillageHob({ hob, walkIn }: { hob: SceneHob; walkIn: boolean }) {
   };
 
   return (
-    <div
-      className={walkIn ? "animate-hb-walk" : undefined}
-      style={walkIn ? { animationDelay: `${hob.walk}s` } : undefined}
-    >
+    <div className={cn(walkIn && "animate-hb-walk")} style={walkIn ? { animationDelay: `${hob.walk}s` } : undefined}>
       <button
         type="button"
         onClick={greet}

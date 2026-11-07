@@ -1,6 +1,7 @@
 import { HOB_COLORS } from "@hobbots/art/look";
 import type { HobColor } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useId, useState } from "react";
 import { type FirstHobDraft, gearOf, LABEL_MAX, pickLook, rerollName } from "../../api/first-hob.ts";
 import { Die, FIELD } from "../hob-form/hob-form.tsx";
@@ -35,7 +36,7 @@ export function NameField({ draft, onChange }: { draft: FirstHobDraft; onChange:
             onChange((d) => ({ ...d, name: value, named: true }));
           }}
           aria-label={copy.nameLabel}
-          className={`min-w-0 flex-1 text-[17px] ${FIELD}`}
+          className={cn(FIELD, "min-w-0 flex-1 text-[17px]")}
         />
         <Button
           type="button"
