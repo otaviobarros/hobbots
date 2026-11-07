@@ -4,7 +4,15 @@ import { type RefObject, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { Decision } from "../../api/approvals.ts";
 import { messages } from "../messages.ts";
-import { canNarrow, offersAlways, type RuleScope, rulesToSave, ruleText, runnerNote } from "./approval-rules.ts";
+import {
+  alwaysLabel,
+  canNarrow,
+  offersAlways,
+  type RuleScope,
+  rulesToSave,
+  ruleText,
+  runnerNote,
+} from "./approval-rules.ts";
 import { useDecideKeys } from "./use-decide-keys.ts";
 import { useWorkScope } from "./use-work-scope.ts";
 
@@ -22,7 +30,8 @@ const VARIANTS = {
 } as const;
 
 /**
- * Allow once, This Task, Always for this site and Deny (ADR 015, ADR 018). A high-risk request
+ * Allow once, This Task, Always (named for what it covers, such as Always for this folder) and Deny
+ * (ADR 015, ADR 018). A high-risk request
  * (`onceOnly`) offers once only and needs the confirmation box ticked first; the hub checks both too
  * (PE-007). This Task and Always open the exact rule they save, narrowable where the hub allows,
  * before anything is sent. This Task is offered for a request made in a Task, and reads This Quest
@@ -117,7 +126,7 @@ export function ApprovalActions({
         )}
         {always && (
           <Button ref={alwaysButton} variant="outline" aria-disabled={pending} onClick={open("always")}>
-            {copy.always}
+            {alwaysLabel(approval)}
           </Button>
         )}
         <Button ref={denyButton} variant={variant.deny} aria-disabled={pending} onClick={open("deny")}>
@@ -201,7 +210,7 @@ function RuleForm({
       }}
     >
       <span id={headingId} className="lbl text-meta text-label">
-        {scope === "always" ? copy.always : copy.forWork[scope]}
+        {scope === "always" ? alwaysLabel(approval) : copy.forWork[scope]}
       </span>
       <p className="m-0 text-ui">
         {scope === "always" ? copy.alwaysIntro({ name }) : copy.forWorkIntro[scope]({ name })}

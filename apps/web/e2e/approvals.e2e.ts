@@ -108,7 +108,7 @@ test("[TC-PE-078] a push to the default branch is high risk and needs the confir
   const { card } = await pipAsksToPush(page, "main");
   await expect(card).toContainText("High risk · once only");
   // High risk is once only: no Always, and no note about rules, since the check box says why.
-  await expect(card.getByRole("button", { name: "Always for this site" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: /^Always/ })).toHaveCount(0);
   await expect(card).not.toContainText("cannot save a rule");
   const allow = card.getByRole("button", { name: "Allow once" });
   await expect(allow).toBeDisabled();
@@ -198,8 +198,8 @@ test("[TC-PE-101] Always shows the rule it saves, saves exactly that rule, and o
 }) => {
   const { current, card } = await pipAsks(page, remove("old.txt"));
   await expect(card).toContainText(/Expires (tomorrow )?at .+ if nobody decides/);
-  await card.getByRole("button", { name: "Always for this site" }).click();
-  const form = card.getByRole("form", { name: "Always for this site" });
+  await card.getByRole("button", { name: "Always for this file" }).click();
+  const form = card.getByRole("form", { name: "Always for this file" });
   // A delete's rule names the exact path, never the folder above it, so there is nothing to narrow.
   await expect(form.getByRole("list", { name: "The rule to save" })).toHaveText(
     `Always let Pip delete ${shared}/old.txt`,
@@ -208,7 +208,7 @@ test("[TC-PE-101] Always shows the rule it saves, saves exactly that rule, and o
 
   // Escape takes the rule back without saving it, with focus on Always.
   await page.keyboard.press("Escape");
-  await expect(card.getByRole("button", { name: "Always for this site" })).toBeFocused();
+  await expect(card.getByRole("button", { name: "Always for this file" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(form.getByRole("button", { name: "Save the rule and allow" })).toBeFocused();
   await page.keyboard.press("Enter");
@@ -235,8 +235,8 @@ test("[TC-PE-102] Always narrowed to the action's files saves only those files, 
   page,
 }) => {
   const { current, card } = await pipAsks(page, write("notes.md"), "careful");
-  await card.getByRole("button", { name: "Always for this site" }).click();
-  const form = card.getByRole("form", { name: "Always for this site" });
+  await card.getByRole("button", { name: "Always for this folder" }).click();
+  const form = card.getByRole("form", { name: "Always for this folder" });
   const rules = form.getByRole("list", { name: "The rule to save" });
   await expect(rules).toHaveText(`Always let Pip create and edit files directly in ${shared}`);
   await expect(form.getByRole("radio", { name: "Every file directly in the folder" })).toBeChecked();
@@ -260,7 +260,7 @@ test("[TC-PE-125] an Always rule shows in Inbox History and Settings, and removi
   page,
 }) => {
   const { current, card } = await pipAsks(page, remove("old.txt"));
-  await card.getByRole("button", { name: "Always for this site" }).click();
+  await card.getByRole("button", { name: "Always for this file" }).click();
   await card.getByRole("button", { name: "Save the rule and allow" }).click();
   await expect(card.getByRole("status")).toHaveText("✓ Allowed, and the rule is saved. Pip carries on.");
   const chat = page.url();

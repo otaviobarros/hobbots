@@ -72,6 +72,14 @@ const describeQuestion = (question: Question, caller: string) => ({
   }),
 });
 
+/** The artifacts a Task returned, by the id hand_off takes (#1088); nothing when it returned none. */
+const artifactsOf = (task: Task, tree: TaskTree) => {
+  const artifacts = tree.artifacts
+    .filter((artifact) => artifact.taskId === task.id)
+    .map((artifact) => ({ artifact_id: artifact.id as string, label: artifact.label, kind: artifact.kind }));
+  return artifacts.length === 0 ? {} : { artifacts };
+};
+
 /** One Task as `read_tasks` reports it: where it stands, what holds it and what it last said. */
 const describeTask = (task: Task, tree: TaskTree, caller: string) => {
   // What its hob and the hub reported, newest first; the hub's own state changes show in `state`.
@@ -98,6 +106,7 @@ const describeTask = (task: Task, tree: TaskTree, caller: string) => {
       return { kind: each.kind, summary: each.summary, ...(detail === null ? {} : { detail }), at: each.createdAt };
     }),
     ...(task.result === null ? {} : { result: task.result.summary }),
+    ...artifactsOf(task, tree),
   };
 };
 

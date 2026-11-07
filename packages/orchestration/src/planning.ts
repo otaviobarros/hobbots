@@ -150,10 +150,14 @@ const sameWait = (
   return recorded.mode === mode && was.size === now.size && [...was].every((id) => now.has(id));
 };
 
+/** How many open Tasks a refused `wait_for` names. */
+const LISTED_TASKS = 8;
+
 /**
  * Why `wait_for` refuses ids that are not Tasks under the caller's: it takes Task ids, and a question's
  * id names the Task the question is about, which the hob waits on instead, or not at all when it is
- * its own, since the hub wakes it with the answer (#702).
+ * its own, since the hub wakes it with the answer (#702). The caller's own Task never waits on itself,
+ * and the refusal names the open Tasks it can wait for (#1088).
  */
 const outsideMessage = (
   scope: CallScope,
@@ -175,9 +179,21 @@ const outsideMessage = (
         : `${id} is a question about Task ${question.taskId}, which is not under yours either: answer it with answer if it waits for you.`,
     ];
   });
+  const own = outside.includes(task.id)
+    ? [`${task.id} is the Task that waits, your own: list the Tasks under it, not the Task itself.`]
+    : [];
+  const open = [...under.values()].filter((each) => !isTerminalTask(each.state)).map((each) => each.id as string);
+  const choices =
+    open.length === 0
+      ? ["No Task under it is still open, so there is nothing to wait for."]
+      : [
+          `The Tasks under it still open: ${open.slice(0, LISTED_TASKS).join(", ")}${open.length > LISTED_TASKS ? ", and more: read_tasks lists them" : ""}.`,
+        ];
   return [
     `wait_for takes the ids of Tasks under Task ${task.id}, and these are not: ${outside.join(", ")}.`,
+    ...own,
     ...questions,
+    ...choices,
   ].join(" ");
 };
 

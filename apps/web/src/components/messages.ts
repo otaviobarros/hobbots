@@ -494,7 +494,22 @@ export const messages = {
     why: "Why now",
     risk: "Risk",
     allowOnce: "Allow once",
-    always: "Always for this site",
+    /**
+     * Always, named for what its rules cover: the folder, the files, the command, the branch, the
+     * repository or the site. Plain Always when the rules cover more than one kind of thing.
+     */
+    always: {
+      folder: "Always for this folder",
+      folders: "Always for these folders",
+      file: "Always for this file",
+      files: "Always for these files",
+      command: "Always for this command",
+      commands: "Always for these commands",
+      branch: "Always for this branch",
+      repository: "Always for this repository",
+      site: "Always for this site",
+      mixed: "Always",
+    },
     alwaysIntro: ({ name }: { name: string }) =>
       `Hobbots saves this rule, and ${name} stops asking for what it covers. You can remove it later.`,
     /** The middle lifetime (ADR 018): This Task, or This Quest once a party joins the Task. */

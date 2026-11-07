@@ -408,9 +408,11 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await refused(ALDRIC, one, "cancel_task", { key: "k8", task_id: one })).reason).toBe("not-lead");
 
     const before = await head();
-    expect((await refused(ADA, ada, "hand_off", { key: "k5", artifact_id: "nope", to_task_id: quill })).reason).toBe(
-      "artifact-missing",
-    );
+    const noArtifact = await refused(ADA, ada, "hand_off", { key: "k5", artifact_id: "nope", to_task_id: quill });
+    expect(noArtifact.reason).toBe("artifact-missing");
+    // With no artifact anywhere, it says there is nothing to hand off and what to use instead (#1088).
+    expect(noArtifact.message).toContain("No Task here has returned an artifact yet");
+    expect(noArtifact.message).toContain("message_task");
     await onlyRefusalsSince(before);
   });
 
@@ -515,6 +517,10 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await refused(ALDRIC, TOP, "wait_for", { key: "w2", tasks: ["other"] })).reason).toBe(
       "wait-outside-subtree",
     );
+    // Its own Task's id is refused too, with the ids it can wait for (#1088).
+    const own = await refused(ALDRIC, TOP, "wait_for", { key: "w3", tasks: [TOP] });
+    expect(own.message).toContain(`${TOP} is the Task that waits, your own`);
+    expect(own.message).toContain(`The Tasks under it still open: ${quill}, ${ada}.`);
 
     // Quill finishes her copy, and Aldric hands it to Ada.
     const tasks = await run(Effect.service(TaskRepository));
@@ -537,6 +543,17 @@ describe("hob tools for Tasks and Quests", () => {
       }),
     )) as TaskToolDone;
     const [artifact] = finished.details.artifacts as Array<string>;
+    // A Task's id is not an artifact's: the refusal says so and names the artifacts there are (#1088).
+    const byTask = await refused(ALDRIC, TOP, "hand_off", { key: "h0", artifact_id: quill, to_task_id: ada });
+    expect(byTask.reason).toBe("artifact-missing");
+    expect(byTask.message).toContain(`${quill} is a Task's id`);
+    expect(byTask.message).toContain(`Copy (artifact_id ${artifact}, from Task ${quill})`);
+    const read = await done(ALDRIC, TOP, "read_tasks", { key: "r-art" });
+    expect(
+      (read.details.tasks as ReadonlyArray<{ readonly task_id: string; readonly artifacts?: unknown }>).find(
+        (each) => each.task_id === quill,
+      )?.artifacts,
+    ).toEqual([{ artifact_id: artifact, label: "Copy", kind: "text" }]);
     const handed = await done(ALDRIC, TOP, "hand_off", { key: "h", artifact_id: artifact, to_task_id: ada });
     expect(handed.message).toContain("Copy");
     expect(

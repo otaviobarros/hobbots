@@ -97,6 +97,11 @@ test("[TC-UX-985] a share arrives in the open Inbox as a Memory request, and Sha
   );
   await expect(request).toContainText("Share it and every hob follows it from its next chat.");
   await expectAccessible(page, request);
+  // A and D act only on a permission request, so the keys under the list leave them out here (#1088).
+  const aside = page.getByRole("complementary", { name: "Inbox" });
+  await expect(aside).toContainText("↑↓move");
+  await expect(aside).not.toContainText("allow once");
+  await expect(aside).not.toContainText("deny");
 
   await request.getByRole("button", { name: "Share it" }).click();
   await expect(request.getByRole("status")).toHaveText("Shared. Every hob follows it from its next chat.");

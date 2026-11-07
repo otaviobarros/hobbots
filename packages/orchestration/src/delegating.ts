@@ -52,6 +52,28 @@ interface Deps {
 
 type DelegateInput = Omit<TaskToolInput<"delegate_task">, "key">;
 
+/** How many of the work's artifacts a refused `hand_off` names. */
+const LISTED_ARTIFACTS = 5;
+
+/**
+ * Why `hand_off` refused an id, and what to pass instead (#1088): it takes the id of an artifact a Task
+ * returned with complete_task, never a Task's id, and a Task that returned none has nothing to hand
+ * off, since its result already reaches the Tasks that depend on it.
+ */
+const missingArtifact = (tree: TaskTree, id: string): string => {
+  const asTask = tree.tasks.some((task) => task.id === id)
+    ? ` ${id} is a Task's id: hand_off takes the id of an artifact a Task returned with complete_task.`
+    : "";
+  if (tree.artifacts.length === 0) {
+    return `No artifact ${id} in the work you are on.${asTask} No Task here has returned an artifact yet, so there is nothing to hand off. A Task's result already reaches the Tasks that depend on it; to tell a running Task something, use message_task.`;
+  }
+  const listed = tree.artifacts
+    .slice(-LISTED_ARTIFACTS)
+    .map((each) => `${each.label} (artifact_id ${each.id}, from Task ${each.taskId})`);
+  const more = tree.artifacts.length > LISTED_ARTIFACTS ? " read_tasks lists the rest." : "";
+  return `No artifact ${id} in the work you are on.${asTask} Its artifacts: ${listed.join("; ")}.${more}`;
+};
+
 /** Longest text of yours a delegated Task carries on as its lead's note. */
 const NOTE_LIMIT = 2_000;
 
@@ -307,9 +329,8 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
     hand_off: (scope: CallScope, input: Omit<TaskToolInput<"hand_off">, "key">) =>
       Effect.gen(function* () {
         const artifact = scope.tree.artifacts.find((each) => each.id === input.artifact_id);
-        if (artifact === undefined) {
-          return yield* refuse("artifact-missing", `No artifact ${input.artifact_id} in the work you are on.`);
-        }
+        if (artifact === undefined)
+          return yield* refuse("artifact-missing", missingArtifact(scope.tree, input.artifact_id));
         yield* ledTask(scope, artifact.taskId);
         const to = yield* ledTask(scope, input.to_task_id);
         const journal = journalOf();
