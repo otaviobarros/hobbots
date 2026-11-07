@@ -512,7 +512,11 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
       copy: ({ params, payload }) =>
         Effect.gen(function* () {
           const skill = yield* skillOf(params.skillId);
-          const hash = payload.base ?? skill.latest;
+          // A skill from ~/.agents/skills is copied as the folder holds it now, which may be an earlier revision.
+          const inFolder = Option.isSome(agentsFolder)
+            ? (yield* agentsFolder.value.current)?.get(skill.name)
+            : undefined;
+          const hash = payload.base ?? inFolder ?? skill.latest;
           const base = yield* library.revision(skill.id, hash);
           const folder = yield* files.folder(hash);
           if (base === null || folder === null) return yield* new SkillMissing({ id: hash });

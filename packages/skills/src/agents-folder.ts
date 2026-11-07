@@ -2,7 +2,7 @@ import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { announcer, EventPublisher, SkillLibrary } from "@hobbots/agents";
-import type { Skill, SkillBy, SkillName, SkillRefused, SkillScope } from "@hobbots/domain";
+import type { Skill, SkillBy, SkillName, SkillRefused, SkillRevisionHash, SkillScope } from "@hobbots/domain";
 import { Context, Duration, Effect, Layer, Option, Queue, Ref, Schedule, Semaphore } from "effect";
 import { type CheckedSkill, checkSkill } from "./check.ts";
 import { folderTree } from "./sources/folder.ts";
@@ -40,6 +40,12 @@ export interface AgentsFolderShape {
   readonly sync: Effect.Effect<void>;
   /** What the last read could not take. */
   readonly problems: Effect.Effect<ReadonlyArray<AgentsFolderProblem>>;
+  /**
+   * The revision each skill the folder holds is, as the last full read took it; null before a read
+   * succeeds. This, not a skill's newest revision, is what the folder has now: a folder put back to
+   * an earlier copy keeps the newer revision as the skill's newest.
+   */
+  readonly current: Effect.Effect<ReadonlyMap<SkillName, SkillRevisionHash> | null>;
 }
 
 export class AgentsFolder extends Context.Service<AgentsFolder, AgentsFolderShape>()("@hobbots/skills/AgentsFolder") {}
@@ -118,6 +124,7 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
       const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a skill from ~/.agents/skills");
       const moves = yield* Effect.serviceOption(AgentsFolderMoves);
       const problems = yield* Ref.make<ReadonlyArray<AgentsFolderProblem>>([]);
+      const current = yield* Ref.make<ReadonlyMap<SkillName, SkillRevisionHash> | null>(null);
       const origin = { _tag: "AgentsFolder", path } as const;
 
       /** Whether a library skill is the one the folder keeps. */
@@ -200,6 +207,7 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
           const found: Array<AgentsFolderProblem> = [];
           const moved: Array<AgentsFolderMove> = [];
           const present = new Set<SkillName>();
+          const here = new Map<SkillName, SkillRevisionHash>();
           for (const result of results) {
             if (result._tag === "Refused") {
               found.push(problemOf(result.folder, { refusal: result.refusal }));
@@ -213,6 +221,7 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
             present.add(result.skill.name);
             moved.push(
               ...(yield* take(result.skill, existing).pipe(
+                Effect.tap(() => Effect.sync(() => here.set(result.skill.name, result.skill.hash))),
                 Effect.catchTags({
                   SkillNameTaken: (error) =>
                     Effect.sync(() => {
@@ -230,6 +239,7 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
             if (!present.has(skill.name) && (yield* fromFolder(skill))) yield* letGo(skill);
           }
           if (moved.length > 0 && Option.isSome(moves)) yield* moves.value.moved(moved);
+          yield* Ref.set(current, here);
           return found;
         });
 
@@ -271,6 +281,6 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
         Effect.forkScoped,
       );
 
-      return AgentsFolder.of({ path, sync, problems: Ref.get(problems) });
+      return AgentsFolder.of({ path, sync, problems: Ref.get(problems), current: Ref.get(current) });
     }),
   );

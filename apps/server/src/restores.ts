@@ -4,6 +4,7 @@ import { ChatService, HobbotsRepository, SkillFiles, SkillLibrary, WorkHold } fr
 import { RestoreRefused, type RestoreStatus, RestoreSummary } from "@hobbots/api";
 import { isAgentsFolderSource, type SkillName } from "@hobbots/domain";
 import { applyRestoreRules, knownSchemaVersion, type RestoreRecord, RestoreRepository } from "@hobbots/persistence";
+import { AgentsFolder } from "@hobbots/skills";
 import { Context, DateTime, Effect, Layer, Option, Ref } from "effect";
 import {
   type BackupManifest,
@@ -101,18 +102,23 @@ export const WorkHoldLive = Layer.effect(
 
 /**
  * Skills from `~/.agents/skills` this computer no longer has (ADR 029): a backup holds none of their
- * files, and a read of the folder writes back each one still in it, so a skill whose newest revision
- * has no files here is gone from the folder. Empty on a hub without skills.
+ * files, so a skill counts as here only when the folder holds it now, as its last read found. A
+ * skill's newest revision says nothing of this: a folder put back to an earlier copy keeps it. With
+ * no read of the folder yet, a skill whose newest revision has no files here is gone. Empty on a hub
+ * without skills.
  */
 export const skillsNotHere = Effect.gen(function* () {
   const library = yield* Effect.serviceOption(SkillLibrary);
   const files = yield* Effect.serviceOption(SkillFiles);
   if (Option.isNone(library) || Option.isNone(files)) return [];
+  const folder = yield* Effect.serviceOption(AgentsFolder);
+  const current = Option.isSome(folder) ? yield* folder.value.current : null;
   const sources = yield* library.value.sources;
   const gone: Array<SkillName> = [];
   for (const skill of yield* library.value.list) {
     if (!isAgentsFolderSource(sources.find((source) => source.id === skill.sourceId))) continue;
-    if ((yield* files.value.folder(skill.latest)) === null) gone.push(skill.name);
+    const here = current !== null ? current.has(skill.name) : (yield* files.value.folder(skill.latest)) !== null;
+    if (!here) gone.push(skill.name);
   }
   return gone;
 });

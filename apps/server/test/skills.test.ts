@@ -249,6 +249,20 @@ describe("skills routes", () => {
       scope: { _tag: "Everyone" },
     });
     expect(given.body.assignment).toMatchObject({ scope: { _tag: "Everyone" }, pin: given.body.revision.hash });
+
+    // The folder moves to r2 and back: r2 stays the newest, but a copy takes what the folder holds now.
+    const file = join(agentsFolder, "shared", "SKILL.md");
+    await writeFile(file, skillMd("shared", "Changed in the folder."));
+    await request("POST", "/api/skills/agents-folder/sync");
+    await writeFile(file, skillMd("shared"));
+    await request("POST", "/api/skills/agents-folder/sync");
+    expect((await request("GET", `/api/skills/${shared.id}`)).body.skill.revisions).toBe(2);
+    const older = await request("POST", `/api/skills/${shared.id}/copies`, { name: "shared-older" });
+    expect(older.status).toBe(200);
+    const olderRead = await request("GET", `/api/skills/${older.body.skill.id}/revisions/${older.body.revision.hash}`);
+    expect(olderRead.body.instructions).toBe(
+      "---\nname: shared-older\ndescription: What shared is for.\n---\n\n# shared\n",
+    );
   });
 
   // covers ADR 029 (Scopes, The Skills page), #1062

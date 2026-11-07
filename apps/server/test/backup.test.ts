@@ -1,4 +1,16 @@
-import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -25,6 +37,7 @@ import {
   PairingRequest,
   QuestId,
   SkillName,
+  SkillRevisionHash,
   TaskId,
   Thread,
   ThreadId,
@@ -53,6 +66,7 @@ import { Effect, Exit, Fiber, Latch, Layer, Option, Redacted, Ref, Stream } from
 import { SqlClient } from "effect/sql";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  copySkillObjects,
   fileStamp,
   listFiles,
   MEMORY_PART,
@@ -861,5 +875,97 @@ describe("backup and restore", () => {
     expect(after.current).not.toBeNull();
     expect(after.moves).toEqual([{ skill: "pdf-forms", scope: { _tag: "Hob", agentId: FRODO } }]);
     expect(after.notHere).toEqual(["gone"]);
+  });
+
+  // covers ADR 029 (Backups, exports and Diagnostics), ADR 026, #1139
+  it("[TC-OP-126] leaves out an edit made in Hobbots to a folder skill, and a restore finds what the folder holds now", async () => {
+    await onHub(dataDir, seed);
+    const agents = join(root, "agents-skills");
+    await mkdir(join(agents, "pdf-forms"), { recursive: true });
+    await writeFile(
+      join(agents, "pdf-forms", "SKILL.md"),
+      "---\nname: pdf-forms\ndescription: What pdf-forms is for.\n---\nFill the fields.\n",
+    );
+    const skills = SkillsLive(dataDir, agents).pipe(Layer.provideMerge(SkillLibraryLive));
+    const edit = SkillRevisionHash.make("e".repeat(64));
+    const before = await onHub(
+      dataDir,
+      Effect.gen(function* () {
+        const library = yield* SkillLibrary;
+        const objects = yield* SkillObjects;
+        const sql = yield* SqlClient.SqlClient;
+        const pdf = yield* library.byName(SkillName.make("pdf-forms"));
+        if (pdf === null) throw new Error("the folder was not read");
+        // As an edit made here before folder skills were read-only left it: a revision of the folder's
+        // skill with no source of its own, the newest, and Frodo held on it.
+        const r1 = pdf.latest;
+        const from = yield* objects.folder(r1);
+        if (from === null) throw new Error("r1 has no files");
+        yield* Effect.promise(() => cp(from, join(objects.root, edit), { recursive: true }));
+        yield* sql`INSERT INTO skill_revisions (skill_id, hash, number, name, description, charms, files, flags,
+          dropped, source_id, commit_sha, path, label, added_by, added_at)
+          SELECT skill_id, ${edit}, 2, name, description, charms, files, flags, dropped, NULL, NULL, NULL, label,
+          added_by, added_at FROM skill_revisions WHERE skill_id = ${pdf.id} AND hash = ${r1}`;
+        yield* sql`UPDATE skills SET latest = ${edit}, revisions = 2 WHERE id = ${pdf.id}`;
+        const hold = { onlyWhenAsked: false, by: { _tag: "You" } } as const;
+        yield* library.assign({
+          ...hold,
+          skillId: pdf.id,
+          scope: { _tag: "Hob", agentId: FRODO },
+          pin: edit,
+          held: true,
+        });
+        yield* library.setOptOut(FRODO, pdf.id, true);
+        return { pdf: pdf.id, r1 };
+      }).pipe(Effect.provide(skills)),
+    );
+    const folder = join(destination, "edited.hobbots-backup");
+    await backUp(dataDir, folder);
+    const paths = (await readBackup(folder, knownSchemaVersion())).files.map((file) => file.path);
+    for (const hash of [before.r1, edit]) expect(paths.some((path) => path.includes(hash))).toBe(false);
+
+    await removeTree(dataDir);
+    await Effect.runPromise(performRestore(dataDir, folder));
+    const after = await onHub(
+      dataDir,
+      Effect.gen(function* () {
+        const library = yield* SkillLibrary;
+        const found = yield* Effect.serviceOption(AgentsFolder);
+        return {
+          skill: yield* library.byName(SkillName.make("pdf-forms")),
+          assignments: yield* library.assignments(before.pdf),
+          optOuts: yield* library.optOuts(FRODO),
+          current: Option.isSome(found) ? yield* found.value.current : null,
+          notHere: yield* skillsNotHere,
+        };
+      }).pipe(Effect.provide(skills)),
+    );
+    // The edit stays the newest in the history, but the folder holds r1, so the skill is here and Frodo,
+    // held on the edit whose files did not come back, is held on r1. His opt-out came back too.
+    expect(after.skill?.latest).toBe(edit);
+    expect(after.current?.get(SkillName.make("pdf-forms"))).toBe(before.r1);
+    expect(after.notHere).toEqual([]);
+    expect(after.assignments.map((one) => [one.scope._tag, one.pin, one.held]).sort()).toEqual([
+      ["Everyone", before.r1, false],
+      ["Hob", before.r1, true],
+    ]);
+    expect(after.optOuts.map((one) => one.skillId)).toEqual([before.pdf]);
+  });
+
+  // covers ADR 029 (Backups, exports and Diagnostics), #1139
+  it("[TC-OP-127] copies only the revisions the snapshot names, so one the folder adds after it stays out", async () => {
+    const objects = join(root, "objects");
+    const named = "a".repeat(64);
+    const later = "b".repeat(64);
+    for (const hash of [named, later]) {
+      await mkdir(join(objects, hash), { recursive: true });
+      await writeFile(join(objects, hash, "SKILL.md"), `${hash}\n`);
+    }
+    const target = join(root, "copied");
+    const copied = await copySkillObjects(objects, target, () => {}, new Set([named]));
+    expect(copied.map((file) => file.path)).toEqual([`skills/${named}/SKILL.md`]);
+    // A database too old to name its revisions keeps every one.
+    const all = await copySkillObjects(objects, join(root, "all"), () => {}, null);
+    expect(all.map((file) => file.path).sort()).toEqual([`skills/${named}/SKILL.md`, `skills/${later}/SKILL.md`]);
   });
 });

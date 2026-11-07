@@ -78,20 +78,21 @@ const backupCounts = (schema: CopySchema): Effect.Effect<BackupCounts, SqlError.
   });
 
 /**
- * The revisions whose files a backup leaves out (ADR 029): those of skills from `~/.agents/skills`,
- * which stay in that folder and are read from it again after a restore. A revision whose content a
- * skill of another source has too is kept, since that skill needs its files.
+ * The revisions whose files a backup holds (ADR 029): each one a skill not from `~/.agents/skills`
+ * has. A skill's source decides, not the revision's, so an edit made in Hobbots to a folder skill
+ * before it was read-only stays out too. A revision whose content another skill has is kept, since
+ * that skill needs its files. Null on a database too old to say, which keeps every revision.
  */
-const agentsFolderRevisions = (
+const backedUpRevisions = (
   schema: CopySchema,
-): Effect.Effect<ReadonlyArray<string>, SqlError.SqlError, SqlClient.SqlClient> =>
+): Effect.Effect<ReadonlyArray<string> | null, SqlError.SqlError, SqlClient.SqlClient> =>
   Effect.gen(function* () {
-    if (!schema.has("skill_revisions", "source_id") || !schema.has("skill_sources", "origin_key")) return [];
+    if (!schema.has("skills", "source_id") || !schema.has("skill_sources", "origin_key")) return null;
     const sql = yield* SqlClient.SqlClient;
-    const rows = yield* sql<{ readonly hash: unknown }>`SELECT r.hash AS hash FROM skill_revisions r
-      LEFT JOIN skill_sources s ON s.id = r.source_id
-      GROUP BY r.hash
-      HAVING SUM(CASE WHEN s.origin_key LIKE 'agents:%' THEN 0 ELSE 1 END) = 0`;
+    const rows = yield* sql<{ readonly hash: unknown }>`SELECT DISTINCT r.hash AS hash FROM skill_revisions r
+      JOIN skills k ON k.id = r.skill_id
+      LEFT JOIN skill_sources s ON s.id = k.source_id
+      WHERE s.origin_key IS NULL OR s.origin_key NOT LIKE 'agents:%'`;
     return rows.map((row) => String(row.hash));
   });
 
@@ -180,8 +181,11 @@ export interface FinishedCopy {
   readonly schemaVersion: number;
   readonly counts: BackupCounts;
   readonly hobFolders: ReadonlyArray<HobFolders>;
-  /** The skill revisions whose files stay out of the backup: only skills from `~/.agents/skills` have them. */
-  readonly leftOutRevisions: ReadonlyArray<string>;
+  /**
+   * The skill revisions whose files the backup holds, as the snapshot names them; null keeps every
+   * one. A revision added after the snapshot is not in it, so its files stay out too.
+   */
+  readonly backedUpRevisions: ReadonlyArray<string> | null;
 }
 
 /** Raised when a backup's copy of the database fails SQLite's integrity check. */
@@ -206,7 +210,7 @@ export const finishBackupCopy = (filename: string) =>
         schemaVersion: yield* schemaVersion,
         counts: yield* backupCounts(schema),
         hobFolders: yield* hobFolders(schema),
-        leftOutRevisions: yield* agentsFolderRevisions(schema),
+        backedUpRevisions: yield* backedUpRevisions(schema),
       } satisfies FinishedCopy;
     }),
   );
