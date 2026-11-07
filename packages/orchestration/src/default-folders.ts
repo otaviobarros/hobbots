@@ -83,9 +83,64 @@ export const namedFolders = (
     ];
   });
 
+/** The folder `path` sits in, on a hub whose paths divide at `separator`; none for a root. */
+const parentOf = (path: string, separator: PathSeparator): string | null => {
+  const trimmed = path.endsWith(separator) ? path.slice(0, -separator.length) : path;
+  const at = trimmed.lastIndexOf(separator);
+  if (at <= 0) return null;
+  // A drive's root keeps its separator: `C:\`.
+  return separator === "\\" && at === 2 ? trimmed.slice(0, 3) : trimmed.slice(0, at);
+};
+
+/**
+ * The folder each path `text` names sits in, for a path that is not a folder itself, such as a file
+ * the work writes or reads: as the hub stores it, when it exists inside one of `lead`. Only the
+ * folder right above it counts, so a path never widens to a folder far above what it names (#1181).
+ */
+const namedParents = (
+  checks: FolderChecksShape,
+  lead: ReadonlyArray<string>,
+  text: string,
+  separator: PathSeparator,
+) =>
+  Effect.gen(function* () {
+    const found = yield* Effect.forEach(
+      pathsIn(text, separator),
+      (path) =>
+        Effect.gen(function* () {
+          const folder = yield* checks.check(path).pipe(Effect.orElseSucceed(() => null));
+          if (folder !== null) return null;
+          const parent = parentOf(path, separator);
+          return parent === null ? null : yield* checks.check(parent).pipe(Effect.orElseSucceed(() => null));
+        }),
+      { concurrency: 8 },
+    );
+    return [
+      ...new Set(
+        found.filter(
+          (folder): folder is string => folder !== null && lead.some((own) => holds(own, folder, separator)),
+        ),
+      ),
+    ];
+  });
+
+/** The folders the work the brief describes is in: those it names, and those the files it names sit in. */
+export const briefTargets = (
+  checks: FolderChecksShape,
+  lead: ReadonlyArray<string>,
+  brief: string,
+  separator: PathSeparator,
+) =>
+  Effect.map(
+    Effect.all([namedFolders(checks, lead, brief, separator), namedParents(checks, lead, brief, separator)]),
+    ([folders, parents]) => ({ folders, parents }),
+  );
+
 /**
  * The member's default folders: each existing folder the brief names inside one of the lead's,
- * as the hub stores it, or else the lead's first folder. None when the lead has none.
+ * as the hub stores it, or else the lead's first folder, and with them the folder each file the
+ * brief names sits in when none of those holds it, so a member told to write
+ * `/docs/out/page.html` can (#1181). None when the lead has none.
  */
 export const defaultFolders = (
   checks: FolderChecksShape,
@@ -93,7 +148,18 @@ export const defaultFolders = (
   brief: string,
   separator: PathSeparator,
 ) =>
-  Effect.map(namedFolders(checks, lead, brief, separator), (inside) => (inside.length > 0 ? inside : lead.slice(0, 1)));
+  Effect.map(briefTargets(checks, lead, brief, separator), ({ folders, parents }) => {
+    const base = folders.length > 0 ? folders : lead.slice(0, 1);
+    const extra = parents.filter((parent) => !base.some((folder) => holds(folder, parent, separator)));
+    return [...base, ...new Set(extra)];
+  });
+
+/** Of `targets`, those none of `folders` holds: where a member was asked to work but cannot. */
+export const outOfReach = (
+  targets: ReadonlyArray<string>,
+  folders: ReadonlyArray<string>,
+  separator: PathSeparator,
+): ReadonlyArray<string> => targets.filter((target) => !folders.some((folder) => holds(folder, target, separator)));
 
 /** The folders a lead names for its Quest's work (#670), as the hub stores them: each one of its own or inside one. */
 export const requestedFolders = (

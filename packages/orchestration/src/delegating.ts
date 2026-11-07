@@ -34,7 +34,7 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
-import { defaultFolders, namedFolders, withFolders } from "./default-folders.ts";
+import { briefTargets, defaultFolders, namedFolders, outOfReach, withFolders } from "./default-folders.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -217,8 +217,24 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
             : [[operation, both.decisions[operation] ?? "deny"]],
         ),
       );
-      return { given: { overrides, folders: [...both.folders] }, decisions: both.decisions, lead: lead.folders };
+      // Where the brief asks for work the member cannot reach, its lead hears so now (#1181).
+      const { folders: named, parents } = yield* briefTargets(folderChecks, lead.folders, input.brief, separator);
+      const unreachable = outOfReach([...new Set([...named, ...parents])], both.folders, separator);
+      return {
+        given: { overrides, folders: [...both.folders] },
+        decisions: both.decisions,
+        lead: lead.folders,
+        unreachable,
+      };
     });
+
+  /** A warning for the lead when the brief names folders the member cannot reach. Empty otherwise. */
+  const outOfFolders = (member: Agent, unreachable: ReadonlyArray<string>): string =>
+    unreachable.length === 0
+      ? ""
+      : ` Warning: the brief names ${unreachable.join(", ")}, outside ${member.name}'s folders, so ${member.name} cannot work there. ` +
+        "Bring in a hob whose folders hold it, do that part yourself, or ask the user to add it to " +
+        `${member.name}'s folders; name it in authority.folders if you left it out. Cancel this Task if it no longer fits.`;
 
   /**
    * A warning for the lead when `member` already owns an open Task under `task`, so a blocked or
@@ -283,7 +299,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const member = yield* findHob(hobs, input.hob);
         yield* checkMember(scope, task, member);
         yield* capacity(scope, member.id, 1);
-        const { given, decisions, lead } = yield* memberAuthority(scope, task, member, input);
+        const { given, decisions, lead, unreachable } = yield* memberAuthority(scope, task, member, input);
         const tools = yield* toolsFor(member, input.authority?.decisions, { decisions, folders: given.folders });
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         const journal = journalOf();
@@ -319,7 +335,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const carried = yield* carryNote(scope, created, journal);
         return {
           done: {
-            message: `Delegated Task ${created.id} to ${member.name}.${carried} You lead Quest ${quest.id}.${tools}${alreadyOpen(scope.tree, task, member)}${existing === undefined ? planNote(task) : ""}`,
+            message: `Delegated Task ${created.id} to ${member.name}.${carried} You lead Quest ${quest.id}.${tools}${alreadyOpen(scope.tree, task, member)}${outOfFolders(member, unreachable)}${existing === undefined ? planNote(task) : ""}`,
             details: {
               task_id: created.id,
               quest_id: quest.id,
