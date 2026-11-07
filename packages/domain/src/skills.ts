@@ -320,5 +320,14 @@ export class SkillInUse extends Schema.TaggedError<SkillInUse>()("SkillInUse", {
   assignments: Schema.Array(SkillAssignment),
 }) {}
 
+/**
+ * Instructions as an edit saves them after the front matter: without the line breaks that open
+ * them, and ending in one. Two texts that save the same make the same revision.
+ */
+export const savedSkillInstructions = (instructions: string): string => {
+  const body = instructions.replace(/^(?:\r?\n)+/, "");
+  return body === "" || body.endsWith("\n") ? body : `${body}\n`;
+};
+
 /** The number a revision shows as, such as `r4`. */
 export const skillRevisionLabel = (revision: { readonly number: number }): string => `r${revision.number}`;

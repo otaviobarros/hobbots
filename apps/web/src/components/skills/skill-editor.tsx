@@ -1,5 +1,5 @@
 import type { SkillDetail } from "@hobbots/api";
-import { type SkillId, type SkillRevisionHash, skillRevisionLabel } from "@hobbots/domain";
+import { type SkillId, type SkillRevisionHash, savedSkillInstructions, skillRevisionLabel } from "@hobbots/domain";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -67,8 +67,8 @@ function EditForm({
   const { skill } = detail;
   const [description, setDescription] = useState(skill.description);
   const [body, setBody] = useState(() => instructionsOf(instructions));
-  // What the editor opened with: the same text makes no revision, so its rollout switches would do nothing.
-  const [opened] = useState(() => ({ description: skill.description.trim(), body }));
+  // What the editor opened with, as it saves: the same text makes no revision, so its rollout switches would do nothing.
+  const [opened] = useState(() => ({ description: skill.description.trim(), body: savedSkillInstructions(body) }));
   const [choice, setChoice] = useState<RollOutChoice>(new Map());
   const [failure, setFailure] = useState<string | null>(null);
   // A save whose answer never came: it may have reached the hub, so it is sent again as it was.
@@ -83,7 +83,7 @@ function EditForm({
   const moves = movesWith(choice);
   const moving = detail.assignments.filter(moves).length;
   const valid = descriptionState(description) !== "long" && description.trim() !== "";
-  const unchanged = description.trim() === opened.description && body === opened.body;
+  const unchanged = description.trim() === opened.description && savedSkillInstructions(body) === opened.body;
   const pending = writes.busy;
 
   return (
@@ -107,10 +107,14 @@ function EditForm({
         writes.edit
           .mutateAsync(input)
           .then((saved) => {
-            // Text that is an older revision again makes nothing and moves no place: say so, and stay.
-            if (saved.revision.number < baseNumber) {
+            // Text that saves as this revision or an older one makes nothing and moves no place, so the
+            // switches did nothing either: say so, and stay.
+            if (saved.revision.number <= baseNumber) {
               setSent(null);
-              setFailure(copy.editor.older({ rev: skillRevisionLabel(saved.revision) }));
+              const rev = skillRevisionLabel(saved.revision);
+              setFailure(
+                saved.revision.number < baseNumber ? copy.editor.older({ rev }) : copy.editor.sameAsBase({ rev }),
+              );
               return;
             }
             say({ tone: "done", message: savedLine(saved) }, back);

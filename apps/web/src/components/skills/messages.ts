@@ -260,6 +260,8 @@ export const messages = {
     cancel: "Cancel",
     unchanged:
       "Nothing to save yet: change the description or instructions to make a new revision. To keep a place on its revision now, use Who uses it.",
+    sameAsBase: ({ rev }: { rev: string }) =>
+      `That saves as ${rev} again, so nothing was saved and no place moved. Change the description or instructions to make a new revision, or use Who uses it to keep a place on its revision.`,
     older: ({ rev }: { rev: string }) =>
       `That is ${rev} again, so nothing was saved and no place moved. To go back to it, use Roll back to ${rev} in History.`,
     added: ({ name }: { name: string }) => `Added ${name} as r1. No hob has it yet.`,

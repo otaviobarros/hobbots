@@ -192,7 +192,7 @@ test("[TC-UX-1062-03] a save whose answer is lost is finished from the editor, n
 });
 
 // covers ADR 029 (Editing), #1062
-test("[TC-UX-1062-04] rollout switches alone save nothing, and text that is an older revision again moves no place", async ({
+test("[TC-UX-1062-04] rollout switches alone, or with text that saves the same, save nothing, and text that is an older revision again moves no place", async ({
   page,
 }) => {
   const { url, folder, api } = await hubWithHobs();
@@ -216,6 +216,11 @@ test("[TC-UX-1062-04] rollout switches alone save nothing, and text that is an o
   const main = page.getByRole("main", { name: "Skills" });
   await expect(main.getByRole("heading", { name: "Edit Review checklist" })).toBeVisible();
   await main.getByRole("switch", { name: "Everyone moves to r4" }).click();
+  await expect(main.getByRole("button", { name: /Save/ })).toBeDisabled();
+  await expect(main).toContainText("Nothing to save yet");
+  // Without its final line break, the text still saves as r3, so it is still nothing to save.
+  await expect(main.getByLabel("Instructions")).toHaveValue("Read the diff twice, then the tests.\n");
+  await main.getByLabel("Instructions").fill("Read the diff twice, then the tests.");
   await expect(main.getByRole("button", { name: /Save/ })).toBeDisabled();
   await expect(main).toContainText("Nothing to save yet");
   await expectAccessible(page, main);

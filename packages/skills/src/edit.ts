@@ -1,3 +1,4 @@
+import { savedSkillInstructions } from "@hobbots/domain";
 import { parseDocument } from "yaml";
 import { folderTree } from "./sources/folder.ts";
 import type { SkillTree } from "./tree.ts";
@@ -18,8 +19,7 @@ const FRONT_MATTER = /^﻿?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 const editSkillFile = (text: string, edit: SkillEdit): string => {
   const document = parseDocument(FRONT_MATTER.exec(text)?.[1] ?? "");
   document.set("description", edit.description);
-  const body = edit.instructions.replace(/^(?:\r?\n)+/, "");
-  return `---\n${document.toString()}---\n\n${body.endsWith("\n") || body === "" ? body : `${body}\n`}`;
+  return `---\n${document.toString()}---\n\n${savedSkillInstructions(edit.instructions)}`;
 };
 
 const encoder = new TextEncoder();
