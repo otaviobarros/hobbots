@@ -805,7 +805,7 @@ describe("the runtime's saved output (#1153)", () => {
     }
   });
 
-  it("is no folder a push or a Charm starts from", async () => {
+  it("is outside the hob's folders for a Charm, and gives a push from it no grant", async () => {
     const { saved, output } = await runtime();
     const context = contextFor(home, "trusting", { runtimeOutputs: output });
     expect((await decide(context, githubRead(saved))).reason.code).toBe("outside-folders");

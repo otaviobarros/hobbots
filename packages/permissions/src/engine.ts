@@ -377,7 +377,7 @@ const deny = (operation: AnyOperation, code: ReasonCode, message: string): Answe
 /**
  * Places a canonical target in the hob's scope: inside a folder (and which), or why not. With
  * `outputs`, the runtime's saved output of the session counts too, for reading files and running
- * commands only: a push or a Charm never starts from it.
+ * commands only: for a push or a Charm it is outside the hob's folders.
  */
 const locate = (scope: ResolvedScope, target: ResolvedTarget, outputs = false): Located | Answer => {
   if (target.canonical === null) {

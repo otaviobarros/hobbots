@@ -199,14 +199,10 @@ describe("Claude Code tool calls under the policy hook", () => {
     const { hooks, canUseTool } = policyHooks(engine, turn, () => {});
     const [pre] = hooks.PreToolUse?.[0]?.hooks ?? [];
     const signal = new AbortController().signal;
-    const decided = async (
-      tool: string,
-      toolInput: Record<string, unknown>,
-      transcript = join(sessions, "s1.jsonl"),
-    ) => {
+    const decided = async (tool: string, toolInput: Record<string, unknown>, session = "s1") => {
       const input = {
-        session_id: "s1",
-        transcript_path: transcript,
+        session_id: session,
+        transcript_path: join(sessions, `${session}.jsonl`),
         cwd: project,
         tool_name: tool,
         tool_input: toolInput,
@@ -229,9 +225,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     });
     // A session folder a command made a link to an older session's opens nothing.
     symlinkSync(join(sessions, "s0"), join(sessions, "s9"));
-    expect(
-      await decided("Read", { file_path: join(sessions, "s9", "tool-results", "b0.txt") }, join(sessions, "s9.jsonl")),
-    ).toBe("deny");
+    expect(await decided("Read", { file_path: join(sessions, "s9", "tool-results", "b0.txt") }, "s9")).toBe("deny");
     // A session outside the hob's own configuration folder names no folder.
     const elsewhere = toolTurn(access(), "on");
     if (elsewhere === null) throw new Error("expected a tool turn");
