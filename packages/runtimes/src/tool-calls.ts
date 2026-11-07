@@ -659,6 +659,44 @@ export const initsRepository = (
       name !== undefined && basename(name) === "git" && args[gitFolders(args, cwd, home).sub] === "init",
   );
 
+/**
+ * The repositories a tool call's command line runs `git commit` in, each as the folder Git finds it
+ * from, after any `cd`, `git -C` or wrapper, and inside `eval` or `sh -c` (#742). Only what the line
+ * says is read: an alias or a script that commits is not seen.
+ */
+export const commitFolders = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  home: string = homedir(),
+): ReadonlyArray<string> => {
+  const found = new Set<string>();
+  const visit = (line: string, at: string) => {
+    const tokens = commandLine(line);
+    const folders = folderFlow(at, home);
+    tokens.forEach((token, index) => {
+      if ("separator" in token) {
+        folders.separator(token.separator);
+        return;
+      }
+      const folder = folders.command(unwrap(token.words, at, home).words, separatorOf(tokens[index + 1]));
+      const [name, ...args] = unwrap(token.words, folder, home).words;
+      const program = basename(name ?? "");
+      if (program === "git") {
+        const git = gitFolders(args, folder, home);
+        if (args[git.sub] === "commit") found.add(git.folders[0] as string);
+      } else if (program === "eval") visit(args.join(" "), folder);
+      else if (SHELLS.has(program)) {
+        const flag = args.findIndex((arg) => /^-[A-Za-z]*c[A-Za-z]*$/.test(arg));
+        if (flag !== -1) visit(args[flag + 1] ?? "", folder);
+      }
+    });
+  };
+  const command = tool === "Bash" ? text(input, "command") : undefined;
+  if (command !== undefined) visit(command, cwd);
+  return [...found];
+};
+
 /** Variables that name a commit's author or committer, or pass Git settings or a config file. */
 const IDENTITY_VARIABLES: ReadonlySet<string> = new Set([
   ...GIT_IDENTITY_VARIABLES,

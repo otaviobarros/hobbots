@@ -33,6 +33,8 @@ import {
   type Agent,
   type ApprovalRequest,
   GIT_INIT_LABEL,
+  type GitIdentity,
+  type HubQuestion,
   isInProgress,
   type Message,
   roleFields,
@@ -58,7 +60,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer, turnCommits } from "@hobbots/runtimes";
-import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
+import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
 import { Effect, Layer, Schedule } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -84,8 +86,14 @@ const project = join(temp, "nettle-project");
 const frodoProject = join(temp, "frodo-project");
 const earlier = join(temp, "earlier-run");
 const memberProject = join(temp, "thistle-project");
+const ledgerProject = join(temp, "pocket-ledger");
 const dataDir = join(temp, "data");
-for (const folder of [project, frodoProject, earlier, memberProject, dataDir]) mkdirSync(folder, { recursive: true });
+for (const folder of [project, frodoProject, earlier, memberProject, ledgerProject, dataDir])
+  mkdirSync(folder, { recursive: true });
+
+/** The user's Git identity as the hub reads it: set, unless a test takes it away (#742). */
+const OTAVIO: GitIdentity = { name: "Otavio", email: "otavio@example.com" };
+let gitIdentity: GitIdentity = OTAVIO;
 
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
@@ -122,12 +130,7 @@ beforeAll(() => {
     .pipe(Layer.provideMerge(CommitIdentityQuestions.layer))
     .pipe(Layer.provideMerge(HubQuestions.layer))
     .pipe(
-      Layer.provideMerge(
-        Layer.succeed(
-          UserGitIdentity,
-          UserGitIdentity.of({ read: Effect.succeed({ name: "Otavio", email: "otavio@example.com" }) }),
-        ),
-      ),
+      Layer.provideMerge(Layer.succeed(UserGitIdentity, UserGitIdentity.of({ read: Effect.sync(() => gitIdentity) }))),
     )
     .pipe(Layer.provideMerge(LocalGit))
     .pipe(Layer.provideMerge(CanonicalSharedFolders))
@@ -154,6 +157,8 @@ beforeAll(() => {
           FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),
           SecretRedaction.layer([]),
+          // The hub reads what a member left uncommitted, so its lead's commit of it is held (#742).
+          GitWorkspaceLive,
           ToolLogsLive(join(dataDir, "tool-logs")),
         ),
       ),
@@ -555,4 +560,113 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     run("git commit --quiet --allow-empty -m 'chore: pocket ledger v0.1'");
     expect(author()).toBe("Otavio <otavio@example.com>|Otavio <otavio@example.com>");
   });
+
+  // covers OR-004, PE-005, IN-004 (#742)
+  it("[TC-OR-742-03] with no identity to commit with, the user is asked in the Quest's chat, and the lead cannot commit its member's open work", async () => {
+    gitIdentity = { name: null, email: null };
+    try {
+      await request("PATCH", "/api/setup", {
+        completed: true,
+        safetyPreset: "balanced",
+        approvedFolders: [ledgerProject],
+      });
+      // The ledger is a repository with one commit, made here as a person would.
+      const git = (...args: Array<string>) =>
+        execFileSync("git", ["-C", ledgerProject, ...args], {
+          encoding: "utf8",
+          env: { PATH: process.env.PATH, HOME: temp, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+        });
+      git("init", "--quiet");
+      git(
+        "-c",
+        "user.name=Otavio",
+        "-c",
+        "user.email=otavio@example.com",
+        "commit",
+        "--quiet",
+        "--allow-empty",
+        "-m",
+        "chore: start",
+      );
+      const create = (name: string, lookSeed: number) =>
+        request<Agent>("POST", "/api/agents", {
+          name,
+          ...roleFields("writer"),
+          lookSeed,
+          lookColor: "moss",
+          runtime: "claude-code",
+          model: null,
+          effort: null,
+          instructions: "",
+        });
+      const lead = (await create("Rowan", 742)).body;
+      const member = (await create("Bracken", 743)).body;
+      const thread = (await request<Thread>("POST", `/api/agents/${lead.id}/threads`)).body;
+      // Bracken writes the ledger, cannot commit it with no identity set, and says the commit waits.
+      await exchange(
+        thread,
+        "Keep a pocket ledger",
+        hub("delegate_task", {
+          key: "ledger",
+          hob: "Bracken",
+          brief: [
+            "Write the pocket ledger and commit it",
+            `fake:run ${JSON.stringify({ command: "printf '# Ledger\\n' > LEDGER.md", writes: { "LEDGER.md": "# Ledger\n" } })}`,
+            hub("report_checkpoint", {
+              key: "waits",
+              kind: "blocker",
+              summary: "The commit waits for the user to say who hobs commit as",
+            }),
+          ].join("\n"),
+          authority: { decisions: { "run-commands": "allow", "edit-files": "allow", "local-git": "allow" } },
+        }),
+      );
+      const blocked = await eventually(async () => {
+        const [tree] = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body.trees;
+        const task = tree?.tasks.find((each) => each.ownerId === member.id && each.state === "blocked");
+        const settled = tree?.attempts.every((each) => each.state !== "running") ?? false;
+        return task !== undefined && settled ? task : undefined;
+      });
+
+      // The user is asked who hobs commit as, in the Quest's chat, and not by any hob.
+      const { body } = await request<{ readonly questions: ReadonlyArray<HubQuestion> }>("GET", "/api/hub-questions");
+      const asked = body.questions.filter((question) => question.subject.kind === "commit-identity");
+      expect(asked).toEqual([expect.objectContaining({ chat: { agentId: lead.id, threadId: thread.id } })]);
+
+      // The lead's commit of Bracken's open work is refused, naming whose it is, and nothing is committed.
+      const tried = await exchange(
+        thread,
+        "Commit Bracken's ledger",
+        "fake:tool Bash git add -A && git commit -m 'chore: pocket ledger v0.1'",
+      );
+      const refused = tried.steps.find((step) => step.kind === "tool" && step.label.includes("git commit"));
+      expect(refused).toMatchObject({
+        state: "denied",
+        reason: expect.stringContaining(
+          `LEDGER.md of Task ${blocked.id}, which Bracken works on. They are Bracken's to commit`,
+        ),
+      });
+      expect(git("log", "--format=%s").trim()).toBe("chore: start");
+      expect(git("status", "--porcelain").trim()).toBe("?? LEDGER.md");
+
+      // Once the member's changes are committed, the lead's own commit there runs.
+      git("add", "LEDGER.md");
+      git(
+        "-c",
+        "user.name=Otavio",
+        "-c",
+        "user.email=otavio@example.com",
+        "commit",
+        "--quiet",
+        "-m",
+        "chore: pocket ledger v0.1",
+      );
+      const again = await exchange(thread, "Commit your notes", "fake:tool Bash git commit -m 'docs: notes'");
+      expect(again.steps.find((step) => step.kind === "tool" && step.label.includes("git commit"))).toMatchObject({
+        state: "done",
+      });
+    } finally {
+      gitIdentity = OTAVIO;
+    }
+  }, 30_000);
 });

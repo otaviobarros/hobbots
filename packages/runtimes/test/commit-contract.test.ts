@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { PromptRequest, ToolAccess } from "@hobbots/agents";
+import type { HubTools, PromptRequest, ToolAccess } from "@hobbots/agents";
 import { type CommitsAs, EMPTY_HOB_POLICY, settleCommitsAs } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Stream } from "effect";
@@ -64,8 +64,11 @@ interface Runtime {
   readonly name: string;
   /** Starts a turn, or null for a runtime that runs no command of its own. */
   readonly start: ((request: PromptRequest) => Promise<Started>) | null;
-  /** What the hob is told when the runtime refuses `command`, which sets its own commit identity. */
-  readonly refusal: (tools: ToolAccess, command: string) => Promise<string>;
+  /**
+   * What the hob is told when the runtime refuses `command`, which sets its own commit identity or
+   * makes a commit the turn's `hubTools` hold, or nothing when it does not refuse it.
+   */
+  readonly refusal: (tools: ToolAccess, command: string, hubTools?: HubTools) => Promise<string>;
 }
 
 const BASE_ENV = { PATH: process.env.PATH } satisfies NodeJS.ProcessEnv;
@@ -76,8 +79,8 @@ const claudeCode: Runtime = {
     const started = claudeTurnStart(turn, "on", true);
     return { env: started.commits.env(BASE_ENV), instructions: started.instructions, prompt: started.prompt };
   },
-  refusal: async (tools, command) => {
-    const turn = toolTurn(tools, "on");
+  refusal: async (tools, command, hubTools) => {
+    const turn = toolTurn(tools, "on", hubTools);
     if (turn === null) throw new Error("expected a tool turn");
     const { hooks } = policyHooks(engine, turn, () => undefined);
     const [pre] = hooks.PreToolUse?.[0]?.hooks ?? [];
@@ -136,8 +139,8 @@ const codex: Runtime = {
       prompt: input.map((part) => part.text ?? "").join("\n"),
     };
   },
-  refusal: async (tools, command) => {
-    const turn = toolTurn(tools, "on", null, CODEX_MODEL_HOSTS);
+  refusal: async (tools, command, hubTools) => {
+    const turn = toolTurn(tools, "on", hubTools, CODEX_MODEL_HOSTS);
     if (turn === null) throw new Error("expected a tool turn");
     // What the hob reads is the note told to its turn: Codex's own answer to a declined call has no text (#1082).
     const told: Array<string> = [];
@@ -163,8 +166,13 @@ const codex: Runtime = {
 const fake: Runtime = {
   name: "the fake runtime",
   start: null,
-  refusal: async (tools, command) => {
-    const turn = { ...request(tools.commitsAs), tools, prompt: `fake:run ${JSON.stringify({ command, exitCode: 0 })}` };
+  refusal: async (tools, command, hubTools) => {
+    const turn = {
+      ...request(tools.commitsAs),
+      tools,
+      ...(hubTools === undefined ? {} : { hubTools }),
+      prompt: `fake:run ${JSON.stringify({ command, exitCode: 0 })}`,
+    };
     const events = await Effect.runPromise(Stream.runCollect(scriptedToolEvents(turn, engine)));
     return [...events].flatMap((event) => (event._tag === "ToolDenied" ? [event.reason] : [])).join("\n");
   },
@@ -260,5 +268,28 @@ describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
     expect(await runtime.refusal(access(settleCommitsAs(null, NONE, GIVEN)), command)).toContain(
       `made as ${GIVEN.name} <${GIVEN.email}>, the identity the user gave Hobbots`,
     );
+  });
+
+  // covers OR-004, PE-005 (#742)
+  it("[TC-OR-742-02] refuses a commit the hub holds, as a lead's of a member's open work, with whose work it is", async () => {
+    const held = `${project} holds changes a member has not committed: LEDGER.md of Task build, which Nettle works on.`;
+    const asked: Array<string> = [];
+    const lead: HubTools = {
+      tools: [],
+      call: () => Effect.succeed({ text: "", refused: false }),
+      holdsCommit: (cwd) =>
+        Effect.sync(() => {
+          asked.push(cwd);
+          return cwd === project ? held : null;
+        }),
+    };
+    const as = settleCommitsAs(null, { name: "Ada Lovelace", email: "ada@example.com" }, null);
+    expect(
+      await runtime.refusal(access(as), "git add -A && git commit -m 'chore: pocket ledger v0.1'", lead),
+    ).toContain(held);
+    expect(asked).toEqual([project]);
+    // A command that commits nothing is never held, and the hub is not asked about it.
+    expect(await runtime.refusal(access(as), "git status", lead)).not.toContain(held);
+    expect(asked).toEqual([project]);
   });
 });

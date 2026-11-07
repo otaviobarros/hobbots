@@ -67,6 +67,22 @@ export const hubAnswer = <R>(
     Effect.map((answer) => ({ ...answer, text: redactor.text(answer.text) })),
   );
 
+/** The first answer any of `sets` gives for a folder that is not null, or null when none does. */
+const firstOf =
+  (
+    sets: ReadonlyArray<HubTools>,
+    pick: (set: HubTools) => ((cwd: string) => Effect.Effect<string | null>) | undefined,
+  ) =>
+  (cwd: string): Effect.Effect<string | null> =>
+    Effect.gen(function* () {
+      for (const set of sets) {
+        const answer = pick(set);
+        const found = answer ? yield* answer(cwd) : null;
+        if (found !== null) return found;
+      }
+      return null;
+    });
+
 /**
  * Every tool of several sets, as one: a call goes to the set that offers its tool. A name two sets
  * offer goes to the first. Null when no set is given.
@@ -81,14 +97,8 @@ export const combineHubTools = (...sets: ReadonlyArray<HubTools | null>): HubToo
     tools,
     // A tool no set offers goes to the first, which refuses it in its own words.
     call: (name, input, step) => (owner.get(name) ?? (given[0] as HubTools)).call(name, input, step),
-    steersPush: (cwd) =>
-      Effect.gen(function* () {
-        for (const set of given) {
-          const tool = set.steersPush ? yield* set.steersPush(cwd) : null;
-          if (tool !== null) return tool;
-        }
-        return null;
-      }),
+    steersPush: firstOf(given, (set) => set.steersPush),
+    holdsCommit: firstOf(given, (set) => set.holdsCommit),
   };
 };
 
