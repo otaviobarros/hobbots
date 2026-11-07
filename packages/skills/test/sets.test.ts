@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SkillFiles, SkillLibrary } from "@hobbots/agents";
+import { SkillName } from "@hobbots/domain";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { checkSet } from "../src/check.ts";
@@ -348,7 +349,7 @@ describe("skill sets", () => {
         const source = {
           _tag: "Copied",
           folder,
-          name: "deliver-change-copy",
+          name: SkillName.make("deliver-change-copy"),
           carried: { charms: [], dropped: [] },
           member,
         } as const;

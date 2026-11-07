@@ -11,6 +11,7 @@ import { SetMemberPage } from "./set-member.tsx";
 import { SetPage } from "./set-page.tsx";
 import { SkillAside } from "./skill-aside.tsx";
 import { SkillInstructions } from "./skill-instructions.tsx";
+import { SkillHeader, SkillLayout } from "./skill-layout.tsx";
 import { addedByOf, ReadOnlyNote, SkillTabs, type SkillViewOf } from "./skill-tabs.tsx";
 import type { Say } from "./skills-flash.ts";
 import { agentsFolderOf, type HobDirectory, skillTitle } from "./skills-model.ts";
@@ -49,50 +50,47 @@ export function SkillPage({
   const title = skillTitle(skill.name);
   const folder = agentsFolderOf(skill, list.sources, detail.revisions);
   return (
-    <div className="flex flex-wrap items-start gap-7">
-      <article className="flex min-w-0 max-w-[700px] flex-[1_1_520px] flex-col gap-4">
-        <nav aria-label={copy.skill.breadcrumb} className="flex items-center gap-1.5 text-detail text-text-secondary">
-          <Link to="/skills" search={{}} className="text-link">
-            {copy.title}
-          </Link>
-          <span aria-hidden>›</span>
-          <span>{title}</span>
-        </nav>
-        <header className="flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-center gap-2">
+    <SkillLayout
+      trail={[{ key: "skill", step: <span>{title}</span> }]}
+      aside={<SkillAside detail={detail} list={list} hobs={hobs} active={active} say={say} />}
+    >
+      <SkillHeader
+        tags={
+          <>
             <RevTag label={skillRevisionLabel({ number: skill.revisions })} />
             {folder !== null && <SkillChip tone="later">{copy.chips.agents}</SkillChip>}
-          </div>
-          <h2 className="m-0 font-heading text-[28px] leading-[34px] font-bold text-text-strong">{title}</h2>
-          <p className="m-0 text-body text-text">{skill.description}</p>
-          <p className="m-0 text-detail text-label">
+          </>
+        }
+        title={title}
+        description={skill.description}
+        byline={
+          <>
             <code className="font-mono">{skill.name}</code>
             {` · ${
               folder === null
                 ? copy.skill.byline({ who: addedByOf(detail), when: formatDay(skill.createdAt) })
                 : copy.agents.byline({ when: formatDay(skill.createdAt) })
             }`}
-          </p>
-        </header>
-        {folder !== null && <ReadOnlyNote>{copy.agents.note({ folder })}</ReadOnlyNote>}
-        <SkillTabs
-          view={view}
-          detail={detail}
-          hobs={hobs}
-          first={{
-            label: copy.skill.instructions,
-            count: null,
-            body: <SkillInstructions view={view} detail={detail} fromFolder={folder !== null} />,
-          }}
-          say={say}
-        />
-      </article>
-      <SkillAside detail={detail} list={list} hobs={hobs} active={active} say={say} />
-    </div>
+          </>
+        }
+      />
+      {folder !== null && <ReadOnlyNote>{copy.agents.note({ folder })}</ReadOnlyNote>}
+      <SkillTabs
+        view={view}
+        detail={detail}
+        hobs={hobs}
+        first={{
+          label: copy.skill.instructions,
+          count: null,
+          body: <SkillInstructions view={view} detail={detail} fromFolder={folder !== null} />,
+        }}
+        say={say}
+      />
+    </SkillLayout>
   );
 }
 
-export function SkillLoading() {
+function SkillLoading() {
   return (
     <div aria-busy="true" className="flex max-w-[700px] flex-col gap-3">
       <Skeleton width="30%" />

@@ -275,7 +275,6 @@ export const messages = {
     skills: "Skills",
     skillsLabel: "Skills in this set",
     typeHint: ({ name, set }: { name: string; set: string }) => `Type /${name}, or /${set}:${name}`,
-    open: ({ name }: { name: string }) => `Open ${name}`,
     used: ({ count }: { count: number }) => (count === 0 ? "Never used" : `Used ${formatCount(count)}×`),
     shared: "Shared files",
     sharedHint: "Every hob that has the set gets them",
@@ -569,6 +568,8 @@ export const messages = {
     passedNoSize: "Checks passed",
     setPassed: "Passed every check",
     setIntro: "This source is a plugin whose skills share files, so it comes in as one set, and it updates as one.",
+    foundSet: ({ label, commit }: { label: string | null; commit: string | null }) =>
+      `${commit === null ? "" : `${label ?? "This"} is commit ${commit.slice(0, 7)}. `}This source is a plugin whose skills share files, so it comes in as one set, and it updates as one.`,
     setLabel: ({ name }: { name: string }) => `The set ${name}`,
     setSkills: ({ name }: { name: string }) => `The skills in ${name}`,
     sharedBy: ({ folders, count }: { folders: ReadonlyArray<string>; count: number }) =>

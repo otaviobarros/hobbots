@@ -42,6 +42,18 @@ const choicesFor = (list: SkillsList, active: ReadonlyArray<Agent>, inSet: boole
   })),
 ];
 
+/** What the copy starts with: the same files, or for a skill of a set, its files and those it links to. */
+const startsLine = (detail: SkillDetail, member: SkillSetSkill | undefined) =>
+  member === undefined
+    ? copy.copySkill.starts({ count: detail.revisions[0]?.files.length ?? 0 })
+    : copy.copySkill.startsSet;
+
+/** What is said once the copy is made, on its page. */
+const doneLine = (name: string, detail: SkillDetail, member: SkillSetSkill | undefined) =>
+  member === undefined
+    ? copy.copySkill.done({ name: skillTitle(name) })
+    : copy.copySkill.doneSet({ name: skillTitle(name), set: detail.skill.name });
+
 /**
  * Make a copy (ADR 029): a skill written in Hobbots with the same files at r1, under a new name, that
  * you can edit. It goes to nobody until you pick who gets it; the original stays as it is. For a
@@ -61,17 +73,18 @@ export function SkillCopy({
   member?: SkillSetSkill;
 }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(`${member?.name ?? detail.skill.name}-copy`);
+  const original = member?.name ?? detail.skill.name;
+  const [name, setName] = useState(`${original}-copy`);
   const [who, setWho] = useState("none");
   const [failure, setFailure] = useState<string | null>(null);
   const writes = useSkillWrites();
   const navigate = useNavigate();
   const nameHint = useId();
-  const title = skillTitle(member?.name ?? detail.skill.name);
+  const title = skillTitle(original);
   const choices = choicesFor(list, active, member !== undefined);
   const picked = choices.find((choice) => choice.key === who) ?? choices[0];
   const valid = isSkillName(name);
-  const files = member === undefined ? (detail.revisions[0]?.files.length ?? 0) : null;
+  const starts = startsLine(detail, member);
 
   const submit = () => {
     if (!isSkillName(name)) return setFailure(copy.copySkill.invalid);
@@ -87,12 +100,7 @@ export function SkillCopy({
         onSuccess: (copied) => {
           // The line is said on the copy's page, where it opens.
           const at = skillView(copied.skill.id);
-          const named = skillTitle(copied.skill.name);
-          const message =
-            member === undefined
-              ? copy.copySkill.done({ name: named })
-              : copy.copySkill.doneSet({ name: named, set: detail.skill.name });
-          say({ tone: "done", message }, at);
+          say({ tone: "done", message: doneLine(copied.skill.name, detail, member) }, at);
           void navigate({ to: "/skills", search: skillsSearchOf(at) });
         },
         onError: (error) =>
@@ -149,9 +157,7 @@ export function SkillCopy({
               </label>
             ))}
           </fieldset>
-          <span className="text-detail text-text-secondary">
-            {`${files === null ? copy.copySkill.startsSet : copy.copySkill.starts({ count: files })} ${picked?.note ?? ""}`}
-          </span>
+          <span className="text-detail text-text-secondary">{`${starts} ${picked?.note ?? ""}`}</span>
           {failure !== null && (
             <p role="alert" className="m-0 text-detail text-rose">
               {failure}

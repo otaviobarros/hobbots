@@ -109,6 +109,15 @@ export const skillsViewOf = (search: SkillsSearch): SkillsView => {
   return scope === null ? { _tag: "Overview" } : { _tag: "Scope", scope };
 };
 
+/** The address of a skill, or of a skill of a set, on a tab. */
+const skillSearchOf = (view: Extract<SkillsView, { _tag: "Skill" }>): SkillsSearch => ({
+  skill: view.skillId,
+  member: view.member ?? undefined,
+  tab: view.tab ?? undefined,
+  file: view.file ?? undefined,
+  diff: view.diff ?? undefined,
+});
+
 /** The address of a view, the inverse of `skillsViewOf`. */
 export const skillsSearchOf = (view: SkillsView): SkillsSearch => {
   switch (view._tag) {
@@ -127,13 +136,7 @@ export const skillsSearchOf = (view: SkillsView): SkillsSearch => {
     case "New":
       return { edit: "new" };
     case "Skill":
-      return {
-        skill: view.skillId,
-        member: view.member ?? undefined,
-        tab: view.tab ?? undefined,
-        file: view.file ?? undefined,
-        diff: view.diff ?? undefined,
-      };
+      return skillSearchOf(view);
     case "Edit":
       return { skill: view.skillId, edit: "skill" };
     case "Search":

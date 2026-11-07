@@ -9,17 +9,11 @@ import { scanSkills, skillsErrorTag } from "../../api/skills.ts";
 import { WriteOne } from "./draft-with-hob.tsx";
 import { GiveChoice, type GiveTo } from "./give-choice.tsx";
 import { ImportCandidates, ImportRefused } from "./import-candidates.tsx";
+import { doneOf, foundLine, importLabel } from "./import-result.ts";
 import { FileSource, GitSource } from "./import-sources.tsx";
 import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
-import {
-  type HobDirectory,
-  type ImportFrom,
-  importable,
-  scopeName,
-  skillsSearchOf,
-  skillView,
-} from "./skills-model.ts";
+import { type HobDirectory, type ImportFrom, importable, scopeName, skillsSearchOf } from "./skills-model.ts";
 import { SkillsIcon } from "./skills-parts.tsx";
 import { giveAll, useSkillWrites } from "./use-skill-writes.ts";
 
@@ -132,39 +126,14 @@ function ScanResult({
       const given = await giveAll(writes, ids, give);
       if (!given) return setFailure(copy.import.notGiven({ count: ids.length, who: scopeName(give, hobs) }));
     }
-    const count = ids.length;
-    if (onlySet?.set != null && ids.length === 1 && ids[0] !== undefined) {
-      const named = { name: onlySet.name ?? onlySet.folder, count: onlySet.set.skills.length };
-      const at = skillView(ids[0]);
-      say(
-        {
-          tone: "done",
-          message:
-            give === null
-              ? copy.import.addedSet(named)
-              : copy.import.addedSetGiven({ ...named, who: scopeName(give, hobs) }),
-        },
-        at,
-      );
-      void navigate({ to: "/skills", search: skillsSearchOf(at) });
-      return;
-    }
-    const message =
-      exported !== null && fromExport !== null
-        ? copy.import.importedSet({ count, given: fromExport.assigned, left: fromExport.leftOut })
-        : give === null
-          ? copy.import.imported({ count })
-          : copy.import.importedGiven({ count, who: scopeName(give, hobs) });
-    say({ tone: "done", message }, { _tag: "Overview" });
-    void navigate({ to: "/skills", search: {} });
+    const done = doneOf({ ids, onlySet, give, hobs, fromExport: exported === null ? null : fromExport });
+    say({ tone: "done", message: done.message }, done.at);
+    void navigate({ to: "/skills", search: skillsSearchOf(done.at) });
   };
 
   return (
     <div className="flex flex-col gap-3.5">
-      <p className="m-0 text-detail text-text-secondary">
-        {copy.import.found({ count: scan.candidates.length, commit: scan.commit })}
-        {sets.length > 0 && ` ${copy.import.setIntro}`}
-      </p>
+      <p className="m-0 text-detail text-text-secondary">{foundLine(scan)}</p>
       <ImportCandidates
         candidates={scan.candidates}
         picked={picked}
@@ -200,13 +169,7 @@ function ScanResult({
       )}
       <div className="flex gap-2">
         <Button disabled={(added === null && folders.length === 0) || writes.busy} onClick={() => void run()}>
-          {writes.busy
-            ? copy.import.importing
-            : added !== null
-              ? copy.import.giveAgain
-              : onlySet?.set != null
-                ? copy.import.addSet({ name: onlySet.name ?? onlySet.folder, count: onlySet.set.skills.length })
-                : copy.import.importN({ count: folders.length })}
+          {writes.busy ? copy.import.importing : importLabel(added !== null, onlySet, folders.length)}
         </Button>
         <Button asChild variant="quiet">
           <Link to="/skills" search={{}}>

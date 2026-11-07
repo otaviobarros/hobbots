@@ -6,10 +6,10 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { skillFileQuery, skillRevisionQuery } from "../../api/skills.ts";
-import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import { messages } from "./messages.ts";
 import { FlagList } from "./skill-flags.tsx";
-import { instructionsOf, type SkillsView, skillsSearchOf } from "./skills-model.ts";
+import { InstructionsText } from "./skill-layout.tsx";
+import { type SkillsView, skillsSearchOf } from "./skills-model.ts";
 
 const copy = messages;
 
@@ -149,17 +149,7 @@ export function SkillInstructions({
   if (latest === undefined) return null;
   return (
     <div className="flex flex-col gap-4">
-      {read.isPending && (
-        <div role="status" className="flex flex-col gap-2">
-          <span className="sr-only">{copy.loading}</span>
-          <Skeleton width="80%" />
-          <Skeleton width="65%" />
-        </div>
-      )}
-      {read.isError && <p className="m-0 text-ui text-text-secondary">{copy.failed.skill}</p>}
-      {read.isSuccess && (
-        <ReplyMarkdown content={instructionsOf(read.data.instructions)} streaming={false} caret={false} />
-      )}
+      <InstructionsText read={{ ...read, text: read.data?.instructions }} />
       <FlagList revision={latest} />
       <FileList view={view} revision={latest} />
       {view.file !== null && (

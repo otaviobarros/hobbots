@@ -122,6 +122,36 @@ describe("a hob's skills (ADR 029, Scopes)", () => {
     expect(groups[0]?.rows[0]?.missingCharms).toEqual(["github"]);
   });
 
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-UI-1143-02] lists each skill of a set a hob gets, and one it turned off, under the set's scope", () => {
+    const set = skill("agent-engineering");
+    const setEveryone = assignment("agent-engineering", everyone);
+    const member = (name: string) => ({
+      name: SkillName.make(name),
+      description: `Use to ${name}.`,
+      path: `skills/${name}`,
+      charms: [],
+    });
+    const withSet: SkillsList = {
+      ...list,
+      skills: [...skills, set],
+      assignments: [...assignments, setEveryone],
+      sets: [{ skillId: set.id, skills: [member("plan-change"), member("deliver-change")] }],
+    };
+    const fromSet = { ...loaded("agent-engineering", everyone), name: SkillName.make("deliver-change") };
+    const hob: HobSkills = {
+      ...view,
+      skills: [...view.skills, { ...fromSet, set: SkillName.make("agent-engineering") }],
+      optedOutOfSets: [{ skillId: set.id, name: SkillName.make("plan-change") }],
+    };
+    const [everyoneGroup] = carriedGroups(hob, withSet);
+    const fromTheSet = everyoneGroup?.rows.filter((row) => row.skill.id === set.id);
+    expect(fromTheSet?.map((row) => [row.member?.name, row.member?.description, row.state._tag])).toEqual([
+      ["deliver-change", "Use to deliver-change.", "Loads"],
+      ["plan-change", "Use to plan-change.", "Off"],
+    ]);
+  });
+
   // covers ADR 029 (A hob's Skills tab), #1062
   it("[TC-UI-1062-02] offers the skills a hob does not carry, and the shared ones it turned off, to turn on again", () => {
     expect(giveOffers(view, list).map((offer) => [offer._tag, offer.skill.name])).toEqual([

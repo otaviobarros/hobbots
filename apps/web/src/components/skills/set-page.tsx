@@ -1,5 +1,5 @@
 import type { SkillDetail, SkillsList } from "@hobbots/api";
-import { type Agent, type SkillSetSkill, skillRevisionLabel } from "@hobbots/domain";
+import { type Agent, type SkillId, type SkillSetSkill, skillRevisionLabel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -10,6 +10,7 @@ import { MemoryCard } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
 import { GiveTo } from "./skill-aside.tsx";
 import { droppedLine } from "./skill-flags.tsx";
+import { ActionsCard, OriginCard, OriginRow, SkillHeader, SkillLayout } from "./skill-layout.tsx";
 import { SkillRemove } from "./skill-remove.tsx";
 import { addedByOf, ReadOnlyNote, SkillTabs, type SkillViewOf } from "./skill-tabs.tsx";
 import type { Say } from "./skills-flash.ts";
@@ -28,6 +29,29 @@ const copy = messages;
 
 const sectionHead = "flex flex-wrap items-center gap-2 px-0.5";
 
+/** One skill of a set: its name as you type it, what it is for, and how often hobs used it. */
+function SetSkillLink({ setId, row }: { setId: SkillId; row: SetSkillRow }) {
+  const { member, used } = row;
+  return (
+    <li>
+      <Link
+        to="/skills"
+        search={skillsSearchOf(memberView(setId, member.name))}
+        className="flex w-full items-center gap-2.5 bg-card px-3 py-2 text-start text-text-strong no-underline hover:bg-hover"
+      >
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="flex items-baseline gap-2">
+            <span className="text-ui font-semibold">{member.name}</span>
+            <code className="font-mono text-meta text-text-secondary">{`/${member.name}`}</code>
+          </span>
+          <span className="truncate text-detail text-text-secondary">{member.description}</span>
+        </span>
+        <span className="text-meta whitespace-nowrap text-label">{copy.set.used({ count: used })}</span>
+      </Link>
+    </li>
+  );
+}
+
 /** A set's skills: each opens read-only, with how often hobs used it. */
 function SetSkills({ detail, skills }: { detail: SkillDetail; skills: ReadonlyArray<SetSkillRow> }) {
   const first = skills[0]?.member.name;
@@ -43,24 +67,8 @@ function SetSkills({ detail, skills }: { detail: SkillDetail; skills: ReadonlyAr
         )}
       </div>
       <RowList label={copy.set.skillsLabel}>
-        {skills.map(({ member, used }) => (
-          <li key={member.name}>
-            <Link
-              to="/skills"
-              search={skillsSearchOf(memberView(detail.skill.id, member.name))}
-              aria-label={copy.set.open({ name: member.name })}
-              className="flex w-full items-center gap-2.5 bg-card px-3 py-2 text-start text-text-strong no-underline hover:bg-hover"
-            >
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="flex items-baseline gap-2">
-                  <span className="text-ui font-semibold">{member.name}</span>
-                  <code className="font-mono text-meta text-text-secondary">{`/${member.name}`}</code>
-                </span>
-                <span className="truncate text-detail text-text-secondary">{member.description}</span>
-              </span>
-              <span className="text-meta whitespace-nowrap text-label">{copy.set.used({ count: used })}</span>
-            </Link>
-          </li>
+        {skills.map((row) => (
+          <SetSkillLink key={row.member.name} setId={detail.skill.id} row={row} />
         ))}
       </RowList>
     </section>
@@ -121,8 +129,7 @@ function SetAside({
   const version = copy.set.version({ label: latest?.label ?? null, commit: latest?.commit ?? null });
   return (
     <aside aria-label={copy.set.aside} className="flex w-[280px] flex-none flex-col gap-4">
-      <MemoryCard label={copy.skill.actions}>
-        <h3 className="lbl m-0 text-label">{copy.skill.actions}</h3>
+      <ActionsCard>
         <GiveTo detail={detail} list={list} hobs={hobs} active={active} say={say} />
         <Button asChild variant="outline">
           <Link to="/skills" search={skillsSearchOf({ ...view, tab: "who", file: null, diff: null })}>
@@ -130,26 +137,18 @@ function SetAside({
           </Link>
         </Button>
         <SkillRemove detail={detail} hobs={hobs} say={say} label={copy.set.remove} />
-      </MemoryCard>
-      <MemoryCard label={copy.skill.origin}>
-        <h3 className="lbl m-0 text-label">{copy.skill.origin}</h3>
-        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-detail">
-          <dt className="text-label">{copy.skill.sourceLabel}</dt>
-          <dd className="m-0 break-words">{originText(originOf(detail.skill.sourceId, list.sources))}</dd>
-          {version !== "" && (
-            <>
-              <dt className="text-label">{copy.skill.version}</dt>
-              <dd className="m-0">{version}</dd>
-            </>
-          )}
-          <dt className="text-label">{copy.skill.leftOut}</dt>
-          <dd className="m-0">{dropped ?? copy.set.leftOutNothing}</dd>
-          <dt className="text-label">{copy.skill.needs}</dt>
-          <dd className="m-0">{charms.length === 0 ? copy.skill.noCharm : copy.set.needsSome({ charms })}</dd>
-          <dt className="text-label">{copy.skill.grants}</dt>
-          <dd className="m-0">{copy.set.grantsNothing}</dd>
-        </dl>
-      </MemoryCard>
+      </ActionsCard>
+      <OriginCard>
+        <OriginRow label={copy.skill.sourceLabel}>
+          {originText(originOf(detail.skill.sourceId, list.sources))}
+        </OriginRow>
+        {version !== "" && <OriginRow label={copy.skill.version}>{version}</OriginRow>}
+        <OriginRow label={copy.skill.leftOut}>{dropped ?? copy.set.leftOutNothing}</OriginRow>
+        <OriginRow label={copy.skill.needs}>
+          {charms.length === 0 ? copy.skill.noCharm : copy.set.needsSome({ charms })}
+        </OriginRow>
+        <OriginRow label={copy.skill.grants}>{copy.set.grantsNothing}</OriginRow>
+      </OriginCard>
     </aside>
   );
 }
@@ -188,45 +187,40 @@ export function SetPage({
     ...(folders.length === 0 ? [] : [copy.set.sharesIn({ folders })]),
   ].join(" · ");
   return (
-    <div className="flex flex-wrap items-start gap-7">
-      <article className="flex min-w-0 max-w-[700px] flex-[1_1_520px] flex-col gap-4">
-        <nav aria-label={copy.skill.breadcrumb} className="flex items-center gap-1.5 text-detail text-text-secondary">
-          <Link to="/skills" search={{}} className="text-link">
-            {copy.title}
-          </Link>
-          <span aria-hidden>›</span>
-          <span>{skill.name}</span>
-        </nav>
-        <header className="flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-center gap-2">
+    <SkillLayout
+      trail={[{ key: "set", step: <span>{skill.name}</span> }]}
+      aside={<SetAside view={view} detail={detail} list={list} hobs={hobs} active={active} say={say} />}
+    >
+      <SkillHeader
+        tags={
+          <>
             {scope !== undefined && <ScopeTag scope={scope} label={scopeName(scope, hobs)} />}
             <RevTag label={latest?.label ?? skillRevisionLabel({ number: skill.revisions })} />
             <SkillChip tone="set">{copy.chips.set({ count: members.length })}</SkillChip>
             <span className="text-meta text-label">{copy.set.uses({ count: week })}</span>
-          </div>
-          <h2 className="m-0 font-heading text-[28px] leading-[34px] font-bold text-text-strong">{skill.name}</h2>
-          <p className="m-0 text-body text-text">{skill.description}</p>
-          <p className="m-0 text-detail text-label">{byline}</p>
-        </header>
-        <ReadOnlyNote icon="set">{copy.set.note({ folders })}</ReadOnlyNote>
-        <SkillTabs
-          view={view}
-          detail={detail}
-          hobs={hobs}
-          first={{
-            label: copy.set.tab,
-            count: members.length,
-            body: (
-              <div className="flex flex-col gap-4">
-                <SetSkills detail={detail} skills={rows} />
-                <SharedFiles shared={shared} count={members.length} />
-              </div>
-            ),
-          }}
-          say={say}
-        />
-      </article>
-      <SetAside view={view} detail={detail} list={list} hobs={hobs} active={active} say={say} />
-    </div>
+          </>
+        }
+        title={skill.name}
+        description={skill.description}
+        byline={byline}
+      />
+      <ReadOnlyNote icon="set">{copy.set.note({ folders })}</ReadOnlyNote>
+      <SkillTabs
+        view={view}
+        detail={detail}
+        hobs={hobs}
+        first={{
+          label: copy.set.tab,
+          count: members.length,
+          body: (
+            <div className="flex flex-col gap-4">
+              <SetSkills detail={detail} skills={rows} />
+              <SharedFiles shared={shared} count={members.length} />
+            </div>
+          ),
+        }}
+        say={say}
+      />
+    </SkillLayout>
   );
 }

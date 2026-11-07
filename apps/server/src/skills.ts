@@ -39,6 +39,7 @@ import {
   type SkillAssignment,
   type SkillBy,
   type SkillId,
+  type SkillName,
   type SkillNotFound,
   type SkillRevision,
   type SkillRevisionHash,
@@ -130,6 +131,35 @@ const NO_SKILLS = {
   agentsFolder: { path: null, problems: [] },
   usesThisWeek: [],
   sets: [],
+};
+
+/**
+ * What Make a copy imports (ADR 029): the revision's files under the new name, or for a set, the one
+ * of its skills named, with the set's files it links to. A set is never copied whole.
+ */
+const copiedSource = (
+  setName: string,
+  base: SkillRevision,
+  folder: string,
+  payload: { readonly name: SkillName; readonly member?: SkillName | undefined },
+) => {
+  const member = base.set?.skills.find((one) => one.name === payload.member);
+  if (base.set !== null && member === undefined)
+    return Effect.fail(
+      new SkillImportRefused({
+        check: "set",
+        path: null,
+        message: `Pick one skill of ${setName} to copy; a set is copied one skill at a time.`,
+      }),
+    );
+  const carried = { charms: member?.charms ?? base.charms, dropped: base.dropped };
+  return Effect.succeed({
+    _tag: "Copied",
+    folder,
+    name: payload.name,
+    carried,
+    ...(member === undefined ? {} : { member }),
+  } satisfies SkillImportSource);
 };
 
 /** A hub built without the library, as most of the server's tests are: no skills, and nothing to import into. */
@@ -571,22 +601,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           if (base === null || folder === null) return yield* new SkillMissing({ id: hash });
           if (payload.scope?._tag === "Hob" && Option.isNone(yield* hobOf(payload.scope.agentId)))
             return yield* new SkillMissing({ id: payload.scope.agentId });
-          // A set is copied one skill at a time, as a skill of its own (ADR 029, Skill sets).
-          const member = base.set?.skills.find((one) => one.name === payload.member);
-          if (base.set !== null && member === undefined)
-            return yield* new SkillImportRefused({
-              check: "set",
-              path: null,
-              message: `Pick one skill of ${skill.name} to copy; a set is copied one skill at a time.`,
-            });
-          const carried = { charms: member?.charms ?? base.charms, dropped: base.dropped };
-          const source = {
-            _tag: "Copied",
-            folder,
-            name: payload.name,
-            carried,
-            ...(member === undefined ? {} : { member }),
-          } as const;
+          const source = yield* copiedSource(skill.name, base, folder, payload);
           const [copied] = yield* importer.add(source, { by: YOU }).pipe(Effect.mapError(importError));
           if (copied === undefined) return yield* new SkillMissing({ id: skill.id });
           // Content a skill of that name already has is that skill, not a new copy.
