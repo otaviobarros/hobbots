@@ -5,12 +5,11 @@ import {
   type CharmOperation,
   declaredOperations,
   EMPTY_HOB_POLICY,
+  effectiveDecision,
   type HobPolicy,
   hobAnswers,
-  narrowest,
   POLICY_OPERATIONS,
   type PolicyDecision,
-  presetDecision,
   type SafetyPreset,
 } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
@@ -47,13 +46,12 @@ const effectiveDecisions = (
   policy: HobPolicy,
   charmOperations: ReadonlyArray<CharmOperation>,
 ): Record<AnyOperation, PolicyDecision> => {
-  const overrides = hobAnswers(policy);
+  const answers = hobAnswers(policy);
   return Object.fromEntries(
-    [...POLICY_OPERATIONS, ...charmOperations.map((operation) => operation.id)].map((operation) => {
-      const override = overrides[operation];
-      const answer = presetDecision(preset, operation, charmOperations);
-      return [operation, override === undefined ? answer : narrowest(answer, override)];
-    }),
+    [...POLICY_OPERATIONS, ...charmOperations.map((operation) => operation.id)].map((operation) => [
+      operation,
+      effectiveDecision(preset, answers, operation, charmOperations),
+    ]),
   ) as Record<AnyOperation, PolicyDecision>;
 };
 

@@ -470,7 +470,7 @@ export const messages = {
     tabs: {
       git: { label: "From Git", sub: "A repository, pinned to a commit" },
       file: { label: "Folder or .zip", sub: "From this computer" },
-      write: { label: "Write one", sub: "Here, from a blank skill" },
+      write: { label: "Write one", sub: "Here, or with a hob" },
     },
     repository: "Repository",
     ref: "Branch, tag or commit",
@@ -486,6 +486,24 @@ export const messages = {
     limits: "Up to 5 MB and 200 files a skill. Nothing in it runs while it is checked.",
     blank: "Start from a blank skill",
     blankHint: "Name, when to use it, and the steps. Hobbots checks it as you type.",
+    draft: "Draft it with a hob",
+    draftHint:
+      "Opens a chat where a hob writes it from your words, a chat or its memory. You review it before it is added.",
+    draftWho: "Which hob drafts it?",
+    draftWhoHint: "It opens a new chat with that hob, with a message you can change before you send it.",
+    draftLooking: "Looking for hobs that may suggest skills…",
+    draftLookFailed: "Hobbots could not read your hobs, so it cannot tell which may suggest skills.",
+    draftTryAgain: "Try again",
+    draftNoneTitle: "No hob may suggest skills now",
+    draftNone: "In a hob's Permissions, allow Suggest a new skill or a change, then come back.",
+    /** The message a drafting chat starts from, ready to change before it is sent. */
+    draftMessage: [
+      "Please write a new skill for my library and propose it, so I can review it before it is added.",
+      "",
+      "What it is for: ",
+      "",
+      "Learn from (optional): a chat of ours, or pages in your memory",
+    ].join("\n"),
     found: ({ count, commit }: { count: number; commit: string | null }) =>
       commit === null ? `Found ${skills(count)}.` : `This is commit ${commit.slice(0, 7)}. Found ${skills(count)}.`,
     pick: ({ name }: { name: string }) => `Import ${name}`,

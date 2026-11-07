@@ -18,6 +18,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentsFolderOf,
   descriptionState,
+  draftingHobs,
   exportRows,
   fileChanges,
   importable,
@@ -262,5 +263,18 @@ describe("Export skills", () => {
     expect(agentsFolderOf(pdf, [agents], [{ path: "pdf" }])).toBe("~/.agents/skills/pdf");
     expect(agentsFolderOf(pdf, [agents])).toBe("~/.agents/skills/pdf-forms");
     expect(agentsFolderOf(skill("s2", "mine", "Mine"), [agents])).toBeNull();
+  });
+
+  // covers ADR 029 (Proactive hobs), #1144
+  it("offers Draft it with a hob only to hobs that may suggest a skill, Ask included", () => {
+    const hob = (name: string, overrides: Agent["policy"]["overrides"]) =>
+      ({
+        id: AgentId.make(name),
+        name,
+        policy: { ownFolders: [], hiddenSharedFolders: [], overrides },
+      }) as unknown as Agent;
+    const active = [hob("Ada", {}), hob("Bram", { "propose-skill": "deny" }), hob("Cleo", { "propose-skill": "ask" })];
+    expect(draftingHobs(active, "balanced").map((one) => one.name)).toEqual(["Ada", "Cleo"]);
+    expect(draftingHobs(active, "trusting").map((one) => one.name)).toEqual(["Ada", "Cleo"]);
   });
 });
