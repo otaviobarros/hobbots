@@ -14,6 +14,12 @@ describe("hobState", () => {
   it("shows paused over activity", () =>
     expect(hobState({ ...hob, status: "paused" }, threads, { t1: "working" })).toBe("paused"));
   it("rests before its threads load", () => expect(hobState(hob, undefined, {})).toBe("idle"));
+  // #1056: a hob that answered and waits only on a command it started is neither writing nor waiting on you.
+  it("waits on a command only while no thread of it writes or thinks", () => {
+    expect(hobState(hob, threads, { t1: "waiting" })).toBe("on-command");
+    expect(hobState(hob, threads, { t1: "waiting", t2: "thinking" })).toBe("thinking");
+    expect(hobState(hob, threads, { t1: "waiting", t2: "working" })).toBe("working");
+  });
 });
 
 describe("threadState", () => {
@@ -23,6 +29,8 @@ describe("threadState", () => {
   it("works while a reply streams without live activity", () =>
     expect(threadState(hob, undefined, true)).toBe("working"));
   it("rests when nothing happens", () => expect(threadState(hob, undefined, false)).toBe("idle"));
+  it("waits on a command once the reply only waits on one", () =>
+    expect(threadState(hob, "waiting", true)).toBe("on-command"));
   it("shows paused over a reply still streaming", () =>
     expect(threadState({ status: "paused" }, "working", true)).toBe("paused"));
 });

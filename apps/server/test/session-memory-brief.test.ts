@@ -43,12 +43,20 @@ describe("the memory brief outside chats", () => {
         hub("delegate_task", {
           key: "review",
           hob: "Pip",
-          brief: ["Review the project", hub("complete_task", { key: "done", summary: "Reviewed" })].join("\n"),
+          brief: [
+            "Review the project",
+            hub("complete_task", { delivered: true, key: "done", summary: "Reviewed" }),
+          ].join("\n"),
         }),
         hub("plan_steps", {
           key: "plan",
           steps: [
-            { brief: ["Draft the notes", hub("complete_task", { key: "noted", summary: "Drafted" })].join("\n") },
+            {
+              brief: [
+                "Draft the notes",
+                hub("complete_task", { delivered: true, key: "noted", summary: "Drafted" }),
+              ].join("\n"),
+            },
           ],
         }),
         hub("wait_for", { key: "wait", tasks: ["$review.task_id"] }),
@@ -101,7 +109,7 @@ describe("the memory brief outside chats", () => {
                 finding("first", "core.py has an unused import"),
                 finding("second", "app.py has a long line"),
                 finding("third", "tests.py has a typo"),
-                hub("complete_task", { key: "done", summary: "Three lint findings" }),
+                hub("complete_task", { delivered: true, key: "done", summary: "Three lint findings" }),
               ].join("\n"),
             }),
           ].join("\n"),

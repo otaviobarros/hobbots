@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import { CharmWriteKey } from "./charm-call.ts";
 import { toolInputJsonSchema } from "./task-tools.ts";
 
 /**
@@ -131,8 +130,8 @@ const githubBody = (description: string) =>
   Schema.String.check(Schema.isMaxLength(MAX_GITHUB_BODY)).annotate({ description });
 
 /**
- * The GitHub writes' inputs. Opening a pull request and commenting run through the hub action
- * pipeline, which adds their `key` (ADR 031); a push carries its own until it moves there (#619).
+ * The GitHub writes' inputs, as each action declares them. The hub action pipeline adds the `key`
+ * every Charm write carries (ADR 031).
  */
 export const GitHubWriteInputs = {
   github_push: Schema.Struct({
@@ -145,7 +144,6 @@ export const GitHubWriteInputs = {
           "Replace the branch on GitHub even when your branch does not build on it. Always asks the user, once only.",
       }),
     ),
-    key: CharmWriteKey,
   }),
   github_open_pull_request: Schema.Struct({
     folder: writeFolder("open the pull request in"),

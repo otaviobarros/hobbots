@@ -57,7 +57,7 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
   await startParty(page, [
     "Draft the copy",
     'fake:write copy.md "# Copy\\n\\nHello.\\n"',
-    script("complete_task", { key: "drafted", summary: "Drafted." }),
+    script("complete_task", { delivered: true, key: "drafted", summary: "Drafted." }),
   ]);
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
   const { bench, changes, files } = lists(page);
@@ -115,7 +115,7 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and ev
     "Draft the copy",
     'fake:once fake:write copy.md "# Copy\\n\\nHello.\\n"',
     "fake:fail",
-    `fake:then ${script("complete_task", { key: "copy-done", summary: "The copy is drafted." })}`,
+    `fake:then ${script("complete_task", { delivered: true, key: "copy-done", summary: "The copy is drafted." })}`,
   ]);
   // A member's failed turn is handed to her again as a second try, which no longer carries the
   // brief's once-only write or its failure.
@@ -166,7 +166,7 @@ test("[TC-UX-282] a file two hobs changed opens the hob's own record when Files 
     "Draft the copy",
     'fake:write copy.md "# Copy\\n\\nHello.\\n"',
     'fake:write notes.md "# Notes\\n\\nLaunch day, with copy.\\n"',
-    script("complete_task", { key: "drafted", summary: "Drafted." }),
+    script("complete_task", { delivered: true, key: "drafted", summary: "Drafted." }),
   ]);
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
   const { bench, changes, files } = lists(page);
@@ -229,7 +229,7 @@ test("[TC-UX-283] a member's History opens an archived Quest's room in its lead'
         brief: [
           "Draft the copy",
           'fake:write copy.md "# Copy\\n\\nHello.\\n"',
-          script("complete_task", { key: "drafted", summary: "Drafted." }),
+          script("complete_task", { delivered: true, key: "drafted", summary: "Drafted." }),
         ].join("\n"),
       }),
     ].join("\n"),

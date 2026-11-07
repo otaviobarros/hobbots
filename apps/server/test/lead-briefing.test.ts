@@ -29,9 +29,10 @@ const delegated = MEMBERS.map((hob, index) =>
     key: hob,
     hob,
     ...(index === 0 ? {} : { depends_on: [["$", MEMBERS[index - 1], ".task_id"].join("")] }),
-    brief: [`Work for ${hob}`, hub("complete_task", { key: `${hob}-done`, summary: `${hob} finished its part` })].join(
-      "\n",
-    ),
+    brief: [
+      `Work for ${hob}`,
+      hub("complete_task", { delivered: true, key: `${hob}-done`, summary: `${hob} finished its part` }),
+    ].join("\n"),
   }),
 );
 

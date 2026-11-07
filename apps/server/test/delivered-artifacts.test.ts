@@ -52,11 +52,13 @@ describe.each(RUNTIMES)("a Task that returns a file, on %s", (runtime) => {
     await run(
       delegated([
         hub("complete_task", {
+          delivered: true,
           key: "in-temp",
           summary: "The page is in my temporary folder",
           artifacts: [file(join(scratch, "skills-feature-explained.html"))],
         }),
         hub("complete_task", {
+          delivered: true,
           key: "in-folder",
           summary: "The page is saved",
           artifacts: [file(join(project, "skills-feature-explained.html"))],
@@ -84,6 +86,7 @@ describe.each(RUNTIMES)("a Task that returns a file, on %s", (runtime) => {
     await run(
       delegated([
         hub("complete_task", {
+          delivered: true,
           key: "missing",
           summary: "The page is saved",
           artifacts: [file(join(project, "never-written.html"))],
@@ -106,6 +109,7 @@ describe.each(RUNTIMES)("a Task that returns a file, on %s", (runtime) => {
     await run(
       delegated([
         hub("complete_task", {
+          delivered: true,
           key: "text",
           summary: "The explainer, as text",
           artifacts: [

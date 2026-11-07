@@ -50,6 +50,7 @@ const STEP_STATES: Record<ReplyStep["state"], string> = {
   denied: "denied",
   unfinished: "outcome unknown",
   uncertain: "cut off while it ran, outcome unknown: check before running it again",
+  stopped: "stopped by the user while the reply waited on it",
 };
 
 const ENDINGS: Partial<Record<Message["status"], string>> = {

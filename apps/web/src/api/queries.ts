@@ -366,6 +366,12 @@ export const useInterrupt = (threadId: ThreadId) =>
     mutationFn: () => call((c) => c.threads.interrupt({ params: { threadId } })),
   });
 
+/** Stop waiting: ends a reply that only waits on commands, keeping its text (#1056). */
+export const useStopWaiting = (threadId: ThreadId) =>
+  useMutation({
+    mutationFn: () => call((c) => c.threads.stopWaiting({ params: { threadId } })),
+  });
+
 /** Creates a thread and sends its first prompt, so a new thread only appears once it has a message. */
 export const startThread = async (queryClient: QueryClient, agentId: AgentId, content: string) => {
   try {

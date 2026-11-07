@@ -270,7 +270,7 @@ const questUnderWay = (quillBrief: ReadonlyArray<string> = [HOLD]) =>
       brief: [
         "Draft the landing copy",
         ...quillBrief,
-        hub("complete_task", { key: "copy-done", summary: "Copy" }),
+        hub("complete_task", { delivered: true, key: "copy-done", summary: "Copy" }),
       ].join("\n"),
     }),
     hub("delegate_task", {
@@ -302,7 +302,7 @@ const nestedUnderWay = [
         brief: [
           "Research the keywords",
           HOLD,
-          hub("complete_task", { key: "keywords-done", summary: "Keywords" }),
+          hub("complete_task", { delivered: true, key: "keywords-done", summary: "Keywords" }),
         ].join("\n"),
       }),
       hub("wait_for", { key: "rook-wait", tasks: ["$keywords.task_id"] }),
@@ -462,7 +462,11 @@ describe("cancelling with confirmed outcomes", () => {
     // Quill's result arrives after the cancel, as his tool call would: it is refused.
     const late = await run(
       TaskTools.use((tools) =>
-        tools.call({ agentId: QUILL, taskId: quill.id }, "complete_task", { key: "late", summary: "Copy, at last" }),
+        tools.call({ agentId: QUILL, taskId: quill.id }, "complete_task", {
+          delivered: true,
+          key: "late",
+          summary: "Copy, at last",
+        }),
       ).pipe(Effect.flip),
     );
     expect(late).toMatchObject({ _tag: "TaskToolRefused", reason: "task-state" });
@@ -602,13 +606,21 @@ describe("cancelling with confirmed outcomes", () => {
         hob: "Rook",
         brief: [
           "Run the ads",
-          hub("complete_task", { key: "ads-done", summary: ["Ads ready", HOLD_STARTED, "That is all"].join("\n") }),
+          hub("complete_task", {
+            delivered: true,
+            key: "ads-done",
+            summary: ["Ads ready", HOLD_STARTED, "That is all"].join("\n"),
+          }),
         ].join("\n"),
       }),
       hub("delegate_task", {
         key: "copy",
         hob: "Quill",
-        brief: ["Draft the landing copy", HOLD, hub("complete_task", { key: "copy-done", summary: "Copy" })].join("\n"),
+        brief: [
+          "Draft the landing copy",
+          HOLD,
+          hub("complete_task", { delivered: true, key: "copy-done", summary: "Copy" }),
+        ].join("\n"),
       }),
       hub("wait_for", { key: "wait", tasks: ["$ads.task_id", "$copy.task_id"] }),
     ].join("\n");
@@ -680,6 +692,7 @@ describe("cancelling with confirmed outcomes", () => {
                   "Pick the channels",
                   hub("report_checkpoint", { key: "draft", kind: "progress", summary: "Channels shortlisted" }),
                   hub("complete_task", {
+                    delivered: true,
                     key: "picked",
                     summary: ["Channels", HOLD_STARTED, "That is all"].join("\n"),
                   }),
@@ -760,7 +773,11 @@ describe("retrying and reassigning", () => {
       hub("delegate_task", {
         key: "copy",
         hob: "Quill",
-        brief: ["Draft the copy", HOLD, hub("complete_task", { key: "copy-done", summary: "Copy ready" })].join("\n"),
+        brief: [
+          "Draft the copy",
+          HOLD,
+          hub("complete_task", { delivered: true, key: "copy-done", summary: "Copy ready" }),
+        ].join("\n"),
       }),
     ].join("\n");
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));

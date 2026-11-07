@@ -454,7 +454,7 @@ describe("the Workbench, end to end", () => {
         "Tidy the notes",
         'fake:write notes.md "# Release notes\\n\\nTidied.\\n"',
         script("start_quest", { key: "quest", goal: "Tidy the notes" }),
-        script("complete_task", { key: "done", summary: "The notes are tidy." }),
+        script("complete_task", { delivered: true, key: "done", summary: "The notes are tidy." }),
       ].join("\n"),
     );
     const tree = await treeOf(thread);

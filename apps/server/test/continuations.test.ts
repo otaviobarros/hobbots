@@ -336,7 +336,7 @@ describe("continuing a hob when work arrives", () => {
     const prompt = [
       "Carry the ring to Mordor",
       hub("plan_steps", { key: "plan", steps: [{ brief: "Walk to Mordor" }] }),
-      `fake:then ${hub("complete_task", { key: "done", summary: "The ring is destroyed" })}`,
+      `fake:then ${hub("complete_task", { delivered: true, key: "done", summary: "The ring is destroyed" })}`,
     ].join("\n");
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
 

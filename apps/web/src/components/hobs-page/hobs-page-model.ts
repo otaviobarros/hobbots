@@ -20,6 +20,7 @@ export const filterOf = (state: HobState): Exclude<HobFilter, "all"> => {
       return "needs";
     case "working":
     case "thinking":
+    case "on-command":
       return "working";
     case "idle":
     case "asleep":

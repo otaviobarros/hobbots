@@ -66,7 +66,7 @@ describe("memory capture of a party's work", () => {
           brief: [
             "Draft the copy",
             hub("ask", { key: "tone", question: "Playful or formal?" }),
-            `fake:then ${hub("complete_task", { key: "copy-done", summary: "Playful copy drafted" })}`,
+            `fake:then ${hub("complete_task", { delivered: true, key: "copy-done", summary: "Playful copy drafted" })}`,
           ].join("\n"),
         }),
         // Quill's question wakes Frodo, who answers it; Quill's result wakes him again.
@@ -115,7 +115,10 @@ describe("memory capture of a party's work", () => {
             hub("delegate_task", {
               key: "lint",
               hob: "Nettle",
-              brief: ["Lint the project", hub("complete_task", { key: "linted", summary: "Lint is clean" })].join("\n"),
+              brief: [
+                "Lint the project",
+                hub("complete_task", { delivered: true, key: "linted", summary: "Lint is clean" }),
+              ].join("\n"),
             }),
           ].join("\n"),
         }),

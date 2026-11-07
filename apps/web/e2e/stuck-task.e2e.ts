@@ -153,7 +153,7 @@ test("[TC-IN-1087-05] Retry in a stuck lane gives the hob a fresh try, which fin
 }) => {
   // The try that is cut off keeps the completion for the session's next turn: only the fresh try
   // Retry sends can finish the Task, so its result shows that the try ran.
-  const finish = script("complete_task", { key: "copy-done", summary: "Three headlines." });
+  const finish = script("complete_task", { delivered: true, key: "copy-done", summary: "Three headlines." });
   const current = await stuckCopy(page, [`fake:once fake:then ${finish}`]);
   await openRoom(page, "Plan the launch");
   await expect(laneHead(page, "Quill")).toContainText("Stuck");

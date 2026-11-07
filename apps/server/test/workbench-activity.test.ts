@@ -475,7 +475,7 @@ describe("a Task's activity", () => {
           "Finish the notes",
           'fake:write notes.md "# Notes\\n\\nDone.\\n"',
           hub("start_quest", { key: "quest", goal: "Finish" }),
-          hub("complete_task", { key: "done", summary: "The notes are finished." }),
+          hub("complete_task", { delivered: true, key: "done", summary: "The notes are finished." }),
         ].join("\n"),
       ),
     );

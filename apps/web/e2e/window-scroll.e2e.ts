@@ -69,7 +69,7 @@ test("[TC-UX-1026-01] a long chat, its Quest room and Workbench, and every other
     "Walk through the steps",
     ...steps,
     script("start_quest", { key: "quest", goal: "Walk through the steps" }),
-    script("complete_task", { key: "done", summary: "Walked through them." }),
+    script("complete_task", { delivered: true, key: "done", summary: "Walked through them." }),
   ]);
   // A long message of its own lines, after more marked steps.
   await send(page, [

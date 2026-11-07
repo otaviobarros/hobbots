@@ -70,7 +70,8 @@ test("[TC-OR-209] a three-member Quest with a dependency chain runs to finished 
 
   // Quill writes the backend, Rook the frontend after it, and Pip reviews both. Aldric wraps up on
   // the continuation that brings the last result; until then wrapping up is refused.
-  const wrap = (key: string) => script("complete_task", { key, summary: "The app is built and reviewed." });
+  const wrap = (key: string) =>
+    script("complete_task", { delivered: true, key, summary: "The app is built and reviewed." });
   await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
@@ -79,16 +80,17 @@ test("[TC-OR-209] a three-member Quest with a dependency chain runs to finished 
       script("delegate_task", {
         key: "backend",
         hob: "Quill",
-        brief: ["Write the backend", script("complete_task", { key: "backend-done", summary: "Backend ready." })].join(
-          "\n",
-        ),
+        brief: [
+          "Write the backend",
+          script("complete_task", { delivered: true, key: "backend-done", summary: "Backend ready." }),
+        ].join("\n"),
       }),
       script("delegate_task", {
         key: "frontend",
         hob: "Rook",
         brief: [
           "Write the frontend",
-          script("complete_task", { key: "frontend-done", summary: "Frontend ready." }),
+          script("complete_task", { delivered: true, key: "frontend-done", summary: "Frontend ready." }),
         ].join("\n"),
         depends_on: ["$backend.task_id"],
       }),
@@ -97,7 +99,7 @@ test("[TC-OR-209] a three-member Quest with a dependency chain runs to finished 
         hob: "Pip",
         brief: [
           "Review the backend and the frontend",
-          script("complete_task", { key: "review-done", summary: "Both reviewed." }),
+          script("complete_task", { delivered: true, key: "review-done", summary: "Both reviewed." }),
         ].join("\n"),
         depends_on: ["$backend.task_id", "$frontend.task_id"],
       }),

@@ -69,7 +69,7 @@ test("[TC-UX-221] two Quests in one thread each keep their own ticket under the 
     [
       "Tidy the notes",
       script("start_quest", { key: "quest", goal: "Tidy the notes" }),
-      script("complete_task", { key: "done", summary: "The notes are tidy." }),
+      script("complete_task", { delivered: true, key: "done", summary: "The notes are tidy." }),
     ].join("\n"),
   );
   await composer.press("Enter");
@@ -138,7 +138,7 @@ test("[TC-UX-222] a finished Quest's ticket says how it ended, needs nothing fro
     [
       "Tidy the notes",
       script("start_quest", { key: "quest", goal: "Tidy the notes" }),
-      script("complete_task", { key: "done", summary: "The notes are tidy." }),
+      script("complete_task", { delivered: true, key: "done", summary: "The notes are tidy." }),
     ].join("\n"),
   );
   await composer.press("Enter");
@@ -178,7 +178,7 @@ test("[TC-UX-224] a finished Quest's ticket and finish banner show one duration,
     [
       "Tidy the notes",
       script("start_quest", { key: "quest", goal: "Tidy the notes" }),
-      script("complete_task", { key: "done", summary: "The notes are tidy." }),
+      script("complete_task", { delivered: true, key: "done", summary: "The notes are tidy." }),
       Array.from({ length: 120 }, (_, index) => `word${index}`).join(" "),
     ].join("\n"),
   );

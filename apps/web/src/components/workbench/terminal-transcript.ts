@@ -92,6 +92,10 @@ const endLine = (command: CommandRecord, now: Date): string => {
   if (command.state === "uncertain") {
     return `${style.yellow(`? ${copy.state.uncertain} · ${copy.uncertain}`)}${style.dim(" · ")}${meta}`;
   }
+  // Cut off by you, with Stop waiting (#1056).
+  if (command.state === "stopped") {
+    return `${style.dim(`■ ${copy.state.stopped} · ${copy.stopped}`)}${style.dim(" · ")}${meta}`;
+  }
   if (runsInSequence(command.command)) return `${style.yellow(copy.finishedInSequence)}${style.dim(" · ")}${meta}`;
   return `${style.dim("✓ ")}${meta}`;
 };

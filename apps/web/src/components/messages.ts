@@ -332,6 +332,10 @@ export const messages = {
     backToChats: ({ name }: { name: string }) => `Back to ${name}'s chats`,
     /** After the hob's name under the chat title: the hob leads this chat, and what it is doing now. */
     leadLine: ({ doing }: { doing: string }) => ` · lead · ${doing}`,
+    /** What the hob does while its reply waits only on commands it started (#1056). */
+    waitingOn: ({ command, time }: { command: string; time: string }) => `waiting on ${command} · ${time}`,
+    waitingOnMany: ({ count, time }: { count: number; time: string }) =>
+      `waiting on ${formatCount(count)} commands · ${time}`,
     hello: ({ name }: { name: string }) => `Hello, I'm ${name}!`,
     freshPage: "A fresh page",
     helloBody: "Tell me my first chore. I keep working even if you switch to another thread.",
@@ -346,6 +350,8 @@ export const messages = {
     brainUnavailable: "Brain unavailable",
     continueFailed: ({ name, why }: { name: string; why: string }) => `${name} could not continue that reply. ${why}`,
     queueGone: "That message already started or was removed.",
+    stopWaitingFailed: ({ name, command }: { name: string; command: string }) =>
+      `Hobbots could not stop waiting, so ${command} still runs and ${name}'s reply still waits on it. Press Stop waiting to try again.`,
     wakeFailed: ({ name }: { name: string }) => `Hobbots could not wake ${name}. Try again.`,
     brainProblem: ({ name, runtime, problem }: { name: string; runtime: string; problem: string }) =>
       `${name} can't think right now: ${runtime} ${problem}.`,
@@ -373,6 +379,27 @@ export const messages = {
     hintSendsAfter: "Sends after this reply",
     hintStopping: ({ name }: { name: string }) => `Stopping. What ${name} wrote so far is kept.`,
     hintStoppingShort: "Stopping",
+    /**
+     * Once the hob has answered and the reply only waits on commands it started (#1056): what it
+     * waits on and for how long, in one line, with the short one beside the Quest room.
+     */
+    hintWaiting: ({ name, command, time }: { name: string; command: string; time: string }) =>
+      `${name} is waiting on ${command} · ${time}`,
+    hintWaitingMany: ({ name, count, time }: { name: string; count: number; time: string }) =>
+      `${name} is waiting on ${formatCount(count)} commands · ${time}`,
+    /** After a long wait, said after the hint in the same quiet color. */
+    hintWaitingLong: "It may not end on its own.",
+    hintWaitingShort: ({ time }: { time: string }) => `Waiting · ${time}`,
+    hintSendsWhenEnds: ({ command }: { command: string }) => `Sends when ${command} ends`,
+    hintSendsWhenAllEnd: "Sends when the commands end",
+    hintStoppingWait: ({ name, command }: { name: string; command: string }) =>
+      `Stopping ${command}. ${name}'s reply is kept.`,
+    hintStoppingWaitMany: ({ name }: { name: string }) => `Stopping the commands. ${name}'s reply is kept.`,
+    minutes: ({ count }: { count: number }) => (count < 1 ? "under a minute" : `${formatCount(count)} min`),
+    stopWaiting: "■ Stop waiting",
+    stopWaitingDescription: ({ name, command }: { name: string; command: string }) =>
+      `Stop waiting ends this reply now. What ${name} wrote is kept, and ${command} is stopped. Messages you send now wait their turn.`,
+    theCommands: "the commands",
     /** Stop's description, read by screen readers and shown on hover. */
     stopDescription: ({ name }: { name: string }) =>
       `Stop ends this reply only. What ${name} wrote so far is kept. Messages you send now wait their turn.`,
@@ -425,6 +452,9 @@ export const messages = {
     label: "Queued message",
     /** The tag on a message sent while a reply runs, above the composer until it starts. */
     waitsItsTurn: "Waits its turn",
+    /** Why a message sent while the reply waits on a command waits (#1056). */
+    waitsForCommand: ({ command }: { command: string }) => `Goes when ${command} ends, or when you stop waiting.`,
+    waitsForCommands: "Goes when the commands end, or when you stop waiting.",
     waitsForWake: ({ name }: { name: string }) => `Waits until you wake ${name}`,
     remove: "Remove",
     sendNow: "Send now",
@@ -441,8 +471,18 @@ export const messages = {
       denied: "not allowed",
       unfinished: "did not finish",
       uncertain: "outcome unknown",
+      stopped: "stopped by you",
     },
+    /** What a screen reader hears after a running command the reply waits on (#1056). */
+    waitedOutcome: "the reply waits for it to end",
     running: ({ label }: { label: string }) => `${label}…`,
+    waitingOn: ({ command }: { command: string }) => `Waiting on ${command}`,
+    waitingNote: ({ time }: { time: string }) =>
+      `Running for ${time}. The reply ends when it does, or when you stop waiting.`,
+    stopped: ({ time }: { time: string | null }) =>
+      time === null
+        ? "Stopped by you while the reply waited on it."
+        : `Stopped by you after ${time}, while the reply waited on it.`,
     awaiting: "Waiting for your approval.",
     failed: "The tool reported an error.",
     /** A Hobbots tool call the hub refused, such as answering a question the user owns (#575). */

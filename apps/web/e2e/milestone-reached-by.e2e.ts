@@ -93,7 +93,7 @@ test("[TC-OR-655] a member's milestone reached through its lead's work shows on 
             milestone_id: "$build.milestones.1",
             reached_by: "Frodo",
           }),
-          hubCall("complete_task", { key: "done", summary: "Built the page; Frodo made the commit" }),
+          hubCall("complete_task", { delivered: true, key: "done", summary: "Built the page; Frodo made the commit" }),
         ].join("\n"),
       }),
       hubCall("wait_for", { key: "wait", tasks: ["$build.task_id"] }),

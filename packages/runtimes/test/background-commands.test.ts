@@ -8,7 +8,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { backgroundCommands, backgroundFinished, isTaskEnd, type TaskEnd } from "../src/background-commands.ts";
-import { policyHooks, toolTurn } from "../src/claude-code.ts";
+import { awaitingAfter, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { makeFakeRuntime } from "../src/fake.ts";
 
 // Issue #1018: a command Claude Code runs in the background finishes when its task ends, not when
@@ -169,8 +169,9 @@ describe("a background command on Claude Code", () => {
 });
 
 /** The events of a fake turn with the given prompt. */
-const fakeTurn = (prompt: string) =>
-  makeFakeRuntime({ engine })
+const fakeTurn = (prompt: string, until?: (event: RuntimeEvent, seen: ReadonlyArray<RuntimeEvent>) => boolean) => {
+  const seen: Array<RuntimeEvent> = [];
+  return makeFakeRuntime({ engine })
     .sendPrompt({
       prompt,
       sessionId: null,
@@ -180,8 +181,14 @@ const fakeTurn = (prompt: string) =>
       effort: null,
       tools: access,
     })
-    .pipe(Stream.runCollect, Effect.runPromise)
+    .pipe(
+      Stream.tap((event) => Effect.sync(() => seen.push(event))),
+      Stream.takeUntil((event) => until?.(event, seen) ?? false),
+      Stream.runCollect,
+      Effect.runPromise,
+    )
     .then((events) => Array.from(events));
+};
 
 describe("a background command on the fake runtime", () => {
   // covers UX-006
@@ -232,5 +239,52 @@ describe("a background command on the fake runtime", () => {
     const events = await fakeTurn(`fake:run ${JSON.stringify({ command: "pnpm dev", background: true })}`);
     expect(events.filter((event) => event._tag === "ToolFinished")).toEqual([]);
     expect(events.at(-1)?._tag).toBe("Completed");
+  });
+});
+
+describe("a reply that waits on its background commands (#1056)", () => {
+  const completed: RuntimeEvent = { _tag: "Completed", sessionId: "s1", text: "Started it." };
+
+  // covers CH-004
+  it("[TC-RT-1056-02] says Claude Code's turn waits on the background commands still running once a run replied", async () => {
+    const background = backgroundCommands(() => {});
+    expect(awaitingAfter([completed], background)).toEqual([completed]);
+    expect(await background.moved("t1", backgrounded)).toBe(true);
+    expect(background.waiting()).toEqual(["t1"]);
+    // Only a run's result says so: the turn is still at work before it.
+    expect(awaitingAfter([{ _tag: "TextDelta", text: "x" }], background)).toEqual([{ _tag: "TextDelta", text: "x" }]);
+    expect(awaitingAfter([completed], background)).toEqual([completed, { _tag: "AwaitingCommands", ids: ["t1"] }]);
+    await background.ended(taskEnd() as TaskEnd);
+    expect(background.waiting()).toEqual([]);
+  });
+
+  // covers CH-004
+  it("[TC-RT-1056-03] on the fake runtime, writes the reply, waits on a command that outlives it, then follows up", async () => {
+    const events = await fakeTurn(
+      `fake:run ${JSON.stringify({ command: "pnpm build", background: true, outlives: true, runsFor: "50 millis" })}`,
+    );
+    const tags = events.map((event) => event._tag);
+    const waits = tags.indexOf("AwaitingCommands");
+    expect(events[waits]).toEqual({ _tag: "AwaitingCommands", ids: ["fake-tool-1"] });
+    expect(tags.indexOf("TextDelta")).toBeLessThan(waits);
+    expect(tags.indexOf("ToolFinished")).toBeGreaterThan(waits);
+    expect(events.at(-1)).toMatchObject({ _tag: "Completed", text: expect.stringContaining("pnpm build ended.") });
+  });
+
+  // covers CH-007
+  it("[TC-RT-1056-04] on the fake runtime, waits again on a command still running once another it waited on ends", async () => {
+    const runs = (input: object) => `fake:run ${JSON.stringify({ background: true, outlives: true, ...input })}`;
+    const waits = (seen: ReadonlyArray<RuntimeEvent>) => seen.filter((event) => event._tag === "AwaitingCommands");
+    const events = await fakeTurn(
+      [runs({ command: "pnpm build", runsFor: "50 millis" }), runs({ command: "pnpm dev" })].join("\n"),
+      (event, seen) => event._tag === "AwaitingCommands" && waits(seen).length === 2,
+    );
+    const tags = events.map((event) => event._tag);
+    expect(waits(events)).toEqual([
+      { _tag: "AwaitingCommands", ids: ["fake-tool-1", "fake-tool-2"] },
+      { _tag: "AwaitingCommands", ids: ["fake-tool-2"] },
+    ]);
+    expect(tags.indexOf("ToolFinished")).toBeLessThan(tags.lastIndexOf("AwaitingCommands"));
+    expect(events.at(-2)).toEqual({ _tag: "TextDelta", text: "\n\npnpm build ended." });
   });
 });

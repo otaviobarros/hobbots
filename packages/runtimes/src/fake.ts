@@ -244,6 +244,12 @@ interface ScriptedEffect {
   readonly background?: boolean;
   /** How long a background command runs, such as "2 seconds"; without it, it runs until its turn ends. */
   readonly runsFor?: Duration.Input;
+  /**
+   * A background command that outlives the reply, as one the model leaves running does (#1048,
+   * #1056): the reply is written while it runs, the turn then waits on it, and once it ends the
+   * fake follows up with a line on how it ended. Without `runsFor` it runs until you stop waiting.
+   */
+  readonly outlives?: boolean;
 }
 
 interface ScriptedCall {
@@ -333,6 +339,8 @@ interface BackgroundRun {
   readonly call: ScriptedCall & { readonly id: string };
   readonly folders: ReadonlyArray<string>;
   readonly endsAt: number | null;
+  /** It goes on after the reply is written, so the turn waits on it (#1056). */
+  readonly outlives: boolean;
 }
 
 /**
@@ -362,6 +370,40 @@ const backgroundEnds = (runs: ReadonlyArray<BackgroundRun>): Stream.Stream<Runti
       }),
     ),
   );
+
+/**
+ * What a turn does after writing `reply` while commands it started outlive it, as Claude Code and
+ * Codex do (#1048, #1056): it waits on them, and as each ends it follows up with a line on how it
+ * ended, then waits again on those still running. One that never ends on its own keeps the turn
+ * waiting until you stop waiting. `text` is the whole reply once every command has ended.
+ */
+const waitOn = (
+  reply: string,
+  outliving: ReadonlyArray<BackgroundRun>,
+): { readonly events: Stream.Stream<RuntimeEvent>; readonly text: string } => {
+  const ending = [...outliving].filter((run) => run.endsAt !== null).sort((a, b) => (a.endsAt ?? 0) - (b.endsAt ?? 0));
+  const awaiting = (runs: ReadonlyArray<BackgroundRun>): ReadonlyArray<RuntimeEvent> =>
+    runs.length === 0 ? [] : [{ _tag: "AwaitingCommands", ids: runs.map((run) => run.call.id) }];
+  let text = reply;
+  const steps = ending.map((run, index) => {
+    const line = `${String(run.call.input.command)} ended.`;
+    const delta = text === "" ? line : `\n\n${line}`;
+    text = `${text}${delta}`;
+    const ended = new Set(ending.slice(0, index + 1));
+    return Stream.concat(
+      backgroundEnds([run]),
+      Stream.fromIterable<RuntimeEvent>([
+        { _tag: "TextDelta", text: delta },
+        ...awaiting(outliving.filter((each) => !ended.has(each))),
+      ]),
+    );
+  });
+  const forever = outliving.some((run) => run.endsAt === null);
+  const events = [Stream.fromIterable(awaiting(outliving)), ...steps, forever ? Stream.never : Stream.empty].reduce(
+    (all, next) => Stream.concat(all, next),
+  );
+  return { events, text };
+};
 
 /**
  * How Claude Code's hooks would report the call's end, so the fake's events take the real runtime's
@@ -407,6 +449,7 @@ const ranScripted = (
         call,
         folders,
         endsAt: runsFor === undefined ? null : now + Duration.toMillis(Duration.fromInputUnsafe(runsFor)),
+        outlives: call.effect.outlives === true,
       });
       return;
     }
@@ -719,14 +762,21 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     const written = Stream.suspend(() => {
       const reply = quiet ? "" : answers.length === 0 ? echo : [echo, ...answers].join("\n\n");
       const words = reply === "" ? [] : reply.split(/(?<= )/);
-      return Stream.fromIterable<RuntimeEvent>([
-        ...(ending === "complete" ? words : words.slice(0, 2)).map(
-          (text): RuntimeEvent => ({ _tag: "TextDelta", text }),
-        ),
-        ...(ending === "complete"
-          ? [{ _tag: "Completed", sessionId, text: reply, usage: fakeUsage(told, reply, known !== undefined) } as const]
-          : []),
-      ]);
+      const deltas = Stream.fromIterable<RuntimeEvent>(
+        (ending === "complete" ? words : words.slice(0, 2)).map((text): RuntimeEvent => ({ _tag: "TextDelta", text })),
+      );
+      if (ending !== "complete") return deltas;
+      const waited = waitOn(
+        reply,
+        background.filter((run) => run.outlives),
+      );
+      const completed: RuntimeEvent = {
+        _tag: "Completed",
+        sessionId,
+        text: waited.text,
+        usage: fakeUsage(told, waited.text, known !== undefined),
+      };
+      return deltas.pipe(Stream.concat(waited.events), Stream.concat(Stream.fromIterable([completed])));
     });
     const failure = fakeFailure(ending);
     const background: Array<BackgroundRun> = [];
@@ -749,7 +799,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
       Stream.concat(scriptedToolEvents({ ...request, prompt: scripted }, options.engine, sandbox, background)),
       Stream.concat(scriptedHubEvents({ ...request, prompt: scripted }, answers, details)),
       // Like Claude Code, the turn completes once its background commands that end have ended.
-      Stream.concat(Stream.suspend(() => backgroundEnds(background))),
+      Stream.concat(Stream.suspend(() => backgroundEnds(background.filter((run) => !run.outlives)))),
       Stream.concat(written),
       Stream.concat(failure),
     );

@@ -404,6 +404,7 @@ const settle = <E>(
   mapper: CodexTurnEvents,
   now: CodexTurnNow,
   followUp: (notice: string) => Effect.Effect<void, E>,
+  report: (event: RuntimeEvent) => void,
 ) =>
   Effect.gen(function* () {
     while (true) {
@@ -415,7 +416,9 @@ const settle = <E>(
       if (signal === "lost" || (signal !== "commandEnded" && signal._tag !== "Completed")) return signal;
       const after = mapper.afterTurn();
       if (after.notice !== null) yield* followUp(after.notice);
-      else if (!after.waiting) return { _tag: "Completed" } as const;
+      else if (after.waiting.length === 0) return { _tag: "Completed" } as const;
+      // The hob has answered and the reply waits only on these commands, at no cost (#1056).
+      else report({ _tag: "AwaitingCommands", ids: after.waiting });
     }
   });
 
@@ -779,7 +782,7 @@ const turnEvents = (
       );
 
       yield* startTurn(turnPrompt(request, launch.instructions, launch.commits), asked);
-      return yield* finish(yield* settle(signals, mapper, now, startTurn), mapper, report, Queue.end(queue));
+      return yield* finish(yield* settle(signals, mapper, now, startTurn, report), mapper, report, Queue.end(queue));
     }),
   );
 

@@ -39,12 +39,14 @@ import {
   type TurnEnding,
   titleFromPrompt,
   toolsSucceeded,
+  waitedSteps,
 } from "@hobbots/domain";
-import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
+import { Context, DateTime, Deferred, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing } from "./briefing.ts";
 import { type CharmTurn, charmOffer, combineHubTools } from "./charms.ts";
+import { stoppableWait } from "./command-wait.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
 import { MemoryProjects, MemoryStore } from "./memory.ts";
@@ -68,7 +70,7 @@ import {
   TurnSkillsInUse,
   withUsedSkill,
 } from "./skill-turn.ts";
-import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
+import { nextSteps, replyStepId, stoppedCommands, uncertainCalls } from "./steps.ts";
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
 import { callScope } from "./tasks.ts";
 import { keepToolOutput } from "./tool-output.ts";
@@ -85,7 +87,22 @@ interface Reply {
   readonly prefix: string;
   /** Whether the turn carries work that needs the hob, so a stop holds it back until you write again. */
   readonly carries: boolean;
+  /** Done once you press Stop waiting, which ends the turn while it only waits on commands (#1056). */
+  readonly endWait: Deferred.Deferred<void>;
+  /** How many commands Stop waiting stopped, once it has ended the turn's stream; null before. */
+  readonly waitsStopped: Ref.Ref<number | null>;
 }
+
+/**
+ * A reply whose runtime stream ended without a result. Stop waiting ended it (`waitsStopped` is how
+ * many commands it stopped): a reply that only waited is done with the text it has, and one that was
+ * not waiting after all is stopped like any other (#1056). Otherwise it is cut off, not a silent
+ * success.
+ */
+const endedWithoutResult = (message: Message, waitsStopped: number | null) => {
+  if (waitsStopped === null) return MessageTransitions.cutOff(message, "Runtime ended without a result");
+  return waitsStopped > 0 ? MessageTransitions.complete(message) : MessageTransitions.interrupt(message);
+};
 
 /** Backpack items a turn carries (ADR 019): told to it, held under its claims, and accepted with its session. */
 type Carry = Pick<CarriedWork, "holding" | "accepted" | "late" | "routineOnly">;
@@ -213,6 +230,12 @@ export class ChatService extends Context.Service<
      * turn in progress, changes nothing.
      */
     readonly stop: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
+    /**
+     * Stop waiting (#1056): once the hob has answered and its reply only waits on commands it started,
+     * ends the reply now. The reply shows as stopping, then completes with its text, and each command
+     * it waited on is stopped. With no reply waiting, it changes nothing.
+     */
+    readonly stopWaiting: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
     /**
      * Continue: resumes a reply that was cut off or ended by the provider's limit, in place. Only the
      * thread's latest message can be continued, while its hob is active and no other turn runs.
@@ -876,7 +899,12 @@ export class ChatService extends Context.Service<
                   return combineHubTools(taskTurn?.hubTools ?? null, recorded(yield* charmsFor(charmTurn)));
                 }).pipe(Effect.provideService(TurnSkillsInUse, skills.recorded)),
               },
-              adapter.sendPrompt,
+              // Stop waiting ends the runtime's stream inside the activity's, so the Workbench hears which
+              // commands were stopped (#1056).
+              (request) =>
+                stoppableWait(adapter.sendPrompt(request), reply.endWait, (count) =>
+                  Ref.set(reply.waitsStopped, count),
+                ),
             )
             .pipe(
               Stream.runForEach(handle),
@@ -886,8 +914,8 @@ export class ChatService extends Context.Service<
                 RuntimeLimitReached: (error) => update((m) => MessageTransitions.limit(m, error.resetsAt)),
               }),
             );
-          // The stream ended without a result: treat it as cut off, not a silent success.
-          yield* update((m) => MessageTransitions.cutOff(m, "Runtime ended without a result"));
+          const waitsStopped = yield* Ref.get(reply.waitsStopped);
+          yield* update((m) => endedWithoutResult(m, waitsStopped));
         }).pipe(
           // Stops the checkpoints as soon as the turn's stream is done.
           Effect.scoped,
@@ -977,8 +1005,11 @@ export class ChatService extends Context.Service<
           // reply that completes is no proof one was checked: none is repeated unchecked (EX-004).
           // Continue names the continued reply's own.
           const uncertain = uncertainCalls(before.flatMap((m) => (m.role === "assistant" ? m.steps : [])));
+          // The turn right after a reply hears of the commands you stopped while it waited (#1056).
+          const lastReply = before.findLast((m) => m.role === "assistant");
+          const stopped = lastReply === undefined ? null : stoppedCommands(lastReply.steps);
           const briefing =
-            [briefed, uncertain, start.context ?? null].filter((part) => part !== null).join("\n\n") || null;
+            [briefed, uncertain, stopped, start.context ?? null].filter((part) => part !== null).join("\n\n") || null;
           const changed = yield* instructionsChanged(
             thread,
             brain.runtime,
@@ -994,6 +1025,8 @@ export class ChatService extends Context.Service<
             prefix: saved.content,
             // Only work that needs the hob is held back when you stop the turn; progress waits anyway.
             carries: start.carry != null && !start.carry.routineOnly,
+            endWait: yield* Deferred.make<void>(),
+            waitsStopped: yield* Ref.make<number | null>(null),
           };
           replies.set(thread.id, reply);
           // The drain is forked outside the turn: it waits for the hob's lock, which a retirement
@@ -1325,6 +1358,21 @@ export class ChatService extends Context.Service<
         if (Option.isSome(requested)) yield* Effect.forkIn(FiberMap.remove(turns, threadId), scope);
       });
 
+      // Stop waiting (#1056): only a reply waiting on commands ends this way; it shows as stopping until
+      // the runtime has ended, then completes in the turn itself.
+      const stopWaiting = Effect.fn("ChatService.stopWaiting")(function* (threadId: ThreadId) {
+        yield* findThread(threadId);
+        const reply = replies.get(threadId);
+        if (!reply) return;
+        const requested = yield* transition(
+          reply,
+          (m) =>
+            m.status === "streaming" && waitedSteps(m.steps).length > 0 ? MessageTransitions.requestStop(m) : undefined,
+          saveMessage,
+        );
+        if (Option.isSome(requested)) yield* Deferred.succeed(reply.endWait, undefined);
+      });
+
       // The reply streams again with the configuration the hob has now, like any new turn.
       const continueReply = Effect.fn("ChatService.continueReply")(function* (
         threadId: ThreadId,
@@ -1537,6 +1585,7 @@ export class ChatService extends Context.Service<
         removeQueued,
         sendNow,
         stop,
+        stopWaiting,
         continueReply,
         interruptAgent,
         reviewAuthority,

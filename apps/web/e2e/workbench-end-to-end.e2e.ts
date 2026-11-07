@@ -172,7 +172,7 @@ test("[TC-UX-063] a Task that changed no file and ran no command greys out Chang
   await send(page, [
     "Suggest a name for the release",
     script("start_quest", { key: "quest", goal: "Suggest a name for the release" }),
-    script("complete_task", { key: "done", summary: "Call it Lantern." }),
+    script("complete_task", { delivered: true, key: "done", summary: "Call it Lantern." }),
   ]);
   const questTicket = ticket(page, "Suggest a name for the release");
   await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });

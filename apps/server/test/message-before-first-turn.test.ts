@@ -27,7 +27,7 @@ describe("a lead's message before the member starts", () => {
     // Frodo wraps up in the turn that brings Pip's result, however the two results reach him.
     reactions.push({
       on: "(Run the migration) finished.",
-      lines: [hub("complete_task", { key: "wrap", summary: "Migration shipped" })],
+      lines: [hub("complete_task", { delivered: true, key: "wrap", summary: "Migration shipped" })],
     });
     await run(
       send([
@@ -35,14 +35,18 @@ describe("a lead's message before the member starts", () => {
         hub("delegate_task", {
           key: "schema",
           hob: "Quill",
-          brief: ["Write the schema", hub("complete_task", { key: "schema-done", summary: "Schema written" })].join(
-            "\n",
-          ),
+          brief: [
+            "Write the schema",
+            hub("complete_task", { delivered: true, key: "schema-done", summary: "Schema written" }),
+          ].join("\n"),
         }),
         hub("delegate_task", {
           key: "migrate",
           hob: "Pip",
-          brief: ["Run the migration", hub("complete_task", { key: "migrate-done", summary: "Migrated" })].join("\n"),
+          brief: [
+            "Run the migration",
+            hub("complete_task", { delivered: true, key: "migrate-done", summary: "Migrated" }),
+          ].join("\n"),
           depends_on: ["$schema.task_id"],
         }),
         hub("message_task", { key: "tell", task_id: "$migrate.task_id", text: MESSAGE }),

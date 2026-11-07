@@ -69,8 +69,9 @@ export type NotKept = typeof NotKept.Type;
 
 /**
  * A command's state. `uncertain`: its turn ended while it ran, so whether it finished is not known.
+ * `stopped`: you stopped it with Stop waiting while its reply waited on it (#1056).
  */
-export const CommandState = Schema.Literals(["running", "succeeded", "failed", "uncertain"]);
+export const CommandState = Schema.Literals(["running", "succeeded", "failed", "uncertain", "stopped"]);
 export type CommandState = typeof CommandState.Type;
 
 /** Whether the `&` at `i` runs what comes before it in the background, rather than redirecting (`2>&1`, `&>`) or piping (`|&`). */

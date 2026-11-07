@@ -228,6 +228,12 @@ export const TaskToolInputs = {
         "Why you leave the files you changed uncommitted. Only when you mean to: completing a Quest you lead with uncommitted changes is refused without it.",
       ),
     ),
+    delivered: Schema.optionalKey(
+      Schema.Boolean.annotate({
+        description:
+          "For a Quest you lead: true only when the result delivers everything the user asked for, where they asked for it. Completing the Quest is refused without true: if something is missing, finish it, or ask the user what to do, and leave the Quest open.",
+      }),
+    ),
     artifacts: Schema.optionalKey(
       Schema.Array(
         Schema.Struct({
@@ -367,6 +373,8 @@ export const TaskToolRefusal = Schema.Literals([
   "uncommitted-changes",
   // A file the Task returns that no one could open once it completes, such as one in the turn's $TMPDIR.
   "artifact-unreachable",
+  // A Quest's lead completing it without saying it delivered what the user asked for (#1181).
+  "not-delivered",
   // A Charm call, such as `git_init` or a GitHub write, the hub refused (#664): its message says why.
   "charm-refused",
 ]);

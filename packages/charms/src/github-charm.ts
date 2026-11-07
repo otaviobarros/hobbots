@@ -6,41 +6,35 @@ import {
   type HubCallStep,
   type HubPlanContext,
   HubRefusal,
-  type HubTools,
   hubAction,
   makeCharmCallRunner,
   makeHubActions,
   readBacksOf,
-  redactedAnswer,
   type ToolAccess,
 } from "@hobbots/agents";
 import {
   type AgentId,
   GITHUB_PUSH_TOOL,
   GITHUB_TOOLS,
-  GITHUB_WRITE_TOOLS,
   type GitHubRepository,
   type GitHubToolInput,
   GitHubToolInputs,
   type GitHubToolName,
-  GitHubWriteInputs,
   githubItemText,
   githubRepositoryText,
   githubSearchQuery,
   githubSearchText,
   githubToolJsonSchema,
-  githubWriteToolJsonSchema,
   repositorySlug,
   trimTrailingSlashes,
 } from "@hobbots/domain";
 import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
-import { Effect, Layer, Schema } from "effect";
-import { GitPush } from "./git-push.ts";
+import { Effect, Layer } from "effect";
 import { GitHubCredential } from "./github-account.ts";
 import { GitHubApi } from "./github-api.ts";
 import type { GitHubError } from "./github-error.ts";
 import { GITHUB_CHARM } from "./github-operations.ts";
-import { makeGitHubPush, pushReadBack } from "./github-push.ts";
+import { makeGitHubPush } from "./github-push.ts";
 import { makeGitHubWrites } from "./github-writes.ts";
 import { GitRemotes } from "./remotes.ts";
 
@@ -49,11 +43,9 @@ import { GitRemotes } from "./remotes.ts";
  * the user gave the Charm, while GitHub is connected on the hub (#322). Each call is decided by the
  * policy engine on the repository the hub found from the hob's own folder, then read on the hub with
  * the connected account. Nothing a hob writes names the repository, and no credential reaches it.
- * The reads, opening pull requests and commenting run through the hub action pipeline (ADR 031),
- * which decides, asks, records and sends them; Push follows (#619).
+ * Every one of them runs through the hub action pipeline (ADR 031), which decides, asks, records and
+ * sends it.
  */
-
-const describe = (error: Schema.SchemaError) => error.message.split("\n").slice(0, 6).join("\n");
 
 /** A read's input, of any of the three reads. */
 type ReadInput = GitHubToolInput<GitHubToolName>;
@@ -114,14 +106,9 @@ export const GitHubCharmTools = Layer.effect(
         });
       });
 
-    const writes = yield* makeGitHubWrites(repositoryFor);
-    const runner = yield* makeCharmCallRunner("GitHub", {
-      github_push: pushReadBack(api, yield* GitPush),
-      ...readBacksOf(writes),
-    });
-    const github = yield* makeGitHubPush(runner);
-    const pushTool = GITHUB_WRITE_TOOLS.find((tool) => tool.name === GITHUB_PUSH_TOOL);
-    if (pushTool === undefined) throw new Error("The GitHub Charm has no github_push tool.");
+    // The writes in the order the hob has always been offered them, after the reads: Push first.
+    const writes = [yield* makeGitHubPush(repositoryFor), ...(yield* makeGitHubWrites(repositoryFor))];
+    const runner = yield* makeCharmCallRunner("GitHub", readBacksOf(writes));
 
     const read = (
       agentId: AgentId,
@@ -149,33 +136,6 @@ export const GitHubCharmTools = Layer.effect(
         }
       }
     };
-
-    /** The call's input, or a refusal saying what is wrong with it. */
-    const decoded = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, raw: unknown) =>
-      Schema.decodeUnknownEffect(schema)(raw).pipe(
-        Effect.mapError((error) => new HubRefusal({ message: describe(error) })),
-      );
-
-    /**
-     * The turn's access, and the folder and repository a call names, or a refusal when the turn has
-     * no tools or the user took the Charm away during the turn.
-     */
-    const resolved = (turn: CharmTurn, named: string | undefined, otherwise: string) =>
-      Effect.gen(function* () {
-        const access = yield* turn.currentAccess;
-        if (access === null) return yield* new HubRefusal({ message: `You have no tools this turn, so ${otherwise}.` });
-        if (!holdsGitHub(access)) {
-          return yield* new HubRefusal({ message: `The GitHub Charm is off for you now, so ${otherwise}.` });
-        }
-        return { access, ...(yield* repositoryFor(access, named)) };
-      });
-
-    const push = (turn: CharmTurn, raw: unknown, step: HubCallStep | undefined) =>
-      Effect.gen(function* () {
-        const input = yield* decoded(GitHubWriteInputs.github_push, raw);
-        const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be pushed");
-        return yield* github.push(turn, access, folder, repository, input, step);
-      });
 
     /**
      * A read, planned for the pipeline: the `github.read` request on the repository of the hob's folder,
@@ -232,24 +192,6 @@ export const GitHubCharmTools = Layer.effect(
       calls: runner,
     });
 
-    /** A push, decided and sent by its own call code until it moves onto the pipeline (#619). */
-    const callPush = (turn: CharmTurn, raw: unknown, step: HubCallStep | undefined) =>
-      redactedAnswer(turn.redactor, push(turn, raw, step), {
-        log: "A GitHub Charm call failed",
-        text: "Hobbots could not reach GitHub this time. Try again.",
-      });
-
-    const call = (turn: CharmTurn, pipeline: HubTools, name: string, raw: unknown, step: HubCallStep | undefined) =>
-      (name === GITHUB_PUSH_TOOL ? callPush(turn, raw, step) : pipeline.call(name, raw, step)).pipe(
-        Effect.provideContext(context),
-      );
-
-    /** The tools in the order the hob has always been offered them: the reads, Push, then the other writes. */
-    const offered = (pipeline: HubTools) => {
-      const [reads, rest] = [pipeline.tools.slice(0, GITHUB_TOOLS.length), pipeline.tools.slice(GITHUB_TOOLS.length)];
-      return [...reads, { ...pushTool, inputSchema: githubWriteToolJsonSchema(GITHUB_PUSH_TOOL) }, ...rest];
-    };
-
     /**
      * A `git push` in one of the hob's folders whose origin is on GitHub is made with `github_push`
      * (ADR 020): Git in the sandbox cannot sign in. A push anywhere else is decided as a push.
@@ -278,8 +220,9 @@ export const GitHubCharmTools = Layer.effect(
           if (!reachable) return null;
           const pipeline = actions(turn);
           return {
-            tools: offered(pipeline),
-            call: (name: string, input: unknown, step?: HubCallStep) => call(turn, pipeline, name, input, step),
+            tools: pipeline.tools,
+            call: (name: string, input: unknown, step?: HubCallStep) =>
+              pipeline.call(name, input, step).pipe(Effect.provideContext(context)),
             steersPush: (cwd: string) => steersPush(turn, cwd),
           };
         }).pipe(Effect.provideContext(context)),

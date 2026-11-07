@@ -549,6 +549,7 @@ describe("A finding on two Tasks changing the same file", () => {
             );
             const tools = yield* TaskTools;
             return (yield* tools.call({ agentId: PIP, taskId: PIP_TASK }, "complete_task", {
+              delivered: true,
               key: "done",
               task_id: PIP_TASK,
               summary: "Shop reviewed",

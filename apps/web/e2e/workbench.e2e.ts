@@ -29,7 +29,7 @@ test("[TC-UX-021] a finished Task's Workbench opens in the room on Changes, coun
       "Tidy the notes",
       'fake:write notes.md "# Notes\\n\\nTidied.\\n"',
       script("start_quest", { key: "quest", goal: "Tidy the notes" }),
-      script("complete_task", { key: "done", summary: "The notes are tidy." }),
+      script("complete_task", { delivered: true, key: "done", summary: "The notes are tidy." }),
     ].join("\n"),
   );
   await composer.press("Enter");
@@ -137,6 +137,7 @@ test("[TC-UX-030] a finished Task's summary in its lane says what happened and w
       'fake:write report.md "# What changed\\n"',
       script("report_checkpoint", { key: "found", kind: "finding", summary: "Two notes said the same thing." }),
       script("complete_task", {
+        delivered: true,
         key: "done",
         summary: "The notes are tidy, and the report says what changed.",
         artifacts: [
@@ -277,7 +278,7 @@ test("[TC-UX-033] Still open says nothing is open only once it could read what w
     [
       "Tidy the notes",
       script("start_quest", { key: "quest", goal: "Tidy the notes" }),
-      script("complete_task", { key: "done", summary: "The notes are tidy." }),
+      script("complete_task", { delivered: true, key: "done", summary: "The notes are tidy." }),
     ].join("\n"),
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
