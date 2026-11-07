@@ -449,9 +449,10 @@ export const messages = {
     draftWho: "Which hob drafts it?",
     draftWhoHint: "It opens a new chat with that hob, with a message you can change before you send it.",
     draftLooking: "Looking for hobs that may suggest skills…",
-    draftLookFailed: "Hobbots could not tell which hobs may suggest skills. Try again in a moment.",
-    draftNone:
-      "No hob may suggest skills now. In a hob's Permissions, allow Suggest a new skill or a change, then come back.",
+    draftLookFailed: "Hobbots could not read your hobs, so it cannot tell which may suggest skills.",
+    draftTryAgain: "Try again",
+    draftNoneTitle: "No hob may suggest skills now",
+    draftNone: "In a hob's Permissions, allow Suggest a new skill or a change, then come back.",
     /** The message a drafting chat starts from, ready to change before it is sent. */
     draftMessage: [
       "Please write a new skill for my library and propose it, so I can review it before it is added.",

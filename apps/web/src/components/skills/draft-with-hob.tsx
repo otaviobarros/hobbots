@@ -1,9 +1,12 @@
 import type { Agent } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@hobbots/ui/components/empty";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { appendDraft, readDraft } from "../../api/drafts.ts";
+import { agentsQuery } from "../../api/queries.ts";
 import { watchedSetupQuery } from "../../api/setup.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
@@ -23,23 +26,47 @@ const startDraft = (hob: Agent) => {
   if (!readDraft(place).includes(copy.draftMessage)) appendDraft(place, copy.draftMessage);
 };
 
-/** The hobs that may draft a skill, each opening a new chat with it. */
-function DraftPicker({ active, labelId }: { active: ReadonlyArray<Agent>; labelId: string }) {
+/**
+ * The hobs that may draft a skill, each opening a new chat with it. It reads the hobs and the preset
+ * itself, so a list that could not be read says so with Try again, never that no hob may draft.
+ */
+function DraftPicker({ labelId }: { labelId: string }) {
   const setup = useQuery(watchedSetupQuery);
+  const agents = useQuery(agentsQuery);
   const preset = setup.data?.safetyPreset;
-  if (preset === undefined) {
-    return setup.isError ? (
-      <p role="alert" className="m-0 text-ui text-text-secondary">
-        {copy.draftLookFailed}
-      </p>
-    ) : (
+  const active = agents.data;
+  if (preset === undefined || active === undefined) {
+    if (setup.isError || agents.isError) {
+      const retry = () => {
+        if (setup.isError) void setup.refetch();
+        if (agents.isError) void agents.refetch();
+      };
+      return (
+        <p role="alert" className="m-0 flex flex-wrap items-center gap-3 text-ui text-text-secondary">
+          {copy.draftLookFailed}
+          <Button variant="outline" size="xs" disabled={setup.isFetching || agents.isFetching} onClick={retry}>
+            {copy.draftTryAgain}
+          </Button>
+        </p>
+      );
+    }
+    return (
       <p role="status" className="m-0 text-ui text-text-secondary">
         {copy.draftLooking}
       </p>
     );
   }
   const hobs = draftingHobs(active, preset);
-  if (hobs.length === 0) return <p className="m-0 text-ui text-text-secondary">{copy.draftNone}</p>;
+  if (hobs.length === 0) {
+    return (
+      <Empty surface="card">
+        <EmptyHeader>
+          <EmptyTitle>{copy.draftNoneTitle}</EmptyTitle>
+          <EmptyDescription>{copy.draftNone}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
   return (
     <ul aria-labelledby={labelId} className="m-0 grid list-none grid-cols-3 gap-2 p-0 max-[900px]:grid-cols-1">
       {hobs.map((hob) => (
@@ -68,7 +95,7 @@ function DraftPicker({ active, labelId }: { active: ReadonlyArray<Agent>; labelI
  * Write one: a blank skill in the editor, or a chat where a hob drafts it. A hob's draft is a
  * proposal like any other, so it waits in To review, attributed to that chat.
  */
-export function WriteOne({ active }: { active: ReadonlyArray<Agent> }) {
+export function WriteOne() {
   const [picking, setPicking] = useState(false);
   const pickerId = useId();
   const labelId = useId();
@@ -100,7 +127,7 @@ export function WriteOne({ active }: { active: ReadonlyArray<Agent> }) {
             {copy.draftWho}
           </h3>
           <p className="m-0 text-detail text-text-secondary">{copy.draftWhoHint}</p>
-          <DraftPicker active={active} labelId={labelId} />
+          <DraftPicker labelId={labelId} />
         </section>
       )}
     </div>

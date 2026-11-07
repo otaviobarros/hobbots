@@ -209,7 +209,7 @@ export function SkillsImport({
       <SourceTabs from={from} />
       {from === "git" && <GitSource looking={scan.isPending} onLook={look} />}
       {from === "file" && <FileSource looking={scan.isPending} onLook={look} />}
-      {from === "write" && <WriteOne active={active} />}
+      {from === "write" && <WriteOne />}
       {scan.isError && from !== "write" && (
         <p role="alert" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
           {copy.import.unreadable}
