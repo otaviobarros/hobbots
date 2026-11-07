@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-07
 - **Issue:** [#1201](https://github.com/otaviobarros/hobbots/issues/1201)
-- **Pull request:** [#PR](https://github.com/otaviobarros/hobbots/pull/PR)
+- **Pull request:** [#1208](https://github.com/otaviobarros/hobbots/pull/1208)
 - **Commit:** `fea550e` on `main`, with a clean tree
 - **Setup:** Apple M1 Pro, macOS 27.0.1, arm64. The hub ran from a worktree of `main` on a new data folder under Balanced, with its own port, never the Mac's Hobbots data. `HOBBOTS_AGENTS_SKILLS` pointed at a stand-in folder that held only `qa-house-style`, so it was each hob's only skill. Pip ran on Claude Code 2.1.316 and Quill on Codex 0.166.0, both on a signed-in subscription. A second run used the Claude Code 2.1.319 CLI in a Linux x86_64 container, set up the way a hob's chat turn is (below).
 - **Result:** Passed. With a description that says when to load the skill, every model tried picked it on its own at least once, and all but `gpt-6-luna` at its default effort picked it every time. With the vague description from #1065, the cheapest model at low effort missed on both runtimes, and a native install of the skill missed as often. Hobbots offers a mounted skill to the model the same way each runtime offers its own, so a miss is the model's choice, and the description is what changes it.
