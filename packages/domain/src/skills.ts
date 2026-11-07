@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { AgentId } from "./ids.ts";
+import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { MemoryScope } from "./memory.ts";
 import { Revision } from "./revision.ts";
 
@@ -253,6 +253,132 @@ export const TurnSkill = Schema.Struct({
   onlyWhenAsked: Schema.Boolean,
 });
 export type TurnSkill = typeof TurnSkill.Type;
+
+/**
+ * Where a skill a reply used came from (ADR 029, The use line): the library, at the revision the turn
+ * was given, or an administrator's settings for the runtime, which have no revision.
+ */
+export const SkillUseSource = Schema.Literals(["library", "organization"]);
+export type SkillUseSource = typeof SkillUseSource.Type;
+
+/**
+ * A skill a reply used, as its runtime reported it and the hub mapped it to what the turn mounted
+ * (ADR 029, The use line). `explicit` when you picked it for the message with `/`; otherwise the hob
+ * picked it on its own. A skill from your organization has no id, revision or number.
+ */
+export const UsedSkill = Schema.Struct({
+  source: SkillUseSource,
+  skillId: Schema.NullOr(SkillId),
+  /** The skill's name, as its `SKILL.md` gives it, or as the runtime names an organization's skill. */
+  name: Schema.String,
+  pin: Schema.NullOr(SkillRevisionHash),
+  /** The revision's place in the skill's history, which the line shows as r4. */
+  number: Schema.NullOr(Schema.Int),
+  explicit: Schema.Boolean,
+});
+export type UsedSkill = typeof UsedSkill.Type;
+
+/** A use of a skill, journaled as `SkillUsed`. */
+export const SkillUseId = Schema.String.pipe(Schema.brand("SkillUseId"));
+export type SkillUseId = typeof SkillUseId.Type;
+
+/**
+ * One use of a skill by a hob (ADR 029, The use line), counted on the skill's Activity tab. A use
+ * from a chat names the thread and the reply; a Task step's or a party member's names the thread
+ * its session runs in, and no reply.
+ */
+export class SkillUse extends Schema.Class<SkillUse>("SkillUse")({
+  id: SkillUseId,
+  ...UsedSkill.fields,
+  agentId: AgentId,
+  threadId: Schema.NullOr(ThreadId),
+  messageId: Schema.NullOr(MessageId),
+  at: Schema.String,
+}) {}
+
+/** How often hobs used a skill (ADR 029): in all, in the last seven days, per hob and per thread. */
+export const SkillUseCounts = Schema.Struct({
+  skillId: SkillId,
+  total: Schema.Int,
+  thisWeek: Schema.Int,
+  /** Each hob that used it, the most recent first. */
+  hobs: Schema.Array(Schema.Struct({ agentId: AgentId, count: Schema.Int, lastAt: Schema.String })),
+  /** Each thread it was used in, the most recent first. */
+  threads: Schema.Array(
+    Schema.Struct({ threadId: ThreadId, agentId: AgentId, count: Schema.Int, lastAt: Schema.String }),
+  ),
+});
+export type SkillUseCounts = typeof SkillUseCounts.Type;
+
+/** The span "this week" counts, in milliseconds: the seven days up to now. */
+export const SKILL_USE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** When "this week" starts for `now`, an ISO time: seven days before it. */
+export const skillUseWeekStart = (now: string): string => new Date(Date.parse(now) - SKILL_USE_WEEK_MS).toISOString();
+
+/** Counts uses of one skill, as `SkillUseCounts` (ADR 029), "this week" being after `since`, an ISO time. */
+export const countSkillUses = (skillId: SkillId, uses: ReadonlyArray<SkillUse>, since: string): SkillUseCounts => {
+  const mine = uses.filter((use) => use.skillId === skillId).sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  const hobs = new Map<AgentId, { agentId: AgentId; count: number; lastAt: string }>();
+  const threads = new Map<ThreadId, { threadId: ThreadId; agentId: AgentId; count: number; lastAt: string }>();
+  for (const use of mine) {
+    const hob = hobs.get(use.agentId) ?? { agentId: use.agentId, count: 0, lastAt: use.at };
+    hobs.set(use.agentId, { ...hob, count: hob.count + 1 });
+    if (use.threadId === null) continue;
+    const thread = threads.get(use.threadId) ?? {
+      threadId: use.threadId,
+      agentId: use.agentId,
+      count: 0,
+      lastAt: use.at,
+    };
+    threads.set(use.threadId, { ...thread, count: thread.count + 1 });
+  }
+  return {
+    skillId,
+    total: mine.length,
+    thisWeek: mine.filter((use) => use.at > since).length,
+    hobs: [...hobs.values()],
+    threads: [...threads.values()],
+  };
+};
+
+/** How often each skill was used after `since`, as the scope lists show it ("Used 12 times this week"). */
+export const skillUsesSince = (
+  uses: ReadonlyArray<SkillUse>,
+  since: string,
+): ReadonlyArray<{ readonly skillId: SkillId; readonly count: number }> => {
+  const counts = new Map<SkillId, number>();
+  for (const use of uses) {
+    if (use.skillId === null || use.at <= since) continue;
+    counts.set(use.skillId, (counts.get(use.skillId) ?? 0) + 1);
+  }
+  return [...counts].map(([skillId, count]) => ({ skillId, count }));
+};
+
+/** Each skill's most recent use, the most recent first: a hob's Skills tab shows the skills it used last. */
+export const lastSkillUses = (uses: ReadonlyArray<SkillUse>): ReadonlyArray<SkillUse> => {
+  const seen = new Set<string>();
+  return [...uses]
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+    .filter((use) => {
+      const key = use.skillId ?? `${use.source}:${use.name}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
+
+/**
+ * A skill's name as the screens show it: its words, the first capitalized, such as "Release steps"
+ * for `release-steps`.
+ */
+export const skillTitle = (name: string): string => {
+  const words = name
+    .split("-")
+    .filter((word) => word.length > 0)
+    .join(" ");
+  return words.length === 0 ? name : `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+};
 
 /** A hob that turned off an Everyone or Project skill for itself. A hob setting, so it survives updates. */
 export const SkillOptOut = Schema.Struct({ agentId: AgentId, skillId: SkillId, at: Schema.String });

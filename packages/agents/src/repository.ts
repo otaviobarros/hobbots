@@ -6,6 +6,7 @@ import type {
   Committed,
   Message,
   MessageId,
+  SkillUse,
   Thread,
   ThreadCheckpoint,
   ThreadId,
@@ -54,8 +55,11 @@ export class HobbotsRepository extends Context.Service<
       revision: number,
     ) => Effect.Effect<Option.Option<Committed<Thread>>>;
     readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;
-    /** Saves the message with the events it produces (`messageEvents`). */
-    readonly upsertMessage: (message: Message) => Effect.Effect<Committed<Message>>;
+    /**
+     * Saves the message with the events it produces (`messageEvents`), and in the same transaction
+     * any skill uses its turn recorded, each journaled as `SkillUsed` (ADR 029, The use line).
+     */
+    readonly upsertMessage: (message: Message, uses?: ReadonlyArray<SkillUse>) => Effect.Effect<Committed<Message>>;
     /**
      * Saves a reply's text while it is in progress, without journaling or a new revision (ADR 013),
      * so a crash keeps what had streamed by then. Does nothing once the reply has ended.

@@ -1,9 +1,11 @@
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { type KeyboardEvent, useEffect, useId, useRef } from "react";
+import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef } from "react";
 import { sendable, useDraft, writeDraft } from "../../api/drafts.ts";
 import type { WaitingPlace } from "../../api/outbox.ts";
 import { messages } from "../messages.ts";
+import { SkillPickerList, UseSkillButton, useSkillPicker } from "../skill-line/skill-picker.tsx";
+import type { SkillPicking } from "../skill-line/skill-picker-model.ts";
 import { SendIcon } from "./chat-icons.tsx";
 
 const copy = messages.composer;
@@ -65,6 +67,7 @@ export function Composer({
   onSend,
   onStop,
   paused,
+  skills,
 }: {
   /** The hob's name, which the hint and Stop's description use. */
   name: string;
@@ -80,9 +83,22 @@ export function Composer({
   onSend: (content: string) => void;
   onStop: () => void;
   paused?: PausedHob | undefined;
+  /** The hob's skills, which `/` picks one of (ADR 029); absent, `/` is plain text. */
+  skills?: SkillPicking | undefined;
 }) {
   const draft = useDraft(place);
   const input = useRef<HTMLTextAreaElement>(null);
+  // Where the picker wants the cursor once the draft it wrote is in the input.
+  const cursorAt = useRef<number | null>(null);
+  const picker = useSkillPicker(draft, skills, (next, cursor) => {
+    cursorAt.current = cursor;
+    writeDraft(place, next);
+  });
+  useLayoutEffect(() => {
+    if (cursorAt.current === null || input.current === null || input.current.value !== draft) return;
+    input.current.setSelectionRange(cursorAt.current, cursorAt.current);
+    cursorAt.current = null;
+  }, [draft]);
   const closed = paused !== undefined && !paused.canQueue;
   const content = sendable(draft);
   const stopWhat = useId();
@@ -118,79 +134,90 @@ export function Composer({
 
   // A card in the skin's corners and edge, with the hint and an icon Send inside it (A2-03).
   return (
-    <div
-      data-composer=""
-      className="cut focus-ring-within flex flex-none flex-col gap-1 border-(length:--edge) border-line-2 bg-card py-2 ps-4 pe-2.5 focus-within:border-focus-ring has-[textarea:disabled]:border-line"
-    >
-      <textarea
-        ref={input}
-        aria-label={placeholder}
-        value={draft}
-        rows={2}
-        spellCheck
-        disabled={closed}
-        placeholder={paused && closed ? copy.pausedPlaceholder(paused) : placeholder}
-        onChange={(event) => writeDraft(place, event.target.value)}
-        onKeyDown={onKeyDown}
-        className="field-sizing-content max-h-40 min-h-12 resize-none overflow-y-auto border-0 bg-transparent py-0.5 [overflow-wrap:anywhere] whitespace-pre-wrap text-text-strong outline-none [tab-size:4] placeholder:text-label disabled:cursor-not-allowed"
-      />
-      <div className="flex items-center gap-2">
-        {busy ? (
-          <BusyHint name={name} stopping={stopping} drafting={content !== ""} />
-        ) : (
-          // Beside the Quest room the chat is narrow, so the keys' hint gives way to the message; a
-          // paused hob's hint stays.
-          <span
-            className={cn("min-w-0 flex-1 text-end text-meta text-label", !paused && "@max-[480px]/chat:invisible")}
-          >
-            {restingHint(paused)}
-          </span>
-        )}
-        {busy && (
-          <>
-            <Button
-              variant="deny"
-              size="bar"
-              onClick={onStop}
-              disabled={stopping}
-              aria-describedby={stopWhat}
-              title={copy.stopDescription({ name })}
-            >
-              {stopping ? copy.stopping : copy.stop}
-            </Button>
-            <span id={stopWhat} hidden>
-              {copy.stopDescription({ name })}
-            </span>
-          </>
-        )}
-        {paused && (
-          <Button
-            variant={paused.canQueue ? "outline" : "default"}
-            size="bar"
-            onClick={paused.onWake}
-            disabled={paused.waking}
-          >
-            {copy.wake(paused)}
-          </Button>
-        )}
-        {!closed &&
-          (paused ? (
-            <Button size="bar" onClick={submit} disabled={!content || sending}>
-              {copy.queue}
-            </Button>
+    <>
+      <SkillPickerList picking={skills} picker={picker} />
+      <div
+        data-composer=""
+        className="cut focus-ring-within flex flex-none flex-col gap-1 border-(length:--edge) border-line-2 bg-card py-2 ps-4 pe-2.5 focus-within:border-focus-ring has-[textarea:disabled]:border-line"
+      >
+        <textarea
+          ref={input}
+          aria-label={placeholder}
+          value={draft}
+          rows={2}
+          spellCheck
+          disabled={closed}
+          placeholder={paused && closed ? copy.pausedPlaceholder(paused) : placeholder}
+          onChange={(event) => writeDraft(place, event.target.value)}
+          onKeyDown={picker.around(onKeyDown)}
+          className="field-sizing-content max-h-40 min-h-12 resize-none overflow-y-auto border-0 bg-transparent py-0.5 [overflow-wrap:anywhere] whitespace-pre-wrap text-text-strong outline-none [tab-size:4] placeholder:text-label disabled:cursor-not-allowed"
+        />
+        <div className="flex items-center gap-2">
+          <UseSkillButton
+            picking={skills}
+            hidden={closed}
+            onClick={() => {
+              picker.start();
+              input.current?.focus();
+            }}
+          />
+          {busy ? (
+            <BusyHint name={name} stopping={stopping} drafting={content !== ""} />
           ) : (
-            <Button
-              size="icon"
-              aria-label={sendLabel}
-              title={sendLabel}
-              onClick={submit}
-              disabled={!content || sending}
-              className="size-[34px]"
+            // Beside the Quest room the chat is narrow, so the keys' hint gives way to the message; a
+            // paused hob's hint stays.
+            <span
+              className={cn("min-w-0 flex-1 text-end text-meta text-label", !paused && "@max-[480px]/chat:invisible")}
             >
-              <SendIcon />
+              {restingHint(paused)}
+            </span>
+          )}
+          {busy && (
+            <>
+              <Button
+                variant="deny"
+                size="bar"
+                onClick={onStop}
+                disabled={stopping}
+                aria-describedby={stopWhat}
+                title={copy.stopDescription({ name })}
+              >
+                {stopping ? copy.stopping : copy.stop}
+              </Button>
+              <span id={stopWhat} hidden>
+                {copy.stopDescription({ name })}
+              </span>
+            </>
+          )}
+          {paused && (
+            <Button
+              variant={paused.canQueue ? "outline" : "default"}
+              size="bar"
+              onClick={paused.onWake}
+              disabled={paused.waking}
+            >
+              {copy.wake(paused)}
             </Button>
-          ))}
+          )}
+          {!closed &&
+            (paused ? (
+              <Button size="bar" onClick={submit} disabled={!content || sending}>
+                {copy.queue}
+              </Button>
+            ) : (
+              <Button
+                size="icon"
+                aria-label={sendLabel}
+                title={sendLabel}
+                onClick={submit}
+                disabled={!content || sending}
+                className="size-[34px]"
+              >
+                <SendIcon />
+              </Button>
+            ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

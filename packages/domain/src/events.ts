@@ -22,7 +22,15 @@ import {
   TaskNote,
   TaskWait,
 } from "./quest.ts";
-import { Skill, SkillAssignment, SkillOptOut, SkillRevision, SkillRevisionHash, SkillSource } from "./skills.ts";
+import {
+  Skill,
+  SkillAssignment,
+  SkillOptOut,
+  SkillRevision,
+  SkillRevisionHash,
+  SkillSource,
+  SkillUse,
+} from "./skills.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { Thread } from "./thread.ts";
 
@@ -177,6 +185,8 @@ const SkillHeld = Schema.TaggedStruct("SkillHeld", { assignment: SkillAssignment
 const SkillOptOutChanged = Schema.TaggedStruct("SkillOptOutChanged", { optOut: SkillOptOut, optedOut: Schema.Boolean });
 /** A skill left the library, with its assignments gone before it. Its revisions' files stay for backups. */
 const SkillRemoved = Schema.TaggedStruct("SkillRemoved", { skill: Skill });
+/** A hob used a skill in a turn (ADR 029, The use line): the revision the turn mounted, or an organization's skill. */
+const SkillUsed = Schema.TaggedStruct("SkillUsed", { use: SkillUse });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
 const FolderScanned = Schema.TaggedStruct("FolderScanned", { scan: FolderScan });
 /**
@@ -271,6 +281,7 @@ export const JournaledEvent = Schema.Union([
   SkillHeld,
   SkillOptOutChanged,
   SkillRemoved,
+  SkillUsed,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -344,6 +355,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   SkillHeld: 1,
   SkillOptOutChanged: 1,
   SkillRemoved: 1,
+  SkillUsed: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

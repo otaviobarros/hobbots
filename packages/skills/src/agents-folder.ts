@@ -1,4 +1,3 @@
-import { watch } from "node:fs";
 import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +8,7 @@ import { type CheckedSkill, checkSkill } from "./check.ts";
 import { folderTree } from "./sources/folder.ts";
 import { SkillObjects } from "./store.ts";
 import type { SkillTree } from "./tree.ts";
+import { folderWatches } from "./watches.ts";
 
 /**
  * `~/.agents/skills`, through Hobbots (ADR 029, The clean-runtime rule). The folder is yours, not a
@@ -50,6 +50,12 @@ const skillFoldersOf = (tree: SkillTree): ReadonlyArray<string> =>
     .map((entry) => entry.path.slice(0, -"/SKILL.md".length))
     .sort();
 
+/** The folders under the folder, "" for the folder itself, as the read listed them. */
+const foldersOf = (tree: SkillTree): ReadonlyArray<string> => [
+  "",
+  ...tree.entries.filter((entry) => entry.kind === "directory").map((entry) => entry.path),
+];
+
 /** Whether nothing is at `path`: the one case read as an empty folder. */
 const isMissing = (path: string) =>
   lstat(path).then(
@@ -65,12 +71,12 @@ const isMissing = (path: string) =>
 const readFolder = (path: string) =>
   Effect.tryPromise({
     try: async () => {
-      if (await isMissing(path)) return [];
+      if (await isMissing(path)) return { skills: [], folders: [] };
       const tree = await folderTree(path);
-      const results = [];
+      const skills = [];
       for (const folder of skillFoldersOf(tree))
-        results.push(await checkSkill(tree, { folder, dropped: [], plugin: null }));
-      return results;
+        skills.push(await checkSkill(tree, { folder, dropped: [], plugin: null }));
+      return { skills, folders: foldersOf(tree) };
     },
     catch: (error) => (error instanceof Error ? error.message : String(error)),
   });
@@ -151,7 +157,7 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
         });
 
       /** Brings the library in line with a full read of the folder. */
-      const reconcile = (results: Effect.Success<ReturnType<typeof readFolder>>) =>
+      const reconcile = (results: Effect.Success<ReturnType<typeof readFolder>>["skills"]) =>
         Effect.gen(function* () {
           const found: Array<AgentsFolderProblem> = [];
           const present = new Set<SkillName>();
@@ -181,10 +187,21 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
           return found;
         });
 
+      // A change in the folder asks for a sync; several in a row make one, a second later.
+      const changes = yield* Queue.sliding<void>(1);
+      const watches = yield* Effect.acquireRelease(
+        Effect.sync(() => folderWatches(path, () => Queue.offerUnsafe(changes, undefined))),
+        (watching) => Effect.sync(watching.close),
+      );
+
       const once = yield* Semaphore.make(1);
       const sync = readFolder(path).pipe(
         Effect.matchEffect({
-          onSuccess: reconcile,
+          onSuccess: ({ skills, folders }) =>
+            Effect.andThen(
+              Effect.promise(() => watches.rewatch(folders)),
+              reconcile(skills),
+            ),
           onFailure: (message) =>
             Effect.as(Effect.logWarning("Could not read ~/.agents/skills", message), [
               problemOf("", { unreadable: message }),
@@ -195,18 +212,6 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
         once.withPermits(1),
       );
 
-      // A change in the folder asks for a sync; several in a row make one, a second later.
-      const changes = yield* Queue.sliding<void>(1);
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          try {
-            return watch(path, { recursive: true }, () => Queue.offerUnsafe(changes, undefined));
-          } catch {
-            return null;
-          }
-        }),
-        (watcher) => Effect.sync(() => watcher?.close()),
-      );
       yield* sync;
       yield* Queue.take(changes).pipe(
         Effect.andThen(Effect.sleep(Duration.seconds(1))),

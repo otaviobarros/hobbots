@@ -57,15 +57,19 @@ const gitHome = (dataDir: string) => {
   return home;
 };
 
-/** Lets every folder under `folder` be written again: the skill library keeps its revisions read-only. */
-const writable = (folder: string) => {
+/**
+ * Lets every folder under `folder` be written again: the skills library keeps each revision's
+ * folders read-only (ADR 029), which a user who is not root cannot remove until they are.
+ */
+const writableFolders = (folder: string) => {
   chmodSync(folder, 0o755);
-  for (const entry of readdirSync(folder, { withFileTypes: true }))
-    if (entry.isDirectory()) writable(join(folder, entry.name));
+  for (const entry of readdirSync(folder, { withFileTypes: true })) {
+    if (entry.isDirectory()) writableFolders(join(folder, entry.name));
+  }
 };
 
 export const removeDataDir = (dataDir: string) => {
-  if (dataDir !== "" && existsSync(dataDir)) writable(dataDir);
+  if (dataDir !== "" && existsSync(dataDir)) writableFolders(dataDir);
   rmSync(dataDir, { recursive: true, force: true });
   rmSync(`${dataDir}-git-home`, { recursive: true, force: true });
 };

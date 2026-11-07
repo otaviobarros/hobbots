@@ -15,6 +15,8 @@ import {
   SkillRevisionHash,
   SkillScope,
   SkillSource,
+  SkillUse,
+  SkillUseCounts,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
@@ -191,6 +193,8 @@ export const HobSkills = Schema.Struct({
   replaced: Schema.Array(Schema.Struct({ assignment: SkillAssignment, by: SkillAssignment })),
   clashes: Schema.Array(Schema.Struct({ name: SkillName, assignments: Schema.Array(SkillAssignment) })),
   optedOut: Schema.Array(SkillId),
+  /** The skills it used last, each once, the most recent first (ADR 029, The use line). */
+  lastUsed: Schema.Array(SkillUse),
 });
 export type HobSkills = typeof HobSkills.Type;
 
@@ -211,6 +215,8 @@ export const SkillsList = Schema.Struct({
   /** The projects a skill can be given to: those hobs work in now, and those the library already gives skills to. */
   projects: Schema.Array(MemoryProjectIdentity),
   agentsFolder: Schema.Struct({ path: Schema.NullOr(Schema.String), problems: Schema.Array(AgentsFolderProblem) }),
+  /** How often hobs used each skill in the last seven days; a skill nobody used is left out. */
+  usesThisWeek: Schema.Array(Schema.Struct({ skillId: SkillId, count: Schema.Int })),
 });
 export type SkillsList = typeof SkillsList.Type;
 
@@ -373,6 +379,14 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
       payload: EditSkillPayload,
       success: RevisedSkill,
       error: importErrors,
+    }),
+  )
+  .add(
+    // How often hobs used a skill, per hob and per thread, as its Activity counts them.
+    HttpApiEndpoint.get("uses", "/skills/:skillId/uses", {
+      params: skillParams,
+      success: SkillUseCounts,
+      error: SkillMissing,
     }),
   )
   .add(

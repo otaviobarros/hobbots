@@ -10,6 +10,7 @@ import {
   type runtimeAdapters,
   sessionMemoryBrief,
   skillMounter,
+  skillUseRecorder,
   startedMemoryBrief,
   type TaskRepository,
   type ToolAccess,
@@ -124,13 +125,15 @@ export const runSessionTurn = (
     const memory = yield* sessionMemoryBrief(turn.agent.id, turn.access?.folders ?? [], turn.sessionId);
     // The hob's skills (ADR 029), resolved as the turn starts, as a chat's are.
     const mounter = yield* skillMounter;
-    const skills = yield* mounter.mounts(
-      yield* mounter.resolve({
-        agentId: turn.agent.id,
-        policy: turn.config.policy,
-        folders: turn.access?.folders ?? [],
-      }),
-    );
+    const given = yield* mounter.resolve({
+      agentId: turn.agent.id,
+      policy: turn.config.policy,
+      folders: turn.access?.folders ?? [],
+    });
+    const skills = yield* mounter.mounts(given);
+    // Its skill uses are counted for the hob; a session's turn has no reply of yours to show them under.
+    const skillUses = yield* skillUseRecorder({ agentId: turn.agent.id, threadId: null, messageId: null });
+    skillUses.given(given);
     const expected = turn.sessionId === null ? undefined : { sessionId: turn.sessionId };
     // Counted as received only once the runtime answers the prompt that carried it.
     let session: string | null = null;
@@ -178,9 +181,11 @@ export const runSessionTurn = (
       )
       .pipe(
         Stream.runForEach((event) => {
+          if (event._tag === "SkillUsed") return Effect.asVoid(skillUses.record(event));
           if (event._tag === "SessionStarted") {
             const first = session === null;
             session = event.sessionId;
+            skillUses.organization(event.organizationSkills);
             return Effect.andThen(
               first ? startTurn : Effect.void,
               turn

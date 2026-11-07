@@ -1,3 +1,4 @@
+import { rmSync, writeFileSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SkillLibrary } from "@hobbots/agents";
@@ -121,6 +122,43 @@ describe("~/.agents/skills", () => {
       expect(yield* agents.problems).toEqual([]);
     }).pipe(Effect.provide(await layerFor(folder)), Effect.runPromise);
   });
+
+  // covers ADR 029 (The clean-runtime rule: ~/.agents/skills stays, through Hobbots), #1060
+  it("[TC-AG-146] notices a change on its own, and outlives the folder being replaced by a file", async () => {
+    const folder = await folderOf({ "release/SKILL.md": skillMd("release"), "release/notes/a.md": "a" });
+    await Effect.gen(function* () {
+      const library = yield* SkillLibrary;
+      const agents = yield* AgentsFolder;
+      const [release] = yield* library.list;
+      if (release === undefined) return expect.unreachable();
+      const revisionsOf = () => Effect.runPromise(Effect.map(library.get(release.id), (skill) => skill?.revisions));
+      const poll = <A>(read: () => Promise<A>) => expect.poll(read, { timeout: 5_000, interval: 100 });
+
+      // A change deep in a skill's folder, with no sync asked for, is a new revision.
+      yield* Effect.promise(() => writeFile(join(folder, "release/notes/a.md"), "b"));
+      yield* Effect.promise(() => poll(revisionsOf).toBe(2));
+
+      // Swapped for a file in one go, while the watch still has events for it to come: nothing
+      // throws, and the read that follows says why it could not read the folder.
+      rmSync(folder, { recursive: true });
+      writeFileSync(folder, "not a folder");
+      yield* Effect.promise(() =>
+        poll(() => Effect.runPromise(agents.problems)).toMatchObject([{ unreadable: `${folder} is not a folder.` }]),
+      );
+
+      // A folder again: the next read watches the new one, so its changes are noticed on their own.
+      yield* Effect.promise(async () => {
+        await rm(folder);
+        await mkdir(join(folder, "release"), { recursive: true });
+        await writeFile(join(folder, "release/SKILL.md"), skillMd("release"));
+      });
+      yield* agents.sync;
+      expect(yield* agents.problems).toEqual([]);
+      const before = (yield* Effect.promise(revisionsOf)) ?? 0;
+      yield* Effect.promise(() => writeFile(join(folder, "release/SKILL.md"), skillMd("release", "Releases, now.")));
+      yield* Effect.promise(() => poll(revisionsOf).toBe(before + 1));
+    }).pipe(Effect.provide(await layerFor(folder)), Effect.runPromise);
+  }, 20_000);
 
   it("[TC-AG-133] reads nothing, and fails nothing, while the folder is not there", async () => {
     const layer = await layerFor(join(await temp("home"), ".agents", "skills"));

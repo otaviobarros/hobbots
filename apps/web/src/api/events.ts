@@ -24,6 +24,7 @@ import { devicesChanged } from "./devices.ts";
 import { failedTaskChanged } from "./failed-tasks.ts";
 import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
+import { hobSkillsChanged } from "./hob-skills.ts";
 import { hubQuestionChanged } from "./hub-questions.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
@@ -134,6 +135,32 @@ const WORKBENCH_RECORDS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
 ]);
 const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent => WORKBENCH_RECORDS.has(event._tag);
 
+/** Changes to the skills library, after which a hob's next turn may get other skills. */
+const SKILL_LIBRARY_CHANGES: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  "SkillRevisionAdded",
+  "SkillAssigned",
+  "SkillUnassigned",
+  "SkillRolledOut",
+  "SkillHeld",
+  "SkillOptOutChanged",
+  "SkillRemoved",
+]);
+type SkillLibraryChange = Extract<
+  HobbotsEvent,
+  {
+    readonly _tag:
+      | "SkillRevisionAdded"
+      | "SkillAssigned"
+      | "SkillUnassigned"
+      | "SkillRolledOut"
+      | "SkillHeld"
+      | "SkillOptOutChanged"
+      | "SkillRemoved";
+  }
+>;
+const isSkillLibraryChange = (event: HobbotsEvent): event is SkillLibraryChange =>
+  SKILL_LIBRARY_CHANGES.has(event._tag);
+
 /** Events the cache takes nothing from. */
 const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // The reply's own upsert, sent just before, already carries its stopping or stopped status.
@@ -142,11 +169,13 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
+  // A reply's use line comes with the reply; no screen counts uses yet (ADR 029, #1062).
+  "SkillUsed",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
   {
-    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded";
+    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded" | "SkillUsed";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -165,9 +194,11 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     return;
   }
   if (isUnapplied(event)) return;
-  // A skill changed here, on another device or in `~/.agents/skills`: the Skills page reads it again.
-  if (isSkillEvent(event)) {
+  // A skill changed here, on another device or in `~/.agents/skills`: the Skills page reads it again,
+  // and what a hob's next turn gets may have changed, which the composer's `/` list shows (ADR 029).
+  if (isSkillLibraryChange(event)) {
     void refreshSkills(queryClient);
+    void hobSkillsChanged(queryClient);
     return;
   }
   if (isMemoryEvent(event)) {
@@ -212,18 +243,6 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       return;
   }
 };
-
-const SKILL_EVENTS = new Set<HobbotsEvent["_tag"]>([
-  "SkillRevisionAdded",
-  "SkillAssigned",
-  "SkillUnassigned",
-  "SkillRolledOut",
-  "SkillHeld",
-  "SkillOptOutChanged",
-  "SkillRemoved",
-]);
-type SkillEvent = Extract<HobbotsEvent, { readonly _tag: `Skill${string}` }>;
-const isSkillEvent = (event: HobbotsEvent): event is SkillEvent => SKILL_EVENTS.has(event._tag);
 
 type MemoryEvent = Extract<
   HobbotsEvent,

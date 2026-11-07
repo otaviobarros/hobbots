@@ -1,5 +1,17 @@
 import { HobbotsRepository, SkillLibrary, type SkillRevisionInput } from "@hobbots/agents";
-import { Agent, AgentId, MemoryProjectIdentity, SkillName, SkillRevisionHash } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  MemoryProjectIdentity,
+  Message,
+  MessageId,
+  SkillName,
+  SkillRevisionHash,
+  SkillUse,
+  SkillUseId,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, SkillLibraryLive } from "../src/index.ts";
@@ -241,6 +253,140 @@ describe("skills library", () => {
         expect((yield* library.optOuts(pip)).map((one) => one.skillId)).toEqual([skill.id]);
         expect((yield* library.setOptOut(pip, skill.id, false))?.value.skillId).toBe(skill.id);
         expect(yield* library.optOuts()).toEqual([]);
+      }),
+    ));
+
+  // covers ADR 029 (The use line), #1096
+  it("[TC-DP-282] records each use with its hob, thread and reply, journals it, and reads a skill's or a hob's", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const library = yield* SkillLibrary;
+        const skill = (yield* library.addRevision(null, input(H1))).value.skill;
+        const use = (at: string, threadId: string | null, source: "library" | "organization" = "library") =>
+          new SkillUse({
+            id: SkillUseId.make(`use-${at}`),
+            source,
+            skillId: source === "library" ? skill.id : null,
+            name: source === "library" ? "release" : "security",
+            pin: source === "library" ? H1 : null,
+            number: source === "library" ? 1 : null,
+            explicit: threadId !== null,
+            agentId: pip,
+            threadId: threadId === null ? null : ThreadId.make(threadId),
+            messageId: threadId === null ? null : MessageId.make(`reply-${at}`),
+            at,
+          });
+        const first = yield* library.recordUse(use("2026-11-06T10:00:00.000Z", "t1"));
+        expect(first.entries[0]).toMatchObject({
+          correlation: { agentId: pip, threadId: "t1", messageId: "reply-2026-11-06T10:00:00.000Z" },
+          payload: { _tag: "SkillUsed", use: { name: "release", pin: H1, number: 1, explicit: true } },
+        });
+        yield* library.recordUse(use("2026-11-06T11:00:00.000Z", null));
+        yield* library.recordUse(use("2026-11-06T12:00:00.000Z", null, "organization"));
+        expect((yield* library.uses({ skillId: skill.id })).map((one) => one.at)).toEqual([
+          "2026-11-06T11:00:00.000Z",
+          "2026-11-06T10:00:00.000Z",
+        ]);
+        expect(yield* library.uses({ agentId: pip })).toHaveLength(3);
+        expect(yield* library.uses({ agentId: AgentId.make("quill") })).toEqual([]);
+        expect((yield* library.uses({})).at(0)).toMatchObject({ source: "organization", skillId: null, pin: null });
+      }),
+    ));
+
+  // covers ADR 029 (The use line), STD-DATA-001
+  it("[TC-DP-284] saves a reply's Used line and its use in one transaction, so a failed write keeps neither", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const repo = yield* HobbotsRepository;
+        const library = yield* SkillLibrary;
+        const skill = (yield* library.addRevision(null, input(H1))).value.skill;
+        const at = "2026-11-06T10:00:00.000Z";
+        const threadId = ThreadId.make("t1");
+        yield* repo.upsertThread(new Thread({ id: threadId, agentId: pip, title: "t", createdAt: at, updatedAt: at }));
+        const used = {
+          source: "library",
+          skillId: skill.id,
+          name: "release",
+          pin: H1,
+          number: 1,
+          explicit: false,
+        } as const;
+        const reply = new Message({
+          id: MessageId.make("reply"),
+          threadId,
+          role: "assistant",
+          content: "",
+          status: "streaming",
+          error: null,
+          configVersion: 1,
+          createdAt: at,
+          skillsUsed: [used],
+        });
+        const use = new SkillUse({
+          id: SkillUseId.make("use-1"),
+          ...used,
+          agentId: pip,
+          threadId,
+          messageId: reply.id,
+          at,
+        });
+        const saved = yield* repo.upsertMessage(reply, [use]);
+        expect(saved.entries.map((entry) => entry.payload._tag)).toEqual(["MessageUpserted", "SkillUsed"]);
+        expect((yield* library.uses({ messageId: reply.id })).map((one) => one.id)).toEqual(["use-1"]);
+
+        // The same use again fails its insert, and the reply's new text is not saved either.
+        const again = yield* Effect.exit(repo.upsertMessage(new Message({ ...saved.value, content: "Later" }), [use]));
+        expect(again._tag).toBe("Failure");
+        expect((yield* repo.listMessages(threadId)).map((one) => one.content)).toEqual([""]);
+        expect(yield* library.uses({ messageId: reply.id })).toHaveLength(1);
+      }),
+    ));
+
+  // covers ADR 029 (The use line)
+  it("[TC-DP-283] counts a skill's uses, its week, and each hob's last uses in the database, one row per answer", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const library = yield* SkillLibrary;
+        const skill = (yield* library.addRevision(null, input(H1))).value.skill;
+        const use = (id: string, at: string, threadId: string | null, source: "library" | "organization" = "library") =>
+          new SkillUse({
+            id: SkillUseId.make(id),
+            source,
+            skillId: source === "library" ? skill.id : null,
+            name: "release",
+            pin: source === "library" ? H1 : null,
+            number: source === "library" ? 1 : null,
+            explicit: false,
+            agentId: pip,
+            threadId: threadId === null ? null : ThreadId.make(threadId),
+            messageId: threadId === null ? null : MessageId.make(`reply-${id}`),
+            at,
+          });
+        yield* library.recordUse(use("old", "2026-10-01T10:00:00.000Z", "t1"));
+        yield* library.recordUse(use("a", "2026-11-05T10:00:00.000Z", "t1"));
+        yield* library.recordUse(use("b", "2026-11-06T10:00:00.000Z", "t2"));
+        yield* library.recordUse(use("step", "2026-11-06T11:00:00.000Z", null));
+        // An organization skill of the same name is its own skill.
+        yield* library.recordUse(use("org", "2026-11-06T12:00:00.000Z", "t2", "organization"));
+        const since = "2026-10-31T00:00:00.000Z";
+        expect(yield* library.useCounts(skill.id, since)).toEqual({
+          skillId: skill.id,
+          total: 4,
+          thisWeek: 3,
+          hobs: [{ agentId: pip, count: 4, lastAt: "2026-11-06T11:00:00.000Z" }],
+          threads: [
+            { threadId: "t2", agentId: pip, count: 1, lastAt: "2026-11-06T10:00:00.000Z" },
+            { threadId: "t1", agentId: pip, count: 2, lastAt: "2026-11-05T10:00:00.000Z" },
+          ],
+        });
+        expect(yield* library.usesSince(since)).toEqual([{ skillId: skill.id, count: 3 }]);
+        expect((yield* library.lastUses(pip, 10)).map((one) => one.id)).toEqual(["org", "step"]);
+        expect((yield* library.lastUses(pip, 1)).map((one) => one.id)).toEqual(["org"]);
+        expect((yield* library.uses({ messageId: MessageId.make("reply-a") })).map((one) => one.id)).toEqual(["a"]);
+        expect(yield* library.uses({ agentId: pip, limit: 2 })).toHaveLength(2);
       }),
     ));
 
