@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
 import { DeviceId } from "./device.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
-import { PolicyOverrides } from "./policy.ts";
+import { StoredPolicyLayer } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { Attempt, AttemptId, isLiveAttempt, isTerminalTask, Task, TaskId } from "./task.ts";
 
@@ -71,7 +71,7 @@ export class Quest extends Schema.Class<Quest>("Quest")({
  * policy, and the folders it may use, or null for its own. A brief can never widen it.
  */
 export const DelegationAuthority = Schema.Struct({
-  overrides: PolicyOverrides,
+  overrides: StoredPolicyLayer,
   folders: Schema.NullOr(Schema.Array(Schema.String)),
 });
 export type DelegationAuthority = typeof DelegationAuthority.Type;
@@ -101,6 +101,15 @@ export class Milestone extends Schema.Class<Milestone>("Milestone")({
   /** Its place among the Task's milestones, from 0. */
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   reachedAt: Schema.NullOr(Schema.String),
+  /**
+   * The hob whose work reached it (#743): the Task's owner that reported it, or the hob it named as
+   * having done the work, such as its lead making a commit the owner could not. Null while it is not
+   * reached, and in milestones journaled before migration 0074.
+   */
+  reachedBy: Schema.NullOr(AgentId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   createdAt: Schema.String,
 }) {}
 

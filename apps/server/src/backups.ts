@@ -190,12 +190,18 @@ export const writeBackup = (options: WriteBackupOptions) =>
       )),
     );
 
-    // Every skill revision's files (ADR 029). Each is written before the row that names it and never
-    // changed or deleted, so every revision the snapshot names is here; one added since is harmless.
+    // The files of each skill revision the snapshot names (ADR 029). Each is written before the row
+    // that names it and never changed or deleted, so every one is here; one added since stays out.
+    // Skills from ~/.agents/skills keep their rows but not their files, which stay in that folder.
     yield* report("skills");
     files.push(
       ...(yield* attempt("copy the skills library", () =>
-        copySkillObjects(sources.skills, join(folder, SKILLS_PART.backup), counting("skills")),
+        copySkillObjects(
+          sources.skills,
+          join(folder, SKILLS_PART.backup),
+          counting("skills"),
+          finished.backedUpRevisions === null ? null : new Set(finished.backedUpRevisions),
+        ),
       )),
     );
 

@@ -1,8 +1,10 @@
+import type { HobPermissions, UpdateHobPermissionsPayload } from "@hobbots/api";
 import {
+  type AnyOperation,
+  isCharmOperation,
   isNarrowerOrEqual,
   type PolicyDecision,
   type PolicyOperation,
-  type PolicyOverrides,
   PRESET_DECISIONS,
   ruleEnforcement,
   type SafetyPreset,
@@ -87,7 +89,7 @@ export const presetInfo = (id: SafetyPreset): PresetInfo =>
 
 /** One rule of a hob's Permissions tab: what the operation covers, in the user's words. */
 export interface RuleInfo {
-  readonly operation: PolicyOperation;
+  readonly operation: AnyOperation;
   readonly label: string;
   readonly note: string;
   /** The answers the hub can give this rule; absent, Allow, Ask and Never. */
@@ -104,19 +106,19 @@ export const RULES: ReadonlyArray<RuleInfo> = [
   { operation: "push", label: "Push your work", note: "Sending commits to a remote." },
   { operation: "use-web", label: "Use the web", note: "Fetching pages, package installs and downloads." },
   {
-    operation: "read-github",
+    operation: "github.read",
     label: "Read GitHub",
     note: "Repository details, issues and pull requests of its folders, read on the hub.",
     // Asking before a read would interrupt without protecting anything, so the hub offers no Ask (ADR 020).
     answers: ["allow", "deny"],
   },
   {
-    operation: "open-pull-request",
+    operation: "github.open-pull-request",
     label: "Open pull requests",
     note: "Pull requests from its pushed branches, in the repository of its folders.",
   },
   {
-    operation: "comment-github",
+    operation: "github.comment",
     label: "Comment on GitHub",
     note: "Comments on issues and pull requests in the repository of its folders.",
   },
@@ -159,14 +161,13 @@ export const RULES: ReadonlyArray<RuleInfo> = [
 
 /** The operations the GitHub Charm card sets, in its order. Permissions lists the others. */
 export const GITHUB_OPERATIONS = [
-  "read-github",
+  "github.read",
   "push",
-  "open-pull-request",
-  "comment-github",
-] as const satisfies ReadonlyArray<PolicyOperation>;
+  "github.open-pull-request",
+  "github.comment",
+] as const satisfies ReadonlyArray<AnyOperation>;
 
-const isGitHub = (operation: PolicyOperation) =>
-  (GITHUB_OPERATIONS as ReadonlyArray<PolicyOperation>).includes(operation);
+const isGitHub = (operation: AnyOperation) => (GITHUB_OPERATIONS as ReadonlyArray<AnyOperation>).includes(operation);
 
 /** The rules the Permissions tab lists: every rule but the GitHub Charm's. */
 export const PERMISSION_RULES: ReadonlyArray<RuleInfo> = RULES.filter((rule) => !isGitHub(rule.operation));
@@ -175,7 +176,8 @@ export const PERMISSION_RULES: ReadonlyArray<RuleInfo> = RULES.filter((rule) => 
  * The answer the hub gives a rule, among those it offers: an Ask a rule cannot give, as an override
  * saved through the API could hold, refuses every call, so it shows as Never.
  */
-export const offeredAnswer = (operation: PolicyOperation, decision: PolicyDecision): PolicyDecision => {
+export const offeredAnswer = (operation: AnyOperation, decision: PolicyDecision | undefined): PolicyDecision => {
+  if (decision === undefined) return "deny";
   const offered = RULES.find((rule) => rule.operation === operation)?.answers;
   return offered === undefined || offered.includes(decision) ? decision : "deny";
 };
@@ -185,25 +187,54 @@ export const answersWithin = (preset: PolicyDecision): ReadonlyArray<PolicyDecis
   (["allow", "ask", "deny"] as const).filter((answer) => isNarrowerOrEqual(answer, preset));
 
 /**
- * The overrides after picking `answer` for one rule. Picking the preset's own answer drops the
- * override, so the hob follows the preset again if it changes later.
+ * The preset's own answer for an operation, built-in or a Charm's, which the hub reports with the
+ * hob's permissions. One the hub does not report is never allowed.
+ */
+export const presetAnswer = (permissions: HobPermissions, operation: AnyOperation): PolicyDecision =>
+  permissions.presets[operation] ??
+  (isCharmOperation(operation) ? "deny" : PRESET_DECISIONS[permissions.preset][operation]);
+
+/**
+ * The change after picking `answer` for one rule: the hob's built-in overrides, or its Charm
+ * overrides for a Charm's operation (ADR 031). Picking the preset's own answer drops the override,
+ * so the hob follows the preset again if it changes later.
  */
 export const pickAnswer = (
-  overrides: PolicyOverrides,
-  operation: PolicyOperation,
+  permissions: HobPermissions,
+  operation: AnyOperation,
   answer: PolicyDecision,
-  preset: SafetyPreset,
-): PolicyOverrides => {
-  const { [operation]: _, ...rest } = overrides;
-  return answer === PRESET_DECISIONS[preset][operation] ? rest : { ...rest, [operation]: answer };
+): UpdateHobPermissionsPayload => {
+  const follows = answer === presetAnswer(permissions, operation);
+  if (isCharmOperation(operation)) {
+    const { [operation]: _, ...rest } = permissions.policy.charms?.overrides ?? {};
+    return { charms: { overrides: follows ? rest : { ...rest, [operation]: answer } } };
+  }
+  const { [operation]: _, ...rest } = permissions.policy.overrides;
+  return { overrides: follows ? rest : { ...rest, [operation]: answer } };
 };
 
-/** Whether the rule is held by the sandbox or only checked by Hobbots, under these answers. */
+/** The answer a change on its way to the hub gives an operation, or undefined when it leaves it as it is. */
+export const sendingAnswer = (
+  permissions: HobPermissions,
+  sending: UpdateHobPermissionsPayload | undefined,
+  operation: AnyOperation,
+): PolicyDecision | undefined => {
+  const overrides: Readonly<Record<string, PolicyDecision | undefined>> | undefined = isCharmOperation(operation)
+    ? sending?.charms?.overrides
+    : sending?.overrides;
+  return overrides === undefined ? undefined : (overrides[operation] ?? presetAnswer(permissions, operation));
+};
+
+/**
+ * Whether the rule is held by the sandbox or only checked by Hobbots, under these answers. A Charm's
+ * operation runs on the hub, which holds its answer itself.
+ */
 export const enforcement = (
-  operation: PolicyOperation,
-  decisions: Readonly<Record<PolicyOperation, PolicyDecision>>,
+  operation: AnyOperation,
+  decisions: Readonly<Record<AnyOperation, PolicyDecision>>,
   sandbox: SandboxState = "on",
-) => ruleEnforcement(operation, (other) => decisions[other], sandbox);
+) =>
+  isCharmOperation(operation) ? "enforced" : ruleEnforcement(operation, (other) => decisions[other] ?? "deny", sandbox);
 
 /** A folder's last part for its row; the root folder keeps its slash. */
 export const folderName = (folder: string): string => {

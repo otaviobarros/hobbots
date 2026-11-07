@@ -35,7 +35,7 @@ import {
 } from "@hobbots/domain";
 import { DateTime, Effect, FiberMap, Option, Semaphore } from "effect";
 import { type PathSeparator, sharedFolders } from "./authority.ts";
-import { memberPrompt, memberReminder } from "./briefs.ts";
+import { memberPrompt, memberReminder, sendBackPrompt } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { emptyQuestFinding } from "./empty-quests.ts";
 import { currentAccessOf, type Ending, type Running, runSessionTurn, STOPPED } from "./session.ts";
@@ -119,6 +119,9 @@ const lastSession = (task: Task, tree: TaskTree): string | null => {
   return current !== undefined && current.agentId === task.ownerId ? current.sessionId : null;
 };
 
+/** A turn whose reply did not complete its Task, and whose session goes on once in the same Attempt (#1086). */
+const SENT_BACK = "sent-back" as const;
+
 /** Why a turn that broke on a bug in Hobbots failed, as its lead and the Quest room show it. */
 const TURN_BROKE = "Hobbots hit an internal error during this turn.";
 
@@ -178,23 +181,38 @@ export const makeMemberRunner = (deps: MemberDeps) => {
     });
 
   /**
-   * After a turn: the Attempt ends with it, until the next turn resumes it. Unless the turn returned
-   * the result itself, its final reply completes the Task once nothing keeps it open. A Task that
+   * After a turn: the Attempt ends with it, until the next turn resumes it. A turn that did not
+   * return the result itself, with nothing keeping its Task open, is sent back once to return it or
+   * report a blocker, and a second such turn blocks the Task with its reply as why (#1086). A Task that
    * comes after others starts only once they have completed, with what they returned, so nothing
    * more from them is to come. A Task still open waits, or is blocked when only its own unreported
    * milestones keep it open, which its lead then hears about, as it does of a Quest the turn left
    * with nobody in it (#576). A failed turn leaves its work to be delivered again.
    */
-  const settle = (taskId: TaskId, attemptId: AttemptId, ending: Ending, work: CarriedWork): Effect.Effect<CarriedEnd> =>
+  const settle = (
+    taskId: TaskId,
+    attemptId: AttemptId,
+    ending: Ending,
+    work: CarriedWork,
+    { sentBack = false, startedAt }: { readonly sentBack?: boolean; readonly startedAt?: string } = {},
+  ): Effect.Effect<CarriedEnd | typeof SENT_BACK> =>
     Effect.gen(function* () {
-      const { decided, completed } = yield* endMemberTurn(
+      const at = yield* nowIso;
+      const result = yield* endTurn(deps, {
+        runner: "member",
         taskId,
         attemptId,
-        ending._tag === "Failed"
-          ? { _tag: "Failed", reason: ending.reason }
-          : { _tag: "Replied", text: deps.redactor.text(ending.text) },
-        work.holding,
-      );
+        ending:
+          ending._tag === "Failed"
+            ? { _tag: "Failed", reason: ending.reason }
+            : { _tag: "Replied", text: deps.redactor.text(ending.text) },
+        carried: work.holding,
+        sentBack,
+        ...(startedAt === undefined ? {} : { startedAt }),
+        at,
+      });
+      if (result.sentBack) return SENT_BACK;
+      const { decided, completed } = result;
       if (ending._tag === "Failed") {
         return {
           _tag: "EndedEarly",
@@ -314,51 +332,74 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 // A member's This Task binds to the top of its lead's tree, so it ends with the Quest (ADR 018).
                 Effect.succeed(task.rootId),
               );
-        const ending = yield* runSessionTurn(
-          deps.adapters,
-          deps.redactor,
-          {
-            agent,
-            config,
-            attemptId,
-            prompt:
-              previous === null
-                ? [memberPrompt(task, tree, lead), work.text("start")].filter((part) => part !== "").join("\n\n")
-                : `${work.text("prompt")}\n\n${memberReminder(task, tree, lead)}`,
-            sessionId: previous,
-            access: run.access,
-            approvals: handle?.approvals ?? null,
-            recordToolStart: deps.recordToolStart(task),
-            hubTools: deps.tools.forSession(
-              { agentId: agent.id, taskId: task.id, carried: work.holding },
-              {
-                attemptId,
-                currentAccess: currentAccessOf(run),
-                redactor: deps.redactor,
-                approvals: handle?.approvals ?? null,
-              },
-            ),
-            started: (session) =>
-              work.accepted(session.sessionId).pipe(
-                Effect.andThen(nowIso),
-                Effect.flatMap((at) =>
-                  deps.attempt(
-                    tasks.updateAttempt(attemptId, { _tag: "Running", ...session, at }),
-                    "record a member's session",
-                  ),
-                ),
-                Effect.asVoid,
+        // The session its turns ran in, as the runtime reported it, for a turn sent back to go on in.
+        let session = previous;
+        // Only the turn that carries the work accepts it; one sent back goes on with it in the same Attempt.
+        const turnWith = (prompt: string, sessionId: string | null, accepts: boolean) =>
+          runSessionTurn(
+            deps.adapters,
+            deps.redactor,
+            {
+              agent,
+              config,
+              attemptId,
+              prompt,
+              sessionId,
+              access: run.access,
+              approvals: handle?.approvals ?? null,
+              recordToolStart: deps.recordToolStart(task),
+              hubTools: deps.tools.forSession(
+                { agentId: agent.id, taskId: task.id, carried: work.holding },
+                {
+                  attemptId,
+                  currentAccess: currentAccessOf(run),
+                  redactor: deps.redactor,
+                  approvals: handle?.approvals ?? null,
+                },
               ),
-            turns: tasks,
-          },
-          deps.recorder,
-        ).pipe(Effect.ensuring(handle === null ? Effect.void : handle.close));
-        return yield* settle(task.id, attemptId, ending, work);
+              started: (started) => {
+                session = started.sessionId;
+                return (accepts ? work.accepted(started.sessionId) : Effect.void).pipe(
+                  Effect.andThen(nowIso),
+                  Effect.flatMap((at) =>
+                    deps.attempt(
+                      tasks.updateAttempt(attemptId, { _tag: "Running", ...started, at }),
+                      "record a member's session",
+                    ),
+                  ),
+                  Effect.asVoid,
+                );
+              },
+              turns: tasks,
+            },
+            deps.recorder,
+          );
+        return yield* Effect.gen(function* () {
+          const ending = yield* turnWith(
+            previous === null
+              ? [memberPrompt(task, tree, lead), work.text("start")].filter((part) => part !== "").join("\n\n")
+              : `${work.text("prompt")}\n\n${memberReminder(task, tree, lead)}`,
+            previous,
+            true,
+          );
+          // A session that never started has nothing to go on in, so its reply is settled as sent back already.
+          // What the member reported since this turn began says how it ended, not what earlier turns did.
+          const settled = yield* settle(task.id, attemptId, ending, work, {
+            sentBack: session === null,
+            startedAt: at,
+          });
+          if (settled !== SENT_BACK) return settled;
+          // Its reply did not complete the Task: the same session goes on once, told to say how it ended (#1086).
+          const again = yield* turnWith(sendBackPrompt(task, lead), session, false);
+          return (yield* settle(task.id, attemptId, again, work, { sentBack: true, startedAt: at })) as CarriedEnd;
+        }).pipe(Effect.ensuring(handle === null ? Effect.void : handle.close));
       }).pipe(
         // A bug in a turn must not leave its Attempt live, which would hold the Task from any other turn.
         Effect.catchDefect((defect) =>
           Effect.logWarning("A member's turn stopped on a defect", defect).pipe(
-            Effect.andThen(settle(taskId, attemptId, { _tag: "Failed", reason: TURN_BROKE }, work)),
+            Effect.andThen(
+              settle(taskId, attemptId, { _tag: "Failed", reason: TURN_BROKE }, work) as Effect.Effect<CarriedEnd>,
+            ),
           ),
         ),
         Effect.onInterrupt(() => stopped(taskId, attemptId, run)),

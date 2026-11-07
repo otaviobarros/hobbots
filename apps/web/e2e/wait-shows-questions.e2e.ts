@@ -55,6 +55,7 @@ const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.string
 test("[TC-OR-245] a question from a Task the lead waits for reaches the lead and is answered, never held in its backpack", async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   const current = await startHub(dataDir);
   hub = current;
   await request(current, "PATCH", "/api/setup", {
@@ -92,8 +93,9 @@ test("[TC-OR-245] a question from a Task the lead waits for reaches the lead and
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
 
-  // The wait in his next turn told him the question waits for him.
-  await expect(page.getByText("A question from them waits for you").first()).toBeVisible({ timeout: 20_000 });
+  // The wait in his next turn told him the question waits for him. The fake writes what the wait
+  // answered after echoing his whole briefing, word by word, so it shows only once that is written.
+  await expect(page.getByText("A question from them waits for you").first()).toBeVisible({ timeout: 60_000 });
 
   // On Frodo's Task, Quill's question was carried into his turn and handled there, not held.
   await openRoom(page, "Ship the release");

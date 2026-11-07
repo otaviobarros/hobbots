@@ -494,7 +494,22 @@ export const messages = {
     why: "Why now",
     risk: "Risk",
     allowOnce: "Allow once",
-    always: "Always for this site",
+    /**
+     * Always, named for what its rules cover: the folder, the files, the command, the branch, the
+     * repository or the site. Plain Always when the rules cover more than one kind of thing.
+     */
+    always: {
+      folder: "Always for this folder",
+      folders: "Always for these folders",
+      file: "Always for this file",
+      files: "Always for these files",
+      command: "Always for this command",
+      commands: "Always for these commands",
+      branch: "Always for this branch",
+      repository: "Always for this repository",
+      site: "Always for this site",
+      mixed: "Always",
+    },
     alwaysIntro: ({ name }: { name: string }) =>
       `Hobbots saves this rule, and ${name} stops asking for what it covers. You can remove it later.`,
     /** The middle lifetime (ADR 018): This Task, or This Quest once a party joins the Task. */
@@ -541,6 +556,8 @@ export const messages = {
         `let ${name} open pull requests into ${base} in ${repository}`,
       comment: ({ name, repository }: { name: string; repository: string }) =>
         `let ${name} comment on issues and pull requests in ${repository}`,
+      charm: ({ name, operation, site }: { name: string; operation: string; site: string }) =>
+        site === "" ? `let ${name} use ${operation}` : `let ${name} use ${operation} for ${site}`,
       runner: ({ name, command, file }: { name: string; command: string; file: string }) =>
         `${command} runs what this folder's ${file} says. If ${name} changes that file, the rule runs the new version.`,
     },
@@ -574,9 +591,9 @@ export const messages = {
       "local-git": "Changes the Git history in its folder.",
       push: "Sends commits to a remote, where others can see them.",
       "use-web": "Reaches a site outside this hub.",
-      "read-github": "Reads only. Nothing changes.",
-      "open-pull-request": "Opens a pull request others can see at once. You can close or edit it.",
-      "comment-github": "Posts a comment others can see at once. You can edit or delete it.",
+      "github.read": "Reads only. Nothing changes.",
+      "github.open-pull-request": "Opens a pull request others can see at once. You can close or edit it.",
+      "github.comment": "Posts a comment others can see at once. You can edit or delete it.",
       "outside-folders": "Acts outside the folders this hob may use.",
       "search-memory": "Reads only. Nothing changes.",
       "save-memory": "Writes a page to its own memory. You can edit or undo it.",
@@ -607,16 +624,16 @@ export const messages = {
       mayDo: ({ name }: { name: string }) => `What ${name} may do`,
       rulesNote: "Ask puts the step in your Inbox first. These never go past your safety level.",
       actions: {
-        "read-github": {
+        "github.read": {
           label: "Read code",
           note: "Repository details, issues and pull requests of its folders, read on the hub.",
         },
         push: { label: "Push changes", note: "Send its commits to a remote." },
-        "open-pull-request": {
+        "github.open-pull-request": {
           label: "Open pull requests",
           note: "From its pushed branches, in the repository of its folders.",
         },
-        "comment-github": {
+        "github.comment": {
           label: "Comment and reply",
           note: "Comments on issues and pull requests in the repository of its folders.",
         },

@@ -12,6 +12,7 @@ import {
   HobLifecycle,
   HobService,
   HobTools,
+  hubCallStep,
   MemoryProjects,
   MemoryReviews,
   MemorySaves,
@@ -272,7 +273,7 @@ const save = (
       return yield* tools.call(
         MEMORY_SAVE_TOOL,
         { key: options.key ?? "deploy", scope, path: PAGE, markdown: options.markdown ?? MARKDOWN, tags: ["deploy"] },
-        { id: "step-1", report: () => undefined },
+        hubCallStep("step-1", () => undefined),
       );
     }),
   );

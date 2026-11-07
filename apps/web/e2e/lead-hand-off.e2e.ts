@@ -1,4 +1,5 @@
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 import { laneHead, openRoom, taskDetails } from "./quest-room.ts";
 
@@ -14,6 +15,8 @@ let shared = "";
 test.beforeEach(() => {
   dataDir = emptyDataDir();
   shared = realpathSync(mkdtempSync(`${dataDir}-shared-`));
+  // Quill returns core.py, which a Task completes with only once it is in its folders (#1180).
+  writeFileSync(join(shared, "core.py"), 'AMOUNT_UNIT = "cents"\n');
 });
 
 test.afterEach(async () => {
@@ -83,7 +86,7 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
           script("complete_task", {
             key: "backend-done",
             summary: "Stores amounts as integer cents.",
-            artifacts: [{ kind: "file", label: "core.py", value: "/project/core.py" }],
+            artifacts: [{ kind: "file", label: "core.py", value: join(shared, "core.py") }],
           }),
         ].join("\n"),
       }),
@@ -94,6 +97,8 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
           "Write the frontend",
           script("ask", { key: "need", question: "Will you hand me Quill's core.py?" }),
           `fake:then ${script("complete_task", { key: "frontend-done", summary: "Frontend reads core.py." })}`,
+          // The hand-off and the answer may reach Rook in separate turns: he finishes in whichever comes last.
+          `fake:then fake:then ${script("complete_task", { key: "frontend-done-later", summary: "Frontend reads core.py." })}`,
         ].join("\n"),
       })}`,
       `fake:then fake:then ${script("hand_off", { key: "hand", artifact_id: "$backend-done.artifacts.0", to_task_id: "$frontend.task_id" })}`,
@@ -111,7 +116,7 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
   const drawer = await taskDetails(page, "Write the frontend");
   await expect(drawer.getByRole("heading", { name: "Handed to it" })).toBeVisible();
   await expect(drawer).toContainText("core.py");
-  await expect(drawer).toContainText("/project/core.py");
+  await expect(drawer).toContainText(join(shared, "core.py"));
   // Quill's Task handed core.py to Rook's, so its result is listed too, and only once.
   await expect(drawer.getByText(/Quill's result/)).toHaveCount(1);
 });

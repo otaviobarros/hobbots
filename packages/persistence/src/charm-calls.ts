@@ -10,10 +10,12 @@ interface Row {
   readonly scope: string;
   readonly callKey: string;
   readonly attempt: string;
+  readonly charm: string;
   readonly tool: string;
   readonly input: string;
   readonly site: string;
   readonly plan: string;
+  readonly appliedText: string;
   readonly state: string;
   readonly result: string | null;
   readonly threadId: string | null;
@@ -31,10 +33,12 @@ const fromRow = (row: Row) =>
     scope: row.scope,
     key: row.callKey,
     attempt: row.attempt,
+    charm: row.charm,
     tool: row.tool,
     input: row.input,
     site: row.site,
     plan: row.plan,
+    appliedText: row.appliedText,
     state: row.state,
     result: row.result,
     threadId: row.threadId,
@@ -49,10 +53,12 @@ const toRow = (call: CharmCall) => ({
   scope: call.scope,
   call_key: call.key,
   attempt: call.attempt,
+  charm: call.charm,
   tool: call.tool,
   input: call.input,
   site: call.site,
   plan: call.plan,
+  applied_text: call.appliedText,
   state: call.state,
   result: call.result,
   thread_id: call.threadId,
@@ -63,7 +69,7 @@ const toRow = (call: CharmCall) => ({
 });
 
 /**
- * The SQL Charm call records (migration 0028), keyed by hob, scope and key (migration 0045). Recording a call checks its key and its site in the
+ * The SQL Charm call records (migrations 0028 and 0075), keyed by hob, scope and key (migration 0045). Recording a call checks its key and its site in the
  * same transaction, with the journal's head taken first so concurrent calls take turns on PostgreSQL.
  */
 export const CharmCallsLive = Layer.effect(

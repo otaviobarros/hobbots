@@ -18,6 +18,12 @@ export interface GitWorkspaceShape {
   readonly uncommitted: (
     files: ReadonlyArray<{ readonly folder: string; readonly path: string }>,
   ) => Effect.Effect<ReadonlyArray<UncommittedFiles>>;
+  /**
+   * The repository Git finds from `folder`, as the real path of its top folder, or null when there
+   * is none: two spellings of one repository give one answer, and a nested repository its own.
+   * Read without running Git, like `uncommitted`.
+   */
+  readonly repository: (folder: string) => Effect.Effect<string | null>;
 }
 
 /** Reads the Git state of a hob's folders for the hub, without running Git. */

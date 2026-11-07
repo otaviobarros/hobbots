@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { SqliteClient } from "@effect/sql-sqlite-node";
-import { WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { SkillName, SkillScope, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Schema, String as Str } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 import { migrations } from "./migrations/index.ts";
@@ -75,6 +75,25 @@ const backupCounts = (schema: CopySchema): Effect.Effect<BackupCounts, SqlError.
           )
         : 0,
     };
+  });
+
+/**
+ * The revisions whose files a backup holds (ADR 029): each one a skill not from `~/.agents/skills`
+ * has. A skill's source decides, not the revision's, so an edit made in Hobbots to a folder skill
+ * before it was read-only stays out too. A revision whose content another skill has is kept, since
+ * that skill needs its files. Null on a database too old to say, which keeps every revision.
+ */
+const backedUpRevisions = (
+  schema: CopySchema,
+): Effect.Effect<ReadonlyArray<string> | null, SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    if (!schema.has("skills", "source_id") || !schema.has("skill_sources", "origin_key")) return null;
+    const sql = yield* SqlClient.SqlClient;
+    const rows = yield* sql<{ readonly hash: unknown }>`SELECT DISTINCT r.hash AS hash FROM skill_revisions r
+      JOIN skills k ON k.id = r.skill_id
+      LEFT JOIN skill_sources s ON s.id = k.source_id
+      WHERE s.origin_key IS NULL OR s.origin_key NOT LIKE 'agents:%'`;
+    return rows.map((row) => String(row.hash));
   });
 
 /** A hob's own folders, as a backup's manifest lists them, so a restore can say which are missing. */
@@ -162,6 +181,11 @@ export interface FinishedCopy {
   readonly schemaVersion: number;
   readonly counts: BackupCounts;
   readonly hobFolders: ReadonlyArray<HobFolders>;
+  /**
+   * The skill revisions whose files the backup holds, as the snapshot names them; null keeps every
+   * one. A revision added after the snapshot is not in it, so its files stay out too.
+   */
+  readonly backedUpRevisions: ReadonlyArray<string> | null;
 }
 
 /** Raised when a backup's copy of the database fails SQLite's integrity check. */
@@ -186,9 +210,14 @@ export const finishBackupCopy = (filename: string) =>
         schemaVersion: yield* schemaVersion,
         counts: yield* backupCounts(schema),
         hobFolders: yield* hobFolders(schema),
+        backedUpRevisions: yield* backedUpRevisions(schema),
       } satisfies FinishedCopy;
     }),
   );
+
+/** An assignment of a skill from `~/.agents/skills` that a read of the folder after a restore moved. */
+export const RestoreSkillMove = Schema.Struct({ skill: SkillName, scope: SkillScope });
+export type RestoreSkillMove = typeof RestoreSkillMove.Type;
 
 /** One restore this database came back from (migration 0038). */
 export class RestoreRecord extends Schema.Class<RestoreRecord>("RestoreRecord")({
@@ -202,11 +231,24 @@ export class RestoreRecord extends Schema.Class<RestoreRecord>("RestoreRecord")(
   missingFolders: Schema.Array(Schema.String),
   /** When you resumed work; null while work is held. */
   resumedAt: Schema.NullOr(Schema.String),
+  /**
+   * The assignments of skills from `~/.agents/skills` that reading the folder again moved to its
+   * current revision, since the backup held none of their files (migration 0071, ADR 029).
+   */
+  skillMoves: Schema.Array(RestoreSkillMove),
 }) {}
+
+const SkillMoveList = Schema.fromJsonString(Schema.Array(RestoreSkillMove));
+const decodeSkillMoves = Schema.decodeUnknownSync(SkillMoveList);
+const encodeSkillMoves = Schema.encodeSync(SkillMoveList);
 
 const decodeRestore = Schema.decodeUnknownSync(RestoreRecord);
 const restoreOf = (row: Record<string, unknown>) =>
-  decodeRestore({ ...row, missingFolders: decodeFolders(String(row.missingFolders)) });
+  decodeRestore({
+    ...row,
+    missingFolders: decodeFolders(String(row.missingFolders)),
+    skillMoves: decodeSkillMoves(String(row.skillMoves ?? "[]")),
+  });
 
 /**
  * The rules of a hub's first start after a restore (ADR 026), in one transaction, before it serves
@@ -215,14 +257,14 @@ const restoreOf = (row: Record<string, unknown>) =>
  * until you resume it. Applying the same restore again changes nothing.
  */
 export const applyRestoreRules = (
-  restore: Omit<RestoreRecord, "resumedAt">,
+  restore: Omit<RestoreRecord, "resumedAt" | "skillMoves">,
 ): Effect.Effect<boolean, SqlError.SqlError, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     return yield* sql.withTransaction(applyOnce(sql, restore));
   });
 
-const applyOnce = (sql: SqlClient.SqlClient, restore: Omit<RestoreRecord, "resumedAt">) =>
+const applyOnce = (sql: SqlClient.SqlClient, restore: Omit<RestoreRecord, "resumedAt" | "skillMoves">) =>
   Effect.gen(function* () {
     const known = yield* sql`SELECT id FROM restores WHERE id = ${restore.id}`;
     if (known.length > 0) return false;
@@ -253,6 +295,8 @@ export class RestoreRepository extends Context.Service<
     readonly resume: (at: string) => Effect.Effect<Option.Option<RestoreRecord>>;
     /** Forgets the folder set aside by the latest restore, once it is deleted. */
     readonly clearSetAside: Effect.Effect<void>;
+    /** Adds to the latest restore what reading `~/.agents/skills` again moved; nothing without a restore. */
+    readonly noteSkillMoves: (moves: ReadonlyArray<RestoreSkillMove>) => Effect.Effect<void>;
   }
 >()("@hobbots/persistence/RestoreRepository") {
   static readonly layer = Layer.effect(
@@ -279,6 +323,13 @@ export class RestoreRepository extends Context.Service<
           if (Option.isNone(current)) return;
           yield* sql`UPDATE restores SET set_aside = NULL WHERE id = ${current.value.id}`.pipe(Effect.orDie);
         }),
+        noteSkillMoves: (moves) =>
+          Effect.gen(function* () {
+            const current = yield* latest;
+            if (Option.isNone(current) || moves.length === 0) return;
+            const all = encodeSkillMoves([...current.value.skillMoves, ...moves]);
+            yield* sql`UPDATE restores SET skill_moves = ${all} WHERE id = ${current.value.id}`.pipe(Effect.orDie);
+          }),
       });
     }),
   );

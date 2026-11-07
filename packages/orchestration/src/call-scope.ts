@@ -1,6 +1,14 @@
-import { explicitlyNarrowed, HobbotsRepository, HobTools, operationDecision, TaskRepository } from "@hobbots/agents";
+import {
+  explicitlyNarrowed,
+  HobbotsRepository,
+  HobTools,
+  operationDecision,
+  TaskRepository,
+  type ToolPolicy,
+} from "@hobbots/agents";
 import {
   type AgentId,
+  type AnyOperation,
   type ApprovalRequest,
   ancestorsOf,
   type CarriedItem,
@@ -186,14 +194,17 @@ export const ownTask = (scope: CallScope, id: string | undefined): Effect.Effect
       : refuse("not-owner", `Task ${task.id} is not yours; only its owner can do this.`),
   );
 
-/** A Task the caller leads from this turn: it owns a Task above it, the turn's own or one under it. */
+/** Whether the caller leads `task` from this turn: it owns a Task above it, the turn's own or one under it. */
+export const leads = (scope: CallScope, task: Task): boolean =>
+  withinTurn(scope, task) &&
+  ancestorsOf(task, scope.tree.tasks).some(
+    (above) => above.ownerId === scope.caller.agentId && withinTurn(scope, above),
+  );
+
+/** A Task the caller leads from this turn, or a refusal naming it. */
 export const ledTask = (scope: CallScope, id: string): Effect.Effect<Task, TaskToolRefused> =>
   Effect.flatMap(taskIn(scope, id), (task) =>
-    ancestorsOf(task, scope.tree.tasks).some(
-      (above) => above.ownerId === scope.caller.agentId && withinTurn(scope, above),
-    )
-      ? Effect.succeed(task)
-      : refuse("not-lead", `Task ${task.id} is not under any Task of yours.`),
+    leads(scope, task) ? Effect.succeed(task) : refuse("not-lead", `Task ${task.id} is not under any Task of yours.`),
   );
 
 /** A Quest's deadline: the one asked for, never later than the one above it, and not passed. */
@@ -288,6 +299,12 @@ export const makeCapacity = (limits: TaskToolLimits) =>
  * What the caller may do on `task`: its own policy now, narrowed by every Delegation on the way
  * down to the Task, so a member never passes on more than it was given (STD-SEC-003).
  */
+/** Every operation a policy answers: the built-in ones and those the hub's Charms declare (ADR 031). */
+const answered = (policy: ToolPolicy): ReadonlyArray<AnyOperation> => [
+  ...POLICY_OPERATIONS,
+  ...(policy.charmOperations ?? []).map((operation) => operation.id),
+];
+
 export const makeAuthorityOf = (separator: PathSeparator) =>
   Effect.gen(function* () {
     const hobs = yield* HobbotsRepository;
@@ -302,9 +319,9 @@ export const makeAuthorityOf = (separator: PathSeparator) =>
             ? NO_AUTHORITY
             : {
                 decisions: Object.fromEntries(
-                  POLICY_OPERATIONS.map((operation) => [operation, operationDecision(access.policy, operation)]),
+                  answered(access.policy).map((operation) => [operation, operationDecision(access.policy, operation)]),
                 ) as Authority["decisions"],
-                fixed: POLICY_OPERATIONS.filter((operation) => explicitlyNarrowed(access.policy, operation)),
+                fixed: answered(access.policy).filter((operation) => explicitlyNarrowed(access.policy, operation)),
                 folders: access.folders,
               };
         return own;

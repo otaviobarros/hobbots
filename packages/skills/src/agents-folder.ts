@@ -2,8 +2,8 @@ import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { announcer, EventPublisher, SkillLibrary } from "@hobbots/agents";
-import type { Skill, SkillBy, SkillName, SkillRefused } from "@hobbots/domain";
-import { Context, Duration, Effect, Layer, Queue, Ref, Schedule, Semaphore } from "effect";
+import type { Skill, SkillBy, SkillName, SkillRefused, SkillRevisionHash, SkillScope } from "@hobbots/domain";
+import { Context, Duration, Effect, Layer, Option, Queue, Ref, Schedule, Semaphore } from "effect";
 import { type CheckedSkill, checkSkill } from "./check.ts";
 import { folderTree } from "./sources/folder.ts";
 import { SkillObjects } from "./store.ts";
@@ -16,6 +16,10 @@ import { folderWatches } from "./watches.ts";
  * skill under Everyone, marked as from that folder, and turns each change there into a new revision
  * that rolls out like your own edit. A skill there that fails the import checks is listed with the
  * rule it broke and is not delivered.
+ *
+ * Hobbots never changes these skills itself: only a change in the folder makes a revision, and
+ * backups and exports hold none of their files. After a restore the hub reads the folder again: an
+ * assignment pinned to a revision whose files it no longer has moves to the folder's current one.
  */
 
 /** A skill in the folder that the hub did not take, and why; or the folder itself, when it could not be read. */
@@ -36,9 +40,30 @@ export interface AgentsFolderShape {
   readonly sync: Effect.Effect<void>;
   /** What the last read could not take. */
   readonly problems: Effect.Effect<ReadonlyArray<AgentsFolderProblem>>;
+  /**
+   * The revision each skill the folder holds is, as the last full read took it; null before a read
+   * succeeds. This, not a skill's newest revision, is what the folder has now: a folder put back to
+   * an earlier copy keeps the newer revision as the skill's newest.
+   */
+  readonly current: Effect.Effect<ReadonlyMap<SkillName, SkillRevisionHash> | null>;
 }
 
 export class AgentsFolder extends Context.Service<AgentsFolder, AgentsFolderShape>()("@hobbots/skills/AgentsFolder") {}
+
+/** An assignment a read of the folder moved off a revision whose files the hub no longer has. */
+export interface AgentsFolderMove {
+  readonly skill: SkillName;
+  readonly scope: SkillScope;
+}
+
+/**
+ * Where the moves a read of the folder makes are noted, such as the latest restore's summary
+ * (ADR 026). Optional: a hub without it moves them all the same.
+ */
+export class AgentsFolderMoves extends Context.Service<
+  AgentsFolderMoves,
+  { readonly moved: (moves: ReadonlyArray<AgentsFolderMove>) => Effect.Effect<void> }
+>()("@hobbots/skills/AgentsFolderMoves") {}
 
 /** The shared skills folder of the user the hub runs as. */
 export const defaultAgentsFolder = () => join(homedir(), ".agents", "skills");
@@ -75,7 +100,7 @@ const readFolder = (path: string) =>
       const tree = await folderTree(path);
       const skills = [];
       for (const folder of skillFoldersOf(tree))
-        skills.push(await checkSkill(tree, { folder, dropped: [], plugin: null }));
+        skills.push(await checkSkill(tree, { folder, dropped: [], plugin: null, manifest: null }));
       return { skills, folders: foldersOf(tree) };
     },
     catch: (error) => (error instanceof Error ? error.message : String(error)),
@@ -97,7 +122,9 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
       const library = yield* SkillLibrary;
       const objects = yield* SkillObjects;
       const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a skill from ~/.agents/skills");
+      const moves = yield* Effect.serviceOption(AgentsFolderMoves);
       const problems = yield* Ref.make<ReadonlyArray<AgentsFolderProblem>>([]);
+      const current = yield* Ref.make<ReadonlyMap<SkillName, SkillRevisionHash> | null>(null);
       const origin = { _tag: "AgentsFolder", path } as const;
 
       /** Whether a library skill is the one the folder keeps. */
@@ -144,6 +171,24 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
           if (revision.rolledOutAt === null) {
             yield* announce((yield* library.rollOutRevision(skill.id, revision.hash, by, "pending")).entries);
           }
+          return yield* moveOffMissing(skill, revision.hash, by);
+        });
+
+      /**
+       * Moves each assignment of a folder skill pinned to a revision whose files the hub does not have,
+       * as after a restore, which brings back no file of these skills, to the folder's current one: a
+       * held one stays held there. Answers what it moved.
+       */
+      const moveOffMissing = (skill: Skill, current: Skill["latest"], by: SkillBy) =>
+        Effect.gen(function* () {
+          const moved: Array<AgentsFolderMove> = [];
+          for (const assignment of yield* library.assignments(skill.id)) {
+            if (assignment.pin === current || (yield* objects.folder(assignment.pin)) !== null) continue;
+            const rolled = yield* library.rollOut(assignment.id, current, by);
+            yield* announce(rolled.entries);
+            moved.push({ skill: skill.name, scope: assignment.scope });
+          }
+          return moved;
         });
 
       /** Takes the Everyone assignment off a folder skill whose folder is gone; the skill stays in the library. */
@@ -160,7 +205,9 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
       const reconcile = (results: Effect.Success<ReturnType<typeof readFolder>>["skills"]) =>
         Effect.gen(function* () {
           const found: Array<AgentsFolderProblem> = [];
+          const moved: Array<AgentsFolderMove> = [];
           const present = new Set<SkillName>();
+          const here = new Map<SkillName, SkillRevisionHash>();
           for (const result of results) {
             if (result._tag === "Refused") {
               found.push(problemOf(result.folder, { refusal: result.refusal }));
@@ -172,18 +219,27 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
               continue;
             }
             present.add(result.skill.name);
-            yield* take(result.skill, existing).pipe(
-              Effect.catchTags({
-                SkillNameTaken: (error) =>
-                  Effect.sync(() => found.push(problemOf(result.skill.folder, { takenBy: error.name }))),
-                SkillNameChanged: () => Effect.void,
-                SkillNotFound: () => Effect.void,
-              }),
+            moved.push(
+              ...(yield* take(result.skill, existing).pipe(
+                Effect.tap(() => Effect.sync(() => here.set(result.skill.name, result.skill.hash))),
+                Effect.catchTags({
+                  SkillNameTaken: (error) =>
+                    Effect.sync(() => {
+                      found.push(problemOf(result.skill.folder, { takenBy: error.name }));
+                      return [];
+                    }),
+                  SkillNameChanged: () => Effect.succeed([]),
+                  SkillNotFound: () => Effect.succeed([]),
+                  SkillReadOnly: () => Effect.succeed([]),
+                }),
+              )),
             );
           }
           for (const skill of yield* library.list) {
             if (!present.has(skill.name) && (yield* fromFolder(skill))) yield* letGo(skill);
           }
+          if (moved.length > 0 && Option.isSome(moves)) yield* moves.value.moved(moved);
+          yield* Ref.set(current, here);
           return found;
         });
 
@@ -225,6 +281,6 @@ export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
         Effect.forkScoped,
       );
 
-      return AgentsFolder.of({ path, sync, problems: Ref.get(problems) });
+      return AgentsFolder.of({ path, sync, problems: Ref.get(problems), current: Ref.get(current) });
     }),
   );

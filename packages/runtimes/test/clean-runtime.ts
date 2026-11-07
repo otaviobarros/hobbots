@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { SkillMount } from "@hobbots/agents";
+import { type HubTools, type SkillMount, type ToolStartedEvent, UNRECORDED_TOOL_CALL } from "@hobbots/agents";
+import { Effect } from "effect";
 
 // The clean-runtime fixture (ADR 029): a fake home folder and a repository that hold a skill, an MCP
 // server, a plugin, a hook and instruction files in every place Claude Code and Codex read, a skill
@@ -35,6 +36,8 @@ export const FOREIGN_MARKERS = [
   "home-codex-instructions",
   "home-mcp-tool",
   "repo-mcp-tool",
+  // A skill of a mounted set that the hob turned off (ADR 029, Skill sets).
+  "skipped-it-offered",
 ] as const;
 
 /** The skill in `~/.agents/skills`, which reaches a hob only as a mount Hobbots serves. */
@@ -43,6 +46,17 @@ export const AGENTS_SKILL = "shared-agents-skill";
 /** The library's skills the turn mounts: one the hob may pick, one Only when asked. */
 export const LIBRARY_SKILL = "library-skill";
 export const ASKED_SKILL = "asked-skill";
+
+/**
+ * A set the turn mounts (ADR 029, Skill sets): `plan-it` and `ship-it` under `skills/`, which link to
+ * the set's `references/rules.md` and to each other, and `skipped-it`, which the hob turned off.
+ */
+export const TEAM_SET = "team-set";
+export const SET_SKILL = "plan-it";
+export const SET_SIBLING = "ship-it";
+export const SET_SKIPPED = "skipped-it";
+/** What the set's shared file says, which a turn reads only by following a link. */
+export const SET_RULES = "Marker team-rules-read.";
 
 export interface CleanRuntimeFixture {
   readonly home: string;
@@ -127,6 +141,21 @@ export const cleanRuntimeFixture = (root: string): CleanRuntimeFixture => {
   skill(objects, LIBRARY_SKILL);
   skill(objects, ASKED_SKILL);
   skill(join(objects, "agents"), AGENTS_SKILL);
+  const set = join(objects, "sets", TEAM_SET);
+  write(
+    join(set, "skills", SET_SKILL, "SKILL.md"),
+    `---\nname: ${SET_SKILL}\ndescription: Marker ${SET_SKILL}-offered.\n---\n\nUse ${SET_SKILL}. Read the [rules](../../references/rules.md) and [ship](../${SET_SIBLING}/SKILL.md).\n`,
+  );
+  skill(join(set, "skills"), SET_SIBLING);
+  skill(join(set, "skills"), SET_SKIPPED);
+  write(join(set, "references", "rules.md"), `${SET_RULES}\n`);
+  const member = (name: string): SkillMount => ({
+    name,
+    revision: `${TEAM_SET}-r1`,
+    folder: set,
+    implicit: true,
+    set: { name: TEAM_SET, path: `skills/${name}` },
+  });
   const mount = (name: string, folder: string, implicit = true): SkillMount => ({
     name,
     revision: `${name}-r1`,
@@ -149,6 +178,60 @@ export const cleanRuntimeFixture = (root: string): CleanRuntimeFixture => {
       mount(LIBRARY_SKILL, objects),
       mount(ASKED_SKILL, objects, false),
       mount(AGENTS_SKILL, join(objects, "agents")),
+      member(SET_SKILL),
+      member(SET_SIBLING),
     ],
   };
+};
+
+/** The hub tool the step-recording contract calls. */
+export const CONTRACT_HUB_TOOL = "pip_note";
+
+/**
+ * The step-recording contract (ADR 031): a hub tool call reaches the hub with a step whose `record`
+ * is the turn's `recordToolStart`, so a hub call is recorded durably before it runs, as the runtime's
+ * own calls are. The hub tool records its step as the hub action pipeline does and runs only once it
+ * is recorded; `order` says what happened. With `records` false, the turn refuses to record it.
+ */
+export const stepRecordingContract = (records = true) => {
+  const order: Array<string> = [];
+  const hubTools: HubTools = {
+    tools: [
+      {
+        name: CONTRACT_HUB_TOOL,
+        description: "Reads the hub's note.",
+        inputSchema: { type: "object", properties: {} },
+        label: "Reading the note",
+      },
+    ],
+    call: (name, _input, step) =>
+      step === undefined
+        ? Effect.sync(() => {
+            order.push("no step");
+            return { text: UNRECORDED_TOOL_CALL, refused: true };
+          })
+        : step
+            .record({
+              _tag: "ToolStarted",
+              id: step.id,
+              tool: name,
+              operation: "pip.read",
+              targets: ["note"],
+              label: "Reading the note",
+            })
+            .pipe(
+              Effect.map((recorded) => {
+                order.push(recorded ? "ran" : "not run");
+                return recorded
+                  ? { text: "The note says hello.", refused: false }
+                  : { text: UNRECORDED_TOOL_CALL, refused: true };
+              }),
+            ),
+  };
+  const recordToolStart = (event: ToolStartedEvent) =>
+    Effect.sync(() => {
+      order.push(`recorded ${event.tool} as ${event.id}`);
+      return records;
+    });
+  return { hubTools, recordToolStart, order };
 };

@@ -408,9 +408,11 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await refused(ALDRIC, one, "cancel_task", { key: "k8", task_id: one })).reason).toBe("not-lead");
 
     const before = await head();
-    expect((await refused(ADA, ada, "hand_off", { key: "k5", artifact_id: "nope", to_task_id: quill })).reason).toBe(
-      "artifact-missing",
-    );
+    const noArtifact = await refused(ADA, ada, "hand_off", { key: "k5", artifact_id: "nope", to_task_id: quill });
+    expect(noArtifact.reason).toBe("artifact-missing");
+    // With no artifact anywhere, it says there is nothing to hand off and what to use instead (#1088).
+    expect(noArtifact.message).toContain("No Task under yours has returned an artifact yet");
+    expect(noArtifact.message).toContain("message_task");
     await onlyRefusalsSince(before);
   });
 
@@ -515,6 +517,10 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await refused(ALDRIC, TOP, "wait_for", { key: "w2", tasks: ["other"] })).reason).toBe(
       "wait-outside-subtree",
     );
+    // Its own Task's id is refused too, with the ids it can wait for (#1088).
+    const own = await refused(ALDRIC, TOP, "wait_for", { key: "w3", tasks: [TOP] });
+    expect(own.message).toContain(`${TOP} is the Task that waits, your own`);
+    expect(own.message).toContain(`The Tasks under it still open: ${quill}, ${ada}.`);
 
     // Quill finishes her copy, and Aldric hands it to Ada.
     const tasks = await run(Effect.service(TaskRepository));
@@ -537,6 +543,24 @@ describe("hob tools for Tasks and Quests", () => {
       }),
     )) as TaskToolDone;
     const [artifact] = finished.details.artifacts as Array<string>;
+    // A Task's id is not an artifact's: the refusal says so and names the artifacts there are (#1088).
+    const byTask = await refused(ALDRIC, TOP, "hand_off", { key: "h0", artifact_id: quill, to_task_id: ada });
+    expect(byTask.reason).toBe("artifact-missing");
+    expect(byTask.message).toContain(`${quill} is a Task's id`);
+    expect(byTask.message).toContain(`Copy (artifact_id ${artifact}, from Task ${quill})`);
+    // A member never learns of a sibling's artifacts from the refusal, nor that its id is a Task's.
+    const sibling = await refused(ADA, ada, "hand_off", { key: "h1", artifact_id: quill, to_task_id: ada });
+    expect(sibling.reason).toBe("artifact-missing");
+    expect(sibling.message).not.toContain(artifact);
+    expect(sibling.message).not.toContain("Copy");
+    expect(sibling.message).not.toContain("is a Task's id");
+    expect(sibling.message).toContain("No Task under yours has returned an artifact yet");
+    const read = await done(ALDRIC, TOP, "read_tasks", { key: "r-art" });
+    expect(
+      (read.details.tasks as ReadonlyArray<{ readonly task_id: string; readonly artifacts?: unknown }>).find(
+        (each) => each.task_id === quill,
+      )?.artifacts,
+    ).toEqual([{ artifact_id: artifact, label: "Copy", kind: "text" }]);
     const handed = await done(ALDRIC, TOP, "hand_off", { key: "h", artifact_id: artifact, to_task_id: ada });
     expect(handed.message).toContain("Copy");
     expect(
@@ -633,6 +657,62 @@ describe("hob tools for Tasks and Quests", () => {
     expect(after.quests[0]?.state).toBe("completed");
     const tasks = await run(Effect.service(TaskRepository));
     expect(Option.getOrThrow(await run(tasks.readLedger(TOP))).open).toEqual([]);
+  });
+
+  // covers OR-001, OR-002 (#743)
+  it("[TC-OR-654] a milestone reached through another hob's work in the same work is recorded with that hob", async () => {
+    await run(seed);
+    const quill = await delegate(ALDRIC, TOP, "Quill", "copy", { milestones: ["Copy drafted", "Committed"] });
+    await delegate(ALDRIC, TOP, "Pip", "email");
+    const [drafted, committed] = (await tree()).milestones.filter((each) => each.taskId === quill);
+    if (drafted === undefined || committed === undefined) throw new Error("expected two milestones");
+
+    // Naming a hob outside this work, or naming one on anything but a milestone, is refused and writes nothing.
+    const before = await head();
+    const outsider = await refused(QUILL, quill, "report_checkpoint", {
+      key: "outsider",
+      kind: "milestone",
+      summary: "Committed",
+      milestone_id: committed.id,
+      reached_by: "Rook",
+    });
+    expect(outsider.reason).toBe("hob-missing");
+    const progress = await refused(QUILL, quill, "report_checkpoint", {
+      key: "progress",
+      kind: "progress",
+      summary: "Committing",
+      reached_by: "Aldric",
+    });
+    expect(progress.reason).toBe("milestone-mismatch");
+    await onlyRefusalsSince(before);
+
+    // Quill's own work reaches the first; its lead's commit, named by name, reaches the second.
+    await done(QUILL, quill, "report_checkpoint", {
+      key: "drafted",
+      kind: "milestone",
+      summary: "Copy drafted",
+      milestone_id: drafted.id,
+    });
+    const reached = await done(QUILL, quill, "report_checkpoint", {
+      key: "committed",
+      kind: "milestone",
+      summary: "Committed",
+      milestone_id: committed.id,
+      reached_by: "aldric",
+    });
+    expect(reached.details.reached_by).toBe(ALDRIC);
+    expect(reached.message).toContain(`reached by hob ${ALDRIC}`);
+    const milestones = (await tree()).milestones.filter((each) => each.taskId === quill);
+    expect(milestones.map(({ title, reachedBy }) => ({ title, reachedBy }))).toEqual([
+      { title: "Copy drafted", reachedBy: QUILL },
+      { title: "Committed", reachedBy: ALDRIC },
+    ]);
+    const recorded = await run(
+      Effect.flatMap(Effect.service(EventJournal), (journal) => journal.readAfter(before.sequence)),
+    );
+    expect(JSON.stringify(recorded.filter((entry) => entry.type === "CheckpointRecorded").at(-1))).toContain(
+      `"reachedBy":"${ALDRIC}"`,
+    );
   });
 
   // covers OR-001

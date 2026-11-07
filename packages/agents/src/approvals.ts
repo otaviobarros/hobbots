@@ -16,6 +16,7 @@ import {
   ApprovalRequest,
   type ApprovalState,
   type ApprovalSurface,
+  type CharmId,
   type Committed,
   decidedState,
   Grant,
@@ -31,7 +32,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Duration, Effect, Layer, Option, Semaphore } from "effect";
 import { unguarded, type WriteGuard } from "./devices.ts";
-import { GitHubIdentityPin, GrantService, isGitHubRule, ruleHolds, ruleOffered } from "./grants.ts";
+import { actsAsIdentity, CharmDeclarations, CharmIdentityPin, GrantService, ruleHolds, ruleOffered } from "./grants.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { ApprovalAction, ApprovalOutcome, PendingApproval, ToolAccess, TurnApprovals } from "./runtime.ts";
@@ -123,8 +124,11 @@ interface Waiter {
   /** The hob's tool access as it is now, read when a decision saves grants. */
   readonly currentAccess: Effect.Effect<ToolAccess | null>;
   readonly decision: Deferred.Deferred<ApprovalOutcome>;
-  /** For a GitHub write, the hob's GitHub identity when it asked; null for any other call. */
-  readonly githubIdentity: number | null;
+  /**
+   * For a call a Charm makes as its identity, such as a GitHub write, that Charm and the hob's
+   * identity with it when it asked; null for any other call.
+   */
+  readonly identity: { readonly charm: CharmId; readonly count: number } | null;
 }
 
 type RefusedDecision = ApprovalActionChanged | ApprovalNotConfirmed | ApprovalNotGrantable | GrantRuleRefused;
@@ -244,6 +248,7 @@ export class ApprovalService extends Context.Service<
     Effect.gen(function* () {
       const repo = yield* ApprovalRepository;
       const hobs = yield* HobbotsRepository;
+      const charms = yield* CharmDeclarations;
       // Paused hobs finish their running turns, so only a retired one stops being asked.
       const hobActive = (agentId: AgentId) =>
         Effect.map(hobs.findAgent(agentId), (agent) => Option.isSome(agent) && agent.value.status !== "retired");
@@ -407,7 +412,7 @@ export class ApprovalService extends Context.Service<
                       workingOn,
                       currentAccess,
                       decision,
-                      githubIdentity: yield* githubIdentityOf(owner.agentId, action),
+                      identity: yield* identityOf(owner.agentId, action),
                     });
                     return {
                       approvalId: saved.id,
@@ -472,23 +477,30 @@ export class ApprovalService extends Context.Service<
           (top) => top !== null && top === approval.rootTaskId,
         );
 
-      // For a call whose grant would be one for a GitHub write, the hob's GitHub identity the call was
-      // pinned to when it chose its credential, or the one now for a call that chose none.
-      const githubIdentityOf = (agentId: AgentId, action: ApprovalAction) =>
+      // For a call whose grant would be one for a call a Charm makes as its identity, such as a GitHub
+      // write, the hob's identity with that Charm the call was pinned to when it chose its credential,
+      // or the one now for a call that chose none.
+      const identityOf = (agentId: AgentId, action: ApprovalAction) =>
         Effect.gen(function* () {
-          if (Option.isNone(grants) || !action.rules.some(isGitHubRule)) return null;
-          const pin = yield* GitHubIdentityPin;
-          return pin !== null && pin.agentId === agentId ? pin.identity : yield* grants.value.githubIdentity(agentId);
+          if (Option.isNone(grants)) return null;
+          const charm = charms.find((each) => action.rules.some((rule) => actsAsIdentity(each, rule)));
+          if (charm === undefined) return null;
+          const pin = yield* CharmIdentityPin;
+          const count =
+            pin !== null && pin.agentId === agentId && pin.charm === charm.id
+              ? pin.identity
+              : yield* grants.value.identity(charm.id, agentId);
+          return { charm: charm.id, count };
         });
 
-      const asksAsGitHub = (approval: ApprovalRequest) => (waiters.get(approval.id)?.githubIdentity ?? null) !== null;
+      const asksAsIdentity = (approval: ApprovalRequest) => (waiters.get(approval.id)?.identity ?? null) !== null;
 
-      // Whether the hob's GitHub identity changed since it asked, so a grant would go to the other one.
+      // Whether the hob's identity with the Charm changed since it asked, so a grant would go to the other one.
       const identityChanged = (approval: ApprovalRequest) => {
-        const asked = waiters.get(approval.id)?.githubIdentity ?? null;
+        const asked = waiters.get(approval.id)?.identity ?? null;
         return asked === null || Option.isNone(grants)
           ? Effect.succeed(false)
-          : Effect.map(grants.value.githubIdentity(approval.agentId), (now) => now !== asked);
+          : Effect.map(grants.value.identity(asked.charm, approval.agentId), (now) => now !== asked.count);
       };
 
       // Saves the decision with its grants only while the hob's access now still holds each rule, so
@@ -516,7 +528,7 @@ export class ApprovalService extends Context.Service<
         guarded: WriteGuard,
       ) =>
         // An approval of a GitHub write is checked against the hob's identity even when it saves no grant.
-        Option.isNone(grants) || (saving.length === 0 && !(next.state === "approved" && asksAsGitHub(approval)))
+        Option.isNone(grants) || (saving.length === 0 && !(next.state === "approved" && asksAsIdentity(approval)))
           ? settle(next, [], guarded)
           : grants.value.exclusive(saveGrants(approval, next, saving, guarded));
 

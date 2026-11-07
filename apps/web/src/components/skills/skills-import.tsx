@@ -6,8 +6,10 @@ import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { scanSkills, skillsErrorTag } from "../../api/skills.ts";
+import { WriteOne } from "./draft-with-hob.tsx";
 import { GiveChoice, type GiveTo } from "./give-choice.tsx";
 import { ImportCandidates, ImportRefused } from "./import-candidates.tsx";
+import { doneOf, foundLine, importLabel } from "./import-result.ts";
 import { FileSource, GitSource } from "./import-sources.tsx";
 import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
@@ -81,6 +83,9 @@ function ScanResult({
   if (scan.candidates.every((candidate) => candidate.refusal !== null))
     return <ImportRefused candidates={scan.candidates} />;
   const folders = can.filter((folder) => picked.has(folder));
+  // A plugin comes in as one set (ADR 029, Skill sets): the page names it, and so does Add.
+  const sets = scan.candidates.filter((one) => one.set !== null);
+  const onlySet = folders.length === 1 ? sets.find((one) => one.folder === folders[0]) : undefined;
 
   // A Hobbots export brings who gets each skill with it, so it is not given out again here.
   const exported = scan.exported;
@@ -121,22 +126,14 @@ function ScanResult({
       const given = await giveAll(writes, ids, give);
       if (!given) return setFailure(copy.import.notGiven({ count: ids.length, who: scopeName(give, hobs) }));
     }
-    const count = ids.length;
-    const message =
-      exported !== null && fromExport !== null
-        ? copy.import.importedSet({ count, given: fromExport.assigned, left: fromExport.leftOut })
-        : give === null
-          ? copy.import.imported({ count })
-          : copy.import.importedGiven({ count, who: scopeName(give, hobs) });
-    say({ tone: "done", message }, { _tag: "Overview" });
-    void navigate({ to: "/skills", search: {} });
+    const done = doneOf({ ids, onlySet, give, hobs, fromExport: exported === null ? null : fromExport });
+    say({ tone: "done", message: done.message }, done.at);
+    void navigate({ to: "/skills", search: skillsSearchOf(done.at) });
   };
 
   return (
     <div className="flex flex-col gap-3.5">
-      <p className="m-0 text-detail text-text-secondary">
-        {copy.import.found({ count: scan.candidates.length, commit: scan.commit })}
-      </p>
+      <p className="m-0 text-detail text-text-secondary">{foundLine(scan)}</p>
       <ImportCandidates
         candidates={scan.candidates}
         picked={picked}
@@ -154,7 +151,17 @@ function ScanResult({
           {copy.import.exportedNote({ when: copy.day(exported.exportedAt), count: exported.assignments })}
         </p>
       )}
-      {!keepsAssignments && <GiveChoice value={give} onChange={setGive} active={active} projects={projects} many />}
+      {!keepsAssignments && (
+        <GiveChoice
+          value={give}
+          onChange={setGive}
+          active={active}
+          projects={projects}
+          many
+          {...(onlySet === undefined ? {} : { legend: copy.import.setLegend })}
+        />
+      )}
+      {onlySet !== undefined && <p className="m-0 text-detail text-label">{copy.import.setNote}</p>}
       {failure !== null && (
         <p role="alert" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
           {failure}
@@ -162,11 +169,7 @@ function ScanResult({
       )}
       <div className="flex gap-2">
         <Button disabled={(added === null && folders.length === 0) || writes.busy} onClick={() => void run()}>
-          {writes.busy
-            ? copy.import.importing
-            : added === null
-              ? copy.import.importN({ count: folders.length })
-              : copy.import.giveAgain}
+          {writes.busy ? copy.import.importing : importLabel(added !== null, onlySet, folders.length)}
         </Button>
         <Button asChild variant="quiet">
           <Link to="/skills" search={{}}>
@@ -178,7 +181,7 @@ function ScanResult({
   );
 }
 
-/** Add a skill: from Git, a folder or a .zip, or written here. A source is scanned first, writing nothing. */
+/** Add a skill: from Git, a folder or a .zip, or written here or by a hob. A source is scanned first, writing nothing. */
 export function SkillsImport({
   from,
   active,
@@ -208,16 +211,7 @@ export function SkillsImport({
       <SourceTabs from={from} />
       {from === "git" && <GitSource looking={scan.isPending} onLook={look} />}
       {from === "file" && <FileSource looking={scan.isPending} onLook={look} />}
-      {from === "write" && (
-        <Link
-          to="/skills"
-          search={skillsSearchOf({ _tag: "New" })}
-          className="flex max-w-[420px] flex-col gap-1 rounded-card border-(length:--edge) border-solid border-line-2 bg-card p-3.5 text-start text-text-strong no-underline hover:border-control"
-        >
-          <span className="text-body font-semibold">{copy.import.blank}</span>
-          <span className="text-detail text-text-secondary">{copy.import.blankHint}</span>
-        </Link>
-      )}
+      {from === "write" && <WriteOne />}
       {scan.isError && from !== "write" && (
         <p role="alert" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
           {copy.import.unreadable}

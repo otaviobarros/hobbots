@@ -9,6 +9,7 @@ import {
   actionDigest,
   CharmTools,
   type HubToolAnswer,
+  hubCallStep,
   makeRedactor,
   type RuntimeEvent,
   type ToolAccess,
@@ -208,10 +209,11 @@ const pushIn = (folder: string, repository: GitHubRepository, turn: Turn, input:
       approvals: userApprovals(turn.access, turn.asked ?? [], turn.answer, turn.whileAsking),
     });
     if (tools === null) throw new Error("The turn was offered no GitHub tools");
-    const answer: HubToolAnswer = yield* tools.call("github_push", input, {
-      id: turn.step ?? "toolu_1",
-      report: (event: RuntimeEvent) => events.push(event),
-    });
+    const answer: HubToolAnswer = yield* tools.call(
+      "github_push",
+      input,
+      hubCallStep(turn.step ?? "toolu_1", (event: RuntimeEvent) => events.push(event)),
+    );
     return answer;
   }).pipe(
     Effect.provide(charmLayer(folder, repository, turn.rows ?? new Map(), turn.credential ?? fixedCredential(TOKEN))),
@@ -479,7 +481,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
         return yield* tools.call(
           "github_push",
           { branch: "feat/x", key: "gone-1" },
-          { id: "toolu_1", report: () => {} },
+          hubCallStep("toolu_1", () => {}),
         );
       }).pipe(
         Effect.provide(layer),
@@ -586,17 +588,19 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
   it("[TC-OR-072] reads back calls the hub left in flight when it starts, and settles them once their effect shows", async () => {
     const { folder, repository, remote, commit } = await setUp("restarted");
     git(folder, "push", "--quiet", remote, "feat/x");
-    const plan = { repository: "octo/restarted", remoteBranch: "feat/x", commit, appliedText: "Pushed." };
+    const plan = { repository: "octo/restarted", remoteBranch: "feat/x", commit };
     const row = (key: string, overrides: Partial<CharmCall>) =>
       new CharmCall({
         agentId: AgentId.make("hob"),
         scope: "",
         key,
         attempt: `${key}-1`,
+        charm: "GitHub",
         tool: "github_push",
         input: "{}",
         site: `github.com/octo/restarted refs/heads/${key}`,
         plan: JSON.stringify(plan),
+        appliedText: "Pushed.",
         state: "sending",
         result: null,
         threadId: null,

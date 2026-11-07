@@ -2,9 +2,11 @@ import { CharmCallService, CharmCalls, HobbotsRepository } from "@hobbots/agents
 import { UserSession } from "@hobbots/api";
 import { Agent, AgentId, CharmCall, MessageId, ThreadId, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
+import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { CharmCallsLive, EventJournal, HobbotsRepositoryLive } from "../src/index.ts";
-import { TestDatabase } from "../src/testing.ts";
+import { CharmCallsLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
+import charmCallValues from "../src/migrations/0075_charm_call_values.ts";
+import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const TestLayer = CharmCallService.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(HobbotsRepositoryLive, CharmCallsLive, EventJournal.layer)),
@@ -42,10 +44,12 @@ const call = (key: string, overrides: Partial<CharmCall> = {}) =>
     scope: "reply:m1",
     key,
     attempt: `${key}-1`,
+    charm: "GitHub",
     tool: "github_push",
     input: `{"branch":"feat/x"}`,
     site: "github.com/octo/app refs/heads/feat/x",
     plan: `{"commit":"${"a".repeat(40)}"}`,
+    appliedText: "Pushed.",
     state: "sending",
     result: null,
     threadId: ThreadId.make("t1"),
@@ -188,5 +192,49 @@ describe("Charm call records", () => {
     expect(result.missing._tag).toBe("CharmCallNotFound");
     expect(result.retried._tag).toBe("Started");
     expect(result.listed.map((c) => c.key)).toEqual(["k1"]);
+  });
+
+  // covers DP-003, ADR 031
+  it("[TC-DP-289] 0075 names every stored call's Charm and moves its applied text out of its plan, readable after", async () => {
+    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0075")) as typeof migrations;
+    const stored = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* seed;
+      for (const [key, plan] of [
+        ["push", `{"commit":"abc","appliedText":"Pushed feat/x."}`],
+        ["old", `{"commit":"def"}`],
+      ] as const) {
+        yield* sql`INSERT INTO charm_calls ${sql.insert({
+          agentId,
+          scope: "reply:m1",
+          callKey: key,
+          attempt: `${key}-1`,
+          tool: "github_push",
+          input: "{}",
+          site: `github.com/octo/app refs/heads/${key}`,
+          plan,
+          state: "uncertain",
+          result: null,
+          threadId: null,
+          messageId: null,
+          stepId: null,
+          createdAt: now,
+          updatedAt: now,
+        })}`;
+      }
+      yield* charmCallValues;
+      return yield* (yield* CharmCalls).unsettled;
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(HobbotsRepositoryLive, CharmCallsLive, EventJournal.layer).pipe(
+          Layer.provideMerge(TestDatabaseAt(earlier)),
+        ),
+      ),
+      Effect.runPromise,
+    );
+    expect(stored.map((c) => [c.key, c.charm, c.plan, c.appliedText])).toEqual([
+      ["push", "GitHub", `{"commit":"abc"}`, "Pushed feat/x."],
+      ["old", "GitHub", `{"commit":"def"}`, "GitHub shows it took effect."],
+    ]);
   });
 });

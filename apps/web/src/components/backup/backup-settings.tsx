@@ -1,4 +1,5 @@
 import type { BackupState, RestoreStatus } from "@hobbots/api";
+import { memoryScopeKey } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Progress } from "@hobbots/ui/components/progress";
@@ -181,7 +182,26 @@ function SetAside({ path, size }: { path: string; size: number }) {
   );
 }
 
-/** What the latest restore left: work held until you resume it, folders to set again, and the data set aside. */
+type SkillMove = NonNullable<RestoreStatus["latest"]>["skillMoves"][number];
+
+/** Who a moved assignment was for: Everyone, a project, or the hob by name. */
+const movedWho = (move: SkillMove) => {
+  switch (move.scope._tag) {
+    case "Everyone":
+      return copy.latest.everyone;
+    case "Project":
+      return copy.latest.project({
+        name: move.scope.identity.split("/").filter(Boolean).at(-1) ?? move.scope.identity,
+      });
+    case "Hob":
+      return move.hob ?? copy.latest.formerHob;
+  }
+};
+
+/**
+ * What the latest restore left: work held until you resume it, folders to set again, skills from
+ * `~/.agents/skills` that are not on this computer or moved to its revision now, and the data set aside.
+ */
 function LatestRestore({ status }: { status: RestoreStatus }) {
   const { latest, failed } = status;
   return (
@@ -210,6 +230,30 @@ function LatestRestore({ status }: { status: RestoreStatus }) {
                 {latest.missingFolders.map((folder) => (
                   <li key={folder} className="font-mono text-code break-all text-text-secondary">
                     {folder}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {latest.skillsNotHere.length > 0 && (
+            <div className="flex flex-col gap-1 text-ui">
+              <span>{copy.latest.skillsNotHere}</span>
+              <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+                {latest.skillsNotHere.map((name) => (
+                  <li key={name} className="font-mono text-code break-all text-text-secondary">
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {latest.skillMoves.length > 0 && (
+            <div className="flex flex-col gap-1 text-ui">
+              <span>{copy.latest.skillMoves}</span>
+              <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+                {latest.skillMoves.map((move) => (
+                  <li key={`${move.skill}:${memoryScopeKey(move.scope)}`} className="text-text-secondary">
+                    {copy.latest.skillMove({ skill: move.skill, who: movedWho(move) })}
                   </li>
                 ))}
               </ul>

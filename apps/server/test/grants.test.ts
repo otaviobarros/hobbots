@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ApprovalService,
+  CharmDeclarations,
   ChatService,
   GrantService,
   HobAdmission,
@@ -13,6 +14,7 @@ import {
   type ToolAccess,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
+import { GITHUB_CHARM } from "@hobbots/charms";
 import {
   Agent,
   AgentId,
@@ -102,6 +104,7 @@ const TestLayer = HobLifecycle.layer.pipe(
         whileApproved: (write) => write,
       }),
       HobAdmission.layer,
+      Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
       FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
     ),
   ),
@@ -393,7 +396,7 @@ describe("Standing grants", () => {
         // which revokes the hob's GitHub grants as the hob goes back to your account.
         const asked = yield* runCommand("git push origin feature");
         const request = asked.pending as ApprovalRequest;
-        yield* grants.switchGitHub(SCOUT, Effect.void);
+        yield* grants.switchIdentity(GITHUB_CHARM, SCOUT, Effect.void);
         const always = yield* Effect.flip(
           approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest, lifetime: "always" }),
         );
@@ -403,7 +406,7 @@ describe("Standing grants", () => {
         // Approving Once is refused the same way: the call it was asked for never runs as you.
         const second = yield* runCommand("git push origin feature");
         const secondRequest = second.pending as ApprovalRequest;
-        yield* grants.switchGitHub(SCOUT, Effect.void);
+        yield* grants.switchIdentity(GITHUB_CHARM, SCOUT, Effect.void);
         const once = yield* Effect.flip(
           approvals.decide(secondRequest.id, { decision: "approve", actionDigest: secondRequest.actionDigest }),
         );

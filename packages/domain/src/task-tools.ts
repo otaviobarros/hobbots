@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { PolicyOverrides } from "./policy.ts";
+import { PolicyLayer } from "./policy.ts";
 import { ArtifactKind, choicesProblem, MAX_QUESTION_OPTIONS, type Quest, TaskRefusal, WaitMode } from "./quest.ts";
 import { ancestorsOf, type Task } from "./task.ts";
 
@@ -64,9 +64,9 @@ const Step = Schema.Struct({
 /** The authority a lead gives a member. It can only narrow what the lead has, never widen it. */
 const Authority = Schema.Struct({
   decisions: Schema.optionalKey(
-    PolicyOverrides.annotate({
+    PolicyLayer.annotate({
       description:
-        "allow, ask or deny for each operation. Each must be at least as narrow as your own. Commands, Git's included, need read-files and edit-files both allow.",
+        "allow, ask or deny for each operation, a built-in one by name or a Charm's by its id, such as github.comment. Each must be at least as narrow as your own. Commands, Git's included, need read-files and edit-files both allow.",
     }),
   ),
   folders: Schema.optionalKey(
@@ -138,6 +138,11 @@ export const TaskToolInputs = {
       text("More about it, only when the summary cannot hold what matters. The Workbench shows it; a lane never does."),
     ),
     milestone_id: Schema.optionalKey(id("The milestone reached, for a milestone checkpoint.")),
+    reached_by: Schema.optionalKey(
+      text(
+        "For a milestone another hob in this work reached, such as your lead making a commit you could not: that hob's name or id. Leave it out when your own work reached it.",
+      ),
+    ),
   }),
   ask: Schema.Struct({
     key,
@@ -183,15 +188,18 @@ export const TaskToolInputs = {
   }),
   hand_off: Schema.Struct({
     key,
-    artifact_id: id("An artifact a Task in your Quest made."),
+    artifact_id: id(
+      'The id of an artifact a Task under you returned with complete_task, as your briefing ("artifact <id>") and read_tasks list it. Not a Task\'s id: a Task that returned no artifact has nothing to hand off.',
+    ),
     to_task_id: id("The Task in your Quest that receives it as context."),
   }),
   wait_for: Schema.Struct({
     key,
     task_id: taskId,
-    tasks: Schema.Array(Schema.String)
-      .check(Schema.isMinLength(1))
-      .annotate({ description: "Ids of Tasks under yours to wait for: steps or members' Tasks." }),
+    tasks: Schema.Array(Schema.String).check(Schema.isMinLength(1)).annotate({
+      description:
+        "Ids of Tasks under yours to wait for: the task_id plan_steps gave each step or delegate_task gave each member's Task. Never your own Task's id or a question's id: Hobbots wakes you with an answer without a wait.",
+    }),
     mode: Schema.optionalKey(
       WaitMode.annotate({
         description: "any: until one of them ends. all: until every one has ended (the default).",
@@ -225,7 +233,9 @@ export const TaskToolInputs = {
         Schema.Struct({
           kind: ArtifactKind,
           label: text("A short name for it."),
-          value: text("A file's absolute path, a link, or the text itself."),
+          value: text(
+            "A file's absolute path inside your folders, a link, or the text itself. Never a file in $TMPDIR, which is removed when your turn ends.",
+          ),
         }),
       ),
     ),
@@ -299,7 +309,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "read_tasks",
     description:
-      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its questions with their state and answer, its latest checkpoints and its result. Read it instead of guessing, and before you tell anyone a question is unanswered; it changes nothing.",
+      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its questions with their state and answer, its latest checkpoints, its result and the artifacts it returned, by the id hand_off takes. Read it instead of guessing, and before you tell anyone a question is unanswered; it changes nothing.",
     label: "Reading the work",
   },
   {
@@ -355,6 +365,8 @@ export const TaskToolRefusal = Schema.Literals([
   "task-state",
   "claim-stale",
   "uncommitted-changes",
+  // A file the Task returns that no one could open once it completes, such as one in the turn's $TMPDIR.
+  "artifact-unreachable",
   // A Charm call, such as `git_init` or a GitHub write, the hub refused (#664): its message says why.
   "charm-refused",
 ]);

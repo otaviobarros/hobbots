@@ -13,6 +13,7 @@ import {
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
+  alwaysLabel,
   canNarrow,
   commandText,
   offersAlways,
@@ -56,6 +57,42 @@ describe("offersAlways", () => {
     expect(offersAlways(request({ grantable: false }))).toBe(false);
     expect(offersAlways(request({ onceOnly: true }))).toBe(false);
     expect(offersAlways(request({ rules: [] }))).toBe(false);
+  });
+});
+
+describe("alwaysLabel", () => {
+  const rules = (...list: ReadonlyArray<GrantRule>) => ({ rules: list });
+  it("names what the rules cover, so a file action never reads as a site", () => {
+    expect(alwaysLabel(request())).toBe("Always for these folders");
+    expect(alwaysLabel(rules({ _tag: "Folder", operation: "edit-files", folder: "/w" }))).toBe(
+      "Always for this folder",
+    );
+    expect(alwaysLabel(rules({ _tag: "Paths", operation: "delete-files", paths: ["/w/a"] }))).toBe(
+      "Always for this file",
+    );
+    expect(alwaysLabel(rules({ _tag: "Paths", operation: "delete-files", paths: ["/w/a", "/w/b"] }))).toBe(
+      "Always for these files",
+    );
+    expect(alwaysLabel(rules({ _tag: "Command", operation: "run-commands", cwd: "/w", words: ["pnpm", "test"] }))).toBe(
+      "Always for this command",
+    );
+    expect(alwaysLabel(rules({ _tag: "Push", cwd: "/w", remote: "origin", branch: "feature" }))).toBe(
+      "Always for this branch",
+    );
+    expect(alwaysLabel(rules({ _tag: "Host", host: "example.com" }))).toBe("Always for this site");
+    expect(
+      alwaysLabel(
+        rules({ _tag: "CharmSite", charm: "github", operation: "github.comment", site: { repository: "o/r" } }),
+      ),
+    ).toBe("Always for this repository");
+  });
+
+  it("reads plain Always when the rules cover different kinds of thing", () => {
+    expect(
+      alwaysLabel(
+        rules({ _tag: "Host", host: "example.com" }, { _tag: "Folder", operation: "read-files", folder: "/w" }),
+      ),
+    ).toBe("Always");
   });
 });
 

@@ -17,6 +17,7 @@ import type { HobLookup, Pins } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { laneMenu } from "./lane-actions-model.ts";
 import { messages } from "./messages.ts";
+import { type StuckRetry, StuckRetryItems, useStuckRetries } from "./stuck-retry-item.tsx";
 import type { LaneActions } from "./use-lane-actions.ts";
 
 type LaneMenuItems = ReturnType<typeof laneMenu>;
@@ -30,8 +31,8 @@ const stayOpen = (go: () => void) => (event: Event) => {
 };
 
 /**
- * The ⋯ menu on a hob's lane (ADR 027): Show in the Workbench, then Retry while the Task failed,
- * Reassign… on the hobs the hub would accept, and Cancel task…. The lead's lane has Pin quest and
+ * The ⋯ menu on a hob's lane (ADR 027): Show in the Workbench, then Retry while the Task failed or
+ * its work is stuck, Reassign… on the hobs the hub would accept, and Cancel task…. The lead's lane has Pin quest and
  * Cancel quest… with what cancelling keeps. Radix moves focus into the menu, moves it with the
  * arrow keys, and gives it back to the ⋯ button when the menu closes.
  */
@@ -57,6 +58,7 @@ export function LaneMenu({
   // Reassign… on one of the hob's other failed Tasks gives that Task, not the header's.
   const target = tree.tasks.find((each) => each.id === open?.taskId) ?? task;
   const menu = laneMenu(tree, task);
+  const stuck = useStuckRetries(tree, task, hobs);
   // Cancel… opens its question in the lane, which takes focus, so the menu does not hand it back.
   const asked = useRef(false);
   const ask = (which: Task) => {
@@ -89,6 +91,7 @@ export function LaneMenu({
         ) : (
           <MenuItems
             task={task}
+            stuck={stuck}
             owner={owner}
             menu={menu}
             pins={pins}
@@ -105,6 +108,7 @@ export function LaneMenu({
 /** The menu's first view: what the lane's Task can do. */
 function MenuItems({
   task,
+  stuck,
   owner,
   menu,
   pins,
@@ -113,6 +117,8 @@ function MenuItems({
   onWorkbench,
 }: {
   task: Task;
+  /** The stuck work on the hob's Tasks that Retry can send again. */
+  stuck: ReadonlyArray<StuckRetry>;
   owner: string;
   menu: LaneMenuItems;
   pins: Pins;
@@ -138,6 +144,7 @@ function MenuItems({
           {messages.retry}
         </DropdownMenuItem>
       )}
+      <StuckRetryItems stuck={stuck} actions={actions} />
       {menu.reassign && (
         <DropdownMenuItem onSelect={stayOpen(() => actions.openMenu(task.id, "reassign"))}>
           {messages.reassign}

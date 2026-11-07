@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { EMPTY_HOB_POLICY, type SafetyPreset } from "@hobbots/domain";
+import { type CharmOperation, EMPTY_HOB_POLICY, type SafetyPreset } from "@hobbots/domain";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterAll, beforeAll } from "vitest";
 import {
@@ -64,6 +64,65 @@ export const useHome = (): Home => {
   return home;
 };
 
+/**
+ * The GitHub Charm's operations as ADR 020 and ADR 031 declare them, written out again here so the
+ * engine is checked against the decision, since the engine never imports a Charm.
+ */
+export const GITHUB_OPERATIONS: ReadonlyArray<CharmOperation> = [
+  {
+    id: "github.read",
+    words: "reading GitHub",
+    presets: { careful: "allow", balanced: "allow", trusting: "allow" },
+    site: ["repository"],
+    onceOnly: false,
+    actsAsIdentity: false,
+  },
+  {
+    id: "github.open-pull-request",
+    words: "opening pull requests",
+    presets: { careful: "ask", balanced: "ask", trusting: "allow" },
+    site: ["repository", "base"],
+    onceOnly: false,
+    actsAsIdentity: true,
+  },
+  {
+    id: "github.comment",
+    words: "commenting on GitHub",
+    presets: { careful: "ask", balanced: "ask", trusting: "allow" },
+    site: ["repository"],
+    onceOnly: false,
+    actsAsIdentity: true,
+  },
+];
+
+/** A GitHub Charm request, as the Charm makes it. */
+export const githubRead = (folder: string, repository = "otaviobarros/hobbots"): PolicyRequest => ({
+  _tag: "Charm",
+  charm: "github",
+  operation: "github.read",
+  folder,
+  site: { repository },
+  targets: [repository],
+});
+
+export const pullRequest = (folder: string, base = "main", repository = "otaviobarros/hobbots"): PolicyRequest => ({
+  _tag: "Charm",
+  charm: "github",
+  operation: "github.open-pull-request",
+  folder,
+  site: { repository, base },
+  targets: [`github.com/${repository} into ${base}`],
+});
+
+export const comment = (folder: string, number = 324, repository = "otaviobarros/hobbots"): PolicyRequest => ({
+  _tag: "Charm",
+  charm: "github",
+  operation: "github.comment",
+  folder,
+  site: { repository },
+  targets: [`github.com/${repository} #${number}`],
+});
+
 export const contextFor = (home: Home, preset: SafetyPreset, extra: Partial<PolicyContext> = {}): PolicyContext => ({
   preset,
   sharedFolders: [home.project],
@@ -72,6 +131,7 @@ export const contextFor = (home: Home, preset: SafetyPreset, extra: Partial<Poli
   sandbox: "on",
   modelHosts: ["api.anthropic.com"],
   restrictions: [],
+  charmOperations: GITHUB_OPERATIONS,
   ...extra,
 });
 

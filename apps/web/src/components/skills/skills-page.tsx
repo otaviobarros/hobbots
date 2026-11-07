@@ -1,4 +1,5 @@
 import type { SkillsList } from "@hobbots/api";
+import type { SkillId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { FlashLine } from "../memory/memory-parts.tsx";
@@ -13,7 +14,7 @@ import { SkillReview } from "./skill-review.tsx";
 import { SkillsExport } from "./skills-export.tsx";
 import { type Say, useFlash } from "./skills-flash.ts";
 import { SkillsImport } from "./skills-import.tsx";
-import { type SkillsSearch, type SkillsView, skillsSearchOf, skillsViewOf } from "./skills-model.ts";
+import { agentsFolderOf, type SkillsSearch, type SkillsView, skillsSearchOf, skillsViewOf } from "./skills-model.ts";
 import { SkillsNav } from "./skills-nav.tsx";
 import { SkillsOverview, WorthALook } from "./skills-overview.tsx";
 import { SkillsEmpty, SkillsFailed, SkillsLoading, SkillsScope, SkillsSearchResults } from "./skills-views.tsx";
@@ -54,13 +55,36 @@ function OverviewBody({ list, hobs, now }: { list: SkillsList; hobs: SkillsReads
   );
 }
 
+/**
+ * The editor, but a skill from ~/.agents/skills and a set have none (ADR 029): the page says where
+ * each changes instead.
+ */
+function EditBody({ skillId, reads, say }: { skillId: SkillId; reads: SkillsReads; say: Say }) {
+  const listed = reads.list.data;
+  const skill = listed?.skills.find((one) => one.id === skillId);
+  const readOnly =
+    skill !== undefined &&
+    listed !== undefined &&
+    (agentsFolderOf(skill, listed.sources) !== null || listed.sets.some((set) => set.skillId === skillId));
+  if (listed === undefined || !readOnly) return <SkillEditor skillId={skillId} hobs={reads.hobs} say={say} />;
+  return (
+    <SkillPage
+      view={{ _tag: "Skill", skillId, member: null, tab: null, file: null, diff: null }}
+      list={listed}
+      hobs={reads.hobs}
+      active={reads.active}
+      say={say}
+    />
+  );
+}
+
 /** The view's body: the editors and Add a skill open whatever the library holds; the rest read it. */
 function ViewBody({ view, reads, say, now }: { view: SkillsView; reads: SkillsReads; say: Say; now: Date }) {
   const projects = reads.list.data?.projects ?? [];
   if (view._tag === "Add")
     return <SkillsImport from={view.from} active={reads.active} projects={projects} hobs={reads.hobs} say={say} />;
   if (view._tag === "New") return <SkillNew active={reads.active} projects={projects} hobs={reads.hobs} say={say} />;
-  if (view._tag === "Edit") return <SkillEditor skillId={view.skillId} hobs={reads.hobs} say={say} />;
+  if (view._tag === "Edit") return <EditBody skillId={view.skillId} reads={reads} say={say} />;
   if (view._tag === "Review") return <SkillReview item={view.item} hobs={reads.hobs} now={now} />;
   const list = reads.list.data;
   if (list === undefined) {

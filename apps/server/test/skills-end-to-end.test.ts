@@ -55,7 +55,8 @@ import { agentsSkillsFolder, SkillsLive } from "../src/skills.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
-// #1065: the skills library end to end on the hub (ADR 029), through its HTTP routes, with the hub's
+// #1065: the skills library end to end on the hub (ADR 029, with the skill sets of #1143 and the
+// read-only `~/.agents/skills` of #1139), through its HTTP routes, with the hub's
 // own composition: the skills store and import, `~/.agents/skills` read from a fake home, the skill
 // tools beside every turn, and a fake Claude Code and a fake Codex, each recording the skills every
 // turn was given. The real runtimes' side of the clean runtime is their contract tests
@@ -104,6 +105,19 @@ git(repository, "init", "--quiet", "--initial-branch=main");
 git(repository, "add", "--all");
 git(repository, "commit", "--quiet", "--message", "skills");
 const commit = git(repository, "rev-parse", "HEAD");
+// A Claude Code plugin whose two skills share a reference file and link to each other: one skill set.
+const plugin = join(root, "playbook");
+write(join(plugin, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "playbook", version: "0.5.0" }));
+for (const [name, sibling] of [
+  ["deliver-change", "plan-change"],
+  ["plan-change", "deliver-change"],
+] as const) {
+  write(
+    join(plugin, "skills", name, "SKILL.md"),
+    `${skillMd(name)}\nRead [the contract](../../references/contract.md) and [${sibling}](../${sibling}/SKILL.md).\n`,
+  );
+}
+write(join(plugin, "references", "contract.md"), "# Contract\n");
 
 /** Every turn's skills, by the runtime that ran it, in the order the turns started. */
 const given: Array<{ readonly runtime: RuntimeKind; readonly skills: ReadonlyArray<SkillMount> }> = [];
@@ -246,11 +260,16 @@ const turn = async (thread: Thread, content: string) => {
   return { reply, runtime: one.runtime, skills: one.skills };
 };
 
-const pins = (skills: ReadonlyArray<SkillMount>) => skills.map((mount) => [mount.name, mount.revision]);
+/** The loose skills a turn mounted, each with its revision. */
+const pins = (skills: ReadonlyArray<SkillMount>) =>
+  skills.filter((mount) => !mount.set).map((mount) => [mount.name, mount.revision]);
+/** The skills of sets a turn mounted, each named with its set, with the set's revision. */
+const setPins = (skills: ReadonlyArray<SkillMount>) =>
+  skills.filter((mount) => mount.set).map((mount) => [`${mount.set?.name}:${mount.name}`, mount.revision]);
 
 describe("the skills library end to end", () => {
-  // covers RT-001, ADR 029 (Import, Scopes, Pins and rollout, A clean runtime, Proactive hobs, The use line), #1057
-  it("[TC-AG-1065] one library reaches a Claude Code hob and a Codex hob by scope, rolls out past a held pin, keeps the runtimes clean, waits for you on a proposal and names each use", async () => {
+  // covers RT-001, ADR 029 (Import, Skill sets, Scopes, Pins and rollout, A clean runtime, Proactive hobs, The use line), #1057
+  it("[TC-AG-1065] one library reaches a Claude Code hob and a Codex hob by scope, a plugin as one set, rolls out past a held pin, keeps the runtimes clean and ~/.agents/skills read-only, waits for you on a proposal and names each use", async () => {
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
     const pip = await summon("Pip", "claude-code", 1065);
     const quill = await summon("Quill", "codex", 1066);
@@ -265,6 +284,15 @@ describe("the skills library end to end", () => {
     expect(fromGit.status).toBe(200);
     const review = fromGit.body.imported[0];
     expect(review.revision).toMatchObject({ name: "review", commit, path: "skills/review" });
+    // A plugin comes in as one set, its two skills and the file they share kept together.
+    const fromPlugin = await request("POST", "/api/skills", { source: { _tag: "Folder", path: plugin } });
+    expect(fromPlugin.status).toBe(200);
+    const playbook = fromPlugin.body.imported[0];
+    expect(playbook.revision).toMatchObject({ name: "playbook", label: "0.5.0" });
+    expect(playbook.revision.set.skills.map((one: { name: string }) => one.name)).toEqual([
+      "deliver-change",
+      "plan-change",
+    ]);
     const library = (await request("GET", "/api/skills")).body;
     const houseStyle = library.skills.find((skill: { name: string }) => skill.name === "house-style");
     expect(library.sources.find((source: { id: string }) => source.id === houseStyle.sourceId)?.origin).toEqual({
@@ -280,6 +308,7 @@ describe("the skills library end to end", () => {
     // Nothing a runtime's own setup or the project holds came into the library.
     expect(library.skills.map((skill: { name: string }) => skill.name).sort()).toEqual([
       "house-style",
+      "playbook",
       "release",
       "review",
     ]);
@@ -296,13 +325,22 @@ describe("the skills library end to end", () => {
     const toProject = await assign(release.skill.id, { _tag: "Project", identity });
     const toQuill = await assign(release.skill.id, { _tag: "Hob", agentId: quill.id }, true);
     await assign(review.skill.id, { _tag: "Hob", agentId: pip.id });
+    // The set goes to the project, and Quill turns off one of its skills for itself alone.
+    await assign(playbook.skill.id, { _tag: "Project", identity });
+    const optOut = await request("PUT", `/api/skills/hobs/${quill.id}/opt-outs/${playbook.skill.id}`, {
+      optedOut: true,
+      member: "plan-change",
+    });
+    expect(optOut.body.optedOutOfSets).toEqual([{ skillId: playbook.skill.id, name: "plan-change" }]);
 
     // The narrower scope wins the clash, and the clash is shown.
     const pipView = (await request("GET", `/api/skills/hobs/${pip.id}`)).body;
     expect(
       pipView.skills.map((skill: { name: string; scope: { _tag: string } }) => [skill.name, skill.scope._tag]),
     ).toEqual([
+      ["deliver-change", "Project"],
       ["house-style", "Everyone"],
+      ["plan-change", "Project"],
       ["release", "Project"],
       ["review", "Hob"],
     ]);
@@ -313,6 +351,7 @@ describe("the skills library end to end", () => {
     expect(
       quillView.skills.map((skill: { name: string; scope: { _tag: string } }) => [skill.name, skill.scope._tag]),
     ).toEqual([
+      ["deliver-change", "Project"],
       ["house-style", "Everyone"],
       ["release", "Hob"],
     ]);
@@ -329,13 +368,17 @@ describe("the skills library end to end", () => {
       ["release", r1],
       ["review", review.revision.hash],
     ]);
-    expect(pipFirst.reply.content).toBe("house-style\nrelease\nreview");
+    expect(setPins(pipFirst.skills)).toEqual([
+      ["playbook:deliver-change", playbook.revision.hash],
+      ["playbook:plan-change", playbook.revision.hash],
+    ]);
     const quillFirst = await turn(quillThread, "/skills");
     expect(quillFirst.runtime).toBe("codex");
     expect(pins(quillFirst.skills)).toEqual([
       ["house-style", houseStyle.latest],
       ["release", r1],
     ]);
+    expect(setPins(quillFirst.skills)).toEqual([["playbook:deliver-change", playbook.revision.hash]]);
 
     // The clean runtime: no turn was handed anything from `~/.claude`, `~/.codex` or the project's own
     // folders, and the `~/.agents/skills` skill reached both runtimes as a mount the hub serves.
@@ -376,11 +419,11 @@ describe("the skills library end to end", () => {
     const pipUses = await turn(pipThread, "Cut the release.\nfake:skill release");
     expect(pins(pipUses.skills).find(([name]) => name === "release")).toEqual(["release", r2]);
     expect(pipUses.reply.skillsUsed).toEqual([
-      { source: "library", skillId: release.skill.id, name: "release", pin: r2, number: 2, explicit: false },
+      { source: "library", skillId: release.skill.id, name: "release", set: null, pin: r2, number: 2, explicit: false },
     ]);
     const quillUses = await turn(quillThread, "Cut the release.\nfake:skill release");
     expect(quillUses.reply.skillsUsed).toEqual([
-      { source: "library", skillId: release.skill.id, name: "release", pin: r1, number: 1, explicit: false },
+      { source: "library", skillId: release.skill.id, name: "release", set: null, pin: r1, number: 1, explicit: false },
     ]);
     const uses = (await request("GET", `/api/skills/${release.skill.id}/uses`)).body;
     expect(uses.total).toBe(2);
@@ -390,6 +433,23 @@ describe("the skills library end to end", () => {
         [quill.id, 1],
       ].sort(),
     );
+    // A skill of a set is picked by its bare name or with its set's, and its use names the set's revision.
+    const setUse = (name: string, pin: string) => ({
+      source: "library",
+      skillId: playbook.skill.id,
+      name,
+      set: "playbook",
+      pin,
+      number: 1,
+      explicit: true,
+    });
+    const pipPlan = await turn(pipThread, "/plan-change go");
+    expect(pipPlan.reply.skillsUsed).toEqual([setUse("plan-change", playbook.revision.hash)]);
+    const quillDeliver = await turn(quillThread, "/playbook:deliver-change go");
+    expect(quillDeliver.reply.skillsUsed).toEqual([setUse("deliver-change", playbook.revision.hash)]);
+    // The skill Quill turned off is not handed to its turn, so naming it uses nothing.
+    const quillPlan = await turn(quillThread, "/playbook:plan-change go");
+    expect(quillPlan.reply.skillsUsed).toEqual([]);
 
     // Roll back from What changed: back to r1 for everyone it moved, and the next turn is on r1.
     const back = await request("POST", `/api/skills/${release.skill.id}/roll-out`, { pin: savedChange.previous });
@@ -398,6 +458,23 @@ describe("the skills library end to end", () => {
     );
     const afterBack = await turn(pipThread, "/skills");
     expect(pins(afterBack.skills).find(([name]) => name === "release")).toEqual(["release", r1]);
+
+    // `~/.agents/skills` is read-only in Hobbots: an edit is refused, and Make a copy gives Pip an editable one.
+    const readOnly = await request("POST", `/api/skills/${houseStyle.id}/edits`, {
+      base: houseStyle.latest,
+      description: "Changed here.",
+      instructions: "Changed.",
+    });
+    expect(readOnly).toMatchObject({ status: 409, body: { _tag: "SkillIsReadOnly", name: "house-style" } });
+    const copied = await request("POST", `/api/skills/${houseStyle.id}/copies`, {
+      name: "house-style-copy",
+      scope: { _tag: "Hob", agentId: pip.id },
+    });
+    expect(copied.body).toMatchObject({ added: true, skill: { name: "house-style-copy", sourceId: null } });
+    const afterCopy = await turn(pipThread, "/skills");
+    expect(pins(afterCopy.skills).map(([name]) => name)).toEqual(
+      expect.arrayContaining(["house-style", "house-style-copy"]),
+    );
 
     // A proposal: the hob's skill tool files it, and nothing reaches the library or any turn until you add it.
     const proposal = {
@@ -410,7 +487,7 @@ describe("the skills library end to end", () => {
     expect(proposed.reply.content).toContain("waits for the user's review in their Inbox");
     const [waiting] = (await request("GET", "/api/skill-proposals")).body.proposals;
     expect(waiting.proposal).toMatchObject({ name: "changelog", state: "waiting", skillId: null, agentId: pip.id });
-    expect((await request("GET", "/api/skills")).body.skills).toHaveLength(3);
+    expect((await request("GET", "/api/skills")).body.skills).toHaveLength(5);
     expect(pins((await turn(pipThread, "/skills")).skills).map(([name]) => name)).not.toContain("changelog");
 
     const added = await request("POST", `/api/skill-proposals/${waiting.proposal.id}/add`, {});

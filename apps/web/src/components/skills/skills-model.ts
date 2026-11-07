@@ -2,8 +2,11 @@ import type { SkillsList } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
+  effectiveDecision,
+  hobAnswers,
   memoryScopeKey,
   memoryScopeOfKey,
+  type SafetyPreset,
   SKILL_DESCRIPTION_MAX,
   type Skill,
   type SkillAssignment,
@@ -19,6 +22,13 @@ import { messages } from "./messages.ts";
 
 const copy = messages;
 
+/**
+ * The hobs Draft it with a hob offers: those whose permissions let them suggest a skill under the
+ * preset. Ask still lets one, since you answer it in the chat; Never does not.
+ */
+export const draftingHobs = (active: ReadonlyArray<Agent>, preset: SafetyPreset): ReadonlyArray<Agent> =>
+  active.filter((hob) => effectiveDecision(preset, hobAnswers(hob.policy), "propose-skill") !== "deny");
+
 /** Where Add a skill takes it from. */
 export const ImportFrom = Schema.Literals(["git", "file", "write"]);
 export type ImportFrom = typeof ImportFrom.Type;
@@ -33,6 +43,8 @@ export interface SkillsSearch {
   readonly scope?: string | undefined;
   /** The skill open, by its id. */
   readonly skill?: string | undefined;
+  /** In a set, the skill of it open, by its name in the set (ADR 029, Skill sets). */
+  readonly member?: string | undefined;
   readonly tab?: SkillTab | undefined;
   /** In Instructions, the file open. */
   readonly file?: string | undefined;
@@ -61,6 +73,8 @@ export type SkillsView =
   | {
       readonly _tag: "Skill";
       readonly skillId: SkillId;
+      /** A skill of the set `skillId`, by its name in the set; null for the skill or set itself. */
+      readonly member: string | null;
       readonly tab: SkillTab | null;
       readonly file: string | null;
       readonly diff: SkillRevisionHash | null;
@@ -75,6 +89,7 @@ const skillViewOf = (search: SkillsSearch, skillId: SkillId): SkillsView =>
     : {
         _tag: "Skill",
         skillId,
+        member: search.member ?? null,
         tab: search.tab ?? null,
         file: search.file ?? null,
         diff: (search.diff as SkillRevisionHash | undefined) ?? null,
@@ -94,6 +109,15 @@ export const skillsViewOf = (search: SkillsSearch): SkillsView => {
   return scope === null ? { _tag: "Overview" } : { _tag: "Scope", scope };
 };
 
+/** The address of a skill, or of a skill of a set, on a tab. */
+const skillSearchOf = (view: Extract<SkillsView, { _tag: "Skill" }>): SkillsSearch => ({
+  skill: view.skillId,
+  member: view.member ?? undefined,
+  tab: view.tab ?? undefined,
+  file: view.file ?? undefined,
+  diff: view.diff ?? undefined,
+});
+
 /** The address of a view, the inverse of `skillsViewOf`. */
 export const skillsSearchOf = (view: SkillsView): SkillsSearch => {
   switch (view._tag) {
@@ -112,12 +136,7 @@ export const skillsSearchOf = (view: SkillsView): SkillsSearch => {
     case "New":
       return { edit: "new" };
     case "Skill":
-      return {
-        skill: view.skillId,
-        tab: view.tab ?? undefined,
-        file: view.file ?? undefined,
-        diff: view.diff ?? undefined,
-      };
+      return skillSearchOf(view);
     case "Edit":
       return { skill: view.skillId, edit: "skill" };
     case "Search":
@@ -129,8 +148,19 @@ export const skillsSearchOf = (view: SkillsView): SkillsSearch => {
 export const skillView = (skillId: SkillId, tab: SkillTab | null = null): SkillsView => ({
   _tag: "Skill",
   skillId,
+  member: null,
   tab,
   file: null,
+  diff: null,
+});
+
+/** A skill of a set, read-only on its own page (ADR 029, Skill sets). */
+export const memberView = (setId: SkillId, member: string, file: string | null = null): SkillsView => ({
+  _tag: "Skill",
+  skillId: setId,
+  member,
+  tab: null,
+  file,
   diff: null,
 });
 
@@ -160,6 +190,20 @@ export const scopeName = (scope: SkillScope, hobs: HobDirectory): string => {
 /** The origin a skill's revisions come from, or null for one written in Hobbots. */
 export const originOf = (sourceId: Skill["sourceId"], sources: ReadonlyArray<SkillSource>): SkillOrigin | null =>
   sourceId === null ? null : (sources.find((source) => source.id === sourceId)?.origin ?? null);
+
+/**
+ * A skill from `~/.agents/skills` (ADR 029): read-only in Hobbots, and out of backups and exports.
+ * Its folder there, as `~/.agents/skills/pdf-forms`, or null for any other skill.
+ */
+export const agentsFolderOf = (
+  skill: Pick<Skill, "sourceId" | "name">,
+  sources: ReadonlyArray<SkillSource>,
+  revisions: ReadonlyArray<Pick<SkillRevision, "path">> = [],
+): string | null => {
+  const origin = originOf(skill.sourceId, sources);
+  if (origin?._tag !== "AgentsFolder") return null;
+  return `${copy.source.agents}/${revisions[0]?.path ?? skill.name}`;
+};
 
 /** A Git address without its scheme and `.git`, as `github.com/acme/skills`. */
 const shortGit = (url: string) =>
@@ -192,6 +236,8 @@ export interface SkillRow {
   /** The revision number the row shows, or null when its pin is an older revision than the newest. */
   readonly number: number | null;
   readonly origin: SkillOrigin | null;
+  /** For a set (ADR 029, Skill sets), the names of the skills its newest revision holds; null for a skill. */
+  readonly set: ReadonlyArray<string> | null;
 }
 
 /** A scope and its skills, or the skills no scope has yet when `scope` is null. */
@@ -209,6 +255,7 @@ const scopeOrder = (scope: SkillScope) => (scope._tag === "Everyone" ? 0 : scope
  */
 export const libraryGroups = (list: SkillsList, hobs: HobDirectory): ReadonlyArray<SkillGroup> => {
   const skills = new Map(list.skills.map((skill) => [skill.id, skill]));
+  const sets = new Map(list.sets.map((set) => [set.skillId, set.skills.map((one) => one.name)]));
   const numberOf = (skill: Skill, pin: SkillRevisionHash) => (pin === skill.latest ? skill.revisions : null);
   const groups = new Map<string, { scope: SkillScope; rows: Array<SkillRow> }>();
   for (const assignment of list.assignments) {
@@ -221,6 +268,7 @@ export const libraryGroups = (list: SkillsList, hobs: HobDirectory): ReadonlyArr
       assignment,
       number: numberOf(skill, assignment.pin),
       origin: originOf(skill.sourceId, list.sources),
+      set: sets.get(skill.id) ?? null,
     });
     groups.set(key, group);
   }
@@ -238,6 +286,7 @@ export const libraryGroups = (list: SkillsList, hobs: HobDirectory): ReadonlyArr
       assignment: null,
       number: skill.revisions,
       origin: originOf(skill.sourceId, list.sources),
+      set: sets.get(skill.id) ?? null,
     }));
   return loose.length === 0 ? sorted : [...sorted, { key: "none", scope: null, rows: sortRows(loose) }];
 };
@@ -246,33 +295,41 @@ export const libraryGroups = (list: SkillsList, hobs: HobDirectory): ReadonlyArr
 export interface ExportRow {
   readonly skill: Skill;
   readonly scope: SkillScope | null;
-  /** The scope's name, with how many more scopes it has, and "~/.agents" for a skill from that folder. */
+  /** The scope's name, with how many more scopes it has. */
   readonly where: string;
 }
 
 /**
  * Every skill once, as Export skills lists it: in the overview's order, Everyone, each project and
- * each hob, then those no one has, each under the first scope it has.
+ * each hob, then those no one has, each under the first scope it has. Skills from `~/.agents/skills`
+ * are listed apart, as not exported: they stay in that folder (ADR 029).
  */
-export const exportRows = (list: SkillsList, hobs: HobDirectory): ReadonlyArray<ExportRow> => {
+export const exportRows = (
+  list: SkillsList,
+  hobs: HobDirectory,
+): { readonly rows: ReadonlyArray<ExportRow>; readonly notExported: ReadonlyArray<Skill> } => {
   const groups = libraryGroups(list, hobs);
   const seen = new Set<SkillId>();
   const rows: Array<ExportRow> = [];
+  const notExported: Array<Skill> = [];
   for (const group of groups) {
     for (const row of group.rows) {
       if (seen.has(row.skill.id)) continue;
       seen.add(row.skill.id);
+      if (row.origin?._tag === "AgentsFolder") {
+        notExported.push(row.skill);
+        continue;
+      }
       const more = groups.filter((other) => other !== group && other.rows.some((one) => one.skill.id === row.skill.id));
       const name = group.scope === null ? copy.scopes.none : scopeName(group.scope, hobs);
-      const parts = [
-        more.length === 0 ? name : copy.export.more({ name, count: more.length }),
-        ...(row.origin?._tag === "AgentsFolder" ? [copy.export.agents] : []),
-      ];
-      rows.push({ skill: row.skill, scope: group.scope, where: parts.join(" · ") });
+      const where = more.length === 0 ? name : copy.export.more({ name, count: more.length });
+      rows.push({ skill: row.skill, scope: group.scope, where });
     }
   }
-  return rows;
+  return { rows, notExported: sortSkills(notExported) };
 };
+
+const sortSkills = (all: ReadonlyArray<Skill>) => [...all].sort((a, b) => a.name.localeCompare(b.name));
 
 const sortRows = (rows: ReadonlyArray<SkillRow>) => [...rows].sort((a, b) => a.skill.name.localeCompare(b.skill.name));
 
@@ -417,3 +474,14 @@ export const importable = (candidate: {
   candidate.refusal === null &&
   candidate.existing === null &&
   (candidate.exported?.older ?? []).every((older) => older.matches && older.refusal === null);
+
+/** The folders a set's shared files are in, as `references/`; a file at the set's top is named by itself. */
+export const sharedFoldersOf = (shared: ReadonlyArray<{ readonly path: string }>): ReadonlyArray<string> =>
+  [
+    ...new Set(
+      shared.map((file) => {
+        const at = file.path.indexOf("/");
+        return at === -1 ? file.path : `${file.path.slice(0, at + 1)}`;
+      }),
+    ),
+  ].sort();

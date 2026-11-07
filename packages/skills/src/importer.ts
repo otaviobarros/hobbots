@@ -16,20 +16,21 @@ import {
   type SkillDropped,
   type SkillFlag,
   type SkillId,
-  type SkillMovedOn,
   type SkillName,
   SkillNameChanged,
   SkillNameTaken,
   SkillNotFound,
   type SkillOrigin,
-  type SkillRefused,
+  SkillRefused,
   type SkillRevisionHash,
+  type SkillSetContent,
+  type SkillSetSkill,
   SkillSourceChanged,
   SkillSourceUnreadable,
 } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
-import { type CheckedSkill, type CheckResult, checkSkill } from "./check.ts";
-import { editedTree, type SkillEdit } from "./edit.ts";
+import { type CheckedSkill, type CheckResult, checkSet, checkSkill } from "./check.ts";
+import { copiedTree, editedTree, memberCopyTree, type SkillEdit } from "./edit.ts";
 import {
   decodeSkillsLock,
   type LockedSkill as ExportedSkill,
@@ -39,7 +40,7 @@ import {
   SKILLS_LOCK_FILE,
   type SkillsLock,
 } from "./exports.ts";
-import { findSkills } from "./find.ts";
+import { type FoundSet, findSkills, pluginSets, repositorySetFolder, siblingsOf } from "./find.ts";
 import { type LockedSkill, readLock } from "./lock.ts";
 import { archiveTree } from "./sources/archive.ts";
 import { folderTree } from "./sources/folder.ts";
@@ -63,7 +64,22 @@ export type SkillImportSource =
        * an `agents/openai.yaml` the import left out: the edit keeps it.
        */
       readonly carried: { readonly charms: ReadonlyArray<string>; readonly dropped: ReadonlyArray<SkillDropped> };
-    } & SkillEdit);
+    } & SkillEdit)
+  /**
+   * A copy of a revision under a new name (ADR 029, Make a copy): its files as they are, its
+   * `SKILL.md` renamed, written in Hobbots with no source.
+   */
+  | {
+      readonly _tag: "Copied";
+      readonly folder: string;
+      readonly name: SkillName;
+      readonly carried: { readonly charms: ReadonlyArray<string>; readonly dropped: ReadonlyArray<SkillDropped> };
+      /**
+       * For a set's revision (ADR 029, Skill sets), the one of its skills copied: its folder, and the
+       * set's files it links to under `linked/`, with those links pointed at them.
+       */
+      readonly member?: SkillSetSkill;
+    };
 
 /** One skill a source holds, as import would take it, or the rule it broke. */
 export interface SkillCandidate {
@@ -76,6 +92,10 @@ export interface SkillCandidate {
   readonly dropped: ReadonlyArray<SkillDropped>;
   readonly charms: ReadonlyArray<string>;
   readonly label: string | null;
+  /** For a set (ADR 029, Skill sets), the skills it holds; null for a skill. */
+  readonly set: SkillSetContent | null;
+  /** For a set, the files it keeps outside its skills' folders, which they share; empty for a skill. */
+  readonly shared: ReadonlyArray<string>;
   readonly refusal: SkillRefused | null;
   /**
    * What the source's lock says of it, the `skills` CLI's `skills-lock.json` or a Hobbots export's
@@ -234,6 +254,10 @@ const openTree = (source: SkillImportSource) => {
         return Promise.resolve(writtenTree(source.files));
       case "Edited":
         return editedTree(source.folder, source);
+      case "Copied":
+        return source.member === undefined
+          ? copiedTree(source.folder, source.name)
+          : memberCopyTree(source.folder, source.member, source.name);
     }
   };
   return Effect.acquireRelease(
@@ -253,6 +277,16 @@ interface ExportedSet {
 }
 
 /** `path` inside the export's folder. */
+/** A set's files outside its skills' folders, which they share (ADR 029, Skill sets). */
+const sharedOf = (skill: CheckedSkill): ReadonlyArray<string> => {
+  const members = skill.set?.skills ?? [];
+  if (members.length === 0) return [];
+  return skill.files
+    .map((file) => file.path)
+    .filter((path) => !members.some((member) => path.startsWith(`${member.path}/`)))
+    .sort();
+};
+
 const inExport = (set: ExportedSet, path: string) => (set.base === "" ? path : `${set.base}/${path}`);
 
 /**
@@ -306,24 +340,83 @@ const fromExportOf = (set: ExportedSet | null, folder: string, result: CheckResu
   return { skill, matches, older: false };
 };
 
-/** Reads and checks every skill of a source; a read that fails partway is the source's failure. */
-const checkAll = (tree: SkillTree) =>
+/** Whether a refusal is of a link that leaves the skill's folder, which a set of the skill may hold. */
+const linksOut = (result: CheckResult) =>
+  result._tag === "Refused" && result.refusal.check === "outside-path" && result.refusal.message.includes(" links to ");
+
+/** The last part of a folder's path, which names a set of a repository that has no manifest. */
+const lastPart = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+
+/**
+ * The sets of a source (ADR 029, Skill sets): each plugin's skills, and the skills side by side in a
+ * repository's folder of which one links outside its own folder. Answers them with the skills that
+ * stay loose, each checked.
+ */
+const setsOf = async (tree: SkillTree) => {
+  const found = findSkills(tree);
+  const sets: Array<FoundSet> = [...pluginSets(found)];
+  const inSet = new Set(sets.flatMap((set) => set.skills));
+  const loose: Array<{ readonly folder: string; readonly result: CheckResult }> = [];
+  for (const one of found)
+    if (!inSet.has(one.folder)) loose.push({ folder: one.folder, result: await checkSkill(tree, one) });
+  for (const one of loose) {
+    if (inSet.has(one.folder) || !linksOut(one.result)) continue;
+    const folder = repositorySetFolder(one.folder);
+    if (folder === null) continue;
+    const skills = siblingsOf(found, one.folder).filter((skill) => !inSet.has(skill));
+    for (const skill of skills) inSet.add(skill);
+    sets.push({ folder, skills, manifest: null, dropped: [] });
+  }
+  return { sets, loose: loose.filter((one) => !inSet.has(one.folder)) };
+};
+
+/** Reads and checks every skill and set of a source; a read that fails partway is the source's failure. */
+const checkAll = (tree: SkillTree, topName: string | null) =>
   Effect.tryPromise({
     try: async () => {
-      const found = findSkills(tree);
+      const { sets, loose } = await setsOf(tree);
       const lock = await readLock(tree);
       const set = await readExport(tree);
       const results: Array<Checked> = [];
-      for (const one of found) {
-        const result = await checkSkill(tree, one);
+      for (const { folder, result } of loose) {
         const name = result._tag === "Passed" ? result.skill.name : null;
         const locked = name === null ? null : (lock.get(name) ?? null);
-        results.push({ result, locked, fromExport: fromExportOf(set, one.folder, result) });
+        results.push({ result, locked, fromExport: fromExportOf(set, folder, result) });
       }
+      for (const one of sets) {
+        const result = await checkSet(tree, one, one.folder === "" ? topName : lastPart(one.folder));
+        results.push({ result, locked: null, fromExport: fromExportOf(set, one.folder, result) });
+      }
+      results.sort((a, b) => (folderOf(a) < folderOf(b) ? -1 : folderOf(a) > folderOf(b) ? 1 : 0));
       return { results, set };
     },
     catch: (error) => unreadable(error) ?? new SkillSourceUnreadable({ message: String(error) }),
   });
+
+/** What names a source that is itself a set of a repository: its folder's, its archive's or its repository's name. */
+const setRefusal = (name: SkillName, toSet: boolean) =>
+  new SkillRefused({
+    check: "set",
+    path: null,
+    message: toSet
+      ? `${name} is one skill, and this source holds a set. Import the set as a skill of its own.`
+      : `${name} is a set; its skills change only with a new version of the set. Make a copy to change one.`,
+  });
+
+const topNameOf = (source: SkillImportSource): string | null => {
+  switch (source._tag) {
+    case "Folder":
+      return lastPart(source.path.replace(/[\\/]+$/, "").replaceAll("\\", "/"));
+    case "Archive":
+      return source.fileName.replace(/\.(?:zip|skill)$/i, "");
+    case "Git":
+      return lastPart(source.url.replace(/\/+$/, "").replace(/\.git$/, ""));
+    case "Written":
+    case "Edited":
+    case "Copied":
+      return null;
+  }
+};
 
 const originOf = (source: SkillImportSource, locked: LockedSkill | null): SkillOrigin | null => {
   // A skill the `skills` CLI installed is followed at the source it came from.
@@ -337,11 +430,16 @@ const originOf = (source: SkillImportSource, locked: LockedSkill | null): SkillO
       return { _tag: "Git", url: source.url, ref: source.ref };
     case "Written":
     case "Edited":
+    case "Copied":
       return null;
   }
 };
 
-type Carried = Extract<SkillImportSource, { readonly _tag: "Edited" }>["carried"];
+type Carried = Extract<SkillImportSource, { readonly _tag: "Edited" | "Copied" }>["carried"];
+
+/** What the source carries over from the revision it was made from, when it was made from one. */
+const carriedOf = (source: SkillImportSource): Carried | null =>
+  source._tag === "Edited" || source._tag === "Copied" ? source.carried : null;
 
 /** An edit's Charms: what its files name now, and what its base recorded from files it left out. */
 const carriedCharms = (skill: CheckedSkill, carried: Carried) =>
@@ -427,7 +525,16 @@ export const SkillImporterLive = Layer.effect(
       Effect.gen(function* () {
         if (result._tag === "Refused") {
           const exported = exportedOf(fromExport, context, false);
-          const none = { name: null, description: null, hash: null, label: null, locked: null, existing: null };
+          const none = {
+            name: null,
+            description: null,
+            hash: null,
+            label: null,
+            set: null,
+            shared: [],
+            locked: null,
+            existing: null,
+          };
           return {
             folder: result.folder,
             ...none,
@@ -450,6 +557,8 @@ export const SkillImporterLive = Layer.effect(
           dropped: skill.dropped,
           charms: skill.charms,
           label: skill.label,
+          set: skill.set,
+          shared: sharedOf(skill),
           refusal: null,
           locked: lockedOf(skill, locked),
           exported,
@@ -461,7 +570,7 @@ export const SkillImporterLive = Layer.effect(
       Effect.scoped(
         Effect.gen(function* () {
           const tree = yield* openTree(source);
-          const { results, set } = yield* checkAll(tree);
+          const { results, set } = yield* checkAll(tree, topNameOf(source));
           return {
             commit: tree.commit,
             candidates: yield* Effect.forEach(
@@ -500,7 +609,13 @@ export const SkillImporterLive = Layer.effect(
       });
 
     /** Fails on a name another skill has, before any file is written. */
-    const checkName = (skill: CheckedSkill, skillId: SkillId | undefined) =>
+    /** Fails on an edit in Hobbots of a set: a set changes only with a new version from its source. */
+    const checkNotSet = (skillId: SkillId) =>
+      Effect.gen(function* () {
+        const [latest] = yield* library.revisions(skillId);
+        if (latest?.set != null) return yield* setRefusal(latest.name, false);
+      });
+    const checkName = (skill: CheckedSkill, skillId: SkillId | undefined, written: boolean) =>
       Effect.gen(function* () {
         if (skillId !== undefined) {
           const target = yield* library.get(skillId);
@@ -508,6 +623,10 @@ export const SkillImporterLive = Layer.effect(
           if (target.name !== skill.name) {
             return yield* new SkillNameChanged({ skillId, name: target.name, given: skill.name });
           }
+          // A set changes only as a whole, with a new version from its source; a loose skill never becomes one.
+          const [latest] = yield* library.revisions(skillId);
+          const toSet = !written && skill.set !== null;
+          if ((latest?.set != null) !== toSet) return yield* setRefusal(target.name, toSet);
           return;
         }
         const existing = yield* existingOf(skill);
@@ -530,6 +649,7 @@ export const SkillImporterLive = Layer.effect(
           description: skill.description,
           files: skill.files,
           flags: skill.flags,
+          set: skill.set,
           ...input,
         });
         yield* announce(committed.entries);
@@ -600,8 +720,10 @@ export const SkillImporterLive = Layer.effect(
 
     const addChosen = (source: SkillImportSource, options: SkillImportOptions) =>
       Effect.gen(function* () {
+        const written = source._tag === "Written" || source._tag === "Edited" || source._tag === "Copied";
+        if (written && options.skillId !== undefined) yield* checkNotSet(options.skillId);
         const tree = yield* openTree(source);
-        const { results, set } = yield* checkAll(tree);
+        const { results, set } = yield* checkAll(tree, topNameOf(source));
         const chosen = yield* picked(results, options);
         if (options.scanned !== undefined) {
           const scanned = options.scanned;
@@ -614,7 +736,9 @@ export const SkillImporterLive = Layer.effect(
             });
           }
         }
-        yield* Effect.forEach(chosen, ({ skill }) => checkName(skill, options.skillId), { discard: true });
+        yield* Effect.forEach(chosen, ({ skill }) => checkName(skill, options.skillId, written), {
+          discard: true,
+        });
         if (set !== null && options.skillId === undefined) yield* checkOlder(results, set, chosen);
         const exported: Array<{ readonly skillId: SkillId; readonly skill: ExportedSkill }> = [];
         const imported = yield* Effect.forEach(chosen, ({ skill, locked, fromExport }) =>
@@ -624,9 +748,10 @@ export const SkillImporterLive = Layer.effect(
               exported.push({ skillId: added.skill.id, skill: fromExport.skill });
               return added;
             }
+            const carried = carriedOf(source);
             return yield* addOne(options.skillId ?? null, skill, {
-              charms: source._tag === "Edited" ? carriedCharms(skill, source.carried) : skill.charms,
-              dropped: source._tag === "Edited" ? carriedDropped(skill, source.carried) : skill.dropped,
+              charms: carried === null ? skill.charms : carriedCharms(skill, carried),
+              dropped: carried === null ? skill.dropped : carriedDropped(skill, carried),
               origin: originOf(source, locked),
               commit: locked?.url != null ? null : tree.commit,
               path: locked?.url != null ? locked.path : skill.folder === "" ? null : skill.folder,

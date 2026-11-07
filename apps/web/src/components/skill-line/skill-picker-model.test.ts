@@ -26,6 +26,7 @@ const skill = (name: string, scope: SkillScope, onlyWhenAsked = false) => ({
   scope,
   onlyWhenAsked,
   missingCharms: [],
+  set: null,
 });
 const view: HobSkills = {
   agentId: pip,
@@ -37,6 +38,7 @@ const view: HobSkills = {
   replaced: [],
   clashes: [],
   optedOut: [],
+  optedOutOfSets: [],
   projects: [],
   lastUsed: [],
 };

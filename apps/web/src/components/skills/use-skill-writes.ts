@@ -2,6 +2,7 @@ import type { SkillId, SkillScope } from "@hobbots/domain";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   assignSkill,
+  copySkill,
   editSkill,
   holdAssignment,
   importSkills,
@@ -14,7 +15,7 @@ import {
 
 /**
  * Every change the Skills page makes, each yours: import, edit, assign, hold, roll out or back,
- * unassign and remove. Each one reads the library again, so a list, a count or a skill's page shows it
+ * unassign, remove and make a copy. Each one reads the library again, so a list, a count or a skill's page shows it
  * (STD-REACT-012).
  */
 export const useSkillWrites = () => {
@@ -28,8 +29,9 @@ export const useSkillWrites = () => {
   const rollOut = useMutation({ mutationFn: rollOutSkill, onSuccess });
   const unassign = useMutation({ mutationFn: unassignSkill, onSuccess });
   const remove = useMutation({ mutationFn: removeSkill, onSuccess });
-  const all = [add, edit, assign, hold, roll, rollOut, unassign, remove];
-  return { add, edit, assign, hold, roll, rollOut, unassign, remove, busy: all.some((one) => one.isPending) };
+  const copy = useMutation({ mutationFn: copySkill, onSuccess });
+  const all = [add, edit, assign, hold, roll, rollOut, unassign, remove, copy];
+  return { add, edit, assign, hold, roll, rollOut, unassign, remove, copy, busy: all.some((one) => one.isPending) };
 };
 
 export type SkillWrites = ReturnType<typeof useSkillWrites>;

@@ -77,7 +77,11 @@ test("[TC-UX-225] the chat keeps the lead's plan and leaves out its routine prog
   await composer.fill(
     [
       "Ship the launch",
-      hubCall("delegate_task", { key: "copy", hob: "Quill", brief: "Write the copy" }),
+      hubCall("delegate_task", {
+        key: "copy",
+        hob: "Quill",
+        brief: ["Write the copy", hubCall("complete_task", { key: "copy-done", summary: "Copy written" })].join("\n"),
+      }),
       hubCall("delegate_task", {
         key: "pages",
         hob: "Pip",

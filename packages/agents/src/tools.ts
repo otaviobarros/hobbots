@@ -1,42 +1,32 @@
 import {
   type Agent,
   type AgentId,
+  type AnyOperation,
+  hobAnswers,
   isNarrowerOrEqual,
   narrowest,
   POLICY_OPERATIONS,
   type PolicyDecision,
   type PolicyOperation,
-  PRESET_DECISIONS,
+  presetDecision,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import type { TurnStart } from "./commit-identity.ts";
 import type { HobbotsRepository } from "./repository.ts";
-import type { HubCallStep, HubTool, HubToolAnswer, HubTools, ToolAccess, ToolPolicy } from "./runtime.ts";
-
-/** The preset's answer for an operation, narrowed by the hob's overrides and every restriction. */
-export const operationDecision = (
-  context: Pick<ToolPolicy, "preset" | "hob" | "restrictions">,
-  operation: PolicyOperation,
-): PolicyDecision =>
-  narrowest(
-    PRESET_DECISIONS[context.preset][operation],
-    ...[context.hob.overrides, ...context.restrictions].flatMap((layer) => layer[operation] ?? []),
-  );
+import type { ToolAccess, ToolPolicy } from "./runtime.ts";
 
 /**
- * The hub tools a turn is offered under `access`: each whose operation its policy does not answer
- * Never for, reached through `call`, or null when there is no access or no tool left.
+ * The preset's answer for an operation, built-in or declared by a Charm (ADR 031), narrowed by the
+ * hob's overrides and every restriction.
  */
-export const offeredHubTools = (
-  access: ToolAccess | null,
-  tools: ReadonlyArray<HubTool>,
-  operationOf: (tool: string) => PolicyOperation,
-  call: (name: string, input: unknown, step: HubCallStep | undefined) => Effect.Effect<HubToolAnswer>,
-): HubTools | null => {
-  if (access === null) return null;
-  const open = tools.filter((tool) => operationDecision(access.policy, operationOf(tool.name)) !== "deny");
-  return open.length === 0 ? null : { tools: open, call: (name, input, step) => call(name, input, step) };
-};
+export const operationDecision = (
+  context: Pick<ToolPolicy, "preset" | "hob" | "restrictions" | "charmOperations">,
+  operation: AnyOperation,
+): PolicyDecision =>
+  narrowest(
+    presetDecision(context.preset, operation, context.charmOperations ?? []),
+    ...[hobAnswers(context.hob), ...context.restrictions].flatMap((layer) => layer[operation] ?? []),
+  );
 
 /**
  * Which of a hob's tools its answers open (ADR 014), whatever the runtime calls them: file reads,
@@ -63,9 +53,15 @@ export const openTools = (decide: (operation: PolicyOperation) => PolicyDecision
  */
 export const explicitlyNarrowed = (
   context: Pick<ToolPolicy, "hob" | "restrictions">,
-  operation: PolicyOperation,
+  operation: AnyOperation,
 ): boolean =>
-  [context.hob.overrides, ...context.restrictions].some((layer) => (layer[operation] ?? "allow") !== "allow");
+  [hobAnswers(context.hob), ...context.restrictions].some((layer) => (layer[operation] ?? "allow") !== "allow");
+
+/** Every operation a policy answers: the built-in ones and those its Charms declare. */
+const answeredOperations = (policy: ToolPolicy): ReadonlyArray<AnyOperation> => [
+  ...POLICY_OPERATIONS,
+  ...(policy.charmOperations ?? []).map((operation) => operation.id),
+];
 
 /**
  * Whether `after` takes away anything `before` gave: a folder, the tools altogether, the user's
@@ -77,7 +73,8 @@ export const narrows = (before: ToolAccess | null, after: ToolAccess | null): bo
   if (after === null || after.policy.dataFolder !== before.policy.dataFolder) return true;
   if (before.folders.some((folder) => !after.folders.includes(folder))) return true;
   if (before.policy.hob.signCommits === true && after.policy.hob.signCommits !== true) return true;
-  return POLICY_OPERATIONS.some((operation) => {
+  // A Charm operation no longer declared answers Never, so losing a Charm narrows too.
+  return answeredOperations(before.policy).some((operation) => {
     const was = operationDecision(before.policy, operation);
     const is = operationDecision(after.policy, operation);
     return is !== was && isNarrowerOrEqual(is, was);

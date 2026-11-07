@@ -10,6 +10,7 @@ import {
   FileChange,
   FileChangeId,
   MessageId,
+  Milestone,
   Question,
   QuestionId,
   Task,
@@ -192,6 +193,16 @@ describe("summaryOf", () => {
     ]);
   });
 
+  it("names the hob whose work reached a milestone only when it is not the Task's owner (#743)", () => {
+    const own = new Milestone({ ...milestone(CAMPAIGN, "Copy drafted", 0, true), reachedBy: ALDRIC });
+    const other = new Milestone({ ...milestone(CAMPAIGN, "Committed", 1, true), reachedBy: ADA });
+    const lines = summaryOf(tree({ milestones: [own, other] }), task(CAMPAIGN), done, null, []).happened;
+    expect(lines.flatMap((line) => (line.kind === "milestone" ? [[line.milestone.title, line.by]] : []))).toEqual([
+      ["Copy drafted", null],
+      ["Committed", ADA],
+    ]);
+  });
+
   it("says when the chosen Attempt ended without finishing", () => {
     const failed = new Attempt({ ...attempt(CAMPAIGN, "failed"), outcome: "The runtime stopped answering." });
     const lines = summaryOf(
@@ -205,7 +216,7 @@ describe("summaryOf", () => {
   });
 
   it("lists the tool calls of the Attempt's own turns with their marks, in the order they started (#892)", () => {
-    const call = { tool: "mcp__hobbots__github_search", operation: "read-github" as const, targets: ["/work"] };
+    const call = { tool: "mcp__hobbots__github_search", operation: "github.read" as const, targets: ["/work"] };
     const steps = [
       { id: "t0", kind: "thinking" as const, label: "Thinking", state: "done" as const },
       { id: "t1", kind: "tool" as const, label: "Searching GitHub", state: "done" as const, call, startedAt: AT },

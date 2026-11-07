@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { useDecideApproval } from "../../api/approvals.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { ApprovalActions } from "../approvals/approval-actions.tsx";
+import { riskOf } from "../approvals/approval-rules.ts";
 import { decisionErrorText, expiryText } from "../approvals/approval-text.ts";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
@@ -223,7 +224,7 @@ function ApprovalBody({
             })}
           </span>
           <span>{approvalCopy.askedByLine({ chain: approvalCopy.chain({ name: asker.name }) })}</span>
-          <span>{approvalCopy.riskLine({ risk: approvalCopy.riskOf[request.operation] })}</span>
+          <span>{approvalCopy.riskLine({ risk: riskOf(request.operation) })}</span>
           <span>{expiryText(request)}</span>
         </span>
       </Details>
@@ -237,7 +238,7 @@ function StuckBody({ entry, asker }: { entry: Extract<TrayEntry, { kind: "stuck"
   return (
     <>
       <p className="m-0 text-text">{blockerWhat(entry.item)}</p>
-      <BlockerChoices item={entry.item} hob={asker} held={false} targets={trayTargets} />
+      <BlockerChoices item={entry.item} hob={asker} reassign={false} targets={trayTargets} />
       <Details summary={copy.details.stuck}>
         {blockerWhy(entry.item, choice.blocker, asker.name)}
         {choice.blocker.diagnostic !== null && (

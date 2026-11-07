@@ -211,6 +211,60 @@ describe("skills routes", () => {
     expect(after.body.skill).toMatchObject({ revisions: 2, latest: edited.body.revision.hash });
   });
 
+  // covers ADR 029 (~/.agents/skills stays, through Hobbots; Make a copy), #1139
+  it("[TC-AG-163] refuses an edit or a revision of a ~/.agents/skills skill, and Make a copy gives an editable one", async () => {
+    const listed = await request("GET", "/api/skills");
+    const [shared] = listed.body.skills;
+    const edit = { base: shared.latest, description: "Changed here.", instructions: "Changed." };
+    const refused = await request("POST", `/api/skills/${shared.id}/edits`, edit);
+    expect(refused).toMatchObject({
+      status: 409,
+      body: { _tag: "SkillIsReadOnly", name: "shared", folder: `${agentsFolder}/shared` },
+    });
+    const written = { _tag: "Written", files: [{ path: "SKILL.md", text: skillMd("shared", "Forked.") }] };
+    const revised = await request("POST", `/api/skills/${shared.id}/revisions`, { source: written });
+    expect(revised.body._tag).toBe("SkillIsReadOnly");
+    expect((await request("GET", `/api/skills/${shared.id}`)).body.skill.revisions).toBe(1);
+
+    // A copy: r1, the same files, no source, given to no one unless you pick a scope.
+    const copied = await request("POST", `/api/skills/${shared.id}/copies`, { name: "shared-copy" });
+    expect(copied.status).toBe(200);
+    expect(copied.body).toMatchObject({
+      added: true,
+      assignment: null,
+      skill: { name: "shared-copy", revisions: 1, sourceId: null },
+    });
+    const read = await request("GET", `/api/skills/${copied.body.skill.id}/revisions/${copied.body.revision.hash}`);
+    // Only its name changes; every other line is the original's.
+    expect(read.body.instructions).toBe("---\nname: shared-copy\ndescription: What shared is for.\n---\n\n# shared\n");
+    const copyEdit = { base: copied.body.revision.hash, description: "Mine.", instructions: "Mine." };
+    const edited = await request("POST", `/api/skills/${copied.body.skill.id}/edits`, copyEdit);
+    expect(edited.body).toMatchObject({ added: true, revision: { number: 2 } });
+
+    // A second copy under that name is refused; one given to Everyone has its assignment.
+    const again = await request("POST", `/api/skills/${shared.id}/copies`, { name: "shared-copy" });
+    expect(again).toMatchObject({ status: 409, body: { _tag: "SkillNameConflict" } });
+    const given = await request("POST", `/api/skills/${shared.id}/copies`, {
+      name: "shared-everyone",
+      scope: { _tag: "Everyone" },
+    });
+    expect(given.body.assignment).toMatchObject({ scope: { _tag: "Everyone" }, pin: given.body.revision.hash });
+
+    // The folder moves to r2 and back: r2 stays the newest, but a copy takes what the folder holds now.
+    const file = join(agentsFolder, "shared", "SKILL.md");
+    await writeFile(file, skillMd("shared", "Changed in the folder."));
+    await request("POST", "/api/skills/agents-folder/sync");
+    await writeFile(file, skillMd("shared"));
+    await request("POST", "/api/skills/agents-folder/sync");
+    expect((await request("GET", `/api/skills/${shared.id}`)).body.skill.revisions).toBe(2);
+    const older = await request("POST", `/api/skills/${shared.id}/copies`, { name: "shared-older" });
+    expect(older.status).toBe(200);
+    const olderRead = await request("GET", `/api/skills/${older.body.skill.id}/revisions/${older.body.revision.hash}`);
+    expect(olderRead.body.instructions).toBe(
+      "---\nname: shared-older\ndescription: What shared is for.\n---\n\n# shared\n",
+    );
+  });
+
   // covers ADR 029 (Scopes, The Skills page), #1062
   it("[TC-AG-148] lists the projects a skill can go to: those hobs work in, before any skill is given to them", async () => {
     const site = join(await mkdtemp(join(tmpdir(), "skills-")), "Site");

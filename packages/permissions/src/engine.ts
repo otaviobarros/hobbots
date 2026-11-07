@@ -1,16 +1,23 @@
 import { createHash } from "node:crypto";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import {
+  AnyOperation,
+  CharmId,
+  type CharmOperation,
+  CharmOperationId,
+  charmOfOperation,
   type Grant,
   GrantId,
   GrantRule,
   type HobPolicy,
+  hobAnswers,
+  isCharmOperation,
   MemoryOperation,
   narrowest,
   PolicyDecision,
-  PolicyOperation,
-  type PolicyOverrides,
-  PRESET_DECISIONS,
+  type PolicyLayer,
+  type PolicyOperation,
+  presetDecision,
   ruleEnforcement,
   type SafetyPreset,
   type SandboxState,
@@ -29,7 +36,7 @@ import { type CanonicalPath, isInside, PathResolver, type ScopeGitResources } fr
  */
 
 /** Bumped whenever the rules below change meaning, so older decisions name the rules they followed. */
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 
 /** Everything a decision depends on. Folders are canonical as stored; the engine resolves them again. */
 export interface PolicyContext {
@@ -48,7 +55,12 @@ export interface PolicyContext {
    */
   readonly hubHosts?: ReadonlyArray<string>;
   /** Narrowing added by the thread, Quest, task or delegation. Each may only narrow. */
-  readonly restrictions: ReadonlyArray<PolicyOverrides>;
+  readonly restrictions: ReadonlyArray<PolicyLayer>;
+  /**
+   * The operations the Charms declare (ADR 031), which `@hobbots/agents` fills from the Charms the
+   * hub holds. A `Charm` request for an operation not among them is refused.
+   */
+  readonly charmOperations?: ReadonlyArray<CharmOperation>;
   /**
    * The live grants that can answer this call, read again for every call (PE-008): not revoked and
    * not expired. Only this hob's, since a grant never applies to another hob, and only its Always
@@ -56,6 +68,23 @@ export interface PolicyContext {
    * answers anything.
    */
   readonly grants?: ReadonlyArray<Grant>;
+  /**
+   * Where the runtime keeps this session's own saved output: a command's or tool's output too large
+   * to return inline, which the runtime tells the hob to read from there (Claude Code's
+   * `tool-results`). The hob may read files there and run commands in it, never change them with its
+   * file tools. They name the session, not the policy, so they are left out of the policy version.
+   */
+  readonly runtimeOutputs?: ReadonlyArray<RuntimeOutput>;
+}
+
+/**
+ * A folder of the runtime's saved output, below a root the hob's commands cannot replace (its
+ * runtime folder). Everything between the two may be the hob's to write, so the folder counts only
+ * when no link lies on the way from the root to it: a link there could name another session's.
+ */
+export interface RuntimeOutput {
+  readonly root: string;
+  readonly folder: string;
 }
 
 export const FileOperation = Schema.Literals(["read-files", "edit-files", "delete-files"]);
@@ -101,17 +130,20 @@ export const PolicyRequest = Schema.TaggedUnion({
   /** A host the sandbox proxy was asked to reach, with the addresses it resolved to, if known. */
   Web: { host: Schema.String, addresses: Schema.Array(Schema.String) },
   /**
-   * A GitHub Charm read (#317) of `repository` (`owner/name`), which the hub found from the remote of
-   * `folder`. The hub reads it outside the sandbox, so it is decided on the folder alone.
+   * A Charm call (ADR 031): one of `charm`'s declared operations, which the hub runs outside the
+   * sandbox, so it is decided on the hob's answers for the operation. `folder`, when the call was
+   * found from one, such as the repository a GitHub call works on, must be one of the hob's. `site`
+   * holds the values of the site fields the operation declares, which a grant names; any other field
+   * is ignored. `targets` say what the call acts on, for the approval card, and default to the site's
+   * values.
    */
-  GitHub: { folder: Schema.String, repository: Schema.String },
-  /**
-   * Opening a pull request (ADR 020) in `repository` into `base`, which the hub found from `folder`.
-   * Decided on the folder and the hob's answers, like a read; a grant names the base branch.
-   */
-  PullRequest: { folder: Schema.String, repository: Schema.String, base: Schema.String },
-  /** Commenting on issue or pull request `number` of `repository` (ADR 020); a grant names the repository. */
-  GitHubComment: { folder: Schema.String, repository: Schema.String, number: Schema.Number },
+  Charm: {
+    charm: CharmId,
+    operation: CharmOperationId,
+    folder: Schema.optionalKey(Schema.String),
+    site: Schema.Record(Schema.String, Schema.String),
+    targets: Schema.optionalKey(Schema.Array(Schema.String)),
+  },
   /**
    * A memory tool call (ADR 028), which the hub serves outside the sandbox on scopes it worked out
    * itself, so it is decided on the hob's answers alone. `scope` names the memory it reaches, for the
@@ -138,6 +170,8 @@ export const ReasonCode = Schema.Literals([
   "data-folder",
   /** `.git/hooks` and `.git/config` are read-only, since Git would later run them outside the sandbox. */
   "protected-path",
+  /** The runtime's saved output of the session is read-only: hobs read it, never change it. */
+  "runtime-output",
   "unresolvable-path",
   "no-target",
   "needs-sandbox",
@@ -150,13 +184,17 @@ export const ReasonCode = Schema.Literals([
   "unsearched-folder",
   /** A standing grant for this hob answers the preset's Ask (ADR 015). */
   "grant",
+  /** A Charm call for an operation no Charm the hub holds declares. */
+  "undeclared-operation",
+  /** A Charm operation declared once only is high risk: it always asks, once only, unless refused. */
+  "once-only-operation",
 ]);
 export type ReasonCode = typeof ReasonCode.Type;
 
 export const PolicyVerdict = Schema.Struct({
   decision: PolicyDecision,
   /** The operation decided, which becomes outside-folders for a target outside the hob's folders. */
-  operation: PolicyOperation,
+  operation: AnyOperation,
   reason: Schema.Struct({ code: ReasonCode, message: Schema.String }),
   /** The concrete resources decided: canonical paths, the host, or the remote and branch. */
   targets: Schema.Array(Schema.String),
@@ -179,6 +217,8 @@ export type PolicyVerdict = typeof PolicyVerdict.Type;
 export interface ResolvedScope {
   readonly folders: ReadonlyArray<string>;
   readonly dataFolder: string;
+  /** The runtime's saved output of the session (`PolicyContext.runtimeOutputs`), read-only. */
+  readonly runtimeOutputs?: ReadonlyArray<string>;
 }
 
 /** A path as requested and its canonical form, or null when it could not be resolved. */
@@ -211,28 +251,17 @@ export type ResolvedRequest =
     }
   | (Omit<Extract<PolicyRequest, { readonly _tag: "Push" }>, "cwd"> & { readonly cwd?: ResolvedTarget })
   | Extract<PolicyRequest, { readonly _tag: "Web" }>
-  | { readonly _tag: "GitHub"; readonly folder: ResolvedTarget; readonly repository: string }
-  | {
-      readonly _tag: "PullRequest";
-      readonly folder: ResolvedTarget;
-      readonly repository: string;
-      readonly base: string;
-    }
-  | {
-      readonly _tag: "GitHubComment";
-      readonly folder: ResolvedTarget;
-      readonly repository: string;
-      readonly number: number;
-    }
+  | (Omit<Extract<PolicyRequest, { readonly _tag: "Charm" }>, "folder"> & { readonly folder?: ResolvedTarget })
   | Extract<PolicyRequest, { readonly _tag: "Memory" }>
   | Extract<PolicyRequest, { readonly _tag: "Skills" }>;
 
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
  * Grants are left out: they are read again for every call and never pin a version (ADR 015). The
- * hub's tailnet hosts are left out too: they follow Tailscale, not the policy.
+ * hub's tailnet hosts are left out too: they follow Tailscale, not the policy, and so is the
+ * runtime's saved output, which follows the session.
  */
-export const policyVersion = ({ grants, hubHosts, ...inputs }: PolicyContext): string =>
+export const policyVersion = ({ grants, hubHosts, runtimeOutputs, ...inputs }: PolicyContext): string =>
   `r${RULES_VERSION}-${createHash("sha256").update(stableJson(inputs)).digest("hex").slice(0, 16)}`;
 
 interface Layered {
@@ -243,8 +272,11 @@ interface Layered {
 }
 
 /** The narrowest answer of the preset, the hob's override and each restriction, and who gave it. */
-const layered = (context: PolicyContext, operation: PolicyOperation): Layered => {
-  let result: Omit<Layered, "narrowed"> = { decision: PRESET_DECISIONS[context.preset][operation], code: "preset" };
+const layered = (context: PolicyContext, operation: AnyOperation): Layered => {
+  let result: Omit<Layered, "narrowed"> = {
+    decision: presetDecision(context.preset, operation, context.charmOperations ?? []),
+    code: "preset",
+  };
   let narrowed = false;
   const consider = (decision: PolicyDecision | undefined, code: Layered["code"]) => {
     if (decision === undefined) return;
@@ -253,7 +285,7 @@ const layered = (context: PolicyContext, operation: PolicyOperation): Layered =>
       result = { decision, code };
     }
   };
-  consider(context.hob.overrides[operation], "override");
+  consider(hobAnswers(context.hob)[operation], "override");
   for (const restriction of context.restrictions) consider(restriction[operation], "restriction");
   return { ...result, narrowed };
 };
@@ -274,9 +306,6 @@ const OPERATION_WORDS: Record<PolicyOperation, string> = {
   "local-git": "local Git work",
   push: "pushing",
   "use-web": "using the web",
-  "read-github": "reading GitHub",
-  "open-pull-request": "opening pull requests",
-  "comment-github": "commenting on GitHub",
   "outside-folders": "anything outside the hob's folders",
   "search-memory": "searching memory",
   "save-memory": "saving to memory",
@@ -286,9 +315,15 @@ const OPERATION_WORDS: Record<PolicyOperation, string> = {
   "skill-feedback": "reporting a skill problem",
 };
 
+/** The words for an operation in a reason: a built-in one's own, or the ones its Charm declares. */
+const wordsOf = (context: PolicyContext, operation: AnyOperation): string =>
+  isCharmOperation(operation)
+    ? (context.charmOperations?.find((declared) => declared.id === operation)?.words ?? operation)
+    : OPERATION_WORDS[operation];
+
 interface Answer {
   readonly decision: PolicyDecision;
-  readonly operation: PolicyOperation;
+  readonly operation: AnyOperation;
   readonly code: ReasonCode;
   readonly message: string;
   /** For an Ask a grant could answer, the rule Always would save. */
@@ -304,21 +339,21 @@ interface Site {
 }
 
 /** The first live grant the context gives for this operation and site. */
-const matchingGrant = (context: PolicyContext, operation: PolicyOperation, site: Site): Grant | undefined =>
+const matchingGrant = (context: PolicyContext, operation: AnyOperation, site: Site): Grant | undefined =>
   context.grants?.find((grant) => grant.operation === operation && site.matches(grant.rule));
 
 /**
  * The layers' answer, and where only the preset asks, a live grant for the site (ADR 015 steps 5 to
  * 8). Without a site no rule can describe the call, so nothing is offered beyond once.
  */
-const fromLayers = (context: PolicyContext, operation: PolicyOperation, site?: Site | null): Answer => {
+const fromLayers = (context: PolicyContext, operation: AnyOperation, site?: Site | null): Answer => {
   const { decision, code, narrowed } = layered(context, operation);
   const who = LAYER_MESSAGES[code];
   const answer: Answer = {
     decision,
     operation,
     code,
-    message: `${who.charAt(0).toUpperCase()}${who.slice(1)} ${DECISION_WORDS[decision]} ${OPERATION_WORDS[operation]}.`,
+    message: `${who.charAt(0).toUpperCase()}${who.slice(1)} ${DECISION_WORDS[decision]} ${wordsOf(context, operation)}.`,
   };
   if (decision !== "ask" || narrowed || !site) return answer;
   const grant = matchingGrant(context, operation, site);
@@ -327,20 +362,24 @@ const fromLayers = (context: PolicyContext, operation: PolicyOperation, site?: S
     decision: "allow",
     operation,
     code: "grant",
-    message: `Your saved rule allows ${OPERATION_WORDS[operation]} here.`,
+    message: `Your saved rule allows ${wordsOf(context, operation)} here.`,
     grantId: grant.id,
   };
 };
 
-const deny = (operation: PolicyOperation, code: ReasonCode, message: string): Answer => ({
+const deny = (operation: AnyOperation, code: ReasonCode, message: string): Answer => ({
   decision: "deny",
   operation,
   code,
   message,
 });
 
-/** Places a canonical target in the hob's scope: inside a folder (and which), or why not. */
-const locate = (scope: ResolvedScope, target: ResolvedTarget): Located | Answer => {
+/**
+ * Places a canonical target in the hob's scope: inside a folder (and which), or why not. With
+ * `outputs`, the runtime's saved output of the session counts too, for reading files and running
+ * commands only: for a push or a Charm it is outside the hob's folders.
+ */
+const locate = (scope: ResolvedScope, target: ResolvedTarget, outputs = false): Located | Answer => {
   if (target.canonical === null) {
     return deny(
       "outside-folders",
@@ -357,15 +396,17 @@ const locate = (scope: ResolvedScope, target: ResolvedTarget): Located | Answer 
     );
   }
   const folder = scope.folders.find((f) => isInside(canonical, f));
-  if (folder === undefined) {
-    return deny("outside-folders", "outside-folders", `${canonical.path} is outside this hob's folders.`);
-  }
-  return { folder, canonical };
+  if (folder !== undefined) return { folder, canonical };
+  const output = outputs ? scope.runtimeOutputs?.find((f) => isInside(canonical, f)) : undefined;
+  if (output !== undefined) return { folder: output, canonical, runtimeOutput: true };
+  return deny("outside-folders", "outside-folders", `${canonical.path} is outside this hob's folders.`);
 };
 
 interface Located {
   readonly folder: string;
   readonly canonical: CanonicalPath;
+  /** In the runtime's saved output of the session, which is read-only and named by no grant. */
+  readonly runtimeOutput?: true;
 }
 
 const located = (value: Located | Answer): value is Located => "folder" in value;
@@ -401,9 +442,15 @@ const fileTarget = (
   target: ResolvedTarget,
   exact = true,
 ): Answer => {
-  const place = locate(scope, target);
+  const place = locate(scope, target, true);
   // Every preset answers Deny outside the folders, and the narrowing layers cannot widen it.
   if (!located(place)) return place;
+  if (place.runtimeOutput) {
+    // A grant would name one session's folder, so nothing is offered beyond once.
+    if (operation === "read-files") return fromLayers(context, operation);
+    const message = `${place.canonical.path} holds output your runtime saved, which hobs can only read.`;
+    return deny(operation, "runtime-output", message);
+  }
   if (operation !== "read-files") {
     const { canonical } = place;
     // Changing a folder changes everything in it, so a protected path below the target counts too.
@@ -461,8 +508,11 @@ const needsSandbox = (context: PolicyContext, operation: PolicyOperation): Answe
       )
     : null;
 
-const enforcementOf = (context: PolicyContext, operation: PolicyOperation): PolicyVerdict["enforcement"] =>
-  ruleEnforcement(operation, (other) => layered(context, other).decision, context.sandbox);
+/** A Charm call runs on the hub, which enforces its answer itself. */
+const enforcementOf = (context: PolicyContext, operation: AnyOperation): PolicyVerdict["enforcement"] =>
+  isCharmOperation(operation)
+    ? "enforced"
+    : ruleEnforcement(operation, (other) => layered(context, other).decision, context.sandbox);
 
 /** The answers a request's parts gave, its targets, and whether it is high risk. */
 interface Evaluated {
@@ -508,11 +558,15 @@ const evaluateCommand = (
   scope: ResolvedScope,
   request: Extract<ResolvedRequest, { readonly _tag: "Command" }>,
 ): Evaluated => {
-  const place = locate(scope, request.cwd);
+  const place = locate(scope, request.cwd, true);
   const answer = !located(place)
     ? place
     : (needsSandbox(context, request.operation) ??
-      fromLayers(context, request.operation, commandSite(request.operation, place.canonical, request.words)));
+      fromLayers(
+        context,
+        request.operation,
+        place.runtimeOutput ? null : commandSite(request.operation, place.canonical, request.words),
+      ));
   return { targets: [request.cwd.canonical?.path ?? request.cwd.input], answers: [answer] };
 };
 
@@ -583,53 +637,66 @@ const evaluateWeb = (
 };
 
 /**
- * A GitHub read: the folder it was found from must be the hob's. No grant answers an Ask, since the
- * Charm cannot pause for an approval yet (#317), so an Ask refuses the call.
+ * A grant for a Charm call (ADR 015, ADR 031): the call's folder, when it has one, and the value of
+ * every site field the operation declares. An operation that declares no site, or is once only, has
+ * none, and neither has a call missing a declared field, so each is approved once only.
  */
-const evaluateGitHub = (
-  context: PolicyContext,
-  scope: ResolvedScope,
-  request: Extract<ResolvedRequest, { readonly _tag: "GitHub" }>,
-): Evaluated => {
-  const place = locate(scope, request.folder);
-  return { targets: [request.repository], answers: [located(place) ? fromLayers(context, "read-github") : place] };
+const charmSite = (
+  declared: CharmOperation,
+  request: Extract<ResolvedRequest, { readonly _tag: "Charm" }>,
+  cwd: CanonicalPath | null,
+): Site | null => {
+  if (declared.onceOnly || declared.site.length === 0) return null;
+  const site: Record<string, string> = {};
+  for (const field of declared.site) {
+    const value = request.site[field];
+    if (value === undefined) return null;
+    site[field] = value;
+  }
+  return {
+    rule: {
+      _tag: "CharmSite",
+      charm: request.charm,
+      operation: request.operation,
+      ...(cwd === null ? {} : { cwd: cwd.path }),
+      site,
+    },
+    matches: (rule) =>
+      rule._tag === "CharmSite" &&
+      rule.charm === request.charm &&
+      rule.operation === request.operation &&
+      (cwd === null ? rule.cwd === undefined : rule.cwd !== undefined && samePath(cwd, rule.cwd)) &&
+      declared.site.every((field) => rule.site[field] === site[field]),
+  };
 };
 
 /**
- * A GitHub write the hub sends for the hob (ADR 020): the folder it was found from must be the hob's.
- * A grant is for the repository and base branch of a pull request, or the repository of a comment,
- * from that folder; never for a title or body, which change with every call.
+ * A Charm call (ADR 031): an operation its Charm declares, decided like a built-in one on the
+ * declared preset answers, the hob's override and every restriction. The folder it was found from,
+ * if any, must be the hob's.
  */
-const evaluateGitHubWrite = (
+const evaluateCharm = (
   context: PolicyContext,
   scope: ResolvedScope,
-  request: Extract<ResolvedRequest, { readonly _tag: "PullRequest" | "GitHubComment" }>,
+  request: Extract<ResolvedRequest, { readonly _tag: "Charm" }>,
 ): Evaluated => {
-  const place = locate(scope, request.folder);
-  if (!located(place)) return { targets: [request.repository], answers: [place] };
-  const cwd = place.canonical;
-  if (request._tag === "PullRequest") {
-    const site: Site = {
-      rule: { _tag: "PullRequest", cwd: cwd.path, repository: request.repository, base: request.base },
-      matches: (rule) =>
-        rule._tag === "PullRequest" &&
-        samePath(cwd, rule.cwd) &&
-        rule.repository === request.repository &&
-        rule.base === request.base,
-    };
-    return {
-      targets: [`github.com/${request.repository} into ${request.base}`],
-      answers: [fromLayers(context, "open-pull-request", site)],
-    };
+  const targets = request.targets ?? Object.values(request.site);
+  const declared = context.charmOperations?.find((operation) => operation.id === request.operation);
+  if (declared === undefined || charmOfOperation(request.operation) !== request.charm) {
+    const message = `No Charm on this hub declares ${request.operation}, so it stays closed.`;
+    return { targets, answers: [deny(request.operation, "undeclared-operation", message)] };
   }
-  const site: Site = {
-    rule: { _tag: "GitHubComment", cwd: cwd.path, repository: request.repository },
-    matches: (rule) =>
-      rule._tag === "GitHubComment" && samePath(cwd, rule.cwd) && rule.repository === request.repository,
-  };
+  const place = request.folder === undefined ? null : locate(scope, request.folder);
+  if (place !== null && !located(place)) return { targets, answers: [place] };
+  const site = charmSite(declared, request, place === null ? null : place.canonical);
+  const answer = fromLayers(context, request.operation, site);
+  if (!declared.onceOnly || answer.decision === "deny") return { targets, answers: [answer] };
+  // A high-risk operation asks even where every layer allows it (ADR 015): Never still wins.
+  const message = `${declared.words.charAt(0).toUpperCase()}${declared.words.slice(1)} always waits for you, once only.`;
   return {
-    targets: [`github.com/${request.repository} #${request.number}`],
-    answers: [fromLayers(context, "comment-github", site)],
+    targets,
+    answers: [{ decision: "ask", operation: request.operation, code: "once-only-operation", message }],
+    onceOnly: true,
   };
 };
 
@@ -643,11 +710,8 @@ const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: Re
       return evaluatePush(context, scope, request);
     case "Web":
       return evaluateWeb(context, request);
-    case "GitHub":
-      return evaluateGitHub(context, scope, request);
-    case "PullRequest":
-    case "GitHubComment":
-      return evaluateGitHubWrite(context, scope, request);
+    case "Charm":
+      return evaluateCharm(context, scope, request);
     case "Memory":
       return { targets: [request.scope], answers: [fromLayers(context, request.operation)] };
     case "Skills":
@@ -730,11 +794,28 @@ export class PolicyEngine extends Context.Service<
               Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
             );
 
+      /**
+       * A saved-output folder's canonical path, or null when it is not below its root or a link lies
+       * on the way to it, so its canonical path is not its root's followed by the same names.
+       */
+      const output = Effect.fnUntraced(function* ({ root, folder: path }: RuntimeOutput) {
+        const below = relative(root, path);
+        if (!isAbsolute(root) || below === "" || below.startsWith("..") || isAbsolute(below)) return null;
+        const [base, resolved] = yield* Effect.all([folder(root), folder(path)]);
+        if (base.canonical === null || resolved.canonical === null) return null;
+        const expected = join(base.canonical.path, below);
+        const exact =
+          isInside(resolved.canonical, expected) &&
+          isInside({ ...resolved.canonical, path: expected }, resolved.canonical.path);
+        return exact ? resolved.canonical.path : null;
+      });
+
       const scopeOf = Effect.fnUntraced(function* (context: PolicyContext) {
         const shared = yield* Effect.forEach(context.sharedFolders, folder);
         const hidden = yield* Effect.forEach(context.hob.hiddenSharedFolders, folder);
         const own = yield* Effect.forEach(context.hob.ownFolders, folder);
         const data = yield* folder(context.dataFolder);
+        const outputs = yield* Effect.forEach(context.runtimeOutputs ?? [], output);
         const same = (a: CanonicalPath, b: CanonicalPath | null) =>
           b !== null && isInside(a, b.path) && isInside(b, a.path);
         const visible = shared.filter(
@@ -744,7 +825,11 @@ export class PolicyEngine extends Context.Service<
         const canonicalFolders = [...visible, ...own].flatMap((f) => (f.canonical === null ? [] : [f.canonical]));
         const folders = canonicalFolders.map((f) => f.path);
         // An unresolvable data folder keeps its stored form, which is still refused.
-        const scope = { folders, dataFolder: data.canonical?.path ?? context.dataFolder } satisfies ResolvedScope;
+        const scope = {
+          folders,
+          dataFolder: data.canonical?.path ?? context.dataFolder,
+          runtimeOutputs: outputs.flatMap((path) => (path === null ? [] : [path])),
+        } satisfies ResolvedScope;
         return { scope, canonicalFolders };
       });
 
@@ -787,12 +872,14 @@ export class PolicyEngine extends Context.Service<
           case "Memory":
           case "Skills":
             return Effect.succeed(request);
-          case "GitHub":
-          case "PullRequest":
-          case "GitHubComment":
-            return (isAbsolute(request.folder) ? resolve(request.folder, "/") : unresolved(request.folder)).pipe(
-              Effect.map((folder) => ({ ...request, folder })),
-            );
+          case "Charm": {
+            const { folder, ...call } = request;
+            return folder === undefined
+              ? Effect.succeed(call)
+              : (isAbsolute(folder) ? resolve(folder, "/") : unresolved(folder)).pipe(
+                  Effect.map((resolved) => ({ ...call, folder: resolved })),
+                );
+          }
         }
       };
 

@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 import { type CommandStart, openTools, operationDecision } from "@hobbots/agents";
-import { narrowest, type PolicyDecision, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
+import { narrowest, redactSecrets } from "@hobbots/domain";
 import {
   type PolicyContext,
   type PolicyRequest,
@@ -12,10 +12,7 @@ import {
 import { GIT_IDENTITY_VARIABLES } from "./sandbox.ts";
 
 /** A request a runtime tool call becomes: every kind but a Charm's, which the hub makes itself. */
-type ToolRequest = Exclude<
-  PolicyRequest,
-  { readonly _tag: "GitHub" | "PullRequest" | "GitHubComment" | "Memory" | "Skills" }
->;
+type ToolRequest = Exclude<PolicyRequest, { readonly _tag: "Charm" | "Memory" | "Skills" }>;
 
 /**
  * Claude Code's tool calls in the policy engine's terms (ADR 014). Only what the call itself says is
@@ -661,6 +658,47 @@ export const initsRepository = (
     ({ words: [name, ...args] }) =>
       name !== undefined && basename(name) === "git" && args[gitFolders(args, cwd, home).sub] === "init",
   );
+
+/**
+ * The folders a tool call's command line runs `git commit` from, as the line spells them, after any
+ * `cd`, `git -C` or wrapper such as `env -C`, and inside `eval` or `sh -c` (#742). Which repository
+ * each is in is the hub's to find. Only what the line says is read: an alias or a script that
+ * commits is not seen.
+ */
+export const commitFolders = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  home: string = homedir(),
+): ReadonlyArray<string> => {
+  const found = new Set<string>();
+  const visit = (line: string, at: string) => {
+    const tokens = commandLine(line);
+    const folders = folderFlow(at, home);
+    tokens.forEach((token, index) => {
+      if ("separator" in token) {
+        folders.separator(token.separator);
+        return;
+      }
+      // A wrapper such as `env -C` moves the command it runs, so the folder is the unwrapped one.
+      const shell = folders.command(unwrap(token.words, at, home).words, separatorOf(tokens[index + 1]));
+      const { words, folder } = unwrap(token.words, shell, home);
+      const [name, ...args] = words;
+      const program = basename(name ?? "");
+      if (program === "git") {
+        const git = gitFolders(args, folder, home);
+        if (args[git.sub] === "commit") found.add(git.folders[0] as string);
+      } else if (program === "eval") visit(args.join(" "), folder);
+      else if (SHELLS.has(program)) {
+        const flag = args.findIndex((arg) => /^-[A-Za-z]*c[A-Za-z]*$/.test(arg));
+        if (flag !== -1) visit(args[flag + 1] ?? "", folder);
+      }
+    });
+  };
+  const command = tool === "Bash" ? text(input, "command") : undefined;
+  if (command !== undefined) visit(command, cwd);
+  return [...found];
+};
 
 /** Variables that name a commit's author or committer, or pass Git settings or a config file. */
 const IDENTITY_VARIABLES: ReadonlySet<string> = new Set([

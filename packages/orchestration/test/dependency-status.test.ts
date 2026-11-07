@@ -128,6 +128,6 @@ describe("a member's later turn", () => {
     expect(
       reminder.startsWith("You work on Task review for Frodo.\nWhere the Tasks your work builds on stand now:"),
     ).toBe(true);
-    expect(reminder.endsWith("your final reply becomes its result.")).toBe(true);
+    expect(reminder.endsWith("A final reply alone does not complete it.")).toBe(true);
   });
 });

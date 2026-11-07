@@ -1,52 +1,47 @@
 import {
-  type AskableVerdict,
-  approvalNote,
-  askOnStep,
-  type CharmTurn,
-  type HubCallStep,
-  showStarted,
+  type HubAction,
+  type HubPlanContext,
+  HubRefusal,
+  type HubWritePlan,
+  hubAction,
+  type ReadBack,
   type ToolAccess,
+  type WriteOutcome,
 } from "@hobbots/agents";
 import {
   type AgentId,
   commentMarker,
+  GITHUB_WRITE_TOOLS,
   type GitHubCommentPlan,
   type GitHubPullRequestPlan,
   type GitHubRepository,
   type GitHubWriteInput,
-  type GitHubWriteToolName,
+  GitHubWriteInputs,
   githubActorText,
   githubCommentSummary,
   githubPullRequestSummary,
+  githubWriteToolJsonSchema,
   hasCommentMarker,
   repositorySlug,
   stripCommentMarkers,
 } from "@hobbots/domain";
-import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
-import { Data, Effect, Option } from "effect";
-import { type CharmCallRunner, type ReadBack, scopesOf, type WriteOutcome } from "./charm-calls.ts";
+import type { PolicyRequest } from "@hobbots/permissions";
+import { Context, Effect } from "effect";
 import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { githubActor, recordedLogin } from "./github-actor.ts";
 import { GitHubApi, type GitHubError, type GitHubWrite } from "./github-api.ts";
+import { GITHUB_CHARM } from "./github-operations.ts";
 
 /**
- * The GitHub Charm's Open pull requests and Comment on GitHub (ADR 020, #324). The hub redacts the
- * outgoing text and reads GitHub's side before it decides, so the approval card shows, and its digest
- * covers, exactly what is sent. Each write is then a recorded Charm call (#323): a retried key returns
- * the first answer, and a call that ends without a clear answer is read back on GitHub, never resent.
+ * The GitHub Charm's Open pull requests and Comment on GitHub (ADR 020, #324), as hub actions (ADR
+ * 031). Each only plans its call: it reads GitHub's side under one sign-in and builds the request, the
+ * card, what the call's record keeps and the send, and the hub action pipeline decides, asks, records
+ * and sends it. The pipeline hands the plan the hob's input redacted, so the approval card shows, and
+ * its digest covers, exactly what is sent. Each write is a recorded Charm call (#323): a retried key
+ * returns the first answer, and a call that ends without a clear answer is read back on GitHub, never
+ * resent.
  */
-
-class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> {}
-
-/**
- * Decides a Charm write on the folder and the hob's answers, with its live grants read again each
- * time: the hub sends it outside the sandbox, so neither the sandbox nor the model's hosts hold the rule.
- */
-export const decideCharmWrite =
-  (engine: PolicyEngine["Service"], turn: CharmTurn, base: ToolAccess, request: PolicyRequest) =>
-  (fresh: ToolAccess | null): Effect.Effect<AskableVerdict> =>
-    decideHubCall(engine, turn.approvals, base, request)(fresh);
 
 /** Fails with the reason when Git would not take `name` as a branch name (ADR 020). */
 export const branchNameCheck = (git: GitPush["Service"], name: string): Effect.Effect<void, string> =>
@@ -144,137 +139,87 @@ const outcomeOf = <A>(result: GitHubWrite<A>, applied: (value: A) => string): Wr
   }
 };
 
-/** The call's key, and its input as the record keeps it: redacted, so no secret the hob wrote lands in the database. */
-const keyed = <I extends { readonly key: string }>(turn: CharmTurn, input: I) => {
-  const { key, ...rest } = input;
-  return { key, withoutKey: turn.redactor.value(rest) };
-};
-
-/** What the hob is told when redaction changed what it wrote. */
+/** What the hob is told when redaction changed what it wrote, by the words for each part. */
 const redactedNote = (parts: ReadonlyArray<string>) =>
   parts.length === 0
     ? ""
     : ` Hobbots redacted what looked like secrets from the ${parts.join(" and ")} before deciding, so the user approved, and GitHub got, the redacted text.`;
 
-export const makeGitHubWrites = (runner: CharmCallRunner) =>
+/** The folder a write acts from and its repository, resolved from the hob's own folders as for a read. */
+export type RepositoryFor = (
+  access: ToolAccess,
+  named: string | undefined,
+) => Effect.Effect<{ readonly folder: string; readonly repository: GitHubRepository }, HubRefusal>;
+
+/** A write tool as the hob is offered it, before the pipeline adds its key. */
+const writeTool = (name: "github_open_pull_request" | "github_comment") => {
+  const tool = GITHUB_WRITE_TOOLS.find((each) => each.name === name);
+  if (tool === undefined) throw new Error(`The GitHub Charm has no ${name} tool.`);
+  return { ...tool, inputSchema: githubWriteToolJsonSchema(name) };
+};
+
+/** The GitHub writes the pipeline runs: opening a pull request and commenting. */
+export const makeGitHubWrites = (repositoryFor: RepositoryFor) =>
   Effect.gen(function* () {
     const api = yield* GitHubApi;
     const credential = yield* GitHubCredential;
     const git = yield* GitPush;
-    const engine = yield* PolicyEngine;
 
-    const github = <A>(effect: Effect.Effect<A, GitHubError>) =>
-      effect.pipe(Effect.mapError((error) => new Refused({ message: error.message })));
+    const refused = (error: GitHubError) => new HubRefusal({ message: error.message });
+    const github = <A>(effect: Effect.Effect<A, GitHubError>) => effect.pipe(Effect.mapError(refused));
 
     const checkBranch = (name: string) =>
-      branchNameCheck(git, name).pipe(Effect.mapError((message) => new Refused({ message })));
+      branchNameCheck(git, name).pipe(Effect.mapError((message) => new HubRefusal({ message })));
 
     /** One request, then once more when nothing reached GitHub, which cannot send it twice. */
     const sendOnceMore = <A>(send: Effect.Effect<GitHubWrite<A>>) =>
       Effect.flatMap(send, (first) => (first._tag === "NotSent" ? send : Effect.succeed(first)));
 
-    interface Planned<P extends object> {
-      readonly tool: Exclude<GitHubWriteToolName, "github_push">;
-      readonly key: string;
-      readonly input: unknown;
-      readonly site: string;
-      /** What the card shows and its digest covers. */
-      readonly plan: P;
-      readonly summary: string;
-      /** What the call's record keeps beyond the card's plan, never shown to the hob. */
-      readonly recorded?: object;
-      readonly appliedText: string;
-      readonly label: string;
-      readonly request: PolicyRequest;
-      readonly send: Effect.Effect<WriteOutcome>;
-      readonly note: string;
-    }
-
-    /** Asks when the policy says so, then sends the write as a recorded Charm call under the pinned sign-in. */
-    const decideAndSend = <P extends object>(
-      turn: CharmTurn,
-      access: ToolAccess,
-      repository: GitHubRepository,
-      step: HubCallStep | undefined,
-      planned: Planned<P>,
-    ) =>
-      Effect.gen(function* () {
-        const decision = yield* askOnStep({
-          call: {
-            id: step?.id ?? planned.key,
-            tool: planned.tool,
-            arguments: { ...planned.plan, summary: planned.summary },
-            label: planned.label,
-          },
-          step,
-          approvals: turn.approvals,
-          decide: decideCharmWrite(engine, turn, access, planned.request),
-        });
-        if (decision._tag === "Refuse") return yield* new Refused({ message: decision.reason });
-        showStarted(step, planned.tool, planned.label, decision.verdict);
-        const outcome = yield* runner.run(
-          {
-            agentId: turn.agentId,
-            scope: turn.scope(),
-            also: turn.also,
-            tool: planned.tool,
-            key: planned.key,
-            input: planned.input,
-            site: planned.site,
-            plan: { ...planned.plan, ...planned.recorded },
-            appliedText: planned.appliedText,
-            step,
-            threadId: turn.threadId,
-            messageId: turn.messageId,
-          },
-          // The approval is bound to the sign-in its card named: another account never sends it.
-          credential
-            .onRepository(turn.agentId, repository, planned.send)
-            .pipe(
-              Effect.catch((error) =>
-                Effect.succeed<WriteOutcome>({ _tag: "NotSent", text: `${error.message} Nothing was sent.` }),
-              ),
-            ),
-        );
-        const approved = decision.approval === undefined ? "" : ` ${approvalNote(decision.approval)}`;
-        if (outcome._tag === "Applied") return `${outcome.text}${planned.note}${approved}`;
-        if (outcome._tag === "Uncertain") return yield* new Refused({ message: outcome.text });
-        return yield* new Refused({ message: `${outcome.text}${planned.note}${approved}` });
-      });
-
-    /** Runs `use` under one sign-in from planning to sending (ADR 020), as Push does. */
-    const pinned = <A, R>(
+    /**
+     * Plans under one sign-in (ADR 020), as Push does: GitHub is read with it, the card names it, and
+     * the rest of the call, from deciding to sending, runs pinned to it, so another account never
+     * asks or sends it.
+     */
+    const pinned = <R extends PolicyRequest>(
       agentId: AgentId,
       repository: GitHubRepository,
-      use: Effect.Effect<A, Refused | GitHubError, R>,
-    ) =>
+      plan: Effect.Effect<Omit<HubWritePlan<R>, "pinned">, HubRefusal | GitHubError>,
+    ): Effect.Effect<HubWritePlan<R>, HubRefusal> =>
       credential
-        .onRepository(agentId, repository, use)
-        .pipe(Effect.mapError((error) => (error instanceof Refused ? error : new Refused({ message: error.message }))));
+        .onRepository(
+          agentId,
+          repository,
+          Effect.gen(function* () {
+            const planned = yield* plan;
+            const pins = yield* Effect.context<never>();
+            return {
+              ...planned,
+              pinned: <A, E>(rest: Effect.Effect<A, E>) =>
+                Effect.updateContext(rest, (now: Context.Context<never>) => Context.merge(now, pins)),
+            };
+          }),
+        )
+        .pipe(Effect.mapError((error) => (error instanceof HubRefusal ? error : refused(error))));
 
-    /** Opens a pull request from a pushed branch: `folder` and `repository` are the hob's, resolved by the caller. */
-    const openPullRequest = (
-      turn: CharmTurn,
-      access: ToolAccess,
-      folder: string,
-      repository: GitHubRepository,
+    /** Sends under the sign-in the card named: another account never sends it (ADR 020). */
+    const sendPinned = (agentId: AgentId, repository: GitHubRepository, send: Effect.Effect<WriteOutcome>) =>
+      credential
+        .onRepository(agentId, repository, send)
+        .pipe(
+          Effect.catch((error) =>
+            Effect.succeed<WriteOutcome>({ _tag: "NotSent", text: `${error.message} Nothing was sent.` }),
+          ),
+        );
+
+    /** Opens a pull request from a pushed branch of the hob's folder's repository. */
+    const planPullRequest = (
       input: GitHubWriteInput<"github_open_pull_request">,
-      step: HubCallStep | undefined,
-    ): Effect.Effect<string, Refused> =>
+      { turn, access, redacted = [] }: HubPlanContext,
+    ) =>
       Effect.gen(function* () {
-        const { key, withoutKey } = keyed(turn, input);
         yield* checkBranch(input.head);
         if (input.base !== undefined) yield* checkBranch(input.base);
-        const earlier = yield* runner.earlier(turn.agentId, scopesOf(turn), key, withoutKey);
-        if (Option.isSome(earlier)) return earlier.value;
-
-        // Outgoing text is redacted before deciding, so the card shows and approves what is sent.
-        const title = turn.redactor.text(input.title);
-        const body = turn.redactor.text(input.body ?? "");
-        const redacted = [
-          ...(title === input.title ? [] : ["title"]),
-          ...(body === (input.body ?? "") ? [] : ["description"]),
-        ];
+        const { folder, repository } = yield* repositoryFor(access, input.folder);
         const slug = repositorySlug(repository);
         const agentId = turn.agentId;
         return yield* pinned(
@@ -284,11 +229,11 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
             const info = yield* github(api.repository(agentId, repository));
             const base = input.base ?? info.defaultBranch;
             if (base === input.head) {
-              return yield* new Refused({ message: `A pull request needs a head branch other than ${base}.` });
+              return yield* new HubRefusal({ message: `A pull request needs a head branch other than ${base}.` });
             }
             const head = yield* github(api.branchHead(agentId, repository, input.head));
             if (head === null) {
-              return yield* new Refused({
+              return yield* new HubRefusal({
                 message: `${slug} has no branch ${input.head} on GitHub. Push it with github_push first.`,
               });
             }
@@ -299,68 +244,80 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
               folder,
               head: input.head,
               base,
-              title,
-              body,
+              title: input.title,
+              body: input.body ?? "",
               draft: input.draft !== false,
               actingAs,
             };
-            return yield* decideAndSend(turn, access, repository, step, {
-              tool: "github_open_pull_request",
-              key,
-              input: withoutKey,
-              site: `github.com/${slug} pull ${input.head} into ${base}`,
-              plan,
-              summary: githubPullRequestSummary(plan),
-              recorded: { existing: existing.map((pr) => pr.number) },
-              appliedText: `Opened a pull request from ${plan.head} into ${plan.base} in ${slug}.`,
-              label: `Opening a pull request from ${input.head} ${githubActorText(actingAs)}`,
-              request: { _tag: "PullRequest", folder, repository: slug, base },
-              send: sendOnceMore(
-                api.openPullRequest(agentId, repository, {
-                  head: plan.head,
-                  base: plan.base,
-                  title: plan.title,
-                  body: plan.body,
-                  draft: plan.draft,
-                }),
-              ).pipe(Effect.map((result) => outcomeOf(result, (pr) => openedText(plan, pr.number, pr.url)))),
-              note: redactedNote(redacted),
-            });
+            const request: PolicyRequest = {
+              _tag: "Charm",
+              charm: GITHUB_CHARM.id,
+              operation: "github.open-pull-request",
+              folder,
+              site: { repository: slug, base },
+              targets: [`github.com/${slug} into ${base}`],
+            };
+            return {
+              request,
+              card: {
+                arguments: { ...plan },
+                summary: githubPullRequestSummary(plan),
+                label: `Opening a pull request from ${input.head} ${githubActorText(actingAs)}`,
+              },
+              write: {
+                site: `github.com/${slug} pull ${input.head} into ${base}`,
+                recorded: { ...plan, existing: existing.map((pr) => pr.number) },
+                appliedText: `Opened a pull request from ${plan.head} into ${plan.base} in ${slug}.`,
+                note: redactedNote([
+                  ...(redacted.includes("title") ? ["title"] : []),
+                  ...(redacted.includes("body") ? ["description"] : []),
+                ]),
+                send: sendPinned(
+                  agentId,
+                  repository,
+                  sendOnceMore(
+                    api.openPullRequest(agentId, repository, {
+                      head: plan.head,
+                      base: plan.base,
+                      title: plan.title,
+                      body: plan.body,
+                      draft: plan.draft,
+                    }),
+                  ).pipe(Effect.map((result) => outcomeOf(result, (pr) => openedText(plan, pr.number, pr.url)))),
+                ),
+              },
+            };
           }),
         );
-      }).pipe(Effect.scoped);
+      });
 
-    /** Comments on an issue or pull request: `folder` and `repository` are the hob's, resolved by the caller. */
-    const comment = (
-      turn: CharmTurn,
-      access: ToolAccess,
-      folder: string,
-      repository: GitHubRepository,
+    /** Comments on an issue or pull request of the hob's folder's repository. */
+    const planComment = (
       input: GitHubWriteInput<"github_comment">,
-      step: HubCallStep | undefined,
-    ): Effect.Effect<string, Refused> =>
+      { turn, access, redacted = [], redact = (text) => text }: HubPlanContext,
+    ) =>
       Effect.gen(function* () {
-        const { key, withoutKey } = keyed(turn, input);
-        const earlier = yield* runner.earlier(turn.agentId, scopesOf(turn), key, withoutKey);
-        if (Option.isSome(earlier)) return earlier.value;
-
-        // The hub's marker is its own: anything shaped like one goes before the text is redacted and shown.
+        const { folder, repository } = yield* repositoryFor(access, input.folder);
+        // The hub's marker is its own: anything shaped like one goes before the text is shown. Taking
+        // one out can join a secret back together, so what is left is redacted again (ADR 020).
         const unmarked = stripCommentMarkers(input.body);
-        const body = turn.redactor.text(unmarked);
+        const body = redact(unmarked);
         if (hasCommentMarker(body)) {
-          return yield* new Refused({
+          return yield* new HubRefusal({
             message:
               "Your comment holds text shaped like Hobbots' hidden call marker (`<!-- hobbots-call`), which Hobbots keeps for itself. Write it without that.",
           });
         }
         if (body.trim() === "") {
-          return yield* new Refused({ message: "Your comment is empty once Hobbots' hidden markers are taken out." });
+          return yield* new HubRefusal({
+            message: "Your comment is empty once Hobbots' hidden markers are taken out.",
+          });
         }
-        const notes = [
+        const note = [
           ...(unmarked === input.body
             ? []
             : [" Hobbots took out text shaped like its hidden call marker, which it keeps for itself."]),
-          redactedNote(body === unmarked ? [] : ["comment"]),
+          redactedNote(redacted.includes("body") || body !== unmarked ? ["comment"] : []),
         ].join("");
         const slug = repositorySlug(repository);
         const agentId = turn.agentId;
@@ -381,30 +338,56 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
             };
             // Random per call and never shown to the hob, so no comment it writes can pass for this call's.
             const marker = crypto.randomUUID();
-            return yield* decideAndSend(turn, access, repository, step, {
-              tool: "github_comment",
-              key,
-              input: withoutKey,
-              site: `github.com/${slug} #${input.number}`,
-              plan,
-              summary: githubCommentSummary(plan),
-              recorded: { marker },
-              appliedText: `Commented on #${input.number} in ${slug}.`,
-              label: `Commenting on #${input.number} ${githubActorText(actingAs)}`,
-              request: { _tag: "GitHubComment", folder, repository: slug, number: input.number },
-              send: sendOnceMore(
-                api.comment(agentId, repository, input.number, `${body}\n\n${commentMarker(marker)}`),
-              ).pipe(Effect.map((result) => outcomeOf(result, (posted) => commentedText(plan, posted.url)))),
-              note: notes,
-            });
+            const request: PolicyRequest = {
+              _tag: "Charm",
+              charm: GITHUB_CHARM.id,
+              operation: "github.comment",
+              folder,
+              site: { repository: slug },
+              targets: [`github.com/${slug} #${input.number}`],
+            };
+            return {
+              request,
+              card: {
+                arguments: { ...plan },
+                summary: githubCommentSummary(plan),
+                label: `Commenting on #${input.number} ${githubActorText(actingAs)}`,
+              },
+              write: {
+                site: `github.com/${slug} #${input.number}`,
+                recorded: { ...plan, marker },
+                appliedText: `Commented on #${input.number} in ${slug}.`,
+                note,
+                send: sendPinned(
+                  agentId,
+                  repository,
+                  sendOnceMore(
+                    api.comment(agentId, repository, input.number, `${body}\n\n${commentMarker(marker)}`),
+                  ).pipe(Effect.map((result) => outcomeOf(result, (posted) => commentedText(plan, posted.url)))),
+                ),
+              },
+            };
           }),
         );
-      }).pipe(Effect.scoped);
+      });
 
-    return {
-      openPullRequest,
-      comment,
-      pullRequestReadBack: pullRequestReadBack(api),
-      commentReadBack: commentReadBack(api),
-    };
+    const actions: ReadonlyArray<HubAction<PolicyRequest>> = [
+      hubAction({
+        tool: writeTool("github_open_pull_request"),
+        input: GitHubWriteInputs.github_open_pull_request,
+        effect: "write",
+        otherwise: "no pull request can be opened",
+        readBack: pullRequestReadBack(api),
+        plan: planPullRequest,
+      }),
+      hubAction({
+        tool: writeTool("github_comment"),
+        input: GitHubWriteInputs.github_comment,
+        effect: "write",
+        otherwise: "nothing can be commented",
+        readBack: commentReadBack(api),
+        plan: planComment,
+      }),
+    ];
+    return actions;
   });

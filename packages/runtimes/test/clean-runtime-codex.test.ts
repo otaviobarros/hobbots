@@ -22,16 +22,22 @@ import { startAppServer } from "../src/codex/app-server.ts";
 import { unexpectedSkillsMessage } from "../src/codex/skills.ts";
 import { type CodexTurnConfig, runCodexTurn } from "../src/codex/turn.ts";
 import { SKILL_MOUNTS, skillMountsHash } from "../src/skills.ts";
+import { functionCall, type Move, runs, standIn } from "../src/testing/responses-stand-in.ts";
 import {
   AGENTS_SKILL,
   ASKED_SKILL,
   type CleanRuntimeFixture,
+  CONTRACT_HUB_TOOL,
   cleanRuntimeFixture,
   FOREIGN_MARKERS,
   LIBRARY_SKILL,
+  SET_RULES,
+  SET_SIBLING,
+  SET_SKILL,
+  stepRecordingContract,
+  TEAM_SET,
 } from "./clean-runtime.ts";
 import { approvalsAnswering, approve } from "./codex-fixture.ts";
-import { type Move, runs, standIn } from "./responses-stand-in.ts";
 
 /**
  * The clean-runtime contract test on an installed Codex (ADR 029), with a stand-in model that records
@@ -150,6 +156,9 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     // The mounted skills, the `~/.agents` one among them, reach the turn through Hobbots.
     expect(offered).toContain(`${LIBRARY_SKILL}-offered`);
     expect(offered).toContain(`${AGENTS_SKILL}-offered`);
+    // A mounted set's skills, less the one the hob turned off (ADR 029, Skill sets).
+    expect(offered).toContain(`${SET_SKILL}-offered`);
+    expect(offered).toContain(`${SET_SIBLING}-offered`);
     // Only when asked: listed to no model.
     expect(offered).not.toContain(`${ASKED_SKILL}-offered`);
     // No bundled skill: Codex's own are off.
@@ -185,6 +194,21 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     expect(readdirSync(join(access.runtimeFolder, "skill-mounts"))).toEqual([]);
   });
 
+  // covers EX-004, ADR 031
+  it("[TC-PE-472] records a hub tool call's step with the turn's recorder before the hub runs it", {
+    timeout: 60_000,
+  }, async () => {
+    for (const records of [true, false]) {
+      const contract = stepRecordingContract(records);
+      const { exit } = await turn({ hubTools: contract.hubTools, recordToolStart: contract.recordToolStart }, [
+        functionCall(CONTRACT_HUB_TOOL, {}, `call-${records}`),
+        { say: "Done." },
+      ]);
+      expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+      expect(contract.order).toEqual([`recorded ${CONTRACT_HUB_TOOL} as call-${records}`, records ? "ran" : "not run"]);
+    }
+  });
+
   // covers RT-001, ADR 029
   it("[TC-RT-526] a skill you picked loads as Codex's skill item, even Only when asked, and counts as used", {
     timeout: 60_000,
@@ -212,6 +236,51 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     const events = Exit.isSuccess(exit) ? exit.value : [];
     expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
       { _tag: "SkillUsed", source: "library", name: LIBRARY_SKILL, explicit: false },
+    ]);
+  });
+
+  /** Where a skill of the mounted set is in the turn's folder. */
+  const setSkillFolder = (name: string) =>
+    join(access.runtimeFolder, SKILL_MOUNTS, skillMountsHash(fixture.mounts), "sets", TEAM_SET, "skills", name);
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-1143-04] a skill of a set you picked loads from its set's folder and follows its links", {
+    timeout: 60_000,
+  }, async () => {
+    const base = setSkillFolder(SET_SKILL);
+    const { exit, offered } = await turn(
+      { prompt: "Plan it.", askedSkill: `${TEAM_SET}:${SET_SKILL}`, tools: access },
+      [
+        runs("read-rules", `cat '${join(base, "..", "..", "references", "rules.md")}'`),
+        runs("read-sibling", `cat '${join(base, "..", SET_SIBLING, "SKILL.md")}'`),
+        { say: "Done." },
+      ],
+    );
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(offered).toContain(`Use ${SET_SKILL}.`);
+    expect(offered).toContain(join(base, "SKILL.md"));
+    expect(offered).toContain(SET_RULES);
+    expect(offered).toContain(`name: ${SET_SIBLING}`);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: SET_SKILL, explicit: true, set: TEAM_SET },
+      // Following the link to the other skill's SKILL.md reads that skill.
+      { _tag: "SkillUsed", source: "library", name: SET_SIBLING, explicit: false, set: TEAM_SET },
+    ]);
+  });
+
+  // covers RT-001, ADR 029
+  it("[TC-RT-1143-05] reading a set's skill's SKILL.md counts as using it, with its set", {
+    timeout: 60_000,
+  }, async () => {
+    const { exit } = await turn({ tools: access }, [
+      runs("read-set-skill", `cat '${join(setSkillFolder(SET_SIBLING), "SKILL.md")}'`),
+      { say: "Done." },
+    ]);
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", source: "library", name: SET_SIBLING, explicit: false, set: TEAM_SET },
     ]);
   });
 

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
+  CharmDeclarations,
   ChatService,
   GrantService,
   HobAdmission,
@@ -13,6 +14,7 @@ import {
   PermissionSummary,
   RuntimeAdapter,
 } from "@hobbots/agents";
+import { GITHUB_CHARM } from "@hobbots/charms";
 import { type Agent, type Message, PRESET_DECISIONS, roleFields } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
@@ -52,6 +54,13 @@ const away = join(temp, "away");
 const awayLink = join(temp, "away-link");
 symlinkSync(away, awayLink);
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
+
+const BALANCED_WITH_GITHUB = {
+  ...PRESET_DECISIONS.balanced,
+  "github.read": "allow",
+  "github.open-pull-request": "ask",
+  "github.comment": "ask",
+};
 
 const hob = {
   name: "Wren",
@@ -119,6 +128,7 @@ const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailab
           ),
           EventBus.layer,
           HobAdmission.layer,
+          Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
           NodeFolderChecks,
           runtime,
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
@@ -176,7 +186,9 @@ describe("a hob's folders", () => {
         sharedFolders: [shared, notes],
         policy: { ownFolders: [], hiddenSharedFolders: [], overrides: {} },
         folders: [shared, notes],
-        decisions: PRESET_DECISIONS.balanced,
+        // The built-in answers, then each one the GitHub Charm declares, by its id (ADR 031).
+        decisions: BALANCED_WITH_GITHUB,
+        presets: BALANCED_WITH_GITHUB,
         enforcement: fakeEnforcement("on"),
       },
     });
@@ -376,6 +388,29 @@ describe("a hob's overrides", () => {
         configVersion: 2,
         policy: { overrides: { "edit-files": "ask", "use-web": "deny", push: "ask" } },
         decisions: { ...PRESET_DECISIONS.balanced, "edit-files": "ask", "use-web": "deny" },
+      },
+    });
+  });
+
+  // covers AG-004, PE-001
+  it("[TC-AG-161] narrows a Charm operation by its id, and refuses one no Charm on the hub declares", async () => {
+    const agent = await newHob();
+
+    const undeclared = await request("PATCH", permissions(agent), { charms: { overrides: { "mail.send": "deny" } } });
+    expect(undeclared).toMatchObject({ status: 400, body: { _tag: "UndeclaredOperation", operations: ["mail.send"] } });
+    const widening = await request("PATCH", permissions(agent), {
+      charms: { overrides: { "github.comment": "allow" } },
+    });
+    expect(widening).toMatchObject({ status: 400, body: { _tag: "OverrideWidens", operations: ["github.comment"] } });
+
+    const narrowed = await request("PATCH", permissions(agent), { charms: { overrides: { "github.read": "deny" } } });
+    expect(narrowed).toMatchObject({
+      status: 200,
+      body: {
+        configVersion: 2,
+        policy: { overrides: {}, charms: { overrides: { "github.read": "deny" } } },
+        decisions: { ...BALANCED_WITH_GITHUB, "github.read": "deny" },
+        presets: BALANCED_WITH_GITHUB,
       },
     });
   });

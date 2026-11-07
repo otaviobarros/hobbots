@@ -1,3 +1,4 @@
+import { SkillName, SkillScope } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { InvalidFolder } from "./errors.ts";
@@ -94,6 +95,16 @@ export const LatestRestore = Schema.Struct({
   backupVersion: Schema.String,
   setAside: Schema.NullOr(SetAsideFolder),
   missingFolders: Schema.Array(Schema.String),
+  /**
+   * Skills from `~/.agents/skills` that are no longer in that folder on this computer, whose files the
+   * backup did not hold (ADR 029): they keep their assignments but are not delivered.
+   */
+  skillsNotHere: Schema.Array(SkillName),
+  /**
+   * The assignments of skills from `~/.agents/skills` that reading the folder again moved to its
+   * current revision, held ones included; `hob` is the hob's name for a hob's assignment.
+   */
+  skillMoves: Schema.Array(Schema.Struct({ skill: SkillName, scope: SkillScope, hob: Schema.NullOr(Schema.String) })),
   workHeld: Schema.Boolean,
 });
 

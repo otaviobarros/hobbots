@@ -4,6 +4,7 @@ import {
   answerHow,
   type BackpackItem,
   CHECKPOINT_WORDS,
+  CONTINUATION_HEADER,
   checkpointText,
   FINISH_RULE,
   handedFrom,
@@ -97,6 +98,7 @@ export const stepPrompt = (step: Task, tree: TaskTree): string => {
     `This is step ${index} of ${total} of a Task you own, running in a fresh session with only its brief and what it refers to.`,
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(step, tree),
+    COMMIT_RULE,
     `Report findings or blockers with report_checkpoint. ${CHECKPOINT_RULE} If the work is already done or you cannot do it as briefed, report a finding or blocker and end without complete_task: the step then waits for its owner. When the step is done, call complete_task with its result; otherwise your final reply becomes its result. Task id: ${step.id}.`,
   ].join("\n");
 };
@@ -130,6 +132,14 @@ const milestonesToReport = (task: Task, tree: TaskTree): ReadonlyArray<string> =
     .map((milestone) => `  - ${milestone.title} (milestone_id ${milestone.id})`);
   return open.length === 0 ? [] : ["Milestones to report with report_checkpoint as you reach them:", ...open];
 };
+
+/**
+ * How commits are made, as every brief that can commit tells it (#742): a lead's, a member's and a
+ * step's. Who commits is the hub's to set, so no hob prescribes a form the hub refuses, asks
+ * another hob who to commit as, or commits another hob's work under its own identity.
+ */
+export const COMMIT_RULE =
+  "If you commit, run plain git commit: Hobbots sets who your commits are made as, and you cannot set or change it. No hob can answer who to commit as, so never ask one: when none is set, Hobbots asks the user itself. Commit only your own Task's work, never a member's: each hob commits its own.";
 
 /**
  * How results move between the members of a Quest (ADR 018). Its lead and its members are told the
@@ -171,6 +181,7 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
     "---",
     `${lead} gave you this Task as part of a Quest ${lead} leads. You work on it in your own session, and you deal only with ${lead}, never with the other hobs on the Quest.`,
     RESULTS_RULE,
+    COMMIT_RULE,
     ...(delegation?.expectedOutput == null ? [] : [`${lead} expects back: ${delegation.expectedOutput}`]),
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(task, tree),
@@ -208,9 +219,27 @@ export const memberReminder = (task: Task, tree: TaskTree, lead: string): string
     ...(standing.length === 0
       ? []
       : [cut(["Where the Tasks your work builds on stand now:", ...standing].join("\n"), STEP_INPUT_LIMIT)]),
-    "When it is done, call complete_task with its result; while nothing else keeps it open, your final reply becomes its result.",
+    MEMBER_FINISH,
   ].join("\n");
 };
+
+/** How a member's Task ends, as every later turn is reminded: only `complete_task` or a blocker ends it (#1086). */
+const MEMBER_FINISH =
+  "When it is done, call complete_task with its result. If you cannot finish it, report a blocker with report_checkpoint. A final reply alone does not complete it.";
+
+/**
+ * What a member's session is told when its turn ended in prose with nothing open (#1086): its reply
+ * does not say whether the work is done, so it goes on once to say so with a tool. A second turn that
+ * ends the same way blocks the Task, with its reply as the reason its lead reads.
+ */
+export const sendBackPrompt = (task: Task, lead: string): string =>
+  [
+    CONTINUATION_HEADER,
+    `Your turn on Task ${task.id} ended without complete_task, so the Task is not done yet.`,
+    "If the work is done, call complete_task now with its result.",
+    "If it is not done, finish it and then call complete_task, or, if you cannot, report a blocker with report_checkpoint that says what stops you.",
+    `If this turn also ends without either, the Task goes back to ${lead} as blocked, with your reply as the reason.`,
+  ].join("\n");
 
 /**
  * The Tasks the owner's briefing lists under `task`, depth first, each with its place (`1`, `1.2`):
@@ -363,6 +392,7 @@ export const ownerBriefingParts = (
           ),
           rule("complete", "Call complete_task with the Task's result once everything under it has ended."),
         ]),
+    rule("commits", COMMIT_RULE),
     rule("chat", LEAN_CHAT_RULE, FINISH_RULE),
   ];
 };

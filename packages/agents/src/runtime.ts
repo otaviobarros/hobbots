@@ -1,6 +1,8 @@
 import {
+  type AnyOperation,
   type ApprovalId,
   type ApprovalLifetime,
+  type CharmOperation,
   type CommitIdentity,
   type CommitsAs,
   type Effort,
@@ -9,8 +11,7 @@ import {
   type GrantRule,
   type HobPolicy,
   type PlanUsage,
-  type PolicyOperation,
-  type PolicyOverrides,
+  type PolicyLayer,
   type ReplyUsage,
   RUNTIME_NAMES,
   type RuntimeEnforcement,
@@ -43,7 +44,7 @@ export interface ToolStartedEvent {
   readonly id: string;
   /** The runtime's own name for the tool, such as `Bash` or `Edit`. */
   readonly tool: string;
-  readonly operation: PolicyOperation;
+  readonly operation: AnyOperation;
   /** The canonical paths, the command's folder, or the remote the call was decided on. */
   readonly targets: ReadonlyArray<string>;
   /** Short words for the step, such as "Running pnpm test". */
@@ -85,7 +86,7 @@ export type RuntimeEvent =
       readonly id: string;
       readonly approvalId: ApprovalId;
       readonly tool: string;
-      readonly operation: PolicyOperation;
+      readonly operation: AnyOperation;
       readonly targets: ReadonlyArray<string>;
       readonly label: string;
     }
@@ -111,7 +112,7 @@ export type RuntimeEvent =
       readonly _tag: "ToolDenied";
       readonly id: string;
       readonly tool: string;
-      readonly operation: PolicyOperation;
+      readonly operation: AnyOperation;
       readonly targets: ReadonlyArray<string>;
       readonly label: string;
       readonly reason: string;
@@ -133,13 +134,16 @@ export type RuntimeEvent =
    * turn. `source` says where the runtime loaded it from: `library`, one of the turn's mounts, or
    * `organization`, a skill an administrator's settings brought that the session reported, so a
    * name both share is never mistaken for the other. `explicit` when it is the skill the turn was
-   * asked to use (`askedSkill`). The hub maps a mount's name to the revision the turn mounted.
+   * asked to use (`askedSkill`). The hub maps a mount's name, and its set when it has one, to the
+   * revision the turn mounted.
    */
   | {
       readonly _tag: "SkillUsed";
       readonly source: "library" | "organization";
       readonly name: string;
       readonly explicit: boolean;
+      /** The set of the mount it used, for a skill of a set (ADR 029, Skill sets). */
+      readonly set?: string | null;
     }
   | {
       readonly _tag: "Completed";
@@ -171,7 +175,9 @@ export interface ToolPolicy {
   /** Hobbots' own data folder, never reachable even when a shared folder contains it. */
   readonly dataFolder: string;
   /** Narrowing added by the thread, Quest, task or delegation. Each may only narrow. */
-  readonly restrictions: ReadonlyArray<PolicyOverrides>;
+  readonly restrictions: ReadonlyArray<PolicyLayer>;
+  /** The operations the Charms the hub holds declare (ADR 031); a Charm operation not among them stays closed. */
+  readonly charmOperations?: ReadonlyArray<CharmOperation>;
 }
 
 /**
@@ -205,7 +211,7 @@ export interface ApprovalAction {
   /** The runtime's id for the call, which is also its reply step's. */
   readonly stepId: string;
   readonly tool: string;
-  readonly operation: PolicyOperation;
+  readonly operation: AnyOperation;
   readonly targets: ReadonlyArray<string>;
   /** The call's concrete arguments, exactly as the runtime would run them. */
   readonly arguments: Readonly<Record<string, unknown>>;
@@ -287,7 +293,34 @@ export interface HubToolAnswer {
 export interface HubCallStep {
   readonly id: string;
   readonly report: (event: RuntimeEvent) => void;
+  /**
+   * Records the call as started, durably, before it runs (EX-004, ADR 031), as the runtime records its
+   * own tool calls with `recordToolStart`; without that, it reports the start. False, or a defect, and
+   * the call never runs.
+   */
+  readonly record: (event: ToolStartedEvent) => Effect.Effect<boolean>;
 }
+
+/**
+ * The step a hub tool call shows as (ADR 031): with `record`, the turn's `recordToolStart`, the call
+ * is recorded durably before it runs, and a defect counts as not recorded; without it, its start is
+ * reported and it runs. Every adapter gives its hub calls one.
+ */
+export const hubCallStep = (
+  id: string,
+  report: (event: RuntimeEvent) => void,
+  record?: ((event: ToolStartedEvent) => Effect.Effect<boolean>) | null,
+): HubCallStep => ({
+  id,
+  report,
+  record: (event) =>
+    record
+      ? record(event).pipe(Effect.catchDefect(() => Effect.succeed(false)))
+      : Effect.sync(() => {
+          report(event);
+          return true;
+        }),
+});
 
 /** The Hobbots tools a turn offers, and how a call reaches the hub, which checks it. */
 export interface HubTools {
@@ -302,6 +335,11 @@ export interface HubTools {
    * folder whose origin is on GitHub (ADR 020), or null when the push is decided as a push.
    */
   readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
+  /**
+   * Why a `git commit` in the repository Git finds from `cwd` is held, or null when it may run: a
+   * lead's commit where a member's open Task left changes, which are that member's to commit (#742).
+   */
+  readonly holdsCommit?: (cwd: string) => Effect.Effect<string | null>;
 }
 
 /**
@@ -317,6 +355,12 @@ export interface SkillMount {
   readonly folder: string;
   /** Whether the hob may pick the skill on its own; false is Only when asked. */
   readonly implicit: boolean;
+  /**
+   * For a skill of a set (ADR 029, Skill sets): the set's name, and the skill's folder inside it. Then
+   * `folder` holds the whole set, laid out as it was imported, so the skill's links to the set's
+   * other files resolve, and `revision` is the set's. Mounts of one set share its folder.
+   */
+  readonly set?: { readonly name: string; readonly path: string } | null;
 }
 
 export interface PromptRequest {
@@ -370,7 +414,8 @@ export interface PromptRequest {
    */
   readonly skills?: ReadonlyArray<SkillMount> | null;
   /**
-   * The name of one of `skills` that you picked for this message with `/` (ADR 029, Explicit use).
+   * The name of one of `skills` that you picked for this message with `/` (ADR 029, Explicit use), as
+   * `<set>:<name>` for a skill of a set (ADR 029, Skill sets).
    * The adapter hands it to the runtime as the runtime's own mention, and reports `SkillUsed` with
    * `explicit` once the turn starts. Absent or null when you picked none.
    */

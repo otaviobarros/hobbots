@@ -12,6 +12,7 @@ import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import {
   SkillEditStale,
   SkillImportRefused,
+  SkillIsReadOnly,
   SkillMissing,
   SkillNameConflict,
   SkillScanOutdated,
@@ -96,6 +97,7 @@ const decisionErrors = [
   SkillNameConflict,
   SkillEditStale,
   SkillScanOutdated,
+  SkillIsReadOnly,
 ];
 
 export class SkillProposalsGroup extends HttpApiGroup.make("skillProposals")

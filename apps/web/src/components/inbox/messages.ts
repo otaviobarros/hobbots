@@ -173,10 +173,10 @@ export const messages = {
     openTask: "Open the task",
     loadFailed: "Hobbots could not read the failed tasks.",
   },
-  /** The keycaps under the list in Needs you. */
+  /** The keycaps under the list in Needs you: A and D only while a permission request is open. */
   keys: {
-    hints: [
-      { keys: ["↑", "↓"], does: "move" },
+    move: { keys: ["↑", "↓"], does: "move" },
+    decide: [
       { keys: ["A"], does: "allow once" },
       { keys: ["D"], does: "deny" },
     ],

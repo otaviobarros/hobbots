@@ -382,7 +382,7 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
   await expect(read.getByRole("radio", { name: "Never" })).toBeChecked();
   await expect
     .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
-    .toMatchObject({ decisions: { "read-github": "deny" } });
+    .toMatchObject({ decisions: { "github.read": "deny" } });
   await read.getByText("Allow", { exact: true }).click();
   await expect(read.getByRole("radio", { name: "Allow" })).toBeChecked();
   for (const name of ["Push changes", "Open pull requests", "Comment and reply"]) {

@@ -1,4 +1,5 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { ServerResponse } from "node:http";
+import { standInServer } from "./stand-in-server.ts";
 
 // A stand-in for the Responses API, as the ADR 024 probe used: the model's moves are fixed, and each
 // request is recorded. Codex reaches it as a custom model provider.
@@ -93,28 +94,24 @@ export const standIn = () => {
   const moves: Array<Move> = [];
   const requests: Array<ModelRequest> = [];
   let served = 0;
-  const server: Server = createServer((request: IncomingMessage, response: ServerResponse) => {
-    let body = "";
-    request.on("data", (chunk) => (body += chunk));
-    request.on("end", () => {
-      if (!request.url?.endsWith("/responses")) {
-        response.writeHead(404).end();
-        return;
-      }
-      requests.push(JSON.parse(body) as ModelRequest);
-      const move = moves.shift() ?? { say: "Nothing scripted." };
-      served += 1;
-      if ("hang" in move) {
-        response.writeHead(200, { "content-type": "text/event-stream" });
-        sse(response, { type: "response.created", response: { id: `r${served}` } });
-        return;
-      }
-      if ("call" in move) {
-        callTool(response, move.call, `r${served}`);
-        return;
-      }
-      say(response, move.say, `r${served}`);
-    });
+  const server = standInServer((request, body, response) => {
+    if (!request.url?.endsWith("/responses")) {
+      response.writeHead(404).end();
+      return;
+    }
+    requests.push(JSON.parse(body) as ModelRequest);
+    const move = moves.shift() ?? { say: "Nothing scripted." };
+    served += 1;
+    if ("hang" in move) {
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      sse(response, { type: "response.created", response: { id: `r${served}` } });
+      return;
+    }
+    if ("call" in move) {
+      callTool(response, move.call, `r${served}`);
+      return;
+    }
+    say(response, move.say, `r${served}`);
   });
   return { server, moves, requests };
 };

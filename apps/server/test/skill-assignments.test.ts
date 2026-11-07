@@ -48,6 +48,8 @@ let root: string;
 
 /** The skills each turn was given, in the order the turns started. */
 let given: Array<ReadonlyArray<SkillMount>>;
+/** What each turn sent its runtime: the prompt and the skill you picked. */
+let sent: Array<{ readonly prompt: string; readonly askedSkill: string | null }>;
 /** A turn whose prompt holds `hold` waits here before the runtime answers it. */
 let release: () => void;
 let held: Promise<void>;
@@ -69,6 +71,7 @@ beforeEach(async () => {
   await mkdir(join(agentsFolder, "shared"), { recursive: true });
   await writeFile(join(agentsFolder, "shared", "SKILL.md"), skillMd("shared"));
   given = [];
+  sent = [];
   held = new Promise((resolve) => {
     release = resolve;
   });
@@ -78,6 +81,7 @@ beforeEach(async () => {
     ...fake,
     sendPrompt: (request: PromptRequest) => {
       given.push(request.skills ?? []);
+      sent.push({ prompt: request.prompt, askedSkill: request.askedSkill ?? null });
       const answer = fake.sendPrompt({ ...request, prompt: request.prompt.replace(/^(hold|stuck)\n/, "") });
       // `stuck`: the turn uses its skill, then waits until it is stopped.
       if (request.prompt.startsWith("stuck\n")) {
@@ -454,6 +458,7 @@ describe("skill uses", () => {
         pin: second.hash,
         number: 2,
         explicit: false,
+        set: null,
       },
     ]);
     // A reply that used none says so with an empty list.
@@ -553,5 +558,190 @@ describe("skill uses", () => {
     expect(stopped.status).toBe("interrupted");
     expect(stopped.skillsUsed).toMatchObject([{ name: "release-steps", number: 1 }]);
     expect((await request("GET", `/api/skills/${skill.skill.id}/uses`)).body).toMatchObject({ total: 1 });
+  });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-07] a set's new version is one update for all its skills, a held hob stays on the old one, and both mention forms pick a skill", async () => {
+    const pip = await summon("Pip", 970);
+    const quill = await summon("Quill", 971);
+    const plugin = join(root, "agent-engineering");
+    const version = async (label: string) => {
+      const manifest = JSON.stringify({ name: "agent-engineering", version: label, description: "A playbook." });
+      await mkdir(join(plugin, ".claude-plugin"), { recursive: true });
+      await writeFile(join(plugin, ".claude-plugin", "plugin.json"), manifest);
+      for (const [name, sibling] of [
+        ["deliver-change", "plan-change"],
+        ["plan-change", "deliver-change"],
+      ] as const) {
+        await mkdir(join(plugin, "skills", name), { recursive: true });
+        const steps = `Read [the contract](../../references/workflow-contract.md) and [${sibling}](../${sibling}/SKILL.md).`;
+        await writeFile(join(plugin, "skills", name, "SKILL.md"), `${skillMd(name)}\n${steps}\n`);
+      }
+      await mkdir(join(plugin, "references"), { recursive: true });
+      await writeFile(join(plugin, "references", "workflow-contract.md"), `# Contract ${label}\n`);
+    };
+    await version("0.5.0");
+    const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: plugin } });
+    expect(imported.status).toBe(200);
+    const [set] = imported.body.imported;
+    expect(set.revision).toMatchObject({ name: "agent-engineering", label: "0.5.0" });
+    expect(set.revision.set.skills.map((one: { name: string }) => one.name)).toEqual(["deliver-change", "plan-change"]);
+    const assign = async (agentId: string) =>
+      (await request("POST", `/api/skills/${set.skill.id}/assignments`, { scope: { _tag: "Hob", agentId } })).body;
+    const toPip = await assign(pip.id);
+    const toQuill = await assign(quill.id);
+    await request("POST", `/api/skills/assignments/${toQuill.id}/hold`, { held: true });
+
+    // Each of the set's skills reaches the turn on the set's revision, named with the set.
+    const pipThread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    await send(pipThread, "/agent-engineering:deliver-change go");
+    const first = await replies(pipThread, 1);
+    const setMounts = (mounts: ReadonlyArray<SkillMount> | undefined) =>
+      (mounts ?? [])
+        .filter((mount) => mount.set?.name === "agent-engineering")
+        .map((mount) => [mount.name, mount.revision]);
+    expect(setMounts(given.at(-1))).toEqual([
+      ["deliver-change", set.revision.hash],
+      ["plan-change", set.revision.hash],
+    ]);
+    expect(first.skillsUsed).toMatchObject([{ name: "deliver-change", set: "agent-engineering", explicit: true }]);
+    expect(first.content).toBe("Echo: go");
+    // A bare name picks the set's skill while no other skill has that name.
+    await send(pipThread, "/plan-change go");
+    expect((await replies(pipThread, 2)).skillsUsed).toMatchObject([
+      { name: "plan-change", set: "agent-engineering", explicit: true },
+    ]);
+    expect((await messages(pipThread)).filter((m) => m.role === "user").map((m) => m.askedSkill)).toEqual([
+      "agent-engineering:deliver-change",
+      "agent-engineering:plan-change",
+    ]);
+
+    // A new version of the plugin is one revision of the set, rolled out to every assignment but the held one.
+    await version("0.6.0");
+    const revised = await request("POST", `/api/skills/${set.skill.id}/revisions`, {
+      source: { _tag: "Folder", path: plugin },
+    });
+    expect(revised.status).toBe(200);
+    expect(revised.body.revision).toMatchObject({ number: 2, label: "0.6.0" });
+    expect(revised.body.rolledOut.map((one: { id: string }) => one.id)).toEqual([toPip.id]);
+    await send(pipThread, "/skills");
+    await replies(pipThread, 3);
+    expect(setMounts(given.at(-1))).toEqual([
+      ["deliver-change", revised.body.revision.hash],
+      ["plan-change", revised.body.revision.hash],
+    ]);
+    const quillThread: Thread = (await request("POST", `/api/agents/${quill.id}/threads`)).body;
+    await send(quillThread, "/skills");
+    await replies(quillThread, 1);
+    expect(setMounts(given.at(-1))).toEqual([
+      ["deliver-change", set.revision.hash],
+      ["plan-change", set.revision.hash],
+    ]);
+
+    // A hob can opt out of one skill of a set Everyone has, and keep the rest.
+    await request("POST", `/api/skills/${set.skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+    const wren = await summon("Wren", 972);
+    const optOut = await request("PUT", `/api/skills/hobs/${wren.id}/opt-outs/${set.skill.id}`, {
+      optedOut: true,
+      member: "plan-change",
+    });
+    expect(optOut.body).toMatchObject({
+      optedOut: [],
+      optedOutOfSets: [{ skillId: set.skill.id, name: "plan-change" }],
+    });
+    const wrenThread: Thread = (await request("POST", `/api/agents/${wren.id}/threads`)).body;
+    await send(wrenThread, "/skills");
+    await replies(wrenThread, 1);
+    expect(setMounts(given.at(-1))).toEqual([["deliver-change", revised.body.revision.hash]]);
+
+    // A bare name two sets share picks neither, and reaches the runtime without its `/`.
+    const other = join(root, "other-set");
+    await mkdir(join(other, ".claude-plugin"), { recursive: true });
+    await writeFile(join(other, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "other-set" }));
+    await mkdir(join(other, "skills", "plan-change"), { recursive: true });
+    await writeFile(join(other, "skills", "plan-change", "SKILL.md"), skillMd("plan-change"));
+    const otherSet = (await request("POST", "/api/skills", { source: { _tag: "Folder", path: other } })).body
+      .imported[0];
+    await request("POST", `/api/skills/${otherSet.skill.id}/assignments`, { scope: { _tag: "Hob", agentId: pip.id } });
+    await send(pipThread, "/plan-change go");
+    const ambiguous = await replies(pipThread, 4);
+    expect(sent.at(-1)).toEqual({ prompt: "plan-change go", askedSkill: null });
+    expect(ambiguous.skillsUsed).toEqual([]);
+    expect((await messages(pipThread)).filter((m) => m.role === "user").at(-1)?.askedSkill).toBeNull();
+    await send(pipThread, "/other-set:plan-change go");
+    expect((await replies(pipThread, 5)).skillsUsed).toMatchObject([{ name: "plan-change", set: "other-set" }]);
+    expect(sent.at(-1)).toEqual({ prompt: "go", askedSkill: "other-set:plan-change" });
+
+    // An edit in Hobbots never changes a set.
+    const edit = await request("POST", `/api/skills/${set.skill.id}/edits`, {
+      base: revised.body.revision.hash,
+      description: "Other.",
+      instructions: "Other.",
+    });
+    expect(edit).toMatchObject({ status: 422, body: { _tag: "SkillImportRefused", check: "set" } });
+  });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-AG-1143-16] the Skills page reads a set: its skills in the library, the files they share, each skill's uses, and a copy of one", async () => {
+    const pip = await summon("Pip", 973);
+    const plugin = join(root, "agent-engineering-page");
+    await mkdir(join(plugin, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      join(plugin, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "agent-engineering", version: "0.5.0", description: "A playbook." }),
+    );
+    for (const [name, links] of [
+      ["deliver-change", "[the contract](../../references/workflow-contract.md) and [plan](../plan-change/SKILL.md)"],
+      ["plan-change", "[the review rules](../../references/review.md)"],
+    ] as const) {
+      await mkdir(join(plugin, "skills", name), { recursive: true });
+      await writeFile(join(plugin, "skills", name, "SKILL.md"), `${skillMd(name)}\nRead ${links}.\n`);
+    }
+    await mkdir(join(plugin, "references"), { recursive: true });
+    await writeFile(join(plugin, "references", "workflow-contract.md"), "# Contract\n[Review](review.md)\n");
+    await writeFile(join(plugin, "references", "review.md"), "# Review\n");
+    const [set] = (await request("POST", "/api/skills", { source: { _tag: "Folder", path: plugin } })).body.imported;
+    await request("POST", `/api/skills/${set.skill.id}/assignments`, { scope: { _tag: "Hob", agentId: pip.id } });
+
+    // The library says which entries are sets, with their skills.
+    const list = (await request("GET", "/api/skills")).body;
+    expect(list.sets).toEqual([{ skillId: set.skill.id, skills: set.revision.set.skills }]);
+    // The set's page lists the files its skills share, with the skills whose SKILL.md links to each.
+    const detail = (await request("GET", `/api/skills/${set.skill.id}`)).body;
+    expect(detail.shared).toEqual([
+      { path: "references/review.md", linkedBy: ["plan-change"] },
+      { path: "references/workflow-contract.md", linkedBy: ["deliver-change"] },
+    ]);
+    // A loose skill has none.
+    const loose = join(root, "loose-for-page");
+    await mkdir(loose, { recursive: true });
+    await writeFile(join(loose, "SKILL.md"), skillMd("loose-for-page"));
+    const [one] = (await request("POST", "/api/skills", { source: { _tag: "Folder", path: loose } })).body.imported;
+    expect((await request("GET", `/api/skills/${one.skill.id}`)).body.shared).toBeNull();
+
+    // Each skill of the set counts its own uses.
+    const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    await send(thread, "/deliver-change go");
+    await replies(thread, 1);
+    const uses = (await request("GET", `/api/skills/${set.skill.id}/uses`)).body;
+    expect(uses).toMatchObject({ total: 1, members: [{ name: "deliver-change", total: 1, thisWeek: 1 }] });
+
+    // Make a copy takes one skill of the set, with the set's files it links to; never the whole set.
+    const whole = await request("POST", `/api/skills/${set.skill.id}/copies`, { name: "agent-engineering-copy" });
+    expect(whole).toMatchObject({ status: 422, body: { _tag: "SkillImportRefused", check: "set" } });
+    const copied = await request("POST", `/api/skills/${set.skill.id}/copies`, {
+      name: "deliver-change-copy",
+      member: "deliver-change",
+      scope: { _tag: "Hob", agentId: pip.id },
+    });
+    expect(copied.status).toBe(200);
+    expect(copied.body.revision).toMatchObject({ name: "deliver-change-copy", number: 1, set: null });
+    expect(copied.body.revision.files.map((file: { path: string }) => file.path)).toEqual([
+      "SKILL.md",
+      "linked/references/review.md",
+      "linked/references/workflow-contract.md",
+      "linked/skills/plan-change/plan-change.md",
+    ]);
+    expect(copied.body.assignment).toMatchObject({ scope: { _tag: "Hob", agentId: pip.id } });
   });
 });

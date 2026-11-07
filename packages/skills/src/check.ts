@@ -1,5 +1,7 @@
 import { posix } from "node:path";
 import {
+  RESERVED_SET_NAME,
+  SKILL_DESCRIPTION_MAX,
   SKILL_HIDDEN_TEXT,
   SKILL_LIMITS,
   type SkillCheck,
@@ -8,14 +10,16 @@ import {
   SkillFilePath,
   type SkillFlag,
   SkillFrontMatter,
-  type SkillName,
+  SkillName,
   SkillRefused,
   type SkillRevisionHash,
+  type SkillSetContent,
+  type SkillSetSkill,
   skillCharmsOf,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { parseDocument } from "yaml";
-import type { FoundSkill } from "./find.ts";
+import { type FoundSet, type FoundSkill, PLUGIN_ONLY } from "./find.ts";
 import { revisionHash, type SkillContent, sha256, skillsCliHash } from "./hash.ts";
 import { insideOf, type SkillTree } from "./tree.ts";
 
@@ -33,6 +37,8 @@ export interface CheckedSkill {
   readonly hash: SkillRevisionHash;
   /** The `skills` CLI's hash of the folder as it was read, before anything was dropped. */
   readonly cliHash: string;
+  /** For a set (ADR 029, Skill sets), the skills it holds; null for a skill. */
+  readonly set: SkillSetContent | null;
 }
 
 export type CheckResult =
@@ -222,6 +228,23 @@ const pluginVersion = async (tree: SkillTree, plugin: string | null): Promise<st
 const labelOf = (metadata: SkillFrontMatter["metadata"]): string | null =>
   typeof metadata?.version === "string" ? metadata.version : null;
 
+/** What a revision stores of its contents: the files, their flags and the revision's hash. */
+const stored = (contents: ReadonlyArray<SkillContent>) => ({
+  flags: contents.flatMap((file) => flagsOf(file, textOf(file.bytes))),
+  contents,
+  files: contents
+    .map(
+      (file): SkillFile => ({
+        path: file.path,
+        mode: file.mode,
+        size: file.bytes.byteLength,
+        sha256: sha256(file.bytes),
+      }),
+    )
+    .sort((a, b) => (a.path < b.path ? -1 : 1)),
+  hash: revisionHash(contents),
+});
+
 /**
  * Checks one skill folder of a source before anything is written (ADR 029, Import): valid front
  * matter, no link or path outside the skill, no link of the file system, at most 5 MB in 200 files.
@@ -269,21 +292,10 @@ const checkFolder = async (tree: SkillTree, found: FoundSkill): Promise<CheckedS
     description: skill.frontMatter.description,
     charms: [...charms].sort(),
     label: (await pluginVersion(tree, found.plugin)) ?? labelOf(skill.frontMatter.metadata),
-    flags: contents.flatMap((file) => flagsOf(file, textOf(file.bytes))),
     dropped,
-    contents,
-    files: contents
-      .map(
-        (file): SkillFile => ({
-          path: file.path,
-          mode: file.mode,
-          size: file.bytes.byteLength,
-          sha256: sha256(file.bytes),
-        }),
-      )
-      .sort((a, b) => (a.path < b.path ? -1 : 1)),
-    hash: revisionHash(contents),
+    ...stored(contents),
     cliHash,
+    set: null,
   };
 };
 
@@ -296,6 +308,259 @@ export const checkSkill = async (tree: SkillTree, found: FoundSkill): Promise<Ch
     return {
       _tag: "Refused",
       folder: found.folder,
+      refusal: new SkillRefused({ check: error.check, path: error.path, message: error.message }),
+    };
+  }
+};
+
+const isSkillName = Schema.is(SkillName);
+
+/** `path` inside a set's folder, or `path` itself at the source's top. */
+const inSet = (set: FoundSet, path: string) => (set.folder === "" ? path : `${set.folder}/${path}`);
+
+/** Where a link in the file at `path` leads, inside the set: a normalized path, or null for an anchor or a URL. */
+const linkedPath = (path: string, target: string): string | null => {
+  if (target.startsWith("#") || SCHEME.test(target)) return null;
+  const bare = target.split(/[?#]/)[0] ?? "";
+  let decoded = bare;
+  try {
+    decoded = decodeURIComponent(bare);
+  } catch {}
+  if (decoded === "") return null;
+  const resolved = posix.normalize(posix.join(posix.dirname(path), decoded.replaceAll("\\", "/")));
+  return resolved === "." ? null : resolved.replace(/\/$/, "");
+};
+
+/**
+ * The paths inside a set that a file at `path` links to (ADR 029, Skill sets), each once, as the set
+ * lays them out: a link to a folder names the folder. Anchors, URLs and links outside the set are left out.
+ */
+export const setLinksOf = (path: string, text: string): ReadonlyArray<string> => {
+  const source = path.toLowerCase().endsWith(".md") ? withoutCode(text) : text;
+  const linked = linkTargetsOf(source).flatMap((target) => {
+    const at = linkedPath(path, target);
+    return at === null || at === ".." || at.startsWith("../") || at.startsWith("/") ? [] : [at];
+  });
+  return [...new Set(linked)];
+};
+
+/**
+ * A file's text with each link that leads inside a set pointed elsewhere: `to` gets the path inside
+ * the set a link leads to and gives the new target, or null to leave the link as written. What
+ * follows the path, such as `#a-heading`, is kept.
+ */
+export const rewriteSetLinks = (path: string, text: string, to: (linked: string) => string | null): string => {
+  const retarget = (target: string) => {
+    const linked = linkedPath(path, target);
+    if (linked === null) return target;
+    const moved = to(linked);
+    if (moved === null) return target;
+    const at = target.search(/[?#]/);
+    return at === -1 ? moved : `${moved}${target.slice(at)}`;
+  };
+  const inline = LINK_TARGETS.reduce(
+    (current, pattern) =>
+      current.replace(pattern, (match: string, target: string) => match.replace(target, retarget(target))),
+    text,
+  );
+  return inline
+    .split("\n")
+    .map((line) => {
+      const target = REFERENCE.exec(line.trim())?.[1];
+      if (target === undefined) return line;
+      const bare = target.replace(/^<|>$/g, "");
+      return line.replace(bare, retarget(bare));
+    })
+    .join("\n");
+};
+
+/** Whether a set's path is a part of the plugin import never keeps, such as its hooks or its manifest. */
+const pluginOnly = (path: string) => PLUGIN_ONLY.some((part) => path === part || path.startsWith(`${part}/`));
+
+interface SetEntry {
+  readonly path: string;
+  readonly source: string;
+  readonly kind: TreeEntryKind;
+  readonly executable: boolean;
+  readonly size: number;
+}
+type TreeEntryKind = SkillTree["entries"][number]["kind"];
+
+/**
+ * The files a set keeps (ADR 029, Skill sets): every file of its skills' folders, then each file a
+ * kept file links to inside the set, a linked folder's files included, and the files those link to.
+ * A link outside the set is refused; one to a file that is not there, or to a part of the plugin
+ * import never keeps, is left alone. Reads each kept file once.
+ */
+const setFiles = async (tree: SkillTree, set: FoundSet, skillFolders: ReadonlyArray<string>) => {
+  const entries = new Map<string, SetEntry>();
+  for (const entry of tree.entries) {
+    const path = insideOf(set.folder, entry.path);
+    if (path !== null && path !== "") entries.set(path, { ...entry, path, source: entry.path });
+  }
+  const kept = new Map<string, SetEntry>();
+  const queue: Array<string> = [];
+  let size = 0;
+  // The limits count each file as it is kept, before it is read, as a loose skill's do.
+  const keep = (entry: SetEntry) => {
+    if (entry.kind === "symlink") refuse("symlink", entry.source, `${entry.source} is a link; a set holds only files.`);
+    if (entry.kind === "other") refuse("unreadable", entry.source, `${entry.source} is not a file or a folder.`);
+    if (!isFilePath(entry.path)) refuse("outside-path", entry.source, `${entry.source} reaches outside the set.`);
+    if (entry.kind !== "file" || kept.has(entry.path)) return;
+    kept.set(entry.path, entry);
+    size += entry.size;
+    checkSetLimits(kept.size, size);
+    queue.push(entry.path);
+  };
+  const keepFolder = (folder: string) => {
+    for (const entry of entries.values())
+      if (entry.path.startsWith(`${folder}/`) && !pluginOnly(entry.path)) keep(entry);
+  };
+  for (const folder of skillFolders) keepFolder(folder);
+  const bytes = new Map<string, Uint8Array>();
+  while (queue.length > 0) {
+    const path = queue.shift() as string;
+    const entry = kept.get(path) as SetEntry;
+    const read = await tree.read(entry.source);
+    bytes.set(path, read);
+    const text = textOf(read);
+    if (text === null) continue;
+    const source = path.toLowerCase().endsWith(".md") ? withoutCode(text) : text;
+    for (const target of linkTargetsOf(source)) {
+      if (reachesOutside(path, target)) {
+        refuse("outside-path", inSet(set, path), `${inSet(set, path)} links to ${target}, outside the set.`);
+      }
+      const linked = linkedPath(path, target);
+      if (linked === null || pluginOnly(linked)) continue;
+      const found = entries.get(linked);
+      if (found === undefined) continue;
+      if (found.kind === "directory") keepFolder(linked);
+      else keep(found);
+    }
+  }
+  const files = [...kept.values()];
+  return files
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    .map((file) => ({ ...file, bytes: bytes.get(file.path) as Uint8Array }));
+};
+
+/** Refuses a set over the limits a skill has, which count the whole set. */
+const checkSetLimits = (files: number, bytes: number) => {
+  if (files > SKILL_LIMITS.files) {
+    refuse("too-many-files", null, `The set holds more than ${SKILL_LIMITS.files} files.`);
+  }
+  if (bytes > SKILL_LIMITS.bytes) refuse("too-large", null, "The set is larger than 5 MB.");
+};
+
+/** What a plugin's manifest says of it: its name, version and description, each when it is text. */
+const manifestOf = async (tree: SkillTree, manifest: string | null) => {
+  if (manifest === null) return { name: null, version: null, description: null };
+  let parsed: { readonly name?: unknown; readonly version?: unknown; readonly description?: unknown } = {};
+  try {
+    parsed = JSON.parse(textOf(await tree.read(manifest)) ?? "{}") ?? {};
+  } catch {
+    return refuse("front-matter", manifest, `${manifest} is not JSON.`);
+  }
+  const text = (value: unknown) => (typeof value === "string" && value.trim() !== "" ? value.trim() : null);
+  return { name: text(parsed.name), version: text(parsed.version), description: text(parsed.description) };
+};
+
+/** A set's description: its manifest's, at most 1,024 characters, or one that lists its skills. */
+const setDescription = (given: string | null, skills: ReadonlyArray<SkillSetSkill>) => {
+  const description = given ?? `Skills: ${skills.map((skill) => skill.name).join(", ")}.`;
+  return description.length > SKILL_DESCRIPTION_MAX
+    ? `${description.slice(0, SKILL_DESCRIPTION_MAX - 1)}…`
+    : description;
+};
+
+/** The set's name, refused when it is not one a set can have. */
+const setNameOf = (name: string | null, set: FoundSet): SkillName => {
+  const at = set.manifest ?? (set.folder === "" ? "." : set.folder);
+  if (name === null || !isSkillName(name)) {
+    return refuse(
+      "front-matter",
+      at,
+      `${at} names the set ${JSON.stringify(name ?? "")}, which is not a name a set can have: lower-case letters, digits and single hyphens.`,
+    );
+  }
+  if (name === RESERVED_SET_NAME) return refuse("front-matter", at, `A set cannot be named ${RESERVED_SET_NAME}.`);
+  return name;
+};
+
+/**
+ * Checks a set before anything is written (ADR 029, Skill sets): its name, each of its skills' front
+ * matter, the files it keeps and the links between them, and the limits, which count the whole set.
+ * Drops what would add authority, with a note, and flags what deserves a careful look. Runs nothing.
+ */
+const checkSetFolder = async (tree: SkillTree, set: FoundSet, folderName: string | null): Promise<CheckedSkill> => {
+  const manifest = await manifestOf(tree, set.manifest);
+  const name = setNameOf(manifest.name ?? folderName, set);
+  const skillFolders = set.skills.map((folder) => insideOf(set.folder, folder) as string);
+  const read = await setFiles(tree, set, skillFolders);
+  const cliHash = skillsCliHash(read);
+  const dropped: Array<SkillDropped> = [...set.dropped];
+  const rewritten = new Map<string, Uint8Array>();
+  const skills: Array<SkillSetSkill> = [];
+  for (const folder of skillFolders) {
+    const path = `${folder}/SKILL.md`;
+    const skillFile = read.find((file) => file.path === path);
+    const skillText = skillFile === undefined ? null : textOf(skillFile.bytes);
+    if (skillText === null) return refuse("front-matter", inSet(set, path), `${inSet(set, path)} is not UTF-8 text.`);
+    const skill = readSkillFile(skillText, inSet(set, path));
+    if (skill.droppedTools) {
+      dropped.push({ kind: "allowed-tools", path: inSet(set, path) });
+      rewritten.set(path, encoder.encode(skill.text));
+    }
+    const charms = new Set(skillCharmsOf(skill.frontMatter));
+    const codexPath = `${folder}/agents/openai.yaml`;
+    const codexFile = read.find((file) => file.path === codexPath);
+    const codex = codexFile === undefined ? null : readCodexMetadata(textOf(codexFile.bytes) ?? "");
+    if (codex !== null) {
+      for (const charm of codex.charms) charms.add(charm);
+      dropped.push({ kind: "tool-dependencies", path: inSet(set, codexPath) });
+      rewritten.set(codexPath, encoder.encode(codex.text));
+    }
+    if (skills.some((one) => one.name === skill.frontMatter.name)) {
+      return refuse("front-matter", inSet(set, path), `Two skills of the set are named ${skill.frontMatter.name}.`);
+    }
+    skills.push({
+      name: skill.frontMatter.name,
+      description: skill.frontMatter.description,
+      path: folder,
+      charms: [...charms].sort(),
+    });
+  }
+  const contents: Array<SkillContent> = read.map((file) => ({
+    path: file.path,
+    mode: file.executable ? "executable" : "regular",
+    bytes: rewritten.get(file.path) ?? file.bytes,
+  }));
+  skills.sort((a, b) => (a.name < b.name ? -1 : 1));
+  return {
+    folder: set.folder,
+    name,
+    description: setDescription(manifest.description, skills),
+    charms: [...new Set(skills.flatMap((skill) => skill.charms))].sort(),
+    label: manifest.version,
+    dropped,
+    ...stored(contents),
+    cliHash,
+    set: { skills },
+  };
+};
+
+/**
+ * Checks one set, answering what passed or the first rule it broke. `folderName` names a set that
+ * is a folder of a repository, which has no manifest to name it.
+ */
+export const checkSet = async (tree: SkillTree, set: FoundSet, folderName: string | null): Promise<CheckResult> => {
+  try {
+    return { _tag: "Passed", skill: await checkSetFolder(tree, set, folderName) };
+  } catch (error) {
+    if (!(error instanceof Refusal)) throw error;
+    return {
+      _tag: "Refused",
+      folder: set.folder,
       refusal: new SkillRefused({ check: error.check, path: error.path, message: error.message }),
     };
   }

@@ -57,6 +57,7 @@ const loaded = (name: string, scope: SkillScope, pin = hash(1), missingCharms: R
   scope,
   onlyWhenAsked: false,
   missingCharms,
+  set: null,
 });
 
 const skills = [
@@ -83,15 +84,17 @@ const list: SkillsList = {
   projects: [site, docs],
   agentsFolder: { path: null, problems: [] },
   usesThisWeek: [],
+  sets: [],
 };
 const [, , deploySite, deployDocs, styleEveryone, stylePip] = assignments;
 if (!deploySite || !deployDocs || !styleEveryone || !stylePip) throw new Error("fixture");
 const view: HobSkills = {
   agentId: pip,
   skills: [loaded("commit-style", everyone, hash(1), ["github"]), loaded("style", own(pip))],
-  replaced: [{ assignment: styleEveryone, by: stylePip }],
+  replaced: [{ assignment: styleEveryone, by: stylePip, name: SkillName.make("style") }],
   clashes: [{ name: SkillName.make("deploy"), assignments: [deploySite, deployDocs] }],
   optedOut: [SkillId.make("astro")],
+  optedOutOfSets: [],
   projects: [site, docs],
   lastUsed: [],
 };
@@ -117,6 +120,36 @@ describe("a hob's skills (ADR 029, Scopes)", () => {
       [["style", "Loads", 1, null, false]],
     ]);
     expect(groups[0]?.rows[0]?.missingCharms).toEqual(["github"]);
+  });
+
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-UI-1143-02] lists each skill of a set a hob gets, and one it turned off, under the set's scope", () => {
+    const set = skill("agent-engineering");
+    const setEveryone = assignment("agent-engineering", everyone);
+    const member = (name: string) => ({
+      name: SkillName.make(name),
+      description: `Use to ${name}.`,
+      path: `skills/${name}`,
+      charms: [],
+    });
+    const withSet: SkillsList = {
+      ...list,
+      skills: [...skills, set],
+      assignments: [...assignments, setEveryone],
+      sets: [{ skillId: set.id, skills: [member("plan-change"), member("deliver-change")] }],
+    };
+    const fromSet = { ...loaded("agent-engineering", everyone), name: SkillName.make("deliver-change") };
+    const hob: HobSkills = {
+      ...view,
+      skills: [...view.skills, { ...fromSet, set: SkillName.make("agent-engineering") }],
+      optedOutOfSets: [{ skillId: set.id, name: SkillName.make("plan-change") }],
+    };
+    const [everyoneGroup] = carriedGroups(hob, withSet);
+    const fromTheSet = everyoneGroup?.rows.filter((row) => row.skill.id === set.id);
+    expect(fromTheSet?.map((row) => [row.member?.name, row.member?.description, row.state._tag])).toEqual([
+      ["deliver-change", "Use to deliver-change.", "Loads"],
+      ["plan-change", "Use to plan-change.", "Off"],
+    ]);
   });
 
   // covers ADR 029 (A hob's Skills tab), #1062

@@ -1,9 +1,8 @@
 import type { HobPermissions, UpdateHobPermissionsPayload } from "@hobbots/api";
-import type { PolicyOverrides } from "@hobbots/domain";
 import { useId } from "react";
-import { GITHUB_OPERATIONS, pickAnswer, RULES, type RuleInfo } from "../../api/safety.ts";
+import { GITHUB_OPERATIONS, pickAnswer, RULES, type RuleInfo, sendingAnswer } from "../../api/safety.ts";
 import { messages } from "../messages.ts";
-import { Rule, RuleWaiting, shownAnswer } from "./hob-permissions.tsx";
+import { Rule, RuleWaiting } from "./hob-permissions.tsx";
 
 /** Allow, Ask or Never for each of the Charm's actions, saved at once as the hob's next version. */
 export function GitHubRules({
@@ -19,7 +18,7 @@ export function GitHubRules({
   /** The change on its way to the hub. */
   sending: UpdateHobPermissionsPayload | undefined;
   pending: boolean;
-  onPick: (overrides: PolicyOverrides) => void;
+  onPick: (change: UpdateHobPermissionsPayload) => void;
 }) {
   const copy = messages.charms.github;
   const headingId = useId();
@@ -37,11 +36,9 @@ export function GitHubRules({
             rule={rule}
             icon={ICONS[rule.operation]}
             permissions={permissions}
-            shown={sending?.overrides ? shownAnswer(permissions, sending.overrides, rule.operation) : undefined}
+            shown={sendingAnswer(permissions, sending, rule.operation)}
             pending={pending}
-            onPick={(answer) =>
-              onPick(pickAnswer(permissions.policy.overrides, rule.operation, answer, permissions.preset))
-            }
+            onPick={(answer) => onPick(pickAnswer(permissions, rule.operation, answer))}
           />
         ),
       )}
@@ -52,10 +49,10 @@ export function GitHubRules({
 
 // A mark for each action, before its name on the card.
 const ICONS: Readonly<Record<string, string>> = {
-  "read-github": "◇",
+  "github.read": "◇",
   push: "↑",
-  "open-pull-request": "⇄",
-  "comment-github": "✎",
+  "github.open-pull-request": "⇄",
+  "github.comment": "✎",
 };
 
 /** The GitHub Charm's actions as its card names them, each with the hub's rule for it. */

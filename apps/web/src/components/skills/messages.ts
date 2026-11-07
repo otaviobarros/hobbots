@@ -46,11 +46,14 @@ export const messages = {
   export: {
     title: "Export skills",
     intro:
-      "Makes a folder with each skill and a skills.lock.json that names its source and revision, so another hub gets exactly the same ones. Backups already include your whole library.",
+      "Makes a folder with each skill and a skills.lock.json that names its source and revision, so another hub gets exactly the same ones. Backups already include your whole library, except skills in ~/.agents/skills.",
     list: "Skills to export",
     pick: ({ name }: { name: string }) => `Export ${name}`,
     more: ({ name, count }: { name: string; count: number }) => `${name} +${formatCount(count)}`,
-    agents: "~/.agents",
+    notExported: "Not exported",
+    notExportedScope: "Everyone · ~/.agents",
+    notExportedNote:
+      "Skills in ~/.agents/skills stay in that folder. Another computer's Hobbots reads its own ~/.agents/skills. Make a copy first if you want to take one with you.",
     assignments: "Include who gets each skill",
     assignmentsHint:
       "Keeps Everyone, project and hob assignments, and held revisions. A hub without those hobs or projects keeps the skills in its library only.",
@@ -87,6 +90,7 @@ export const messages = {
     heldOld: "Kept on an older revision",
     older: "On an older revision",
     onlyWhenAsked: "Only when asked",
+    set: ({ count }: { count: number }) => `Set of ${skills(count)}`,
   },
   review: {
     title: "To review",
@@ -221,13 +225,15 @@ export const messages = {
     addedBySource: "added from its source",
     files: ({ rev }: { rev: string }) => `Files in ${rev}`,
     filesSize: ({ count, bytes }: { count: number; bytes: number }) => `${files(count)} · ${formatBytes(bytes)}`,
-    fileOpen: ({ path }: { path: string }) => `Open ${path}`,
+    // Read before the path, so a file link is named "Open SKILL.md" and its visible text is in its name.
+    fileOpen: "Open ",
     script: "Runs as the hob's own command",
     aside: "About this skill",
     actions: "Actions",
     edit: "Edit",
     origin: "Where it came from",
     sourceLabel: "Source",
+    folder: "Folder",
     commit: "Commit",
     version: "Version",
     first: "First",
@@ -238,6 +244,92 @@ export const messages = {
     grants: "Grants",
     grantsNothing: "Nothing. Its scripts run as the hob's own commands, under its permissions.",
     leftOut: "Left out",
+  },
+  agents: {
+    byline: ({ when }: { when: string }) => `from ~/.agents/skills on this computer · picked up ${when}`,
+    note: ({ folder }: { folder: string }) =>
+      `This skill lives in ${folder}, which other tools on this computer use too, so Hobbots only reads it. Change it in that folder: each change becomes a new revision here and rolls out to every hob. To change it just for your hobs, make a copy.`,
+    readOnly: "read-only",
+    fileReadOnly: "Read-only. Change it in its folder in ~/.agents/skills.",
+    noEdit:
+      "No Edit or Remove here: delete its folder in ~/.agents/skills to remove it, or turn it off for one hob on that hob's skills list.",
+    source: ({ folder }: { folder: string }) => `${folder} on this computer`,
+    revisions: "Revisions",
+    revisionsText: "Made when the folder changes. Roll back and holding a hob back still work.",
+    backups: "Backups",
+    backupsText: "Not in backups or exports. Another computer reads its own folder.",
+  },
+  set: {
+    tab: "Skills",
+    uses: ({ count }: { count: number }) =>
+      count === 0
+        ? "Not used this week"
+        : `Used ${formatCount(count)} ${plural(count, { one: "time", other: "times" })} this week`,
+    byline: ({ who, when }: { who: string; when: string }) => `${who} on ${when}`,
+    sharesIn: ({ folders }: { folders: ReadonlyArray<string> }) =>
+      `its skills share the files in ${formatList(folders)}`,
+    note: ({ folders }: { folders: ReadonlyArray<string> }) =>
+      folders.length === 0
+        ? "These skills come and update together, so their links to each other keep working. A hob can still turn one off on its skills list. To change one just for your hobs, open it and make a copy."
+        : `These skills come and update together, so their links to each other and to ${formatList(folders)} keep working. A hob can still turn one off on its skills list. To change one just for your hobs, open it and make a copy.`,
+    skills: "Skills",
+    skillsLabel: "Skills in this set",
+    typeHint: ({ name, set }: { name: string; set: string }) => `Type /${name}, or /${set}:${name}`,
+    used: ({ count }: { count: number }) => (count === 0 ? "Never used" : `Used ${formatCount(count)}×`),
+    shared: "Shared files",
+    sharedHint: "Every hob that has the set gets them",
+    linkedBy: ({ count, all }: { count: number; all: boolean }) =>
+      count === 0
+        ? "linked by another file"
+        : all
+          ? `linked by all ${formatCount(count)}`
+          : `linked by ${formatCount(count)}`,
+    aside: "About this set",
+    whoUses: "Who uses it, holding a hob back",
+    remove: "Remove the set…",
+    version: ({ label, commit }: { label: string | null; commit: string | null }) =>
+      [label, commit === null ? null : `commit ${commit.slice(0, 7)}`].filter((part) => part !== null).join(", "),
+    leftOutNothing: "Nothing. It has no hooks, commands, agents or MCP servers.",
+    needsSome: ({ charms }: { charms: ReadonlyArray<string> }) => `Its skills name ${formatList(charms)}.`,
+    grantsNothing: "Nothing. Hobs follow it under their own permissions.",
+  },
+  member: {
+    inSet: ({ set }: { set: string }) => `In ${set}`,
+    byline: ({ set, name }: { set: string; name: string }) => `/${name} or /${set}:${name} · from the set ${set}`,
+    note: ({ set }: { set: string }) =>
+      `This skill comes with the set ${set}, so it changes only with a new version of the set. A hob can still turn it off on its skills list. To change it just for your hobs, make a copy.`,
+    fileReadOnly: ({ set }: { set: string }) => `Read-only. It changes with a new version of ${set}.`,
+    noEdit: ({ set }: { set: string }) =>
+      `No Edit or Remove here: it comes and goes with ${set}. Open the set to give it out, hold it back or remove it.`,
+    openSet: ({ set }: { set: string }) => `Open ${set}`,
+  },
+  copySkill: {
+    open: "Make a copy…",
+    label: ({ name }: { name: string }) => `Make a copy of ${name}`,
+    name: "Typed as",
+    nameHint: "Lowercase letters, digits and hyphens, as you type it after /",
+    who: "Who gets it",
+    nobody: "Nobody yet",
+    nobodyNote: "Nobody gets the copy until you give it to someone. The original keeps following the folder.",
+    nobodyNoteSet: "Nobody gets the copy until you give it to someone. The original keeps updating with its set.",
+    everyoneNote: "Every hob gets both. Turn the original off on a hob's skills list if the copy should replace it.",
+    projectNote: "Hobs in its folders get both. Turn the original off for them if the copy should replace it.",
+    hobNote: ({ name }: { name: string }) =>
+      `${name} gets both. Turn the original off for ${name} if the copy should replace it.`,
+    starts: ({ count }: { count: number }) =>
+      `The copy starts at r1 with the same ${files(count)}, and you can edit it.`,
+    startsSet:
+      "The copy starts at r1 with this skill's files and the files of the set it links to, and you can edit it.",
+    confirm: "Make the copy",
+    copying: "Copying…",
+    cancel: "Cancel",
+    done: ({ name }: { name: string }) =>
+      `${name} is in your library at r1, and you can edit it. The original in ~/.agents/skills is unchanged.`,
+    doneSet: ({ name, set }: { name: string; set: string }) =>
+      `${name} is in your library at r1, and you can edit it. ${set} is unchanged.`,
+    taken: "Your library has a skill of that name. Pick another name.",
+    invalid: "Use lowercase letters, digits and hyphens, up to 64.",
+    failed: "The copy was not made. Try again.",
   },
   file: {
     label: ({ path }: { path: string }) => `The file ${path}`,
@@ -380,6 +472,8 @@ export const messages = {
     same: ({ rev }: { rev: string }) => `That is ${rev} already, so nothing new was saved.`,
     taken: "Your library has a skill of that name. Pick another name, or edit that one.",
     failed: "It was not saved. Your text is still here; try again.",
+    readOnly:
+      "This skill comes from ~/.agents/skills, which Hobbots only reads, so it was not saved. Change it in that folder, or make a copy to edit it here.",
     newer: ({ rev, base }: { rev: string; base: string }) =>
       `${rev} was saved while you edited ${base}, so this edit cannot be saved over it. Your text is still here: copy it, then edit ${rev}.`,
     unfinished: ({ rev }: { rev: string }) =>
@@ -427,7 +521,7 @@ export const messages = {
     tabs: {
       git: { label: "From Git", sub: "A repository, pinned to a commit" },
       file: { label: "Folder or .zip", sub: "From this computer" },
-      write: { label: "Write one", sub: "Here, from a blank skill" },
+      write: { label: "Write one", sub: "Here, or with a hob" },
     },
     repository: "Repository",
     ref: "Branch, tag or commit",
@@ -443,6 +537,24 @@ export const messages = {
     limits: "Up to 5 MB and 200 files a skill. Nothing in it runs while it is checked.",
     blank: "Start from a blank skill",
     blankHint: "Name, when to use it, and the steps. Hobbots checks it as you type.",
+    draft: "Draft it with a hob",
+    draftHint:
+      "Opens a chat where a hob writes it from your words, a chat or its memory. You review it before it is added.",
+    draftWho: "Which hob drafts it?",
+    draftWhoHint: "It opens a new chat with that hob, with a message you can change before you send it.",
+    draftLooking: "Looking for hobs that may suggest skills…",
+    draftLookFailed: "Hobbots could not read your hobs, so it cannot tell which may suggest skills.",
+    draftTryAgain: "Try again",
+    draftNoneTitle: "No hob may suggest skills now",
+    draftNone: "In a hob's Permissions, allow Suggest a new skill or a change, then come back.",
+    /** The message a drafting chat starts from, ready to change before it is sent. */
+    draftMessage: [
+      "Please write a new skill for my library and propose it, so I can review it before it is added.",
+      "",
+      "What it is for: ",
+      "",
+      "Learn from (optional): a chat of ours, or pages in your memory",
+    ].join("\n"),
     found: ({ count, commit }: { count: number; commit: string | null }) =>
       commit === null ? `Found ${skills(count)}.` : `This is commit ${commit.slice(0, 7)}. Found ${skills(count)}.`,
     pick: ({ name }: { name: string }) => `Import ${name}`,
@@ -454,6 +566,23 @@ export const messages = {
     passed: ({ count, bytes }: { count: number; bytes: number }) =>
       `Checks passed · ${files(count)}, ${formatBytes(bytes)}`,
     passedNoSize: "Checks passed",
+    setPassed: "Passed every check",
+    setIntro: "This source is a plugin whose skills share files, so it comes in as one set, and it updates as one.",
+    foundSet: ({ label, commit }: { label: string | null; commit: string | null }) =>
+      `${commit === null ? "" : `${label ?? "This"} is commit ${commit.slice(0, 7)}. `}This source is a plugin whose skills share files, so it comes in as one set, and it updates as one.`,
+    setLabel: ({ name }: { name: string }) => `The set ${name}`,
+    setSkills: ({ name }: { name: string }) => `The skills in ${name}`,
+    sharedBy: ({ folders, count }: { folders: ReadonlyArray<string>; count: number }) =>
+      `Shared by them: ${formatList(folders)}, ${files(count)}. Links inside the set stay as written; a link outside it would have been refused.`,
+    noShared: "Its skills share no files. Links inside the set stay as written.",
+    setLegend: "Give the set to",
+    setNote:
+      "A set comes in whole and updates as one. A hob can still turn off any of its skills on its own skills list.",
+    addSet: ({ name, count }: { name: string; count: number }) => `Add ${name}, ${skills(count)}`,
+    addedSet: ({ name, count }: { name: string; count: number }) =>
+      `Added ${name} with its ${skills(count)}. No hob has them yet.`,
+    addedSetGiven: ({ name, count, who }: { name: string; count: number; who: string }) =>
+      `Added ${name}. ${who} gets its ${skills(count)} from the next chat.`,
     flagged: "Worth a look",
     importN: ({ count }: { count: number }) => (count === 0 ? "Pick a skill to import" : `Import ${skills(count)}`),
     importing: "Importing…",
@@ -507,7 +636,8 @@ export const messages = {
   },
   checks: {
     "front-matter": "SKILL.md needs front matter with a name and a description between --- lines.",
-    "outside-path": "A link or a path points outside the skill folder. Links must stay inside it.",
+    "outside-path": "A link or a path points outside the skill folder, or outside its set. Links must stay inside.",
+    set: "A skill in a set changes only with a new version of the set. Make a copy to change it.",
     symlink: "It holds a symbolic link. A skill's files must be plain files.",
     "too-large": "It is over 5 MB.",
     "too-many-files": "It has more than 200 files.",

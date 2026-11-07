@@ -1,6 +1,7 @@
 import { isAbsolute, join, relative, sep } from "node:path";
 import {
   AdditionalRuntimes,
+  hubCallStep,
   type PromptRequest,
   RuntimeAdapter,
   RuntimeError,
@@ -27,6 +28,7 @@ import { backgroundFinished } from "./background-commands.ts";
 import { sessionPolicy, toolTurn } from "./claude-code.ts";
 import { type HookEnd, toolFinished } from "./command-exit.ts";
 import { applyScriptedWrites } from "./fake-writes.ts";
+import { mountName } from "./skills.ts";
 import { commandOf, toolLabel, toolRequests } from "./tool-calls.ts";
 
 /**
@@ -144,9 +146,12 @@ const FAKE_COMPACT_DIRECTIVE = "fake:compact";
  */
 const FAKE_SKILL_DIRECTIVE = "fake:skill ";
 
-/** The skills the fake uses in a turn: the one you picked, then those its prompt names, each once and only if mounted. */
+/**
+ * The skills the fake uses in a turn: the one you picked, then those its prompt names, each once and
+ * only if mounted. A skill of a set is named `<set>:<name>` (ADR 029, Skill sets).
+ */
 const fakeSkillUses = (request: PromptRequest, scripted: string): ReadonlyArray<RuntimeEvent> => {
-  const mounted = new Set((request.skills ?? []).map((skill) => skill.name));
+  const mounted = new Map((request.skills ?? []).map((skill) => [mountName(skill), skill]));
   const asked = request.askedSkill && mounted.has(request.askedSkill) ? [request.askedSkill] : [];
   const named = scripted
     .split("\n")
@@ -154,12 +159,12 @@ const fakeSkillUses = (request: PromptRequest, scripted: string): ReadonlyArray<
     .filter((line) => line.startsWith(FAKE_SKILL_DIRECTIVE))
     .map((line) => line.slice(FAKE_SKILL_DIRECTIVE.length).trim())
     .filter((name) => mounted.has(name) && !asked.includes(name));
-  return [
-    ...asked.map((name): RuntimeEvent => ({ _tag: "SkillUsed", source: "library", name, explicit: true })),
-    ...[...new Set(named)].map(
-      (name): RuntimeEvent => ({ _tag: "SkillUsed", source: "library", name, explicit: false }),
-    ),
-  ];
+  const used = (key: string, explicit: boolean): RuntimeEvent => {
+    const mount = mounted.get(key);
+    const set = mount?.set ? { set: mount.set.name } : {};
+    return { _tag: "SkillUsed", source: "library", name: mount?.name ?? key, explicit, ...set };
+  };
+  return [...asked.map((key) => used(key, true)), ...[...new Set(named)].map((key) => used(key, false))];
 };
 
 /** The prompt with each `fake:once` line run the first time and dropped after, remembering it in `seen`. */
@@ -191,7 +196,9 @@ export const fakeSkillsPrompt = "/skills";
 export const fakeSkillsReply = (skills: PromptRequest["skills"]) =>
   (skills ?? []).length === 0
     ? "No skills."
-    : (skills ?? []).map((skill) => (skill.implicit ? skill.name : `${skill.name} (only when asked)`)).join("\n");
+    : (skills ?? [])
+        .map((skill) => (skill.implicit ? mountName(skill) : `${mountName(skill)} (only when asked)`))
+        .join("\n");
 
 /**
  * A prompt line `fake:tool <Tool> <argument>` asks the fake runtime to make that tool call. A
@@ -446,10 +453,8 @@ export const scriptedToolEvents = (
             request.approvals,
             call,
             (event) => Queue.offerUnsafe(queue, event),
-            turn.commitsAs,
+            turn,
             request.redaction,
-            turn.steersPush,
-            turn.initTool,
           );
           const label = toolLabel(call.tool, call.input, request.redaction?.text);
           const command =
@@ -571,7 +576,11 @@ export const scriptedHubEvents = (
             label: hub.tools.find((tool) => tool.name === call.name)?.label ?? call.name,
           });
           // Resolved when the call is made, so it can name what an earlier call answered.
-          const answer = yield* hub.call(call.name, resolveReferences(call.input, details), { id: call.id, report });
+          const answer = yield* hub.call(
+            call.name,
+            resolveReferences(call.input, details),
+            hubCallStep(call.id, report, request.recordToolStart),
+          );
           answers.push(`${call.name}: ${answer.text}`);
           const key = (call.input as { readonly key?: unknown } | null)?.key;
           if (typeof key === "string" && !answer.refused) details.set(key, answerDetails(answer.text));

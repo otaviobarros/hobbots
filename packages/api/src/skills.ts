@@ -15,6 +15,8 @@ import {
   SkillRevision,
   SkillRevisionHash,
   SkillScope,
+  SkillSetContent,
+  SkillSetSkill,
   SkillSource,
   SkillUse,
   SkillUseCounts,
@@ -82,6 +84,16 @@ export class SkillStillAssigned extends Schema.TaggedError<SkillStillAssigned>()
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * The skill comes from `~/.agents/skills`, which Hobbots only reads (ADR 029): change it in
+ * `folder`, or make a copy to change it in Hobbots. Nothing was saved.
+ */
+export class SkillIsReadOnly extends Schema.TaggedError<SkillIsReadOnly>()(
+  "SkillIsReadOnly",
+  { skillId: SkillId, name: SkillName, folder: Schema.String },
+  { httpApiStatus: 409 },
+) {}
+
 /** The most an archive may be, as base64 text: 50 MB of archive. */
 const ARCHIVE_BASE64_MAX = Math.ceil((50 * 1024 * 1024) / 3) * 4;
 
@@ -137,6 +149,10 @@ export const SkillCandidate = Schema.Struct({
   dropped: Schema.Array(SkillDropped),
   charms: Schema.Array(Schema.String),
   label: Schema.NullOr(Schema.String),
+  /** For a set (ADR 029, Skill sets), the skills it holds, shown before you add it; null for a skill. */
+  set: Schema.NullOr(SkillSetContent),
+  /** For a set, the files it keeps outside its skills' folders, which they share; empty for a skill. */
+  shared: Schema.Array(Schema.String),
   refusal: Schema.NullOr(CandidateRefusal),
   locked: Schema.NullOr(Schema.Struct({ matches: Schema.Boolean, url: Schema.NullOr(Schema.String) })),
   /**
@@ -225,6 +241,8 @@ export const HobSkill = Schema.Struct({
   onlyWhenAsked: Schema.Boolean,
   /** The Charms it names that the hob does not have: shown as "Needs the GitHub Charm". */
   missingCharms: Schema.Array(Schema.String),
+  /** The set it comes from, or null for a skill of its own (ADR 029, Skill sets). */
+  set: Schema.NullOr(SkillName),
 });
 export type HobSkill = typeof HobSkill.Type;
 
@@ -236,9 +254,12 @@ export type HobSkill = typeof HobSkill.Type;
 export const HobSkills = Schema.Struct({
   agentId: AgentId,
   skills: Schema.Array(HobSkill),
-  replaced: Schema.Array(Schema.Struct({ assignment: SkillAssignment, by: SkillAssignment })),
+  /** Each replaced assignment, with the skill's name, which for a set is the one of its skills replaced. */
+  replaced: Schema.Array(Schema.Struct({ assignment: SkillAssignment, by: SkillAssignment, name: SkillName })),
   clashes: Schema.Array(Schema.Struct({ name: SkillName, assignments: Schema.Array(SkillAssignment) })),
   optedOut: Schema.Array(SkillId),
+  /** Single skills of a set the hob turned off, each with its set's id (ADR 029, Skill sets). */
+  optedOutOfSets: Schema.Array(Schema.Struct({ skillId: SkillId, name: SkillName })),
   /** The projects it works in now, whose skills it gets: an opted-out project skill shows under its project. */
   projects: Schema.Array(MemoryProjectIdentity),
   /** The skills it used last, each once, the most recent first (ADR 029, The use line). */
@@ -305,8 +326,16 @@ export const ExportSkillsPayload = Schema.Struct({
   assignments: Schema.Boolean,
 });
 
-/** An export of skills: the folder made on the hub, its name, and how many skills it holds. */
-export const SkillsExported = Schema.Struct({ folder: Schema.String, name: Schema.String, skills: Schema.Int });
+/**
+ * An export of skills: the folder made on the hub, its name, how many skills it holds, and the
+ * skills from `~/.agents/skills` it left out, which stay in that folder (ADR 029).
+ */
+export const SkillsExported = Schema.Struct({
+  folder: Schema.String,
+  name: Schema.String,
+  skills: Schema.Int,
+  leftOut: Schema.Array(SkillName),
+});
 export type SkillsExported = typeof SkillsExported.Type;
 
 /** A skill in `~/.agents/skills` the hub did not take, and why; `folder` is "" when the folder itself could not be read. */
@@ -326,6 +355,8 @@ export const SkillsList = Schema.Struct({
   agentsFolder: Schema.Struct({ path: Schema.NullOr(Schema.String), problems: Schema.Array(AgentsFolderProblem) }),
   /** How often hobs used each skill in the last seven days; a skill nobody used is left out. */
   usesThisWeek: Schema.Array(Schema.Struct({ skillId: SkillId, count: Schema.Int })),
+  /** Each set in the library (ADR 029, Skill sets), with the skills its newest revision holds. */
+  sets: Schema.Array(Schema.Struct({ skillId: SkillId, skills: Schema.Array(SkillSetSkill) })),
 });
 export type SkillsList = typeof SkillsList.Type;
 
@@ -334,6 +365,11 @@ export const SkillDetail = Schema.Struct({
   /** Newest first. */
   revisions: Schema.Array(SkillRevision),
   assignments: Schema.Array(SkillAssignment),
+  /**
+   * For a set (ADR 029, Skill sets), the files of its newest revision that are in none of its skills'
+   * folders, each with the skills whose `SKILL.md` links to it; null for a skill.
+   */
+  shared: Schema.NullOr(Schema.Array(Schema.Struct({ path: Schema.String, linkedBy: Schema.Array(SkillName) }))),
 });
 export type SkillDetail = typeof SkillDetail.Type;
 
@@ -369,6 +405,25 @@ export const EditSkillPayload = Schema.Struct({
   holds: Schema.optionalKey(Schema.Array(Schema.Struct({ assignmentId: SkillAssignmentId, held: Schema.Boolean }))),
 });
 
+/**
+ * Make a copy (ADR 029): a new skill written in Hobbots, named `name`, with the files of `base` (the
+ * skill's newest revision when absent) at r1. It has no source and goes to `scope` only when given.
+ */
+export const CopySkillPayload = Schema.Struct({
+  name: SkillName,
+  base: Schema.optionalKey(SkillRevisionHash),
+  scope: Schema.optionalKey(SkillScope),
+  /** For a set (ADR 029, Skill sets), the one of its skills to copy, by its name in the set. */
+  member: Schema.optionalKey(SkillName),
+});
+
+/** The copy, and the assignment it was given, if any. */
+export const CopiedSkill = Schema.Struct({
+  ...ImportedSkill.fields,
+  assignment: Schema.NullOr(SkillAssignment),
+});
+export type CopiedSkill = typeof CopiedSkill.Type;
+
 const skillParams = { skillId: SkillId };
 const assignmentParams = { assignmentId: SkillAssignmentId };
 const hobParams = { agentId: AgentId };
@@ -379,6 +434,7 @@ const importErrors = [
   SkillNameConflict,
   SkillEditStale,
   SkillScanOutdated,
+  SkillIsReadOnly,
 ];
 
 export class SkillsGroup extends HttpApiGroup.make("skills")
@@ -482,10 +538,10 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
     }),
   )
   .add(
-    // Turns an Everyone or Project skill off for one hob, or on again.
+    // Turns an Everyone or Project skill off for one hob, or on again; with `member`, one skill of a set.
     HttpApiEndpoint.put("optOut", "/skills/hobs/:agentId/opt-outs/:skillId", {
       params: { ...hobParams, ...skillParams },
-      payload: Schema.Struct({ optedOut: Schema.Boolean }),
+      payload: Schema.Struct({ optedOut: Schema.Boolean, member: Schema.optionalKey(Schema.NullOr(SkillName)) }),
       success: HobSkills,
       error: SkillMissing,
     }),
@@ -495,6 +551,14 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
       params: skillParams,
       payload: EditSkillPayload,
       success: RevisedSkill,
+      error: importErrors,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("copy", "/skills/:skillId/copies", {
+      params: skillParams,
+      payload: CopySkillPayload,
+      success: CopiedSkill,
       error: importErrors,
     }),
   )

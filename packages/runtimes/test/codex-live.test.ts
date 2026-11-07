@@ -22,8 +22,8 @@ import { startAppServer } from "../src/codex/app-server.ts";
 import { LOST_TURN } from "../src/codex/events.ts";
 import { type CodexTurnConfig, codexFolders, runCodexTurn } from "../src/codex/turn.ts";
 import { ProcessSandbox, type ProcessSandboxShape } from "../src/sandbox.ts";
+import { adds, functionCall, type ModelRequest, runs, standIn, textOf } from "../src/testing/responses-stand-in.ts";
 import { approvalsAnswering, approve } from "./codex-fixture.ts";
-import { adds, functionCall, type ModelRequest, runs, standIn, textOf } from "./responses-stand-in.ts";
 
 /**
  * Runs turns on an installed Codex with a stand-in for the Responses API, as the ADR 024 probe did:

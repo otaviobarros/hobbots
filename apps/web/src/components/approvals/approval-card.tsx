@@ -13,6 +13,7 @@ import { messages } from "../messages.ts";
 import { messages as plainCopy } from "../plain-words/messages.ts";
 import { approvalAction, capitalized } from "../plain-words/plain-words.ts";
 import { ApprovalActions } from "./approval-actions.tsx";
+import { riskOf } from "./approval-rules.ts";
 import { decisionErrorText, expiryText, resultText } from "./approval-text.ts";
 
 const copy = messages.approval;
@@ -28,7 +29,7 @@ const TONE: Record<ApprovalState, { readonly ring: string; readonly text: string
 /**
  * A tool call waiting for the user, inline in the reply it paused (PE-003): the exact action, what
  * it acts on, who asked, why the policy asks now, the risk and when it expires, with Allow once,
- * Always for this site with the rule it saves, and Deny with an optional reason. It follows the durable request, so a decision made elsewhere or an expiry shows
+ * Always (named for what it covers) with the rule it saves, and Deny with an optional reason. It follows the durable request, so a decision made elsewhere or an expiry shows
  * here as it happens. `via` names where it shows, which a decision records.
  */
 export function ApprovalCard({ approval, hob, via }: { approval: ApprovalRequest; hob: Agent; via: ApprovalSurface }) {
@@ -145,7 +146,7 @@ function ApprovalDetails({ approval, hob }: { approval: ApprovalRequest; hob: Ag
       <dt className="text-label">{copy.risk}</dt>
       <dd className="m-0 flex flex-col gap-0.5">
         {approval.onceOnly && <span className="font-bold text-rose">{copy.highRisk}</span>}
-        <span>{copy.riskOf[approval.operation]}</span>
+        <span>{riskOf(approval.operation)}</span>
       </dd>
     </dl>
   );

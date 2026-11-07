@@ -1,4 +1,4 @@
-import type { HubTools, RuntimeEvent } from "@hobbots/agents";
+import { type HubTools, hubCallStep, type PromptRequest, type RuntimeEvent } from "@hobbots/agents";
 import { Effect, Fiber } from "effect";
 import type { CodexTurnEvents } from "./events.ts";
 import type { DynamicToolCallParams, DynamicToolCallResponse, DynamicToolSpec } from "./protocol.ts";
@@ -20,10 +20,11 @@ export const dynamicToolsOf = (hub: HubTools | null | undefined): ReadonlyArray<
 export const notOffered = (tool: string) =>
   `${tool} is not offered in this turn, so it did not run. Use the tools you were given.`;
 
-/** What a hub tool call is given about the turn: its events, and how it reports a step. */
+/** What a hub tool call is given about the turn: its events, how it reports a step and how it records a call. */
 export interface HubToolTurn {
   readonly events: CodexTurnEvents;
   readonly report: (event: RuntimeEvent) => void;
+  readonly record: PromptRequest["recordToolStart"];
 }
 
 /**
@@ -49,7 +50,9 @@ export const callHubTool = (
       hub == null
         ? { text: notOffered(tool), refused: true }
         : yield* Fiber.join(
-            yield* Effect.forkDetach(hub.call(tool, params.arguments ?? {}, { id: callId, report: turn.report })),
+            yield* Effect.forkDetach(
+              hub.call(tool, params.arguments ?? {}, hubCallStep(callId, turn.report, turn.record)),
+            ),
           );
     return { contentItems: [{ type: "inputText", text: answer.text }], success: !answer.refused };
   });

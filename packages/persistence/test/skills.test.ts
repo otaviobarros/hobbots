@@ -121,6 +121,29 @@ describe("skills library", () => {
       }),
     ));
 
+  // covers ADR 029 (~/.agents/skills stays, through Hobbots), #1139
+  it("[TC-DP-285] takes a new revision of a ~/.agents/skills skill only from that folder", () =>
+    run(
+      Effect.gen(function* () {
+        const library = yield* SkillLibrary;
+        const agents = { _tag: "AgentsFolder", path: "/home/me/.agents/skills" } as const;
+        const { value } = yield* library.addRevision(null, input(H1, { origin: agents, path: "release" }));
+        const edited = yield* Effect.flip(library.addRevision(value.skill.id, input(H2, { origin: null })));
+        expect(edited).toMatchObject({
+          _tag: "SkillReadOnly",
+          skillId: value.skill.id,
+          name: "release",
+          folder: "/home/me/.agents/skills/release",
+        });
+        const forked = yield* Effect.flip(library.addRevision(value.skill.id, input(H2)));
+        expect(forked._tag).toBe("SkillReadOnly");
+        // The same content answers its revision, and the folder itself still adds one.
+        expect((yield* library.addRevision(value.skill.id, input(H1, { origin: null }))).value.added).toBe(false);
+        const next = yield* library.addRevision(value.skill.id, input(H2, { origin: agents, path: "release" }));
+        expect(next.value.revision.number).toBe(2);
+      }),
+    ));
+
   it("[TC-DP-278] assigns a skill once per scope, rolls it out, holds it and takes it off", () =>
     run(
       Effect.gen(function* () {
@@ -256,6 +279,65 @@ describe("skills library", () => {
       }),
     ));
 
+  // covers ADR 029 (Skill sets), #1143
+  it("[TC-DP-1143-01] keeps a set's skills with its revision, a hob's opt-out of one of them, and a use with its set", () =>
+    run(
+      Effect.gen(function* () {
+        yield* seed;
+        const library = yield* SkillLibrary;
+        const set = {
+          skills: [
+            {
+              name: SkillName.make("deliver-change"),
+              description: "Deliver.",
+              path: "skills/deliver-change",
+              charms: [],
+            },
+            {
+              name: SkillName.make("plan-change"),
+              description: "Plan.",
+              path: "skills/plan-change",
+              charms: ["github"],
+            },
+          ],
+        };
+        const added = (yield* library.addRevision(null, input(H1, { name: SkillName.make("agent-engineering"), set })))
+          .value;
+        expect(added.revision.set).toEqual(set);
+        expect((yield* library.revision(added.skill.id, H1))?.set).toEqual(set);
+        // A plain skill has none.
+        const plain = (yield* library.addRevision(null, input(H2))).value;
+        expect(plain.revision.set).toBeNull();
+        const plan = SkillName.make("plan-change");
+        expect((yield* library.setOptOut(pip, added.skill.id, true, plan))?.value).toMatchObject({ member: plan });
+        expect(yield* library.setOptOut(pip, added.skill.id, true, plan)).toBeNull();
+        yield* library.setOptOut(pip, added.skill.id, true);
+        expect((yield* library.optOuts(pip)).map((one) => one.member)).toEqual([null, plan]);
+        yield* library.setOptOut(pip, added.skill.id, false, plan);
+        expect((yield* library.optOuts(pip)).map((one) => one.member)).toEqual([null]);
+        yield* library.recordUse(
+          new SkillUse({
+            id: SkillUseId.make("use-set"),
+            source: "library",
+            skillId: added.skill.id,
+            name: "deliver-change",
+            pin: H1,
+            number: 1,
+            explicit: true,
+            agentId: pip,
+            threadId: null,
+            messageId: null,
+            at: "2026-11-07T10:00:00.000Z",
+            set: SkillName.make("agent-engineering"),
+          }),
+        );
+        expect((yield* library.uses({ skillId: added.skill.id }))[0]).toMatchObject({
+          name: "deliver-change",
+          set: "agent-engineering",
+        });
+      }),
+    ));
+
   // covers ADR 029 (The use line), #1096
   it("[TC-DP-282] records each use with its hob, thread and reply, journals it, and reads a skill's or a hob's", () =>
     run(
@@ -351,7 +433,13 @@ describe("skills library", () => {
         yield* seed;
         const library = yield* SkillLibrary;
         const skill = (yield* library.addRevision(null, input(H1))).value.skill;
-        const use = (id: string, at: string, threadId: string | null, source: "library" | "organization" = "library") =>
+        const use = (
+          id: string,
+          at: string,
+          threadId: string | null,
+          source: "library" | "organization" = "library",
+          set: string | null = null,
+        ) =>
           new SkillUse({
             id: SkillUseId.make(id),
             source,
@@ -364,8 +452,11 @@ describe("skills library", () => {
             threadId: threadId === null ? null : ThreadId.make(threadId),
             messageId: threadId === null ? null : MessageId.make(`reply-${id}`),
             at,
+            set: set === null ? null : SkillName.make(set),
           });
         yield* library.recordUse(use("old", "2026-10-01T10:00:00.000Z", "t1"));
+        // A use of a set's skill counts for the set, and for that skill by its name in the set (#1143).
+        yield* library.recordUse(use("member", "2026-11-06T09:00:00.000Z", "t2", "library", "release-kit"));
         yield* library.recordUse(use("a", "2026-11-05T10:00:00.000Z", "t1"));
         yield* library.recordUse(use("b", "2026-11-06T10:00:00.000Z", "t2"));
         yield* library.recordUse(use("step", "2026-11-06T11:00:00.000Z", null));
@@ -374,15 +465,16 @@ describe("skills library", () => {
         const since = "2026-10-31T00:00:00.000Z";
         expect(yield* library.useCounts(skill.id, since)).toEqual({
           skillId: skill.id,
-          total: 4,
-          thisWeek: 3,
-          hobs: [{ agentId: pip, count: 4, lastAt: "2026-11-06T11:00:00.000Z" }],
+          total: 5,
+          thisWeek: 4,
+          hobs: [{ agentId: pip, count: 5, lastAt: "2026-11-06T11:00:00.000Z" }],
           threads: [
-            { threadId: "t2", agentId: pip, count: 1, lastAt: "2026-11-06T10:00:00.000Z" },
+            { threadId: "t2", agentId: pip, count: 2, lastAt: "2026-11-06T10:00:00.000Z" },
             { threadId: "t1", agentId: pip, count: 2, lastAt: "2026-11-05T10:00:00.000Z" },
           ],
+          members: [{ name: "release", total: 1, thisWeek: 1 }],
         });
-        expect(yield* library.usesSince(since)).toEqual([{ skillId: skill.id, count: 3 }]);
+        expect(yield* library.usesSince(since)).toEqual([{ skillId: skill.id, count: 4 }]);
         expect((yield* library.lastUses(pip, 10)).map((one) => one.id)).toEqual(["org", "step"]);
         expect((yield* library.lastUses(pip, 1)).map((one) => one.id)).toEqual(["org"]);
         expect((yield* library.uses({ messageId: MessageId.make("reply-a") })).map((one) => one.id)).toEqual(["a"]);

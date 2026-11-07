@@ -23,6 +23,10 @@ test("[TC-OP-053] follows a Quest that delegated to two hobs from Settings › D
   });
 
   await page.goto(`${url}/#/settings/help`);
+  // The plain check names the memory engine too, before any technical detail (#1088).
+  const check = page.getByRole("region", { name: "Check that everything works" });
+  await check.getByRole("button", { name: "Check now" }).click();
+  await expect(check).toContainText("Memory is turned off (optional)");
   await page.getByText("Technical details").click();
   const diagnostics = page.getByRole("region", { name: "Diagnostics" });
   await expect(diagnostics.getByRole("list", { name: "AI providers" })).toContainText("Claude Code");

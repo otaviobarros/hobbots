@@ -8,11 +8,8 @@ import {
   isTerminalTask,
   MilestoneId,
   NoteId,
-  POLICY_OPERATIONS,
-  type PolicyDecision,
   type PolicyOperation,
   type PolicyOverrides,
-  type Quest,
   QuestId,
   questsAbove,
   type Task,
@@ -22,13 +19,14 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import { type Authority, delegatedAuthority, narrowBy, type PathSeparator } from "./authority.ts";
+import { type Authority, delegatedAuthority, narrowBy, operationsOf, type PathSeparator } from "./authority.ts";
 import { cut, firstLine, planNote } from "./briefs.ts";
 import {
   type CallScope,
   depthWithin,
   fromRecords,
   journalOf,
+  leads,
   ledTask,
   newId,
   ownTask,
@@ -36,7 +34,7 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
-import { defaultFolders, namedFolders, withFolders } from "./default-folders.ts";
+import { briefTargets, defaultFolders, namedFolders, outOfReach, withFolders } from "./default-folders.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -54,6 +52,33 @@ interface Deps {
 }
 
 type DelegateInput = Omit<TaskToolInput<"delegate_task">, "key">;
+
+/** How many of the work's artifacts a refused `hand_off` names. */
+const LISTED_ARTIFACTS = 5;
+
+/**
+ * Why `hand_off` refused an id, and what to pass instead (#1088): it takes the id of an artifact a Task
+ * returned with complete_task, never a Task's id, and a Task that returned none has nothing to hand
+ * off, since its result already reaches the Tasks that depend on it. It names only the Tasks the
+ * caller leads and their artifacts, the ones hand_off accepts, so a member never learns of a sibling
+ * branch's work (STD-SEC-003).
+ */
+const missingArtifact = (scope: CallScope, id: string): string => {
+  const led = scope.tree.tasks.filter((task) => leads(scope, task));
+  const ledIds = new Set<string>(led.map((task) => task.id));
+  const asTask = ledIds.has(id)
+    ? ` ${id} is a Task's id: hand_off takes the id of an artifact a Task returned with complete_task.`
+    : "";
+  const artifacts = scope.tree.artifacts.filter((artifact) => ledIds.has(artifact.taskId));
+  if (artifacts.length === 0) {
+    return `No artifact ${id} in the work you lead.${asTask} No Task under yours has returned an artifact yet, so there is nothing to hand off. A Task's result already reaches the Tasks that depend on it; to tell a running Task something, use message_task.`;
+  }
+  const listed = artifacts
+    .slice(-LISTED_ARTIFACTS)
+    .map((each) => `${each.label} (artifact_id ${each.id}, from Task ${each.taskId})`);
+  const more = artifacts.length > LISTED_ARTIFACTS ? " read_tasks lists the rest." : "";
+  return `No artifact ${id} in the work you lead.${asTask} The artifacts you can hand off: ${listed.join("; ")}.${more}`;
+};
 
 /** Longest text of yours a delegated Task carries on as its lead's note. */
 const NOTE_LIMIT = 2_000;
@@ -186,12 +211,30 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
       const both = narrowBy(own, narrowed.authority, separator);
       // Only the answers the Delegation gives: the member's own preset answers stay its own.
       const overrides = Object.fromEntries(
-        POLICY_OPERATIONS.flatMap((operation) =>
-          narrowed.authority.overrides[operation] === undefined ? [] : [[operation, both.decisions[operation]]],
+        operationsOf(both).flatMap((operation) =>
+          narrowed.authority.overrides[operation] === undefined
+            ? []
+            : [[operation, both.decisions[operation] ?? "deny"]],
         ),
       );
-      return { given: { overrides, folders: [...both.folders] }, decisions: both.decisions, lead: lead.folders };
+      // Where the brief asks for work the member cannot reach, its lead hears so now (#1181).
+      const { folders: named, parents } = yield* briefTargets(folderChecks, lead.folders, input.brief, separator);
+      const unreachable = outOfReach([...new Set([...named, ...parents])], both.folders, separator);
+      return {
+        given: { overrides, folders: [...both.folders] },
+        decisions: both.decisions,
+        lead: lead.folders,
+        unreachable,
+      };
     });
+
+  /** A warning for the lead when the brief names folders the member cannot reach. Empty otherwise. */
+  const outOfFolders = (member: Agent, unreachable: ReadonlyArray<string>): string =>
+    unreachable.length === 0
+      ? ""
+      : ` Warning: the brief names ${unreachable.join(", ")}, outside ${member.name}'s folders, so ${member.name} cannot work there. ` +
+        "Bring in a hob whose folders hold it, do that part yourself, or ask the user to add it to " +
+        `${member.name}'s folders; name it in authority.folders if you left it out. Cancel this Task if it no longer fits.`;
 
   /**
    * A warning for the lead when `member` already owns an open Task under `task`, so a blocked or
@@ -256,7 +299,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const member = yield* findHob(hobs, input.hob);
         yield* checkMember(scope, task, member);
         yield* capacity(scope, member.id, 1);
-        const { given, decisions, lead } = yield* memberAuthority(scope, task, member, input);
+        const { given, decisions, lead, unreachable } = yield* memberAuthority(scope, task, member, input);
         const tools = yield* toolsFor(member, input.authority?.decisions, { decisions, folders: given.folders });
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         const journal = journalOf();
@@ -292,7 +335,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const carried = yield* carryNote(scope, created, journal);
         return {
           done: {
-            message: `Delegated Task ${created.id} to ${member.name}.${carried} You lead Quest ${quest.id}.${tools}${alreadyOpen(scope.tree, task, member)}${existing === undefined ? planNote(task) : ""}`,
+            message: `Delegated Task ${created.id} to ${member.name}.${carried} You lead Quest ${quest.id}.${tools}${alreadyOpen(scope.tree, task, member)}${outOfFolders(member, unreachable)}${existing === undefined ? planNote(task) : ""}`,
             details: {
               task_id: created.id,
               quest_id: quest.id,
@@ -308,9 +351,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
     hand_off: (scope: CallScope, input: Omit<TaskToolInput<"hand_off">, "key">) =>
       Effect.gen(function* () {
         const artifact = scope.tree.artifacts.find((each) => each.id === input.artifact_id);
-        if (artifact === undefined) {
-          return yield* refuse("artifact-missing", `No artifact ${input.artifact_id} in the work you are on.`);
-        }
+        if (artifact === undefined) return yield* refuse("artifact-missing", missingArtifact(scope, input.artifact_id));
         yield* ledTask(scope, artifact.taskId);
         const to = yield* ledTask(scope, input.to_task_id);
         const journal = journalOf();

@@ -320,7 +320,7 @@ export const withUserIdentity = (
  */
 export const NO_GIT_IDENTITY_NOTE = [
   "No Git identity is set for your commits yet: the user's Git config sets none, and Hobbots is asking the user who hobs should commit as.",
-  "Do not ask the user yourself and never set an identity: Hobbots applies their answer to your next turn.",
+  "Do not ask the user or another hob who to commit as, and never set an identity: Hobbots applies the user's answer to your next turn.",
   "Until then, do not commit. Do the rest of the work, leave your changes uncommitted, and say in your reply that the commit waits for the user to answer Hobbots' question about who hobs commit as.",
 ].join(" ");
 

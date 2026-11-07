@@ -32,7 +32,13 @@ export function ScopeTag({ scope, label }: { scope: SkillScope | null; label: st
 }
 
 /** A small state tag beside a skill's name. */
-export function SkillChip({ tone, children }: { tone: "later" | "waiting" | "needs"; children: React.ReactNode }) {
+export function SkillChip({
+  tone,
+  children,
+}: {
+  tone: "later" | "waiting" | "needs" | "set";
+  children: React.ReactNode;
+}) {
   return (
     <span
       className={cn(
@@ -40,6 +46,7 @@ export function SkillChip({ tone, children }: { tone: "later" | "waiting" | "nee
         tone === "later" && "bg-line text-text-secondary",
         tone === "waiting" && "bg-[color-mix(in_srgb,var(--color-star)_18%,transparent)] text-text-strong",
         tone === "needs" && "bg-[color-mix(in_srgb,var(--color-lantern)_18%,transparent)] text-text-strong",
+        tone === "set" && "bg-[color-mix(in_srgb,var(--color-mint)_18%,transparent)] text-text-strong",
       )}
     >
       {children}
@@ -60,6 +67,8 @@ const ICONS = {
   git: "M5 3.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zM5 9.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zM11 5.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zM5 6.5v3M11 8.5c0 2-3 2-6 2.5",
   file: "M8 10.5V3M5 5.5 8 2.5l3 3M3 10.5v2a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2",
   write: "M3 13l1-3.5L11 2.5l2.5 2.5-7 7zM9.5 4l2.5 2.5",
+  set: "M3 2.5h3.5A1 1 0 0 1 7.5 3.5V6.5A1 1 0 0 1 6.5 7.5H3.5A1 1 0 0 1 2.5 6.5V3.5A1 1 0 0 1 3.5 2.5zM9.5 2.5h3A1 1 0 0 1 13.5 3.5V6.5A1 1 0 0 1 12.5 7.5H9.5A1 1 0 0 1 8.5 6.5V3.5A1 1 0 0 1 9.5 2.5zM3.5 8.5h3A1 1 0 0 1 7.5 9.5V12.5A1 1 0 0 1 6.5 13.5H3.5A1 1 0 0 1 2.5 12.5V9.5A1 1 0 0 1 3.5 8.5zM9.5 8.5h3A1 1 0 0 1 13.5 9.5V12.5A1 1 0 0 1 12.5 13.5H9.5A1 1 0 0 1 8.5 12.5V9.5A1 1 0 0 1 9.5 8.5z",
+  lock: "M5 7h6a1.5 1.5 0 0 1 1.5 1.5V12A1.5 1.5 0 0 1 11 13.5H5A1.5 1.5 0 0 1 3.5 12V8.5A1.5 1.5 0 0 1 5 7zM5.5 7V5a2.5 2.5 0 0 1 5 0v2",
 } as const;
 
 export type SkillsIconName = keyof typeof ICONS;

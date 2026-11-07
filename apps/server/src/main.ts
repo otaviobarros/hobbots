@@ -7,6 +7,7 @@ import {
   ActivityRecorder,
   ApprovalService,
   CharmCallService,
+  CharmDeclarations,
   ChatService,
   CommitIdentityQuestions,
   DataExport,
@@ -27,6 +28,7 @@ import {
   TaskFiles,
 } from "@hobbots/agents";
 import {
+  GITHUB_CHARM,
   GitHubAccountLive,
   GitHubApiNode,
   GitHubCharmTools,
@@ -465,15 +467,11 @@ const ServerLive = Layer.unwrap(
         Layer.provideMerge(
           Layer.mergeAll(
             ActivityRecorder.layer(),
-            TaskFiles.layer.pipe(Layer.provide(HobFilesLive)),
+            TaskFiles.layer,
             // Exports of your threads and work history (ADR 026), never inside a hob's folder.
             DataExport.layer(config.version).pipe(
               Layer.provide(
-                Layer.mergeAll(
-                  HobFilesLive,
-                  ExportFoldersLive,
-                  SaveDestinationsLive(join(config.dataDir, "workspaces", "default")),
-                ),
+                Layer.mergeAll(ExportFoldersLive, SaveDestinationsLive(join(config.dataDir, "workspaces", "default"))),
               ),
             ),
           ).pipe(
@@ -482,6 +480,9 @@ const ServerLive = Layer.unwrap(
                 FolderScannerLive,
                 // What a Task leaves uncommitted when it completes, read without running Git (#586).
                 GitWorkspaceLive,
+                // The hob's folders as the Files tab, exports and `complete_task` read them: a Task
+                // completes only with files that are there for whoever reads its result.
+                HobFilesLive,
                 // Nothing is deleted from it while a backup holds cleanup (ADR 026).
                 HeldActivityStore.pipe(Layer.provide(ActivityStoreLive(join(dataDir, "activity")))),
               ),
@@ -563,6 +564,8 @@ const ServerLive = Layer.unwrap(
             ]),
             // The whole output of long tool calls, which their steps show cut.
             ToolLogsLive(join(dataDir, "tool-logs")),
+            // The Charms the hub holds, as they declare themselves to the policy (ADR 031).
+            Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
           ),
         ),
       );

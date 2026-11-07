@@ -17,15 +17,17 @@ import {
   SkillId,
   SkillInUse,
   SkillMovedOn,
-  type SkillName,
+  SkillName,
   SkillNameChanged,
   SkillNameTaken,
   SkillNotFound,
   type SkillOptOut,
   SkillOrigin,
+  SkillReadOnly,
   SkillRevision,
   type SkillRevisionHash,
   SkillScope,
+  SkillSetContent,
   SkillSource,
   SkillSourceId,
 } from "@hobbots/domain";
@@ -64,6 +66,7 @@ interface RevisionRow {
   readonly addedBy: string;
   readonly addedAt: string;
   readonly rolledOutAt: string | null;
+  readonly setSkills: string | null;
 }
 
 interface AssignmentRow {
@@ -88,6 +91,8 @@ interface OptOutRow {
   readonly agentId: string;
   readonly skillId: string;
   readonly optedOutAt: string;
+  /** For one skill of a set (`skill_set_opt_outs`). */
+  readonly skillName?: string | null;
 }
 
 const decodeSkill = Schema.decodeUnknownEffect(Skill);
@@ -100,6 +105,7 @@ const originJson = Schema.encodeSync(Schema.fromJsonString(SkillOrigin));
 const filesJson = Schema.encodeSync(Schema.fromJsonString(Schema.Array(SkillFile)));
 const flagsJson = Schema.encodeSync(Schema.fromJsonString(Schema.Array(SkillFlag)));
 const droppedJson = Schema.encodeSync(Schema.fromJsonString(Schema.Array(SkillDropped)));
+const setJson = Schema.encodeSync(Schema.fromJsonString(SkillSetContent));
 
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every count and revision fits a number.
 const skillOf = (row: SkillRow) =>
@@ -123,6 +129,7 @@ const revisionOf = (row: RevisionRow) =>
     addedBy: JSON.parse(row.addedBy),
     addedAt: row.addedAt,
     rolledOutAt: row.rolledOutAt,
+    set: row.setSkills === null ? null : JSON.parse(row.setSkills),
   }).pipe(Effect.orDie);
 
 const assignmentOf = (row: AssignmentRow) =>
@@ -144,6 +151,7 @@ const sourceOf = (row: SourceRow) =>
 const optOutOf = (row: OptOutRow): SkillOptOut => ({
   agentId: AgentId.make(row.agentId),
   skillId: SkillId.make(row.skillId),
+  member: row.skillName ? SkillName.make(row.skillName) : null,
   at: row.optedOutAt,
 });
 
@@ -186,6 +194,33 @@ interface Changed<A> {
   readonly value: A;
   readonly events: ReadonlyArray<JournaledEvent>;
 }
+
+/** The revision `input` makes, as number `number` of skill `skillId`. */
+const newRevision = (
+  input: SkillRevisionInput,
+  skillId: SkillId,
+  number: number,
+  sourceId: SkillRevision["sourceId"],
+  addedAt: string,
+) =>
+  new SkillRevision({
+    skillId,
+    hash: input.hash,
+    number,
+    name: input.name,
+    description: input.description,
+    charms: input.charms,
+    files: input.files,
+    flags: input.flags,
+    dropped: input.dropped,
+    sourceId,
+    commit: input.commit,
+    path: input.path,
+    label: input.label,
+    addedBy: input.addedBy,
+    addedAt,
+    set: input.set ?? null,
+  });
 
 export const SkillLibraryLive = Layer.effect(
   SkillLibrary,
@@ -250,6 +285,7 @@ export const SkillLibraryLive = Layer.effect(
         added_by: byJson(revision.addedBy),
         added_at: revision.addedAt,
         rolled_out_at: revision.rolledOutAt,
+        set_skills: revision.set === null ? null : setJson(revision.set),
       })}`;
 
     const writeSkill = (skill: Skill, isNew: boolean) =>
@@ -270,6 +306,21 @@ export const SkillLibraryLive = Layer.effect(
             revisions = ${skill.revisions}, source_id = ${skill.sourceId}, updated_at = ${skill.updatedAt},
             revision = ${skill.revision}
           WHERE id = ${skill.id}`;
+
+    /**
+     * A skill from `~/.agents/skills` takes new revisions only from that folder (ADR 029): an edit,
+     * a proposal or an import of other content is refused, so Hobbots never forks it.
+     */
+    const onlyFromItsFolder = (skill: Skill, input: SkillRevisionInput) =>
+      Effect.gen(function* () {
+        if (skill.sourceId === null || input.origin?._tag === "AgentsFolder") return;
+        const [row] = yield* sql<SourceRow>`SELECT * FROM skill_sources WHERE id = ${skill.sourceId}`;
+        const source = row === undefined ? null : yield* sourceOf(row);
+        if (source?.origin._tag !== "AgentsFolder") return;
+        const latest = yield* revisionRow(skill.id, skill.latest);
+        const folder = `${source.origin.path}/${latest?.path ?? skill.name}`;
+        return yield* new SkillReadOnly({ skillId: skill.id, name: skill.name, folder });
+      });
 
     /** The skill a revision goes to, or the revision it already is. */
     const targetOf = (skillId: SkillId | null, input: SkillRevisionInput) =>
@@ -292,13 +343,14 @@ export const SkillLibraryLive = Layer.effect(
         if (skill.name !== input.name) {
           return yield* new SkillNameChanged({ skillId: skill.id, name: skill.name, given: input.name });
         }
+        yield* onlyFromItsFolder(skill, input);
         return { _tag: "Next" as const, skill };
       });
 
     const addRevision = (skillId: SkillId | null, input: SkillRevisionInput) =>
       change<
         { skill: Skill; revision: SkillRevision; added: boolean },
-        SkillNotFound | SkillNameTaken | SkillNameChanged | SkillMovedOn | SqlError.SqlError
+        SkillNotFound | SkillNameTaken | SkillNameChanged | SkillMovedOn | SkillReadOnly | SqlError.SqlError
       >((first) =>
         Effect.gen(function* () {
           const target = yield* targetOf(skillId, input);
@@ -309,23 +361,7 @@ export const SkillLibraryLive = Layer.effect(
           const { source, added } = yield* sourceFor(input.origin, at);
           const previous = target._tag === "Next" ? target.skill : null;
           const id = previous?.id ?? SkillId.make(crypto.randomUUID());
-          const revision = new SkillRevision({
-            skillId: id,
-            hash: input.hash,
-            number: (previous?.revisions ?? 0) + 1,
-            name: input.name,
-            description: input.description,
-            charms: input.charms,
-            files: input.files,
-            flags: input.flags,
-            dropped: input.dropped,
-            sourceId: source?.id ?? null,
-            commit: input.commit,
-            path: input.path,
-            label: input.label,
-            addedBy: input.addedBy,
-            addedAt: at,
-          });
+          const revision = newRevision(input, id, (previous?.revisions ?? 0) + 1, source?.id ?? null, at);
           const skill = new Skill({
             id,
             name: input.name,
@@ -529,23 +565,44 @@ export const SkillLibraryLive = Layer.effect(
         ),
       optOuts: (agentId) =>
         sqlOrDie(
-          (agentId === undefined
-            ? sql<OptOutRow>`SELECT * FROM skill_opt_outs ORDER BY agent_id, skill_id`
-            : sql<OptOutRow>`SELECT * FROM skill_opt_outs WHERE agent_id = ${agentId} ORDER BY skill_id`
-          ).pipe(Effect.map((rows) => rows.map(optOutOf))),
+          Effect.all(
+            agentId === undefined
+              ? [
+                  sql<OptOutRow>`SELECT * FROM skill_opt_outs ORDER BY agent_id, skill_id`,
+                  sql<OptOutRow>`SELECT * FROM skill_set_opt_outs ORDER BY agent_id, skill_id, skill_name`,
+                ]
+              : [
+                  sql<OptOutRow>`SELECT * FROM skill_opt_outs WHERE agent_id = ${agentId} ORDER BY skill_id`,
+                  sql<OptOutRow>`SELECT * FROM skill_set_opt_outs WHERE agent_id = ${agentId}
+                    ORDER BY skill_id, skill_name`,
+                ],
+          ).pipe(Effect.map(([whole, single]) => [...whole, ...single].map(optOutOf))),
         ),
-      setOptOut: (agentId, skillId, optedOut) =>
+      setOptOut: (agentId, skillId, optedOut, member = null) =>
         change<SkillOptOut | null, SkillNotFound | SqlError.SqlError>(() =>
           Effect.gen(function* () {
             if ((yield* skillRow(skillId)) === null) return yield* new SkillNotFound({ id: skillId });
-            const rows = optedOut
-              ? yield* sql<OptOutRow>`INSERT INTO skill_opt_outs ${sql.insert({
-                  agent_id: agentId,
-                  skill_id: skillId,
-                  opted_out_at: yield* now,
-                })} ON CONFLICT (agent_id, skill_id) DO NOTHING RETURNING *`
-              : yield* sql<OptOutRow>`DELETE FROM skill_opt_outs
-                  WHERE agent_id = ${agentId} AND skill_id = ${skillId} RETURNING *`;
+            const at = yield* now;
+            // One skill of a set is kept apart from the whole skill or set (ADR 029, Skill sets).
+            const rows =
+              member !== null
+                ? optedOut
+                  ? yield* sql<OptOutRow>`INSERT INTO skill_set_opt_outs ${sql.insert({
+                      agent_id: agentId,
+                      skill_id: skillId,
+                      skill_name: member,
+                      opted_out_at: at,
+                    })} ON CONFLICT (agent_id, skill_id, skill_name) DO NOTHING RETURNING *`
+                  : yield* sql<OptOutRow>`DELETE FROM skill_set_opt_outs
+                      WHERE agent_id = ${agentId} AND skill_id = ${skillId} AND skill_name = ${member} RETURNING *`
+                : optedOut
+                  ? yield* sql<OptOutRow>`INSERT INTO skill_opt_outs ${sql.insert({
+                      agent_id: agentId,
+                      skill_id: skillId,
+                      opted_out_at: at,
+                    })} ON CONFLICT (agent_id, skill_id) DO NOTHING RETURNING *`
+                  : yield* sql<OptOutRow>`DELETE FROM skill_opt_outs
+                      WHERE agent_id = ${agentId} AND skill_id = ${skillId} RETURNING *`;
             const [row] = rows;
             if (row === undefined) return { value: null, events: [] };
             const optOut = optOutOf(row);
@@ -562,6 +619,7 @@ export const SkillLibraryLive = Layer.effect(
             const at = yield* now;
             const skill = new Skill({ ...before, updatedAt: at, revision: first });
             yield* sql`DELETE FROM skill_opt_outs WHERE skill_id = ${id}`;
+            yield* sql`DELETE FROM skill_set_opt_outs WHERE skill_id = ${id}`;
             yield* sql`UPDATE skills SET removed_at = ${at}, updated_at = ${at}, revision = ${first} WHERE id = ${id}`;
             return { value: skill, events: [{ _tag: "SkillRemoved", skill }] };
           }),

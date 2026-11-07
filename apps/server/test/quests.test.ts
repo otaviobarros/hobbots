@@ -352,6 +352,7 @@ describe("leading a party on a Quest", () => {
         brief: [
           "Build the campaign once the copy exists",
           hub("report_checkpoint", { key: "research", kind: "progress", summary: "Keyword research done" }),
+          hub("complete_task", { key: "build-done", summary: "The campaign is built" }),
         ].join("\n"),
         depends_on: ["$copy.task_id"],
       }),
@@ -1090,8 +1091,12 @@ describe("a nested Quest", () => {
     const pipBrief = [
       hub("delegate_task", { key: "copy", hob: "Quill", brief: quillBrief }),
       hub("wait_for", { key: "pip-wait", tasks: ["$copy.task_id"] }),
+      `fake:then ${hub("complete_task", { key: "keywords-done", summary: "Keywords from the copy" })}`,
     ];
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookLeads(pipBrief)))));
+    const rookBrief = rookLeads(pipBrief, [
+      `fake:then ${hub("complete_task", { key: "ads-done", summary: "Ads from the keywords" })}`,
+    ]);
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
 
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     expect(done.quests.map((quest) => [quest.leadId, quest.depth])).toEqual([

@@ -1,36 +1,47 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative } from "node:path";
-import { CharmTools, type CharmTurn, type HubCallStep, type HubToolAnswer, type ToolAccess } from "@hobbots/agents";
+import {
+  CharmTools,
+  type CharmTurn,
+  type HubCallStep,
+  type HubPlanContext,
+  HubRefusal,
+  type HubTools,
+  hubAction,
+  makeCharmCallRunner,
+  makeHubActions,
+  readBacksOf,
+  redactedAnswer,
+  type ToolAccess,
+} from "@hobbots/agents";
 import {
   type AgentId,
   GITHUB_PUSH_TOOL,
   GITHUB_TOOLS,
   GITHUB_WRITE_TOOLS,
   type GitHubRepository,
+  type GitHubToolInput,
   GitHubToolInputs,
   type GitHubToolName,
   GitHubWriteInputs,
-  type GitHubWriteToolName,
   githubItemText,
   githubRepositoryText,
   githubSearchQuery,
   githubSearchText,
   githubToolJsonSchema,
   githubWriteToolJsonSchema,
-  isGitHubToolName,
-  isGitHubWriteToolName,
   repositorySlug,
   trimTrailingSlashes,
 } from "@hobbots/domain";
-import { type PolicyContext, PolicyEngine } from "@hobbots/permissions";
-import { Data, Effect, Layer, Schema } from "effect";
-import { makeCharmCallRunner } from "./charm-calls.ts";
+import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
+import { Effect, Layer, Schema } from "effect";
 import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { GitHubApi } from "./github-api.ts";
 import type { GitHubError } from "./github-error.ts";
+import { GITHUB_CHARM } from "./github-operations.ts";
 import { makeGitHubPush, pushReadBack } from "./github-push.ts";
-import { commentReadBack, makeGitHubWrites, pullRequestReadBack } from "./github-writes.ts";
+import { makeGitHubWrites } from "./github-writes.ts";
 import { GitRemotes } from "./remotes.ts";
 
 /**
@@ -38,23 +49,17 @@ import { GitRemotes } from "./remotes.ts";
  * the user gave the Charm, while GitHub is connected on the hub (#322). Each call is decided by the
  * policy engine on the repository the hub found from the hob's own folder, then read on the hub with
  * the connected account. Nothing a hob writes names the repository, and no credential reaches it.
+ * The reads, opening pull requests and commenting run through the hub action pipeline (ADR 031),
+ * which decides, asks, records and sends them; Push follows (#619).
  */
-
-class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> {}
-
-/** Why a call under Ask did not run: a Charm call cannot pause for an approval yet. */
-export const GITHUB_UNASKABLE =
-  "Hobbots cannot ask you about GitHub reads yet, so the call did not run. Set Read GitHub to Allow or Never for this hob.";
 
 const describe = (error: Schema.SchemaError) => error.message.split("\n").slice(0, 6).join("\n");
 
-// The engine decides a GitHub read on the folder and the hob's answers alone: the sandbox and the
-// model's hosts do not hold this rule, since the hub reads GitHub outside the sandbox.
-const policyContext = (access: ToolAccess): PolicyContext => ({
-  ...access.policy,
-  sandbox: "on",
-  modelHosts: [],
-});
+/** A read's input, of any of the three reads. */
+type ReadInput = GitHubToolInput<GitHubToolName>;
+
+/** Whether the hob still holds the GitHub Charm. Until the Charm-id grant (#620) it is `githubCharm`. */
+const holdsGitHub = (access: ToolAccess) => access.policy.hob.githubCharm !== false;
 
 /** A folder as the file system resolves it, so a link and its target are the same folder. */
 const canonical = (folder: string) => {
@@ -76,34 +81,25 @@ export const GitHubCharmTools = Layer.effect(
     const credential = yield* GitHubCredential;
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
-    const runner = yield* makeCharmCallRunner({
-      github_push: pushReadBack(api, yield* GitPush),
-      github_open_pull_request: pullRequestReadBack(api),
-      github_comment: commentReadBack(api),
-    });
-    const github = yield* makeGitHubPush(runner);
-    const writes = yield* makeGitHubWrites(runner);
-    const tools = [
-      ...GITHUB_TOOLS.map((tool) => ({ ...tool, inputSchema: githubToolJsonSchema(tool.name) })),
-      ...GITHUB_WRITE_TOOLS.map((tool) => ({ ...tool, inputSchema: githubWriteToolJsonSchema(tool.name) })),
-    ];
 
     /** The folder to read and its repository: the one named, which must be the hob's, or the first that has one. */
     const repositoryFor = (access: ToolAccess, named: string | undefined) =>
       Effect.gen(function* () {
         if (access.folders.length === 0) {
-          return yield* new Refused({ message: "You have no folders this turn, so there is no repository to read." });
+          return yield* new HubRefusal({
+            message: "You have no folders this turn, so there is no repository to read.",
+          });
         }
         if (named !== undefined) {
           const folder = access.folders.find((f) => withoutSlash(f) === withoutSlash(named));
           if (folder === undefined) {
-            return yield* new Refused({
+            return yield* new HubRefusal({
               message: `${named} is not one of your folders. Your folders: ${access.folders.join(", ")}.`,
             });
           }
           const repository = yield* remotes.repositoryOf(folder);
           if (repository === null) {
-            return yield* new Refused({
+            return yield* new HubRefusal({
               message: `${folder} is not the top of a Git repository whose origin remote is on github.com.`,
             });
           }
@@ -113,17 +109,26 @@ export const GitHubCharmTools = Layer.effect(
           const repository = yield* remotes.repositoryOf(folder);
           if (repository !== null) return { folder, repository };
         }
-        return yield* new Refused({
+        return yield* new HubRefusal({
           message: "None of your folders is the top of a Git repository whose origin remote is on github.com.",
         });
       });
 
+    const writes = yield* makeGitHubWrites(repositoryFor);
+    const runner = yield* makeCharmCallRunner("GitHub", {
+      github_push: pushReadBack(api, yield* GitPush),
+      ...readBacksOf(writes),
+    });
+    const github = yield* makeGitHubPush(runner);
+    const pushTool = GITHUB_WRITE_TOOLS.find((tool) => tool.name === GITHUB_PUSH_TOOL);
+    if (pushTool === undefined) throw new Error("The GitHub Charm has no github_push tool.");
+
     const read = (
       agentId: AgentId,
       name: GitHubToolName,
-      input: unknown,
+      input: ReadInput,
       repository: GitHubRepository,
-    ): Effect.Effect<string, Refused | GitHubError> => {
+    ): Effect.Effect<string, HubRefusal | GitHubError> => {
       switch (name) {
         case "github_repository":
           return api.repository(agentId, repository).pipe(Effect.map(githubRepositoryText));
@@ -131,7 +136,7 @@ export const GitHubCharmTools = Layer.effect(
           const search = input as (typeof GitHubToolInputs)["github_search"]["Type"];
           if (search.state === "merged" && search.kind === "issue") {
             return Effect.fail(
-              new Refused({ message: "Only pull requests can be merged; search issues by open, closed or all." }),
+              new HubRefusal({ message: "Only pull requests can be merged; search issues by open, closed or all." }),
             );
           }
           return api
@@ -148,7 +153,7 @@ export const GitHubCharmTools = Layer.effect(
     /** The call's input, or a refusal saying what is wrong with it. */
     const decoded = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, raw: unknown) =>
       Schema.decodeUnknownEffect(schema)(raw).pipe(
-        Effect.mapError((error) => new Refused({ message: describe(error) })),
+        Effect.mapError((error) => new HubRefusal({ message: describe(error) })),
       );
 
     /**
@@ -158,70 +163,92 @@ export const GitHubCharmTools = Layer.effect(
     const resolved = (turn: CharmTurn, named: string | undefined, otherwise: string) =>
       Effect.gen(function* () {
         const access = yield* turn.currentAccess;
-        if (access === null) return yield* new Refused({ message: `You have no tools this turn, so ${otherwise}.` });
-        if (access.policy.hob.githubCharm === false) {
-          return yield* new Refused({ message: `The GitHub Charm is off for you now, so ${otherwise}.` });
+        if (access === null) return yield* new HubRefusal({ message: `You have no tools this turn, so ${otherwise}.` });
+        if (!holdsGitHub(access)) {
+          return yield* new HubRefusal({ message: `The GitHub Charm is off for you now, so ${otherwise}.` });
         }
         return { access, ...(yield* repositoryFor(access, named)) };
       });
 
-    const write = (turn: CharmTurn, name: GitHubWriteToolName, raw: unknown, step: HubCallStep | undefined) =>
+    const push = (turn: CharmTurn, raw: unknown, step: HubCallStep | undefined) =>
       Effect.gen(function* () {
-        switch (name) {
-          case "github_push": {
-            const input = yield* decoded(GitHubWriteInputs[name], raw);
-            const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be pushed");
-            return yield* github.push(turn, access, folder, repository, input, step);
-          }
-          case "github_open_pull_request": {
-            const input = yield* decoded(GitHubWriteInputs[name], raw);
-            const { access, folder, repository } = yield* resolved(turn, input.folder, "no pull request can be opened");
-            return yield* writes.openPullRequest(turn, access, folder, repository, input, step);
-          }
-          case "github_comment": {
-            const input = yield* decoded(GitHubWriteInputs[name], raw);
-            const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be commented");
-            return yield* writes.comment(turn, access, folder, repository, input, step);
-          }
-        }
+        const input = yield* decoded(GitHubWriteInputs.github_push, raw);
+        const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be pushed");
+        return yield* github.push(turn, access, folder, repository, input, step);
       });
 
-    const call = (turn: CharmTurn, name: string, raw: unknown, step: HubCallStep | undefined) =>
-      Effect.gen(function* () {
-        if (isGitHubWriteToolName(name)) return yield* write(turn, name, raw, step);
-        if (!isGitHubToolName(name)) return yield* new Refused({ message: `Hobbots has no ${name} tool.` });
-        const input = yield* decoded(GitHubToolInputs[name], raw);
-        const { access, folder, repository } = yield* resolved(turn, input.folder, "GitHub cannot be read");
-        const verdict = yield* engine.decide(policyContext(access), {
-          _tag: "GitHub",
-          folder,
-          repository: repositorySlug(repository),
+    /**
+     * A read, planned for the pipeline: the `github.read` request on the repository of the hob's folder,
+     * and the read itself, under the sign-in that reaches the repository. The app's sign-in also reads
+     * public repositories it is not installed on (ADR 020), and the read must use the sign-in that check
+     * was made for.
+     */
+    const planRead =
+      (name: GitHubToolName) =>
+      (input: ReadInput, { turn, access }: HubPlanContext) =>
+        Effect.gen(function* () {
+          const { folder, repository } = yield* repositoryFor(access, input.folder);
+          const slug = repositorySlug(repository);
+          const request: PolicyRequest = {
+            _tag: "Charm",
+            charm: GITHUB_CHARM.id,
+            operation: "github.read",
+            folder,
+            site: { repository: slug },
+            targets: [slug],
+          };
+          return {
+            request,
+            card: { arguments: { ...input, repository: slug } },
+            send: credential
+              .onRepository(
+                turn.agentId,
+                repository,
+                Effect.suspend(() => read(turn.agentId, name, input, repository)),
+              )
+              .pipe(
+                Effect.mapError((error) =>
+                  error instanceof HubRefusal ? error : new HubRefusal({ message: error.message }),
+                ),
+              ),
+          };
         });
-        if (verdict.decision === "ask")
-          return yield* new Refused({ message: `${verdict.reason.message} ${GITHUB_UNASKABLE}` });
-        if (verdict.decision === "deny") return yield* new Refused({ message: verdict.reason.message });
-        // The app's sign-in also reads public repositories it is not installed on (ADR 020), and
-        // the read must use the sign-in that check was made for.
-        return yield* credential
-          .onRepository(
-            turn.agentId,
-            repository,
-            Effect.suspend(() => read(turn.agentId, name, input, repository)),
-          )
-          .pipe(Effect.mapError((error) => new Refused({ message: error.message })));
-      }).pipe(
-        Effect.match({
-          onFailure: (refused): HubToolAnswer => ({ text: turn.redactor.text(refused.message), refused: true }),
-          onSuccess: (text): HubToolAnswer => ({ text: turn.redactor.text(text), refused: false }),
-        }),
-        // A defect becomes an answer; an interrupted turn stays interrupted.
-        Effect.catchDefect((defect) =>
-          Effect.logError("A GitHub Charm call failed", defect).pipe(
-            Effect.as({ text: "Hobbots could not reach GitHub this time. Try again.", refused: true }),
-          ),
+
+    const actions = makeHubActions({
+      owner: { _tag: "Charm", declaration: GITHUB_CHARM, name: "GitHub", holds: holdsGitHub },
+      actions: [
+        ...GITHUB_TOOLS.map((tool) =>
+          hubAction({
+            tool: { ...tool, inputSchema: githubToolJsonSchema(tool.name) },
+            input: GitHubToolInputs[tool.name],
+            effect: "read",
+            otherwise: "GitHub cannot be read",
+            plan: planRead(tool.name),
+          }),
         ),
+        ...writes,
+      ],
+      decide: (approvals, base, request: PolicyRequest) => decideHubCall(engine, approvals, base, request),
+      calls: runner,
+    });
+
+    /** A push, decided and sent by its own call code until it moves onto the pipeline (#619). */
+    const callPush = (turn: CharmTurn, raw: unknown, step: HubCallStep | undefined) =>
+      redactedAnswer(turn.redactor, push(turn, raw, step), {
+        log: "A GitHub Charm call failed",
+        text: "Hobbots could not reach GitHub this time. Try again.",
+      });
+
+    const call = (turn: CharmTurn, pipeline: HubTools, name: string, raw: unknown, step: HubCallStep | undefined) =>
+      (name === GITHUB_PUSH_TOOL ? callPush(turn, raw, step) : pipeline.call(name, raw, step)).pipe(
         Effect.provideContext(context),
       );
+
+    /** The tools in the order the hob has always been offered them: the reads, Push, then the other writes. */
+    const offered = (pipeline: HubTools) => {
+      const [reads, rest] = [pipeline.tools.slice(0, GITHUB_TOOLS.length), pipeline.tools.slice(GITHUB_TOOLS.length)];
+      return [...reads, { ...pushTool, inputSchema: githubWriteToolJsonSchema(GITHUB_PUSH_TOOL) }, ...rest];
+    };
 
     /**
      * A `git push` in one of the hob's folders whose origin is on GitHub is made with `github_push`
@@ -249,9 +276,10 @@ export const GitHubCharmTools = Layer.effect(
           const app = yield* credential.hobApp(turn.agentId).pipe(Effect.orElseSucceed(() => null));
           const reachable = (yield* credential.connected) || app !== null;
           if (!reachable) return null;
+          const pipeline = actions(turn);
           return {
-            tools,
-            call: (name: string, input: unknown, step?: HubCallStep) => call(turn, name, input, step),
+            tools: offered(pipeline),
+            call: (name: string, input: unknown, step?: HubCallStep) => call(turn, pipeline, name, input, step),
             steersPush: (cwd: string) => steersPush(turn, cwd),
           };
         }).pipe(Effect.provideContext(context)),

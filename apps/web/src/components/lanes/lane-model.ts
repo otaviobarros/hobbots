@@ -176,6 +176,7 @@ const leadOf = (tree: TaskTree, task: Task): AgentId | null => {
 export type LanePicks = ReadonlyMap<TaskId, AttemptId>;
 
 const NO_PICKS: LanePicks = new Map();
+const NO_STUCK: ReadonlySet<TaskId> = new Set();
 
 /** The Attempt a Task's lane shows: the one picked for it, else its latest. */
 const shownAttempt = (tree: TaskTree, task: Task, picks: LanePicks): Attempt | undefined => {
@@ -204,7 +205,12 @@ export const laneAttempts = (tree: TaskTree, picks: LanePicks = NO_PICKS): Reado
 ];
 
 /** The Workbench records the room has read, and the tries picked in it. */
-type Reads = { readonly of: (id: AttemptId) => AttemptActivity | undefined; readonly picks: LanePicks };
+type Reads = {
+  readonly of: (id: AttemptId) => AttemptActivity | undefined;
+  readonly picks: LanePicks;
+  /** The Tasks whose hob ran out of tries at its work, which wait for your choice (IN-007). */
+  readonly stuck: ReadonlySet<TaskId>;
+};
 
 /** A lane item with the time it happened, to put a lane in order. */
 type Timed = { readonly at: string; readonly item: LaneItem };
@@ -451,11 +457,13 @@ const nowItem = (tree: TaskTree, unit: ReadonlyArray<Task>, read: Reads): LaneIt
 
 /**
  * Where the lane's Task stands. A question or an approval waiting for you lights the lane of the hob
- * whose Task it is on; a lead with one under it shows where its own Task stands.
+ * whose Task it is on, and so does stuck work on one of its Tasks that has not ended (#1087); a lead
+ * with one under it shows where its own Task stands.
  */
-const laneStatus = (tree: TaskTree, unit: ReadonlyArray<Task>, task: Task): RoomStatus => {
+const laneStatus = (tree: TaskTree, unit: ReadonlyArray<Task>, task: Task, stuck: ReadonlySet<TaskId>): RoomStatus => {
   const asks = unit.some((each) => questionForYou(tree, each) !== null || pendingApprovalsOn(tree, each.id).length > 0);
   if (asks) return "needs-you";
+  if (unit.some((each) => stuck.has(each.id) && !isTerminalTask(each.state))) return "stuck";
   const status = roomStatus(tree, task);
   if (status !== "needs-you") return status;
   return task.state === "waiting" ? "waiting" : "running";
@@ -539,7 +547,7 @@ const laneOf = (tree: TaskTree, hobId: AgentId, tasks: Owned, role: LaneRole, re
     task,
     tasks,
     title: taskTitle(task),
-    status: laneStatus(tree, owned, task),
+    status: laneStatus(tree, owned, task, read.stuck),
     items: now === null ? foldMarks(items) : [...foldMarks(items), now],
     plain: foldMarks(plainItems(now === null ? items : [...items, now])),
   };
@@ -549,17 +557,18 @@ const laneOf = (tree: TaskTree, hobId: AgentId, tasks: Owned, role: LaneRole, re
  * The room's lanes for a request's Task tree: one per hob, each under the hob that brought it in.
  * `activities` are the Workbench records of the tree's Attempts that have been read; an Attempt not
  * read yet adds only what the tree itself records. `picks` names a try picked for a Task, which its
- * lane shows in place of the latest.
+ * lane shows in place of the latest. `stuck` names the Tasks with stuck work, whose lanes say so.
  */
 export const laneRoom = (
   tree: TaskTree,
   activities: ReadonlyArray<AttemptActivity>,
   picks: LanePicks = NO_PICKS,
+  stuck: ReadonlySet<TaskId> = NO_STUCK,
 ): LaneRoom => {
   const top = tree.tasks[0];
   if (top === undefined) return { lanes: [], order: [] };
   const reads = new Map(activities.map((each) => [each.attempt.id, each]));
-  const read: Reads = { of: (id) => reads.get(id), picks };
+  const read: Reads = { of: (id) => reads.get(id), picks, stuck };
   // A hob keeps one lane, under the hob that brought it in first.
   const owned = new Map<AgentId, { tasks: Owned; lead: AgentId | null }>();
   for (const task of tree.tasks) {

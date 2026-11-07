@@ -9,7 +9,8 @@ import {
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { withBlocker } from "../../api/blockers.ts";
-import { blockersOn, blockerWhat, blockerWhy } from "./blocker-model.ts";
+import { BUILD, blackFriday, CAMPAIGN, COPY } from "../../test/quests.ts";
+import { blockersOn, blockerWhat, blockerWhy, reassignable } from "./blocker-model.ts";
 
 const at = "2026-11-02T00:00:00.000Z";
 
@@ -88,6 +89,15 @@ describe("blockers", () => {
   it("puts on a Task card only the open blockers about its Tasks", () => {
     const items = [item("on"), item("elsewhere", { taskId: "t9" }), item("none", { taskId: null })];
     expect(blockersOn(items, new Set(["t1"])).map((each) => each.id)).toEqual(["on"]);
+  });
+
+  it("offers Reassign on stuck work only where its Task can change hands, as the lane's menu does (#1087)", () => {
+    const trees = [blackFriday()];
+    expect(reassignable(trees, item("member", { taskId: COPY }))?.task.id).toBe(COPY);
+    expect(reassignable(trees, item("waiting", { taskId: BUILD }))?.task.id).toBe(BUILD);
+    // The lead's own Task is asked again, never handed on; a Task the thread does not hold offers nothing.
+    expect(reassignable(trees, item("lead", { taskId: CAMPAIGN }))).toBeNull();
+    expect(reassignable(trees, item("elsewhere", { taskId: "t9" }))).toBeNull();
   });
 
   it("keeps a blocker listed while it waits for a choice, at its newest version, and drops it once decided", () => {

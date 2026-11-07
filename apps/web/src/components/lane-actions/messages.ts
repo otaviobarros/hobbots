@@ -6,6 +6,8 @@ export const messages = {
   menuOf: ({ name }: { name: string }) => `${name}'s task`,
   showInWorkbench: "Show in the Workbench",
   retry: "Retry",
+  /** Retry on stuck work when the lane holds more than one Task with some. */
+  retryTask: ({ title }: { title: string }) => `Retry “${title}”`,
   retrying: "Retrying…",
   reassign: "Reassign…",
   cancelTask: "Cancel task…",

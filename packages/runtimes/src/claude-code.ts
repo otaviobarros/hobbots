@@ -35,7 +35,6 @@ import {
 } from "@hobbots/agents";
 import {
   type CommitIdentity,
-  type CommitsAs,
   GIT_INIT_TOOL,
   type PlanUsage,
   policySandbox,
@@ -48,10 +47,17 @@ import {
   stableJson,
   unreportedPlan,
 } from "@hobbots/domain";
-import { type PolicyContext, PolicyEngine, type PolicyVerdict, policyVersion } from "@hobbots/permissions";
+import {
+  type PolicyContext,
+  PolicyEngine,
+  type PolicyVerdict,
+  policyVersion,
+  type RuntimeOutput,
+} from "@hobbots/permissions";
 import { type Duration, Effect, Layer, Queue, Stream } from "effect";
 import {
   type CallDecision,
+  type CallSteers,
   decideCall,
   grantedHosts,
   keptGitHint,
@@ -68,7 +74,7 @@ import {
   isExecutable,
   runnableBinary,
 } from "./binary.ts";
-import { askedSkillPrompt, SKILL_TOOL, withSkills } from "./claude-code-skills.ts";
+import { askedSkillPrompt, READ_TOOL, readsSkillFile, SKILL_TOOL, withSkills } from "./claude-code-skills.ts";
 import { COMMAND_ENV_FILE_VARIABLE, commandColorFile, plainBashResponse } from "./command-color.ts";
 import { toolFinished } from "./command-exit.ts";
 import { turnCommits } from "./git-config.ts";
@@ -83,7 +89,7 @@ import {
 } from "./sandbox.ts";
 import { askedMount, holdSkillFolder, skillFolderScope } from "./skills.ts";
 import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
-import { fullToolOutput } from "./tool-output.ts";
+import { fullToolOutput, savedOutputFolder } from "./tool-output.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
@@ -710,7 +716,7 @@ export const wholeUsage = (earlier: ReplyUsage | undefined, later: ReplyUsage | 
  * announced as `init` again, with its own `result`. So the session starts once, and the turn
  * completes when Claude Code stops, with what each run replied and what all of them used.
  */
-export const wholeTurn = (asked: string | null = null) => {
+export const wholeTurn = (asked: string | null = null, askedSet: string | null = null) => {
   let started = false;
   let completed: Extract<RuntimeEvent, { _tag: "Completed" }> | null = null;
   return {
@@ -719,7 +725,10 @@ export const wholeTurn = (asked: string | null = null) => {
         if (started) return [];
         started = true;
         // The skill you picked loads with the prompt, as Claude Code's own mention (ADR 029).
-        if (asked !== null) return [event, { _tag: "SkillUsed", source: "library", name: asked, explicit: true }];
+        if (asked !== null) {
+          const set = askedSet === null ? {} : { set: askedSet };
+          return [event, { _tag: "SkillUsed", source: "library", name: asked, explicit: true, ...set }];
+        }
       }
       if (event._tag !== "Completed") return [event];
       const earlier = completed?.text ?? "";
@@ -779,25 +788,19 @@ export const claudeTurnStart = (request: PromptRequest, policySandboxState: Sand
   );
   const asked = askedMount(request.askedSkill, request.skills);
   const prompt = askedSkillPrompt(turnPrompt(request, instructions, commits.now), asked);
-  return { tools, commits, instructions, prompt, asked: asked?.name ?? null };
+  return { tools, commits, instructions, prompt, asked: asked?.name ?? null, askedSet: asked?.set?.name ?? null };
 };
 
 /** A turn with tools: the context every call is decided under, its folders and the tools offered. */
-export interface ToolTurn {
+export interface ToolTurn extends CallSteers {
   readonly context: PolicyContext;
   /** Canonical and existing; the first is where Claude Code starts. */
   readonly folders: ReadonlyArray<string>;
   readonly tools: ReadonlyArray<string>;
   /** Claude Code's configuration folder for this hob. */
   readonly runtimeFolder: string;
-  /** The hub tool a `git push` command in a folder is pointed to, when the turn offers one (ADR 020). */
-  readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
-  /** The hub tool a `git init` command is pointed to, when the turn offers it (ADR 014). */
-  readonly initTool?: string;
   /** The hob's bot, when it has its own GitHub App: its commands commit as it (ADR 022). */
   readonly commitAs?: CommitIdentity;
-  /** Who its commits are made as, as the hub settled it (#586, #741), which a refused identity override names. */
-  readonly commitsAs: CommitsAs;
 }
 
 /**
@@ -850,6 +853,7 @@ export const toolTurn = (
     tools,
     runtimeFolder: access.runtimeFolder,
     ...(hubTools?.steersPush ? { steersPush: hubTools.steersPush } : {}),
+    ...(hubTools?.holdsCommit ? { holdsCommit: hubTools.holdsCommit } : {}),
     ...(hubTools?.tools.some((tool) => tool.name === GIT_INIT_TOOL) ? { initTool: GIT_INIT_TOOL } : {}),
     ...(access.commitAs ? { commitAs: access.commitAs } : {}),
     commitsAs: access.commitsAs,
@@ -871,6 +875,7 @@ export const policyHooks = (
   redaction?: Redactor | null,
   record?: PromptRequest["recordToolStart"],
   background?: BackgroundCommands | null,
+  skillFolder?: string | null,
 ): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
   const label = (tool: string, input: Record<string, unknown>) => toolLabel(tool, input, redaction?.text);
   const started = new Set<string>();
@@ -878,6 +883,10 @@ export const policyHooks = (
   const notes = new Map<string, string>();
   // Each call as the hook saw it, so the permission callback decides the same call in the same folder.
   const seen = new Map<string, ToolCall>();
+  // Where Claude Code saves this session's large outputs, which the hob may read (#1153).
+  let outputs: ReadonlyArray<RuntimeOutput> = [];
+  const context = (): PolicyContext =>
+    outputs.length === 0 ? turn.context : { ...turn.context, runtimeOutputs: outputs };
   // Answers whether the call may run: it is recorded first when the turn records calls (EX-004).
   const begin = async (id: string, tool: string, input: Record<string, unknown>, verdict: PolicyVerdict) => {
     // A command's folder is the one its call was decided on.
@@ -924,17 +933,21 @@ export const policyHooks = (
 
   const preToolUse: HookCallback = async (input): Promise<HookJSONOutput> => {
     if (input.hook_event_name !== "PreToolUse") return {};
+    const saved = savedOutputFolder(turn.runtimeFolder, input);
+    if (saved !== undefined) outputs = [{ root: turn.runtimeFolder, folder: saved }];
     const tool = input.tool_name;
     // The hub decides its own tools' calls (ADR 018); the turn allows them by name.
     if (hubToolOf(tool) !== null) return {};
     // A mounted skill's instructions are the hob's to read; the skills hook decides those (ADR 029).
     if (tool === SKILL_TOOL) return {};
+    // A read of a skill's own files, or its set's, is the skills hook's to allow (ADR 029, Skill sets).
+    if (tool === READ_TOOL && readsSkillFile(input.tool_input, skillFolder)) return {};
     const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
-    const decision = await Effect.runPromise(
-      decideCall(engine, turn.context, null, call, report, turn.commitsAs, redaction, turn.steersPush, turn.initTool),
-    ).catch(() => failed(tool));
+    const decision = await Effect.runPromise(decideCall(engine, context(), null, call, report, turn, redaction)).catch(
+      () => failed(tool),
+    );
     if (decision._tag === "Run") {
       if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
         const reason = refuse(call.id, tool, toolInput, unrecorded(decision));
@@ -1013,22 +1026,9 @@ export const policyHooks = (
     }
     const call = { id: options.toolUseID, tool, input, cwd: hooked?.cwd ?? (turn.folders[0] as string) };
     // An aborted call stops waiting, which expires its request.
-    const decision = await Effect.runPromise(
-      decideCall(
-        engine,
-        turn.context,
-        approvals,
-        call,
-        report,
-        turn.commitsAs,
-        redaction,
-        turn.steersPush,
-        turn.initTool,
-      ),
-      {
-        signal: options.signal,
-      },
-    ).catch(() => failed(tool));
+    const decision = await Effect.runPromise(decideCall(engine, context(), approvals, call, report, turn, redaction), {
+      signal: options.signal,
+    }).catch(() => failed(tool));
     if (decision._tag === "Run") {
       // A call the hook allowed was recorded then.
       if (started.has(call.id) || (await begin(call.id, tool, input, decision.verdict))) {
@@ -1231,6 +1231,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                               request.redaction,
                               request.recordToolStart,
                               background,
+                              skills?.folder ?? null,
                             ),
                             // Only Hobbots' script: one the hub was started with never reaches the commands.
                             { ...base.env, [COMMAND_ENV_FILE_VARIABLE]: colorScript },
@@ -1257,6 +1258,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   ),
                   request.hubTools,
                   report,
+                  request.recordToolStart,
                 ),
               }),
             ),
@@ -1272,7 +1274,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               ),
           );
           const toEvents = turnEvents(tools);
-          const whole = wholeTurn(start.asked);
+          const whole = wholeTurn(start.asked, start.askedSet);
           // Tool events arrive from the hooks while the turn runs, so the turn's own events share their queue.
           yield* Stream.fromAsyncIterable(turn, errorMessage).pipe(
             // A background command's end arrives as its task's notification.

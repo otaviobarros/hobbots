@@ -1,11 +1,5 @@
 import type { HobPermissions, UpdateHobPermissionsPayload } from "@hobbots/api";
-import {
-  type Agent,
-  type PolicyDecision,
-  type PolicyOperation,
-  PRESET_DECISIONS,
-  policySandbox,
-} from "@hobbots/domain";
+import { type Agent, type PolicyDecision, type PolicyOperation, policySandbox } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
@@ -26,8 +20,10 @@ import {
   offeredAnswer,
   PERMISSION_RULES,
   pickAnswer,
+  presetAnswer,
   presetInfo,
   type RuleInfo,
+  sendingAnswer,
 } from "../../api/safety.ts";
 import { watchedSetupQuery } from "../../api/setup.ts";
 import { messages } from "../messages.ts";
@@ -107,8 +103,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
   const otherError = update.variables?.ownFolders === undefined ? update.error : null;
   const preset = presetInfo(data.preset).label;
   const careful = PERMISSION_RULES.filter(
-    (rule) =>
-      offeredAnswer(rule.operation, data.decisions[rule.operation]) !== PRESET_DECISIONS[data.preset][rule.operation],
+    (rule) => offeredAnswer(rule.operation, data.decisions[rule.operation]) !== presetAnswer(data, rule.operation),
   ).length;
 
   return (
@@ -121,11 +116,9 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
             key={rule.operation}
             rule={rule}
             permissions={data}
-            shown={sending?.overrides ? shownAnswer(data, sending.overrides, rule.operation) : undefined}
+            shown={sendingAnswer(data, sending, rule.operation)}
             pending={locked}
-            onPick={(answer) =>
-              save({ overrides: pickAnswer(data.policy.overrides, rule.operation, answer, data.preset) })
-            }
+            onPick={(answer) => save(pickAnswer(data, rule.operation, answer))}
           />
         )}
       />
@@ -345,12 +338,6 @@ function SigningSwitch({
   );
 }
 
-export const shownAnswer = (
-  permissions: HobPermissions,
-  overrides: NonNullable<UpdateHobPermissionsPayload["overrides"]>,
-  operation: PolicyOperation,
-): PolicyDecision => overrides[operation] ?? PRESET_DECISIONS[permissions.preset][operation];
-
 /** The shared folders, each shown to the hob or hidden from it. */
 function SharedFolders({
   name,
@@ -441,7 +428,7 @@ export function Rule({
   const copy = messages.permissions;
   const labelId = useId();
   const noteId = useId();
-  const preset = PRESET_DECISIONS[permissions.preset][rule.operation];
+  const preset = presetAnswer(permissions, rule.operation);
   const allowed = answersWithin(preset);
   const current = shown ?? offeredAnswer(rule.operation, permissions.decisions[rule.operation]);
   // Why the rule is blocked whatever its answer, or null when the hub can hold it.

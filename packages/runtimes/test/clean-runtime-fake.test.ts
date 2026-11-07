@@ -3,8 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import { fakeSkillsPrompt, makeFakeRuntime } from "../src/fake.ts";
-import { AGENTS_SKILL, ASKED_SKILL, cleanRuntimeFixture, LIBRARY_SKILL } from "./clean-runtime.ts";
+import { FAKE_HUB_DIRECTIVE, fakeSkillsPrompt, makeFakeRuntime } from "../src/fake.ts";
+import {
+  AGENTS_SKILL,
+  ASKED_SKILL,
+  CONTRACT_HUB_TOOL,
+  cleanRuntimeFixture,
+  LIBRARY_SKILL,
+  SET_SIBLING,
+  SET_SKILL,
+  stepRecordingContract,
+  TEAM_SET,
+} from "./clean-runtime.ts";
 
 // The clean-runtime contract test on the fake runtime (ADR 029): it loads exactly the skills the turn
 // mounts, whatever the home folder and the repository hold. The real runtimes run the same fixture in
@@ -37,8 +47,38 @@ describe("a clean fake runtime (ADR 029)", () => {
   // covers RT-001, ADR 029
   it("[TC-RT-519] loads only the skills the turn mounts, Only when asked marked, and none without mounts", async () => {
     expect(await skillsOf(fixture.mounts)).toEqual([
-      [LIBRARY_SKILL, `${ASKED_SKILL} (only when asked)`, AGENTS_SKILL].join("\n"),
+      [
+        LIBRARY_SKILL,
+        `${ASKED_SKILL} (only when asked)`,
+        AGENTS_SKILL,
+        // A set's skills by their set, less the one the hob turned off (ADR 029, Skill sets).
+        `${TEAM_SET}:${SET_SKILL}`,
+        `${TEAM_SET}:${SET_SIBLING}`,
+      ].join("\n"),
     ]);
     expect(await skillsOf(null)).toEqual(["No skills."]);
+  });
+
+  const hubCall = (records: boolean) => {
+    const contract = stepRecordingContract(records);
+    return makeFakeRuntime()
+      .sendPrompt({
+        prompt: `${FAKE_HUB_DIRECTIVE} ${CONTRACT_HUB_TOOL} {}`,
+        sessionId: null,
+        instructions: "",
+        instructionsChanged: false,
+        model: null,
+        effort: null,
+        hubTools: contract.hubTools,
+        recordToolStart: contract.recordToolStart,
+      })
+      .pipe(Stream.runCollect, Effect.runPromise)
+      .then(() => contract.order);
+  };
+
+  // covers EX-004, ADR 031
+  it("[TC-PE-470] records a hub tool call's step with the turn's recorder before the hub runs it", async () => {
+    expect(await hubCall(true)).toEqual([`recorded ${CONTRACT_HUB_TOOL} as fake-hub-1`, "ran"]);
+    expect(await hubCall(false)).toEqual([`recorded ${CONTRACT_HUB_TOOL} as fake-hub-1`, "not run"]);
   });
 });

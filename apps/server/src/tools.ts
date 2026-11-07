@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import {
+  CharmDeclarations,
   CommitIdentityQuestions,
   effectiveFolders,
   FolderChecks,
@@ -10,7 +11,7 @@ import {
   openTools,
   operationDecision,
 } from "@hobbots/agents";
-import { type CommitsAs, hobAppCommitIdentity, settleCommitsAs } from "@hobbots/domain";
+import { type CommitsAs, declaredOperations, hobAppCommitIdentity, settleCommitsAs } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { userGitIdentity } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
@@ -38,6 +39,8 @@ export const HobToolsLive = Layer.effect(
     // A hob on your account commits as you, or as who you told the hub when your Git config sets no one
     // (#741). A hub without the question reads your Git config in your home.
     const identities = yield* Effect.serviceOption(CommitIdentityQuestions);
+    // What the hub's Charms declare (ADR 031), which every turn's policy decides their calls on.
+    const charmOperations = declaredOperations(yield* CharmDeclarations);
     return HobTools.of({
       access: (agent, turn) =>
         Effect.gen(function* () {
@@ -58,6 +61,7 @@ export const HobToolsLive = Layer.effect(
             dataFolder: dataDir,
             // Threads, Quests and delegations add no restrictions yet.
             restrictions: [],
+            charmOperations,
           };
           const turnFolders = holder === undefined ? folders : [];
           // Only a turn whose commands may run can commit, so only then is who it commits as settled.

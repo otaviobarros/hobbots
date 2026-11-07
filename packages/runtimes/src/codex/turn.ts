@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from 
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { type PromptRequest, RuntimeError, type RuntimeEvent, type RuntimeLimitReached } from "@hobbots/agents";
-import type { PolicyOperation, SandboxState } from "@hobbots/domain";
+import type { AnyOperation, SandboxState } from "@hobbots/domain";
 import type { PolicyEngine } from "@hobbots/permissions";
 import { Deferred, type Duration, Effect, Queue, type Scope, Stream } from "effect";
 import { grantedHosts } from "../approval.ts";
@@ -37,7 +37,14 @@ import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
 import { codexCaBundle, codexPath } from "./locate.ts";
 import { POLICY_REQUESTS, type PolicyRequest, policyGate, refusalNotice, shellScript } from "./policy.ts";
 import { TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
-import { admitSkills, askedSkillInput, skillRootsOf, skillSettings, unusedSkillRoots } from "./skills.ts";
+import {
+  admitSkills,
+  askedSkillInput,
+  setSkillFilesOf,
+  skillRootsOf,
+  skillSettings,
+  unusedSkillRoots,
+} from "./skills.ts";
 
 /** Starts a turn's App Server for as long as the scope lasts. */
 export type StartAppServer = (
@@ -56,6 +63,8 @@ type TurnSignIn = (binary: string) => Effect.Effect<ChatGptTokens | null, Runtim
 interface CodexToolTurn {
   readonly events: CodexTurnEvents;
   readonly report: (event: RuntimeEvent) => void;
+  /** Records a hub tool call before it runs, as the turn's own calls are. */
+  readonly record: PromptRequest["recordToolStart"];
   readonly redact: (text: string) => string;
   /** Adds a note to a running turn, which the model reads with its next request (#1082). */
   readonly tell: (turnId: string, text: string) => Effect.Effect<void>;
@@ -77,7 +86,7 @@ export const TOOLS_CLOSED = "You have no tools in this conversation, so this did
 
 const denied = (
   turn: CodexToolTurn,
-  call: { readonly id: string; readonly tool: string; readonly operation: PolicyOperation; readonly label: string },
+  call: { readonly id: string; readonly tool: string; readonly operation: AnyOperation; readonly label: string },
   targets: ReadonlyArray<string> = [],
 ) => turn.report({ _tag: "ToolDenied", ...call, targets, reason: TOOLS_CLOSED, decidedBy: "policy" });
 
@@ -695,12 +704,19 @@ const turnEvents = (
       }
       const opened = yield* openThread(server, request, launch.cwd, launch.instructions).pipe(Effect.mapError(failed));
       const threadId = opened.thread.id;
-      const mapper = codexTurnEvents(threadId, skillRootsOf(launch.skills), admitted.organizationFiles);
+      const mapper = codexTurnEvents(
+        threadId,
+        skillRootsOf(launch.skills),
+        admitted.organizationFiles,
+        setSkillFilesOf(launch.skills, request.skills),
+      );
       // The skill you picked loads with the turn's first input, as Codex's own skill item (ADR 029).
-      const asked = askedSkillInput(launch.skills, askedMount(request.askedSkill, request.skills));
+      const askedOne = askedMount(request.askedSkill, request.skills);
+      const asked = askedSkillInput(launch.skills, askedOne);
       turn = {
         events: mapper,
         report,
+        record: request.recordToolStart,
         redact: request.redaction?.text ?? ((text) => text),
         tell: tellTurn(server, threadId),
         gate: launch.gate,
@@ -737,7 +753,10 @@ const turnEvents = (
           mapper.follow(started.turn.id);
           now.turnId = started.turn.id;
           // Codex took the skill item with the turn, so the skill you picked is used (ADR 029).
-          if (skill !== null) report({ _tag: "SkillUsed", source: "library", name: skill.name, explicit: true });
+          if (skill !== null) {
+            const set = askedOne?.set ? { set: askedOne.set.name } : {};
+            report({ _tag: "SkillUsed", source: "library", name: skill.name, explicit: true, ...set });
+          }
         });
 
       // Cancelling the turn asks Codex to stop it and waits for the acknowledgement, so the process

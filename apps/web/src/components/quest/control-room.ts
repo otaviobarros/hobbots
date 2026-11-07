@@ -27,9 +27,10 @@ type Waited = { readonly kind: "hob"; readonly id: AgentId } | { readonly kind: 
 /**
  * Where a Task stands in the tree: the card's statuses, with a cancel shown as it is: asked for
  * (`cancelling`), confirmed (`cancelled`), or ended without the hub confirming its session stopped
- * (`unresolved`, OR-006).
+ * (`unresolved`, OR-006). A lane also shows a Task whose hob ran out of tries at its work as
+ * `stuck` until you choose what happens to it (IN-007, #1087).
  */
-export type RoomStatus = RowStatus | "cancelling" | "cancelled" | "unresolved";
+export type RoomStatus = RowStatus | "cancelling" | "cancelled" | "unresolved" | "stuck";
 
 export interface RoomRow {
   readonly task: Task;
@@ -58,13 +59,19 @@ export const roomStatus = (tree: TaskTree, task: Task): RoomStatus => {
 
 /**
  * A cancel shows in the waiting tone: nothing runs, and nothing is done either. One whose stop was
- * never confirmed shows in the tone of work that needs a look.
+ * never confirmed shows in the tone of work that needs a look, and stuck work in the tone of a failure.
  */
 export const roomTone = (status: RoomStatus): RowStatus =>
-  status === "unresolved" ? "blocked" : status === "cancelling" || status === "cancelled" ? "waiting" : status;
+  status === "stuck"
+    ? "failed"
+    : status === "unresolved"
+      ? "blocked"
+      : status === "cancelling" || status === "cancelled"
+        ? "waiting"
+        : status;
 
 export const roomStatusLabel = (status: RoomStatus): string =>
-  status === "cancelling" || status === "cancelled" || status === "unresolved"
+  status === "cancelling" || status === "cancelled" || status === "unresolved" || status === "stuck"
     ? messages.room.status[status]
     : messages.status[status];
 
