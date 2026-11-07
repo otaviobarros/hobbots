@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import {
   AnyOperation,
   CharmId,
@@ -36,7 +36,7 @@ import { type CanonicalPath, isInside, PathResolver, type ScopeGitResources } fr
  */
 
 /** Bumped whenever the rules below change meaning, so older decisions name the rules they followed. */
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 
 /** Everything a decision depends on. Folders are canonical as stored; the engine resolves them again. */
 export interface PolicyContext {
@@ -68,6 +68,23 @@ export interface PolicyContext {
    * answers anything.
    */
   readonly grants?: ReadonlyArray<Grant>;
+  /**
+   * Where the runtime keeps this session's own saved output: a command's or tool's output too large
+   * to return inline, which the runtime tells the hob to read from there (Claude Code's
+   * `tool-results`). The hob may read files there and run commands in it, never change them with its
+   * file tools. They name the session, not the policy, so they are left out of the policy version.
+   */
+  readonly runtimeOutputs?: ReadonlyArray<RuntimeOutput>;
+}
+
+/**
+ * A folder of the runtime's saved output, below a root the hob's commands cannot replace (its
+ * runtime folder). Everything between the two may be the hob's to write, so the folder counts only
+ * when no link lies on the way from the root to it: a link there could name another session's.
+ */
+export interface RuntimeOutput {
+  readonly root: string;
+  readonly folder: string;
 }
 
 export const FileOperation = Schema.Literals(["read-files", "edit-files", "delete-files"]);
@@ -153,6 +170,8 @@ export const ReasonCode = Schema.Literals([
   "data-folder",
   /** `.git/hooks` and `.git/config` are read-only, since Git would later run them outside the sandbox. */
   "protected-path",
+  /** The runtime's saved output of the session is read-only: hobs read it, never change it. */
+  "runtime-output",
   "unresolvable-path",
   "no-target",
   "needs-sandbox",
@@ -198,6 +217,8 @@ export type PolicyVerdict = typeof PolicyVerdict.Type;
 export interface ResolvedScope {
   readonly folders: ReadonlyArray<string>;
   readonly dataFolder: string;
+  /** The runtime's saved output of the session (`PolicyContext.runtimeOutputs`), read-only. */
+  readonly runtimeOutputs?: ReadonlyArray<string>;
 }
 
 /** A path as requested and its canonical form, or null when it could not be resolved. */
@@ -237,9 +258,10 @@ export type ResolvedRequest =
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
  * Grants are left out: they are read again for every call and never pin a version (ADR 015). The
- * hub's tailnet hosts are left out too: they follow Tailscale, not the policy.
+ * hub's tailnet hosts are left out too: they follow Tailscale, not the policy, and so is the
+ * runtime's saved output, which follows the session.
  */
-export const policyVersion = ({ grants, hubHosts, ...inputs }: PolicyContext): string =>
+export const policyVersion = ({ grants, hubHosts, runtimeOutputs, ...inputs }: PolicyContext): string =>
   `r${RULES_VERSION}-${createHash("sha256").update(stableJson(inputs)).digest("hex").slice(0, 16)}`;
 
 interface Layered {
@@ -352,8 +374,12 @@ const deny = (operation: AnyOperation, code: ReasonCode, message: string): Answe
   message,
 });
 
-/** Places a canonical target in the hob's scope: inside a folder (and which), or why not. */
-const locate = (scope: ResolvedScope, target: ResolvedTarget): Located | Answer => {
+/**
+ * Places a canonical target in the hob's scope: inside a folder (and which), or why not. With
+ * `outputs`, the runtime's saved output of the session counts too, for reading files and running
+ * commands only: for a push or a Charm it is outside the hob's folders.
+ */
+const locate = (scope: ResolvedScope, target: ResolvedTarget, outputs = false): Located | Answer => {
   if (target.canonical === null) {
     return deny(
       "outside-folders",
@@ -370,15 +396,17 @@ const locate = (scope: ResolvedScope, target: ResolvedTarget): Located | Answer 
     );
   }
   const folder = scope.folders.find((f) => isInside(canonical, f));
-  if (folder === undefined) {
-    return deny("outside-folders", "outside-folders", `${canonical.path} is outside this hob's folders.`);
-  }
-  return { folder, canonical };
+  if (folder !== undefined) return { folder, canonical };
+  const output = outputs ? scope.runtimeOutputs?.find((f) => isInside(canonical, f)) : undefined;
+  if (output !== undefined) return { folder: output, canonical, runtimeOutput: true };
+  return deny("outside-folders", "outside-folders", `${canonical.path} is outside this hob's folders.`);
 };
 
 interface Located {
   readonly folder: string;
   readonly canonical: CanonicalPath;
+  /** In the runtime's saved output of the session, which is read-only and named by no grant. */
+  readonly runtimeOutput?: true;
 }
 
 const located = (value: Located | Answer): value is Located => "folder" in value;
@@ -414,9 +442,15 @@ const fileTarget = (
   target: ResolvedTarget,
   exact = true,
 ): Answer => {
-  const place = locate(scope, target);
+  const place = locate(scope, target, true);
   // Every preset answers Deny outside the folders, and the narrowing layers cannot widen it.
   if (!located(place)) return place;
+  if (place.runtimeOutput) {
+    // A grant would name one session's folder, so nothing is offered beyond once.
+    if (operation === "read-files") return fromLayers(context, operation);
+    const message = `${place.canonical.path} holds output your runtime saved, which hobs can only read.`;
+    return deny(operation, "runtime-output", message);
+  }
   if (operation !== "read-files") {
     const { canonical } = place;
     // Changing a folder changes everything in it, so a protected path below the target counts too.
@@ -524,11 +558,15 @@ const evaluateCommand = (
   scope: ResolvedScope,
   request: Extract<ResolvedRequest, { readonly _tag: "Command" }>,
 ): Evaluated => {
-  const place = locate(scope, request.cwd);
+  const place = locate(scope, request.cwd, true);
   const answer = !located(place)
     ? place
     : (needsSandbox(context, request.operation) ??
-      fromLayers(context, request.operation, commandSite(request.operation, place.canonical, request.words)));
+      fromLayers(
+        context,
+        request.operation,
+        place.runtimeOutput ? null : commandSite(request.operation, place.canonical, request.words),
+      ));
   return { targets: [request.cwd.canonical?.path ?? request.cwd.input], answers: [answer] };
 };
 
@@ -756,11 +794,28 @@ export class PolicyEngine extends Context.Service<
               Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
             );
 
+      /**
+       * A saved-output folder's canonical path, or null when it is not below its root or a link lies
+       * on the way to it, so its canonical path is not its root's followed by the same names.
+       */
+      const output = Effect.fnUntraced(function* ({ root, folder: path }: RuntimeOutput) {
+        const below = relative(root, path);
+        if (!isAbsolute(root) || below === "" || below.startsWith("..") || isAbsolute(below)) return null;
+        const [base, resolved] = yield* Effect.all([folder(root), folder(path)]);
+        if (base.canonical === null || resolved.canonical === null) return null;
+        const expected = join(base.canonical.path, below);
+        const exact =
+          isInside(resolved.canonical, expected) &&
+          isInside({ ...resolved.canonical, path: expected }, resolved.canonical.path);
+        return exact ? resolved.canonical.path : null;
+      });
+
       const scopeOf = Effect.fnUntraced(function* (context: PolicyContext) {
         const shared = yield* Effect.forEach(context.sharedFolders, folder);
         const hidden = yield* Effect.forEach(context.hob.hiddenSharedFolders, folder);
         const own = yield* Effect.forEach(context.hob.ownFolders, folder);
         const data = yield* folder(context.dataFolder);
+        const outputs = yield* Effect.forEach(context.runtimeOutputs ?? [], output);
         const same = (a: CanonicalPath, b: CanonicalPath | null) =>
           b !== null && isInside(a, b.path) && isInside(b, a.path);
         const visible = shared.filter(
@@ -770,7 +825,11 @@ export class PolicyEngine extends Context.Service<
         const canonicalFolders = [...visible, ...own].flatMap((f) => (f.canonical === null ? [] : [f.canonical]));
         const folders = canonicalFolders.map((f) => f.path);
         // An unresolvable data folder keeps its stored form, which is still refused.
-        const scope = { folders, dataFolder: data.canonical?.path ?? context.dataFolder } satisfies ResolvedScope;
+        const scope = {
+          folders,
+          dataFolder: data.canonical?.path ?? context.dataFolder,
+          runtimeOutputs: outputs.flatMap((path) => (path === null ? [] : [path])),
+        } satisfies ResolvedScope;
         return { scope, canonicalFolders };
       });
 

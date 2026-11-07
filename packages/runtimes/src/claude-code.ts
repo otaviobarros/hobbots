@@ -48,7 +48,13 @@ import {
   stableJson,
   unreportedPlan,
 } from "@hobbots/domain";
-import { type PolicyContext, PolicyEngine, type PolicyVerdict, policyVersion } from "@hobbots/permissions";
+import {
+  type PolicyContext,
+  PolicyEngine,
+  type PolicyVerdict,
+  policyVersion,
+  type RuntimeOutput,
+} from "@hobbots/permissions";
 import { type Duration, Effect, Layer, Queue, Stream } from "effect";
 import {
   type CallDecision,
@@ -83,7 +89,7 @@ import {
 } from "./sandbox.ts";
 import { askedMount, holdSkillFolder, skillFolderScope } from "./skills.ts";
 import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
-import { fullToolOutput } from "./tool-output.ts";
+import { fullToolOutput, savedOutputFolder } from "./tool-output.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
@@ -882,6 +888,10 @@ export const policyHooks = (
   const notes = new Map<string, string>();
   // Each call as the hook saw it, so the permission callback decides the same call in the same folder.
   const seen = new Map<string, ToolCall>();
+  // Where Claude Code saves this session's large outputs, which the hob may read (#1153).
+  let outputs: ReadonlyArray<RuntimeOutput> = [];
+  const context = (): PolicyContext =>
+    outputs.length === 0 ? turn.context : { ...turn.context, runtimeOutputs: outputs };
   // Answers whether the call may run: it is recorded first when the turn records calls (EX-004).
   const begin = async (id: string, tool: string, input: Record<string, unknown>, verdict: PolicyVerdict) => {
     // A command's folder is the one its call was decided on.
@@ -928,6 +938,8 @@ export const policyHooks = (
 
   const preToolUse: HookCallback = async (input): Promise<HookJSONOutput> => {
     if (input.hook_event_name !== "PreToolUse") return {};
+    const saved = savedOutputFolder(turn.runtimeFolder, input);
+    if (saved !== undefined) outputs = [{ root: turn.runtimeFolder, folder: saved }];
     const tool = input.tool_name;
     // The hub decides its own tools' calls (ADR 018); the turn allows them by name.
     if (hubToolOf(tool) !== null) return {};
@@ -939,7 +951,7 @@ export const policyHooks = (
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
     const decision = await Effect.runPromise(
-      decideCall(engine, turn.context, null, call, report, turn.commitsAs, redaction, turn.steersPush, turn.initTool),
+      decideCall(engine, context(), null, call, report, turn.commitsAs, redaction, turn.steersPush, turn.initTool),
     ).catch(() => failed(tool));
     if (decision._tag === "Run") {
       if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
@@ -1020,17 +1032,7 @@ export const policyHooks = (
     const call = { id: options.toolUseID, tool, input, cwd: hooked?.cwd ?? (turn.folders[0] as string) };
     // An aborted call stops waiting, which expires its request.
     const decision = await Effect.runPromise(
-      decideCall(
-        engine,
-        turn.context,
-        approvals,
-        call,
-        report,
-        turn.commitsAs,
-        redaction,
-        turn.steersPush,
-        turn.initTool,
-      ),
+      decideCall(engine, context(), approvals, call, report, turn.commitsAs, redaction, turn.steersPush, turn.initTool),
       {
         signal: options.signal,
       },

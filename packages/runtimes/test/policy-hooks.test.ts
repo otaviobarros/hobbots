@@ -185,6 +185,67 @@ describe("Claude Code tool calls under the policy hook", () => {
     }
   });
 
+  // covers PE-002, PE-005
+  it("[TC-PE-463] lets a hob read the output Claude Code saved for its session, and nothing else in its runtime folder", async () => {
+    const turn = toolTurn(access(), "on");
+    if (turn === null) throw new Error("expected a tool turn");
+    const sessions = join(turn.runtimeFolder, "projects", "-project");
+    const saved = join(sessions, "s1", "tool-results");
+    const other = join(sessions, "s0", "tool-results");
+    mkdirSync(saved, { recursive: true });
+    mkdirSync(other, { recursive: true });
+    writeFileSync(join(saved, "b1.txt"), "whole output");
+    writeFileSync(join(other, "b0.txt"), "an older session");
+    const { hooks, canUseTool } = policyHooks(engine, turn, () => {});
+    const [pre] = hooks.PreToolUse?.[0]?.hooks ?? [];
+    const signal = new AbortController().signal;
+    const decided = async (tool: string, toolInput: Record<string, unknown>, session = "s1") => {
+      const input = {
+        session_id: session,
+        transcript_path: join(sessions, `${session}.jsonl`),
+        cwd: project,
+        tool_name: tool,
+        tool_input: toolInput,
+      };
+      const output = await pre?.({ ...input, tool_use_id: "t1", hook_event_name: "PreToolUse" } as HookInput, "t1", {
+        signal,
+      });
+      return (output as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput
+        ?.permissionDecision;
+    };
+    expect(await decided("Read", { file_path: join(saved, "b1.txt") })).toBe("allow");
+    expect(await decided("Bash", { command: `cd "${saved}" && head -50 b1.txt` })).toBe("allow");
+    expect(await decided("Write", { file_path: join(saved, "b1.txt") })).toBe("deny");
+    expect(await decided("Read", { file_path: join(other, "b0.txt") })).toBe("deny");
+    expect(await decided("Read", { file_path: join(turn.runtimeFolder, "settings.json") })).toBe("deny");
+    // The permission callback decides under the same session's folder.
+    const options = { signal, toolUseID: "t2" } as Parameters<typeof canUseTool>[2];
+    expect(await canUseTool("Read", { file_path: join(saved, "b1.txt") }, options)).toMatchObject({
+      behavior: "allow",
+    });
+    // A session folder a command made a link to an older session's opens nothing.
+    symlinkSync(join(sessions, "s0"), join(sessions, "s9"));
+    expect(await decided("Read", { file_path: join(sessions, "s9", "tool-results", "b0.txt") }, "s9")).toBe("deny");
+    // A session outside the hob's own configuration folder names no folder.
+    const elsewhere = toolTurn(access(), "on");
+    if (elsewhere === null) throw new Error("expected a tool turn");
+    const fresh = policyHooks(engine, elsewhere, () => {}).hooks.PreToolUse?.[0]?.hooks[0];
+    const foreign = await fresh?.(
+      {
+        session_id: "s1",
+        transcript_path: join(outside, "projects", "-project", "s1.jsonl"),
+        cwd: project,
+        tool_name: "Read",
+        tool_input: { file_path: join(saved, "b1.txt") },
+        tool_use_id: "t3",
+        hook_event_name: "PreToolUse",
+      } as HookInput,
+      "t3",
+      { signal },
+    );
+    expect(foreign).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+  });
+
   // covers PE-003
   it("[TC-PE-014] does not run a call that needs approval on a turn that cannot ask", async () => {
     const result = await call("Bash", { command: "pnpm test && git push origin main" });
