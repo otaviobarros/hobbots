@@ -1,21 +1,17 @@
-import { AgentId, CharmCall, type CharmDeclaration, EMPTY_HOB_POLICY, MessageId } from "@hobbots/domain";
-import { Cause, Effect, Exit, Layer, Schedule, Schema } from "effect";
+import { AgentId, CharmCall, EMPTY_HOB_POLICY, MessageId } from "@hobbots/domain";
+import { Cause, Effect, Exit, Layer, Schedule } from "effect";
 import { describe, expect, it } from "vitest";
 import {
-  type AskableVerdict,
-  type Charm,
   Charms,
   type CharmTurn,
-  defineCharm,
   HUB_TOOL_NAME_MAX,
   type HubTools,
-  hubAction,
   hubCallStep,
   joinHubTools,
   makeRedactor,
   type ToolAccess,
 } from "../src/index.ts";
-import { charmToolsFor, memoryCharmCalls } from "../src/testing.ts";
+import { charmToolsFor, fakeCharm, memoryCharmCalls } from "../src/testing.ts";
 
 // The Charm registry (ADR 031), with two fake Charms, Pip and Rook, each with a read and a write.
 
@@ -23,90 +19,6 @@ const set = (owner: string, names: ReadonlyArray<string>): HubTools => ({
   tools: names.map((name) => ({ name, description: name, inputSchema: { type: "object" }, label: name })),
   call: (name) => Effect.succeed({ text: `${owner} ${name}`, refused: false }),
 });
-
-const allowed = (operation: `${string}.${string}`): AskableVerdict => ({
-  decision: "allow",
-  operation,
-  reason: { message: "The policy allows it." },
-  targets: [],
-  onceOnly: false,
-  grantable: false,
-  rules: [],
-  grantIds: [],
-  policyVersion: "v1",
-});
-
-const declaration = (id: string): CharmDeclaration => ({
-  id,
-  operations: ["read", "write"].map((operation) => ({
-    id: `${id}.${operation}` as const,
-    words: `${operation} with ${id}`,
-    presets: { careful: "allow", balanced: "allow", trusting: "allow" },
-    site: [],
-    onceOnly: false,
-    actsAsIdentity: false,
-  })),
-  takesOver: [],
-});
-
-const tool = (name: string) => ({ name, description: name, inputSchema: { type: "object" }, label: name });
-
-interface FakeCharm {
-  readonly id: string;
-  readonly name: string;
-  /** Its tools' names, `<id>_read` and `<id>_write` unless given. */
-  readonly read?: string;
-  readonly write?: string;
-  readonly connected?: boolean;
-}
-
-/** A Charm whose read answers its name, and whose write ends uncertain and is found applied when read back. */
-const fakeCharm = (charm: FakeCharm): Effect.Effect<Charm> => {
-  const prefix = charm.id.replaceAll("-", "_");
-  const read = charm.read ?? `${prefix}_read`;
-  const write = charm.write ?? `${prefix}_write`;
-  const request = (operation: string) => ({
-    _tag: "Charm",
-    charm: charm.id,
-    operation: `${charm.id}.${operation}`,
-    site: {},
-  });
-  return Effect.succeed(
-    defineCharm({
-      declaration: declaration(charm.id),
-      name: charm.name,
-      actions: [
-        hubAction({
-          tool: tool(read),
-          input: Schema.Struct({}),
-          effect: "read",
-          otherwise: `${charm.name} cannot be read`,
-          plan: () => Effect.succeed({ request: request("read"), card: { arguments: {} }, send: Effect.succeed(read) }),
-        }),
-        hubAction({
-          tool: tool(write),
-          input: Schema.Struct({}),
-          effect: "write",
-          otherwise: `nothing was written to ${charm.name}`,
-          readBack: () => Effect.succeed(true),
-          plan: () =>
-            Effect.succeed({
-              request: request("write"),
-              card: { arguments: {} },
-              write: {
-                site: charm.id,
-                recorded: {},
-                appliedText: `${charm.name} shows it took effect.`,
-                send: Effect.succeed({ _tag: "Uncertain", text: "No answer." } as const),
-              },
-            }),
-        }),
-      ],
-      decide: (_approvals, _base, planned) => () => Effect.succeed(allowed(planned.operation as `${string}.${string}`)),
-      connected: () => Effect.succeed(charm.connected ?? true),
-    }),
-  );
-};
 
 const PIP = fakeCharm({ id: "pip", name: "Pip" });
 const ROOK = fakeCharm({ id: "rook", name: "Rook" });

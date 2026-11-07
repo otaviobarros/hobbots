@@ -5,6 +5,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
   CharmDeclarations,
+  Charms,
   ChatService,
   GrantService,
   HobAdmission,
@@ -14,6 +15,7 @@ import {
   PermissionSummary,
   RuntimeAdapter,
 } from "@hobbots/agents";
+import { fakeCharm, memoryCharmCalls } from "@hobbots/agents/testing";
 import { GITHUB_CHARM } from "@hobbots/charms";
 import { type Agent, type Message, PRESET_DECISIONS, roleFields } from "@hobbots/domain";
 import {
@@ -78,8 +80,16 @@ let replyGate: Promise<void>;
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
+// The Charms the hub declares to the policy: the GitHub Charm's declaration alone, unless a test
+// registers its own Charms.
+const GITHUB_DECLARED = Layer.succeed(CharmDeclarations, [GITHUB_CHARM]);
+
 // Starts the hub; `legacyFolders` are shared folders stored as an earlier version saved them, as typed.
-const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailable" = "on") => {
+const start = (
+  legacyFolders?: ReadonlyArray<string>,
+  sandbox: "on" | "unavailable" = "on",
+  charms: typeof GITHUB_DECLARED | Layer.Layer<Charms> = GITHUB_DECLARED,
+) => {
   replyGate = Promise.resolve();
   const fake = makeFakeRuntime({ sandbox });
   const runtime = Layer.succeed(RuntimeAdapter, {
@@ -128,7 +138,7 @@ const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailab
           ),
           EventBus.layer,
           HobAdmission.layer,
-          Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
+          charms,
           NodeFolderChecks,
           runtime,
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
@@ -292,6 +302,33 @@ describe("a hob's folders", () => {
       configVersion: 4,
       policy: { charms: { granted: ["github"] } },
     });
+  });
+
+  // covers AG-004, PE-002, ADR 031
+  it("[TC-PE-511] lets a hob be granted a Charm that is only registered, and rules on the operations it declares", async () => {
+    await dispose();
+    // Rook is registered with the Charm registry and declared nowhere else.
+    start(
+      undefined,
+      "on",
+      Charms.layer([fakeCharm({ id: "rook", name: "Rook" })]).pipe(Layer.provide(memoryCharmCalls())),
+    );
+    const agent = await newHob();
+    const granted = await request("PATCH", permissions(agent), { charms: { granted: ["rook"] } });
+    expect(granted).toMatchObject({ status: 200, body: { policy: { charms: { granted: ["rook"] } } } });
+    // Its operations are the policy's: each has its preset's answer, and an override that narrows one is kept.
+    const narrowed = await request("PATCH", permissions(agent), { charms: { overrides: { "rook.write": "ask" } } });
+    expect(narrowed).toMatchObject({
+      status: 200,
+      body: { policy: { charms: { overrides: { "rook.write": "ask" } } } },
+    });
+    expect((await request("GET", permissions(agent))).body.decisions).toMatchObject({
+      "rook.read": "allow",
+      "rook.write": "ask",
+    });
+    // A Charm the registry does not hold is refused, the GitHub Charm included.
+    const github = await request("PATCH", permissions(agent), { charms: { granted: ["rook", "github"] } });
+    expect(github).toMatchObject({ status: 400, body: { _tag: "UnknownCharm", charms: ["github"] } });
   });
 
   // covers AG-004

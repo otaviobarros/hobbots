@@ -7,7 +7,6 @@ import {
   ActivityRecorder,
   ApprovalService,
   CharmCallService,
-  CharmDeclarations,
   Charms,
   ChatService,
   CommitIdentityQuestions,
@@ -29,7 +28,6 @@ import {
   TaskFiles,
 } from "@hobbots/agents";
 import {
-  GITHUB_CHARM,
   GitHubAccountLive,
   GitHubApiNode,
   GitHubCharm,
@@ -377,7 +375,8 @@ const ServerLive = Layer.unwrap(
     );
     const charmFolder = join(dataDir, "charms", "github");
     // The Charm registry (ADR 031): every Charm the hub holds, registered once, with one never-twice
-    // runner for all of them. The GitHub Charm is the only one yet.
+    // runner for all of them. It declares them to the policy too, so registering a Charm here is all
+    // it takes for a hob to be granted it. The GitHub Charm is the only one yet.
     const HubCharms = Charms.layer([GitHubCharm]).pipe(
       Layer.provide(
         Layer.mergeAll(
@@ -569,8 +568,6 @@ const ServerLive = Layer.unwrap(
             ]),
             // The whole output of long tool calls, which their steps show cut.
             ToolLogsLive(join(dataDir, "tool-logs")),
-            // The Charms the hub holds, as they declare themselves to the policy (ADR 031).
-            Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
           ),
         ),
       );

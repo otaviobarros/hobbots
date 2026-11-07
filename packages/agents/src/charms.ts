@@ -14,6 +14,7 @@ import {
 import { Context, Effect, Layer, Option, Schema, type Scope } from "effect";
 import type { AskableVerdict } from "./asking.ts";
 import { type CharmCallRunner, makeCharmCallRunner, type ReadBack } from "./charm-calls.ts";
+import { CharmDeclarations } from "./grants.ts";
 import {
   type HubAction,
   type HubActionEffect,
@@ -239,11 +240,12 @@ export class Charms extends Context.Service<
   /**
    * Registers `charms`, with one never-twice runner for all of them, built from every Charm's
    * read-backs. A tool name two of them share, or a built-in hub tool's, or one longer than
-   * `HUB_TOOL_NAME_MAX`, stops the hub with an error that names it.
+   * `HUB_TOOL_NAME_MAX`, stops the hub with an error that names it. It also provides
+   * `CharmDeclarations` from the same Charms, so a Charm registered here is the policy's too: its id
+   * can be granted, and its operations can be ruled on, without being declared anywhere else.
    */
   static readonly layer = <R>(charms: ReadonlyArray<Effect.Effect<Charm, never, R>>) =>
-    Layer.effect(
-      Charms,
+    Layer.effectContext(
       Effect.gen(function* () {
         const registered = yield* Effect.all(charms);
         const problem = charmsProblem(registered);
@@ -276,7 +278,7 @@ export class Charms extends Context.Service<
           };
         };
 
-        return Charms.of({
+        const service = Charms.of({
           charms: registered,
           forTurn: (turn, offer) =>
             Effect.gen(function* () {
@@ -291,6 +293,12 @@ export class Charms extends Context.Service<
               return sets;
             }),
         });
+        return Context.make(Charms, service).pipe(
+          Context.add(
+            CharmDeclarations,
+            registered.map((charm) => charm.declaration),
+          ),
+        );
       }),
     );
 }

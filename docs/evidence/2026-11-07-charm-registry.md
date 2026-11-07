@@ -3,7 +3,7 @@
 - **Date:** 2026-11-07
 - **Issue:** [#620](https://github.com/otaviobarros/hobbots/issues/620)
 - **Pull request:** opened from `claude/project-thread-tozd4q`
-- **Commit:** the branch's head, with a clean tree
+- **Commit:** first run on `029b2c51f939db2aff17a41fb1b6df311bd61396`; the suites below re-ran on the commit after it, which adds `[TC-PE-511]`, with a clean tree
 - **Setup:** Linux x86_64 container, Node 22.23.4. The registry suites ran with fake Charms, the real GitHub Charm against a fake GitHub, the fake runtime, the real policy engine and in-memory call records; the persistence and server suites ran on SQLite and on PostgreSQL 16 (the same environment `pnpm test:pg` sets, on a local server instead of Docker). No account, real model or real GitHub was used.
 - **Result:** Passed with gaps: the Charms are a list registered once, a hob holds a set of Charm ids, a duplicate or over-long tool name stops the hub, taking a Charm away stops the hob's running turn, and one never-twice runner serves every Charm; the GitHub Charm behaves as before.
 
@@ -18,6 +18,7 @@
 | `[TC-PE-504]`, `[TC-PE-505]` | `narrows` stops a turn when a Charm is taken away or a Charm operation's answer narrows, and not when one is given or widens | ✅ |
 | `[TC-PE-506]` | Taking a Charm away revokes the grants that relied on it: its sites and the built-in requests it takes over | ✅ |
 | `[TC-PE-507]` | Charms are granted by id through the API, keep their overrides, and a Charm the hub does not hold is refused | ✅ |
+| `[TC-PE-511]` | A Charm registered with the registry and declared nowhere else is granted through the API, its operations get their preset answers and a narrowing override, and a Charm the registry does not hold is refused. It fails when the hub's declarations are supplied apart from the registry | ✅ |
 | `[TC-PE-508]` | Through the hub with the fake runtime, a running turn stops once its hob loses a Charm, and goes on when it gains one | ✅ |
 | `[TC-PE-509]` | The real GitHub Charm registered beside a fake second Charm: both offered to a hob holding both, only one to a hob holding one | ✅ |
 | `[TC-PE-510]` | Policies stored or journaled with `githubCharm` decode to the set it meant, and the flag is never written again | ✅ |
