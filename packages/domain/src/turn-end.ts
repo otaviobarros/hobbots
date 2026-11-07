@@ -71,7 +71,10 @@ export interface TurnEndInput {
   readonly carried: ReadonlySet<string>;
   /** The root's state before the turn, which a turn that recorded no wait gives back. */
   readonly was?: TaskState;
-  /** What the turn last reported in its Attempt, other than progress: a step that stopped on a finding or blocker is held (#667). */
+  /**
+   * What the turn last reported in its Attempt, other than progress: a step that stopped on a finding
+   * or blocker is held (#667), and a member that reported a blocker is blocked on it (#1086).
+   */
   readonly lastReport?: CheckpointKind;
   /** A member's turn that ran because its last one was sent back to finish properly (#1086). */
   readonly sentBack?: boolean;
@@ -130,12 +133,19 @@ const heldOpen = (task: Task, open: ReadonlyArray<LedgerEntry>): TaskMove => {
  * A member's Task after its turn: a failed turn leaves its work to be delivered again; a stopped one
  * waits for it. A Task completes only by `complete_task` (#1086): a reply with nothing open sends its
  * member back once to call it or report a blocker, and a second such reply blocks the Task with the
- * reply as why, so its lead reads what the member said rather than a Task shown done.
+ * reply as why, so its lead reads what the member said rather than a Task shown done. One that
+ * reported a blocker is blocked on it, which its lead already heard, and is not sent back.
  */
-const memberAfter = (task: Task, ending: TurnEnding, open: ReadonlyArray<LedgerEntry>, sentBack: boolean): TaskMove => {
+const memberAfter = (
+  task: Task,
+  ending: TurnEnding,
+  open: ReadonlyArray<LedgerEntry>,
+  { sentBack, lastReport }: { readonly sentBack: boolean; readonly lastReport: CheckpointKind | undefined },
+): TaskMove => {
   if (ending._tag === "Failed") return STAY;
   if (ending._tag === "Stopped") return task.state === "active" ? move("waiting") : STAY;
   if (open.length > 0) return heldOpen(task, open);
+  if (lastReport === "blocker") return task.state === "blocked" ? STAY : move("blocked");
   if (!sentBack) return SEND_BACK;
   return task.state === "blocked" ? STAY : move("blocked", endedUnfinished(ending.text.trim()));
 };
@@ -175,7 +185,7 @@ const taskAfter = (input: TurnEndInput): TaskMove => {
           }
         : move("failed");
     case "member":
-      return memberAfter(task, ending, open, input.sentBack === true);
+      return memberAfter(task, ending, open, { sentBack: input.sentBack === true, lastReport: input.lastReport });
     case "root":
       return rootAfter(task, open, input.was);
   }

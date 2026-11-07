@@ -302,6 +302,23 @@ describe("turnEnded", () => {
       "stay",
       "→waiting",
     ]);
+    // A blocker it reported, in the turn or the one it was sent back for, blocks it on that blocker,
+    // which its lead already heard: no send-back, and no second blocker of the hub's own (#1086).
+    const reported = (sentBack: boolean, lastReport: "blocker" | "finding", state: TaskState = "active") =>
+      turnEnded({
+        runner: "member",
+        task: task(state),
+        ending: unfinished,
+        ledger: [],
+        carried: new Set(),
+        sentBack,
+        lastReport,
+      }).task;
+    expect(reported(false, "blocker")).toEqual({ _tag: "Move", to: "blocked" });
+    expect(reported(true, "blocker")).toEqual({ _tag: "Move", to: "blocked" });
+    expect(shown(reported(false, "blocker", "blocked"))).toBe("stay");
+    // A finding is not a blocker: it still sends the member back to finish.
+    expect(shown(reported(false, "finding"))).toBe("back");
     // A step and the root never send back.
     expect(shown(decide("step", "active", unfinished).task)).toBe("complete|→failed");
     expect(shown(decide("root", "active", unfinished).task)).toBe("stay");

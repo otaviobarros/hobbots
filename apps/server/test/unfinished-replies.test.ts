@@ -32,6 +32,17 @@ const delegated = send([
   hub("wait_for", { key: "wait", tasks: ["$notes.task_id"] }),
 ]);
 
+/** The blocker a member reports when it cannot finish. */
+const STUCK = { key: "stuck", kind: "blocker", summary: "The commit hook rejects RELEASE.md" } as const;
+
+/** The summaries of the blockers on Pip's Task, oldest first. */
+const blockersOf = (tree: TaskTree) => {
+  const pip = ownedBy(tree, PIP);
+  return tree.checkpoints
+    .filter((each) => each.taskId === pip?.id && each.kind === "blocker")
+    .map((each) => each.summary);
+};
+
 const RUNTIMES: ReadonlyArray<RuntimeKind> = ["claude-code", "codex"];
 
 describe.each(RUNTIMES)("a member's turn that ends without complete_task, on %s", (runtime) => {
@@ -74,5 +85,71 @@ describe.each(RUNTIMES)("a member's turn that ends without complete_task, on %s"
     // Its lead reads the member's own words as the blocker, not a Task shown done.
     const blocker = blocked.checkpoints.find((each) => each.taskId === pip?.id && each.kind === "blocker");
     expect(`${blocker?.summary} ${blocker?.detail ?? ""}`).toContain("Its member's last reply: Echo:");
+  }, 30_000);
+
+  // covers OR-004, EX-002, IN-004
+  it("[TC-OR-651] blocks the Task on the blocker its member reported, with no send-back and no blocker of the hub's own", async () => {
+    const party = partyHub({ members: runtime });
+    dispose = party.dispose;
+    const { run, requests } = party;
+    await run(
+      send([
+        "Ship the release notes",
+        hub("delegate_task", {
+          key: "notes",
+          hob: "Pip",
+          brief: ["Write RELEASE.md, then commit it", hub("report_checkpoint", STUCK)].join("\n"),
+        }),
+        hub("wait_for", { key: "wait", tasks: ["$notes.task_id"] }),
+      ]),
+    );
+    const blocked = await run(treeWhen((tree) => ownedBy(tree, PIP)?.state === "blocked" && idle(tree, PIP)));
+    expect(requests.filter((each) => each.prompt.includes(SENT_BACK))).toEqual([]);
+    expect(blockersOf(blocked)).toEqual([STUCK.summary]);
+  }, 30_000);
+
+  // covers OR-004, EX-002, IN-004
+  it("[TC-OR-652] blocks the Task on the blocker its member reports once sent back, and adds none of its own", async () => {
+    const party = partyHub({ members: runtime, repliesWhenSentBack: true });
+    dispose = party.dispose;
+    const { run, requests, reactions } = party;
+    reactions.push({ on: SENT_BACK, lines: [hub("report_checkpoint", STUCK)] });
+    await run(delegated);
+    const blocked = await run(treeWhen((tree) => ownedBy(tree, PIP)?.state === "blocked" && idle(tree, PIP)));
+    expect(requests.filter((each) => each.prompt.includes(SENT_BACK))).toHaveLength(1);
+    expect(blockersOf(blocked)).toEqual([STUCK.summary]);
+    expect(attemptsOf(blocked, PIP)).toEqual([[1, "completed"]]);
+  }, 30_000);
+
+  // covers OR-004, EX-002
+  it("[TC-OR-653] counts only what the member reported since its turn began, not a blocker an earlier turn of its Attempt cleared", async () => {
+    const party = partyHub({ members: runtime });
+    dispose = party.dispose;
+    const { run, requests } = party;
+    // Pip reports a blocker and asks Frodo, whose answer starts the turn Pip goes on in.
+    await run(
+      send([
+        "Ship the release notes",
+        hub("delegate_task", {
+          key: "notes",
+          hob: "Pip",
+          brief: [
+            "Write RELEASE.md, then commit it",
+            hub("report_checkpoint", STUCK),
+            hub("ask", { key: "which", question: "May I skip the commit hook?" }),
+          ].join("\n"),
+        }),
+        hub("wait_for", { key: "wait", tasks: ["$notes.task_id"] }),
+      ]),
+    );
+    const asked = await run(treeWhen((tree) => tree.questions.length === 1 && idle(tree, PIP)));
+    const question = asked.questions[0];
+    if (question === undefined) throw new Error("no question");
+    await run(send(["Answer Pip", hub("answer", { key: "yes", question_id: question.id, answer: "Yes, skip it" })]));
+    const done = await run(treeWhen((tree) => ownedBy(tree, PIP)?.state === "completed" && idle(tree, PIP)));
+    // The turn after the answer was sent back and finished, rather than blocked on the old blocker.
+    expect(ownedBy(done, PIP)?.result?.summary).toBe("Done as briefed");
+    expect(requests.filter((each) => each.prompt.includes(SENT_BACK))).toHaveLength(1);
+    expect(attemptsOf(done, PIP)).toEqual([[1, "completed"]]);
   }, 30_000);
 });

@@ -194,7 +194,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
     attemptId: AttemptId,
     ending: Ending,
     work: CarriedWork,
-    sentBack = false,
+    { sentBack = false, startedAt }: { readonly sentBack?: boolean; readonly startedAt?: string } = {},
   ): Effect.Effect<CarriedEnd | typeof SENT_BACK> =>
     Effect.gen(function* () {
       const at = yield* nowIso;
@@ -208,6 +208,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
             : { _tag: "Replied", text: deps.redactor.text(ending.text) },
         carried: work.holding,
         sentBack,
+        ...(startedAt === undefined ? {} : { startedAt }),
         at,
       });
       if (result.sentBack) return SENT_BACK;
@@ -382,11 +383,15 @@ export const makeMemberRunner = (deps: MemberDeps) => {
             true,
           );
           // A session that never started has nothing to go on in, so its reply is settled as sent back already.
-          const settled = yield* settle(task.id, attemptId, ending, work, session === null);
+          // What the member reported since this turn began says how it ended, not what earlier turns did.
+          const settled = yield* settle(task.id, attemptId, ending, work, {
+            sentBack: session === null,
+            startedAt: at,
+          });
           if (settled !== SENT_BACK) return settled;
           // Its reply did not complete the Task: the same session goes on once, told to say how it ended (#1086).
           const again = yield* turnWith(sendBackPrompt(task, lead), session, false);
-          return (yield* settle(task.id, attemptId, again, work, true)) as CarriedEnd;
+          return (yield* settle(task.id, attemptId, again, work, { sentBack: true, startedAt: at })) as CarriedEnd;
         }).pipe(Effect.ensuring(handle === null ? Effect.void : handle.close));
       }).pipe(
         // A bug in a turn must not leave its Attempt live, which would hold the Task from any other turn.

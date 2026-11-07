@@ -39,6 +39,11 @@ export interface TurnOnTask {
   readonly was?: TaskState;
   /** A member's turn that ran because its last one was sent back to finish properly (#1086). */
   readonly sentBack?: boolean;
+  /**
+   * When the member's turn began, before any turn it was sent back for: only what it reported since
+   * says how it ended, since its Attempt keeps the reports of earlier turns it resumed (#1086).
+   */
+  readonly startedAt?: string;
   readonly at: string;
 }
 
@@ -113,6 +118,7 @@ const inputOf = (turn: TurnOnTask, task: Task, tree: TaskTree, open: TurnEndInpu
     (each) =>
       each.taskId === task.id &&
       each.attemptId === turn.attemptId &&
+      (turn.startedAt === undefined || each.createdAt >= turn.startedAt) &&
       each.source !== "automatic" &&
       each.kind !== "progress",
   );
