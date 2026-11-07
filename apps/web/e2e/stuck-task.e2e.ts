@@ -46,7 +46,7 @@ const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringi
  * Aldric brings in Quill, whose one try at the copy is cut off, so it is stuck: each item has one
  * delivery here. The cut-off runs once, so whoever takes the copy next gets through it.
  */
-const stuckCopy = async (page: import("@playwright/test").Page) => {
+const stuckCopy = async (page: import("@playwright/test").Page, after: ReadonlyArray<string> = []) => {
   dataDir = emptyDataDir();
   const current = await startHub(dataDir, { HOBBOTS_BACKPACK_MAX_DELIVERIES: "1" });
   hub = current;
@@ -59,7 +59,11 @@ const stuckCopy = async (page: import("@playwright/test").Page) => {
   await composer.fill(
     [
       "Plan the launch",
-      script("delegate_task", { key: "copy", hob: "Quill", brief: "Draft the landing copy\nfake:once fake:fail" }),
+      script("delegate_task", {
+        key: "copy",
+        hob: "Quill",
+        brief: ["Draft the landing copy", "fake:once fake:fail", ...after].join("\n"),
+      }),
     ].join("\n"),
   );
   await composer.press("Enter");
@@ -144,19 +148,26 @@ test("[TC-IN-1087-04] says when Retry in a stuck lane is not saved, and when the
 });
 
 // covers IN-007, UX-004
-test("[TC-IN-1087-05] Retry in a stuck lane gives the hob a fresh try, which gets through, so the lane and the Inbox stop saying it is stuck", async ({
+test("[TC-IN-1087-05] Retry in a stuck lane gives the hob a fresh try, which finishes the Task, so the lane and the Inbox stop saying it is stuck", async ({
   page,
 }) => {
-  const current = await stuckCopy(page);
+  // The try that is cut off keeps the completion for the session's next turn: only the fresh try
+  // Retry sends can finish the Task, so its result shows that the try ran.
+  const finish = script("complete_task", { key: "copy-done", summary: "Three headlines." });
+  const current = await stuckCopy(page, [`fake:once fake:then ${finish}`]);
   await openRoom(page, "Plan the launch");
   await expect(laneHead(page, "Quill")).toContainText("Stuck");
+  // The cut-off try finished nothing: no result yet, only the failed first Attempt.
+  await expect(lane(page, "Quill")).not.toContainText("Result · ");
+  await expect(lane(page, "Quill")).toContainText("Attempt 1 failed.");
   const sent = page.waitForResponse(
     (response) => /\/api\/blockers\/[^/]+\/decision$/.test(response.url()) && response.ok(),
   );
   await (await laneMenu(page, "Quill")).getByRole("menuitem", { name: "Retry" }).click();
   await sent;
-  // The try runs once the hub saved it: the stuck work leaves the lane and the Inbox.
-  await expect(laneHead(page, "Quill")).not.toContainText("Stuck", { timeout: 20_000 });
+  // The fresh try runs and finishes the Task with its result, and the stuck work leaves the lane and the Inbox.
+  await expect(lane(page, "Quill")).toContainText("Result · Three headlines.", { timeout: 20_000 });
+  await expect(laneHead(page, "Quill")).not.toContainText("Stuck");
   await expect(lane(page, "Quill").getByRole("alert")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
   await expect((await laneMenu(page, "Quill")).getByRole("menuitem", { name: "Retry" })).toHaveCount(0);
