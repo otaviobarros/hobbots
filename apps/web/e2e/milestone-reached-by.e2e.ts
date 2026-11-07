@@ -54,6 +54,7 @@ const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.string
 // covers OR-002, UX-002
 test("[TC-OR-655] a member's milestone reached through its lead's work shows on its Task as reached by the lead", async ({
   page,
+  scan,
 }) => {
   test.setTimeout(120_000);
   const current = await startHub(dataDir);
@@ -99,6 +100,7 @@ test("[TC-OR-655] a member's milestone reached through its lead's work shows on 
     ].join("\n"),
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
+  await scan();
   await composer.press("Enter");
 
   await openRoom(page, "Ship the page");
@@ -110,4 +112,5 @@ test("[TC-OR-655] a member's milestone reached through its lead's work shows on 
   await expect(happened.getByText("Milestone: Committed")).toBeVisible();
   await expect(happened.getByText("Reached by Frodo")).toHaveCount(1);
   await expect(happened.getByText("Milestone: Committed").locator("..")).toContainText("Reached by Frodo");
+  await scan();
 });
