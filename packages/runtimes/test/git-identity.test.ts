@@ -168,7 +168,7 @@ describe("Commits a hob makes without its own app", () => {
     const none = settled(empty, null);
     expect(none.as._tag).toBe("Missing");
     expect(none.note).toBe(NO_GIT_IDENTITY_NOTE);
-    expect(none.note).toContain("Do not ask the user yourself");
+    expect(none.note).toContain("Do not ask the user or another hob who to commit as");
     const noHome = { HOME: empty };
     expect(commit(repo, "open", { ...none.env(UNSIGNED_GIT), ...noHome })).toMatch(/^failed: .*no email was given/s);
     // The user gave Hobbots one: it is used, name and email, and the hob is told so.
