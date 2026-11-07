@@ -131,3 +131,28 @@ test("[TC-UX-1063-02] Edit then add keeps your draft through a refusal and adds 
   await expect(review.getByRole("status")).toHaveText("Not now. Ada is told, and the library is unchanged.");
   await expect(page.getByRole("link", { name: "Hobbots inbox, something needs you" })).toHaveCount(0);
 });
+
+// covers ADR 029 (Proactive hobs), #1063
+test("[TC-UX-1063-03] a proposals list that fails to load never reads as all clear, and Try again shows what waits", async ({
+  page,
+}) => {
+  const { url, propose } = await proposalHub();
+  await propose("release-steps", "Tag the release.");
+  // The proposals fail to read until the hub answers again; every other read of the Inbox answers.
+  let down = true;
+  await page.route("**/api/skill-proposals", async (route) => {
+    if (down) await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+    else await route.continue();
+  });
+  await page.goto(`${url}/#/inbox`);
+
+  const failed = page.getByRole("alert").filter({ hasText: "Hobbots could not read the skills your hobs propose." });
+  await expect(failed).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Nothing needs you")).toHaveCount(0);
+  down = false;
+  await failed.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("link", { name: /Ada drafted a skill: Release steps/ })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(failed).toHaveCount(0);
+});

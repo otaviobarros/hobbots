@@ -25,6 +25,7 @@ import {
   SkillProposalNotFound,
   type SkillProposalState,
   type SkillRevisionHash,
+  SkillSourceUnreadable,
   skillProposalOpen,
   skillProposalStale,
 } from "@hobbots/domain";
@@ -106,13 +107,23 @@ export const SkillReviewsLive = Layer.effect(
         const newest = skill?.latest ?? proposal.base.hash;
         const revision = yield* library.revision(proposal.skillId, newest);
         const folder = yield* files.folder(newest);
-        if (revision === null || folder === null) return [skillMd];
+        // Files the hub cannot find are not files the skill lacks: the add is refused, never made without them.
+        if (revision === null || folder === null) {
+          return yield* new SkillSourceUnreadable({
+            message: `The files of ${proposal.name}'s newest revision are not on this hub, so the change cannot keep them.`,
+          });
+        }
         const kept = yield* Effect.forEach(
           revision.files.filter((file) => file.path !== "SKILL.md"),
           (file) =>
-            Effect.map(
-              Effect.promise(() => readFile(join(folder, file.path))),
-              (bytes): WrittenFile => ({ path: file.path, bytes, executable: file.mode === "executable" }),
+            Effect.tryPromise({
+              try: () => readFile(join(folder, file.path)),
+              catch: () =>
+                new SkillSourceUnreadable({
+                  message: `${file.path} of ${proposal.name}'s newest revision could not be read, so the change cannot keep it.`,
+                }),
+            }).pipe(
+              Effect.map((bytes): WrittenFile => ({ path: file.path, bytes, executable: file.mode === "executable" })),
             ),
         );
         return [skillMd, ...kept];
@@ -191,6 +202,10 @@ export const SkillReviewsLive = Layer.effect(
         yield* write(proposal).pipe(
           Effect.catch((error: SkillReviewError) =>
             error._tag === "SkillProposalClosed" ? Effect.void : Effect.asVoid(sendBack(proposal)),
+          ),
+          // One proposal that cannot be finished never keeps the next from being finished.
+          Effect.catchCause((cause) =>
+            Effect.logWarning(`Could not finish adding skill proposal ${proposal.id}`, cause),
           ),
         );
       }

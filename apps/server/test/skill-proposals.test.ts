@@ -16,6 +16,8 @@ import {
   PermissionSummary,
   SkillFiles,
   SkillLibrary,
+  SkillProposalLog,
+  SkillReviews,
   SkillTools,
   type ToolAccess,
 } from "@hobbots/agents";
@@ -31,6 +33,7 @@ import {
   SKILL_PROPOSE_TOOL,
   SKILL_REQUEST_TOOL,
   SKILL_SEARCH_TOOL,
+  SkillProposal,
   type ThreadId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
@@ -405,6 +408,77 @@ describe("hobs proposing skills", () => {
     await request("POST", `/api/skill-proposals/${review?.proposal.id}/decline`);
     expect((await propose("review-steps")).text).toContain("turned down a new skill, review-steps");
     expect(await proposals()).toHaveLength(2);
+  });
+
+  // covers ADR 029 (Proactive hobs), #1063
+  it("[TC-AG-152] a change whose kept files cannot be read is refused, waits again, and leaves the library as it was", async () => {
+    const [first] = await runtime.runPromise(
+      SkillImporter.use((importer) =>
+        importer.add(
+          {
+            _tag: "Written",
+            files: [
+              { path: "SKILL.md", text: skillMd("release-steps") },
+              { path: "scripts/tag.sh", text: "#!/bin/sh\ngit tag v1\n", executable: true },
+            ],
+          },
+          { by: { _tag: "You" } },
+        ),
+      ),
+    );
+    await propose("release-steps", { basedOn: 1, body: "Tag, then push." });
+    const [waiting] = await proposals();
+    // The script goes missing from the revision's folder, as a damaged disk would lose it.
+    const folder = await runtime.runPromise(SkillFiles.use((store) => store.folder(first?.revision.hash as never)));
+    if (folder === null) throw new Error("No files for r1");
+    unlock(folder);
+    fs.rmSync(path.join(folder, "scripts/tag.sh"));
+    const refused = await request("POST", `/api/skill-proposals/${waiting?.proposal.id}/add`, {});
+    expect(refused).toMatchObject({ status: 422, body: { _tag: "SkillSourceNotRead" } });
+    expect(refused.body.message).toContain("scripts/tag.sh");
+    expect((await proposals())[0]?.proposal.state).toBe("waiting");
+    expect((await library())[0]?.revisions).toBe(1);
+
+    // The whole folder gone is refused the same way: a missing folder is not a skill without files.
+    fs.rmSync(folder, { recursive: true, force: true });
+    expect(await request("POST", `/api/skill-proposals/${waiting?.proposal.id}/add`, {})).toMatchObject({
+      status: 422,
+      body: { _tag: "SkillSourceNotRead" },
+    });
+    expect((await proposals())[0]?.proposal.state).toBe("waiting");
+  });
+
+  // covers ADR 029 (Proactive hobs), #1063
+  it("[TC-AG-153] a hub that stopped while adding finishes each proposal it can, and sends back one it cannot", async () => {
+    const [first] = await runtime.runPromise(
+      SkillImporter.use((importer) =>
+        importer.add(
+          {
+            _tag: "Written",
+            files: [
+              { path: "SKILL.md", text: skillMd("release-steps") },
+              { path: "notes.md", text: "- Tag\n" },
+            ],
+          },
+          { by: { _tag: "You" } },
+        ),
+      ),
+    );
+    await propose("release-steps", { basedOn: 1, body: "Tag, then push." });
+    await propose("review-steps");
+    // Both were claimed when the hub stopped, before either was written.
+    for (const view of await proposals()) {
+      await runtime.runPromise(
+        SkillProposalLog.use((log) => log.move(new SkillProposal({ ...view.proposal, state: "adding" }), ["waiting"])),
+      );
+    }
+    const folder = await runtime.runPromise(SkillFiles.use((store) => store.folder(first?.revision.hash as never)));
+    if (folder === null) throw new Error("No files for r1");
+    unlock(folder);
+    fs.rmSync(path.join(folder, "notes.md"));
+    await runtime.runPromise(SkillReviews.use((reviews) => reviews.recover));
+    const states = Object.fromEntries((await proposals()).map((view) => [view.proposal.name, view.proposal.state]));
+    expect(states).toEqual({ "release-steps": "waiting", "review-steps": "added" });
   });
 
   // covers ADR 029 (Proactive hobs), #1063

@@ -81,6 +81,7 @@ export const messages = {
   emptyHistoryHint: "Requests you allow or deny, and ones that expire, show here.",
   pickOne: "Pick a request to see what it would do.",
   failed: "Hobbots could not read the Inbox.",
+  skillsFailed: "Hobbots could not read the skills your hobs propose.",
   requestFailed: "Hobbots could not read this request. It stays open here until you try again or pick another.",
   retry: "Try again",
   detail: {
