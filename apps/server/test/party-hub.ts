@@ -51,7 +51,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeAdditionalRuntimesLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
-import { ActivityStoreLive, FolderScannerLive } from "@hobbots/workbench";
+import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
 import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { DispatcherHostLive } from "../src/backpack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
@@ -151,6 +151,8 @@ export const partyHub = (
     readonly repliesWhenSentBack?: boolean;
     /** The runtime the party's members run on; Frodo always runs on Claude Code. */
     readonly members?: RuntimeKind;
+    /** Whether the hub reads the hob's folders, as `complete_task` does to check the files a Task returns. */
+    readonly files?: boolean;
   } = {},
 ) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -261,6 +263,7 @@ export const partyHub = (
         tools,
         HobAdmission.layer,
         recording,
+        options.files === true ? HobFilesLive : Layer.empty,
         options.memory === undefined
           ? Layer.empty
           : Layer.mergeAll(Layer.succeed(MemoryStore, options.memory), MemoryBriefReceipts.layer),
@@ -280,7 +283,7 @@ export const partyHub = (
     await runtime.dispose();
     rmSync(temp, { recursive: true, force: true });
   };
-  return { run, dispose, requests, answers, reactions, gates };
+  return { run, dispose, requests, answers, reactions, gates, project, temp };
 };
 
 export const isLive = (state: string) => state === "starting" || state === "running";
