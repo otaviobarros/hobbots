@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import {
+  Charms as AgentCharms,
   ChatService,
   FolderSandbox,
   HobAdmission,
@@ -14,7 +15,7 @@ import {
   GITHUB_CHARM,
   GitHubAccountLive,
   GitHubApi,
-  GitHubCharmTools,
+  GitHubCharm,
   GitHubConnection,
   GitHubSignInFake,
   GitPushLive,
@@ -101,7 +102,7 @@ describe("The GitHub Charm on a hub", () => {
             policy: {
               preset: "balanced" as const,
               sharedFolders: [folder],
-              hob: { ...EMPTY_HOB_POLICY, ...(githubCharm ? {} : { githubCharm: false }) },
+              hob: { ...EMPTY_HOB_POLICY, ...(githubCharm ? {} : { charms: { granted: [] } }) },
               dataFolder: join(root, "data"),
               restrictions: [],
               // What the hub's tools give a turn: the operations its Charms declare (ADR 031).
@@ -116,7 +117,7 @@ describe("The GitHub Charm on a hub", () => {
     const Account = GitHubAccountLive({ clientId: "Iv23liHobbots", slug: "hobbots", environmentToken: null }).pipe(
       Layer.provide(Layer.mergeAll(KeychainMemory, GitHubSignInFake, LocalGitHubSignInsNone, GitHubAccountRepository)),
     );
-    const Charms = GitHubCharmTools.pipe(
+    const Charms = AgentCharms.layer([GitHubCharm]).pipe(
       Layer.provide(
         Layer.mergeAll(
           FakeGitHub,

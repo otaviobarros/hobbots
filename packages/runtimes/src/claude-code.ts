@@ -1141,7 +1141,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       hubTools: {
         status: "verified",
         evidence:
-          "Charms and coordination tools are served as an MCP server on Claude Code's control channel and decided by the hub.",
+          "Each Charm the hob holds, Local Git, Memory, Skills and the Task tools are served as an MCP server on Claude Code's control channel and decided by the hub.",
       },
       toolEvents: {
         status: "verified",

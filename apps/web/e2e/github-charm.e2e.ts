@@ -84,7 +84,7 @@ test("[TC-GEN-024] connects GitHub in Settings and grants it per hob on the Char
   await expect(page.getByRole("region", { name: "GitHub Charm" }).getByText("Off", { exact: true })).toBeVisible();
   await expect
     .poll(() => api<{ policy: object }>(current, "GET", `/api/agents/${pip.id}/permissions`))
-    .toMatchObject({ policy: { githubCharm: false } });
+    .toMatchObject({ policy: { charms: { granted: [] } } });
   await grant.click();
   await expect(grant).toBeChecked();
 

@@ -1,6 +1,8 @@
 import type { HobPermissions, UpdateHobPermissionsPayload } from "@hobbots/api";
 import {
   type AnyOperation,
+  type CharmId,
+  heldCharms,
   isCharmOperation,
   isNarrowerOrEqual,
   type PolicyDecision,
@@ -212,6 +214,19 @@ export const pickAnswer = (
   const { [operation]: _, ...rest } = permissions.policy.overrides;
   return { overrides: follows ? rest : { ...rest, [operation]: answer } };
 };
+
+/**
+ * The change that grants the hob `charm` or takes it away (ADR 031): the Charms it holds, with
+ * `charm` added or left out.
+ */
+export const switchCharm = (permissions: HobPermissions, charm: CharmId, on: boolean): UpdateHobPermissionsPayload => {
+  const others = heldCharms(permissions.policy).filter((id) => id !== charm);
+  return { charms: { granted: on ? [...others, charm] : others } };
+};
+
+/** Whether the hob holds `charm` once a change on its way to the hub lands, or undefined when it leaves the Charms as they are. */
+export const sendingCharm = (sending: UpdateHobPermissionsPayload | undefined, charm: CharmId): boolean | undefined =>
+  sending?.charms?.granted?.includes(charm);
 
 /** The answer a change on its way to the hub gives an operation, or undefined when it leaves it as it is. */
 export const sendingAnswer = (

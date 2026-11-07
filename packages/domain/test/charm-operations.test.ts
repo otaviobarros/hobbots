@@ -5,6 +5,7 @@ import {
   DelegationAuthority,
   GrantRule,
   HobPolicy,
+  heldCharms,
   hobAnswers,
   presetDecision,
   StoredOperation,
@@ -60,6 +61,27 @@ describe("Charm operations", () => {
     // Encoded and read again, a policy keeps its overrides where they were.
     expect(Schema.decodeUnknownSync(HobPolicy)(Schema.encodeSync(HobPolicy)(policy))).toEqual(policy);
     expect(hobAnswers(policy)).toEqual({ push: "ask", "github.comment": "deny" });
+  });
+
+  // covers DP-051, ADR 031
+  it("[TC-PE-510] reads the GitHub Charm flag stored or journaled before the Charm-id grant as the set it meant", () => {
+    const decode = Schema.decodeUnknownSync(HobPolicy);
+    const base = { ownFolders: [], hiddenSharedFolders: [], overrides: {} };
+    const off = decode({ ...base, githubCharm: false, overrides: { "comment-github": "deny" } });
+    expect(off).toEqual({ ...base, charms: { granted: [], overrides: { "github.comment": "deny" } } });
+    expect(heldCharms(off)).toEqual([]);
+    // On, or never set, the hob holds the GitHub Charm every hob started with.
+    for (const on of [decode({ ...base, githubCharm: true }), decode(base)]) {
+      expect(on).toEqual(base);
+      expect(heldCharms(on)).toEqual(["github"]);
+    }
+    // A set given beside the old flag wins, and the flag is never written again.
+    const both = decode({ ...base, githubCharm: false, charms: { granted: ["github"] } });
+    expect(heldCharms(both)).toEqual(["github"]);
+    expect(Schema.encodeSync(HobPolicy)(off)).toEqual({
+      ...base,
+      charms: { granted: [], overrides: { "github.comment": "deny" } },
+    });
   });
 
   it("answers a Charm operation by its declaration, and one nothing declares with Never", () => {

@@ -1,6 +1,7 @@
 import { CharmCall, isCharmCallSettled } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { CharmCalls } from "./charm-calls.ts";
+import { type CharmOffer, Charms, type CharmTurn, joinHubTools } from "./charms.ts";
 
 /** Test doubles for the agents package's ports, for this package's tests and its callers'. */
 
@@ -59,3 +60,10 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) => {
     }),
   );
 };
+
+/**
+ * The Charm tools a turn is offered, joined into one set as a runtime gets them beside the other hub
+ * tools, or null when it is offered none.
+ */
+export const charmToolsFor = (turn: CharmTurn, offer?: CharmOffer) =>
+  Charms.use((charms) => charms.forTurn(turn, offer)).pipe(Effect.map(joinHubTools));

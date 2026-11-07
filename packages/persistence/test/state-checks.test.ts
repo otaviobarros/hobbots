@@ -26,10 +26,13 @@ const agent = new Agent({
   createdAt: at,
 });
 
-// Keeps 0047 too: the repository that seeds the hob writes its name with each version.
+// Keeps 0047 and 0076 too: the repository that seeds the hob writes its name with each version, and
+// its Charms.
 const migrationsBefore = (id: string) =>
   Object.fromEntries(
-    Object.entries(migrations).filter(([key]) => key < id || key === "0047_versioned_name"),
+    Object.entries(migrations).filter(
+      ([key]) => key < id || key === "0047_versioned_name" || key === "0076_charm_grants",
+    ),
   ) as typeof migrations;
 
 /** One row in each of the four tables, written as raw SQL so nothing but the database checks it. */

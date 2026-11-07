@@ -2,6 +2,7 @@ import {
   type Agent,
   type AgentId,
   type AnyOperation,
+  heldCharms,
   hobAnswers,
   isNarrowerOrEqual,
   narrowest,
@@ -65,14 +66,17 @@ const answeredOperations = (policy: ToolPolicy): ReadonlyArray<AnyOperation> => 
 
 /**
  * Whether `after` takes away anything `before` gave: a folder, the tools altogether, the user's
- * signing agent (`signCommits`), or an operation whose answer gets narrower. A turn granted `before`
- * must then stop, since its calls and commands already run under what it was given (PE-008).
+ * signing agent (`signCommits`), a Charm the hob held (ADR 031), or an operation whose answer gets
+ * narrower, a Charm's included. A turn granted `before` must then stop, since its calls and commands
+ * already run under what it was given (PE-008).
  */
 export const narrows = (before: ToolAccess | null, after: ToolAccess | null): boolean => {
   if (before === null) return false;
   if (after === null || after.policy.dataFolder !== before.policy.dataFolder) return true;
   if (before.folders.some((folder) => !after.folders.includes(folder))) return true;
   if (before.policy.hob.signCommits === true && after.policy.hob.signCommits !== true) return true;
+  const held = heldCharms(after.policy.hob);
+  if (heldCharms(before.policy.hob).some((charm) => !held.includes(charm))) return true;
   // A Charm operation no longer declared answers Never, so losing a Charm narrows too.
   return answeredOperations(before.policy).some((operation) => {
     const was = operationDecision(before.policy, operation);

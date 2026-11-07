@@ -8,7 +8,7 @@ import {
   type ApprovalAction,
   type ApprovalOutcome,
   actionDigest,
-  CharmTools,
+  Charms,
   DeviceRepository,
   GrantService,
   HobbotsRepository,
@@ -48,7 +48,7 @@ import {
   ACTION_PERMISSIONS,
   GitHubApi,
   GitHubApiLive,
-  GitHubCharmTools,
+  GitHubCharm,
   GitHubConnection,
   GitHubCredential,
   GitHubCredentialPerHob,
@@ -65,7 +65,7 @@ import {
   KeychainError,
 } from "../src/index.ts";
 import { type FakeGitHub, startFakeGitHub } from "../src/testing.ts";
-import { directSandbox, memoryCharmCalls } from "./support.ts";
+import { charmToolsFor, directSandbox, memoryCharmCalls } from "./support.ts";
 
 // A hob's own GitHub App (#223, ADR 022) against the fake GitHub of #325: the manifest, the state,
 // the code exchange, the key in the keychain, the installations and removing it all again.
@@ -1111,7 +1111,7 @@ const accessIn = (
 
 /** The GitHub Charm's tools over the hob's app and GitHub's REST API, for hobs working in `folder`. */
 const writesLayer = (w: World, calls: Array<string>, folder: string, repository: GitHubRepository) =>
-  GitHubCharmTools.pipe(
+  Charms.layer([GitHubCharm]).pipe(
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(
@@ -1142,7 +1142,7 @@ const callAs = (agentId: AgentId, w: World, folder: string, tool: string, input:
     const asked: Array<ApprovalAction> = [];
     const events: Array<RuntimeEvent> = [];
     const access = accessIn(folder, turn.preset ?? "balanced", turn.overrides);
-    const tools = yield* (yield* CharmTools).forTurn({
+    const tools = yield* charmToolsFor({
       agentId,
       threadId: ThreadId.make("t1"),
       messageId: MessageId.make("m1"),
@@ -1184,7 +1184,7 @@ const callAs = (agentId: AgentId, w: World, folder: string, tool: string, input:
     return { answer, asked, labels, summary: asked.map((card) => String(card.arguments.summary)) };
   });
 
-type WriteServices = CharmTools | CharmServices;
+type WriteServices = Charms | CharmServices;
 
 const runWrites = <A, E>(
   w: World,
@@ -1476,7 +1476,7 @@ const pushLayer = (
   repository: GitHubRepository,
   wrap: (git: GitPush["Service"]) => GitPush["Service"] = (git) => git,
 ) =>
-  GitHubCharmTools.pipe(
+  Charms.layer([GitHubCharm]).pipe(
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(
@@ -1541,7 +1541,7 @@ const pushAs = (
 ) =>
   Effect.gen(function* () {
     const access = pushAccess(folder);
-    const tools = yield* (yield* CharmTools).forTurn({
+    const tools = yield* charmToolsFor({
       agentId: FRODO,
       threadId: ThreadId.make("t1"),
       messageId: MessageId.make("m1"),
@@ -1573,7 +1573,7 @@ const runPush = <A, E>(
   calls: Array<string>,
   folder: string,
   repository: GitHubRepository,
-  effect: Effect.Effect<A, E, CharmServices | CharmTools>,
+  effect: Effect.Effect<A, E, CharmServices | Charms>,
   wrap?: (git: GitPush["Service"]) => GitPush["Service"],
 ) => Effect.runPromise(Effect.provide(effect, pushLayer(w, calls, folder, repository, wrap)));
 

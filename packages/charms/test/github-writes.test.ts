@@ -6,7 +6,7 @@ import {
   type ApprovalAction,
   type ApprovalOutcome,
   actionDigest,
-  CharmTools,
+  Charms,
   type HubToolAnswer,
   hubCallStep,
   makeRedactor,
@@ -33,14 +33,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   GITHUB_CHARM,
   GitHubApi,
-  GitHubCharmTools,
+  GitHubCharm,
   type GitHubPostedComment,
   type GitHubPullRequest,
   type GitHubWrite,
   GitPushLive,
   GitRemotes,
 } from "../src/index.ts";
-import { directSandbox, fixedCredential, memoryCharmCalls } from "./support.ts";
+import { charmToolsFor, directSandbox, fixedCredential, memoryCharmCalls } from "./support.ts";
 
 const TOKEN = "ghu_writetoken0123456789abcdefghijklmnopqrstu";
 const SECRET = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
@@ -245,7 +245,7 @@ const makeHub = (
   rows = new Map<string, CharmCall>(),
   credential = fixedCredential(TOKEN),
 ) => {
-  const layer = GitHubCharmTools.pipe(
+  const layer = Charms.layer([GitHubCharm]).pipe(
     Layer.provide(
       Layer.mergeAll(
         github.layer,
@@ -264,9 +264,8 @@ const makeHub = (
   );
   const call = (tool: string, input: Record<string, unknown>, turn: Turn = {}) =>
     Effect.gen(function* () {
-      const charms = yield* CharmTools;
       const access = turn.access ?? accessFor();
-      const tools = yield* charms.forTurn({
+      const tools = yield* charmToolsFor({
         agentId: AgentId.make("hob"),
         threadId: ThreadId.make("t1"),
         messageId: MessageId.make("m1"),
