@@ -7,6 +7,8 @@ export const messages = {
   organization: "(from your organization)",
   /** After the skill's name, for a skill from a set: the set it comes from, before the set's revision. */
   fromSet: ({ set }: { set: string }) => `from ${set}`,
+  open: "Open",
+  openLabel: ({ title }: { title: string }) => `Open ${title}`,
   picker: {
     /** The `/` list's name and its heading. */
     label: ({ name }: { name: string }) => `${name}'s skills`,

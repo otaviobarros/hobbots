@@ -1,4 +1,5 @@
 import { skillTitle, type UsedSkill } from "@hobbots/domain";
+import { memberView, type SkillsView, skillView } from "../skills/skills-model.ts";
 import { messages } from "./messages.ts";
 
 /**
@@ -19,3 +20,14 @@ export const usedLine = (used: UsedSkill): { readonly title: string; readonly de
       .join(" "),
   };
 };
+
+/**
+ * Where a used skill's Open goes: its page in the library, or a set's skill's page in its set. An
+ * organization's skill has no page here, so its line has no Open.
+ */
+export const usedPage = (used: UsedSkill): SkillsView | null =>
+  used.source !== "library" || used.skillId === null
+    ? null
+    : used.set === null
+      ? skillView(used.skillId)
+      : memberView(used.skillId, used.name);
