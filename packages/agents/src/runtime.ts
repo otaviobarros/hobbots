@@ -125,6 +125,18 @@ export type RuntimeEvent =
    */
   | { readonly _tag: "ToolUncertain"; readonly id: string; readonly reason: string }
   /**
+   * The model has answered, and the turn stays open only for the started commands `ids`, which are
+   * still running (#1048, #1056). Waiting spends no tokens. When one of them ends the runtime tells
+   * the model in a follow-up within the same turn, and says this again if any are left after it.
+   */
+  | { readonly _tag: "AwaitingCommands"; readonly ids: ReadonlyArray<string> }
+  /**
+   * Hobbots stopped the started command `id`, one the turn waited on, because you pressed Stop
+   * waiting (#1056). Only the hub reports it, never a runtime: it ends the runtime, which stops the
+   * commands it runs on every runtime alike.
+   */
+  | { readonly _tag: "ToolStopped"; readonly id: string }
+  /**
    * The runtime compacted the session: it now holds a summary of what came before, not what it was
    * told, so Hobbots tells it again what it relies on the session to hold (#1027).
    */

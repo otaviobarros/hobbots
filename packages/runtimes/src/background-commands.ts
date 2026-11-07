@@ -112,6 +112,8 @@ export const backgroundCommands = (
       await finish(id, ended);
       return true;
     },
+    /** The calls whose commands still run in the background, which the turn waits on once it replied (#1056). */
+    waiting: (): ReadonlyArray<string> => [...new Set(running.values())],
     /** A task ended: its call, if it was a background command of this turn, is reported finished. */
     ended: async (end: TaskEnd): Promise<void> => {
       let id = running.get(end.task_id);

@@ -11,6 +11,7 @@ export const messages = {
   tags: {
     needsYou: "Needs you",
     working: "Working",
+    onCommand: "Waiting on a command",
     resting: "Resting",
     paused: "Paused",
     failed: "Had a problem",
@@ -25,6 +26,7 @@ export const messages = {
   doing: {
     writing: ({ title }: { title: string }) => `Writing “${title}”`,
     thinking: ({ title }: { title: string }) => `Thinking about “${title}”`,
+    onCommand: ({ title }: { title: string }) => `Waiting on a command in “${title}”`,
     waiting: "Waiting on you",
     asksTo: ({ action }: { action: string }) => `Asks to ${action}`,
     asksYou: ({ text }: { text: string }) => `Asks you: ${text}`,

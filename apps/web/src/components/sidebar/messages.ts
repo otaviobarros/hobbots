@@ -13,6 +13,7 @@ export const messages = {
   state: {
     "needs-you": "Needs you",
     working: "Working",
+    waiting: "Waiting on a command",
     paused: "Paused",
     resting: "Resting",
   },

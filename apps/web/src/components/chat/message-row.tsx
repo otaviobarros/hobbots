@@ -201,6 +201,7 @@ export function QueuedRow({
   message,
   hob,
   replying,
+  waitsFor = null,
   pending,
   onRemove,
   onSendNow,
@@ -208,6 +209,8 @@ export function QueuedRow({
   message: Message;
   hob: Agent;
   replying: boolean;
+  /** Why it waits, while the reply waits only on commands its hob started (#1056). */
+  waitsFor?: string | null;
   pending: boolean;
   onRemove: () => void;
   onSendNow: () => void;
@@ -224,6 +227,7 @@ export function QueuedRow({
       <span className="min-w-24 flex-1 truncate text-text-secondary" title={message.content}>
         {message.content}
       </span>
+      {!paused && waitsFor !== null && <span className="text-meta text-label">{waitsFor}</span>}
       <Button variant="quiet" size="xs" onClick={onRemove} disabled={pending}>
         {messages.queued.remove}
       </Button>

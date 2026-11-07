@@ -1,12 +1,14 @@
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef } from "react";
+import { type KeyboardEvent, useEffect, useLayoutEffect, useRef } from "react";
 import { sendable, useDraft, writeDraft } from "../../api/drafts.ts";
 import type { WaitingPlace } from "../../api/outbox.ts";
+import type { ReplyWait } from "../../lib/reply-wait.ts";
 import { messages } from "../messages.ts";
 import { SkillPickerList, UseSkillButton, useSkillPicker } from "../skill-line/skill-picker.tsx";
 import type { SkillPicking } from "../skill-line/skill-picker-model.ts";
 import { SendIcon } from "./chat-icons.tsx";
+import { BusyHint, StopButton } from "./composer-busy.tsx";
 
 const copy = messages.composer;
 
@@ -30,27 +32,6 @@ const restingHint = (paused: PausedHob | undefined): string => {
 };
 
 /**
- * While a reply runs, the hint is one line that never wraps: a blinking mint dot and who is
- * replying, or when a draft will go. Beside the Quest room it keeps only the dot and one word. The
- * longer sentence is Stop's description.
- */
-function BusyHint({ name, stopping, drafting }: { name: string; stopping: boolean; drafting: boolean }) {
-  const full = stopping ? copy.hintStopping({ name }) : drafting ? copy.hintSendsAfter : copy.hintReplying({ name });
-  return (
-    <span
-      aria-live="polite"
-      className="flex min-w-0 flex-1 items-center justify-end gap-1.5 text-meta whitespace-nowrap text-text-secondary"
-    >
-      {!stopping && <span aria-hidden className="size-2 flex-none animate-hb-blink rounded-dot bg-mint" />}
-      <span className="truncate @max-[480px]/chat:hidden">{full}</span>
-      <span className="hidden truncate @max-[480px]/chat:inline">
-        {stopping ? copy.hintStoppingShort : copy.hintReplyingShort}
-      </span>
-    </span>
-  );
-}
-
-/**
  * Plain text in, exactly as typed: no Markdown, and a paste keeps its text, line breaks and tabs.
  * The input grows with its text up to its height limit and then scrolls. Enter sends, Shift+Enter
  * adds a line, and a key that finishes an IME composition never sends. Each thread keeps its own
@@ -66,6 +47,8 @@ export function Composer({
   sending,
   onSend,
   onStop,
+  wait = null,
+  onStopWaiting,
   paused,
   skills,
 }: {
@@ -82,6 +65,10 @@ export function Composer({
   sending: boolean;
   onSend: (content: string) => void;
   onStop: () => void;
+  /** What the reply waits on once its hob has answered, if only commands keep it open (#1056). */
+  wait?: ReplyWait | null;
+  /** Stop waiting: ends a reply that only waits on commands, keeping its text. */
+  onStopWaiting?: () => void;
   paused?: PausedHob | undefined;
   /** The hob's skills, which `/` picks one of (ADR 029); absent, `/` is plain text. */
   skills?: SkillPicking | undefined;
@@ -101,7 +88,6 @@ export function Composer({
   }, [draft]);
   const closed = paused !== undefined && !paused.canQueue;
   const content = sendable(draft);
-  const stopWhat = useId();
   const sendLabel = busy ? copy.sendAfterReply : copy.send;
 
   // Focus comes back to the input when a reply ends, unless the user has moved it somewhere else
@@ -162,7 +148,7 @@ export function Composer({
             }}
           />
           {busy ? (
-            <BusyHint name={name} stopping={stopping} drafting={content !== ""} />
+            <BusyHint name={name} stopping={stopping} drafting={content !== ""} wait={wait} />
           ) : (
             // Beside the Quest room the chat is narrow, so the keys' hint gives way to the message; a
             // paused hob's hint stays.
@@ -173,21 +159,7 @@ export function Composer({
             </span>
           )}
           {busy && (
-            <>
-              <Button
-                variant="deny"
-                size="bar"
-                onClick={onStop}
-                disabled={stopping}
-                aria-describedby={stopWhat}
-                title={copy.stopDescription({ name })}
-              >
-                {stopping ? copy.stopping : copy.stop}
-              </Button>
-              <span id={stopWhat} hidden>
-                {copy.stopDescription({ name })}
-              </span>
-            </>
+            <StopButton name={name} stopping={stopping} wait={wait} onStop={onStop} onStopWaiting={onStopWaiting} />
           )}
           {paused && (
             <Button

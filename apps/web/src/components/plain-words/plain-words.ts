@@ -200,6 +200,9 @@ export const commandLine = (record: CommandRecord): { readonly text: string; rea
       return { text: said(messages.ran, sense), outcome: "failed" };
     case "uncertain":
       return { text: said(messages.ran, sense), outcome: "unknown" };
+    // You stopped it while its reply waited on it (#1056).
+    case "stopped":
+      return { text: said(messages.ran, sense), outcome: "blocked" };
   }
 };
 

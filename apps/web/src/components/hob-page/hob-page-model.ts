@@ -1,5 +1,6 @@
 import { type Agent, type AgentId, type HistoryFilter, STARTER_ROLES, type Thread } from "@hobbots/domain";
 import { Schema } from "effect";
+import type { ThreadActivity } from "../../api/activity.ts";
 import { firstLine } from "../../lib/format.ts";
 import type { HobNeed, HobState } from "../../lib/hob-state.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
@@ -41,6 +42,8 @@ export const stateTag = (state: HobState, fresh = false): StateTag => {
     case "working":
     case "thinking":
       return { variant: "working", glyph: "●", word: copy.tags.working };
+    case "on-command":
+      return { variant: "working", glyph: "◷", word: copy.tags.onCommand };
     case "failed":
       return { variant: "failed", glyph: "✗", word: copy.tags.failed };
     case "paused":
@@ -88,7 +91,7 @@ export const needLine = (need: HobNeed, hobId: AgentId, nameOf: (id: AgentId) =>
 export const doingOf = (
   state: HobState,
   threads: ReadonlyArray<Pick<Thread, "id" | "title">>,
-  activity: Readonly<Record<string, "thinking" | "working">>,
+  activity: Readonly<Record<string, ThreadActivity>>,
   need?: string,
 ): Doing | null => {
   if (state === "needs-you" || state === "waiting") return { kind: "needs-you", text: need ?? copy.doing.waiting };
@@ -97,6 +100,8 @@ export const doingOf = (
   if (writing) return { kind: "live", text: copy.doing.writing({ title: writing.title }) };
   const thinking = threads.find((thread) => activity[thread.id] === "thinking");
   if (thinking) return { kind: "live", text: copy.doing.thinking({ title: thinking.title }) };
+  const waiting = threads.find((thread) => activity[thread.id] === "waiting");
+  if (waiting) return { kind: "live", text: copy.doing.onCommand({ title: waiting.title }) };
   return null;
 };
 

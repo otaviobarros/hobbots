@@ -289,6 +289,11 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       error: ThreadNotFound,
     }),
+    // Stop waiting: ends a reply that only waits on commands its hob started, keeping its text (#1056).
+    HttpApiEndpoint.post("stopWaiting", "/threads/:threadId/stop-waiting", {
+      params: { threadId: ThreadId },
+      error: ThreadNotFound,
+    }),
     // Resumes a reply that was cut off or ended by the provider's limit, in place.
     HttpApiEndpoint.post("continueReply", "/threads/:threadId/messages/:messageId/continue", {
       params: { threadId: ThreadId, messageId: MessageId },

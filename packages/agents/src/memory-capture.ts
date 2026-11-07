@@ -63,7 +63,7 @@ const PAGE = 200;
 const TEXT_MAX = 8_000;
 
 const ENDED_REPLY: ReadonlySet<MessageStatus> = new Set(["complete", "failed", "stopped", "interrupted", "limited"]);
-const ENDED_STEP: ReadonlySet<ReplyStepState> = new Set(["done", "failed", "denied", "uncertain"]);
+const ENDED_STEP: ReadonlySet<ReplyStepState> = new Set(["done", "failed", "denied", "uncertain", "stopped"]);
 
 /** A save a newer write or save of its page replaced before it reached memory: refused, as a conflict is. */
 const SUPERSEDED = { state: "refused", version: null } as const;

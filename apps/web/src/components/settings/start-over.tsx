@@ -191,7 +191,7 @@ function Working() {
   const names = hobs
     .filter((hob, index) => {
       const state = hobState(hob, threads[index]?.data, activity);
-      return state === "working" || state === "thinking";
+      return state === "working" || state === "thinking" || state === "on-command";
     })
     .map((hob) => hob.name);
   if (names.length === 0) return null;

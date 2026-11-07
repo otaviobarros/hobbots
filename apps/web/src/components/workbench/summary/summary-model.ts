@@ -218,6 +218,7 @@ const STEP_MARK: Readonly<Record<ReplyStep["state"], Mark>> = {
   denied: "failed",
   unfinished: "cancelled",
   uncertain: "unresolved",
+  stopped: "cancelled",
 };
 
 /**

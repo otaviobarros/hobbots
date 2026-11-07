@@ -40,6 +40,7 @@ export const messages = {
     empty: "Nothing to pick up yet. Your chats and quests show here once you start them.",
     writing: "writing a reply…",
     thinking: "thinking…",
+    waiting: "waiting on a command…",
     leads: ({ lead }: { lead: string }) => `${lead} leads it`,
     progress: ({ done, total }: { done: number; total: number }) =>
       `${formatCount(done)} of ${formatCount(total)} done`,

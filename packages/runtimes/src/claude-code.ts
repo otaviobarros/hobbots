@@ -1074,6 +1074,19 @@ export const toolOptions = (
 /** Where a turn's skill folders go: the hob's runtime folder, or the hub's own folder for a chat. */
 const skillsBase = (tools: ToolTurn | null, config: ClaudeCodeConfig) => tools?.runtimeFolder ?? config.workspaceDir;
 
+/**
+ * A run's events, and once a run has replied while background commands still run, that the turn now
+ * waits on them (#1056): Claude Code wakes the session when one ends, so the turn goes on until then.
+ */
+export const awaitingAfter = (
+  events: ReadonlyArray<RuntimeEvent>,
+  background: Pick<BackgroundCommands, "waiting">,
+): ReadonlyArray<RuntimeEvent> => {
+  if (!events.some((event) => event._tag === "Completed")) return events;
+  const ids = background.waiting();
+  return ids.length === 0 ? events : [...events, { _tag: "AwaitingCommands", ids }];
+};
+
 /** Hands a turn's background commands each task end Claude Code reports (#1018). */
 const taskEnds = (background: BackgroundCommands) => (message: unknown) =>
   isTaskEnd(message) ? Effect.promise(() => background.ended(message)) : Effect.void;
@@ -1280,7 +1293,10 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
             // A background command's end arrives as its task's notification.
             Stream.tap(taskEnds(background)),
             Stream.mapEffect((message) =>
-              Effect.try({ try: () => toEvents(message).flatMap(whole.read), catch: errorMessage }),
+              Effect.try({
+                try: () => awaitingAfter(toEvents(message), background).flatMap(whole.read),
+                catch: errorMessage,
+              }),
             ),
             Stream.flattenIterable,
             Stream.catch((error) =>
