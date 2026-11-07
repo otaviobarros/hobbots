@@ -209,6 +209,32 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
       return (yield* items.toItems(rows)).map((item) => ({ item, taskRevision: task.revision }));
     });
 
+  /**
+   * Closes the stuck items about `task` (IN-007): failed, with a blocker that waits for your choice,
+   * once no choice is left to make because the Task ended or, with `from`, because that hob no
+   * longer owns it (#1087). Each resolves as late at `task`'s version, from sequence `first` on, and
+   * its blocker stays unchosen as the record that nobody had to choose.
+   */
+  const closeStuck = (task: Task, from: string | null, first: number) =>
+    Effect.gen(function* () {
+      const at = DateTime.formatIso(yield* DateTime.now);
+      const recipient = from === null ? sql.literal("") : sql`AND recipient_id = ${from}`;
+      const stuck = yield* sql<{ readonly id: string }>`SELECT id FROM backpack_items
+        WHERE task_id = ${task.id} AND state = 'failed' ${recipient}
+          AND EXISTS (SELECT 1 FROM backpack_blockers b WHERE b.item_id = backpack_items.id AND b.decision IS NULL)
+        ORDER BY recorded_sequence`;
+      const disposition = dispositionColumn({ _tag: "late", taskRevision: task.revision });
+      const events: Array<JournaledEvent> = [];
+      for (const { id } of stuck) {
+        yield* sql`UPDATE backpack_items SET state = 'resolved', disposition = ${disposition},
+            updated_at = ${at}, revision = ${first + events.length}
+          WHERE id = ${id}`;
+        const closed = yield* items.item(id as BackpackItemId);
+        if (closed !== undefined) events.push({ _tag: "BackpackItemChanged", item: closed });
+      }
+      return events;
+    });
+
   /** The question items about `task` still waiting unclaimed for a lead, once its questions are withdrawn. Late at the version it ended at. */
   const questionItems = (task: Task) =>
     Effect.gen(function* () {
@@ -224,5 +250,5 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
       call === null ? `attempt:${attemptId}` : `tool:${call.agentId}:${call.key}`,
     );
 
-  return { readFor, consume, retire, settleQuestionCopies, staleItems, questionItems, consumer };
+  return { readFor, consume, retire, settleQuestionCopies, staleItems, closeStuck, questionItems, consumer };
 };

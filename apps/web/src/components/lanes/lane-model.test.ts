@@ -460,6 +460,25 @@ describe("the Quest room's lanes", () => {
     expect(lines(laneOf(room, ADA))).toEqual([`wait ${QUILL}, you`]);
   });
 
+  it("[TC-UX-1087-01] says Stuck in the lane whose Task has stuck work, until the Task ends (#1087)", () => {
+    const room = laneRoom(blackFriday(), [], undefined, new Set([COPY]));
+    expect(laneOf(room, QUILL).status).toBe("stuck");
+    expect(laneOf(room, ALDRIC).status).toBe("running");
+    // A question for you still comes first, and an ended Task is stuck no more.
+    const base = blackFriday();
+    const asked = tree({ ...base, questions: [question(COPY, QUILL, "Which tone?", { recipientId: null })] });
+    expect(laneOf(laneRoom(asked, [], undefined, new Set([COPY])), QUILL).status).toBe("needs-you");
+    const ended = tree({
+      ...base,
+      tasks: base.tasks.map((each) =>
+        each.id === COPY
+          ? task(COPY, { ownerId: QUILL, brief: "Draft the landing copy", state: "completed", second: 2 })
+          : each,
+      ),
+    });
+    expect(laneOf(laneRoom(ended, [], undefined, new Set([COPY])), QUILL).status).not.toBe("stuck");
+  });
+
   it("lights a hob's lane for a question or an approval on any of its Tasks, not only the first", () => {
     const SIGNS = TaskId.make("signs");
     const base = blackFriday();

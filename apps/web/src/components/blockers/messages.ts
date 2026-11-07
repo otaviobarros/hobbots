@@ -43,11 +43,20 @@ export const messages = {
   decided: {
     retry: ({ name }: { name: string }) => `Sent back to ${name} for another try.`,
     dismiss: ({ name }: { name: string }) => `Dismissed ${name}'s stuck work.`,
+    reassign: ({ name }: { name: string }) => `Gave the task to ${name}.`,
   },
   retry: "Retry",
-  reassign: "Reassign",
+  /** Opens the hobs the stuck work's Task can go to, as the lane's menu lists them (#1087). */
+  reassign: "Reassign…",
+  reassignTo: ({ title }: { title: string }) => `Reassign “${title}” to`,
+  reassigning: "Reassigning…",
+  noOneElse: "No other hob can take this task.",
+  readingHobs: "Reading your hobs…",
+  hobsUnread: "Hobbots could not read your hobs.",
+  /** The work's Task tree could not be read, so whether another hob can take it is unknown. */
+  reassignUnread: "Hobbots could not read whether another hob can take this.",
+  tryAgain: "Try again",
   dismiss: "Dismiss",
-  reassignHeld: "Reassign arrives once a task can change owners.",
   openChat: "Open in the chat",
   failed: "Hobbots could not save that. The blocker is read again.",
   retired: ({ name }: { name: string }) => `${name} retired, so this cannot be retried. Dismiss it instead.`,

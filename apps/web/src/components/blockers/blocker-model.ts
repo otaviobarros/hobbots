@@ -1,5 +1,6 @@
-import { type BackpackBlocker, type BackpackItem, openBlocker } from "@hobbots/domain";
+import { type BackpackBlocker, type BackpackItem, openBlocker, type TaskTree } from "@hobbots/domain";
 import { firstLine } from "../../lib/format.ts";
+import { taskControls } from "../quest/control-room.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages;
@@ -34,3 +35,16 @@ export const blockersOn = (
   taskIds: ReadonlySet<string>,
 ): ReadonlyArray<BackpackItem> =>
   items.filter((item) => openBlocker(item) !== undefined && item.taskId !== null && taskIds.has(item.taskId));
+
+/**
+ * The stuck item's Task, in the tree of the thread it belongs to, while that Task can change hands:
+ * the same rule the lane's ⋯ menu offers Reassign… by (#1087). Null otherwise, or until the
+ * thread's Tasks are read.
+ */
+export const reassignable = (trees: ReadonlyArray<TaskTree>, item: BackpackItem) => {
+  for (const tree of trees) {
+    const task = tree.tasks.find((each) => each.id === item.taskId);
+    if (task !== undefined) return taskControls(tree, task).reassign ? { tree, task } : null;
+  }
+  return null;
+};
