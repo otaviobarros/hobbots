@@ -169,8 +169,9 @@ describe("a background command on Claude Code", () => {
 });
 
 /** The events of a fake turn with the given prompt. */
-const fakeTurn = (prompt: string) =>
-  makeFakeRuntime({ engine })
+const fakeTurn = (prompt: string, until?: (event: RuntimeEvent, seen: ReadonlyArray<RuntimeEvent>) => boolean) => {
+  const seen: Array<RuntimeEvent> = [];
+  return makeFakeRuntime({ engine })
     .sendPrompt({
       prompt,
       sessionId: null,
@@ -180,8 +181,14 @@ const fakeTurn = (prompt: string) =>
       effort: null,
       tools: access,
     })
-    .pipe(Stream.runCollect, Effect.runPromise)
+    .pipe(
+      Stream.tap((event) => Effect.sync(() => seen.push(event))),
+      Stream.takeUntil((event) => until?.(event, seen) ?? false),
+      Stream.runCollect,
+      Effect.runPromise,
+    )
     .then((events) => Array.from(events));
+};
 
 describe("a background command on the fake runtime", () => {
   // covers UX-006
@@ -262,5 +269,22 @@ describe("a reply that waits on its background commands (#1056)", () => {
     expect(tags.indexOf("TextDelta")).toBeLessThan(waits);
     expect(tags.indexOf("ToolFinished")).toBeGreaterThan(waits);
     expect(events.at(-1)).toMatchObject({ _tag: "Completed", text: expect.stringContaining("pnpm build ended.") });
+  });
+
+  // covers CH-007
+  it("[TC-RT-1056-04] on the fake runtime, waits again on a command still running once another it waited on ends", async () => {
+    const runs = (input: object) => `fake:run ${JSON.stringify({ background: true, outlives: true, ...input })}`;
+    const waits = (seen: ReadonlyArray<RuntimeEvent>) => seen.filter((event) => event._tag === "AwaitingCommands");
+    const events = await fakeTurn(
+      [runs({ command: "pnpm build", runsFor: "50 millis" }), runs({ command: "pnpm dev" })].join("\n"),
+      (event, seen) => event._tag === "AwaitingCommands" && waits(seen).length === 2,
+    );
+    const tags = events.map((event) => event._tag);
+    expect(waits(events)).toEqual([
+      { _tag: "AwaitingCommands", ids: ["fake-tool-1", "fake-tool-2"] },
+      { _tag: "AwaitingCommands", ids: ["fake-tool-2"] },
+    ]);
+    expect(tags.indexOf("ToolFinished")).toBeLessThan(tags.lastIndexOf("AwaitingCommands"));
+    expect(events.at(-2)).toEqual({ _tag: "TextDelta", text: "\n\npnpm build ended." });
   });
 });

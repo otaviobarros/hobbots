@@ -1,4 +1,4 @@
-import { Deferred, Effect, Stream } from "effect";
+import { Cause, Deferred, Effect, Stream } from "effect";
 import type { RuntimeEvent } from "./runtime.ts";
 
 /**
@@ -42,9 +42,12 @@ export const stoppableWait = <E, R>(
         return Stream.fromIterable(ids.map((id): RuntimeEvent => ({ _tag: "ToolStopped", id })));
       }),
     );
-    return events.pipe(
-      Stream.tap((event) => Effect.sync(() => track(event))),
-      Stream.interruptWhen(Deferred.await(stop)),
+    // Each pull races the stop, rather than `Stream.interruptWhen`, which runs the runtime's stream
+    // ahead of the turn in a fiber of its own: a runtime waits on the turn to have handled an event
+    // (a tool call it records, a hub call it answers) before it goes on.
+    const halted = Effect.flatMap(Deferred.await(stop), () => Cause.done());
+    const tracked = Stream.tap(events, (event) => Effect.sync(() => track(event)));
+    return Stream.transformPull(tracked, (pull) => Effect.succeed(Effect.raceFirst(pull, halted))).pipe(
       Stream.concat(after),
     );
   });

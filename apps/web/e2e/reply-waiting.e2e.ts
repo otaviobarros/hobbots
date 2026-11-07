@@ -13,6 +13,9 @@ test.afterEach(stopAldricHub);
 /** A prompt line that makes the fake run a command, with what it prints and how it exits. */
 const run = (input: object) => `fake:run ${JSON.stringify(input)}`;
 
+// The composer with what waits above it.
+const composerArea = (page: Page) => page.locator("[data-composer]").locator("..");
+
 const composer = (page: Page) => page.getByRole("textbox", { name: /^Message Aldric/ });
 
 const send = async (page: Page, lines: ReadonlyArray<string>) => {
@@ -23,6 +26,7 @@ const send = async (page: Page, lines: ReadonlyArray<string>) => {
 // covers CH-004, CH-007, CH-008
 test("[TC-CH-1056-03] a reply waiting on a command says which one and for how long, and Stop waiting ends it with the command stopped", async ({
   page,
+  scan,
 }) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/new`);
@@ -52,6 +56,19 @@ test("[TC-CH-1056-03] a reply waiting on a command says which one and for how lo
   const queued = page.getByRole("region", { name: "Queued message" });
   await expect(queued).toContainText("Waits its turn");
   await expect(queued).toContainText("Goes when pnpm dev ends, or when you stop waiting.");
+  await scan(composerArea(page));
+  await scan(steps);
+
+  // A Stop waiting the hub never gets says so, and the button is there to try again.
+  await page.route("**/stop-waiting", (route) => route.fulfill({ status: 503, body: "" }), { times: 1 });
+  await stopWaiting.click();
+  const failed = page.getByRole("alert").filter({ hasText: "Hobbots could not stop waiting" });
+  await expect(failed).toHaveText(
+    "Hobbots could not stop waiting, so pnpm dev still runs and Aldric's reply still waits on it. Press Stop waiting to try again.",
+  );
+  await expect(stopWaiting).toBeEnabled();
+  await expect(steps).toContainText("Waiting on pnpm dev");
+  await scan(composerArea(page));
 
   // Stop waiting ends the reply as done: its text stays and the command shows as stopped by you.
   await stopWaiting.click();
@@ -59,6 +76,8 @@ test("[TC-CH-1056-03] a reply waiting on a command says which one and for how lo
   const stoppedStep = page.getByRole("list", { name: "Reply steps" }).filter({ hasText: "Running pnpm dev" });
   await expect(stoppedStep).toContainText("Stopped by you after under a minute, while the reply waited on it.");
   await expect(page.getByText(/You stopped this reply/)).toBeHidden();
+  await expect(failed).toBeHidden();
+  await scan(stoppedStep);
 
   // The Terminal says the same.
   await openWorkbench(page, ticket(page, "Start the dev server"));
@@ -68,4 +87,5 @@ test("[TC-CH-1056-03] a reply waiting on a command says which one and for how lo
   const screen = rows(hobTerminal(panel, "Aldric"));
   await expect(screen).toContainText("$ pnpm dev", { timeout: 20_000 });
   await expect(screen).toContainText("■ Stopped by you · You stopped it while the reply waited on it.");
+  await scan(bench);
 });

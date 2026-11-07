@@ -372,6 +372,40 @@ const backgroundEnds = (runs: ReadonlyArray<BackgroundRun>): Stream.Stream<Runti
   );
 
 /**
+ * What a turn does after writing `reply` while commands it started outlive it, as Claude Code and
+ * Codex do (#1048, #1056): it waits on them, and as each ends it follows up with a line on how it
+ * ended, then waits again on those still running. One that never ends on its own keeps the turn
+ * waiting until you stop waiting. `text` is the whole reply once every command has ended.
+ */
+const waitOn = (
+  reply: string,
+  outliving: ReadonlyArray<BackgroundRun>,
+): { readonly events: Stream.Stream<RuntimeEvent>; readonly text: string } => {
+  const ending = [...outliving].filter((run) => run.endsAt !== null).sort((a, b) => (a.endsAt ?? 0) - (b.endsAt ?? 0));
+  const awaiting = (runs: ReadonlyArray<BackgroundRun>): ReadonlyArray<RuntimeEvent> =>
+    runs.length === 0 ? [] : [{ _tag: "AwaitingCommands", ids: runs.map((run) => run.call.id) }];
+  let text = reply;
+  const steps = ending.map((run, index) => {
+    const line = `${String(run.call.input.command)} ended.`;
+    const delta = text === "" ? line : `\n\n${line}`;
+    text = `${text}${delta}`;
+    const ended = new Set(ending.slice(0, index + 1));
+    return Stream.concat(
+      backgroundEnds([run]),
+      Stream.fromIterable<RuntimeEvent>([
+        { _tag: "TextDelta", text: delta },
+        ...awaiting(outliving.filter((each) => !ended.has(each))),
+      ]),
+    );
+  });
+  const forever = outliving.some((run) => run.endsAt === null);
+  const events = [Stream.fromIterable(awaiting(outliving)), ...steps, forever ? Stream.never : Stream.empty].reduce(
+    (all, next) => Stream.concat(all, next),
+  );
+  return { events, text };
+};
+
+/**
  * How Claude Code's hooks would report the call's end, so the fake's events take the real runtime's
  * path: a command that exits non-zero fails with an `Exit code N` error, and one that exits 0 succeeds
  * with its output.
@@ -734,31 +768,17 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
         (ending === "complete" ? words : words.slice(0, 2)).map((text): RuntimeEvent => ({ _tag: "TextDelta", text })),
       );
       if (ending !== "complete") return deltas;
-      const outliving = background.filter((run) => run.outlives);
-      // The turn waits on what outlives the reply, then tells how each ended, as Claude Code and Codex do.
-      const followUp = outliving.map((run) => `${String(run.call.input.command)} ended.`).join(" ");
-      const text = followUp === "" ? reply : reply === "" ? followUp : `${reply}\n\n${followUp}`;
+      const waited = waitOn(
+        reply,
+        background.filter((run) => run.outlives),
+      );
       const completed: RuntimeEvent = {
         _tag: "Completed",
         sessionId,
-        text,
-        usage: fakeUsage(told, text, known !== undefined),
+        text: waited.text,
+        usage: fakeUsage(told, waited.text, known !== undefined),
       };
-      if (outliving.length === 0) return Stream.concat(deltas, Stream.fromIterable([completed]));
-      return deltas.pipe(
-        Stream.concat(
-          Stream.fromIterable<RuntimeEvent>([{ _tag: "AwaitingCommands", ids: outliving.map((run) => run.call.id) }]),
-        ),
-        Stream.concat(backgroundEnds(outliving)),
-        // One that never ends on its own keeps the turn waiting until you stop waiting.
-        Stream.concat(outliving.some((run) => run.endsAt === null) ? Stream.never : Stream.empty),
-        Stream.concat(
-          Stream.fromIterable<RuntimeEvent>([
-            { _tag: "TextDelta", text: reply === "" ? followUp : `\n\n${followUp}` },
-            completed,
-          ]),
-        ),
-      );
+      return deltas.pipe(Stream.concat(waited.events), Stream.concat(Stream.fromIterable([completed])));
     });
     const failure = fakeFailure(ending);
     const background: Array<BackgroundRun> = [];

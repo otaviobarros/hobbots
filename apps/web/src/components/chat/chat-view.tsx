@@ -86,10 +86,11 @@ const stayAtEnd = (view: HTMLDivElement | null) => {
 
 const copy = messages.chat;
 const queuedCopy = messages.queued;
+const composerCopy = messages.composer;
 
 /** What the header says the hob does while its reply waits only on commands (#1056). */
 const waitingWords = (wait: ReplyWait, now: Date): string => {
-  const time = messages.composer.minutes({ count: minutesSince(wait.since, now) });
+  const time = composerCopy.minutes({ count: minutesSince(wait.since, now) });
   const command = wait.commands.length === 1 ? wait.commands[0] : undefined;
   return command === undefined
     ? copy.waitingOnMany({ count: wait.commands.length, time })
@@ -397,6 +398,11 @@ export function ChatView({
           {error && (
             <p role="alert" className="text-ui text-rose">
               {sendErrorText(error, current)}
+            </p>
+          )}
+          {stopWaiting.isError && wait !== null && (
+            <p role="alert" className="text-ui text-rose">
+              {copy.stopWaitingFailed({ name: current.name, command: waitCommand ?? composerCopy.theCommands })}
             </p>
           )}
           {pause.isError && (

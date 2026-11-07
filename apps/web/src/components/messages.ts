@@ -350,6 +350,8 @@ export const messages = {
     brainUnavailable: "Brain unavailable",
     continueFailed: ({ name, why }: { name: string; why: string }) => `${name} could not continue that reply. ${why}`,
     queueGone: "That message already started or was removed.",
+    stopWaitingFailed: ({ name, command }: { name: string; command: string }) =>
+      `Hobbots could not stop waiting, so ${command} still runs and ${name}'s reply still waits on it. Press Stop waiting to try again.`,
     wakeFailed: ({ name }: { name: string }) => `Hobbots could not wake ${name}. Try again.`,
     brainProblem: ({ name, runtime, problem }: { name: string; runtime: string; problem: string }) =>
       `${name} can't think right now: ${runtime} ${problem}.`,
