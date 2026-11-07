@@ -91,11 +91,13 @@ export const messages = {
       running: ({ time }: { time: string }) => `Running · ${time}`,
       failed: "Failed",
       uncertain: "Cut off",
+      stopped: "Stopped by you",
     },
     /** A line of commands run one after another succeeds by its last one alone (#702). */
     finishedInSequence: "Finished · an earlier part may have failed",
     exitCode: ({ code }: { code: number }) => `exit code ${formatCount(code)}`,
     uncertain: "The turn ended while this ran, so whether it finished is not known.",
+    stopped: "You stopped it while the reply waited on it.",
     ranIn: ({ folder }: { folder: string }) => `ran in ${folder}`,
     unsandboxed: "unsandboxed",
     started: ({ time }: { time: string }) => `started ${time}`,

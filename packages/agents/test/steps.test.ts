@@ -1,6 +1,6 @@
 import type { ReplyStep } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { nextSteps, uncertainCalls } from "../src/steps.ts";
+import { nextSteps, stoppedCommands, uncertainCalls } from "../src/steps.ts";
 
 const call = { tool: "Bash", operation: "run-commands", targets: ["/work"] } as const;
 const started = { _tag: "ToolStarted", id: "t1", ...call, label: "Running pnpm test" } as const;
@@ -87,5 +87,53 @@ describe("uncertainCalls", () => {
     ]);
     expect(told).toContain("Do not run any of them again");
     expect(uncertainCalls(steps.slice(0, 2))).toBeNull();
+  });
+});
+
+describe("a reply that waits on commands (#1056)", () => {
+  const dev = { _tag: "ToolStarted", id: "t2", ...call, label: "Running pnpm dev" } as const;
+  const both = () => {
+    const one = nextSteps([], 0, started, "2026-11-07T10:00:00.000Z") ?? [];
+    return nextSteps(one, 0, dev, "2026-11-07T10:01:00.000Z") ?? [];
+  };
+  const waited = (steps: ReadonlyArray<ReplyStep> | null) =>
+    steps?.filter((step) => step.waitedOn === true).map((step) => step.id);
+
+  it("marks only the running commands the turn waits on, and only once", () => {
+    const steps = both();
+    const waiting = nextSteps(steps, 0, { _tag: "AwaitingCommands", ids: ["t2"] });
+    expect(waited(waiting)).toEqual(["t2"]);
+    expect(nextSteps(waiting ?? [], 0, { _tag: "AwaitingCommands", ids: ["t2"] })).toBeNull();
+    // A call that is not a running command is never waited on.
+    expect(nextSteps(waiting ?? [], 0, { _tag: "AwaitingCommands", ids: ["nothing"] })?.some((s) => s.waitedOn)).toBe(
+      false,
+    );
+  });
+
+  it("stops waiting once a waited command ends, since its end starts a follow-up", () => {
+    const waiting = nextSteps(both(), 0, { _tag: "AwaitingCommands", ids: ["t1", "t2"] }) ?? [];
+    const ended = nextSteps(waiting, 0, { _tag: "ToolFinished", id: "t2", failed: false });
+    expect(states(ended)).toEqual(["t1:running", "t2:done"]);
+    expect(waited(ended)).toEqual([]);
+  });
+
+  it("cuts a waited command off when you stop waiting, with when", () => {
+    const waiting = nextSteps(both(), 0, { _tag: "AwaitingCommands", ids: ["t2"] }) ?? [];
+    const stopped = nextSteps(waiting, 0, { _tag: "ToolStopped", id: "t2" }, "2026-11-07T10:15:00.000Z");
+    expect(states(stopped)).toEqual(["t1:running", "t2:stopped"]);
+    expect(stopped?.[1]).toMatchObject({ endedAt: "2026-11-07T10:15:00.000Z" });
+    expect(stopped?.[1]?.waitedOn).toBeUndefined();
+    expect(nextSteps(stopped ?? [], 0, { _tag: "ToolStopped", id: "t2" })).toBeNull();
+  });
+
+  it("tells the next turn which commands you stopped", () => {
+    const stopped = nextSteps(nextSteps(both(), 0, { _tag: "AwaitingCommands", ids: ["t2"] }) ?? [], 0, {
+      _tag: "ToolStopped",
+      id: "t2",
+    });
+    const told = stoppedCommands(stopped ?? []) ?? "";
+    expect(told).toContain("the user stopped these commands");
+    expect(told.split("\n").filter((line) => line.startsWith("- "))).toEqual(["- Running pnpm dev"]);
+    expect(stoppedCommands(both())).toBeNull();
   });
 });

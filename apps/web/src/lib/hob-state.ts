@@ -1,13 +1,27 @@
 import type { Agent, AgentId, ApprovalRequest, BackpackItem, FailedTask, Question, ThreadId } from "@hobbots/domain";
+import type { ThreadActivity } from "../api/activity.ts";
 
-/** Sprite states from the design sprite sheet that the current build can show, plus paused. */
-export type HobState = "idle" | "thinking" | "working" | "waiting" | "needs-you" | "asleep" | "paused" | "failed";
+/**
+ * Sprite states from the design sprite sheet that the current build can show, plus paused. `waiting`
+ * waits on you; `on-command` has answered and waits only on a command it started (#1056).
+ */
+export type HobState =
+  | "idle"
+  | "thinking"
+  | "working"
+  | "on-command"
+  | "waiting"
+  | "needs-you"
+  | "asleep"
+  | "paused"
+  | "failed";
 
 /** Words for a state, for headers and screen readers. */
 export const stateLabel: Record<HobState, string> = {
   idle: "ready",
   thinking: "thinking",
   working: "working",
+  "on-command": "waiting on a command",
   waiting: "waiting",
   "needs-you": "needs you",
   asleep: "asleep",
@@ -23,12 +37,13 @@ export const stateLabel: Record<HobState, string> = {
 export const hobState = (
   hob: Pick<Agent, "status">,
   threads: ReadonlyArray<{ readonly id: string }> | undefined,
-  activity: Readonly<Record<string, "thinking" | "working">>,
+  activity: Readonly<Record<string, ThreadActivity>>,
 ): HobState => {
   if (hob.status === "paused") return "paused";
   const states = (threads ?? []).map((t) => activity[t.id]).filter((a) => a !== undefined);
   if (states.includes("working")) return "working";
-  return states.length > 0 ? "thinking" : "idle";
+  if (states.includes("thinking")) return "thinking";
+  return states.length > 0 ? "on-command" : "idle";
 };
 
 /**
@@ -112,10 +127,11 @@ export const leadNeeds = ({
  */
 export const threadState = (
   hob: Pick<Agent, "status">,
-  activity: "thinking" | "working" | undefined,
+  activity: ThreadActivity | undefined,
   streaming: boolean,
 ): HobState => {
   if (hob.status === "paused") return "paused";
+  if (activity === "waiting") return "on-command";
   return activity ?? (streaming ? "working" : "idle");
 };
 
@@ -125,6 +141,7 @@ const sceneRank: Record<HobState, number> = {
   waiting: 1,
   failed: 2,
   working: 3,
+  "on-command": 3,
   thinking: 4,
   idle: 5,
   asleep: 6,

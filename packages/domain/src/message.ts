@@ -48,7 +48,10 @@ export const isResumable = (status: MessageStatus): boolean => status === "inter
  *   was running, or a Charm's write ended without a clear answer (ADR 020), so it may or may not
  *   have taken effect. Hobbots never runs it again on its own.
  *
- * `unfinished` and `uncertain` are final: Continue starts new steps and never revives them.
+ * - `stopped`: a command the reply waited on after the hob had answered (`waitedOn`), which you
+ *   stopped with Stop waiting (#1056). It was cut off, by you, and did not run to its end.
+ *
+ * `unfinished`, `uncertain` and `stopped` are final: Continue starts new steps and never revives them.
  */
 export const ReplyStepState = Schema.Literals([
   "running",
@@ -58,6 +61,7 @@ export const ReplyStepState = Schema.Literals([
   "denied",
   "unfinished",
   "uncertain",
+  "stopped",
 ]);
 export type ReplyStepState = typeof ReplyStepState.Type;
 
@@ -83,6 +87,13 @@ export const ReplyStep = Schema.Struct({
   call: Schema.optionalKey(ToolCall),
   /** For a tool step that started: when the policy allowed it and it was recorded, just before it ran (ISO 8601). */
   startedAt: Schema.optionalKey(Schema.String),
+  /**
+   * For a running command step: the hob has answered and the reply stays open only until this
+   * command ends (#1056). Each runtime says so once its model is done while the command runs on.
+   */
+  waitedOn: Schema.optionalKey(Schema.Boolean),
+  /** For a `stopped` step: when you stopped it (ISO 8601). */
+  endedAt: Schema.optionalKey(Schema.String),
   /** For an `awaiting` step: the approval it waits on. */
   approvalId: Schema.optionalKey(Schema.String),
   /** For a `denied` step: why the call was refused. For an `uncertain` one: what is known of its outcome. */
@@ -215,12 +226,29 @@ const endedState = (step: ReplyStep): ReplyStepState => {
   return step.state === "awaiting" ? "unfinished" : step.state;
 };
 
+/** A step without its `waitedOn` mark, which only a running step carries. */
+const unwaited = (step: ReplyStep): ReplyStep => {
+  if (step.waitedOn === undefined) return step;
+  const { waitedOn: _, ...rest } = step;
+  return rest;
+};
+
 /** Steps as their turn ends: a tool call cut off while it ran is uncertain, anything else still under way unfinished. */
 export const endedSteps = (steps: ReadonlyArray<ReplyStep>): ReadonlyArray<ReplyStep> =>
   steps.map((step) => {
     const state = endedState(step);
-    return state === step.state ? step : { ...step, state };
+    return state === step.state && step.waitedOn === undefined ? step : { ...unwaited(step), state };
   });
+
+/** The running command steps the reply waits on, once its hob has answered (#1056). */
+export const waitedSteps = (steps: ReadonlyArray<ReplyStep>): ReadonlyArray<ReplyStep> =>
+  steps.filter((step) => step.waitedOn === true && step.state === "running");
+
+/**
+ * The command a step runs, as its label names it, without the "Running" before it: what the chat
+ * says the reply waits on.
+ */
+export const stepCommand = (step: Pick<ReplyStep, "label">): string => step.label.replace(/^Running /, "");
 
 /**
  * Whether every tool call in the steps plainly succeeded. A failed, refused or uncertain call is

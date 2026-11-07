@@ -320,14 +320,15 @@ export const codexTurnEvents = (
     },
     /**
      * After a Codex turn completed, or an outlived command ended while none ran: what to tell the hob
-     * about outlived commands that ended since it was last told, and whether any still run (#1048).
+     * about outlived commands that ended since it was last told, and the ones that still run, which
+     * the reply waits on (#1048, #1056).
      */
-    afterTurn: (): { readonly notice: string | null; readonly waiting: boolean } => {
+    afterTurn: (): { readonly notice: string | null; readonly waiting: ReadonlyArray<string> } => {
       const told = ended;
       ended = [];
       return {
         notice: told.length === 0 ? null : commandsEndedNotice(told, outlived.size),
-        waiting: outlived.size > 0,
+        waiting: [...outlived],
       };
     },
     /** The hob's whole reply: what every Codex turn of it said, and what they used. */

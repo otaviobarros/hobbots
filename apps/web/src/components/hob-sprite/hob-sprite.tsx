@@ -12,6 +12,8 @@ const motion: Record<HobState, string> = {
   idle: "",
   thinking: "animate-hb-bob",
   working: "animate-hb-bob",
+  // Nothing is being written: the hob stands still while its command runs (#1056).
+  "on-command": "",
   waiting: "",
   "needs-you": "",
   asleep: "opacity-60",

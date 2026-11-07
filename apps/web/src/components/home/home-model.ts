@@ -8,6 +8,7 @@ import {
   type Thread,
   type ThreadId,
 } from "@hobbots/domain";
+import type { ThreadActivity } from "../../api/activity.ts";
 import { groupOf } from "../../lib/crew.ts";
 import type { HobState } from "../../lib/hob-state.ts";
 import { type QuestInProgress, workTone } from "../../lib/quest-work.ts";
@@ -38,7 +39,7 @@ export const homeSummary = (
  */
 export const peekThread = <T extends Pick<Thread, "id" | "updatedAt">>(
   threads: ReadonlyArray<T>,
-  activity: Readonly<Record<string, "thinking" | "working">>,
+  activity: Readonly<Record<string, ThreadActivity>>,
 ): T | null =>
   threads.find((thread) => activity[thread.id] !== undefined) ??
   threads.toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??

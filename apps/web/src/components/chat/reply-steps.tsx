@@ -1,10 +1,12 @@
-import type { ReplyStep, ToolCall, ToolOutput } from "@hobbots/domain";
+import { type ReplyStep, stepCommand, type ToolCall, type ToolOutput } from "@hobbots/domain";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@hobbots/ui/components/collapsible";
 import { cn } from "@hobbots/ui/lib/utils";
 import type { ReactNode } from "react";
 import { formatBytes } from "../../lib/format.ts";
 import { operationLabel, shownSteps } from "../../lib/reply-steps.ts";
+import { minutesBetween, minutesSince } from "../../lib/reply-wait.ts";
 import { formatTime } from "../../lib/time.ts";
+import { useNow } from "../inbox/use-now.ts";
 import { messages } from "../messages.ts";
 import { LogLink, OutputBlock } from "./tool-output.tsx";
 
@@ -21,7 +23,14 @@ const MARK: Record<StepState, { readonly glyph: string; readonly className: stri
   denied: { glyph: "⊘", className: "text-rose" },
   unfinished: { glyph: "■", className: "text-label" },
   uncertain: { glyph: "?", className: "font-bold text-lantern" },
+  stopped: { glyph: "■", className: "text-label" },
 };
+
+/** A running command the reply waits on, once its hob has answered: a still mark, nothing is written (#1056). */
+const WAITED = { glyph: "◷", className: "text-mint" } as const;
+
+/** Whether the reply waits on this step's command. */
+const waitedOn = (step: ReplyStep) => step.state === "running" && step.waitedOn === true;
 
 /** Where a step's full log is served. */
 type LogUrl = (stepId: string) => string;
@@ -75,26 +84,39 @@ export function ReplySteps({
 }
 
 function StepLine({ step, outcome }: { step: ReplyStep; outcome: StepState }) {
-  const mark = MARK[outcome];
+  const waited = waitedOn(step);
+  const mark = waited ? WAITED : MARK[outcome];
+  const words = waited
+    ? copy.waitingOn({ command: stepCommand(step) })
+    : outcome === "running"
+      ? copy.running({ label: step.label })
+      : step.label;
   return (
     <span className="flex items-center gap-2 text-text-secondary">
       <span aria-hidden className={cn("w-3.5 text-center", mark.className)}>
         {mark.glyph}
       </span>
-      <span className={outcome === "running" ? "text-text-strong" : undefined}>
-        {outcome === "running" ? copy.running({ label: step.label }) : step.label}
-      </span>
-      <span className="sr-only">{copy.outcome[outcome]}</span>
+      <span className={outcome === "running" ? "text-text-strong" : undefined}>{words}</span>
+      <span className="sr-only">{waited ? copy.waitedOutcome : copy.outcome[outcome]}</span>
     </span>
   );
 }
+
+/** How long, in the words the steps use. */
+const minutesWords = (count: number | null) => (count === null ? null : messages.composer.minutes({ count }));
 
 /** Why a refused step never ran, by who refused it. */
 const DENIED = { policy: copy.deniedByPolicy, user: copy.deniedByUser, sandbox: copy.deniedBySandbox } as const;
 
 /** The line under a tool step that says what happened, when its mark alone does not. */
-const stepNote = (step: ReplyStep, outcome: StepState): string | null => {
+const stepNote = (step: ReplyStep, outcome: StepState, now: Date): string | null => {
   switch (outcome) {
+    case "running":
+      return waitedOn(step)
+        ? copy.waitingNote({ time: messages.composer.minutes({ count: minutesSince(step.startedAt ?? null, now) }) })
+        : null;
+    case "stopped":
+      return copy.stopped({ time: minutesWords(minutesBetween(step.startedAt, step.endedAt)) });
     case "awaiting":
       return copy.awaiting;
     case "failed":
@@ -123,7 +145,9 @@ function ToolStep({
   logUrl: LogUrl;
   settle?: ReactNode;
 }) {
-  const note = stepNote(step, outcome);
+  // A wait's clock moves once a minute (#1056).
+  const now = useNow(waitedOn(step) ? 60_000 : null);
+  const note = stepNote(step, outcome, now);
   return (
     <Collapsible className="flex flex-col gap-0.5">
       <CollapsibleTrigger className="group flex items-center gap-2 border-0 bg-transparent p-0 text-start text-detail text-text-secondary hover:text-text-strong focus-visible:outline-2 focus-visible:outline-focus-ring">
@@ -136,7 +160,11 @@ function ToolStep({
         <span
           className={cn(
             "ps-5.5 text-meta",
-            outcome === "denied" || outcome === "failed" ? "text-rose" : "text-lantern",
+            outcome === "denied" || outcome === "failed"
+              ? "text-rose"
+              : outcome === "running" || outcome === "stopped"
+                ? "text-text-secondary"
+                : "text-lantern",
           )}
         >
           {note}
