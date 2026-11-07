@@ -34,7 +34,15 @@ export type SkillImportSource =
   /** Written in Hobbots: each file's path in the skill and its text. */
   | { readonly _tag: "Written"; readonly files: ReadonlyArray<{ readonly path: string; readonly text: string }> }
   /** A revision's folder, edited in Hobbots: its other files are kept as they are. */
-  | ({ readonly _tag: "Edited"; readonly folder: string } & SkillEdit);
+  | ({
+      readonly _tag: "Edited";
+      readonly folder: string;
+      /**
+       * What the base revision recorded that its stored files no longer show, such as a Charm named in
+       * an `agents/openai.yaml` the import left out: the edit keeps it.
+       */
+      readonly carried: { readonly charms: ReadonlyArray<string>; readonly dropped: ReadonlyArray<SkillDropped> };
+    } & SkillEdit);
 
 /** One skill a source holds, as import would take it, or the rule it broke. */
 export interface SkillCandidate {
@@ -181,6 +189,18 @@ const originOf = (source: SkillImportSource, locked: LockedSkill | null): SkillO
   }
 };
 
+type Carried = Extract<SkillImportSource, { readonly _tag: "Edited" }>["carried"];
+
+/** An edit's Charms: what its files name now, and what its base recorded from files it left out. */
+const carriedCharms = (skill: CheckedSkill, carried: Carried) =>
+  [...new Set([...skill.charms, ...carried.charms])].sort();
+
+/** An edit's left-out content: its own, and its base's, once each. */
+const carriedDropped = (skill: CheckedSkill, carried: Carried) => {
+  const seen = new Set(skill.dropped.map((one) => `${one.kind}\u0000${one.path}`));
+  return [...skill.dropped, ...carried.dropped.filter((one) => !seen.has(`${one.kind}\u0000${one.path}`))];
+};
+
 const lockedOf = (skill: CheckedSkill, locked: LockedSkill | null) =>
   locked === null ? null : { matches: locked.computedHash === skill.cliHash, url: locked.url };
 
@@ -290,10 +310,10 @@ export const SkillImporterLive = Layer.effect(
                 hash: skill.hash,
                 name: skill.name,
                 description: skill.description,
-                charms: skill.charms,
+                charms: source._tag === "Edited" ? carriedCharms(skill, source.carried) : skill.charms,
                 files: skill.files,
                 flags: skill.flags,
-                dropped: skill.dropped,
+                dropped: source._tag === "Edited" ? carriedDropped(skill, source.carried) : skill.dropped,
                 origin: originOf(source, locked),
                 commit: locked?.url != null ? null : tree.commit,
                 path: locked?.url != null ? locked.path : skill.folder === "" ? null : skill.folder,

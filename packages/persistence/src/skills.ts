@@ -271,7 +271,8 @@ export const SkillLibraryLive = Layer.effect(
         }
         const skill = yield* skillRow(skillId);
         if (skill === null) return yield* new SkillNotFound({ id: skillId });
-        if (input.after !== undefined && skill.latest !== input.after) {
+        // The same content as the newest is this edit saved before, sent again to finish its rollout.
+        if (input.after !== undefined && skill.latest !== input.after && skill.latest !== input.hash) {
           return yield* new SkillMovedOn({ skillId: skill.id, latest: skill.latest });
         }
         const same = yield* revisionRow(skill.id, input.hash);

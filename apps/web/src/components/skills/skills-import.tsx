@@ -1,5 +1,5 @@
 import type { SkillScan, SkillSourcePayload } from "@hobbots/api";
-import type { Agent, MemoryProjectIdentity } from "@hobbots/domain";
+import type { Agent, MemoryProjectIdentity, SkillId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useMutation } from "@tanstack/react-query";
@@ -13,7 +13,7 @@ import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
 import { type HobDirectory, type ImportFrom, importable, scopeName, skillsSearchOf } from "./skills-model.ts";
 import { SkillsIcon } from "./skills-parts.tsx";
-import { useSkillWrites } from "./use-skill-writes.ts";
+import { giveAll, useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
 
@@ -73,21 +73,43 @@ function ScanResult({
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set(can));
   const [give, setGive] = useState<GiveTo>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  // The skills this scan already added: Import again gives them out, and imports nothing twice.
+  const [added, setAdded] = useState<ReadonlyArray<SkillId> | null>(null);
   if (scan.candidates.length === 0) return <p className="m-0 text-ui text-text-secondary">{copy.import.none}</p>;
   if (scan.candidates.every((candidate) => candidate.refusal !== null))
     return <ImportRefused candidates={scan.candidates} />;
   const folders = can.filter((folder) => picked.has(folder));
 
-  const run = async () => {
+  const importPicked = async () => {
     // Only what this scan found is added: a branch that moved on since is refused, not imported unseen.
     const scanned = scan.candidates.flatMap((one) =>
       one.hash !== null && folders.includes(one.folder) ? [{ folder: one.folder, hash: one.hash }] : [],
     );
-    const added = await writes.add.mutateAsync({ source, folders, scanned });
-    if (give !== null) {
-      for (const one of added.imported) await writes.assign.mutateAsync({ skillId: one.skill.id, scope: give });
+    return (await writes.add.mutateAsync({ source, folders, scanned })).imported.map((one) => one.skill.id);
+  };
+
+  // Two saves, each kept once made: the import, then giving each skill out. What failed is said as such.
+  const run = async () => {
+    setFailure(null);
+    let ids = added;
+    try {
+      ids ??= await importPicked();
+    } catch (error) {
+      setFailure(skillsErrorTag(error) === "SkillScanOutdated" ? copy.import.moved : copy.import.failed);
+      return;
     }
-    return added.imported.length;
+    setAdded(ids);
+    if (give !== null) {
+      const given = await giveAll(writes, ids, give);
+      if (!given) return setFailure(copy.import.notGiven({ count: ids.length, who: scopeName(give, hobs) }));
+    }
+    const count = ids.length;
+    const message =
+      give === null
+        ? copy.import.imported({ count })
+        : copy.import.importedGiven({ count, who: scopeName(give, hobs) });
+    say({ tone: "done", message }, { _tag: "Overview" });
+    void navigate({ to: "/skills", search: {} });
   };
 
   return (
@@ -114,25 +136,12 @@ function ScanResult({
         </p>
       )}
       <div className="flex gap-2">
-        <Button
-          disabled={folders.length === 0 || writes.busy}
-          onClick={() => {
-            setFailure(null);
-            run()
-              .then((count) => {
-                const message =
-                  give === null
-                    ? copy.import.imported({ count })
-                    : copy.import.importedGiven({ count, who: scopeName(give, hobs) });
-                say({ tone: "done", message }, { _tag: "Overview" });
-                void navigate({ to: "/skills", search: {} });
-              })
-              .catch((error: unknown) =>
-                setFailure(skillsErrorTag(error) === "SkillScanOutdated" ? copy.import.moved : copy.import.failed),
-              );
-          }}
-        >
-          {writes.busy ? copy.import.importing : copy.import.importN({ count: folders.length })}
+        <Button disabled={(added === null && folders.length === 0) || writes.busy} onClick={() => void run()}>
+          {writes.busy
+            ? copy.import.importing
+            : added === null
+              ? copy.import.importN({ count: folders.length })
+              : copy.import.giveAgain}
         </Button>
         <Button asChild variant="quiet">
           <Link to="/skills" search={{}}>

@@ -260,12 +260,16 @@ export const messages = {
     cancel: "Cancel",
     unchanged: "Nothing changed yet.",
     added: ({ name }: { name: string }) => `Added ${name} as r1. No hob has it yet.`,
+    notGiven: ({ name, who }: { name: string; who: string }) =>
+      `Added ${name} as r1, but it was not given to ${who} yet. Save again to give it: it is not added twice.`,
     addedGiven: ({ name, who }: { name: string; who: string }) =>
       `Added ${name} as r1. ${who} gets it from the next chat.`,
     saved: ({ rev }: { rev: string }) => `Saved ${rev}. No hob moved to it yet.`,
     same: ({ rev }: { rev: string }) => `That is ${rev} already, so nothing new was saved.`,
     taken: "Your library has a skill of that name. Pick another name, or edit that one.",
     failed: "It was not saved. Your text is still here; try again.",
+    newer: ({ rev, base }: { rev: string; base: string }) =>
+      `${rev} was saved while you edited ${base}, so this edit cannot be saved over it. Your text is still here: copy it, then edit ${rev}.`,
     stale:
       "A newer revision was saved while you edited, so this was not saved. Your text is still here: copy it, then edit the newest revision.",
   },
@@ -350,6 +354,9 @@ export const messages = {
       `Imported ${skills(count)} as r1. ${who} gets ${plural(count, { one: "it", other: "them" })} from the next chat.`,
     refusedRule: ({ path, rule }: { path: string; rule: string }) => `${path}: ${rule}`,
     failed: "Nothing was imported. Try again.",
+    notGiven: ({ count, who }: { count: number; who: string }) =>
+      `Imported ${skills(count)}, but ${plural(count, { one: "it was", other: "they were" })} not given to ${who} yet. Give ${plural(count, { one: "it", other: "them" })} again: nothing is imported twice.`,
+    giveAgain: "Give again",
     moved: "The source changed since you looked, so nothing was imported. Look again to see what it holds now.",
     taken: ({ name }: { name: string }) =>
       `Your library already has ${name}. Open it and add the new content as a revision there.`,

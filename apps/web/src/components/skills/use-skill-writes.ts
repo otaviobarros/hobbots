@@ -1,3 +1,4 @@
+import type { SkillId, SkillScope } from "@hobbots/domain";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   assignSkill,
@@ -32,3 +33,16 @@ export const useSkillWrites = () => {
 };
 
 export type SkillWrites = ReturnType<typeof useSkillWrites>;
+
+/**
+ * Gives each skill to `scope`, true once every one has it. A skill has one assignment per scope, so
+ * giving it again after a failure changes only what was not given yet.
+ */
+export const giveAll = async (writes: SkillWrites, skillIds: ReadonlyArray<SkillId>, scope: SkillScope) => {
+  try {
+    for (const skillId of skillIds) await writes.assign.mutateAsync({ skillId, scope });
+    return true;
+  } catch {
+    return false;
+  }
+};

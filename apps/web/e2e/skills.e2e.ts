@@ -55,7 +55,7 @@ const hubWithHobs = async () => {
     join(folder, "SKILL.md"),
     "---\nname: review-checklist\ndescription: Use when reviewing a pull request before it merges.\n---\n\nRead the diff twice.\n",
   );
-  return { url: started.url, folder };
+  return { url: started.url, folder, api };
 };
 
 // covers ADR 029 (the Skills page, editing and rollout), #1062
@@ -127,5 +127,33 @@ test("[TC-UX-1062] Skills: write one, give it out, edit and roll out with one ho
   await main.getByRole("button", { name: "Import 1 skill" }).click();
   await expect(main).toContainText("Imported 1 skill as r1. Everyone gets it from the next chat.");
   await expect(main.getByRole("link", { name: /Review checklist/ }).first()).toBeVisible();
+  await expectAccessible(page, main);
+});
+
+// covers ADR 029 (Editing), #1062
+test("[TC-UX-1062-02] a save from another device while you edit keeps your text and says it cannot be saved over", async ({
+  page,
+}) => {
+  const { url, folder, api } = await hubWithHobs();
+  const imported = (await api("POST", "/skills", { source: { _tag: "Folder", path: folder } })) as unknown as {
+    imported: ReadonlyArray<{ skill: { id: string }; revision: { hash: string } }>;
+  };
+  const first = imported.imported[0];
+  if (first === undefined) throw new Error("Nothing was imported.");
+  const { skill, revision } = first;
+  await page.goto(`${url}/#/skills?skill=${skill.id}&edit=skill`);
+  const main = page.getByRole("main", { name: "Skills" });
+  await expect(main.getByRole("heading", { name: "Edit Review checklist" })).toBeVisible();
+  await main.getByLabel("Instructions").fill("My draft, not saved yet.");
+
+  // Another device saves r2 from r1: the page reads it, and the draft and its base stay.
+  await api("POST", `/skills/${skill.id}/edits`, {
+    base: revision.hash,
+    description: "Use when reviewing a pull request before it merges.",
+    instructions: "Saved elsewhere.",
+  });
+  await expect(main.getByRole("status").filter({ hasText: "r2 was saved while you edited r1" })).toBeVisible();
+  await expect(main.getByLabel("Instructions")).toHaveValue("My draft, not saved yet.");
+  await expect(main.getByRole("button", { name: /Save/ })).toBeDisabled();
   await expectAccessible(page, main);
 });

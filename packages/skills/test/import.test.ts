@@ -189,6 +189,21 @@ describe("skill import", () => {
         const yaml = yield* Effect.promise(() => readFile(join(object ?? "", "agents/openai.yaml"), "utf8"));
         expect(yaml).toContain("allow_implicit_invocation: true");
         expect(yaml).not.toContain("dependencies");
+        // An edit of it keeps the GitHub Charm and what was left out, which its stored files no longer show.
+        if (added === undefined) return expect.unreachable();
+        const edit = {
+          _tag: "Edited",
+          folder: object ?? "",
+          description: "Use when opening a pull request.",
+          instructions: "Open it.",
+          carried: { charms: added.revision.charms, dropped: added.revision.dropped },
+        } as const;
+        const [edited] = yield* (yield* SkillImporter).add(edit, { ...you, skillId: added.skill.id });
+        expect(edited?.revision).toMatchObject({
+          number: 2,
+          charms: ["github", "linear"],
+          dropped: [{ kind: "tool-dependencies", path: "agents/openai.yaml" }],
+        });
       }),
     );
   });
@@ -354,6 +369,7 @@ describe("skill import", () => {
           folder: base,
           description: "Use when releasing: tag: then push.",
           instructions: "Tag it, then push.",
+          carried: { charms: [], dropped: [] },
         } as const;
         const [second] = yield* importer.add(edit, { ...you, skillId: first.skill.id });
         expect(second?.revision).toMatchObject({
@@ -374,7 +390,7 @@ describe("skill import", () => {
   });
 
   // covers ADR 029 (Import, Storage and revisions), #1062
-  it("[TC-AG-147] adds only what was looked at: a source that changed since its scan, or an edit of an older revision, writes nothing", async () => {
+  it("[TC-AG-147] adds only what was looked at: a source that changed since its scan, or an edit of an older revision, writes nothing; the same edit again is the revision it made", async () => {
     const { layer } = await importerLayer();
     const folder = await folderOf({ "SKILL.md": skillMd("release") });
     await runWith(layer)(
@@ -398,10 +414,19 @@ describe("skill import", () => {
         // An edit made from r1 after r2 was saved is refused, and r2 stays the newest.
         const base = (yield* (yield* SkillFiles).folder(first.revision.hash)) ?? "";
         const edit = (instructions: string) =>
-          ({ _tag: "Edited", folder: base, description: "Releases.", instructions }) as const;
+          ({
+            _tag: "Edited",
+            folder: base,
+            description: "Releases.",
+            instructions,
+            carried: { charms: [], dropped: [] },
+          }) as const;
         const after = first.revision.hash;
         const [second] = yield* importer.add(edit("Tag it."), { ...you, skillId: first.skill.id, after });
         expect(second?.revision.number).toBe(2);
+        // The same edit sent again, as after the hub stopped before its rollout, is the revision it made.
+        const [retried] = yield* importer.add(edit("Tag it."), { ...you, skillId: first.skill.id, after });
+        expect(retried).toMatchObject({ added: false, revision: { hash: second?.revision.hash } });
         const stale = yield* Effect.flip(importer.add(edit("Push it."), { ...you, skillId: first.skill.id, after }));
         expect(stale).toMatchObject({ _tag: "SkillMovedOn", latest: second?.revision.hash });
         expect(yield* library.get(first.skill.id)).toMatchObject({ revisions: 2, latest: second?.revision.hash });

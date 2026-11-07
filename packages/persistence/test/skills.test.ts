@@ -185,6 +185,35 @@ describe("skills library", () => {
       }),
     ));
 
+  // covers ADR 029 (Pins and rollout), #1062
+  it("[TC-DP-282] refuses a revision made from an older one, but takes the same edit again so it can finish its rollout", () =>
+    run(
+      Effect.gen(function* () {
+        const library = yield* SkillLibrary;
+        const { skill } = (yield* library.addRevision(null, input(H1))).value;
+        const everyone = { _tag: "Everyone" } as const;
+        yield* library.assign({
+          skillId: skill.id,
+          scope: everyone,
+          pin: H1,
+          held: false,
+          onlyWhenAsked: false,
+          by: { _tag: "You" },
+        });
+        const saved = (yield* library.addRevision(skill.id, input(H2, { after: H1 }))).value;
+        expect(saved).toMatchObject({ added: true, revision: { number: 2 } });
+        // The hub stopped here, before the rollout. The same edit sent again is r2, and its rollout runs.
+        const again = (yield* library.addRevision(skill.id, input(H2, { after: H1 }))).value;
+        expect(again).toMatchObject({ added: false, revision: { hash: H2 } });
+        const rolled = yield* library.rollOutRevision(skill.id, H2, { _tag: "You" }, "pending");
+        expect(rolled.value.map((one) => one.pin)).toEqual([H2]);
+        // Other content made from r1 is refused, and writes nothing.
+        const stale = yield* Effect.flip(library.addRevision(skill.id, input(H3, { after: H1 })));
+        expect(stale).toMatchObject({ _tag: "SkillMovedOn", latest: H2 });
+        expect((yield* library.get(skill.id))?.revisions).toBe(2);
+      }),
+    ));
+
   it("[TC-DP-279] keeps a hob's opt-outs, journaling only a change", () =>
     run(
       Effect.gen(function* () {

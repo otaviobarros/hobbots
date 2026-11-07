@@ -231,4 +231,36 @@ describe("skills routes", () => {
     // A folder with no Git remote is its own project, by its name.
     expect((await request("GET", "/api/skills")).body.projects).toEqual(["site"]);
   });
+
+  // covers ADR 029 (Pins and rollout, The Skills page), #1062
+  it("[TC-AG-149] keeps the places an edit holds back, changes no hold when the edit is refused, and settles a save sent again", async () => {
+    const folder = await folderWith({ "SKILL.md": skillMd("release") });
+    const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
+    const [{ skill, revision }] = imported.body.imported;
+    const everyone = await request("POST", `/api/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+    const pinOf = async () => (await request("GET", `/api/skills/${skill.id}`)).body.assignments[0];
+
+    // Saved as r2, with Everyone kept on r1.
+    const edit = {
+      base: revision.hash,
+      description: "Use when releasing.",
+      instructions: "Tag it.",
+      keep: [everyone.body.id],
+    };
+    const kept = await request("POST", `/api/skills/${skill.id}/edits`, edit);
+    expect(kept.body).toMatchObject({ added: true, revision: { number: 2 }, rolledOut: [] });
+    expect(await pinOf()).toMatchObject({ pin: revision.hash, held: true });
+
+    // A refused edit changes no hold.
+    const stale = await request("POST", `/api/skills/${skill.id}/edits`, { ...edit, instructions: "Push.", keep: [] });
+    expect(stale.status).toBe(409);
+    expect(await pinOf()).toMatchObject({ pin: revision.hash, held: true });
+
+    // The same save sent again, now letting Everyone follow, is r2 and settles the hold. Its rollout
+    // already ran, so nothing moves: Move to r2 does that (the interrupted rollout is TC-AG-147).
+    const again = await request("POST", `/api/skills/${skill.id}/edits`, { ...edit, keep: [] });
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ added: false, revision: { number: 2 }, rolledOut: [] });
+    expect(await pinOf()).toMatchObject({ pin: revision.hash, held: false });
+  });
 });

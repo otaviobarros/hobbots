@@ -2,7 +2,7 @@ import type { Agent, MemoryProjectIdentity } from "@hobbots/domain";
 import { Input } from "@hobbots/ui/components/input";
 import { useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
-import { skillsErrorTag } from "../../api/skills.ts";
+import { type importSkills, skillsErrorTag } from "../../api/skills.ts";
 import { GiveChoice, type GiveTo } from "./give-choice.tsx";
 import { messages } from "./messages.ts";
 import { DescriptionField, EditorFooter, InstructionsField } from "./skill-fields.tsx";
@@ -18,7 +18,7 @@ import {
   skillTitle,
   skillView,
 } from "./skills-model.ts";
-import { useSkillWrites } from "./use-skill-writes.ts";
+import { giveAll, useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
 
@@ -46,15 +46,31 @@ export function SkillNew({
   const valid = nameValid(name) && description.trim() !== "" && descriptionState(description) !== "long";
   const pending = writes.busy;
 
+  // Two saves, each kept once made: the skill, then giving it out. Adding the same text again is the
+  // skill already added, so saving after a failure only gives it out.
   const save = async () => {
     const file = newSkillFile(name, description, body);
-    const added = await writes.add.mutateAsync({
-      source: { _tag: "Written", files: [{ path: "SKILL.md", text: file }] },
-    });
-    const [one] = added.imported;
-    if (one === undefined) throw new Error("Nothing was added.");
-    if (give !== null) await writes.assign.mutateAsync({ skillId: one.skill.id, scope: give });
-    return one;
+    let one: Awaited<ReturnType<typeof importSkills>>["imported"][number] | undefined;
+    try {
+      const added = await writes.add.mutateAsync({
+        source: { _tag: "Written", files: [{ path: "SKILL.md", text: file }] },
+      });
+      [one] = added.imported;
+    } catch (error) {
+      return setFailure(skillsErrorTag(error) === "SkillNameConflict" ? copy.editor.taken : copy.editor.failed);
+    }
+    if (one === undefined) return setFailure(copy.editor.failed);
+    const title = skillTitle(one.skill.name);
+    if (give !== null && !(await giveAll(writes, [one.skill.id], give))) {
+      return setFailure(copy.editor.notGiven({ name: title, who: scopeName(give, hobs) }));
+    }
+    const at = skillView(one.skill.id);
+    const message =
+      give === null
+        ? copy.editor.added({ name: title })
+        : copy.editor.addedGiven({ name: title, who: scopeName(give, hobs) });
+    say({ tone: "done", message }, at);
+    void navigate({ to: "/skills", search: skillsSearchOf(at) });
   };
 
   return (
@@ -65,20 +81,7 @@ export function SkillNew({
         event.preventDefault();
         if (!valid || pending) return;
         setFailure(null);
-        save()
-          .then((one) => {
-            const at = skillView(one.skill.id);
-            const name = skillTitle(one.skill.name);
-            const message =
-              give === null
-                ? copy.editor.added({ name })
-                : copy.editor.addedGiven({ name, who: scopeName(give, hobs) });
-            say({ tone: "done", message }, at);
-            void navigate({ to: "/skills", search: skillsSearchOf(at) });
-          })
-          .catch((error: unknown) =>
-            setFailure(skillsErrorTag(error) === "SkillNameConflict" ? copy.editor.taken : copy.editor.failed),
-          );
+        void save();
       }}
     >
       <h2 className="m-0 font-heading text-[26px] leading-8 font-bold text-text-strong">{copy.editor.newTitle}</h2>

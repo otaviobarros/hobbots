@@ -47,7 +47,10 @@ export interface SkillRevisionInput {
   readonly path: string | null;
   readonly label: string | null;
   readonly addedBy: SkillBy;
-  /** The revision this one was made from: adding it fails with `SkillMovedOn` once the skill's newest is another. */
+  /**
+   * The revision this one was made from: adding it fails with `SkillMovedOn` once the skill's newest
+   * is another, unless the newest is this very content, added before by the same edit sent again.
+   */
   readonly after?: SkillRevisionHash;
 }
 

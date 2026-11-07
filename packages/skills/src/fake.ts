@@ -64,7 +64,8 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
       const target = skillId === null ? named(input.name) : (skills.get(skillId) ?? null);
       if (skillId !== null && target === null) return yield* new SkillNotFound({ id: skillId });
       if (target === null) return { _tag: "Next" as const, skill: null };
-      if (skillId !== null && input.after !== undefined && target.latest !== input.after) {
+      const retried = target.latest === input.hash;
+      if (skillId !== null && input.after !== undefined && target.latest !== input.after && !retried) {
         return yield* new SkillMovedOn({ skillId: target.id, latest: target.latest });
       }
       const same = revisionOf(target.id, input.hash);

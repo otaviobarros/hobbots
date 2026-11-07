@@ -246,6 +246,12 @@ export const EditSkillPayload = Schema.Struct({
   description: SkillDescription,
   /** The `SKILL.md` text after its front matter. */
   instructions: Schema.String.check(Schema.isMaxLength(1024 * 1024)),
+  /**
+   * The skill's assignments to keep on their revision; every other one follows the edit. Applied once
+   * the revision is saved and before it rolls out, so an edit that is refused changes no hold, and the
+   * same save sent again finishes what it started. Absent, every hold stays as it is.
+   */
+  keep: Schema.optionalKey(Schema.Array(SkillAssignmentId)),
 });
 
 const skillParams = { skillId: SkillId };

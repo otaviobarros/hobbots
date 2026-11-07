@@ -64,11 +64,18 @@ export const editSkill = (input: {
   base: SkillRevisionHash;
   description: string;
   instructions: string;
+  /** The skill's places to keep on their revision; the hub lets every other one follow the edit. */
+  keep: ReadonlyArray<SkillAssignmentId>;
 }) =>
   call((c) =>
     c.skills.edit({
       params: { skillId: input.skillId },
-      payload: { base: input.base, description: input.description, instructions: input.instructions },
+      payload: {
+        base: input.base,
+        description: input.description,
+        instructions: input.instructions,
+        keep: input.keep,
+      },
     }),
   );
 
