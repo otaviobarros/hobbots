@@ -41,6 +41,8 @@ import { AppError, PageError, ScreenError } from "./components/route-error/route
 import { ConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
 import { SettingsPage } from "./components/settings/settings-page.tsx";
 import { AppShell, AppWindow } from "./components/shell/app-shell.tsx";
+import { ImportFrom, SkillTab } from "./components/skills/skills-model.ts";
+import { SkillsPage } from "./components/skills/skills-page.tsx";
 import { ArrivedPage, ArrivedWaiting } from "./components/summon/arrived.tsx";
 import { Summon } from "./components/summon/summon.tsx";
 import { SummonStep } from "./components/summon/summon-model.ts";
@@ -371,6 +373,29 @@ const memoryRoute = createRoute({
     return <MemoryPage search={memoryRoute.useSearch()} />;
   },
 });
+// Skills (ADR 029): `?scope=` opens a scope, `?skill=` a skill with `&tab=` its tab, `&file=` a file and
+// `&diff=` what a revision changed; `&edit=skill` opens its editor and `?edit=new` a new skill; `?add=`
+// opens Add a skill from Git, a folder or written here; `?q=` searches.
+const skillsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  errorComponent: (props) => <PageError error={props.error} way="home" />,
+  path: "skills",
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({
+      scope: searchParam(MemoryScopeKey),
+      skill: searchParam(Schema.String),
+      tab: searchParam(SkillTab),
+      file: searchParam(Schema.String),
+      diff: searchParam(Schema.String),
+      edit: searchParam(Schema.Literals(["skill", "new"])),
+      add: searchParam(ImportFrom),
+      q: searchParam(SearchText),
+    }),
+  ),
+  component: function Skills() {
+    return <SkillsPage search={skillsRoute.useSearch()} />;
+  },
+});
 // Settings opens on its overview; each section has its own address, such as `/settings/devices`.
 const settingsRoute = createRoute({
   getParentRoute: () => shellRoute,
@@ -516,6 +541,7 @@ const routeTree = rootRoute.addChildren([
     arrivedRoute,
     inboxRoute,
     memoryRoute,
+    skillsRoute,
     usageRoute,
     settingsRoute,
     settingsSectionRoute,

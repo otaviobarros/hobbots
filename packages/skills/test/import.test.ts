@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile, stat } from "node:fs/promises";
+import { lstat, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SkillFiles, SkillLibrary } from "@hobbots/agents";
 import { SkillName } from "@hobbots/domain";
@@ -189,6 +189,21 @@ describe("skill import", () => {
         const yaml = yield* Effect.promise(() => readFile(join(object ?? "", "agents/openai.yaml"), "utf8"));
         expect(yaml).toContain("allow_implicit_invocation: true");
         expect(yaml).not.toContain("dependencies");
+        // An edit of it keeps the GitHub Charm and what was left out, which its stored files no longer show.
+        if (added === undefined) return expect.unreachable();
+        const edit = {
+          _tag: "Edited",
+          folder: object ?? "",
+          description: "Use when opening a pull request.",
+          instructions: "Open it.",
+          carried: { charms: added.revision.charms, dropped: added.revision.dropped },
+        } as const;
+        const [edited] = yield* (yield* SkillImporter).add(edit, { ...you, skillId: added.skill.id });
+        expect(edited?.revision).toMatchObject({
+          number: 2,
+          charms: ["github", "linear"],
+          dropped: [{ kind: "tool-dependencies", path: "agents/openai.yaml" }],
+        });
       }),
     );
   });
@@ -333,6 +348,88 @@ describe("skill import", () => {
         expect(yield* (yield* SkillLibrary).sources).toEqual([]);
         const outside = { _tag: "Written", files: [...written.files, { path: "../x.md", text: "x" }] } as const;
         expect(yield* Effect.flip((yield* SkillImporter).add(outside, you))).toMatchObject({ check: "outside-path" });
+      }),
+    );
+  });
+  // covers ADR 029 (Storage and revisions), #1062
+  it("[TC-AG-145] edits a revision into a new one: the description and instructions change, every other file stays", async () => {
+    const { layer } = await importerLayer();
+    const folder = await folderOf({
+      "SKILL.md": "---\nname: release\ndescription: Releases.\nlicense: MIT\n---\n\nTag it.\n",
+      "scripts/tag.sh": { text: "#!/bin/sh\ngit tag", executable: true },
+    });
+    await runWith(layer)(
+      Effect.gen(function* () {
+        const importer = yield* SkillImporter;
+        const [first] = yield* importer.add({ _tag: "Folder", path: folder }, you);
+        if (first === undefined) return expect.unreachable();
+        const base = (yield* (yield* SkillFiles).folder(first.revision.hash)) ?? "";
+        const edit = {
+          _tag: "Edited",
+          folder: base,
+          description: "Use when releasing: tag: then push.",
+          instructions: "Tag it, then push.",
+          carried: { charms: [], dropped: [] },
+        } as const;
+        const [second] = yield* importer.add(edit, { ...you, skillId: first.skill.id });
+        expect(second?.revision).toMatchObject({
+          number: 2,
+          name: "release",
+          description: "Use when releasing: tag: then push.",
+        });
+        const object = (yield* (yield* SkillFiles).folder(second?.revision.hash ?? first.revision.hash)) ?? "";
+        const text = yield* Effect.promise(() => readFile(join(object, "SKILL.md"), "utf8"));
+        expect(text).toContain("license: MIT");
+        expect(text).toContain("Tag it, then push.");
+        expect(second?.revision.files.find((file) => file.path === "scripts/tag.sh")?.mode).toBe("executable");
+        // The same edit again is the revision it already made.
+        const [again] = yield* importer.add(edit, { ...you, skillId: first.skill.id });
+        expect(again).toMatchObject({ added: false, revision: { number: 2 } });
+      }),
+    );
+  });
+
+  // covers ADR 029 (Import, Storage and revisions), #1062
+  it("[TC-AG-147] adds only what was looked at: a source that changed since its scan, or an edit of an older revision, writes nothing; the same edit again is the revision it made", async () => {
+    const { layer } = await importerLayer();
+    const folder = await folderOf({ "SKILL.md": skillMd("release") });
+    await runWith(layer)(
+      Effect.gen(function* () {
+        const importer = yield* SkillImporter;
+        const library = yield* SkillLibrary;
+        const source = { _tag: "Folder", path: folder } as const;
+        const [seen] = (yield* importer.scan(source)).candidates;
+        if (seen?.hash == null) return expect.unreachable();
+        const scanned = new Map([[seen.folder, seen.hash]]);
+        // The folder changes between Look and Import: nothing is added.
+        yield* Effect.promise(() => writeFile(join(folder, "SKILL.md"), `${skillMd("release")}\nAnd push.\n`));
+        const changed = yield* Effect.flip(importer.add(source, { ...you, scanned }));
+        expect(changed).toMatchObject({ _tag: "SkillSourceChanged", folder: seen.folder });
+        expect(yield* library.list).toEqual([]);
+        // What a new scan found is added.
+        const [now] = (yield* importer.scan(source)).candidates;
+        if (now?.hash == null) return expect.unreachable();
+        const [first] = yield* importer.add(source, { ...you, scanned: new Map([[now.folder, now.hash]]) });
+        if (first === undefined) return expect.unreachable();
+        // An edit made from r1 after r2 was saved is refused, and r2 stays the newest.
+        const base = (yield* (yield* SkillFiles).folder(first.revision.hash)) ?? "";
+        const edit = (instructions: string) =>
+          ({
+            _tag: "Edited",
+            folder: base,
+            description: "Releases.",
+            instructions,
+            carried: { charms: [], dropped: [] },
+          }) as const;
+        const after = first.revision.hash;
+        const [second] = yield* importer.add(edit("Tag it."), { ...you, skillId: first.skill.id, after });
+        expect(second?.revision.number).toBe(2);
+        // The same edit sent again, as after the hub stopped before its rollout, is the revision it made.
+        const [retried] = yield* importer.add(edit("Tag it."), { ...you, skillId: first.skill.id, after });
+        expect(retried).toMatchObject({ added: false, revision: { hash: second?.revision.hash } });
+        const stale = yield* Effect.flip(importer.add(edit("Push it."), { ...you, skillId: first.skill.id, after }));
+        expect(stale).toMatchObject({ _tag: "SkillMovedOn", latest: second?.revision.hash });
+        expect(yield* library.get(first.skill.id)).toMatchObject({ revisions: 2, latest: second?.revision.hash });
       }),
     );
   });

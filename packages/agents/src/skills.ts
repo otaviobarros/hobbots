@@ -24,6 +24,7 @@ import type {
   SkillRevisionHash,
   SkillScope,
   SkillSource,
+  SkillSourceChanged,
   SkillSourceUnreadable,
   SkillUse,
   SkillUseCounts,
@@ -36,6 +37,12 @@ import { Context, type Effect } from "effect";
  * stored is the adapter's business. Policy, such as which skills a hob gets, is built on top of it
  * (`resolveSkills`), never inside it.
  */
+
+/** A hold a save changes: keep the assignment on its revision, or let it follow edits again. */
+export interface SkillHoldChange {
+  readonly assignmentId: SkillAssignmentId;
+  readonly held: boolean;
+}
 
 /** A revision to add, already checked: its hash is the content's, and its files are in `SkillFiles`. */
 export interface SkillRevisionInput {
@@ -53,8 +60,8 @@ export interface SkillRevisionInput {
   readonly label: string | null;
   readonly addedBy: SkillBy;
   /**
-   * The revision this one was built on, when it keeps files of it: written only while that is still
-   * the skill's newest, or refused with `SkillMovedOn`, in the same transaction as the write.
+   * The revision this one was made from: adding it fails with `SkillMovedOn` once the skill's newest
+   * is another, unless the newest is this very content, added before by the same edit sent again.
    */
   readonly after?: SkillRevisionHash;
 }
@@ -109,7 +116,8 @@ export interface SkillLibraryShape {
    * Adds `input` as the newest revision of skill `skillId`, or as the first of a new skill when null.
    * Content the skill already has answers that revision, unchanged, and a new skill whose content a
    * skill of that name already has answers that one. Otherwise a new skill fails on a name the
-   * library has (`SkillNameTaken`), and a revision on a name that is not its skill's (`SkillNameChanged`).
+   * library has (`SkillNameTaken`), and a revision on a name that is not its skill's (`SkillNameChanged`)
+   * or made from a revision that is no longer the newest (`SkillMovedOn`), checked as it is written.
    */
   readonly addRevision: (
     skillId: SkillId | null,
@@ -136,12 +144,17 @@ export interface SkillLibraryShape {
    * out only a revision that is still its skill's newest and was never rolled out, so two saves of
    * one content roll it out once and a rollback made between them stays. `always` is a rollout you
    * ask for, such as Roll back, which goes ahead whatever the revision's past.
+   *
+   * `holds` are the holds a save changed along with its edit: applied only by the `pending` rollout
+   * that claims the revision, in its transaction and before anything moves. A save sent again after
+   * its rollout ran claims nothing, so it never replays them over a Keep on made since.
    */
   readonly rollOutRevision: (
     skillId: SkillId,
     pin: SkillRevisionHash,
     by: SkillBy,
     when: "pending" | "always",
+    holds?: ReadonlyArray<SkillHoldChange>,
   ) => Library<Committed<ReadonlyArray<SkillAssignment>>, SkillNotFound>;
   /**
    * Makes `delivery` once for `operation`, such as one proposal's add: its receipt is recorded in the
@@ -214,7 +227,8 @@ export type SkillImportError =
   | SkillNotFound
   | SkillNameTaken
   | SkillNameChanged
-  | SkillMovedOn;
+  | SkillMovedOn
+  | SkillSourceChanged;
 
 /**
  * A skill's files as import checks them: what it is called and says it is for, what a reader is

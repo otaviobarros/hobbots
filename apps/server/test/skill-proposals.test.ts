@@ -562,7 +562,7 @@ describe("hobs proposing skills", () => {
       races.push(add([{ path: "SKILL.md", text: skillMd("release-steps", body) }], skillId));
     }
     const moved = await request("POST", `/api/skill-proposals/${again?.proposal.id}/add`, {});
-    expect(moved).toMatchObject({ status: 409, body: { _tag: "SkillChangedMeanwhile" } });
+    expect(moved).toMatchObject({ status: 409, body: { _tag: "SkillEditStale" } });
     expect((await proposals()).find((one) => one.proposal.id === again?.proposal.id)?.proposal.state).toBe("waiting");
     expect((await library())[0]?.revisions).toBe(6);
     // The library refuses a revision built on one that is no longer the newest, whoever writes it.

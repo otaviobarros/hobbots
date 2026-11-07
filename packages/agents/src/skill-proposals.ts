@@ -14,6 +14,7 @@ import type {
   SkillProposalNotFound,
   SkillProposalState,
   SkillRefused,
+  SkillSourceChanged,
   SkillSourceUnreadable,
 } from "@hobbots/domain";
 import { SKILL_PROPOSALS_WAITING_MAX, skillProposalOpen } from "@hobbots/domain";
@@ -99,7 +100,8 @@ export type SkillReviewError =
   | SkillNotFound
   | SkillNameTaken
   | SkillNameChanged
-  | SkillMovedOn;
+  | SkillMovedOn
+  | SkillSourceChanged;
 
 /**
  * Your side of proposals: what waits for you and what was decided lately, and your decisions. Only

@@ -1,10 +1,13 @@
 import {
   AgentId,
+  MemoryProjectIdentity,
   Skill,
   SkillAssignment,
   SkillAssignmentId,
   SkillCheck,
+  SkillDescription,
   SkillDropped,
+  SkillFileMode,
   SkillFlag,
   SkillId,
   SkillName,
@@ -21,9 +24,10 @@ import { DeviceSession } from "./user-session.ts";
 
 /**
  * The skills library (ADR 029, Import): list and read skills, see what a source holds, import from
- * a folder on the hub's computer, an archive or a Git repository, add a revision, and remove a skill
- * nothing assigns. Then where each skill applies (#1061): assign it to Everyone, a project or a hob,
- * pinned to a revision; hold an assignment, roll one out or back; and turn a skill off for one hob.
+ * a folder on the hub's computer, an archive or a Git repository, add a revision or edit one, read a
+ * revision's files, and remove a skill nothing assigns. Then where each skill applies (#1061): assign
+ * it to Everyone, a project or a hob, pinned to a revision; hold an assignment, roll one out or back;
+ * and turn a skill off for one hob.
  */
 
 /** There is no such skill, revision or folder in the source. */
@@ -54,13 +58,17 @@ export class SkillNameConflict extends Schema.TaggedError<SkillNameConflict>()(
   { httpApiStatus: 409 },
 ) {}
 
-/**
- * The skill got a newer revision while this one was written from it, again each time it was tried,
- * so nothing was added: read it again and decide on what it is now.
- */
-export class SkillChangedMeanwhile extends Schema.TaggedError<SkillChangedMeanwhile>()(
-  "SkillChangedMeanwhile",
-  { skillId: SkillId },
+/** An edit made from a revision that is no longer the skill's newest; `latest` is. Nothing was saved. */
+export class SkillEditStale extends Schema.TaggedError<SkillEditStale>()(
+  "SkillEditStale",
+  { skillId: SkillId, latest: SkillRevisionHash },
+  { httpApiStatus: 409 },
+) {}
+
+/** The source changed since it was scanned; scan it again to see what it holds now. Nothing was written. */
+export class SkillScanOutdated extends Schema.TaggedError<SkillScanOutdated>()(
+  "SkillScanOutdated",
+  { folder: Schema.String },
   { httpApiStatus: 409 },
 ) {}
 
@@ -123,6 +131,11 @@ export const ImportSkillsPayload = Schema.Struct({
   source: SkillSourcePayload,
   /** The folders to take, from a scan; every one when absent. */
   folders: Schema.optionalKey(Schema.Array(Schema.String)),
+  /**
+   * What the scan found in each folder taken: the import fails with `SkillScanOutdated` when the source
+   * now holds anything else, such as a branch that moved on since you looked.
+   */
+  scanned: Schema.optionalKey(Schema.Array(Schema.Struct({ folder: Schema.String, hash: SkillRevisionHash }))),
 });
 
 export const ReviseSkillPayload = Schema.Struct({
@@ -197,6 +210,10 @@ export const AgentsFolderProblem = Schema.Struct({
 export const SkillsList = Schema.Struct({
   skills: Schema.Array(Skill),
   sources: Schema.Array(SkillSource),
+  /** Every assignment, of every skill: where each one applies, as the Skills page groups them. */
+  assignments: Schema.Array(SkillAssignment),
+  /** The projects a skill can be given to: those hobs work in now, and those the library already gives skills to. */
+  projects: Schema.Array(MemoryProjectIdentity),
   agentsFolder: Schema.Struct({ path: Schema.NullOr(Schema.String), problems: Schema.Array(AgentsFolderProblem) }),
   /** How often hobs used each skill in the last seven days; a skill nobody used is left out. */
   usesThisWeek: Schema.Array(Schema.Struct({ skillId: SkillId, count: Schema.Int })),
@@ -214,10 +231,46 @@ export type SkillDetail = typeof SkillDetail.Type;
 /** A revision with its `SKILL.md`, as the skill's Instructions show it. */
 export const SkillRevisionDetail = Schema.Struct({ revision: SkillRevision, instructions: Schema.String });
 
+/** The most of a file the skill's page shows, in bytes; a longer one is listed without its text. */
+export const SKILL_FILE_SHOWN_MAX = 512 * 1024;
+
+/** One file of a revision, read-only: its text, or null when it is not text or is too long to show. */
+export const SkillFileRead = Schema.Struct({
+  path: Schema.String,
+  mode: SkillFileMode,
+  size: Schema.Int,
+  text: Schema.NullOr(Schema.String),
+});
+export type SkillFileRead = typeof SkillFileRead.Type;
+
+/**
+ * An edit in Hobbots: a new revision from `base` with another description and instructions, its
+ * name and every other file kept.
+ */
+export const EditSkillPayload = Schema.Struct({
+  base: SkillRevisionHash,
+  description: SkillDescription,
+  /** The `SKILL.md` text after its front matter. */
+  instructions: Schema.String.check(Schema.isMaxLength(1024 * 1024)),
+  /**
+   * The holds you switched along with the edit. They are set by the edit's own rollout, in its
+   * transaction: never by an edit that is refused, and never again by the same save sent after its
+   * rollout ran, so a Keep on made since stays.
+   */
+  holds: Schema.optionalKey(Schema.Array(Schema.Struct({ assignmentId: SkillAssignmentId, held: Schema.Boolean }))),
+});
+
 const skillParams = { skillId: SkillId };
 const assignmentParams = { assignmentId: SkillAssignmentId };
 const hobParams = { agentId: AgentId };
-const importErrors = [SkillImportRefused, SkillSourceNotRead, SkillMissing, SkillNameConflict, SkillChangedMeanwhile];
+const importErrors = [
+  SkillImportRefused,
+  SkillSourceNotRead,
+  SkillMissing,
+  SkillNameConflict,
+  SkillEditStale,
+  SkillScanOutdated,
+];
 
 export class SkillsGroup extends HttpApiGroup.make("skills")
   .add(HttpApiEndpoint.get("list", "/skills", { success: SkillsList }))
@@ -228,6 +281,14 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
     HttpApiEndpoint.get("revision", "/skills/:skillId/revisions/:hash", {
       params: { ...skillParams, hash: SkillRevisionHash },
       success: SkillRevisionDetail,
+      error: SkillMissing,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("file", "/skills/:skillId/revisions/:hash/file", {
+      params: { ...skillParams, hash: SkillRevisionHash },
+      query: { path: Schema.String },
+      success: SkillFileRead,
       error: SkillMissing,
     }),
   )
@@ -310,6 +371,14 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
       payload: Schema.Struct({ optedOut: Schema.Boolean }),
       success: HobSkills,
       error: SkillMissing,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("edit", "/skills/:skillId/edits", {
+      params: skillParams,
+      payload: EditSkillPayload,
+      success: RevisedSkill,
+      error: importErrors,
     }),
   )
   .add(

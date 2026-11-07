@@ -2,6 +2,7 @@ import type { Agent, MemoryKind, MemoryScope } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
+import { LineIcon } from "../shell/line-icon.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages;
@@ -40,22 +41,7 @@ const ICONS = {
 export type MemoryIconName = keyof typeof ICONS;
 
 export function MemoryIcon({ name, size = 16 }: { name: MemoryIconName; size?: number }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      width={size}
-      height={size}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="shrink-0"
-    >
-      <path d={ICONS[name]} />
-    </svg>
-  );
+  return <LineIcon path={ICONS[name]} size={size} />;
 }
 
 /** Who a scope belongs to, as a row shows it: the hob on its tile, or a folder or person icon. */

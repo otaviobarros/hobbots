@@ -1,4 +1,9 @@
-import { type SkillAssignmentInput, SkillLibrary, type SkillRevisionInput } from "@hobbots/agents";
+import {
+  type SkillAssignmentInput,
+  type SkillHoldChange,
+  SkillLibrary,
+  type SkillRevisionInput,
+} from "@hobbots/agents";
 import {
   AgentId,
   type JournaledEvent,
@@ -278,9 +283,9 @@ export const SkillLibraryLive = Layer.effect(
         }
         const skill = yield* skillRow(skillId);
         if (skill === null) return yield* new SkillNotFound({ id: skillId });
-        // Built on files of a revision that is no longer the newest: refused, so nothing it kept goes back.
-        if (input.after !== undefined && skill.latest !== input.after) {
-          return yield* new SkillMovedOn({ skillId: skill.id, expected: input.after, latest: skill.latest });
+        // The same content as the newest is this edit saved before, sent again to finish its rollout.
+        if (input.after !== undefined && skill.latest !== input.after && skill.latest !== input.hash) {
+          return yield* new SkillMovedOn({ skillId: skill.id, latest: skill.latest });
         }
         const same = yield* revisionRow(skill.id, input.hash);
         if (same !== null) return { _tag: "Same" as const, skill, revision: same };
@@ -404,6 +409,7 @@ export const SkillLibraryLive = Layer.effect(
       pin: SkillRevisionHash,
       by: SkillBy,
       when: "pending" | "always",
+      holds: ReadonlyArray<SkillHoldChange> = [],
     ) =>
       Effect.gen(function* (): Effect.fn.Return<
         Changed<ReadonlyArray<SkillAssignment>>,
@@ -420,6 +426,13 @@ export const SkillLibraryLive = Layer.effect(
         if (when === "pending" && claimed.length === 0) return { value: [], events: [] };
         const moved: Array<SkillAssignment> = [];
         const events: Array<JournaledEvent> = [];
+        // The save that claimed it sets its holds first, so what it keeps back is not moved.
+        for (const hold of when === "pending" ? holds : []) {
+          const [row] = yield* sql<AssignmentRow>`UPDATE skill_assignments
+            SET held = ${hold.held ? 1 : 0}, revision = ${first}
+            WHERE id = ${hold.assignmentId} AND skill_id = ${skillId} AND held = ${hold.held ? 0 : 1} RETURNING *`;
+          if (row !== undefined) events.push({ _tag: "SkillHeld", assignment: yield* assignmentOf(row) });
+        }
         for (const before of yield* assignmentsOf(skillId)) {
           if (before.held || before.pin === pin) continue;
           // Moved only while it is still not held and still on the pin it was read with, so a
@@ -482,9 +495,9 @@ export const SkillLibraryLive = Layer.effect(
             return { value: assignment, events: [{ _tag: "SkillRolledOut", assignment, from: before.pin }] };
           }),
         ),
-      rollOutRevision: (skillId, pin, by, when) =>
+      rollOutRevision: (skillId, pin, by, when, holds = []) =>
         change<ReadonlyArray<SkillAssignment>, SkillNotFound | SqlError.SqlError>((first) =>
-          rollOutIn(first, skillId, pin, by, when),
+          rollOutIn(first, skillId, pin, by, when, holds),
         ),
       deliver: (operation, delivery) =>
         change<ReadonlyArray<SkillAssignment> | null, SkillNotFound | SqlError.SqlError>((first) =>

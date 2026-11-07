@@ -13,6 +13,7 @@ import {
   PermissionSummary,
   RuntimeAdapter,
 } from "@hobbots/agents";
+import { roleFields } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -168,5 +169,102 @@ describe("skills routes", () => {
     const inUse = await request("DELETE", `/api/skills/${sharedId}`);
     expect(inUse).toMatchObject({ status: 409, body: { _tag: "SkillStillAssigned", skillId: sharedId } });
     expect(inUse.body.assignments).toHaveLength(1);
+  });
+  // covers ADR 029 (Storage and revisions, The Skills page), #1062
+  it("[TC-AG-146] reads a revision's files only by the paths it lists, and edits a skill into a new revision", async () => {
+    const folder = await folderWith({
+      "SKILL.md": skillMd("release"),
+      "references/checks.md": "Check the banner.",
+      "logo.bin": "\u0000\u0001",
+    });
+    const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
+    const [{ skill, revision }] = imported.body.imported;
+    const at = `/api/skills/${skill.id}/revisions/${revision.hash}/file`;
+
+    const checks = await request("GET", `${at}?path=references%2Fchecks.md`);
+    expect(checks.body).toEqual({ path: "references/checks.md", mode: "regular", size: 17, text: "Check the banner." });
+    expect((await request("GET", `${at}?path=logo.bin`)).body).toMatchObject({ path: "logo.bin", text: null });
+    // A path the revision does not list is not read, whatever it names.
+    expect((await request("GET", `${at}?path=..%2F..%2Fetc%2Fpasswd`)).status).toBe(404);
+    expect((await request("GET", `${at}?path=missing.md`)).status).toBe(404);
+
+    const edit = { base: revision.hash, description: "Use when releasing.", instructions: "Tag, then push." };
+    const edited = await request("POST", `/api/skills/${skill.id}/edits`, edit);
+    expect(edited.body).toMatchObject({ added: true, revision: { number: 2, description: "Use when releasing." } });
+    expect(edited.body.revision.files.map((file: { path: string }) => file.path)).toEqual([
+      "SKILL.md",
+      "logo.bin",
+      "references/checks.md",
+    ]);
+    const read = await request("GET", `/api/skills/${skill.id}/revisions/${edited.body.revision.hash}`);
+    expect(read.body.instructions).toBe(
+      "---\nname: release\ndescription: Use when releasing.\n---\n\nTag, then push.\n",
+    );
+    const missing = await request("POST", `/api/skills/${skill.id}/edits`, { ...edit, base: "0".repeat(64) });
+    expect(missing.status).toBe(404);
+
+    // An edit made from r1 after r2 was saved is refused, and saves nothing: r2 stays the newest.
+    const stale = await request("POST", `/api/skills/${skill.id}/edits`, { ...edit, instructions: "Only tag." });
+    expect(stale.status).toBe(409);
+    expect(stale.body).toMatchObject({ _tag: "SkillEditStale", latest: edited.body.revision.hash });
+    const after = await request("GET", `/api/skills/${skill.id}`);
+    expect(after.body.skill).toMatchObject({ revisions: 2, latest: edited.body.revision.hash });
+  });
+
+  // covers ADR 029 (Scopes, The Skills page), #1062
+  it("[TC-AG-148] lists the projects a skill can go to: those hobs work in, before any skill is given to them", async () => {
+    const site = join(await mkdtemp(join(tmpdir(), "skills-")), "Site");
+    await mkdir(site);
+    expect((await request("GET", "/api/skills")).body.projects).toEqual([]);
+    await request("PATCH", "/api/setup", { safetyPreset: "balanced", approvedFolders: [site] });
+    const hob = {
+      name: "Wren",
+      ...roleFields("writer"),
+      lookSeed: 7,
+      lookColor: "moss",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+    };
+    expect((await request("POST", "/api/agents", hob)).status).toBe(200);
+    // A folder with no Git remote is its own project, by its name.
+    expect((await request("GET", "/api/skills")).body.projects).toEqual(["site"]);
+  });
+
+  // covers ADR 029 (Pins and rollout, The Skills page), #1062
+  it("[TC-AG-149] keeps the places an edit holds back, changes no hold when it is refused, and never replays its holds", async () => {
+    const folder = await folderWith({ "SKILL.md": skillMd("release") });
+    const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
+    const [{ skill, revision }] = imported.body.imported;
+    const everyone = await request("POST", `/api/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+    const place = async () => (await request("GET", `/api/skills/${skill.id}`)).body.assignments[0];
+    const keep = [{ assignmentId: everyone.body.id, held: true }];
+    const edit = { base: revision.hash, description: "Use when releasing.", instructions: "Tag it." };
+
+    // A refused edit changes no hold.
+    const r2 = await request("POST", `/api/skills/${skill.id}/edits`, edit);
+    expect(r2.body.rolledOut).toHaveLength(1);
+    const stale = await request("POST", `/api/skills/${skill.id}/edits`, {
+      ...edit,
+      instructions: "Push.",
+      holds: keep,
+    });
+    expect(stale.status).toBe(409);
+    expect(await place()).toMatchObject({ pin: r2.body.revision.hash, held: false });
+
+    // Saved as r3 with Everyone kept on r2.
+    const next = { ...edit, base: r2.body.revision.hash, instructions: "Tag, then push.", holds: keep };
+    const r3 = await request("POST", `/api/skills/${skill.id}/edits`, next);
+    expect(r3.body).toMatchObject({ added: true, revision: { number: 3 }, rolledOut: [] });
+    expect(await place()).toMatchObject({ pin: r2.body.revision.hash, held: true });
+
+    // Its answer was lost, Everyone was let go on another device, and the save is sent again: it is
+    // r3, and the hold it carried is not set over the newer choice.
+    await request("POST", `/api/skills/assignments/${everyone.body.id}/hold`, { held: false });
+    const again = await request("POST", `/api/skills/${skill.id}/edits`, next);
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ added: false, revision: { number: 3 }, rolledOut: [] });
+    expect(await place()).toMatchObject({ pin: r2.body.revision.hash, held: false });
   });
 });

@@ -10,10 +10,11 @@ import {
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import {
-  SkillChangedMeanwhile,
+  SkillEditStale,
   SkillImportRefused,
   SkillMissing,
   SkillNameConflict,
+  SkillScanOutdated,
   SkillSourceNotRead,
 } from "./skills.ts";
 import { DeviceSession } from "./user-session.ts";
@@ -93,7 +94,8 @@ const decisionErrors = [
   SkillSourceNotRead,
   SkillMissing,
   SkillNameConflict,
-  SkillChangedMeanwhile,
+  SkillEditStale,
+  SkillScanOutdated,
 ];
 
 export class SkillProposalsGroup extends HttpApiGroup.make("skillProposals")

@@ -1,10 +1,10 @@
 import type { MemoryChange } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { SearchField } from "@hobbots/ui/components/search-field";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useShowMemoryFiles } from "../../lib/show-memory-files.ts";
+import { PageSearch } from "../shell/page-search.tsx";
 import { PageHeader } from "../shell/pages.tsx";
 import type { Say } from "./memory-actions.tsx";
 import {
@@ -32,35 +32,15 @@ type Reads = ReturnType<typeof useMemory>;
 /** The search in the header. Enter searches; clearing it leaves a search for the overview. */
 function MemorySearchForm({ view }: { view: MemoryView }) {
   const navigate = useNavigate();
-  const asked = view._tag === "Search" ? view.q : "";
-  const [draft, setDraft] = useState(asked);
-  const [shownFor, setShownFor] = useState(asked);
-  // A search opened from elsewhere, such as Back, shows its own words.
-  if (shownFor !== asked) {
-    setShownFor(asked);
-    setDraft(asked);
-  }
   return (
-    <search aria-label={copy.search.label} className="w-[300px] max-[1180px]:w-[220px]">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          const q = draft.trim();
-          void navigate({ to: "/memory", search: q === "" ? {} : memorySearchOf({ _tag: "Search", q, within: null }) });
-        }}
-      >
-        <SearchField
-          aria-label={copy.search.label}
-          placeholder={copy.search.placeholder}
-          clearLabel={copy.search.clear}
-          value={draft}
-          onValueChange={(next) => {
-            setDraft(next);
-            if (next === "" && view._tag === "Search") void navigate({ to: "/memory", search: {} });
-          }}
-        />
-      </form>
-    </search>
+    <PageSearch
+      asked={view._tag === "Search" ? view.q : ""}
+      copy={copy.search}
+      onSearch={(q) =>
+        void navigate({ to: "/memory", search: q === "" ? {} : memorySearchOf({ _tag: "Search", q, within: null }) })
+      }
+      onClear={() => void navigate({ to: "/memory", search: {} })}
+    />
   );
 }
 

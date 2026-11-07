@@ -69,7 +69,7 @@ const writableFolders = (folder: string) => {
 };
 
 export const removeDataDir = (dataDir: string) => {
-  if (existsSync(dataDir)) writableFolders(dataDir);
+  if (dataDir !== "" && existsSync(dataDir)) writableFolders(dataDir);
   rmSync(dataDir, { recursive: true, force: true });
   rmSync(`${dataDir}-git-home`, { recursive: true, force: true });
 };
