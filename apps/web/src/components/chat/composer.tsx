@@ -1,10 +1,11 @@
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { type KeyboardEvent, useEffect, useId, useRef } from "react";
+import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef } from "react";
 import { sendable, useDraft, writeDraft } from "../../api/drafts.ts";
 import type { WaitingPlace } from "../../api/outbox.ts";
 import { messages } from "../messages.ts";
-import { SkillPickerList, type SkillPicking, UseSkillButton, useSkillPicker } from "../skill-line/skill-picker.tsx";
+import { SkillPickerList, UseSkillButton, useSkillPicker } from "../skill-line/skill-picker.tsx";
+import type { SkillPicking } from "../skill-line/skill-picker-model.ts";
 import { SendIcon } from "./chat-icons.tsx";
 
 const copy = messages.composer;
@@ -86,8 +87,18 @@ export function Composer({
   skills?: SkillPicking | undefined;
 }) {
   const draft = useDraft(place);
-  const picker = useSkillPicker(draft, skills, (next) => writeDraft(place, next));
   const input = useRef<HTMLTextAreaElement>(null);
+  // Where the picker wants the cursor once the draft it wrote is in the input.
+  const cursorAt = useRef<number | null>(null);
+  const picker = useSkillPicker(draft, skills, (next, cursor) => {
+    cursorAt.current = cursor;
+    writeDraft(place, next);
+  });
+  useLayoutEffect(() => {
+    if (cursorAt.current === null || input.current === null || input.current.value !== draft) return;
+    input.current.setSelectionRange(cursorAt.current, cursorAt.current);
+    cursorAt.current = null;
+  }, [draft]);
   const closed = paused !== undefined && !paused.canQueue;
   const content = sendable(draft);
   const stopWhat = useId();

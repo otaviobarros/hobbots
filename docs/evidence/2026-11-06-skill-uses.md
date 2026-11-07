@@ -38,9 +38,20 @@
 | TC-OR-647 | A Task step uses the hob's skill | ✅ Counted for the hob, with no thread or reply |
 | TC-DP-282 | Uses on SQLite and PostgreSQL | ✅ Each journaled as `SkillUsed` with its hob, thread and reply; read per skill, per hob and in all, newest first |
 
+## After review
+
+A review of the pull request found five problems, fixed with these checks:
+
+| Case | Check | Result |
+|---|---|---|
+| TC-UI-1096-06 | In a browser, you write a message, press Use a skill, close the list with Escape, press it again, type `rel` and pick with Enter, then send and reload | ✅ The message stayed after the `/` each time and came back as it was on Escape; the reply's line read "Used Release steps (r1)" before and after the reload; no serious or critical accessibility violations in the list or the line |
+| TC-UI-1096-07 | In a browser, the hob's skills fail to load, then load on Try again | ✅ The list said it was loading, then that Hobbots could not read the skills, never that the hob has none; Try again showed the skill |
+| TC-RT-533 | Codex refuses `turn/start` for a turn with a skill you picked | ✅ No `SkillUsed`; with a Codex that takes the turn, one, after `turn/start` |
+| TC-RT-531, TC-RT-532 | A Codex command reads an administrator's skill's `SKILL.md` that admission let through | ✅ Reported as used; another `SKILL.md` and another file of that skill are not |
+
 ## Gaps
 
 - No real model ran, so whether a real model picks a skill, and how often, was not observed.
 - On Codex, a skill the model reads by any way other than a command Codex parses as a read (such as a script that prints it) is not counted.
 - The Used line's Open, and the Activity tab, scope lists and hob Skills tab that show the counts, wait for the Skills page ([#1062](https://github.com/otaviobarros/hobbots/issues/1062)). The routes are in place.
-- A skill from an administrator's settings is recorded as the organization's when the runtime names it; no runtime here had one used.
+- A skill from an administrator's settings is recorded as the organization's when the runtime names it. On Codex a read of its `SKILL.md` names it, checked with a scripted App Server (TC-RT-531, TC-RT-532), not with Codex itself; no installed runtime here had one.

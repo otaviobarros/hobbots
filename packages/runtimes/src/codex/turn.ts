@@ -695,7 +695,7 @@ const turnEvents = (
       }
       const opened = yield* openThread(server, request, launch.cwd, launch.instructions).pipe(Effect.mapError(failed));
       const threadId = opened.thread.id;
-      const mapper = codexTurnEvents(threadId, skillRootsOf(launch.skills));
+      const mapper = codexTurnEvents(threadId, skillRootsOf(launch.skills), admitted.organizationFiles);
       // The skill you picked loads with the turn's first input, as Codex's own skill item (ADR 029).
       const asked = askedSkillInput(launch.skills, askedMount(request.askedSkill, request.skills));
       turn = {
@@ -712,7 +712,6 @@ const turnEvents = (
         ...launch.session,
         ...(admitted.organization.length > 0 ? { organizationSkills: admitted.organization } : {}),
       });
-      if (asked !== null) report({ _tag: "SkillUsed", name: asked.name, explicit: true });
       yield* Deferred.await(accepted);
 
       // Subscribed before the turn starts, so its first notifications are not missed.
@@ -737,6 +736,8 @@ const turnEvents = (
             .pipe(Effect.mapError(failed));
           mapper.follow(started.turn.id);
           now.turnId = started.turn.id;
+          // Codex took the skill item with the turn, so the skill you picked is used (ADR 029).
+          if (skill !== null) report({ _tag: "SkillUsed", name: skill.name, explicit: true });
         });
 
       // Cancelling the turn asks Codex to stop it and waits for the acknowledgement, so the process

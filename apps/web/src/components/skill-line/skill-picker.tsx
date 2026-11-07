@@ -3,38 +3,57 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { type KeyboardEvent, useState } from "react";
 import { MemoryIcon } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
-import { matchingSkills, type PickerSkill, pickedDraft, slashQuery } from "./skill-picker-model.ts";
+import {
+  dismissedDraft,
+  matchingSkills,
+  pickedDraft,
+  type SkillPicking,
+  slashQuery,
+  startedDraft,
+} from "./skill-picker-model.ts";
 
 const copy = messages.picker;
-
-/** The hob's skills the composer's `/` offers, and whose they are. */
-export interface SkillPicking {
-  readonly hobName: string;
-  readonly skills: ReadonlyArray<PickerSkill>;
-}
 
 /**
  * Picking one of the hob's skills with `/` (ADR 029, Explicit use): while the draft is `/` and the
  * start of a name, the list shows the skills that match; ↑ and ↓ move, Enter or a click picks, and
- * Escape leaves the draft as typed. The picked skill becomes `/name ` at the start of the message,
- * which the hub hands the runtime as its own mention.
+ * Escape closes the list. The picked skill becomes `/name ` at the start of the message, which the
+ * hub hands the runtime as its own mention; what was already written stays after it. `write` takes
+ * the new draft and where the cursor goes in it.
  */
-export const useSkillPicker = (draft: string, picking: SkillPicking | undefined, write: (draft: string) => void) => {
+export const useSkillPicker = (
+  draft: string,
+  picking: SkillPicking | undefined,
+  write: (draft: string, cursor: number) => void,
+) => {
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const query = picking === undefined ? null : slashQuery(draft);
-  const open = query !== null && dismissed !== draft;
-  const list = open && picking ? matchingSkills(picking.skills, query) : [];
+  const slash =
+    picking === undefined
+      ? null
+      : slashQuery(
+          draft,
+          picking.skills.map((skill) => skill.name),
+        );
+  const open = slash !== null && dismissed !== draft;
+  const list = open && picking ? matchingSkills(picking.skills, slash.query) : [];
   const at = Math.min(active, Math.max(0, list.length - 1));
   const pick = (name: string) => {
-    write(pickedDraft(name));
+    write(pickedDraft(name, slash?.rest ?? null), name.length + 2);
     setActive(0);
+  };
+  /** Use a skill: a `/` at the start, before what was written, with the cursor after it. */
+  const start = () => {
+    setDismissed(null);
+    write(startedDraft(draft), 1);
   };
   /** Handles a key for the list; true when it took the key. */
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (!open) return false;
     if (event.key === "Escape") {
-      setDismissed(draft);
+      const back = slash === null ? draft : dismissedDraft(draft, slash);
+      if (back === draft) setDismissed(draft);
+      else write(back, 0);
       return true;
     }
     if (list.length === 0) return false;
@@ -63,7 +82,7 @@ export const useSkillPicker = (draft: string, picking: SkillPicking | undefined,
       }
       rest(event);
     };
-  return { open, list, active: at, pick, around, start: () => write("/") };
+  return { open, list, active: at, pick, around, start };
 };
 
 /** The `/` list over the composer, as the screens draw it. */
@@ -102,13 +121,31 @@ export function SkillPickerList({
           </li>
         ))}
       </ul>
-      {picker.list.length === 0 && (
-        <span className="px-2.5 py-2 text-detail text-text-secondary">
-          {empty ? copy.noSkills({ name: picking.hobName }) : copy.none({ name: picking.hobName })}
-        </span>
-      )}
+      {picker.list.length === 0 && <EmptyList picking={picking} empty={empty} />}
       <span className="px-2 pt-1 pb-0.5 text-meta text-label">{copy.hint({ name: picking.hobName })}</span>
     </section>
+  );
+}
+
+/** What the list says when it shows no skill: still loading, failed with a retry, or none to show. */
+function EmptyList({ picking, empty }: { picking: SkillPicking; empty: boolean }) {
+  const name = picking.hobName;
+  if (picking.status === "failed") {
+    return (
+      <span role="alert" className="flex items-center gap-2 px-2.5 py-2 text-detail text-text-secondary">
+        {copy.failed({ name })}
+        <Button variant="outline" size="bar" onMouseDown={(event) => event.preventDefault()} onClick={picking.onRetry}>
+          {copy.retry}
+        </Button>
+      </span>
+    );
+  }
+  const text =
+    picking.status === "loading" ? copy.loading({ name }) : empty ? copy.noSkills({ name }) : copy.none({ name });
+  return (
+    <span aria-live="polite" className="px-2.5 py-2 text-detail text-text-secondary">
+      {text}
+    </span>
   );
 }
 

@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import type { SkillFolder } from "../skills.ts";
 import type { AppServer } from "./app-server.ts";
 import type { SkillMetadata } from "./protocol.ts";
+import type { SkillFile } from "./skill-reads.ts";
 
 /** How deep Hobbots looks for a `SKILL.md` under a root Codex scans; the check catches anything deeper. */
 const MAX_DEPTH = 6;
@@ -88,6 +89,8 @@ export const unexpectedSkillsMessage = (skills: ReadonlyArray<SkillMetadata>) =>
 /** What `skills/list` showed before the turn: the skills an administrator's settings bring. */
 export interface AdmittedSkills {
   readonly organization: ReadonlyArray<string>;
+  /** Their `SKILL.md` files, as listed and as resolved, so a read of one counts as its use. */
+  readonly organizationFiles: ReadonlyArray<SkillFile>;
 }
 
 /**
@@ -121,7 +124,12 @@ export const admitSkills = (
     );
     if (unexpected.length > 0)
       return yield* Effect.fail(new RuntimeError({ message: unexpectedSkillsMessage(unexpected) }));
-    return { organization: [...new Set(organization.map((skill) => skill.name))].sort() };
+    return {
+      organization: [...new Set(organization.map((skill) => skill.name))].sort(),
+      organizationFiles: organization.flatMap((skill) =>
+        [...new Set([skill.path, realOrSelf(skill.path)])].map((path) => ({ name: skill.name, path })),
+      ),
+    };
   });
 
 /** The turn's skill folder as given and as resolved, so a read through either path counts as a use. */

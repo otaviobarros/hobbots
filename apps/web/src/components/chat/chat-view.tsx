@@ -56,7 +56,7 @@ import { PinNotes } from "../quest/pin-notes.tsx";
 import { ThreadQuestButton, useWorkMoments } from "../quest/thread-work.tsx";
 import type { Pins } from "../quest/use-work.ts";
 import { ReconnectingCard } from "../shell/reconnecting.tsx";
-import { pickerSkills } from "../skill-line/skill-picker-model.ts";
+import { skillPicking } from "../skill-line/skill-picker-model.ts";
 import { SkillUsedLines } from "../skill-line/skill-used-line.tsx";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { BackIcon } from "./chat-icons.tsx";
@@ -433,7 +433,7 @@ export function ChatView({
             sending={start.isPending || send.isPending}
             onSend={sendDraft}
             onStop={() => interrupt.mutate()}
-            skills={{ hobName: current.name, skills: pickerSkills(skills.data, current.name) }}
+            skills={skillPicking(skills, current.name)}
             paused={
               paused
                 ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: threadId !== undefined }

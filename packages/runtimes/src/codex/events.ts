@@ -11,7 +11,7 @@ import type {
   TurnError,
   TurnNotification,
 } from "./protocol.ts";
-import { skillReadsOf } from "./skill-reads.ts";
+import { type SkillFile, skillReadsOf } from "./skill-reads.ts";
 
 /**
  * How a Codex turn ended, from its `turn/completed` (ADR 024). `interrupted` is the acknowledgement
@@ -121,9 +121,14 @@ const turnFailure = (error: TurnError | null): RuntimeError | RuntimeLimitReache
  *
  * A tool call is reported as started by whatever decided and recorded it (`started`); from then on
  * its output and end come from Codex's items. A tool item nobody started is not reported here.
- * `skillRoots` are the turn's skill folder, as given and as resolved, whose reads count as uses.
+ * `skillRoots` are the turn's skill folder, as given and as resolved, whose reads count as uses, and
+ * `skillFiles` the organization's skills Codex was let load, whose `SKILL.md` reads count too.
  */
-export const codexTurnEvents = (threadId: string, skillRoots: ReadonlyArray<string> = []) => {
+export const codexTurnEvents = (
+  threadId: string,
+  skillRoots: ReadonlyArray<string> = [],
+  skillFiles: ReadonlyArray<SkillFile> = [],
+) => {
   // The Codex turns of this Hobbots turn: its first, and any that follow up on a command (#1048).
   const turns = new Set<string>();
   // Whether a follow-up turn was asked for that Codex has not named yet.
@@ -225,7 +230,7 @@ export const codexTurnEvents = (threadId: string, skillRoots: ReadonlyArray<stri
     if (item.type === "contextCompaction") return { events: [{ _tag: "SessionCompacted" }] };
     if (!("status" in item)) return NOTHING;
     // A command that read a mounted skill's `SKILL.md` is the model using that skill (ADR 029).
-    const used = skillReadsOf(item, skillRoots).map(
+    const used = skillReadsOf(item, skillRoots, skillFiles).map(
       (name): RuntimeEvent => ({ _tag: "SkillUsed", name, explicit: false }),
     );
     const finished = toolFinished(item);

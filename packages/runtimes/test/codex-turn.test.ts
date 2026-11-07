@@ -737,6 +737,17 @@ describe("a Codex turn's skill uses (ADR 029, #1096)", () => {
     // A turn without skills counts none.
     expect(codexTurnEvents(THREAD).map(read("c6", `${ROOT}/release-steps/SKILL.md`)).events).toEqual([]);
   });
+
+  // covers ADR 029 (The use line)
+  it("[TC-RT-531] counts a read of an organization skill Codex was let load, and no other file beside it", () => {
+    const org = { name: "org-steps", path: "/etc/codex/skills/org-steps/SKILL.md" };
+    const events = codexTurnEvents(THREAD, [], [org]);
+    expect(events.map(read("o1", org.path)).events).toEqual([
+      { _tag: "SkillUsed", name: "org-steps", explicit: false },
+    ]);
+    expect(events.map(read("o2", "/etc/codex/skills/other/SKILL.md")).events).toEqual([]);
+    expect(events.map(read("o3", "/etc/codex/skills/org-steps/notes.md")).events).toEqual([]);
+  });
 });
 
 describe("a Codex command that outlives its turn (#1048)", () => {
@@ -1130,5 +1141,57 @@ describe("a Codex turn's skills (ADR 029)", () => {
     });
     // A turn without skills sets no root.
     expect(admitted.skillRequests[0]?.params).toEqual({ extraRoots: [] });
+  });
+
+  // covers ADR 029 (The use line)
+  it("[TC-RT-532] reports an administrator's skill the model reads as used, from your organization", async () => {
+    const orgPath = "/etc/codex/skills/org-steps/SKILL.md";
+    const server = fakeServer({
+      script: [
+        item("item/completed", {
+          type: "commandExecution",
+          id: "c1",
+          command: `cat ${orgPath}`,
+          cwd: "/repo",
+          status: "completed",
+          aggregatedOutput: "",
+          exitCode: 0,
+          commandActions: [{ type: "read", command: `cat ${orgPath}`, name: "SKILL.md", path: orgPath }],
+        }),
+        message("m1", "Hi."),
+        completed("completed"),
+      ],
+      skills: [{ name: "org-steps", path: orgPath, scope: "admin", enabled: true }],
+    });
+    const ran = await run(config(server.start));
+    expect(events(ran).filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", name: "org-steps", explicit: false },
+    ]);
+  });
+
+  // covers ADR 029 (Explicit use)
+  it("[TC-RT-533] reports the skill you picked as used only once Codex takes the turn with it", async () => {
+    const asked = { ...prompt({ skills: mounted() }), askedSkill: "release" };
+    const taken = scripted([]);
+    const ran = await run(config(taken.start), asked);
+    expect(Exit.isSuccess(ran), String(ran)).toBe(true);
+    expect(events(ran).filter((event) => event._tag === "SkillUsed")).toEqual([
+      { _tag: "SkillUsed", name: "release", explicit: true },
+    ]);
+    expect(taken.requests.find((request) => request.method === "turn/start")?.params).toMatchObject({
+      input: [{ type: "text" }, { type: "skill", name: "release" }],
+    });
+
+    const refused = fakeServer({ refusesTurn: true });
+    const seen: Array<RuntimeEvent> = [];
+    const exit = await Effect.runPromise(
+      runCodexTurn(config(refused.start), asked).pipe(
+        Stream.runForEach((event) => Effect.sync(() => seen.push(event))),
+        Effect.exit,
+      ),
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(seen.map((event) => event._tag)).toContain("SessionStarted");
+    expect(seen.filter((event) => event._tag === "SkillUsed")).toEqual([]);
   });
 });
