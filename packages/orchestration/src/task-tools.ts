@@ -164,7 +164,7 @@ export class TaskTools extends Context.Service<
         const handlers: Record<TaskToolName, ToolHandler> = {
           ...makePlanning({ tasks, capacity, limits, wrapUp, folderChecks, authority: authority.of, separator }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
-          ...makeAsking({ tasks }),
+          ...makeAsking({ tasks, hobs }),
           ...makeLeading({ tasks }),
         };
 

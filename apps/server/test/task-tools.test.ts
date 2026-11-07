@@ -659,6 +659,62 @@ describe("hob tools for Tasks and Quests", () => {
     expect(Option.getOrThrow(await run(tasks.readLedger(TOP))).open).toEqual([]);
   });
 
+  // covers OR-001, OR-002 (#743)
+  it("[TC-OR-654] a milestone reached through another hob's work in the same work is recorded with that hob", async () => {
+    await run(seed);
+    const quill = await delegate(ALDRIC, TOP, "Quill", "copy", { milestones: ["Copy drafted", "Committed"] });
+    await delegate(ALDRIC, TOP, "Pip", "email");
+    const [drafted, committed] = (await tree()).milestones.filter((each) => each.taskId === quill);
+    if (drafted === undefined || committed === undefined) throw new Error("expected two milestones");
+
+    // Naming a hob outside this work, or naming one on anything but a milestone, is refused and writes nothing.
+    const before = await head();
+    const outsider = await refused(QUILL, quill, "report_checkpoint", {
+      key: "outsider",
+      kind: "milestone",
+      summary: "Committed",
+      milestone_id: committed.id,
+      reached_by: "Rook",
+    });
+    expect(outsider.reason).toBe("hob-missing");
+    const progress = await refused(QUILL, quill, "report_checkpoint", {
+      key: "progress",
+      kind: "progress",
+      summary: "Committing",
+      reached_by: "Aldric",
+    });
+    expect(progress.reason).toBe("milestone-mismatch");
+    await onlyRefusalsSince(before);
+
+    // Quill's own work reaches the first; its lead's commit, named by name, reaches the second.
+    await done(QUILL, quill, "report_checkpoint", {
+      key: "drafted",
+      kind: "milestone",
+      summary: "Copy drafted",
+      milestone_id: drafted.id,
+    });
+    const reached = await done(QUILL, quill, "report_checkpoint", {
+      key: "committed",
+      kind: "milestone",
+      summary: "Committed",
+      milestone_id: committed.id,
+      reached_by: "aldric",
+    });
+    expect(reached.details.reached_by).toBe(ALDRIC);
+    expect(reached.message).toContain(`reached by hob ${ALDRIC}`);
+    const milestones = (await tree()).milestones.filter((each) => each.taskId === quill);
+    expect(milestones.map(({ title, reachedBy }) => ({ title, reachedBy }))).toEqual([
+      { title: "Copy drafted", reachedBy: QUILL },
+      { title: "Committed", reachedBy: ALDRIC },
+    ]);
+    const recorded = await run(
+      Effect.flatMap(Effect.service(EventJournal), (journal) => journal.readAfter(before.sequence)),
+    );
+    expect(JSON.stringify(recorded.filter((entry) => entry.type === "CheckpointRecorded").at(-1))).toContain(
+      `"reachedBy":"${ALDRIC}"`,
+    );
+  });
+
   // covers OR-001
   it("[TC-OR-017] a refused or malformed call writes nothing and says why", async () => {
     await run(seed);

@@ -138,6 +138,11 @@ export const TaskToolInputs = {
       text("More about it, only when the summary cannot hold what matters. The Workbench shows it; a lane never does."),
     ),
     milestone_id: Schema.optionalKey(id("The milestone reached, for a milestone checkpoint.")),
+    reached_by: Schema.optionalKey(
+      text(
+        "For a milestone another hob in this work reached, such as your lead making a commit you could not: that hob's name or id. Leave it out when your own work reached it.",
+      ),
+    ),
   }),
   ask: Schema.Struct({
     key,

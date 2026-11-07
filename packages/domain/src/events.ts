@@ -99,7 +99,7 @@ const TaskStateChanged = Schema.TaggedStruct("TaskStateChanged", {
 });
 /** A Task gained its Quest record: its owner brought in another hob. */
 const QuestStarted = Schema.TaggedStruct("QuestStarted", { quest: Quest });
-/** A Checkpoint was recorded; `milestone` is the one it reached, now with `reachedAt`. */
+/** A Checkpoint was recorded; `milestone` is the one it reached, now with `reachedAt` and `reachedBy`. */
 const CheckpointRecorded = Schema.TaggedStruct("CheckpointRecorded", {
   checkpoint: Checkpoint,
   milestone: Schema.NullOr(Milestone),
