@@ -1,5 +1,5 @@
 import type { GitHubStatus } from "@hobbots/api";
-import type { RemoteAccessStatus, RuntimeHealth, RuntimeKind } from "@hobbots/domain";
+import type { MemoryEngineHealth, RemoteAccessStatus, RuntimeHealth, RuntimeKind } from "@hobbots/domain";
 import { formatCount, plural } from "../../lib/format.ts";
 import { PROVIDER_NAMES, PROVIDERS } from "../../lib/providers.ts";
 import { messages } from "./messages.ts";
@@ -12,7 +12,7 @@ const names = messages.check.names;
 export type CheckTone = "ok" | "off" | "warn" | "broken";
 
 /** The read a line comes from, so the line can say it is checking while that read runs. */
-export type CheckSource = "runtimes" | "setup" | "github" | "remote" | "blockers";
+export type CheckSource = "runtimes" | "memory" | "setup" | "github" | "remote" | "blockers";
 
 /** One line of the plain check, and where to go when it needs you. */
 export interface CheckLine {
@@ -29,6 +29,8 @@ export interface CheckLine {
 /** What the plain check reads; anything still loading is undefined. */
 export interface CheckInput {
   readonly runtimes: ReadonlyArray<RuntimeHealth> | undefined;
+  /** The memory engine's health; null on a hub that runs none. */
+  readonly memory: MemoryEngineHealth | null | undefined;
   readonly connected: ReadonlyArray<RuntimeKind> | undefined;
   readonly folders: number | undefined;
   readonly github: GitHubStatus | undefined;
@@ -59,6 +61,23 @@ const sandboxLine = (input: CheckInput): CheckLine => {
   const verified = ready.some((health) => health.enforcement.processSandbox.status === "verified");
   const base = { key: "sandbox", name: names.sandbox, source: "runtimes" } as const;
   return verified ? { ...base, tone: "ok", text: copy.sandbox } : { ...base, tone: "warn", text: copy.noSandbox };
+};
+
+/** The memory engine (ADR 028): running, starting, off by choice, or unable to start in this copy. */
+const memoryLine = (health: MemoryEngineHealth): CheckLine => {
+  const base = { key: "memory", name: names.memory, source: "memory" } as const;
+  switch (health.state) {
+    case "running":
+      return { ...base, tone: "ok", text: copy.memoryRunning };
+    case "starting":
+      return { ...base, tone: "warn", text: copy.memoryStarting };
+    case "restarting":
+      return { ...base, tone: "warn", text: copy.memoryRestarting };
+    case "off":
+      if (health.offReason === "missing") return { ...base, tone: "broken", text: copy.memoryMissing };
+      if (health.offReason === "checksum") return { ...base, tone: "broken", text: copy.memoryChecksum };
+      return { ...base, tone: "off", text: copy.memoryOff };
+  }
 };
 
 const foldersLine = (folders: number): CheckLine =>
@@ -106,6 +125,8 @@ const stuckLine = (stuck: number): CheckLine =>
 export const checkLines = (input: CheckInput): ReadonlyArray<CheckLine> => [
   ...providerLines(input),
   sandboxLine(input),
+  // A hub that runs no memory engine, or whose answer is still on its way, shows no line for it.
+  ...(input.memory === undefined || input.memory === null ? [] : [memoryLine(input.memory)]),
   ...(input.folders === undefined ? [] : [foldersLine(input.folders)]),
   githubLine(input.github),
   // A connected desktop's hub sets remote access, so this Mac does not check it.

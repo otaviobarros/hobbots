@@ -10,6 +10,7 @@ import { useBlockersQuery } from "../../api/blockers.ts";
 import { connectionBridge } from "../../api/connected-desktop.ts";
 import { makeReport } from "../../api/diagnostics.ts";
 import { githubStatusQuery } from "../../api/github.ts";
+import { memoryOverviewQuery } from "../../api/memory.ts";
 import { runtimesQuery } from "../../api/queries.ts";
 import { remoteAccessQuery } from "../../api/remote-access.ts";
 import { setupQuery } from "../../api/setup.ts";
@@ -30,6 +31,7 @@ const TONES: Readonly<Record<CheckTone, { readonly glyph: string; readonly color
 /** What the check reads, and a way to read it all again. */
 const useCheck = () => {
   const runtimes = useQuery(runtimesQuery);
+  const memory = useQuery(memoryOverviewQuery);
   const setup = useQuery(setupQuery);
   const github = useQuery(githubStatusQuery);
   // A connected desktop's hub sets remote access, so this Mac does not ask for it.
@@ -37,6 +39,7 @@ const useCheck = () => {
   const blockers = useBlockersQuery();
   const lines = checkLines({
     runtimes: runtimes.data,
+    memory: memory.data?.engine,
     connected: setup.data?.connectedProviders,
     folders: setup.data?.approvedFolders.length,
     github: github.data,
@@ -46,12 +49,13 @@ const useCheck = () => {
   const local = connectionBridge === undefined;
   const sources: Readonly<Record<CheckSource, { readonly isFetching: boolean; readonly refetch: () => unknown }>> = {
     runtimes,
+    memory,
     setup,
     github,
     remote,
     blockers,
   };
-  const reads = [runtimes, setup, github, blockers, ...(local ? [remote] : [])];
+  const reads = [runtimes, memory, setup, github, blockers, ...(local ? [remote] : [])];
   return {
     lines,
     checking: reads.some((read) => read.isFetching),
