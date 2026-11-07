@@ -7,6 +7,7 @@ import {
   ApprovalService,
   accessNow,
   CharmCallService,
+  CharmDeclarations,
   ChatService,
   FolderSandbox,
   GrantService,
@@ -19,6 +20,7 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import {
+  GITHUB_CHARM,
   GitHubAccountLive,
   GitHubApiNode,
   GitHubCharmTools,
@@ -235,6 +237,8 @@ beforeAll(async () => {
           ).pipe(Layer.provideMerge(TestDatabase)),
           EventBus.layer,
           HobAdmission.layer,
+          // The Charms this hub holds, as the server declares them (ADR 031).
+          Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
           NodeFolderChecks,
           FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),

@@ -1,4 +1,4 @@
-import { GitHubIdentityPin, GrantService, HobbotsRepository, HobGitHubApps } from "@hobbots/agents";
+import { CharmIdentityPin, GrantService, HobbotsRepository, HobGitHubApps } from "@hobbots/agents";
 import {
   type AgentId,
   type GitHubHobAppActor,
@@ -9,6 +9,7 @@ import {
 import { Context, Effect, Layer, Option, type Redacted } from "effect";
 import { GitHubConnection, GitHubCredential, type GitHubTokenScope } from "./github-account.ts";
 import { GitHubError } from "./github-error.ts";
+import { GITHUB_CHARM } from "./github-operations.ts";
 import { HobAppTokens } from "./hob-app-tokens.ts";
 
 /**
@@ -106,15 +107,17 @@ export const GitHubCredentialPerHob = Layer.effectContext(
           // The credential and the identity count are read together, between switches (ADR 022), so
           // a request the call asks names the identity it acts as, even while a switch is under way.
           const [app, identity] = yield* grants.exclusive(
-            Effect.all([sourceOf(agentId), grants.githubIdentity(agentId)]),
+            Effect.all([sourceOf(agentId), grants.identity(GITHUB_CHARM.id, agentId)]),
           );
-          const outer = yield* GitHubIdentityPin;
+          const outer = yield* CharmIdentityPin;
           const pinned = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
             effect.pipe(
               Effect.provideService(PinnedSource, { agentId, source: app?.appId ?? "account" } satisfies Pinned),
               Effect.provideService(
-                GitHubIdentityPin,
-                outer !== null && outer.agentId === agentId ? outer : { agentId, identity },
+                CharmIdentityPin,
+                outer !== null && outer.agentId === agentId && outer.charm === GITHUB_CHARM.id
+                  ? outer
+                  : { agentId, charm: GITHUB_CHARM.id, identity },
               ),
             );
           if (app === null) return yield* account.onRepository(agentId, repository, pinned(use));

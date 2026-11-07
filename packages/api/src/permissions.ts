@@ -1,16 +1,17 @@
 import {
   AgentId,
+  AnyOperation,
+  CharmOverrides,
   ConfigVersion,
   HobPolicy,
   PolicyDecision,
-  PolicyOperation,
   PolicyOverrides,
   RuntimeEnforcement,
   SafetyPreset,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { AgentNotFound, InvalidFolder, OverrideWidens } from "./errors.ts";
+import { AgentNotFound, InvalidFolder, OverrideWidens, UndeclaredOperation } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**
@@ -27,8 +28,13 @@ export const HobPermissions = Schema.Struct({
   policy: HobPolicy,
   /** The shared folders the hob does not hide, then its own. */
   folders: Schema.Array(Schema.String),
-  /** Per operation, the narrower of the preset and the hob's override. */
-  decisions: Schema.Record(PolicyOperation, PolicyDecision),
+  /**
+   * Per operation, the narrower of the preset and the hob's override: every built-in one, and every
+   * one the Charms the hub holds declare (ADR 031), by its id.
+   */
+  decisions: Schema.Record(AnyOperation, PolicyDecision),
+  /** Per operation, the preset's own answer, which an override may only narrow. */
+  presets: Schema.Record(AnyOperation, PolicyDecision),
   /**
    * What the hob's runtime enforces on this hub. Where the process sandbox is unsupported, commands,
    * local Git and the web are blocked whatever the decisions say.
@@ -48,6 +54,11 @@ export const UpdateHobPermissionsPayload = Schema.Struct({
   ownFolders: Schema.optionalKey(Schema.Array(Schema.NonEmptyString)),
   hiddenSharedFolders: Schema.optionalKey(Schema.Array(Schema.NonEmptyString)),
   overrides: Schema.optionalKey(PolicyOverrides),
+  /**
+   * The hob's overrides for Charm operations, keyed by id (ADR 031). Each must be an operation a Charm
+   * the hub holds declares, and may only narrow its preset answer.
+   */
+  charms: Schema.optionalKey(Schema.Struct({ overrides: CharmOverrides })),
   /** Whether the hob signs commits with the user's 1Password SSH key, which also opens SSH logins. */
   signCommits: Schema.optionalKey(Schema.Boolean),
   /** Whether the hob has the GitHub Charm (ADR 020): the user's own grant, so it may widen. */
@@ -66,7 +77,7 @@ export class PermissionsGroup extends HttpApiGroup.make("permissions")
       params: { agentId: AgentId },
       payload: UpdateHobPermissionsPayload,
       success: HobPermissions,
-      error: [AgentNotFound, InvalidFolder, OverrideWidens],
+      error: [AgentNotFound, InvalidFolder, OverrideWidens, UndeclaredOperation],
     }),
   )
   .middleware(DeviceSession)

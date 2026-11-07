@@ -3,6 +3,7 @@ import {
   type Agent,
   type AgentId,
   effectiveDecision,
+  hobAnswers,
   memoryScopeKey,
   memoryScopeOfKey,
   type SafetyPreset,
@@ -26,7 +27,7 @@ const copy = messages;
  * preset. Ask still lets one, since you answer it in the chat; Never does not.
  */
 export const draftingHobs = (active: ReadonlyArray<Agent>, preset: SafetyPreset): ReadonlyArray<Agent> =>
-  active.filter((hob) => effectiveDecision(preset, hob.policy.overrides, "propose-skill") !== "deny");
+  active.filter((hob) => effectiveDecision(preset, hobAnswers(hob.policy), "propose-skill") !== "deny");
 
 /** Where Add a skill takes it from. */
 export const ImportFrom = Schema.Literals(["git", "file", "write"]);

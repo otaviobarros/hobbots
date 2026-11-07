@@ -177,7 +177,7 @@ describe("Workbench records", () => {
       kind: "tool" as const,
       label: "Searching GitHub",
       state: "running" as const,
-      call: { tool: "mcp__hobbots__github_search", operation: "read-github" as const, targets: [project] },
+      call: { tool: "mcp__hobbots__github_search", operation: "github.read" as const, targets: [project] },
       startedAt: now,
     };
     const result = await run(

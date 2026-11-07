@@ -84,7 +84,7 @@ The policy engine decides each call on its exact arguments, which the approval c
 | Comment on GitHub | `github_comment` | Ask | Ask | Allow |
 
 - Read GitHub and both Push rows are ADR 014's, unchanged. Read GitHub stays offered as Allow or Never by choice, even once hub tools can ask: it only investigates the hob's own project, so asking would interrupt without protecting anything.
-- Open pull requests and Comment on GitHub are new operations (`open-pull-request`, `comment-github`). Each is offered as Allow, Ask or Never per hob, and overrides only narrow it (#130).
+- Open pull requests and Comment on GitHub are new operations (`open-pull-request`, `comment-github`, renamed `github.open-pull-request` and `github.comment` by [ADR 031](031-charm-actions-and-registry.md)). Each is offered as Allow, Ask or Never per hob, and overrides only narrow it (#130).
 - They ask under Balanced because, like a push, other people see them at once.
 - **Not high risk.** The GitHub Charm marks none of its new actions high risk in the sense of ADR 015. A pull request or comment reaches only the hob's own repository, and you can close, edit or delete it, unlike a message sent to other people. So This Quest and Always are offered for them.
 - **Hub tools can ask.** A hub tool call whose answer is Ask holds the turn for an approval as a runtime tool call does, with the lifetimes and expiry of ADR 015. #323 builds this for Push, and #324 reuses it.

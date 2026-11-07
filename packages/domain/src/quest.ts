@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
 import { DeviceId } from "./device.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
-import { PolicyOverrides } from "./policy.ts";
+import { StoredPolicyLayer } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { Attempt, AttemptId, isLiveAttempt, isTerminalTask, Task, TaskId } from "./task.ts";
 
@@ -71,7 +71,7 @@ export class Quest extends Schema.Class<Quest>("Quest")({
  * policy, and the folders it may use, or null for its own. A brief can never widen it.
  */
 export const DelegationAuthority = Schema.Struct({
-  overrides: PolicyOverrides,
+  overrides: StoredPolicyLayer,
   folders: Schema.NullOr(Schema.Array(Schema.String)),
 });
 export type DelegationAuthority = typeof DelegationAuthority.Type;

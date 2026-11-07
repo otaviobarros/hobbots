@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { PolicyOverrides } from "./policy.ts";
+import { PolicyLayer } from "./policy.ts";
 import { ArtifactKind, choicesProblem, MAX_QUESTION_OPTIONS, type Quest, TaskRefusal, WaitMode } from "./quest.ts";
 import { ancestorsOf, type Task } from "./task.ts";
 
@@ -64,9 +64,9 @@ const Step = Schema.Struct({
 /** The authority a lead gives a member. It can only narrow what the lead has, never widen it. */
 const Authority = Schema.Struct({
   decisions: Schema.optionalKey(
-    PolicyOverrides.annotate({
+    PolicyLayer.annotate({
       description:
-        "allow, ask or deny for each operation. Each must be at least as narrow as your own. Commands, Git's included, need read-files and edit-files both allow.",
+        "allow, ask or deny for each operation, a built-in one by name or a Charm's by its id, such as github.comment. Each must be at least as narrow as your own. Commands, Git's included, need read-files and edit-files both allow.",
     }),
   ),
   folders: Schema.optionalKey(

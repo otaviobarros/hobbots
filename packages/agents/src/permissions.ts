@@ -1,15 +1,20 @@
 import type { HobPermissions } from "@hobbots/api";
 import {
   type Agent,
+  type AnyOperation,
+  type CharmOperation,
+  declaredOperations,
+  EMPTY_HOB_POLICY,
   effectiveDecision,
   type HobPolicy,
+  hobAnswers,
   POLICY_OPERATIONS,
   type PolicyDecision,
-  type PolicyOperation,
   type SafetyPreset,
 } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
 import { sameFolderIn } from "./folders.ts";
+import { CharmDeclarations } from "./grants.ts";
 import { FolderChecks, type FolderChecksShape, InstallationSettings } from "./ports.ts";
 import { missingRuntimeHealth, runtimeAdapters } from "./runtime.ts";
 
@@ -31,14 +36,24 @@ export const hobFoldersNow = (folders: FolderChecksShape, sharedFolders: Readonl
     Effect.map(Effect.forEach(each, folders.identity), (canonical) => [...new Set(canonical)]),
   );
 
-/** Per operation, the answer the hob gets under the preset (`effectiveDecision`). */
+/**
+ * Per operation, built-in or declared by a Charm the hub holds, the narrower of the preset and the
+ * hob's override. Taking the narrower one keeps an override stored under one preset from widening a
+ * stricter preset picked later.
+ */
 const effectiveDecisions = (
   preset: SafetyPreset,
-  overrides: HobPolicy["overrides"],
-): Record<PolicyOperation, PolicyDecision> =>
-  Object.fromEntries(
-    POLICY_OPERATIONS.map((operation) => [operation, effectiveDecision(preset, overrides, operation)]),
-  ) as Record<PolicyOperation, PolicyDecision>;
+  policy: HobPolicy,
+  charmOperations: ReadonlyArray<CharmOperation>,
+): Record<AnyOperation, PolicyDecision> => {
+  const answers = hobAnswers(policy);
+  return Object.fromEntries(
+    [...POLICY_OPERATIONS, ...charmOperations.map((operation) => operation.id)].map((operation) => [
+      operation,
+      effectiveDecision(preset, answers, operation, charmOperations),
+    ]),
+  ) as Record<AnyOperation, PolicyDecision>;
+};
 
 /**
  * A hob's policy with what it adds up to under the installation's current preset and shared folders,
@@ -54,6 +69,7 @@ export class PermissionSummary extends Context.Service<
       const setup = yield* InstallationSettings;
       const folders = yield* FolderChecks;
       const adapters = yield* runtimeAdapters;
+      const charmOperations = declaredOperations(yield* CharmDeclarations);
       return PermissionSummary.of({
         of: (agent) =>
           Effect.gen(function* () {
@@ -65,7 +81,8 @@ export class PermissionSummary extends Context.Service<
               sharedFolders: approvedFolders,
               policy: agent.policy,
               folders: yield* effectiveFolders(folders, approvedFolders, agent.policy),
-              decisions: effectiveDecisions(safetyPreset, agent.policy.overrides),
+              decisions: effectiveDecisions(safetyPreset, agent.policy, charmOperations),
+              presets: effectiveDecisions(safetyPreset, EMPTY_HOB_POLICY, charmOperations),
               // What the hob's own runtime enforces; a thread on another brain runs under that one's.
               enforcement: yield* adapters(agent.runtime)?.enforcement ??
                 Effect.succeed(missingRuntimeHealth(agent.runtime).enforcement),

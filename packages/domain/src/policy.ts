@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 import type { SafetyPreset } from "./setup.ts";
 
 /**
@@ -7,7 +7,10 @@ import type { SafetyPreset } from "./setup.ts";
  * `@hobbots/permissions` decides calls with these; this module holds only the shared shapes.
  */
 
-/** The MVP operations. Every runtime tool call and sandbox network request becomes one of these. */
+/**
+ * The built-in operations: every runtime tool call, sandbox network request and built-in hub tool
+ * call becomes one of these. A Charm's operations are declared by the Charm (`CharmOperation`).
+ */
 export const PolicyOperation = Schema.Literals([
   "read-files",
   "edit-files",
@@ -16,9 +19,6 @@ export const PolicyOperation = Schema.Literals([
   "local-git",
   "push",
   "use-web",
-  "read-github",
-  "open-pull-request",
-  "comment-github",
   "outside-folders",
   "search-memory",
   "save-memory",
@@ -67,9 +67,6 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "local-git": "ask",
     push: "ask",
     "use-web": "ask",
-    "read-github": "allow",
-    "open-pull-request": "ask",
-    "comment-github": "ask",
     "outside-folders": "deny",
     "search-memory": "allow",
     "save-memory": "allow",
@@ -86,9 +83,6 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "local-git": "allow",
     push: "ask",
     "use-web": "allow",
-    "read-github": "allow",
-    "open-pull-request": "ask",
-    "comment-github": "ask",
     "outside-folders": "deny",
     "search-memory": "allow",
     "save-memory": "allow",
@@ -105,9 +99,6 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "local-git": "allow",
     push: "allow",
     "use-web": "allow",
-    "read-github": "allow",
-    "open-pull-request": "allow",
-    "comment-github": "allow",
     "outside-folders": "deny",
     "search-memory": "allow",
     "save-memory": "allow",
@@ -117,6 +108,98 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "skill-feedback": "allow",
   },
 };
+
+/**
+ * A Charm's id, such as `github`: lowercase words joined by hyphens. Its operations' ids start with
+ * it (ADR 031).
+ */
+export const CharmId = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/));
+export type CharmId = typeof CharmId.Type;
+
+/** A Charm operation's id, `<charm>.<operation>`, such as `github.comment`. */
+export const CharmOperationId = Schema.TemplateLiteral([Schema.String, ".", Schema.String]).check(
+  Schema.isPattern(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*\.[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
+);
+export type CharmOperationId = typeof CharmOperationId.Type;
+
+/** Any operation a call is decided as: a built-in one, or one a Charm declares. */
+export const AnyOperation = Schema.Union([PolicyOperation, CharmOperationId]);
+export type AnyOperation = typeof AnyOperation.Type;
+
+/** Whether an operation is a Charm's rather than a built-in one. */
+export const isCharmOperation = (operation: AnyOperation): operation is CharmOperationId => operation.includes(".");
+
+/** The Charm a Charm operation belongs to. */
+export const charmOfOperation = (operation: CharmOperationId): CharmId => operation.slice(0, operation.indexOf("."));
+
+/**
+ * The names the GitHub Charm's operations had before they were declared by the Charm (ADR 031).
+ * Only decoding uses them, so overrides, approvals, grants and events stored before the change read
+ * as they always meant.
+ */
+const LEGACY_OPERATIONS: Readonly<Record<string, CharmOperationId>> = {
+  "read-github": "github.read",
+  "open-pull-request": "github.open-pull-request",
+  "comment-github": "github.comment",
+};
+
+/** An operation's current name, for one stored before ADR 031. */
+export const currentOperationName = (name: string): string => LEGACY_OPERATIONS[name] ?? name;
+
+/** An operation as stored or journaled: a name from before ADR 031 decodes as the operation it became. */
+export const StoredOperation = Schema.String.pipe(
+  Schema.decodeTo(
+    AnyOperation,
+    SchemaTransformation.transform({
+      decode: (name: string) => currentOperationName(name) as AnyOperation,
+      encode: (operation: AnyOperation): string => operation,
+    }),
+  ),
+);
+
+/**
+ * An operation a Charm declares (ADR 031). `words` name it in the hub's reasons, such as "opening
+ * pull requests"; the UI's own words are keyed by its id. `site` names the request's site fields a
+ * grant names, such as the repository and base branch, never free text. An operation that declares
+ * no site, or is `onceOnly`, is approved once only. `actsAsIdentity` marks an operation the Charm
+ * performs as an identity, such as the user's GitHub account or the hob's own app, so a grant for it
+ * belongs to that identity (ADR 022).
+ */
+export interface CharmOperation {
+  readonly id: CharmOperationId;
+  readonly words: string;
+  readonly presets: Readonly<Record<SafetyPreset, PolicyDecision>>;
+  readonly site: ReadonlyArray<string>;
+  readonly onceOnly: boolean;
+  readonly actsAsIdentity: boolean;
+}
+
+/**
+ * What a Charm declares to the policy: its operations, and the built-in operations it takes over,
+ * whose calls it makes as its identity too, such as Push for the GitHub Charm (ADR 031).
+ */
+export interface CharmDeclaration {
+  readonly id: CharmId;
+  readonly operations: ReadonlyArray<CharmOperation>;
+  readonly takesOver: ReadonlyArray<PolicyOperation>;
+}
+
+/** Every operation the Charms declare. */
+export const declaredOperations = (charms: ReadonlyArray<CharmDeclaration>): ReadonlyArray<CharmOperation> =>
+  charms.flatMap((charm) => charm.operations);
+
+/**
+ * The preset's answer for any operation. A Charm operation nothing declares is never allowed, so a
+ * call no Charm stands behind stays closed.
+ */
+export const presetDecision = (
+  preset: SafetyPreset,
+  operation: AnyOperation,
+  declared: ReadonlyArray<CharmOperation>,
+): PolicyDecision =>
+  isCharmOperation(operation)
+    ? (declared.find((each) => each.id === operation)?.presets[preset] ?? "deny")
+    : PRESET_DECISIONS[preset][operation];
 
 /**
  * Rules Hobbots recognizes and decides but a permitted command could always perform another way
@@ -162,9 +245,6 @@ export const PolicyOverrides = Schema.Struct({
   "local-git": Schema.optionalKey(PolicyDecision),
   push: Schema.optionalKey(PolicyDecision),
   "use-web": Schema.optionalKey(PolicyDecision),
-  "read-github": Schema.optionalKey(PolicyDecision),
-  "open-pull-request": Schema.optionalKey(PolicyDecision),
-  "comment-github": Schema.optionalKey(PolicyDecision),
   "outside-folders": Schema.optionalKey(PolicyDecision),
   "search-memory": Schema.optionalKey(PolicyDecision),
   "save-memory": Schema.optionalKey(PolicyDecision),
@@ -175,19 +255,32 @@ export const PolicyOverrides = Schema.Struct({
 });
 export type PolicyOverrides = typeof PolicyOverrides.Type;
 
+/** Per-hob answers for Charm operations, keyed by their id. Each may only narrow the declared preset answer. */
+export const CharmOverrides = Schema.Record(CharmOperationId, PolicyDecision);
+export type CharmOverrides = typeof CharmOverrides.Type;
+
 /**
- * The answer a hob gets for one operation: the narrower of the preset's and its own override, so an
- * override stored under one preset never widens a stricter preset picked later.
+ * One layer's answers for any operation: the built-in ones by name and the Charm ones by id. A
+ * restriction from a delegation is one of these (ADR 018), so a lead can narrow a member's Charm
+ * operations too.
  */
-export const effectiveDecision = (
-  preset: SafetyPreset,
-  overrides: PolicyOverrides,
-  operation: PolicyOperation,
-): PolicyDecision => {
-  const answer = PRESET_DECISIONS[preset][operation];
-  const override = overrides[operation];
-  return override === undefined ? answer : narrowest(answer, override);
-};
+export const PolicyLayer = Schema.StructWithRest(PolicyOverrides, [CharmOverrides]);
+export type PolicyLayer = typeof PolicyLayer.Type;
+
+/** Each answer under its current operation name, for answers stored before ADR 031. */
+const renamedAnswers = (answers: Readonly<Record<string, PolicyDecision>>): Record<string, PolicyDecision> =>
+  Object.fromEntries(Object.entries(answers).map(([name, decision]) => [currentOperationName(name), decision]));
+
+/** A layer as stored or journaled: an operation named as before ADR 031 decodes under its current id. */
+export const StoredPolicyLayer = Schema.Record(Schema.String, PolicyDecision).pipe(
+  Schema.decodeTo(
+    PolicyLayer,
+    SchemaTransformation.transform({
+      decode: renamedAnswers,
+      encode: (layer: Readonly<Record<string, PolicyDecision>>) => layer,
+    }),
+  ),
+);
 
 /**
  * A hob's own policy configuration. Folders are stored canonical. `hiddenSharedFolders` hides
@@ -196,15 +289,70 @@ export const effectiveDecision = (
  * agent to them: the agent cannot be limited to signing, so it also lets them log in over SSH with
  * the user's keys. Off unless the user turns it on. `githubCharm` is the hob's grant of the GitHub Charm
  * (ADR 014, ADR 020): granted unless it is `false`, and without it the hob is offered none of the
- * Charm's actions.
+ * Charm's actions. `charms` holds the hob's overrides for Charm operations (ADR 031); the built-in
+ * `overrides` stay a closed record.
  */
-export const HobPolicy = Schema.Struct({
+const HobPolicyFields = {
   ownFolders: Schema.Array(Schema.String),
   hiddenSharedFolders: Schema.Array(Schema.String),
   overrides: PolicyOverrides,
   signCommits: Schema.optionalKey(Schema.Boolean),
   githubCharm: Schema.optionalKey(Schema.Boolean),
-});
+  charms: Schema.optionalKey(Schema.Struct({ overrides: CharmOverrides })),
+};
+const CurrentHobPolicy = Schema.Struct(HobPolicyFields);
+type CurrentHobPolicy = typeof CurrentHobPolicy.Type;
+
+/**
+ * A policy's overrides as stored in one record: a Charm operation's override goes to `charms`, under
+ * its current id when it was stored before ADR 031 under its old name.
+ */
+const splitOverrides = (stored: StoredHobPolicy): CurrentHobPolicy => {
+  const { overrides, charms, ...rest } = stored;
+  const renamed = renamedAnswers(overrides);
+  const builtIn = Object.fromEntries(Object.entries(renamed).filter(([name]) => !name.includes(".")));
+  const charm = {
+    ...Object.fromEntries(Object.entries(renamed).filter(([name]) => name.includes("."))),
+    ...charms?.overrides,
+  };
+  return {
+    ...rest,
+    overrides: builtIn,
+    ...(Object.keys(charm).length === 0 ? {} : { charms: { overrides: charm as CharmOverrides } }),
+  };
+};
+
+const StoredHobPolicyFields = { ...HobPolicyFields, overrides: Schema.Record(Schema.String, PolicyDecision) };
+type StoredHobPolicy = Schema.Struct<typeof StoredHobPolicyFields>["Type"];
+
+export const HobPolicy = Schema.Struct(StoredHobPolicyFields).pipe(
+  Schema.decodeTo(
+    CurrentHobPolicy,
+    SchemaTransformation.transform({
+      decode: splitOverrides,
+      encode: (policy: CurrentHobPolicy): StoredHobPolicy => policy,
+    }),
+  ),
+);
 export type HobPolicy = typeof HobPolicy.Type;
 
 export const EMPTY_HOB_POLICY: HobPolicy = { ownFolders: [], hiddenSharedFolders: [], overrides: {} };
+
+/** The hob's own answers for every operation: its built-in overrides and its Charm overrides. */
+export const hobAnswers = (hob: HobPolicy): PolicyLayer => ({ ...hob.charms?.overrides, ...hob.overrides });
+
+/**
+ * The answer a hob gets for one operation, built-in or declared by a Charm in `declared`: the
+ * narrower of the preset's and the hob's own, so an override stored under one preset never widens a
+ * stricter preset picked later.
+ */
+export const effectiveDecision = (
+  preset: SafetyPreset,
+  answers: PolicyLayer,
+  operation: AnyOperation,
+  declared: ReadonlyArray<CharmOperation> = [],
+): PolicyDecision => {
+  const answer = presetDecision(preset, operation, declared);
+  const override = answers[operation];
+  return override === undefined ? answer : narrowest(answer, override);
+};

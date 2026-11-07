@@ -91,7 +91,7 @@ export function GitHubCharm({
             permissions={permissions}
             sending={sending}
             pending={update.isPending || outdated}
-            onPick={(overrides) => update.mutate({ overrides })}
+            onPick={(change) => update.mutate(change)}
           />
         </div>
       ) : (

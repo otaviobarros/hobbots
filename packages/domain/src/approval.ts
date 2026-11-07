@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { DeviceId } from "./device.ts";
 import { ApprovalLifetime, GrantRule } from "./grant-rule.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
-import { PolicyOperation } from "./policy.ts";
+import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { TaskId } from "./task.ts";
 
@@ -61,7 +61,7 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   stepId: Schema.String,
   /** The runtime's name for the tool, such as `Bash`. */
   tool: Schema.String,
-  operation: PolicyOperation,
+  operation: StoredOperation,
   /** The canonical paths, the command's folder, or the remote and branch the call was decided on. */
   targets: Schema.Array(Schema.String),
   /** The call's concrete arguments, as the runtime gave them. */

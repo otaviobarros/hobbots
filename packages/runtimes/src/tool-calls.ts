@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 import { type CommandStart, openTools, operationDecision } from "@hobbots/agents";
-import { narrowest, type PolicyDecision, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
+import { narrowest, redactSecrets } from "@hobbots/domain";
 import {
   type PolicyContext,
   type PolicyRequest,
@@ -12,10 +12,7 @@ import {
 import { GIT_IDENTITY_VARIABLES } from "./sandbox.ts";
 
 /** A request a runtime tool call becomes: every kind but a Charm's, which the hub makes itself. */
-type ToolRequest = Exclude<
-  PolicyRequest,
-  { readonly _tag: "GitHub" | "PullRequest" | "GitHubComment" | "Memory" | "Skills" }
->;
+type ToolRequest = Exclude<PolicyRequest, { readonly _tag: "Charm" | "Memory" | "Skills" }>;
 
 /**
  * Claude Code's tool calls in the policy engine's terms (ADR 014). Only what the call itself says is

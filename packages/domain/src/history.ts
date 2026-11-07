@@ -2,7 +2,7 @@ import { DateTime, Schema } from "effect";
 import { ApprovalId, type ApprovalRequest, ApprovalState, exactAction } from "./approval.ts";
 import { ApprovalLifetime } from "./grant-rule.ts";
 import { AgentId, ThreadId } from "./ids.ts";
-import { PolicyOperation } from "./policy.ts";
+import { StoredOperation } from "./policy.ts";
 import { type Delegation, partyOf, type Quest, QuestId, type Question, QuestionId, QuestState } from "./quest.ts";
 import { type Attempt, AttemptId, type Task, TaskId } from "./task.ts";
 
@@ -62,7 +62,7 @@ export const ApprovalEvent = Schema.TaggedStruct("Approval", {
   ...base,
   approvalId: ApprovalId,
   state: ApprovalState,
-  operation: PolicyOperation,
+  operation: StoredOperation,
   label: Schema.String,
   /** The exact command, address or file, as the approval card shows it. */
   action: Schema.String,

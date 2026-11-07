@@ -4,16 +4,21 @@ import {
   InvalidFolder,
   InvalidHob,
   OverrideWidens,
+  UndeclaredOperation,
   type UpdateAgentPayload,
   type UpdateHobPermissionsPayload,
 } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  type CharmOperation,
+  type CharmOverrides,
   DEFAULT_LENGTH,
   DEFAULT_VOICE,
+  declaredOperations,
   type Effort,
   type HobPolicy,
+  hobAnswers,
   isNarrowerOrEqual,
   POLICY_OPERATIONS,
   PRESET_DECISIONS,
@@ -27,6 +32,7 @@ import {
 import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { sameFolderIn } from "./folders.ts";
+import { CharmDeclarations } from "./grants.ts";
 import { EventPublisher, FolderChecks, InstallationSettings } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { type RuntimeAdapters, runtimeAdapters } from "./runtime.ts";
@@ -92,12 +98,27 @@ const checkRole = (role: { readonly role: RoleId | null; readonly roleTitle: str
     : new InvalidHob({ field: "roleTitle", message: `The ${title} role is titled "${title}"` });
 };
 
-/** An override that would allow more than the preset, naming each operation it widens. */
-const checkOverrides = (preset: SafetyPreset, overrides: HobPolicy["overrides"]): OverrideWidens | undefined => {
-  const widened = POLICY_OPERATIONS.filter((operation) => {
-    const override = overrides[operation];
-    return override !== undefined && !isNarrowerOrEqual(override, PRESET_DECISIONS[preset][operation]);
-  });
+/**
+ * An override that would allow more than the preset, naming each operation it widens, built-in or a
+ * Charm's (ADR 031).
+ */
+const checkOverrides = (
+  preset: SafetyPreset,
+  policy: HobPolicy,
+  charmOperations: ReadonlyArray<CharmOperation>,
+): OverrideWidens | undefined => {
+  const widened = [
+    ...POLICY_OPERATIONS.filter((operation) => {
+      const override = policy.overrides[operation];
+      return override !== undefined && !isNarrowerOrEqual(override, PRESET_DECISIONS[preset][operation]);
+    }),
+    ...charmOperations
+      .filter((operation) => {
+        const override = policy.charms?.overrides[operation.id];
+        return override !== undefined && !isNarrowerOrEqual(override, operation.presets[preset]);
+      })
+      .map((operation) => operation.id),
+  ];
   return widened.length === 0
     ? undefined
     : new OverrideWidens({
@@ -107,13 +128,61 @@ const checkOverrides = (preset: SafetyPreset, overrides: HobPolicy["overrides"])
       });
 };
 
+/** An override for a Charm operation no Charm the hub holds declares, which is never stored (ADR 031). */
+const checkDeclared = (
+  overrides: CharmOverrides,
+  charmOperations: ReadonlyArray<CharmOperation>,
+): UndeclaredOperation | undefined => {
+  const undeclared = Object.keys(overrides).filter((id) => !charmOperations.some((operation) => operation.id === id));
+  return undeclared.length === 0
+    ? undefined
+    : new UndeclaredOperation({
+        operations: undeclared,
+        message: `No Charm on this hub declares ${undeclared.join(", ")}`,
+      });
+};
+
+/**
+ * The answers a change gives checked, when it gives any: a Charm override no Charm declares is
+ * refused first, then any override that widens its preset.
+ */
+const checkAnswers = (
+  payload: UpdateHobPermissionsPayload,
+  preset: SafetyPreset,
+  policy: HobPolicy,
+  charmOperations: ReadonlyArray<CharmOperation>,
+): UndeclaredOperation | OverrideWidens | undefined => {
+  if (payload.overrides === undefined && payload.charms === undefined) return undefined;
+  return (
+    (payload.charms && checkDeclared(payload.charms.overrides, charmOperations)) ??
+    checkOverrides(preset, policy, charmOperations)
+  );
+};
+
+/** `before` with each field the change gives replaced; Charm overrides are left out when there are none. */
+const changedPolicy = (before: HobPolicy, change: UpdateHobPermissionsPayload): HobPolicy => {
+  const charmOverrides = change.charms?.overrides ?? before.charms?.overrides ?? {};
+  return {
+    ownFolders: change.ownFolders ?? before.ownFolders,
+    hiddenSharedFolders: change.hiddenSharedFolders ?? before.hiddenSharedFolders,
+    overrides: change.overrides ?? before.overrides,
+    ...(Object.keys(charmOverrides).length === 0 ? {} : { charms: { overrides: charmOverrides } }),
+    ...((change.signCommits ?? before.signCommits) === true ? { signCommits: true } : {}),
+    ...((change.githubCharm ?? before.githubCharm) === false ? { githubCharm: false } : {}),
+  };
+};
+
+/** Two answer records give the same answer for every operation either names. */
+const sameAnswers = (a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>) =>
+  [...new Set([...Object.keys(a), ...Object.keys(b)])].every((operation) => a[operation] === b[operation]);
+
 /** Two policies hold the same folders, in the same order, the same overrides, signing and Charms. */
 const samePolicy = (a: HobPolicy, b: HobPolicy) =>
   (a.signCommits === true) === (b.signCommits === true) &&
   (a.githubCharm !== false) === (b.githubCharm !== false) &&
   a.ownFolders.join("\0") === b.ownFolders.join("\0") &&
   a.hiddenSharedFolders.join("\0") === b.hiddenSharedFolders.join("\0") &&
-  POLICY_OPERATIONS.every((operation) => a.overrides[operation] === b.overrides[operation]);
+  sameAnswers(hobAnswers(a), hobAnswers(b));
 
 const roleFields = ["role", "roleTitle", "sigil", "hat", "tool"] as const;
 const toneFields = ["voice", "length"] as const;
@@ -174,7 +243,7 @@ export class HobService extends Context.Service<
     readonly updatePolicy: (
       id: AgentId,
       payload: UpdateHobPermissionsPayload,
-    ) => Effect.Effect<Agent, AgentNotFound | InvalidFolder | OverrideWidens>;
+    ) => Effect.Effect<Agent, AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation>;
   }
 >()("@hobbots/agents/HobService") {
   static readonly layer = Layer.effect(
@@ -182,6 +251,8 @@ export class HobService extends Context.Service<
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const bus = yield* EventPublisher;
+      // Read once: the Charms a hub holds are fixed when it starts (ADR 031).
+      const charmOperations = declaredOperations(yield* CharmDeclarations);
       const adapters = yield* runtimeAdapters;
       const admission = yield* HobAdmission;
       const setup = yield* InstallationSettings;
@@ -299,13 +370,11 @@ export class HobService extends Context.Service<
           Effect.gen(function* () {
             // Read inside the retry, so each attempt checks against the setup as it is then.
             const { safetyPreset, approvedFolders } = yield* setup.get;
-            const policy: HobPolicy = {
-              ownFolders: ownFolders ?? agent.policy.ownFolders,
-              hiddenSharedFolders: hiddenSharedFolders ?? agent.policy.hiddenSharedFolders,
-              overrides: payload.overrides ?? agent.policy.overrides,
-              ...((payload.signCommits ?? agent.policy.signCommits) === true ? { signCommits: true } : {}),
-              ...((payload.githubCharm ?? agent.policy.githubCharm) === false ? { githubCharm: false } : {}),
-            };
+            const policy = changedPolicy(agent.policy, {
+              ...payload,
+              ...(ownFolders && { ownFolders }),
+              ...(hiddenSharedFolders && { hiddenSharedFolders }),
+            });
             if (samePolicy(policy, agent.policy)) return agent;
             // Only what changes is checked, so a shared folder removed in setup since does not block
             // an unrelated change, and a stricter preset does not reject an override kept as it was.
@@ -327,10 +396,8 @@ export class HobService extends Context.Service<
                 return yield* new InvalidFolder({ folder: unknown, message: `${unknown} is not a shared folder` });
               }
             }
-            if (payload.overrides !== undefined) {
-              const widens = checkOverrides(safetyPreset, policy.overrides);
-              if (widens !== undefined) return yield* widens;
-            }
+            const refused = checkAnswers(payload, safetyPreset, policy, charmOperations);
+            if (refused !== undefined) return yield* refused;
             return new Agent({ ...agent, policy });
           }),
         );

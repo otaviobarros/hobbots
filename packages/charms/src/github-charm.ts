@@ -29,6 +29,7 @@ import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { GitHubApi } from "./github-api.ts";
 import type { GitHubError } from "./github-error.ts";
+import { GITHUB_CHARM } from "./github-operations.ts";
 import { makeGitHubPush, pushReadBack } from "./github-push.ts";
 import { commentReadBack, makeGitHubWrites, pullRequestReadBack } from "./github-writes.ts";
 import { GitRemotes } from "./remotes.ts";
@@ -49,7 +50,8 @@ export const GITHUB_UNASKABLE =
 const describe = (error: Schema.SchemaError) => error.message.split("\n").slice(0, 6).join("\n");
 
 // The engine decides a GitHub read on the folder and the hob's answers alone: the sandbox and the
-// model's hosts do not hold this rule, since the hub reads GitHub outside the sandbox.
+// model's hosts do not hold this rule, since the hub reads GitHub outside the sandbox. Its operations
+// are the ones the hub declares: a hub that holds no GitHub Charm leaves them closed (ADR 031).
 const policyContext = (access: ToolAccess): PolicyContext => ({
   ...access.policy,
   sandbox: "on",
@@ -192,10 +194,14 @@ export const GitHubCharmTools = Layer.effect(
         if (!isGitHubToolName(name)) return yield* new Refused({ message: `Hobbots has no ${name} tool.` });
         const input = yield* decoded(GitHubToolInputs[name], raw);
         const { access, folder, repository } = yield* resolved(turn, input.folder, "GitHub cannot be read");
+        const slug = repositorySlug(repository);
         const verdict = yield* engine.decide(policyContext(access), {
-          _tag: "GitHub",
+          _tag: "Charm",
+          charm: GITHUB_CHARM.id,
+          operation: "github.read",
           folder,
-          repository: repositorySlug(repository),
+          site: { repository: slug },
+          targets: [slug],
         });
         if (verdict.decision === "ask")
           return yield* new Refused({ message: `${verdict.reason.message} ${GITHUB_UNASKABLE}` });
