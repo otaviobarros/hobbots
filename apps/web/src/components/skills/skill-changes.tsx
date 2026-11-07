@@ -31,13 +31,16 @@ function ChangeRow({ change, hobs, say }: { change: SkillChange; hobs: HobDirect
   const writes = useSkillWrites();
   const text = changeText(change, hobs);
   const back = change.previousNumber === null ? null : skillRevisionLabel({ number: change.previousNumber });
-  // Roll back moves each place the change moved back to where it was, one by one, as Who uses it does.
+  // Roll back moves each place the change moved back to the revision it was on, one by one, as Who
+  // uses it does: places that were on different revisions each go back to their own.
   const rollBack = async () => {
-    const pin = change.previous;
-    if (pin === null) return;
     try {
-      for (const assignmentId of change.moved) await writes.roll.mutateAsync({ assignmentId, pin });
-      say({ tone: "done", message: copy.rolledBackDone({ name: skillTitle(change.name), rev: back ?? "" }) });
+      for (const { assignmentId, from } of change.moved) await writes.roll.mutateAsync({ assignmentId, pin: from });
+      const name = skillTitle(change.name);
+      say({
+        tone: "done",
+        message: back === null ? copy.rolledBackEach({ name }) : copy.rolledBackDone({ name, rev: back }),
+      });
     } catch {
       say({ tone: "failed", message: copy.rollBackFailed });
     }
@@ -68,9 +71,9 @@ function ChangeRow({ change, hobs, say }: { change: SkillChange; hobs: HobDirect
         )}
         {text.note !== null && <span className="text-detail text-text-secondary">{text.note}</span>}
       </span>
-      {canRollBack(change) && back !== null && (
+      {canRollBack(change) && (
         <Button variant="outline" size="sm" disabled={writes.busy} onClick={() => void rollBack()}>
-          {copy.rollBack({ rev: back })}
+          {back === null ? copy.rollBackEach : copy.rollBack({ rev: back })}
         </Button>
       )}
     </li>

@@ -117,6 +117,8 @@ export const messages = {
     removedLine: ({ name }: { name: string }) => `${name} left the library`,
     rollBack: ({ rev }: { rev: string }) => `Roll back to ${rev}`,
     rolledBackDone: ({ name, rev }: { name: string; rev: string }) => `${name} is back on ${rev} where it moved.`,
+    rollBackEach: "Roll back",
+    rolledBackEach: ({ name }: { name: string }) => `${name} is back on the revision each place was on.`,
     rollBackFailed: "It did not roll back. A place may have moved since; open the skill to see where it is.",
     failed: "What changed could not be read.",
     retry: "Try again",
@@ -130,6 +132,7 @@ export const messages = {
       `Used ${formatCount(total)} ${plural(total, { one: "time", other: "times" })}, ${formatCount(week)} this week, by ${formatCount(hobs)} ${plural(hobs, { one: "hob", other: "hobs" })}.`,
     byHob: "By hob",
     notes: "Notes from hobs",
+    notesFailed: "The notes hobs left on this skill could not be read.",
     note: ({ note }: { note: string }) => `“${note}”`,
     noteKind: { wrong: "wrong", outdated: "outdated", unclear: "unclear" },
     noteBy: ({ hob, kind, when, more }: { hob: string; kind: string; when: string; more: number }) =>

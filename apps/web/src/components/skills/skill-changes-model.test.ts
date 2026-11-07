@@ -30,7 +30,7 @@ describe("What changed (ADR 029, The Skills page)", () => {
     const saved = change({
       scopes: [{ _tag: "Everyone" }],
       held: [{ _tag: "Hob", agentId: bram }],
-      moved: [SkillAssignmentId.make("a")],
+      moved: [{ assignmentId: SkillAssignmentId.make("a"), from: SkillRevisionHash.make("1".repeat(64)) }],
       previous: SkillRevisionHash.make("1".repeat(64)),
       previousNumber: 1,
     });

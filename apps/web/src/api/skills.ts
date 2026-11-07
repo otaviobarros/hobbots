@@ -139,9 +139,15 @@ export const skillFeedbackQuery = (skillId: SkillId) =>
     select: (answer) => answer.feedback,
   });
 
-/** A hob left a note on a skill: the notes its Activity shows are read again. */
-export const refreshSkillFeedback = (queryClient: QueryClient) =>
-  queryClient.invalidateQueries({ queryKey: [...skillsKey, "feedback"] });
+/**
+ * A hob left a note on a skill: the notes its Activity shows are read again. A read already under way
+ * may have started before the note, so it is cancelled first, not reused (STD-REACT-012).
+ */
+export const refreshSkillFeedback = async (queryClient: QueryClient) => {
+  const notes = { queryKey: [...skillsKey, "feedback"] };
+  await queryClient.cancelQueries(notes);
+  await queryClient.invalidateQueries(notes);
+};
 
 export const refreshSkillUses = async (queryClient: QueryClient) => {
   const counted = {

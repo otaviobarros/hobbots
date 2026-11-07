@@ -313,11 +313,57 @@ describe("skills routes", () => {
     ]);
     // A save's Roll back goes to the revision before it, for the places its rollout moved.
     expect(release[2]).toMatchObject({
-      moved: [everyone.body.id],
+      moved: [{ assignmentId: everyone.body.id, from: revision.hash }],
       previous: revision.hash,
       previousNumber: 1,
       by: { _tag: "You" },
     });
-    expect(release[0]).toMatchObject({ previous: r2.body.revision.hash, previousNumber: 2 });
+    expect(release[0]).toMatchObject({
+      moved: [{ assignmentId: everyone.body.id, from: r2.body.revision.hash }],
+      previous: r2.body.revision.hash,
+      previousNumber: 2,
+    });
+  });
+
+  // covers ADR 029 (Pins and rollout, The Skills page), #1062
+  it("[TC-AG-160] a save that moves places from different revisions keeps where each came from, for Roll back", async () => {
+    const hob = {
+      name: "Wren",
+      ...roleFields("writer"),
+      lookSeed: 7,
+      lookColor: "moss",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+    };
+    const wren = await request("POST", "/api/agents", hob);
+    const folder = await folderWith({ "SKILL.md": skillMd("release") });
+    const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
+    const [{ skill, revision }] = imported.body.imported;
+    const everyone = await request("POST", `/api/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+    const own = await request("POST", `/api/skills/${skill.id}/assignments`, {
+      scope: { _tag: "Hob", agentId: wren.body.id },
+    });
+    const edit = { base: revision.hash, description: "Use when releasing.", instructions: "Tag it." };
+    const r2 = await request("POST", `/api/skills/${skill.id}/edits`, edit);
+    // Wren goes back to r1 while Everyone stays on r2; r3 then moves both, each from its own revision.
+    await request("POST", `/api/skills/assignments/${own.body.id}/roll-out`, { pin: revision.hash });
+    await request("POST", `/api/skills/${skill.id}/edits`, {
+      ...edit,
+      base: r2.body.revision.hash,
+      instructions: "Tag, then push.",
+    });
+
+    const { body } = await request("GET", "/api/skills/changes");
+    const [save] = body.changes.filter((one: { skillId: string }) => one.skillId === skill.id);
+    expect(save).toMatchObject({ kind: "saved", number: 3, previous: null, previousNumber: null });
+    expect(save.moved).toEqual(
+      expect.arrayContaining([
+        { assignmentId: everyone.body.id, from: r2.body.revision.hash },
+        { assignmentId: own.body.id, from: revision.hash },
+      ]),
+    );
+    expect(save.moved).toHaveLength(2);
   });
 });

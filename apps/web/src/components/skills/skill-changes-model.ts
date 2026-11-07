@@ -89,6 +89,6 @@ export const changeText = (change: SkillChange, hobs: HobDirectory) => {
   }
 };
 
-/** Whether Roll back can move a save's or a rollout's places back to where they were. */
+/** Whether Roll back can move a save's or a rollout's places back to the revisions they were on. */
 export const canRollBack = (change: SkillChange): boolean =>
-  (change.kind === "saved" || change.kind === "rolledOut") && change.previous !== null && change.moved.length > 0;
+  (change.kind === "saved" || change.kind === "rolledOut") && change.moved.length > 0;

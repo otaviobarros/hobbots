@@ -232,9 +232,9 @@ export const SkillChange = Schema.Struct({
   scopes: Schema.Array(SkillScope),
   /** The places a save kept on their revision. */
   held: Schema.Array(SkillScope),
-  /** The assignments a save or rollout moved, which Roll back moves back to `previous`. */
-  moved: Schema.Array(SkillAssignmentId),
-  /** Where Roll back goes: the revision the moved places were on, or null when there is no way back. */
+  /** The assignments a save or rollout moved, each with the revision it was on, where Roll back takes it. */
+  moved: Schema.Array(Schema.Struct({ assignmentId: SkillAssignmentId, from: SkillRevisionHash })),
+  /** The revision every moved place was on, or null when they were on different ones or none moved. */
   previous: Schema.NullOr(SkillRevisionHash),
   previousNumber: Schema.NullOr(Schema.Int),
   /** The hob that turned a skill off or on for itself. */

@@ -275,7 +275,6 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           {
             name: (skillId) => names.get(skillId) ?? null,
             number: (skillId, hash) => revisions.get(skillId)?.find((one) => one.hash === hash)?.number ?? null,
-            before: (skillId, number) => revisions.get(skillId)?.find((one) => one.number === number - 1)?.hash ?? null,
           },
           CHANGES_SHOWN,
         ),

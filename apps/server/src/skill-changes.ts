@@ -26,8 +26,6 @@ const SAME_CHANGE_MS = 60_000;
 export interface SkillChangeLookup {
   readonly name: (skillId: SkillId) => SkillName | null;
   readonly number: (skillId: SkillId, hash: SkillRevisionHash) => number | null;
-  /** The revision before `number`, which Roll back from a save goes to. */
-  readonly before: (skillId: SkillId, number: number) => SkillRevisionHash | null;
 }
 
 type Draft = { -readonly [K in keyof SkillChange]: SkillChange[K] } & {
@@ -81,14 +79,11 @@ const ofAssignment = (changes: Changes, kind: SkillChange["kind"], assignment: S
 
 const saved = (changes: Changes, event: Extract<JournaledEvent, { _tag: "SkillRevisionAdded" }>, at: string) => {
   const { skill, revision } = event;
-  const previous = changes.lookup.before(skill.id, revision.number);
   push(changes, {
     ...blank(at, skill.id, skill.name),
     kind: "saved",
     number: revision.number,
     pin: revision.hash,
-    previous,
-    previousNumber: previous === null ? null : revision.number - 1,
     by: revision.addedBy,
   });
 };
@@ -99,10 +94,10 @@ const rolledOut = (changes: Changes, event: Extract<JournaledEvent, { _tag: "Ski
   const joins =
     near(before, at) &&
     before.pin === assignment.pin &&
-    (before.kind === "saved" || (before.kind === "rolledOut" && before.previous === from));
+    (before.kind === "saved" || (before.kind === "rolledOut" && before.moved.every((one) => one.from === from)));
   if (joins) {
     before.scopes = [...before.scopes, assignment.scope];
-    before.moved = [...before.moved, assignment.id];
+    before.moved = [...before.moved, { assignmentId: assignment.id, from }];
     return;
   }
   const name = changes.nameOf(assignment.skillId);
@@ -113,9 +108,7 @@ const rolledOut = (changes: Changes, event: Extract<JournaledEvent, { _tag: "Ski
     number: changes.lookup.number(assignment.skillId, assignment.pin),
     pin: assignment.pin,
     scopes: [assignment.scope],
-    moved: [assignment.id],
-    previous: from,
-    previousNumber: changes.lookup.number(assignment.skillId, from),
+    moved: [{ assignmentId: assignment.id, from }],
     by: assignment.by,
   });
 };
@@ -162,6 +155,17 @@ const add = (changes: Changes, event: JournaledEvent, at: string) => {
 };
 
 /**
+ * Where the places a save or rollout moved came from: one revision when they were all on it, which
+ * the line names, or none when they were on different ones. Roll back takes each to its own.
+ */
+const withPrevious = (change: SkillChange, lookup: SkillChangeLookup): SkillChange => {
+  const froms = new Set(change.moved.map((one) => one.from));
+  const [only] = froms;
+  if (froms.size !== 1 || only === undefined) return change;
+  return { ...change, previous: only, previousNumber: lookup.number(change.skillId, only) };
+};
+
+/**
  * The journal's skill entries as What changed lists them (ADR 029, The Skills page), newest first.
  * A save's rollout and the holds it set read as part of the save, and a rollout's moves of one skill
  * to one revision as one change. `envelopes` come in any order; at most `limit` changes are kept.
@@ -190,7 +194,7 @@ export const skillChangesOf = (
   return changes.list
     .reverse()
     .slice(0, limit)
-    .map(({ pin: _pin, ms: _ms, ...change }) => change);
+    .map(({ pin: _pin, ms: _ms, ...change }) => withPrevious(change, lookup));
 };
 
 /** The skill a journaled skill change is about. */

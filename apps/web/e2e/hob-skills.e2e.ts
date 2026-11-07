@@ -157,6 +157,16 @@ test("[TC-UX-1062-06] What changed lists a save with its rollout and rolls it ba
   await expect(notes).toContainText("“Step 1 does not say which diff.”", { timeout: 20_000 });
   await expect(notes).toContainText(/Pip, unclear · .* · 2 more notes suggest a revision/);
   await expectAccessible(page, main);
+
+  // Notes that cannot be read say so, apart from the uses, and Try again reads them.
+  await page.route("**/api/skills/*/feedback", (route) => route.fulfill({ status: 500, body: "{}" }));
+  await page.reload();
+  const failed = main.getByRole("alert").filter({ hasText: "The notes hobs left on this skill could not be read." });
+  await expect(failed).toBeVisible({ timeout: 20_000 });
+  await expect(main).toContainText("No hob has used it yet.");
+  await page.unroute("**/api/skills/*/feedback");
+  await failed.getByRole("button", { name: "Try again" }).click();
+  await expect(notes).toContainText("“Step 1 does not say which diff.”");
 });
 
 // covers ADR 029 (A hob's Skills tab), #1062

@@ -3,6 +3,7 @@ import {
   type AgentId,
   SKILL_FEEDBACK_SUGGESTS_REVISION,
   type SkillFeedback,
+  type SkillId,
   type SkillUseCounts,
   skillRevisionLabel,
   type Thread,
@@ -76,11 +77,34 @@ function ChatUseRow({
   );
 }
 
+/** A read that failed, with Try again. */
+function ReadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <p role="alert" className="m-0 flex items-center gap-3 rounded-card bg-notice px-4 py-3 text-ui text-text">
+      <span className="flex-1">{message}</span>
+      <Button variant="outline" size="xs" onClick={onRetry}>
+        {copy.retry}
+      </Button>
+    </p>
+  );
+}
+
 /**
  * The notes hobs left that the skill is wrong, outdated or unclear, newest first, each saying how many
  * more would suggest a revision (ADR 029, `skill_feedback`). Nothing shows until a hob leaves one.
  */
-function SkillNotes({ notes, hobs }: { notes: ReadonlyArray<SkillFeedback>; hobs: HobDirectory }) {
+function SkillNotes({ skillId, hobs }: { skillId: SkillId; hobs: HobDirectory }) {
+  const read = useQuery(skillFeedbackQuery(skillId));
+  if (read.data === undefined) {
+    return read.isError ? (
+      <ReadFailed message={copy.notesFailed} onRetry={() => void read.refetch()} />
+    ) : (
+      <div aria-busy="true" className="flex flex-col gap-2">
+        <Skeleton width="30ch" />
+      </div>
+    );
+  }
+  const notes: ReadonlyArray<SkillFeedback> = read.data;
   if (notes.length === 0) return null;
   const more = Math.max(0, SKILL_FEEDBACK_SUGGESTS_REVISION - notes.length);
   return (
@@ -114,7 +138,6 @@ function SkillNotes({ notes, hobs }: { notes: ReadonlyArray<SkillFeedback>; hobs
 export function SkillActivity({ detail, hobs }: { detail: SkillDetail; hobs: HobDirectory }) {
   const { skill } = detail;
   const uses = useQuery(skillUsesQuery(skill.id));
-  const notes = useQuery(skillFeedbackQuery(skill.id)).data ?? [];
   const titles = useThreadTitles(uses.data?.hobs.map((one) => one.agentId) ?? []);
   const title = skillTitle(skill.name);
 
@@ -128,12 +151,7 @@ export function SkillActivity({ detail, hobs }: { detail: SkillDetail; hobs: Hob
       </section>
       {uses.data === undefined ? (
         uses.isError ? (
-          <p role="alert" className="m-0 flex items-center gap-3 rounded-card bg-notice px-4 py-3 text-ui text-text">
-            <span className="flex-1">{copy.failed}</span>
-            <Button variant="outline" size="xs" onClick={() => void uses.refetch()}>
-              {copy.retry}
-            </Button>
-          </p>
+          <ReadFailed message={copy.failed} onRetry={() => void uses.refetch()} />
         ) : (
           <div aria-busy="true" className="flex flex-col gap-2">
             <Skeleton width="40ch" />
@@ -165,7 +183,7 @@ export function SkillActivity({ detail, hobs }: { detail: SkillDetail; hobs: Hob
           </section>
         </>
       )}
-      <SkillNotes notes={notes} hobs={hobs} />
+      <SkillNotes skillId={skill.id} hobs={hobs} />
     </div>
   );
 }
