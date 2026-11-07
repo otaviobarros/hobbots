@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.0.3](https://github.com/otaviobarros/hobbots/compare/v0.0.2...v0.0.3) (2026-11-07)
+
+
+### Features
+
+* **agents:** add the hub action pipeline and move the GitHub reads onto it ([#1154](https://github.com/otaviobarros/hobbots/issues/1154)) ([46f735e](https://github.com/otaviobarros/hobbots/commit/46f735e75475f105171810e393e43eb451048308))
+* **desktop:** package Hobbots for Linux as .deb and .rpm ([#1094](https://github.com/otaviobarros/hobbots/issues/1094)) ([8fc9720](https://github.com/otaviobarros/hobbots/commit/8fc972073d60c3ef490cdb448be22e59950785b7))
+* **policy:** decide Charm operations by their declared ids ([#1142](https://github.com/otaviobarros/hobbots/issues/1142)) ([f1ae481](https://github.com/otaviobarros/hobbots/commit/f1ae48134f530a4d176d1d6a749cf674a5ada2e2))
+* **runtimes:** deliver a turn's skills to Claude Code and Codex, and load nothing else ([#1103](https://github.com/otaviobarros/hobbots/issues/1103)) ([4a38317](https://github.com/otaviobarros/hobbots/commit/4a38317d8a5560319394b275ab4189cc85b3948b))
+* **skills:** add the skill types and the SkillLibrary port ([#1102](https://github.com/otaviobarros/hobbots/issues/1102)) ([11d67fb](https://github.com/otaviobarros/hobbots/commit/11d67fb2490ee74b086e41f13b5250fef23a9bed))
+* **skills:** assign skills to scopes, roll out revisions and give each turn its hob's skills ([#1105](https://github.com/otaviobarros/hobbots/issues/1105)) ([f73e188](https://github.com/otaviobarros/hobbots/commit/f73e188d3f545f675ae20ec5ff01e2f5676142ac))
+* **skills:** import, deliver and export a plugin as a skill set ([#1150](https://github.com/otaviobarros/hobbots/issues/1150)) ([e3a7244](https://github.com/otaviobarros/hobbots/commit/e3a7244a73d29fdf9e6d8d477f50383f3412f860))
+* **skills:** include skills in backups, exports and Diagnostics ([#1137](https://github.com/otaviobarros/hobbots/issues/1137)) ([d0f0e39](https://github.com/otaviobarros/hobbots/commit/d0f0e399d0a0444177c9011c268ef72493fd5753))
+* **skills:** keep ~/.agents/skills read-only and out of backups and exports ([#1146](https://github.com/otaviobarros/hobbots/issues/1146)) ([9b36e84](https://github.com/otaviobarros/hobbots/commit/9b36e8496558248a776a2b13fc7eec3be6335ce2))
+* **skills:** let hobs propose skills for your review ([#1108](https://github.com/otaviobarros/hobbots/issues/1108)) ([e9160ea](https://github.com/otaviobarros/hobbots/commit/e9160ea81fd9781bc0a25cffa04eee9989c0129f))
+* **skills:** show a plugin as one set on the Skills page, and copy one of its skills ([#1175](https://github.com/otaviobarros/hobbots/issues/1175)) ([f56815e](https://github.com/otaviobarros/hobbots/commit/f56815e6ec405327c216a19ea958afabcfd5490a))
+* **skills:** show which skills a reply used, and count each use ([#1106](https://github.com/otaviobarros/hobbots/issues/1106)) ([facdd6d](https://github.com/otaviobarros/hobbots/commit/facdd6d20396bf50f12cef17562c3437a6d22df3))
+* **skills:** store skills with immutable revisions and import them safely ([#1104](https://github.com/otaviobarros/hobbots/issues/1104)) ([7ad0b52](https://github.com/otaviobarros/hobbots/commit/7ad0b524e7d987ecaaeb13ee357a4b70e3f9c120))
+* **web:** add a hob's Skills tab, the skill picker in Summon and Profile, and What changed, To review and Activity ([#1138](https://github.com/otaviobarros/hobbots/issues/1138)) ([b386129](https://github.com/otaviobarros/hobbots/commit/b386129c1e677c4abc161132d7f0a43cde2a045a))
+* **web:** add the Skills page, with import, editing and rollout ([#1107](https://github.com/otaviobarros/hobbots/issues/1107)) ([be6e3b9](https://github.com/otaviobarros/hobbots/commit/be6e3b97a570098237c78926429587b0cb9cb6a9))
+* **web:** draft a skill with a hob from Add a skill › Write one ([#1147](https://github.com/otaviobarros/hobbots/issues/1147)) ([daff3f4](https://github.com/otaviobarros/hobbots/commit/daff3f41a32058ecb96174ca9c42a2ac8596a614))
+
+
+### Bug Fixes
+
+* **orchestration:** credit a milestone to the hob whose work reached it ([#1178](https://github.com/otaviobarros/hobbots/issues/1178)) ([764c9b7](https://github.com/otaviobarros/hobbots/commit/764c9b7eea2661eedb9908e5841ae9d314b0a46c))
+* **orchestration:** keep leads from committing their members' open work ([#1177](https://github.com/otaviobarros/hobbots/issues/1177)) ([d816b8f](https://github.com/otaviobarros/hobbots/commit/d816b8fea23a5d935c33ff968b53bf81a3ed3737))
+* **orchestration:** never show a member's Task done on its reply alone ([#1156](https://github.com/otaviobarros/hobbots/issues/1156)) ([9980954](https://github.com/otaviobarros/hobbots/commit/9980954ec368539b78e6267e3e3451a4de73b6f5))
+* **permissions:** let a hob read the output its runtime saved for its session ([#1155](https://github.com/otaviobarros/hobbots/issues/1155)) ([fb7f306](https://github.com/otaviobarros/hobbots/commit/fb7f30630f562b1a4cba68859efac623b5f73b54))
+* **skills:** watch each folder of ~/.agents/skills so a folder replaced by a file cannot crash the hub ([#1109](https://github.com/otaviobarros/hobbots/issues/1109)) ([a39743f](https://github.com/otaviobarros/hobbots/commit/a39743f86327a2ef90e54f5412e6efb86a9c1efc))
+* **web:** fit the Inbox keys and Always label to the request, and steer hand_off and wait_for to the right ids ([#1151](https://github.com/otaviobarros/hobbots/issues/1151)) ([30d1b46](https://github.com/otaviobarros/hobbots/commit/30d1b462cff14955fa385ec1db4a500b37e07f76))
+* **web:** list skills in what a backup holds ([#1140](https://github.com/otaviobarros/hobbots/issues/1140)) ([0b3c501](https://github.com/otaviobarros/hobbots/commit/0b3c501c8c19438acddae2c300f61e73e2eea3e6))
+* **web:** make stuck Task controls agree across the card, the lane and the Inbox ([#1152](https://github.com/otaviobarros/hobbots/issues/1152)) ([17b0912](https://github.com/otaviobarros/hobbots/commit/17b09129115052602aa5dc5b63c596e02912ce35))
+* **web:** name the memory engine in Help's plain check ([#1173](https://github.com/otaviobarros/hobbots/issues/1173)) ([f443089](https://github.com/otaviobarros/hobbots/commit/f4430899b651d1fca331c711a5e0025da26deae0))
+
+
+### Code Refactoring
+
+* **agents:** move the Memory and Skill tools onto the hub action pipeline ([#1176](https://github.com/otaviobarros/hobbots/issues/1176)) ([220dcbd](https://github.com/otaviobarros/hobbots/commit/220dcbd076f43910f74fe52726ca54b513b3c042))
+
 ## [0.0.2](https://github.com/otaviobarros/hobbots/compare/v0.0.1...v0.0.2) (2026-11-06)
 
 
