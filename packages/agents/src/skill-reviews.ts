@@ -19,10 +19,10 @@ import { announcer, EventPublisher } from "./ports.ts";
 import { SkillProposalLog, type SkillReviewError, SkillReviews } from "./skill-proposals.ts";
 import {
   rolloutTargets,
+  type SkillDelivery,
   SkillFiles,
   SkillLibrary,
   type SkillRevisionAdded,
-  type SkillRolloutWhen,
   SkillWriter,
   type WrittenFile,
 } from "./skills.ts";
@@ -215,32 +215,35 @@ export const SkillReviewsLive = Layer.effect(
 
     /**
      * Gives the hob its new skill, or rolls a change out, as the plan says: a new revision as your own
-     * edit does, once; the newest again moves only what it never reached; an earlier one brought back
-     * moves only the assignments still on the revision that was newest when it was planned. Done
-     * again after a stop, each moves nothing that moved since, or that a later decision moved on.
+     * edit does, the newest again only where it never reached, and an earlier one brought back to every
+     * assignment not held, as Roll back does. It is made once for the proposal: the library records its
+     * receipt with the assignments it moves, so a hub that stops and finishes it again moves nothing,
+     * whatever you decided since.
      */
     const rollOut = (adding: SkillProposal, revision: SkillRevision, plan: SkillProposalPlan, by: SkillBy) =>
       Effect.gen(function* () {
-        if (adding.skillId === null) {
-          const scope = { _tag: "Hob", agentId: adding.agentId } as const;
-          const mine = (yield* library.assignments(revision.skillId)).some(
-            (one) => one.scope._tag === "Hob" && one.scope.agentId === adding.agentId,
-          );
-          if (mine) return;
-          const assigned = yield* library.assign({
-            skillId: revision.skillId,
-            scope,
-            pin: revision.hash,
-            held: false,
-            onlyWhenAsked: false,
-            by,
-          });
-          yield* announce(assigned.entries);
-          return;
-        }
-        const when: SkillRolloutWhen = plan.as === "earlier" && plan.after !== null ? { from: plan.after } : "pending";
-        const rolled = yield* library.rollOutRevision(revision.skillId, revision.hash, by, when);
-        yield* announce(rolled.entries);
+        const delivery: SkillDelivery =
+          adding.skillId === null
+            ? {
+                _tag: "Assign",
+                input: {
+                  skillId: revision.skillId,
+                  scope: { _tag: "Hob", agentId: adding.agentId },
+                  pin: revision.hash,
+                  held: false,
+                  onlyWhenAsked: false,
+                  by,
+                },
+              }
+            : {
+                _tag: "RollOut",
+                skillId: revision.skillId,
+                pin: revision.hash,
+                by,
+                when: plan.as === "earlier" ? "always" : "pending",
+              };
+        const delivered = yield* library.deliver(`skill-proposal:${adding.id}`, delivery);
+        if (delivered !== null) yield* announce(delivered.entries);
       });
 
     /**

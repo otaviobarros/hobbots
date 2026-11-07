@@ -1,4 +1,4 @@
-import { SkillLibrary, type SkillRevisionInput } from "@hobbots/agents";
+import { type SkillAssignmentInput, SkillLibrary, type SkillRevisionInput } from "@hobbots/agents";
 import {
   AgentId,
   type JournaledEvent,
@@ -175,6 +175,12 @@ const now = Effect.map(DateTime.now, DateTime.formatIso);
  * The SQL record of the skills library (migration 0065). Every change is one transaction with the
  * journal's head taken first, so two writers take turns on PostgreSQL, and a refusal rolls it back.
  */
+/** What a change inside a journaled transaction makes, with the events it journals. */
+interface Changed<A> {
+  readonly value: A;
+  readonly events: ReadonlyArray<JournaledEvent>;
+}
+
 export const SkillLibraryLive = Layer.effect(
   SkillLibrary,
   Effect.gen(function* () {
@@ -351,6 +357,87 @@ export const SkillLibraryLive = Layer.effect(
           revision = ${assignment.revision}
         WHERE id = ${assignment.id}`;
 
+    /** Assigns a skill to a scope, or changes its assignment there, inside a journaled change. */
+    const assignIn = (first: number, input: SkillAssignmentInput) =>
+      Effect.gen(function* (): Effect.fn.Return<Changed<SkillAssignment>, SkillNotFound | SqlError.SqlError> {
+        if ((yield* skillRow(input.skillId)) === null) return yield* new SkillNotFound({ id: input.skillId });
+        yield* knownPin(input.skillId, input.pin);
+        const key = scopeKey(input.scope);
+        const [found] = yield* sql<AssignmentRow>`SELECT * FROM skill_assignments
+          WHERE skill_id = ${input.skillId} AND scope_key = ${key}`;
+        const fields = { pin: input.pin, held: input.held, onlyWhenAsked: input.onlyWhenAsked, by: input.by };
+        if (found !== undefined) {
+          const before = yield* assignmentOf(found);
+          const assignment = new SkillAssignment({ ...before, ...fields, revision: first });
+          yield* saveAssignment(assignment);
+          const events: Array<JournaledEvent> = [{ _tag: "SkillAssigned", assignment }];
+          return { value: assignment, events };
+        }
+        const assignment = new SkillAssignment({
+          id: SkillAssignmentId.make(crypto.randomUUID()),
+          skillId: input.skillId,
+          scope: input.scope,
+          ...fields,
+          assignedAt: yield* now,
+          revision: first,
+        });
+        yield* sql`INSERT INTO skill_assignments ${sql.insert({
+          id: assignment.id,
+          skill_id: assignment.skillId,
+          scope: scopeJson(assignment.scope),
+          scope_key: key,
+          pin: assignment.pin,
+          held: assignment.held ? 1 : 0,
+          only_when_asked: assignment.onlyWhenAsked ? 1 : 0,
+          assigned_by: byJson(assignment.by),
+          assigned_at: assignment.assignedAt,
+          revision: first,
+        })}`;
+        return { value: assignment, events: [{ _tag: "SkillAssigned", assignment }] };
+      });
+
+    /** Rolls a revision out to the skill's assignments, inside a journaled change. */
+    const rollOutIn = (
+      first: number,
+      skillId: SkillId,
+      pin: SkillRevisionHash,
+      by: SkillBy,
+      when: "pending" | "always",
+    ) =>
+      Effect.gen(function* (): Effect.fn.Return<
+        Changed<ReadonlyArray<SkillAssignment>>,
+        SkillNotFound | SqlError.SqlError
+      > {
+        yield* knownPin(skillId, pin);
+        // A save's own rollout claims the revision first, in this transaction: only the newest,
+        // never rolled out, so a second save of it, or one after a rollback, moves nothing.
+        const claimed = yield* sql<{
+          readonly hash: string;
+        }>`UPDATE skill_revisions SET rolled_out_at = ${yield* now}
+          WHERE skill_id = ${skillId} AND hash = ${pin} AND rolled_out_at IS NULL
+            AND hash = (SELECT latest FROM skills WHERE id = ${skillId}) RETURNING hash`;
+        if (when === "pending" && claimed.length === 0) return { value: [], events: [] };
+        const moved: Array<SkillAssignment> = [];
+        const events: Array<JournaledEvent> = [];
+        for (const before of yield* assignmentsOf(skillId)) {
+          if (before.held || before.pin === pin) continue;
+          // Moved only while it is still not held and still on the pin it was read with, so a
+          // Keep on rN that lands meanwhile is never overwritten.
+          const [row] = yield* sql<AssignmentRow>`UPDATE skill_assignments
+            SET pin = ${pin}, assigned_by = ${byJson(by)}, revision = ${first}
+            WHERE id = ${before.id} AND held = 0 AND pin = ${before.pin} RETURNING *`;
+          if (row === undefined) continue;
+          const assignment = yield* assignmentOf(row);
+          moved.push(assignment);
+          events.push({ _tag: "SkillRolledOut", assignment, from: before.pin });
+        }
+        if (claimed.length === 0) {
+          yield* sql`UPDATE skill_revisions SET rolled_out_at = COALESCE(rolled_out_at, ${yield* now})
+            WHERE skill_id = ${skillId} AND hash = ${pin}`;
+        }
+        return { value: moved, events };
+      });
+
     return SkillLibrary.of({
       list: sqlOrDie(
         sql<SkillRow>`SELECT * FROM skills WHERE removed_at IS NULL ORDER BY name`.pipe(
@@ -374,45 +461,7 @@ export const SkillLibraryLive = Layer.effect(
       ),
       addRevision,
       assignments: (skillId) => sqlOrDie(assignmentsOf(skillId)),
-      assign: (input) =>
-        change<SkillAssignment, SkillNotFound | SqlError.SqlError>((first) =>
-          Effect.gen(function* () {
-            if ((yield* skillRow(input.skillId)) === null) return yield* new SkillNotFound({ id: input.skillId });
-            yield* knownPin(input.skillId, input.pin);
-            const key = scopeKey(input.scope);
-            const [found] = yield* sql<AssignmentRow>`SELECT * FROM skill_assignments
-              WHERE skill_id = ${input.skillId} AND scope_key = ${key}`;
-            const fields = { pin: input.pin, held: input.held, onlyWhenAsked: input.onlyWhenAsked, by: input.by };
-            if (found !== undefined) {
-              const before = yield* assignmentOf(found);
-              const assignment = new SkillAssignment({ ...before, ...fields, revision: first });
-              yield* saveAssignment(assignment);
-              const events: Array<JournaledEvent> = [{ _tag: "SkillAssigned", assignment }];
-              return { value: assignment, events };
-            }
-            const assignment = new SkillAssignment({
-              id: SkillAssignmentId.make(crypto.randomUUID()),
-              skillId: input.skillId,
-              scope: input.scope,
-              ...fields,
-              assignedAt: yield* now,
-              revision: first,
-            });
-            yield* sql`INSERT INTO skill_assignments ${sql.insert({
-              id: assignment.id,
-              skill_id: assignment.skillId,
-              scope: scopeJson(assignment.scope),
-              scope_key: key,
-              pin: assignment.pin,
-              held: assignment.held ? 1 : 0,
-              only_when_asked: assignment.onlyWhenAsked ? 1 : 0,
-              assigned_by: byJson(assignment.by),
-              assigned_at: assignment.assignedAt,
-              revision: first,
-            })}`;
-            return { value: assignment, events: [{ _tag: "SkillAssigned", assignment }] };
-          }),
-        ),
+      assign: (input) => change<SkillAssignment, SkillNotFound | SqlError.SqlError>((first) => assignIn(first, input)),
       unassign: (id) =>
         change<SkillAssignment | null, SqlError.SqlError>(() =>
           Effect.gen(function* () {
@@ -434,38 +483,27 @@ export const SkillLibraryLive = Layer.effect(
         ),
       rollOutRevision: (skillId, pin, by, when) =>
         change<ReadonlyArray<SkillAssignment>, SkillNotFound | SqlError.SqlError>((first) =>
-          Effect.gen(function* () {
-            yield* knownPin(skillId, pin);
-            // A save's own rollout claims the revision first, in this transaction: only the newest,
-            // never rolled out, so a second save of it, or one after a rollback, moves nothing.
-            const claimed = yield* sql<{
-              readonly hash: string;
-            }>`UPDATE skill_revisions SET rolled_out_at = ${yield* now}
-              WHERE skill_id = ${skillId} AND hash = ${pin} AND rolled_out_at IS NULL
-                AND hash = (SELECT latest FROM skills WHERE id = ${skillId}) RETURNING hash`;
-            if (when === "pending" && claimed.length === 0) return { value: [], events: [] };
-            const moved: Array<SkillAssignment> = [];
-            const events: Array<JournaledEvent> = [];
-            for (const before of yield* assignmentsOf(skillId)) {
-              if (before.held || before.pin === pin) continue;
-              if (typeof when === "object" && before.pin !== when.from) continue;
-              // Moved only while it is still not held and still on the pin it was read with, so a
-              // Keep on rN that lands meanwhile is never overwritten.
-              const [row] = yield* sql<AssignmentRow>`UPDATE skill_assignments
-                SET pin = ${pin}, assigned_by = ${byJson(by)}, revision = ${first}
-                WHERE id = ${before.id} AND held = 0 AND pin = ${before.pin} RETURNING *`;
-              if (row === undefined) continue;
-              const assignment = yield* assignmentOf(row);
-              moved.push(assignment);
-              events.push({ _tag: "SkillRolledOut", assignment, from: before.pin });
-            }
-            if (claimed.length === 0) {
-              yield* sql`UPDATE skill_revisions SET rolled_out_at = COALESCE(rolled_out_at, ${yield* now})
-                WHERE skill_id = ${skillId} AND hash = ${pin}`;
-            }
-            return { value: moved, events };
-          }),
+          rollOutIn(first, skillId, pin, by, when),
         ),
+      deliver: (operation, delivery) =>
+        change<ReadonlyArray<SkillAssignment> | null, SkillNotFound | SqlError.SqlError>((first) =>
+          Effect.gen(function* (): Effect.fn.Return<
+            Changed<ReadonlyArray<SkillAssignment> | null>,
+            SkillNotFound | SqlError.SqlError
+          > {
+            // The receipt is taken first, in this transaction: an operation made already moves nothing.
+            const [taken] = yield* sql<{ readonly operation: string }>`INSERT INTO skill_operations ${sql.insert({
+              operation,
+              done_at: yield* now,
+            })} ON CONFLICT (operation) DO NOTHING RETURNING operation`;
+            if (taken === undefined) return { value: null, events: [] };
+            if (delivery._tag === "Assign") {
+              const assigned = yield* assignIn(first, delivery.input);
+              return { value: [assigned.value], events: assigned.events };
+            }
+            return yield* rollOutIn(first, delivery.skillId, delivery.pin, delivery.by, delivery.when);
+          }),
+        ).pipe(Effect.map((committed) => (committed.value === null ? null : { ...committed, value: committed.value }))),
       hold: (id, held) =>
         change<SkillAssignment, SkillNotFound | SqlError.SqlError>((first) =>
           Effect.gen(function* () {

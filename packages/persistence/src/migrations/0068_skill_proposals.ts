@@ -9,6 +9,8 @@ import { SqlClient } from "effect/sql";
 // already, or an earlier one brought back. `planned_hash`/`planned_after`/`planned_as` are what an
 // add in progress writes, recorded before it writes anything, so a stopped hub finishes that. `memory_pages` is JSON, and `edited` is 0 or
 // 1. A hob has at most one proposal per name open at once. Feedback is a hob's note on a skill.
+// `skill_operations` holds a receipt for each change an approved proposal made to who uses a skill,
+// written in the transaction that made it, so making it again after a stop moves nothing.
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
@@ -61,4 +63,10 @@ export default Effect.gen(function* () {
     )
   `;
   yield* sql`CREATE INDEX skill_feedback_skill ON skill_feedback (skill_id, created_at)`;
+  yield* sql`
+    CREATE TABLE skill_operations (
+      operation TEXT PRIMARY KEY,
+      done_at TEXT NOT NULL
+    )
+  `;
 });

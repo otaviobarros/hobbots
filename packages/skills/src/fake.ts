@@ -99,7 +99,8 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
     return { skill, revision };
   };
 
-  return {
+  const operations = new Set<string>();
+  const library: SkillLibraryShape = {
     list: Effect.sync(() => [...skills.values()].sort((a, b) => (a.name < b.name ? -1 : 1))),
     get: (id) => Effect.sync(() => skills.get(id) ?? null),
     byName: (name) => Effect.sync(() => named(name)),
@@ -160,6 +161,16 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
         );
         return committed(moved);
       }),
+    deliver: (operation, delivery) =>
+      Effect.gen(function* () {
+        if (operations.has(operation)) return null;
+        operations.add(operation);
+        if (delivery._tag === "Assign") {
+          const assigned = yield* library.assign(delivery.input);
+          return committed([assigned.value]);
+        }
+        return yield* library.rollOutRevision(delivery.skillId, delivery.pin, delivery.by, delivery.when);
+      }),
     hold: (id, held) =>
       Effect.map(assignmentOf(id), (before) => save(new SkillAssignment({ ...before, held, revision: ++sequence }))),
     optOuts: (agentId) => Effect.sync(() => optOuts.filter((one) => agentId === undefined || one.agentId === agentId)),
@@ -186,6 +197,7 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
         return committed(new Skill({ ...skill, updatedAt: now(), revision: ++sequence }));
       }),
   };
+  return library;
 };
 
 /** `SkillLibrary` in memory, fresh for each build of the layer. */

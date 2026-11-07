@@ -67,11 +67,18 @@ export interface SkillRevisionAdded {
 }
 
 /**
- * Which assignments a revision's rollout moves: those its first rollout reaches (`pending`, nothing
- * once it was rolled out or is not the newest), every one not held (`always`, as Roll back), or only
- * those still on `from`, so a rollout that is finished again never moves what was decided since.
+ * What an approved proposal changes in who uses a skill: an assignment for the hob that proposed a
+ * new skill, or a revision rolled out as `rollOutRevision` rolls it out.
  */
-export type SkillRolloutWhen = "pending" | "always" | { readonly from: SkillRevisionHash };
+export type SkillDelivery =
+  | { readonly _tag: "Assign"; readonly input: SkillAssignmentInput }
+  | {
+      readonly _tag: "RollOut";
+      readonly skillId: SkillId;
+      readonly pin: SkillRevisionHash;
+      readonly by: SkillBy;
+      readonly when: "pending" | "always";
+    };
 
 /** A new assignment, or a change to the one a skill already has in that scope. */
 export interface SkillAssignmentInput {
@@ -131,8 +138,17 @@ export interface SkillLibraryShape {
     skillId: SkillId,
     pin: SkillRevisionHash,
     by: SkillBy,
-    when: SkillRolloutWhen,
+    when: "pending" | "always",
   ) => Library<Committed<ReadonlyArray<SkillAssignment>>, SkillNotFound>;
+  /**
+   * Makes `delivery` once for `operation`, such as one proposal's add: its receipt is recorded in the
+   * same transaction as the assignments it moves, so making it again, after a stop or a retry, moves
+   * nothing, whatever was decided since. Null when the operation was made already.
+   */
+  readonly deliver: (
+    operation: string,
+    delivery: SkillDelivery,
+  ) => Library<Committed<ReadonlyArray<SkillAssignment>> | null, SkillNotFound>;
   /** Holds an assignment on its revision, or lets it follow rollouts again. */
   readonly hold: (id: SkillAssignmentId, held: boolean) => Library<Committed<SkillAssignment>, SkillNotFound>;
   /** Every hob's opt-outs, or one hob's. */

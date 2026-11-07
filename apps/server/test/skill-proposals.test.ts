@@ -31,12 +31,14 @@ import {
   EMPTY_HOB_POLICY,
   type EventEnvelope,
   type HobPolicy,
+  memoryProjectIdentity,
   type SafetyPreset,
   SKILL_FEEDBACK_TOOL,
   SKILL_PROPOSE_TOOL,
   SKILL_REQUEST_TOOL,
   SKILL_SEARCH_TOOL,
   SkillProposal,
+  type SkillScope,
   type ThreadId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
@@ -724,7 +726,8 @@ describe("hobs proposing skills", () => {
     });
     expect(await pinOf()).toBe(r3);
 
-    // A rollback to r1 that rolled out before the hub stopped is not done again over a later rollout.
+    // A rollback to r1 that was made before the hub stopped is not made again, even once you moved
+    // Ada back to the very revision it rolled back from.
     const r1 = (await runtime.runPromise(SkillLibrary.use((skills) => skills.revisions(skillId)))).find(
       (one) => one.number === 1,
     )?.hash as never;
@@ -736,18 +739,69 @@ describe("hobs proposing skills", () => {
         const log = yield* SkillProposalLog;
         const planned = { hash: r1, after: r3, as: "earlier" as const };
         yield* log.move(new SkillProposal({ ...back.proposal, state: "adding", planned }), ["waiting"]);
-        yield* (yield* SkillLibrary).rollOutRevision(skillId, r1, { _tag: "Hob", agentId: ada }, { from: r3 });
+        yield* (yield* SkillLibrary).deliver(`skill-proposal:${back.proposal.id}`, {
+          _tag: "RollOut",
+          skillId,
+          pin: r1,
+          by: { _tag: "Hob", agentId: ada },
+          when: "always",
+        });
       }),
     );
     expect(await pinOf()).toBe(r1);
-    const r4 = await revise("Newer steps.");
-    expect(await pinOf()).toBe(r4);
+    const [assignment] = await runtime.runPromise(SkillLibrary.use((skills) => skills.assignments(skillId)));
+    await runtime.runPromise(
+      SkillLibrary.use((skills) => skills.rollOut(assignment?.id as never, r3, { _tag: "You" })),
+    );
+    expect(await pinOf()).toBe(r3);
     await runtime.runPromise(SkillReviews.use((reviews) => reviews.recover));
     expect((await proposals()).find((one) => one.proposal.id === back.proposal.id)?.proposal).toMatchObject({
       state: "added",
       added: { number: 1, as: "earlier" },
     });
-    expect(await pinOf()).toBe(r4);
+    expect(await pinOf()).toBe(r3);
+  });
+
+  // covers ADR 029 (Proactive hobs), #1063
+  it("[TC-AG-159] a change that is an earlier revision again rolls back every assignment not held, whatever it is on", async () => {
+    await importSkill("release-steps");
+    const [skill] = await library();
+    const skillId = skill?.id as never;
+    await call(SKILL_REQUEST_TOOL, { name: "release-steps", why: "To release." }, accessFor("trusting"));
+    const revise = (body: string) =>
+      runtime.runPromise(
+        SkillImporter.use((importer) =>
+          importer.add(
+            { _tag: "Written", files: [{ path: "SKILL.md", text: skillMd("release-steps", body) }] },
+            { by: { _tag: "You" }, skillId },
+          ),
+        ).pipe(Effect.map(([added]) => added?.revision.hash as never)),
+      );
+    const r2 = await revise("Second steps.");
+    const r3 = await revise("Third steps.");
+    const r1 = skill?.latest as never;
+    // Ada is on r3; every hob is on r2 after you rolled that one back; a project holds r2.
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const skills = yield* SkillLibrary;
+        yield* skills.rollOutRevision(skillId, r3, { _tag: "You" }, "always");
+        const assign = (scope: SkillScope, pin: never, held: boolean) =>
+          skills.assign({ skillId, scope, pin, held, onlyWhenAsked: false, by: { _tag: "You" } });
+        yield* assign({ _tag: "Everyone" }, r2, false);
+        yield* assign({ _tag: "Project", identity: memoryProjectIdentity(null, "site") }, r2, true);
+      }),
+    );
+    await propose("release-steps", { basedOn: 3, body: "Steps for release-steps." });
+    const [waiting] = await proposals();
+    const added = await request("POST", `/api/skill-proposals/${waiting?.proposal.id}/add`, {});
+    expect(added).toMatchObject({ status: 200, body: { added: { number: 1, as: "earlier" } } });
+    const pins = Object.fromEntries(
+      (await runtime.runPromise(SkillLibrary.use((skills) => skills.assignments(skillId)))).map((one) => [
+        one.scope._tag,
+        one.pin,
+      ]),
+    );
+    expect(pins).toEqual({ Hob: r1, Everyone: r1, Project: r2 });
   });
 
   // covers ADR 029 (Proactive hobs), #1063
