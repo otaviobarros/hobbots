@@ -12,6 +12,7 @@ import {
   HobLifecycle,
   HobService,
   HobTools,
+  hubCallStep,
   makeRedactor,
   PermissionSummary,
   SkillFiles,
@@ -264,7 +265,11 @@ const call = (name: string, input: unknown, access: ToolAccess = accessFor("bala
     Effect.gen(function* () {
       const tools = yield* (yield* SkillTools).forTurn(turnFor(access, work));
       if (tools === null) throw new Error("No skill tools");
-      return yield* tools.call(name, input, { id: "step-1", report: () => undefined });
+      return yield* tools.call(
+        name,
+        input,
+        hubCallStep("step-1", () => undefined),
+      );
     }),
   );
 

@@ -1,5 +1,21 @@
-import { CharmCalls, FolderSandbox } from "@hobbots/agents";
-import { CharmCall, isCharmCallSettled } from "@hobbots/domain";
+import {
+  type ApprovalAction,
+  actionDigest,
+  CharmCalls,
+  FolderSandbox,
+  type ToolAccess,
+  type TurnApprovals,
+} from "@hobbots/agents";
+import {
+  AgentId,
+  ApprovalId,
+  type ApprovalLifetime,
+  CharmCall,
+  Grant,
+  GrantId,
+  isCharmCallSettled,
+  ruleOperation,
+} from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Redacted } from "effect";
 import { GitHubCredential, GitHubError } from "../src/index.ts";
 
@@ -116,4 +132,54 @@ export const fixedCredential = (token: string, fresh: string = token) => {
       signIn += 1;
     },
   };
+};
+
+/**
+ * A user who approves every request with `lifetime`, and the grants they save: a This Task or Always
+ * approval of a grantable request saves its rules as grants, which answer the hob's later calls.
+ */
+export const approvingUser = (access: ToolAccess, lifetime: ApprovalLifetime) => {
+  const asked: Array<ApprovalAction> = [];
+  const grants: Array<Grant> = [];
+  const approvals: TurnApprovals = {
+    request: (action) =>
+      Effect.gen(function* () {
+        asked.push(action);
+        const saves = lifetime !== "once" && action.grantable;
+        for (const rule of saves ? action.rules : []) {
+          grants.push(
+            new Grant({
+              id: GrantId.make(`grant-${grants.length + 1}`),
+              agentId: AgentId.make("hob"),
+              operation: ruleOperation(rule),
+              rule,
+              lifetime: lifetime === "task" ? "task" : "always",
+              taskId: null,
+              approvalId: ApprovalId.make(`approval-${asked.length}`),
+              grantedBy: "user",
+              createdAt: "2026-11-07T00:00:00.000Z",
+              expiresAt: null,
+              lastUsedAt: null,
+              revokedAt: null,
+              revokedBy: null,
+              revokeReason: null,
+            }),
+          );
+        }
+        const digest = yield* actionDigest(action);
+        return {
+          approvalId: ApprovalId.make(`approval-${asked.length}`),
+          decision: Effect.succeed({
+            _tag: "Approved" as const,
+            actionDigest: digest,
+            policyVersion: action.policyVersion,
+            lifetime: saves ? lifetime : "once",
+          }),
+        };
+      }),
+    currentAccess: Effect.succeed(access),
+    grants: Effect.sync(() => [...grants]),
+    used: () => Effect.void,
+  };
+  return { approvals, asked, grants };
 };

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { SkillMount } from "@hobbots/agents";
+import { type HubTools, type SkillMount, type ToolStartedEvent, UNRECORDED_TOOL_CALL } from "@hobbots/agents";
+import { Effect } from "effect";
 
 // The clean-runtime fixture (ADR 029): a fake home folder and a repository that hold a skill, an MCP
 // server, a plugin, a hook and instruction files in every place Claude Code and Codex read, a skill
@@ -151,4 +152,56 @@ export const cleanRuntimeFixture = (root: string): CleanRuntimeFixture => {
       mount(AGENTS_SKILL, join(objects, "agents")),
     ],
   };
+};
+
+/** The hub tool the step-recording contract calls. */
+export const CONTRACT_HUB_TOOL = "pip_note";
+
+/**
+ * The step-recording contract (ADR 031): a hub tool call reaches the hub with a step whose `record`
+ * is the turn's `recordToolStart`, so a hub call is recorded durably before it runs, as the runtime's
+ * own calls are. The hub tool records its step as the hub action pipeline does and runs only once it
+ * is recorded; `order` says what happened. With `records` false, the turn refuses to record it.
+ */
+export const stepRecordingContract = (records = true) => {
+  const order: Array<string> = [];
+  const hubTools: HubTools = {
+    tools: [
+      {
+        name: CONTRACT_HUB_TOOL,
+        description: "Reads the hub's note.",
+        inputSchema: { type: "object", properties: {} },
+        label: "Reading the note",
+      },
+    ],
+    call: (name, _input, step) =>
+      step === undefined
+        ? Effect.sync(() => {
+            order.push("no step");
+            return { text: UNRECORDED_TOOL_CALL, refused: true };
+          })
+        : step
+            .record({
+              _tag: "ToolStarted",
+              id: step.id,
+              tool: name,
+              operation: "pip.read",
+              targets: ["note"],
+              label: "Reading the note",
+            })
+            .pipe(
+              Effect.map((recorded) => {
+                order.push(recorded ? "ran" : "not run");
+                return recorded
+                  ? { text: "The note says hello.", refused: false }
+                  : { text: UNRECORDED_TOOL_CALL, refused: true };
+              }),
+            ),
+  };
+  const recordToolStart = (event: ToolStartedEvent) =>
+    Effect.sync(() => {
+      order.push(`recorded ${event.tool} as ${event.id}`);
+      return records;
+    });
+  return { hubTools, recordToolStart, order };
 };

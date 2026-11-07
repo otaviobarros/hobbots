@@ -6,6 +6,7 @@ import {
   type ApprovalOutcome,
   actionDigest,
   type CharmTurn,
+  hubCallStep,
   MemoryProjects,
   MemorySaves,
   type MemoryShareRequest,
@@ -189,7 +190,11 @@ const callOn = (hub: Hub, name: string, input: unknown, options: CallOptions = {
     const tools = yield* (yield* MemoryTools).forTurn(turn);
     if (tools === null) return { offered: [] as ReadonlyArray<string>, answer: null, events: [] };
     const events: Array<RuntimeEvent> = [];
-    const answer = yield* tools.call(name, input, { id: "step-1", report: (event) => events.push(event) });
+    const answer = yield* tools.call(
+      name,
+      input,
+      hubCallStep("step-1", (event) => events.push(event)),
+    );
     return { offered: tools.tools.map((tool) => tool.name), answer, events };
   }).pipe(Effect.provide(hub.layer), Effect.runPromise);
 

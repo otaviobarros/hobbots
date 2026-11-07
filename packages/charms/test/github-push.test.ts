@@ -9,6 +9,7 @@ import {
   actionDigest,
   CharmTools,
   type HubToolAnswer,
+  hubCallStep,
   makeRedactor,
   type RuntimeEvent,
   type ToolAccess,
@@ -208,10 +209,11 @@ const pushIn = (folder: string, repository: GitHubRepository, turn: Turn, input:
       approvals: userApprovals(turn.access, turn.asked ?? [], turn.answer, turn.whileAsking),
     });
     if (tools === null) throw new Error("The turn was offered no GitHub tools");
-    const answer: HubToolAnswer = yield* tools.call("github_push", input, {
-      id: turn.step ?? "toolu_1",
-      report: (event: RuntimeEvent) => events.push(event),
-    });
+    const answer: HubToolAnswer = yield* tools.call(
+      "github_push",
+      input,
+      hubCallStep(turn.step ?? "toolu_1", (event: RuntimeEvent) => events.push(event)),
+    );
     return answer;
   }).pipe(
     Effect.provide(charmLayer(folder, repository, turn.rows ?? new Map(), turn.credential ?? fixedCredential(TOKEN))),
@@ -479,7 +481,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
         return yield* tools.call(
           "github_push",
           { branch: "feat/x", key: "gone-1" },
-          { id: "toolu_1", report: () => {} },
+          hubCallStep("toolu_1", () => {}),
         );
       }).pipe(
         Effect.provide(layer),

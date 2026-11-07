@@ -6,7 +6,7 @@ import {
   type Options,
   type SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { HubTools, RuntimeEvent } from "@hobbots/agents";
+import { type HubTools, hubCallStep, type PromptRequest, type RuntimeEvent } from "@hobbots/agents";
 import { stableJson } from "@hobbots/domain";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -63,7 +63,12 @@ const metaToolUseId = (meta: unknown): string | undefined => {
 };
 
 /** The in-process MCP server that answers the turn's hub tool calls through the hub. */
-const hubServer = (hub: HubTools, announced: AnnouncedCalls, report: (event: RuntimeEvent) => void) =>
+const hubServer = (
+  hub: HubTools,
+  announced: AnnouncedCalls,
+  report: (event: RuntimeEvent) => void,
+  record: PromptRequest["recordToolStart"],
+) =>
   createSdkMcpServer({
     name: HUB_SERVER,
     alwaysLoad: true,
@@ -74,7 +79,9 @@ const hubServer = (hub: HubTools, announced: AnnouncedCalls, report: (event: Run
         inputSchema: inputShape(tool.inputSchema),
         handler: async (args, extra) => {
           const id = announced.take(tool.name, args, (extra as { _meta?: unknown } | undefined)?._meta);
-          const answer = await Effect.runPromise(hub.call(tool.name, args, id === null ? undefined : { id, report }));
+          const answer = await Effect.runPromise(
+            hub.call(tool.name, args, id === null ? undefined : hubCallStep(id, report, record)),
+          );
           return { content: [{ type: "text", text: answer.text }], isError: answer.refused };
         },
       }),
@@ -92,7 +99,11 @@ const hubServer = (hub: HubTools, announced: AnnouncedCalls, report: (event: Run
  * (`default`) it reaches the callback, which refuses a tool it does not know, and on a chat-only
  * turn (`dontAsk`) Claude Code denies it without asking.
  */
-const hubOptions = (hub: HubTools, report: (event: RuntimeEvent) => void): Partial<Options> => {
+const hubOptions = (
+  hub: HubTools,
+  report: (event: RuntimeEvent) => void,
+  record: PromptRequest["recordToolStart"],
+): Partial<Options> => {
   const labels = new Map(hub.tools.map((tool) => [tool.name, tool.label]));
   const started = new Set<string>();
   const announced = new AnnouncedCalls();
@@ -115,7 +126,7 @@ const hubOptions = (hub: HubTools, report: (event: RuntimeEvent) => void): Parti
   const end = stepEnds(started, report);
   const matcher = `${PREFIX}.*`;
   return {
-    mcpServers: { [HUB_SERVER]: hubServer(hub, announced, report) },
+    mcpServers: { [HUB_SERVER]: hubServer(hub, announced, report, record) },
     strictMcpConfig: true,
     hooks: {
       PreToolUse: [{ matcher, hooks: [start] }],
@@ -158,9 +169,10 @@ export const withHubTools = (
   options: Options,
   hub: HubTools | null | undefined,
   report: (event: RuntimeEvent) => void,
+  record: PromptRequest["recordToolStart"] = null,
 ): Options => {
   if (!hub || hub.tools.length === 0) return options;
-  const added = hubOptions(hub, report);
+  const added = hubOptions(hub, report, record);
   return {
     ...options,
     ...added,

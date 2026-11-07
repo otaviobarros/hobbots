@@ -290,7 +290,34 @@ export interface HubToolAnswer {
 export interface HubCallStep {
   readonly id: string;
   readonly report: (event: RuntimeEvent) => void;
+  /**
+   * Records the call as started, durably, before it runs (EX-004, ADR 031), as the runtime records its
+   * own tool calls with `recordToolStart`; without that, it reports the start. False, or a defect, and
+   * the call never runs.
+   */
+  readonly record: (event: ToolStartedEvent) => Effect.Effect<boolean>;
 }
+
+/**
+ * The step a hub tool call shows as (ADR 031): with `record`, the turn's `recordToolStart`, the call
+ * is recorded durably before it runs, and a defect counts as not recorded; without it, its start is
+ * reported and it runs. Every adapter gives its hub calls one.
+ */
+export const hubCallStep = (
+  id: string,
+  report: (event: RuntimeEvent) => void,
+  record?: ((event: ToolStartedEvent) => Effect.Effect<boolean>) | null,
+): HubCallStep => ({
+  id,
+  report,
+  record: (event) =>
+    record
+      ? record(event).pipe(Effect.catchDefect(() => Effect.succeed(false)))
+      : Effect.sync(() => {
+          report(event);
+          return true;
+        }),
+});
 
 /** The Hobbots tools a turn offers, and how a call reaches the hub, which checks it. */
 export interface HubTools {

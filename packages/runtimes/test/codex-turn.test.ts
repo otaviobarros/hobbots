@@ -32,6 +32,7 @@ import {
   TOOLS_CLOSED,
 } from "../src/codex/turn.ts";
 import { ProcessSandbox, type ProcessSandboxShape, type SandboxScope, sandboxFilesystem } from "../src/sandbox.ts";
+import { CONTRACT_HUB_TOOL, stepRecordingContract } from "./clean-runtime.ts";
 import { completed, fakeServer, n, THREAD, TURN } from "./codex-app-server.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-codex-"));
@@ -414,6 +415,23 @@ describe("a Codex turn", () => {
   });
   const toolDone = (id: string, tool: string, success: boolean) =>
     item("item/completed", { type: "dynamicToolCall", id, tool, status: success ? "completed" : "failed", success });
+
+  // covers EX-004, ADR 031: the step-recording contract every adapter passes (clean-runtime.ts).
+  it("[TC-PE-473] records a hub tool call's step with the turn's recorder before the hub runs it", async () => {
+    for (const records of [true, false]) {
+      const contract = stepRecordingContract(records);
+      const server = fakeServer({
+        asks: [toolCall("call_1", CONTRACT_HUB_TOOL)],
+        script: [toolDone("call_1", CONTRACT_HUB_TOOL, records), message("m1", "Done."), completed("completed")],
+      });
+      const exit = await run(
+        config(server.start),
+        prompt({ hubTools: contract.hubTools, recordToolStart: contract.recordToolStart }),
+      );
+      expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+      expect(contract.order).toEqual([`recorded ${CONTRACT_HUB_TOOL} as call_1`, records ? "ran" : "not run"]);
+    }
+  });
 
   // covers OR-001, PE-003, ADR 024
   it("[TC-RT-080] declares the turn's hub tools on a new Codex thread and answers each call through the hub, as a step", async () => {

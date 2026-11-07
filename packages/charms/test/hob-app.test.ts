@@ -13,6 +13,7 @@ import {
   GrantService,
   HobbotsRepository,
   HobGitHubApps,
+  hubCallStep,
   makeRedactor,
   RetiredHobGitHubApp,
   type RuntimeEvent,
@@ -1174,7 +1175,11 @@ const callAs = (agentId: AgentId, w: World, folder: string, tool: string, input:
       },
     });
     if (tools === null) return yield* Effect.die("the turn was offered no GitHub tools");
-    const answer = yield* tools.call(tool, input, { id: `step-${tool}`, report: (event) => events.push(event) });
+    const answer = yield* tools.call(
+      tool,
+      input,
+      hubCallStep(`step-${tool}`, (event) => events.push(event)),
+    );
     const labels = events.flatMap((event) => ("label" in event ? [event.label] : []));
     return { answer, asked, labels, summary: asked.map((card) => String(card.arguments.summary)) };
   });
@@ -1546,7 +1551,11 @@ const pushAs = (
       approvals: approveAll(access, asked, whileAsking),
     });
     if (tools === null) return yield* Effect.die("The turn was offered no GitHub tools");
-    return yield* tools.call("github_push", input, { id: `toolu_${asked.length + 1}`, report: () => {} });
+    return yield* tools.call(
+      "github_push",
+      input,
+      hubCallStep(`toolu_${asked.length + 1}`, () => {}),
+    );
   });
 
 /** The commits the fake made through its Git database API since `from`. */
