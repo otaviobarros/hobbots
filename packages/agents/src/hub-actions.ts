@@ -50,6 +50,12 @@ export interface HubPlanContext {
    * changed, so the hob can be told what the user approved and the Charm got.
    */
   readonly redacted?: ReadonlyArray<string>;
+  /**
+   * For a Charm write: redacts text the plan builds from its input, such as a body it normalized,
+   * since a change to redacted text can join a secret back together. It holds only the turn's
+   * redactor's text function, never what it learned.
+   */
+  readonly redact?: (text: string) => string;
 }
 
 /** What the policy decided for a call: its targets as the engine resolved them, such as a folder with its links followed. */
@@ -224,7 +230,8 @@ export interface HubActionsOptions<R extends HubRequest, V extends AskableVerdic
 
 /**
  * What an action is given to plan, built afresh for each call: only the turn's ids and the access,
- * so the turn's approvals, grants and redactor never reach an action, whatever it reads at run time.
+ * so the turn's approvals and grants never reach an action, whatever it reads at run time. A Charm
+ * write is also told which fields were redacted, and may redact text it builds.
  */
 const planContext = (turn: CharmTurn, access: ToolAccess, redacted?: ReadonlyArray<string>): HubPlanContext => ({
   turn: {
@@ -236,7 +243,7 @@ const planContext = (turn: CharmTurn, access: ToolAccess, redacted?: ReadonlyArr
     ...(turn.also === undefined ? {} : { also: turn.also }),
   },
   access,
-  ...(redacted === undefined ? {} : { redacted }),
+  ...(redacted === undefined ? {} : { redacted, redact: (text: string) => turn.redactor.text(text) }),
 });
 
 /** The fields of `input` whose values redaction changed in `redacted`. */

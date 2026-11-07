@@ -103,7 +103,7 @@ The registry replaces `CharmTools`. It is a list of Charms registered once, in t
 - **Only two ways.** No third-party code is loaded into the hub. A Charm is reviewed built-in code, or an MCP server running outside the hub's process.
 - **MCP first.** An outside service gets an MCP Charm first. A built-in Charm is written only where the hub must hold a rule the server cannot, as GitHub's repository resolution and Push do.
 - **MCP defaults.** An MCP tool marked `readOnlyHint` is a read and defaults to Allow under every preset. Any other tool is a write and defaults to Ask. Mapping an MCP tool's arguments to site fields comes with the MCP adapter.
-- **Outside data.** Everything a Charm returns is redacted and labeled for the hob as other people's text, never instructions.
+- **Outside data.** Everything a Charm returns is redacted. What a Charm reads is labeled for the hob as other people's text, never instructions; a write's answer is the hub's own words, so it carries no label.
 
 ## Rationale
 

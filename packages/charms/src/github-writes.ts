@@ -292,11 +292,16 @@ export const makeGitHubWrites = (repositoryFor: RepositoryFor) =>
       });
 
     /** Comments on an issue or pull request of the hob's folder's repository. */
-    const planComment = (input: GitHubWriteInput<"github_comment">, { turn, access, redacted = [] }: HubPlanContext) =>
+    const planComment = (
+      input: GitHubWriteInput<"github_comment">,
+      { turn, access, redacted = [], redact = (text) => text }: HubPlanContext,
+    ) =>
       Effect.gen(function* () {
         const { folder, repository } = yield* repositoryFor(access, input.folder);
-        // The hub's marker is its own: anything shaped like one goes before the text is shown.
-        const body = stripCommentMarkers(input.body);
+        // The hub's marker is its own: anything shaped like one goes before the text is shown. Taking
+        // one out can join a secret back together, so what is left is redacted again (ADR 020).
+        const unmarked = stripCommentMarkers(input.body);
+        const body = redact(unmarked);
         if (hasCommentMarker(body)) {
           return yield* new HubRefusal({
             message:
@@ -309,10 +314,10 @@ export const makeGitHubWrites = (repositoryFor: RepositoryFor) =>
           });
         }
         const note = [
-          ...(body === input.body
+          ...(unmarked === input.body
             ? []
             : [" Hobbots took out text shaped like its hidden call marker, which it keeps for itself."]),
-          redactedNote(redacted.includes("body") ? ["comment"] : []),
+          redactedNote(redacted.includes("body") || body !== unmarked ? ["comment"] : []),
         ].join("");
         const slug = repositorySlug(repository);
         const agentId = turn.agentId;

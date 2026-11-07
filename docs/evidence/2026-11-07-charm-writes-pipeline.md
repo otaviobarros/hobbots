@@ -20,6 +20,7 @@
 | `[TC-PE-486]` | The step is recorded before the never-twice record; an unrecorded step records and sends nothing | ✅ |
 | `[TC-PE-487]` | `git_init` records its step before it creates anything, and creates nothing unrecorded | ✅ |
 | `[TC-PE-488]` | Opening a pull request and commenting send nothing when their step cannot be recorded | ✅ |
+| `[TC-PE-489]` | A secret that taking out a forged comment marker joins back together is redacted before the card, record and send | ✅ |
 | `[TC-DP-289]` | Migration 0074 names each stored call's Charm and moves its applied text out of its plan | ✅ On SQLite and PostgreSQL |
 | GitHub and Local Git suites | `github-writes`, `github-api-writes`, `github-push`, `github-charm`, `hob-app`, `local-git`, the moved `charm-calls` suite, and the server's GitHub Charm and Local Git end-to-end suites | ✅ Without a loosened assertion |
 
