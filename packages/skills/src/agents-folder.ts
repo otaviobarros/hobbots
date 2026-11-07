@@ -1,5 +1,4 @@
-import { type FSWatcher, watch } from "node:fs";
-import { lstat, stat } from "node:fs/promises";
+import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { announcer, EventPublisher, SkillLibrary } from "@hobbots/agents";
@@ -9,6 +8,7 @@ import { type CheckedSkill, checkSkill } from "./check.ts";
 import { folderTree } from "./sources/folder.ts";
 import { SkillObjects } from "./store.ts";
 import type { SkillTree } from "./tree.ts";
+import { folderWatches } from "./watches.ts";
 
 /**
  * `~/.agents/skills`, through Hobbots (ADR 029, The clean-runtime rule). The folder is yours, not a
@@ -88,64 +88,6 @@ const problemOf = (folder: string, fields: Partial<AgentsFolderProblem>): Agents
   unreadable: null,
   ...fields,
 });
-
-/**
- * One plain watch on each folder under `path`, never a recursive one: on Linux, Node's recursive
- * watch reads the tree itself on each event and throws, out of reach, when a folder in it is
- * replaced by a file. A plain watch only reports, and its errors arrive as its `error` event. Each
- * read re-arms the watches from what it listed; a folder replaced since gets a new one.
- */
-const folderWatches = (path: string, changed: () => void) => {
-  const watches = new Map<string, { readonly watcher: FSWatcher; readonly ino: number }>();
-  let armed = false;
-
-  const drop = (folder: string) => {
-    watches.get(folder)?.watcher.close();
-    watches.delete(folder);
-  };
-
-  const arm = (folder: string, ino: number) => {
-    try {
-      const watcher = watch(join(path, folder), () => changed());
-      // The folder went or changed under the watch: let it go, and read again to see what is there.
-      watcher.on("error", () => {
-        if (watches.get(folder)?.watcher === watcher) drop(folder);
-        changed();
-      });
-      watches.set(folder, { watcher, ino });
-      return true;
-    } catch {
-      // Gone since the read; the read it set off will see that.
-      return false;
-    }
-  };
-
-  /** Watches exactly `folders`; one new since the last read sets off another, for what it got before its watch. */
-  const rewatch = async (folders: ReadonlyArray<string>) => {
-    const wanted = new Set(folders);
-    for (const folder of [...watches.keys()]) if (!wanted.has(folder)) drop(folder);
-    let added = false;
-    for (const folder of folders) {
-      const stats = await stat(join(path, folder)).catch(() => null);
-      const known = watches.get(folder);
-      if (stats === null || !stats.isDirectory()) {
-        drop(folder);
-        continue;
-      }
-      if (known?.ino === Number(stats.ino)) continue;
-      drop(folder);
-      added = arm(folder, Number(stats.ino)) || added;
-    }
-    if (added && armed) changed();
-    armed = true;
-  };
-
-  const close = () => {
-    for (const folder of [...watches.keys()]) drop(folder);
-  };
-
-  return { rewatch, close };
-};
 
 /** Syncs `~/.agents/skills` at `path` now, then whenever it changes and every five minutes. */
 export const AgentsFolderLive = (path: string = defaultAgentsFolder()) =>
