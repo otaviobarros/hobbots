@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-07
 - **Issue:** [#1139](https://github.com/otaviobarros/hobbots/issues/1139)
-- **Pull request:** pending
+- **Pull request:** [#1146](https://github.com/otaviobarros/hobbots/pull/1146)
 - **Commit:** `19476e3` on `claude/project-thread-2l22nl`, with a clean tree
 - **Setup:** Linux x86_64 container, Node 22.23.4, SQLite through `node:sqlite`, the fake runtime. Unit and hub tests ran as root, and the backup and skills server suites again as `nobody`, since read-only skill folders behave differently for root. Browser tests on the preinstalled Chromium with Playwright 1.63.0 against the built web client and a real hub reading a `~/.agents/skills` of its own (`HOBBOTS_AGENTS_SKILLS`). No real runtime, model or sign-in, and no PostgreSQL run here; CI runs the PostgreSQL suite.
 - **Result:** Passed with gaps: no path changed a skill from the folder, Make a copy gave an editable skill with the same files, a backup held none of the folder's files, and a restore brought back every assignment and hold, reading content from the folder and naming the skill it no longer had. The packaged app, PostgreSQL and a real runtime were not run here.
