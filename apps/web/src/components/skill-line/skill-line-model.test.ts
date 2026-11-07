@@ -20,6 +20,24 @@ describe("the line for a skill a reply used (ADR 029)", () => {
     ).toEqual({ title: "Security", detail: "(from your organization)" });
   });
 
+  // covers ADR 029 (Skill sets, The use line)
+  it("[TC-UI-1192-01] names the set a set's skill comes from, before the set's revision", () => {
+    const fromSet = {
+      source: "library" as const,
+      skillId: SkillId.make("s2"),
+      name: "deliver-change",
+      pin: SkillRevisionHash.make("b".repeat(64)),
+      number: 1,
+      explicit: true,
+      set: SkillName.make("agent-engineering"),
+    };
+    expect(usedLine(fromSet)).toEqual({ title: "Deliver change", detail: "from agent-engineering (r1)" });
+    expect(usedLine({ ...fromSet, number: null })).toEqual({
+      title: "Deliver change",
+      detail: "from agent-engineering",
+    });
+  });
+
   // covers ADR 029 (The use line)
   it("[TC-UI-1194-01] opens a library skill's page, a set's skill in its set, and nothing for your organization's", () => {
     const library = {

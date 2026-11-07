@@ -86,7 +86,7 @@ A hob's skills for a turn are Everyone's, plus each project of the folders it wo
 
 ### Storage and revisions
 
-- **Immutable revisions.** A revision is a whole skill folder, identified by the SHA-256 of a canonical listing of its files (sorted relative paths, each file's mode and contents), and shown as r1, r2, r3. Its files live in `<data folder>/skills/objects/<hash>/`, written once and never changed. Importing the same content again returns the existing revision. A version the source carries (a Git tag, `metadata.version`, a plugin's version) is shown as a label only.
+- **Immutable revisions.** A revision is a whole skill folder, identified by the SHA-256 of a canonical listing of its files (sorted relative paths, each file's mode and contents), and shown as r1, r2, r3. Its files live in `<data folder>/skills/objects/<hash>/`, written once and never changed. The files are read-only and their folders stay writable to their owner, so a data folder can be removed with a plain `rm -rf`; no turn can write there, since the sandbox keeps the data folder and each turn's skill folder out of reach ([#1196](https://github.com/otaviobarros/hobbots/issues/1196)). Importing the same content again returns the existing revision. A version the source carries (a Git tag, `metadata.version`, a plugin's version) is shown as a label only.
 - **The database** holds skills, revisions, assignments, sources, proposals and uses, and refers to a revision only by its hash.
 
 ### Import

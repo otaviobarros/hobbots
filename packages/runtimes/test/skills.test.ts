@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -87,9 +88,13 @@ describe("a turn's skill folder (ADR 029)", () => {
     });
     expect(readdirSync(written.skills)).toEqual(["alpha"]);
     expect(readFileSync(join(written.skills, "alpha", "scripts", "run.sh"), "utf8")).toBe("echo hi\n");
-    // Nothing in it may be written, and no MCP server, hook or command comes with it.
+    // No file in it may be written, and no MCP server, hook or command comes with it. Its folders stay
+    // writable to their owner, so one a stopped hub left behind can be removed with `rm -rf` (#1196).
     expect(statSync(join(written.skills, "alpha", "SKILL.md")).mode & 0o222).toBe(0);
-    expect(statSync(written.skills).mode & 0o222).toBe(0);
+    expect(statSync(written.skills).mode & 0o777).toBe(0o700);
+    rmSync(written.folder, { recursive: true });
+    expect(existsSync(written.folder)).toBe(false);
+    expect(writeSkillFolder(base, mounts)).toEqual(written);
     expect(readdirSync(written.folder).sort()).toEqual([".claude-plugin", "skills"]);
     expect(writeSkillFolder(base, mounts)).toEqual(written);
     // No draft is left beside it.

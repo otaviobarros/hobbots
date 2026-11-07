@@ -12,8 +12,9 @@ const action = "rounded-control px-2 py-0.5 text-detail text-link no-underline h
 
 /**
  * The quiet lines under a reply for the skills it used (ADR 029, The use line, #1096): "Used Release
- * steps (r4)", one line a skill, like the line for a memory save, with Open to the skill's page. No
- * badge: it is a notice only. An organization's skill has no page here, so its line has no Open.
+ * steps (r4)", or "Used Deliver change from agent-engineering (r1)" for a set's skill, one line a skill,
+ * like the line for a memory save, with Open to the skill's page. No badge: it is a notice only. An
+ * organization's skill has no page here, so its line has no Open.
  */
 export function SkillUsedLines({ message, hob }: { message: Message; hob: Agent }) {
   if (message.role !== "assistant" || message.skillsUsed.length === 0) return null;
