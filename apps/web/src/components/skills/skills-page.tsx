@@ -4,9 +4,11 @@ import { FlashLine } from "../memory/memory-parts.tsx";
 import { PageSearch } from "../shell/page-search.tsx";
 import { PageHeader } from "../shell/pages.tsx";
 import { messages } from "./messages.ts";
+import { SkillChanges } from "./skill-changes.tsx";
 import { SkillEditor } from "./skill-editor.tsx";
 import { SkillNew } from "./skill-new.tsx";
 import { SkillPage } from "./skill-page.tsx";
+import { SkillReview } from "./skill-review.tsx";
 import { type Say, useFlash } from "./skills-flash.ts";
 import { SkillsImport } from "./skills-import.tsx";
 import { type SkillsSearch, type SkillsView, skillsSearchOf, skillsViewOf } from "./skills-model.ts";
@@ -45,6 +47,7 @@ function ViewBody({ view, reads, say, now }: { view: SkillsView; reads: SkillsRe
     return <SkillsImport from={view.from} active={reads.active} projects={projects} hobs={reads.hobs} say={say} />;
   if (view._tag === "New") return <SkillNew active={reads.active} projects={projects} hobs={reads.hobs} say={say} />;
   if (view._tag === "Edit") return <SkillEditor skillId={view.skillId} hobs={reads.hobs} say={say} />;
+  if (view._tag === "Review") return <SkillReview item={view.item} hobs={reads.hobs} now={now} />;
   const list = reads.list.data;
   if (list === undefined) {
     return reads.list.isError ? (
@@ -54,6 +57,8 @@ function ViewBody({ view, reads, say, now }: { view: SkillsView; reads: SkillsRe
     );
   }
   switch (view._tag) {
+    case "Changes":
+      return <SkillChanges hobs={reads.hobs} say={say} now={now} />;
     case "Skill":
       return <SkillPage view={view} list={list} hobs={reads.hobs} active={reads.active} say={say} />;
     case "Search":

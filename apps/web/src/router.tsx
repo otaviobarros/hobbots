@@ -293,10 +293,13 @@ const arrivedRoute = createRoute({
   pendingMs: 0,
   pendingMinMs: 0,
   path: "hobs/$hobId/arrived",
+  // `?skills=not-given` when the skills picked in Summon were not given yet, which Arrived says.
+  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ skills: searchParam(Schema.Literal("not-given")) })),
   loader: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
   component: function ArrivedRoute() {
     const params = arrivedRoute.useParams();
-    return <ArrivedPage hobId={AgentId.make(params.hobId)} />;
+    const search = arrivedRoute.useSearch();
+    return <ArrivedPage hobId={AgentId.make(params.hobId)} skillsNotGiven={search.skills === "not-given"} />;
   },
 });
 
@@ -375,7 +378,7 @@ const memoryRoute = createRoute({
 });
 // Skills (ADR 029): `?scope=` opens a scope, `?skill=` a skill with `&tab=` its tab, `&file=` a file and
 // `&diff=` what a revision changed; `&edit=skill` opens its editor and `?edit=new` a new skill; `?add=`
-// opens Add a skill from Git, a folder or written here; `?q=` searches.
+// opens Add a skill from Git, a folder or written here; `?view=changes` What changed; `?q=` searches.
 const skillsRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="home" />,
@@ -390,6 +393,8 @@ const skillsRoute = createRoute({
       edit: searchParam(Schema.Literals(["skill", "new"])),
       add: searchParam(ImportFrom),
       q: searchParam(SearchText),
+      view: searchParam(Schema.Literals(["changes", "review"])),
+      item: searchParam(Schema.String),
     }),
   ),
   component: function Skills() {

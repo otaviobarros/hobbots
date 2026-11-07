@@ -5,11 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useActivity } from "../../api/activity.ts";
 import { useIsNewHob } from "../../api/history.ts";
+import { useHobSkills } from "../../api/hob-skills.ts";
 import { hobMemoryScopesQuery } from "../../api/memory-saves.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
 import { PageToastViewport } from "../archive/archive-toast.tsx";
 import type { WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
+import { HobSkillsTab, SkillsTabIcon } from "../hob-skills/hob-skills-tab.tsx";
 import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { MemoryIcon } from "../memory/memory-parts.tsx";
 import { HobAside } from "./hob-aside.tsx";
@@ -104,6 +106,11 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
               {copy.tabs.memory}
               <MemoryCount hob={hob} />
             </TabsTrigger>
+            <TabsTrigger value="skills">
+              <SkillsTabIcon />
+              {copy.tabs.skills}
+              <SkillsCount hob={hob} />
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="chats">
             {threads.isPending ? (
@@ -119,6 +126,9 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
           </TabsContent>
           <TabsContent value="memory">
             <HobMemory hob={hob} />
+          </TabsContent>
+          <TabsContent value="skills">
+            <HobSkillsTab hob={hob} />
           </TabsContent>
         </Tabs>
         <HobAside hob={hob} />
@@ -141,4 +151,11 @@ function MemoryCount({ hob }: { hob: Agent }) {
   const scopes = useQuery(hobMemoryScopesQuery(hob.id));
   if (scopes.isError && scopes.data === undefined) return null;
   return <ChatCount count={ownCount(scopes.data?.scopes)} />;
+}
+
+/** The Skills tab's count of the skills the hob loads, left out while they do not answer. */
+function SkillsCount({ hob }: { hob: Agent }) {
+  const skills = useHobSkills(hob.id, hob.configVersion);
+  if (skills.isError && skills.data === undefined) return null;
+  return <ChatCount count={skills.data?.skills.length} />;
 }
