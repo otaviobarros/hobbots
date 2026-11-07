@@ -31,3 +31,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [027 — The Quest room](027-quest-room.md)
 - [028 — Memory](028-memory.md)
 - [029 — Skills](029-skills.md)
+- [031 — Charm actions and the Charm registry](031-charm-actions-and-registry.md)
