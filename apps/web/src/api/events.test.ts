@@ -16,6 +16,7 @@ import { approvalsKey } from "./approvals.ts";
 import { applyEvent, remoteAccessChanged } from "./events.ts";
 import { queryKeys } from "./queries.ts";
 import { remoteAccessQuery } from "./remote-access.ts";
+import { skillProposalsQuery } from "./skill-proposals.ts";
 
 const threadId = ThreadId.make("t1");
 const now = "2026-10-28T12:00:00.000Z";
@@ -312,4 +313,23 @@ it("[TC-DP-140] a read answered before a pause never undoes the pause the hub an
   expect(observer.getCurrentResult().data).toEqual(paused);
   unsubscribe();
   vi.unstubAllGlobals();
+});
+
+describe("a proposal's review", () => {
+  it("is read again when the library it is drawn from changes, and not for an opt-out", async () => {
+    const client = new QueryClient();
+    client.setQueryData(skillProposalsQuery.queryKey, { proposals: [] });
+    const stale = () => client.getQueryState(skillProposalsQuery.queryKey)?.isInvalidated;
+    applyEvent(client, { _tag: "SkillOptOutChanged", optOut: {} as never, optedOut: true });
+    await Promise.resolve();
+    expect(stale()).toBe(false);
+    for (const event of [
+      { _tag: "SkillRevisionAdded", revision: {} as never },
+      { _tag: "SkillHeld", assignment: {} as never },
+    ] as const) {
+      client.setQueryData(skillProposalsQuery.queryKey, { proposals: [] });
+      applyEvent(client, event as never);
+      await vi.waitFor(() => expect(stale()).toBe(true));
+    }
+  });
 });

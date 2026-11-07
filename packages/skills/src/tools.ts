@@ -43,7 +43,7 @@ import {
   stableJson,
 } from "@hobbots/domain";
 import { decideHubCall, PolicyEngine } from "@hobbots/permissions";
-import { Data, DateTime, Effect, Layer, Schema } from "effect";
+import { Data, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SkillImporter } from "./importer.ts";
 
 /**
@@ -312,6 +312,10 @@ export const SkillToolsLive = Layer.effect(
         step,
         Effect.gen(function* () {
           const identity = identityOf(input);
+          // A call sent again answers as the first did, before the library, which it may have changed, is read.
+          const recorded = yield* log.recorded(turn.agentId, identity.key, turn.scope(), turn.also);
+          if (Option.isSome(recorded))
+            return limitedAnswer({ _tag: "Existing", proposal: recorded.value }, identity.input);
           const { skillId, base } = yield* baseOf(input);
           const redacted = turn.redactor.text(instructions);
           const description = yield* checked(input, redacted);

@@ -59,6 +59,16 @@ export class SkillProposalLog extends Context.Service<
      */
     readonly begin: (proposal: SkillProposal, also?: string) => Effect.Effect<SkillProposalStart>;
     /**
+     * The proposal the hob made with `key` in `work` or in `also`, whatever became of it, so a call
+     * sent again answers as the first did before anything in the library is read again.
+     */
+    readonly recorded: (
+      agentId: AgentId,
+      key: string,
+      work: string,
+      also?: string,
+    ) => Effect.Effect<Option.Option<SkillProposal>>;
+    /**
      * Saves `proposal` as it now stands, and journals it, when its record is still in one of `from`.
      * None when it moved on meanwhile, so of two decisions racing for one proposal only the first lands.
      */

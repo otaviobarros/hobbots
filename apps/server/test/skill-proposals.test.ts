@@ -14,6 +14,7 @@ import {
   HobTools,
   makeRedactor,
   PermissionSummary,
+  SkillFiles,
   SkillLibrary,
   SkillTools,
   type ToolAccess,
@@ -351,6 +352,59 @@ describe("hobs proposing skills", () => {
     );
     const [item] = await told();
     expect(item?.payload).toMatchObject({ proposal: { state: "added", edited: true } });
+  });
+
+  // covers ADR 029 (Proactive hobs), #1063
+  it("[TC-AG-150] a stale change keeps the files the skill has now, not those of the revision the hob read", async () => {
+    const add = (files: ReadonlyArray<{ path: string; text: string; executable?: boolean }>, skillId?: string) =>
+      runtime.runPromise(
+        SkillImporter.use((importer) =>
+          importer.add(
+            { _tag: "Written", files },
+            { by: { _tag: "You" }, ...(skillId === undefined ? {} : { skillId: skillId as never }) },
+          ),
+        ),
+      );
+    const [first] = await add([
+      { path: "SKILL.md", text: skillMd("release-steps") },
+      { path: "scripts/tag.sh", text: "#!/bin/sh\ngit tag v1\n", executable: true },
+    ]);
+    expect(await propose("release-steps", { basedOn: 1, body: "Tag, then push." })).toMatchObject({ refused: false });
+    // Meanwhile r2 fixes the script and adds a checklist.
+    await add(
+      [
+        { path: "SKILL.md", text: skillMd("release-steps", "Steps for release-steps, fixed.") },
+        { path: "scripts/tag.sh", text: '#!/bin/sh\ngit tag "$1"\n', executable: true },
+        { path: "checklist.md", text: "- Tag\n" },
+      ],
+      first?.revision.skillId,
+    );
+    const [waiting] = await proposals();
+    expect(waiting?.latest).toMatchObject({ number: 2 });
+    const added = await request("POST", `/api/skill-proposals/${waiting?.proposal.id}/add`, {});
+    expect(added).toMatchObject({ status: 200, body: { state: "added", added: { number: 3 } } });
+    const folder = await runtime.runPromise(SkillFiles.use((store) => store.folder(added.body.added.hash)));
+    if (folder === null) throw new Error("No files for r3");
+    expect(fs.readFileSync(path.join(folder, "scripts/tag.sh"), "utf8")).toBe('#!/bin/sh\ngit tag "$1"\n');
+    expect(fs.readFileSync(path.join(folder, "checklist.md"), "utf8")).toBe("- Tag\n");
+    expect(fs.readFileSync(path.join(folder, "SKILL.md"), "utf8")).toBe(skillMd("release-steps", "Tag, then push."));
+  });
+
+  // covers ADR 029 (Proactive hobs), #1063
+  it("[TC-AG-151] a proposal sent again after you decided answers as it ended, not with what the library now holds", async () => {
+    await propose("release-steps");
+    const [waiting] = await proposals();
+    await request("POST", `/api/skill-proposals/${waiting?.proposal.id}/add`, {});
+    // The skill is in the library now, which would refuse a new proposal of that name without basedOn.
+    expect(await propose("release-steps")).toEqual({
+      text: "The user added a new skill, release-steps as r1. You use it from your next turn.",
+      refused: false,
+    });
+    await propose("review-steps");
+    const review = (await proposals()).find((one) => one.proposal.name === "review-steps");
+    await request("POST", `/api/skill-proposals/${review?.proposal.id}/decline`);
+    expect((await propose("review-steps")).text).toContain("turned down a new skill, review-steps");
+    expect(await proposals()).toHaveLength(2);
   });
 
   // covers ADR 029 (Proactive hobs), #1063

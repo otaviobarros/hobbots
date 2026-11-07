@@ -142,13 +142,26 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
-  // No screen shows the skills library yet (ADR 029, #1062).
+  // No screen shows the skills library yet (ADR 029, #1062); a proposal's review reads it again.
   "SkillRevisionAdded",
   "SkillAssigned",
   "SkillUnassigned",
   "SkillRolledOut",
   "SkillHeld",
   "SkillOptOutChanged",
+  "SkillRemoved",
+]);
+
+/**
+ * Library changes a proposal's review is drawn from: the newest revision it is shown against, and
+ * the assignments adding it would roll out to.
+ */
+const REVIEWED_LIBRARY: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  "SkillRevisionAdded",
+  "SkillAssigned",
+  "SkillUnassigned",
+  "SkillRolledOut",
+  "SkillHeld",
   "SkillRemoved",
 ]);
 type UnappliedEvent = Extract<
@@ -183,14 +196,9 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     if (event._tag === "CommandOutput") applyCommandOutput(queryClient, event);
     return;
   }
-  if (isUnapplied(event)) return;
+  if (applySkillEvent(queryClient, event) || isUnapplied(event)) return;
   if (isMemoryEvent(event)) {
     applyMemoryEvent(queryClient, event);
-    return;
-  }
-  if (isProposalEvent(event)) {
-    // The Inbox reads the proposals again; a note on a skill shows on its page, which #1062 builds.
-    if (event._tag !== "SkillFeedbackLeft") void skillProposalsChanged(queryClient);
     return;
   }
   switch (event._tag) {
@@ -254,6 +262,17 @@ const PROPOSAL_EVENTS = new Set<HobbotsEvent["_tag"]>([
   "SkillFeedbackLeft",
 ]);
 const isProposalEvent = (event: HobbotsEvent): event is ProposalEvent => PROPOSAL_EVENTS.has(event._tag);
+
+/**
+ * A proposal's event, or a library change its review is drawn from: the Inbox reads the proposals
+ * again, so a review waiting there shows the library as Add would find it. A note on a skill shows
+ * on its page, which #1062 builds. Whether the event was one of these.
+ */
+const applySkillEvent = (queryClient: QueryClient, event: HobbotsEvent): event is ProposalEvent | UnappliedEvent => {
+  if (!isProposalEvent(event) && !REVIEWED_LIBRARY.has(event._tag)) return false;
+  if (event._tag !== "SkillFeedbackLeft") void skillProposalsChanged(queryClient);
+  return true;
+};
 
 /** A hob's save or share, as memory's lists show it (ADR 028). */
 const applyMemoryEvent = (queryClient: QueryClient, event: MemoryEvent) => {

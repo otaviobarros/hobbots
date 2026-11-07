@@ -117,13 +117,16 @@ export const SkillProposalLogLive = Layer.effect(
     const journaled = makeJournaled(sql);
     const rows = (found: ReadonlyArray<Row>) => Effect.forEach(found, fromRow);
 
+    /** The proposal a hob made with `key` in `work` or `also`, the first one when both have one. */
+    const byKey = (agentId: string, key: string, work: string, also?: string) =>
+      sql<Row>`SELECT * FROM skill_proposals
+        WHERE agent_id = ${agentId} AND ${sql.in("scope", [work, also ?? work])} AND call_key = ${key}
+        ORDER BY created_at LIMIT 1`;
+
     const begin = (proposal: SkillProposal, also?: string) =>
       Effect.gen(function* () {
         yield* lockJournal(sql);
-        const [stored] = yield* sql<Row>`SELECT * FROM skill_proposals
-          WHERE agent_id = ${proposal.agentId} AND ${sql.in("scope", [proposal.work, also ?? proposal.work])}
-            AND call_key = ${proposal.key}
-          ORDER BY created_at LIMIT 1`;
+        const [stored] = yield* byKey(proposal.agentId, proposal.key, proposal.work, also);
         if (stored !== undefined) return { _tag: "Existing", proposal: yield* fromRow(stored) } as const;
         const open = yield* rows(
           yield* sql<Row>`SELECT * FROM skill_proposals
@@ -141,6 +144,7 @@ export const SkillProposalLogLive = Layer.effect(
 
     return SkillProposalLog.of({
       begin,
+      recorded: (agentId, key, work, also) => firstRow(byKey(agentId, key, work, also), fromRow),
       move: (proposal, from) =>
         journaled(1, () =>
           Effect.gen(function* () {

@@ -94,14 +94,18 @@ export const SkillReviewsLive = Layer.effect(
 
     /**
      * The files of the revision a proposal makes: its `SKILL.md`, and for a change, every other file
-     * of the revision it changed, as it was, so a script it refers to keeps its contents and its mode.
+     * of the skill's newest revision, as it is now, so a script it refers to keeps its contents and
+     * its mode. A proposal changes only `SKILL.md`, and its review shows it against the newest
+     * revision, so a script fixed or a file added since the hob read the skill stays as it is.
      */
     const filesOf = (proposal: SkillProposal) =>
       Effect.gen(function* () {
         const skillMd: WrittenFile = { path: "SKILL.md", text: proposal.instructions };
         if (proposal.skillId === null || proposal.base === null) return [skillMd];
-        const revision = yield* library.revision(proposal.skillId, proposal.base.hash);
-        const folder = yield* files.folder(proposal.base.hash);
+        const skill = yield* library.get(proposal.skillId);
+        const newest = skill?.latest ?? proposal.base.hash;
+        const revision = yield* library.revision(proposal.skillId, newest);
+        const folder = yield* files.folder(newest);
         if (revision === null || folder === null) return [skillMd];
         const kept = yield* Effect.forEach(
           revision.files.filter((file) => file.path !== "SKILL.md"),
