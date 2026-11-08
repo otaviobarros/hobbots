@@ -227,6 +227,8 @@ export interface SkillFilesShape {
    * revision's, or null when the hub has none for it.
    */
   readonly draft: (hash: SkillRevisionHash) => Effect.Effect<string | null>;
+  /** The `SKILL.md` of a draft a chat tries, or null when the hub has none for it. */
+  readonly draftText: (hash: SkillRevisionHash) => Effect.Effect<string | null>;
 }
 
 export class SkillFiles extends Context.Service<SkillFiles, SkillFilesShape>()("@hobbots/agents/SkillFiles") {}

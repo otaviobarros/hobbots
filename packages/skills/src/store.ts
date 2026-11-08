@@ -108,6 +108,12 @@ export const SkillObjectsLive = (dataFolder: string) => {
       return SkillFiles.of({
         folder: store.folder,
         draft: store.draft,
+        draftText: (hash) =>
+          Effect.gen(function* () {
+            const folder = yield* store.draft(hash);
+            if (folder === null) return null;
+            return yield* Effect.promise(() => readFile(join(folder, "SKILL.md"), "utf8").catch(() => null));
+          }),
         read: (hash, path) =>
           Effect.gen(function* () {
             const folder = yield* store.folder(hash);

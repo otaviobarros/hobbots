@@ -391,4 +391,45 @@ describe("trying a skill in a chat, and the health checks", () => {
       ].sort(),
     );
   });
+
+  it("[TC-AG-1099-10] reads back the draft a chat tries, and once the hub lost it, as after a restore, says so and runs nothing", async () => {
+    const agents: ReadonlyArray<Agent> = (await request("GET", "/api/agents")).body;
+    const pip = agents.find((agent) => agent.name === "Pip");
+    if (pip === undefined) throw new Error("No Pip");
+    const text = skillMd(
+      "standup",
+      "Writes the standup when you ask for today's notes.",
+      "Yesterday, today, blockers.",
+    );
+    const started = await startTrial(pip.id, { _tag: "Written", text });
+    expect(started.status).toBe(200);
+    const thread: Thread = started.body;
+
+    // The editor it came from opens on exactly the text you tried.
+    const read = await request("GET", `/api/skill-trials/${thread.id}`);
+    expect(read).toMatchObject({ status: 200, body: { trial: { name: "standup", skillId: null }, text } });
+    // An ordinary chat tries no draft.
+    const plain: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    expect((await request("GET", `/api/skill-trials/${plain.id}`)).body._tag).toBe("SkillDraftGone");
+
+    // The draft's files go, as when a backup without them is restored.
+    const folder = join(drafts, thread.skillTrial?.hash ?? "");
+    unlock(folder);
+    rmSync(folder, { recursive: true, force: true });
+    expect(await request("GET", `/api/skill-trials/${thread.id}`)).toMatchObject({
+      status: 404,
+      body: { _tag: "SkillDraftGone" },
+    });
+    // The next message runs nothing without the draft, and the reply says how to try it again.
+    const turns = given.length;
+    expect((await request("POST", `/api/threads/${thread.id}/messages`, { content: "Write it." })).status).toBe(200);
+    const reply = await eventually(async () => {
+      const ended = (await messages(thread)).filter((m) => m.role === "assistant" && !isInProgress(m.status));
+      return ended.at(-1);
+    });
+    expect(reply).toMatchObject({ status: "failed" });
+    expect(reply.error).toContain("no longer on this hub");
+    expect(reply.error).toContain("Try in a chat again");
+    expect(given).toHaveLength(turns);
+  });
 });

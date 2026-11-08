@@ -1,4 +1,4 @@
-import { AgentId, SkillDescription, SkillId, SkillRevisionHash, Thread } from "@hobbots/domain";
+import { AgentId, SkillDescription, SkillId, SkillRevisionHash, SkillTrial, Thread, ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { AgentNotFound, HobUnavailable } from "./errors.ts";
@@ -31,6 +31,20 @@ export const SkillTrialDraftPayload = Schema.Union([
 ]);
 export type SkillTrialDraftPayload = typeof SkillTrialDraftPayload.Type;
 
+/**
+ * The draft a chat tries is gone from this hub, as after a restore, since no backup holds drafts: the
+ * chat cannot load it. Opening the draft again and trying it in a new chat brings it back.
+ */
+export class SkillDraftGone extends Schema.TaggedError<SkillDraftGone>()(
+  "SkillDraftGone",
+  { threadId: ThreadId },
+  { httpApiStatus: 404 },
+) {}
+
+/** The draft a chat tries and its whole `SKILL.md`, so the editor it came from opens on it again. */
+export const SkillTrialText = Schema.Struct({ trial: SkillTrial, text: Schema.String });
+export type SkillTrialText = typeof SkillTrialText.Type;
+
 export class SkillTrialsGroup extends HttpApiGroup.make("skillTrials")
   .add(
     // Checks the draft and opens a new chat with the hob that loads only it: the chat comes back.
@@ -38,6 +52,14 @@ export class SkillTrialsGroup extends HttpApiGroup.make("skillTrials")
       payload: Schema.Struct({ agentId: AgentId, draft: SkillTrialDraftPayload }),
       success: Thread,
       error: [...importErrors, SkillProposalMissing, AgentNotFound, HobUnavailable],
+    }),
+  )
+  .add(
+    // The draft a chat tries, as it was tried, to edit further and save from where it came.
+    HttpApiEndpoint.get("draft", "/skill-trials/:threadId", {
+      params: { threadId: ThreadId },
+      success: SkillTrialText,
+      error: SkillDraftGone,
     }),
   )
   .middleware(DeviceSession)

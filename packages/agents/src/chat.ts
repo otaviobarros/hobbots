@@ -30,6 +30,7 @@ import {
   type SkillMention,
   type SkillTrial,
   sameBrain,
+  skillTitle,
   stripEscapes,
   systemInstructions,
   type TaskBriefMark,
@@ -393,6 +394,9 @@ export class ChatService extends Context.Service<
           : Effect.succeed(null);
       // A chat that tries a draft records no library skill with a message, and `/` names the draft
       // (ADR 029, Try in a chat).
+      /** Why a trial chat's turn did not start, and how to try the draft again (ADR 029, Try in a chat). */
+      const draftGoneText = (name: string) =>
+        `The draft of ${skillTitle(name)} this chat tries is no longer on this hub, as after a restore, so nothing ran here. Try in a chat again from where you wrote it.`;
       const acceptedIn = (thread: Thread, agent: Agent) =>
         thread.skillTrial === null ? acceptedSkills(agent) : Effect.succeed<Message["skills"]>([]);
       // A turn's skills: those its message was accepted with, or, for a continuation or a message
@@ -918,6 +922,12 @@ export class ChatService extends Context.Service<
           const memory = yield* memoryBriefFor(agent, tools, expected);
           const roster = yield* rosterFor(agent, tools, expected, adapter);
           const skills = yield* skillsFor(agent, config, tools, thread, yours);
+          // A chat that tries a draft never runs without it: the hub lost its files, as a restore does,
+          // so the reply says how to bring it back instead of answering as if it were loaded.
+          if (skills.trial !== null && skills.mounts.length === 0) {
+            yield* update((m) => MessageTransitions.cutOff(m, draftGoneText(skills.trial?.name ?? "")));
+            return;
+          }
           yield* update(withSkills(skills.recorded));
           skillUses.given(skills.recorded, skills.trial);
           const named = namedSkills(skills.recorded, skills.trial);

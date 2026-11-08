@@ -59,8 +59,11 @@ export const messages = {
     failed: "Hobbots could not open the chat. Try again.",
     notice: ({ name }: { name: string }) => `Trying the draft of ${name}.`,
     noticeHint: "Only this draft is loaded in this chat, and nothing here reaches the library or counts as a use.",
-    backToReview: "Back to the proposal",
-    backToSkill: "Back to the skill",
+    backToDraft: "Back to the draft",
+    draftGone:
+      "The draft this chat tries is no longer on this hub, as after a restore, so nothing runs here. Try in a chat again from where you wrote it.",
+    editorGone: "The draft you tried is no longer on this hub, as after a restore, so this opens without it.",
+    loadingDraft: "Opening the draft you tried…",
   },
   health: {
     aHob: "A hob",
@@ -98,7 +101,8 @@ export const messages = {
     loadHint:
       "A hob reads every skill's name and description before each chat, within about 8,000 characters. Past that, or past about 30 skills, it picks the right one less often.",
     noHobs: "No hob has skills yet.",
-    more: ({ count }: { count: number }) => `And ${formatCount(count)} more`,
+    more: ({ count }: { count: number }) => `Show ${formatCount(count)} more`,
+    fewer: "Show fewer",
   },
   export: {
     title: "Export skills",

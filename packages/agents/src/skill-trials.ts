@@ -1,4 +1,4 @@
-import type { AgentNotFound, HobUnavailable } from "@hobbots/api";
+import { type AgentNotFound, type HobUnavailable, SkillDraftGone } from "@hobbots/api";
 import {
   type AgentId,
   type SkillId,
@@ -10,9 +10,11 @@ import {
   SkillTrial,
   skillTitle,
   type Thread,
+  type ThreadId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { ChatService } from "./chat.ts";
+import { HobbotsRepository } from "./repository.ts";
 import { SkillProposalLog } from "./skill-proposals.ts";
 import { proposalFiles } from "./skill-reviews.ts";
 import { type SkillDraftSource, SkillFiles, SkillLibrary, SkillWriter } from "./skills.ts";
@@ -60,6 +62,13 @@ export class SkillTrials extends Context.Service<
   {
     /** Checks the draft, keeps its files apart, and opens a new chat with the hob that loads only it. */
     readonly start: (agentId: AgentId, draft: SkillTrialDraft) => Effect.Effect<Thread, SkillTrialError>;
+    /**
+     * The whole `SKILL.md` the chat tries, so you can go on editing it where it came from; gone when the
+     * chat tries no draft or the hub no longer has its files, as after a restore.
+     */
+    readonly draft: (
+      threadId: ThreadId,
+    ) => Effect.Effect<{ readonly trial: SkillTrial; readonly text: string }, SkillDraftGone>;
   }
 >()("@hobbots/agents/SkillTrials") {}
 
@@ -73,6 +82,7 @@ export const SkillTrialsLive = Layer.effect(
     const library = yield* SkillLibrary;
     const files = yield* SkillFiles;
     const chat = yield* ChatService;
+    const repo = yield* HobbotsRepository;
     const proposals = yield* Effect.serviceOption(SkillProposalLog);
     const filesOf = proposalFiles(library, files);
 
@@ -117,6 +127,14 @@ export const SkillTrialsLive = Layer.effect(
           const staged = yield* writer.stage(source);
           const skillTrial = new SkillTrial({ ...staged, skillId, base, proposalId });
           return yield* chat.createThread(agentId, { title: trialTitle(staged.name), skillTrial });
+        }),
+      draft: (threadId) =>
+        Effect.gen(function* () {
+          const thread = yield* repo.findThread(threadId);
+          const trial = Option.isSome(thread) ? thread.value.skillTrial : null;
+          const text = trial === null ? null : yield* files.draftText(trial.hash);
+          if (trial === null || text === null) return yield* new SkillDraftGone({ threadId });
+          return { trial, text };
         }),
     });
   }),

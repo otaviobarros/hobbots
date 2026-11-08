@@ -3,7 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { skillHealthQuery } from "../../api/skill-trials.ts";
 import { MemoryCard } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
@@ -85,22 +85,33 @@ function Pending({ failed, onRetry }: { failed: boolean; onRetry: () => void }) 
  */
 function WorthALookCard({ list, hobs, now }: { list: SkillsList; hobs: HobDirectory; now: Date }) {
   const health = useQuery(skillHealthQuery);
+  // Every finding is a click away: past the first few, Show N more lists the rest in place.
+  const [all, setAll] = useState(false);
   const items = health.data === undefined ? [] : healthItems(health.data, hobs, now);
   const none = health.data !== undefined && items.length === 0 && list.agentsFolder.problems.length === 0;
+  const hidden = items.length - SHOWN;
   return (
     <WorthCard
       list={list}
       after={
         <>
-          {items.length > SHOWN && (
-            <span className="text-meta text-label">{copy.health.more({ count: items.length - SHOWN })}</span>
+          {hidden > 0 && (
+            <Button
+              variant="quiet"
+              size="xs"
+              className="self-start"
+              aria-expanded={all}
+              onClick={() => setAll((was) => !was)}
+            >
+              {all ? copy.health.fewer : copy.health.more({ count: hidden })}
+            </Button>
           )}
           {none && <p className="m-0 text-ui text-text-secondary">{copy.health.allGood}</p>}
           {health.data === undefined && <Pending failed={health.isError} onRetry={() => void health.refetch()} />}
         </>
       }
     >
-      {items.slice(0, SHOWN).map((item) => (
+      {(all ? items : items.slice(0, SHOWN)).map((item) => (
         <ItemRow key={item.key} item={item} />
       ))}
     </WorthCard>

@@ -1,22 +1,24 @@
 import { skillTitle, type Thread } from "@hobbots/domain";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { skillTrialDraftQuery } from "../../api/skill-trials.ts";
 import { SkillIcon } from "../skill-line/skill-picker.tsx";
 import { messages } from "./messages.ts";
-import { skillsSearchOf } from "./skills-model.ts";
-import { trialOrigin } from "./try-in-chat-model.ts";
+import { draftSearch } from "./try-in-chat-model.ts";
 
 const copy = messages.trial;
 
 /**
  * Above the composer of a chat that tries a draft (ADR 029, Try in a chat, #1099): that only the draft
- * is loaded here and nothing reaches the library, with a way back to where the draft is. Nothing in
- * any other chat.
+ * is loaded here and nothing reaches the library, with Back to the draft, which opens its editor on
+ * the text you tried. Once the hub no longer has the draft, as after a restore, it says so and how to
+ * try it again. Nothing in any other chat.
  */
 export function TrialNotice({ thread }: { thread: Thread | undefined }) {
   const trial = thread?.skillTrial ?? null;
-  if (trial === null) return null;
+  const draft = useQuery({ ...skillTrialDraftQuery(thread?.id ?? ("" as Thread["id"])), enabled: trial !== null });
+  if (thread === undefined || trial === null) return null;
   const title = skillTitle(trial.name);
-  const origin = trialOrigin(trial);
   return (
     <section
       aria-label={copy.notice({ name: title })}
@@ -26,11 +28,12 @@ export function TrialNotice({ thread }: { thread: Thread | undefined }) {
         <SkillIcon />
       </span>
       <span className="min-w-0 flex-1 text-text-secondary">
-        <b className="font-semibold text-text-strong">{copy.notice({ name: title })}</b> {copy.noticeHint}
+        <b className="font-semibold text-text-strong">{copy.notice({ name: title })}</b>{" "}
+        {draft.isError ? <span role="alert">{copy.draftGone}</span> : copy.noticeHint}
       </span>
-      {origin !== null && (
-        <Link to="/skills" search={skillsSearchOf(origin)} className="text-ui text-link">
-          {origin._tag === "Review" ? copy.backToReview : copy.backToSkill}
+      {!draft.isError && (
+        <Link to="/skills" search={draftSearch(trial, thread.id)} className="text-ui text-link">
+          {copy.backToDraft}
         </Link>
       )}
     </section>

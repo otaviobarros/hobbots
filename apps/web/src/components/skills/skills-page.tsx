@@ -62,14 +62,25 @@ function OverviewBody({ list, hobs, now }: { list: SkillsList; hobs: SkillsReads
  * The editor, but a skill from ~/.agents/skills and a set have none (ADR 029): the page says where
  * each changes instead.
  */
-function EditBody({ skillId, reads, say }: { skillId: SkillId; reads: SkillsReads; say: Say }) {
+function EditBody({
+  skillId,
+  reads,
+  say,
+  trial,
+}: {
+  skillId: SkillId;
+  reads: SkillsReads;
+  say: Say;
+  trial: string | null;
+}) {
   const listed = reads.list.data;
   const skill = listed?.skills.find((one) => one.id === skillId);
   const readOnly =
     skill !== undefined &&
     listed !== undefined &&
     (agentsFolderOf(skill, listed.sources) !== null || listed.sets.some((set) => set.skillId === skillId));
-  if (listed === undefined || !readOnly) return <SkillEditor skillId={skillId} hobs={reads.hobs} say={say} />;
+  if (listed === undefined || !readOnly)
+    return <SkillEditor skillId={skillId} hobs={reads.hobs} say={say} trial={trial} />;
   return (
     <SkillPage
       view={{ _tag: "Skill", skillId, member: null, tab: null, file: null, diff: null }}
@@ -82,13 +93,27 @@ function EditBody({ skillId, reads, say }: { skillId: SkillId; reads: SkillsRead
 }
 
 /** The view's body: the editors and Add a skill open whatever the library holds; the rest read it. */
-function ViewBody({ view, reads, say, now }: { view: SkillsView; reads: SkillsReads; say: Say; now: Date }) {
+// `trial` opens Write one, the editor or To review on the draft a chat tried (ADR 029, Try in a chat).
+function ViewBody({
+  view,
+  reads,
+  say,
+  now,
+  trial,
+}: {
+  view: SkillsView;
+  reads: SkillsReads;
+  say: Say;
+  now: Date;
+  trial: string | null;
+}) {
   const projects = reads.list.data?.projects ?? [];
   if (view._tag === "Add")
     return <SkillsImport from={view.from} active={reads.active} projects={projects} hobs={reads.hobs} say={say} />;
-  if (view._tag === "New") return <SkillNew active={reads.active} projects={projects} hobs={reads.hobs} say={say} />;
-  if (view._tag === "Edit") return <EditBody skillId={view.skillId} reads={reads} say={say} />;
-  if (view._tag === "Review") return <SkillReview item={view.item} hobs={reads.hobs} now={now} />;
+  if (view._tag === "New")
+    return <SkillNew active={reads.active} projects={projects} hobs={reads.hobs} say={say} trial={trial} />;
+  if (view._tag === "Edit") return <EditBody skillId={view.skillId} reads={reads} say={say} trial={trial} />;
+  if (view._tag === "Review") return <SkillReview item={view.item} hobs={reads.hobs} now={now} trial={trial} />;
   return <LibraryBody view={view} reads={reads} say={say} now={now} />;
 }
 
@@ -154,7 +179,7 @@ export function SkillsPage({ search }: { search: SkillsSearch }) {
         <SkillsNav view={view} reads={reads} />
         <main aria-label={copy.title} className="min-w-0 flex-1 overflow-y-auto px-8 pt-6 pb-8 max-[1180px]:px-6">
           {flash !== null && <FlashLine message={flash.message} tone={flash.tone} />}
-          <ViewBody view={view} reads={reads} say={say} now={now} />
+          <ViewBody view={view} reads={reads} say={say} now={now} trial={search.trial ?? null} />
         </main>
       </div>
     </div>

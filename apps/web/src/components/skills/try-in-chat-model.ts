@@ -1,7 +1,8 @@
+import type { SkillTrialText } from "@hobbots/api";
 import type { Agent, AgentId, SkillTrial } from "@hobbots/domain";
 import { ApiError } from "../../api/client.ts";
 import { messages } from "./messages.ts";
-import { type SkillsView, skillView } from "./skills-model.ts";
+import { instructionsOf, type SkillsSearch, type SkillsView, skillsSearchOf } from "./skills-model.ts";
 
 /** Try in a chat (ADR 029, Try in a chat, #1099): which hobs a draft can be tried with, and what a failed try says. */
 
@@ -30,8 +31,21 @@ export const trialErrorText = (error: unknown): string => {
   }
 };
 
-/** Where the draft a chat tries came from: the proposal waiting in To review, or the skill it changes. */
-export const trialOrigin = (trial: SkillTrial): SkillsView | null => {
+/** The editor a draft a chat tries came from: the proposal in To review, the skill's editor, or Write one. */
+const draftView = (trial: SkillTrial): SkillsView => {
   if (trial.proposalId !== null) return { _tag: "Review", item: trial.proposalId };
-  return trial.skillId === null ? null : skillView(trial.skillId);
+  return trial.skillId === null ? { _tag: "New" } : { _tag: "Edit", skillId: trial.skillId };
 };
+
+/** The address of that editor, opened on the draft the chat `threadId` tries, to go on editing it. */
+export const draftSearch = (trial: SkillTrial, threadId: string): SkillsSearch => ({
+  ...skillsSearchOf(draftView(trial)),
+  trial: threadId,
+});
+
+/** The fields an editor opens with from a draft you tried: its name, description and instructions. */
+export const draftFields = (draft: SkillTrialText) => ({
+  name: draft.trial.name as string,
+  description: draft.trial.description as string,
+  body: instructionsOf(draft.text),
+});

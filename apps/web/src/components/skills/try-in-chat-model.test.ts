@@ -1,7 +1,7 @@
 import { type Agent, AgentId, SkillId, SkillName, SkillRevisionHash, SkillTrial } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
-import { trialErrorText, trialHobs, trialOrigin } from "./try-in-chat-model.ts";
+import { draftFields, draftSearch, trialErrorText, trialHobs } from "./try-in-chat-model.ts";
 
 const hob = (id: string, status: Agent["status"]) => ({ id: AgentId.make(id), name: id, status }) as Agent;
 const trial = (more: Partial<SkillTrial>) =>
@@ -33,15 +33,29 @@ describe("Try in a chat (ADR 029, Try in a chat)", () => {
     expect(trialErrorText(new ApiError("gone", "HobUnavailable"))).not.toBe(trialErrorText(new Error("network")));
   });
 
-  it("[TC-UI-1099-05] leads back to the proposal in To review, or to the skill an edit changes", () => {
-    expect(trialOrigin(trial({ proposalId: "p1", skillId: SkillId.make("release") }))).toEqual({
-      _tag: "Review",
+  it("[TC-UI-1099-05] leads back to the draft you tried in the editor it came from, opened on that text", () => {
+    const base = SkillRevisionHash.make("2".repeat(64));
+    expect(draftSearch(trial({ proposalId: "p1", skillId: SkillId.make("release") }), "t1")).toEqual({
+      view: "review",
       item: "p1",
+      trial: "t1",
     });
-    expect(trialOrigin(trial({ skillId: SkillId.make("release") }))).toMatchObject({
-      _tag: "Skill",
-      skillId: "release",
+    expect(draftSearch(trial({ skillId: SkillId.make("release"), base }), "t1")).toEqual({
+      skill: "release",
+      edit: "skill",
+      trial: "t1",
     });
-    expect(trialOrigin(trial({}))).toBeNull();
+    expect(draftSearch(trial({}), "t1")).toEqual({ edit: "new", trial: "t1" });
+    const tried = trial({});
+    expect(
+      draftFields({
+        trial: tried,
+        text: "---\nname: changelog\ndescription: Writes the changelog when you cut a release.\n---\n\nNewest first.\n",
+      }),
+    ).toEqual({
+      name: "changelog",
+      description: "Writes the changelog when you cut a release.",
+      body: "Newest first.\n",
+    });
   });
 });

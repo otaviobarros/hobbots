@@ -1,5 +1,5 @@
 import { readSkillHealth, SkillLibrary, type SkillTrialError, SkillTrials } from "@hobbots/agents";
-import { HobbotsApi, SkillProposalMissing, SkillSourceNotRead } from "@hobbots/api";
+import { HobbotsApi, SkillDraftGone, SkillProposalMissing, SkillSourceNotRead } from "@hobbots/api";
 import { DateTime, Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { importError, workingHobSkills } from "./skills.ts";
@@ -25,11 +25,17 @@ const trialError = (error: SkillTrialError) => {
 export const SkillTrialsHandlers = HttpApiBuilder.group(HobbotsApi, "skillTrials", (handlers) =>
   Effect.gen(function* () {
     const trials = yield* Effect.serviceOption(SkillTrials);
-    return handlers.handle("start", ({ payload }) =>
-      Option.isNone(trials)
-        ? Effect.fail(new SkillSourceNotRead({ message: "This hub has no skills library." }))
-        : trials.value.start(payload.agentId, payload.draft).pipe(Effect.mapError(trialError)),
-    );
+    return handlers
+      .handle("start", ({ payload }) =>
+        Option.isNone(trials)
+          ? Effect.fail(new SkillSourceNotRead({ message: "This hub has no skills library." }))
+          : trials.value.start(payload.agentId, payload.draft).pipe(Effect.mapError(trialError)),
+      )
+      .handle("draft", ({ params }) =>
+        Option.isNone(trials)
+          ? Effect.fail(new SkillDraftGone({ threadId: params.threadId }))
+          : trials.value.draft(params.threadId),
+      );
   }),
 );
 

@@ -5,7 +5,6 @@ import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { proposalClosed, useCheckProposal, useDecideProposal } from "../../api/skill-proposals.ts";
 import { DraftForm } from "../draft-form/draft-form.tsx";
-import { TryInChat } from "../skills/try-in-chat.tsx";
 import { messages } from "./messages.ts";
 import {
   addLabel,
@@ -18,6 +17,7 @@ import {
   proposalRevision,
   skillTitle,
 } from "./proposal-model.ts";
+import { TryProposal, useProposalEdit } from "./try-proposal.tsx";
 
 const copy = messages;
 
@@ -118,33 +118,6 @@ function ProposalFlags({ view, check }: { view: SkillProposalView; check: SkillP
   );
 }
 
-/**
- * Try in a chat (ADR 029, #1099): the proposal, or your edit of it, loaded alone in a new chat, the
- * hob that proposed it offered first.
- */
-function TryProposal({
-  proposal,
-  instructions,
-  disabled,
-}: {
-  proposal: SkillProposalView["proposal"];
-  /** Your edit as it stands, or null for the proposal as the hob made it. */
-  instructions: string | null;
-  disabled: boolean;
-}) {
-  return (
-    <TryInChat
-      first={proposal.agentId}
-      disabled={disabled}
-      draft={() => ({
-        _tag: "Proposal",
-        proposalId: proposal.id,
-        ...(instructions === null ? {} : { instructions }),
-      })}
-    />
-  );
-}
-
 /** What a failed decision says. */
 const errorText = (error: unknown) => {
   if (proposalClosed(error)) return copy.closed;
@@ -156,13 +129,20 @@ const errorText = (error: unknown) => {
  * Your decision on a proposal while it waits: Add it (for the hob, or rolled out), Edit then add, or
  * Not now. Once decided, what happened.
  */
-export function ProposalDecision({ view, who }: { view: SkillProposalView; who: string }) {
+export function ProposalDecision({
+  view,
+  who,
+  tried = null,
+}: {
+  view: SkillProposalView;
+  who: string;
+  /** Your edit as you tried it in a chat: Edit then add opens on it (ADR 029, Try in a chat). */
+  tried?: string | null;
+}) {
   const { proposal } = view;
   const decide = useDecideProposal(proposal);
   const checking = useCheckProposal(proposal);
-  const [editing, setEditing] = useState(false);
-  // Your edit as it stands, which Try in a chat loads while you edit.
-  const [edited, setEdited] = useState(proposal.instructions);
+  const { editing, setEditing, edited, setEdited, opening, setOpening } = useProposalEdit(proposal, tried);
   // Your edit as the checks last found it: it is added only once you have seen what they found.
   const [checked, setChecked] = useState<{ readonly draft: string; readonly check: SkillProposalCheck } | null>(null);
   const waiting = proposal.state === "waiting";
@@ -189,7 +169,7 @@ export function ProposalDecision({ view, who }: { view: SkillProposalView; who: 
       {waiting && editing && (
         <>
           <DraftForm
-            initial={proposal.instructions}
+            initial={opening}
             label={copy.editLabel}
             hint={copy.editHint}
             submit={checked === null ? copy.addEdited : copy.addAnyway}
@@ -205,6 +185,7 @@ export function ProposalDecision({ view, who }: { view: SkillProposalView; who: 
             }}
             onBack={() => {
               setEditing(false);
+              setOpening(proposal.instructions);
               setEdited(proposal.instructions);
               setChecked(null);
             }}

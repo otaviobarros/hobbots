@@ -454,7 +454,7 @@ test("[TC-UX-1143] a plugin comes in as one set, opens on its own page, and a sk
 });
 
 // covers ADR 029 (Try in a chat, Health checks), #1099
-test("[TC-UX-1099] the Overview shows what deserves a look and what each hob carries, and Try in a chat opens a chat with only the draft", async ({
+test("[TC-UX-1099] the Overview shows every finding and what each hob carries, and Try in a chat opens a chat with only the draft and leads back to it", async ({
   page,
 }) => {
   const { url, folder, api } = await hubWithHobs();
@@ -471,11 +471,22 @@ test("[TC-UX-1099] the Overview shows what deserves a look and what each hob car
   };
   await added(folder);
   await added(vague);
+  // Eight more whose descriptions say nothing of when to use them, so the card lists more than it shows at first.
+  for (let n = 1; n <= 8; n += 1) {
+    const one = join(dataDir, "to-import", `chore-${n}`);
+    mkdirSync(one, { recursive: true });
+    writeFileSync(join(one, "SKILL.md"), `---\nname: chore-${n}\ndescription: Chores.\n---\n\nDo it.\n`);
+    await api("POST", "/skills", { source: { _tag: "Folder", path: one } });
+  }
 
   await page.goto(`${url}/#/`);
   await page.getByRole("link", { name: "Skills", exact: true }).first().click();
   const main = page.getByRole("main", { name: "Skills" });
   const worth = main.getByRole("region", { name: "Worth a look" });
+  const findings = worth.getByRole("link", { name: /description may not trigger/ });
+  await expect(findings).toHaveCount(8);
+  await worth.getByRole("button", { name: "Show 1 more" }).click();
+  await expect(findings).toHaveCount(9);
   await expect(worth).toContainText("Tidy up's description may not trigger");
   const carries = main.getByRole("region", { name: "What each hob carries" });
   await expect(carries).toContainText("Pip");
@@ -495,7 +506,11 @@ test("[TC-UX-1099] the Overview shows what deserves a look and what each hob car
   const notice = page.getByRole("region", { name: "Trying the draft of Tidy up." });
   await expect(notice).toContainText("nothing here reaches the library");
   await expectAccessible(page, page.getByRole("main"));
-  await notice.getByRole("link", { name: "Back to the skill" }).click();
-  await expect(main.getByRole("heading", { name: "Tidy up", level: 2 })).toBeVisible();
-  await expect(main).toContainText("Tidies things.");
+  // Back to the draft opens the editor on the text you tried, so you save what you tested.
+  await notice.getByRole("link", { name: "Back to the draft" }).click();
+  await expect(main.getByRole("heading", { name: "Edit Tidy up" })).toBeVisible();
+  await expect(main.getByLabel("When to use it")).toHaveValue("Use when a folder needs tidying before a release.");
+  await main.getByRole("button", { name: "Save and roll out to 1 place" }).click();
+  await expect(main).toContainText("Saved r2 and rolled it out to 1 place from their next chat.");
+  await expect(main).toContainText("Use when a folder needs tidying before a release.");
 });

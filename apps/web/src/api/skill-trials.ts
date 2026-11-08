@@ -1,5 +1,5 @@
-import type { SkillHealth, SkillTrialDraftPayload } from "@hobbots/api";
-import type { AgentId, Thread } from "@hobbots/domain";
+import type { SkillHealth, SkillTrialDraftPayload, SkillTrialText } from "@hobbots/api";
+import type { AgentId, Thread, ThreadId } from "@hobbots/domain";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { queryKeys } from "./queries.ts";
@@ -32,3 +32,15 @@ export const skillHealthQuery = queryOptions({
   queryFn: (): Promise<SkillHealth> => call((c) => c.skillHealth.get()),
   staleTime: 60_000,
 });
+
+/**
+ * The draft a chat tries, as it was tried, so its editor opens on it again. A draft never changes, so
+ * it is read once; gone when the hub no longer has it, as after a restore.
+ */
+export const skillTrialDraftQuery = (threadId: ThreadId) =>
+  queryOptions({
+    queryKey: ["skills", "trial", threadId] as const,
+    queryFn: (): Promise<SkillTrialText> => call((c) => c.skillTrials.draft({ params: { threadId } })),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
