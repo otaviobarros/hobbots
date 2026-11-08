@@ -327,6 +327,8 @@ test("[TC-UX-1139] a skill from ~/.agents/skills is read-only with Make a copy, 
   const home = emptyDataDir();
   mkdirSync(join(home, "Downloads"), { recursive: true });
   hub = await startHub(dataDir, { HOME: home, HOBBOTS_AGENTS_SKILLS: agents });
+  // The page names the folder HOBBOTS_AGENTS_SKILLS set, not ~/.agents/skills (#1220).
+  const shown = agents.replace(/^\/(?:Users|home)\/[^/]+/, "~");
   try {
     await page.goto(`${hub.url}/#/skills`);
     const main = page.getByRole("main", { name: "Skills" });
@@ -335,7 +337,8 @@ test("[TC-UX-1139] a skill from ~/.agents/skills is read-only with Make a copy, 
       .first()
       .click();
     await expect(main.getByRole("heading", { name: "Pdf forms", level: 2 })).toBeVisible();
-    await expect(main.getByRole("note")).toContainText("~/.agents/skills/pdf-forms");
+    await expect(main.getByRole("note")).toContainText(`${shown}/pdf-forms`);
+    await expect(main.getByText(`From ${shown}`, { exact: true })).toBeVisible();
     const aside = main.getByRole("complementary", { name: "About this skill" });
     await expect(aside.getByRole("link", { name: "Edit" })).toHaveCount(0);
     await expect(aside.getByRole("button", { name: "Remove from the library…" })).toHaveCount(0);
@@ -348,7 +351,7 @@ test("[TC-UX-1139] a skill from ~/.agents/skills is read-only with Make a copy, 
     await expectAccessible(page, main);
     await form.getByRole("button", { name: "Make the copy" }).click();
     await expect(main).toContainText(
-      "Pdf forms copy is in your library at r1, and you can edit it. The original in ~/.agents/skills is unchanged.",
+      `Pdf forms copy is in your library at r1, and you can edit it. The original in ${shown} is unchanged.`,
     );
     // The copy is yours to edit.
     await expect(main.getByRole("heading", { name: "Pdf forms copy", level: 2 })).toBeVisible();
@@ -363,7 +366,10 @@ test("[TC-UX-1139] a skill from ~/.agents/skills is read-only with Make a copy, 
     await expect(main.getByRole("checkbox", { name: "Export Pdf forms", exact: true })).toHaveCount(0);
     const left = main.getByRole("region", { name: "Not exported" });
     await expect(left).toContainText("Pdf forms");
-    await expect(left).toContainText("Another computer's Hobbots reads its own ~/.agents/skills.");
+    await expect(left).toContainText(
+      `Skills in ${shown} stay in that folder. Another computer's Hobbots reads its own.`,
+    );
+    await expect(left).toContainText(`Everyone · ${shown}`);
     await expectAccessible(page, main);
   } finally {
     removeDataDir(home);

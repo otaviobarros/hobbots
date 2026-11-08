@@ -362,12 +362,14 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
       const revisions = new Map(
         yield* Effect.forEach(ids, (id) => Effect.map(library.revisions(id), (all) => [id, all] as const)),
       );
+      const pins = new Map((yield* library.assignments()).map((one) => [one.id, one.pin]));
       return {
         changes: skillChangesOf(
           envelopes,
           {
             name: (skillId) => names.get(skillId) ?? null,
             number: (skillId, hash) => revisions.get(skillId)?.find((one) => one.hash === hash)?.number ?? null,
+            pin: (assignmentId) => pins.get(assignmentId) ?? null,
           },
           CHANGES_SHOWN,
         ),

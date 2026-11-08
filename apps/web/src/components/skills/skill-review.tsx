@@ -26,6 +26,12 @@ const whoOf = (view: SkillProposalView, hobs: HobDirectory) =>
 const shownOf = (views: ReadonlyArray<SkillProposalView>, item: string | null) =>
   views.filter((view) => skillProposalOpen(view.proposal) || view.proposal.id === item);
 
+/** Where a proposal came from: a chat whenever it was asked for in one, even one that read memory pages. */
+const fromLine = (view: SkillProposalView, who: string) =>
+  view.proposal.threadId === null && view.proposal.memoryPages.length > 0
+    ? copy.fromMemory({ who })
+    : copy.from({ who });
+
 function ReviewRow({ view, hobs, open }: { view: SkillProposalView; hobs: HobDirectory; open: boolean }) {
   const who = whoOf(view, hobs);
   const { proposal } = view;
@@ -37,9 +43,7 @@ function ReviewRow({ view, hobs, open }: { view: SkillProposalView; hobs: HobDir
         aria-current={open ? "page" : undefined}
         className={row}
       >
-        <span className="text-meta text-label">
-          {proposal.memoryPages.length > 0 ? copy.fromMemory({ who }) : copy.from({ who })}
-        </span>
+        <span className="text-meta text-label">{fromLine(view, who)}</span>
         <span className="text-meta font-semibold text-text-secondary">
           {proposal.base === null ? copy.newSkill : copy.change}
         </span>

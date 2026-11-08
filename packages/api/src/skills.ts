@@ -297,7 +297,10 @@ export const SkillChange = Schema.Struct({
   scopes: Schema.Array(SkillScope),
   /** The places a save kept on their revision. */
   held: Schema.Array(SkillScope),
-  /** The assignments a save or rollout moved, each with the revision it was on, where Roll back takes it. */
+  /**
+   * The assignments a save or rollout moved that are still on the revision it moved them to, each with
+   * the revision it was on, where Roll back takes it: none once they all moved again.
+   */
   moved: Schema.Array(Schema.Struct({ assignmentId: SkillAssignmentId, from: SkillRevisionHash })),
   /** The revision every moved place was on, or null when they were on different ones or none moved. */
   previous: Schema.NullOr(SkillRevisionHash),

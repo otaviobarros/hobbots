@@ -11,6 +11,7 @@ import { RepositoryOffers } from "./skill-repository-offer.tsx";
 import type { Say } from "./skills-flash.ts";
 import { SkillHealthCards } from "./skills-health.tsx";
 import {
+  folderName,
   type HobDirectory,
   libraryGroups,
   originText,
@@ -49,7 +50,9 @@ function RowChips({ row }: { row: SkillRow }) {
     <>
       <UpdateChips row={row} />
       {row.set !== null && <SkillChip tone="set">{copy.chips.set({ count: row.set.length })}</SkillChip>}
-      {origin?._tag === "AgentsFolder" && <SkillChip tone="later">{copy.chips.agents}</SkillChip>}
+      {origin?._tag === "AgentsFolder" && (
+        <SkillChip tone="later">{copy.chips.agents({ folder: folderName(origin.path) })}</SkillChip>
+      )}
       {assignment?.held === true && (
         <SkillChip tone="waiting">
           {row.number === null ? copy.chips.heldOld : copy.chips.held({ rev: copy.revision({ number: row.number }) })}
@@ -136,7 +139,7 @@ export function SkillsOverview({
           <span className="mt-0.5">
             <SkillsIcon name="notice" />
           </span>
-          <p className="m-0 flex-1">{copy.overview.note}</p>
+          <p className="m-0 flex-1">{copy.overview.note({ folder: folderName(list.agentsFolder.path) })}</p>
           <Button asChild variant="quiet" size="sm" className="flex-none">
             <Link to="/skills" search={skillsSearchOf({ _tag: "Export" })}>
               {copy.overview.export}

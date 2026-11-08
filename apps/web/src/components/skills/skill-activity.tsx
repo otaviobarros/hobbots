@@ -18,7 +18,7 @@ import { skillFeedbackQuery, skillUsesQuery } from "../../api/skills.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { RowList } from "../memory/memory-overview.tsx";
 import { messages } from "./messages.ts";
-import { type HobDirectory, skillTitle } from "./skills-model.ts";
+import { type HobDirectory, skillTitle, usedRevision } from "./skills-model.ts";
 import { ScopeMark } from "./skills-parts.tsx";
 
 const copy = messages.activity;
@@ -146,7 +146,7 @@ export function SkillActivity({ detail, hobs }: { detail: SkillDetail; hobs: Hob
       <section aria-label={copy.shows} className="flex flex-col gap-1.5 rounded-card bg-card p-4">
         <h3 className="lbl m-0 text-label">{copy.shows}</h3>
         <p className="m-0 text-detail text-text-secondary">
-          {copy.line({ name: title, rev: skillRevisionLabel({ number: skill.revisions }) })}
+          {copy.line({ name: title, rev: skillRevisionLabel({ number: usedRevision(detail) }) })}
         </p>
       </section>
       {uses.data === undefined ? (

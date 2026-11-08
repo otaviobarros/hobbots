@@ -21,6 +21,7 @@ import {
   draftingHobs,
   exportRows,
   fileChanges,
+  folderName,
   importable,
   instructionsOf,
   libraryGroups,
@@ -33,6 +34,7 @@ import {
   skillsSearchOf,
   skillsViewOf,
   skillTitle,
+  usedRevision,
 } from "./skills-model.ts";
 
 const hash = (n: number) => SkillRevisionHash.make(n.toString(16).padStart(64, "0"));
@@ -312,6 +314,30 @@ describe("Export skills", () => {
     expect(agentsFolderOf(pdf, [agents], [{ path: "pdf" }])).toBe("~/.agents/skills/pdf");
     expect(agentsFolderOf(pdf, [agents])).toBe("~/.agents/skills/pdf-forms");
     expect(agentsFolderOf(skill("s2", "mine", "Mine"), [agents])).toBeNull();
+  });
+
+  // covers ADR 029 (~/.agents/skills), #1220
+  it("names the folder HOBBOTS_AGENTS_SKILLS set instead of ~/.agents/skills, with the home folder as ~", () => {
+    const shared = new SkillSource({
+      id: SkillSourceId.make("agents"),
+      origin: { _tag: "AgentsFolder", path: "/Users/me/team-skills/" },
+      addedAt: AT,
+    });
+    const pdf = skill("s1", "pdf-forms", "Forms", hash(1), 1, "agents");
+    expect(agentsFolderOf(pdf, [shared])).toBe("~/team-skills/pdf-forms");
+    expect(originText(shared.origin)).toBe("~/team-skills");
+    expect(folderName("/srv/skills")).toBe("/srv/skills");
+    expect(folderName("/home/me")).toBe("~");
+    expect(folderName(null)).toBe("~/.agents/skills");
+  });
+
+  // covers ADR 029 (The use line), #1220
+  it("names the revision places use in the use line, so a rollback names the older one", () => {
+    const release = skill("s1", "release", "Release", hash(2), 2);
+    const revisions = [2, 1].map((number) => ({ number, hash: hash(number) }) as unknown as SkillRevision);
+    const everyone = assignment("a1", "s1", { _tag: "Everyone" }, hash(1));
+    expect(usedRevision({ skill: release, revisions, assignments: [everyone] })).toBe(1);
+    expect(usedRevision({ skill: release, revisions, assignments: [] })).toBe(2);
   });
 
   // covers ADR 029 (Proactive hobs), #1144

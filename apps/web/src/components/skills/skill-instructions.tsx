@@ -139,7 +139,8 @@ export function SkillInstructions({
 }: {
   view: SkillViewOf;
   detail: SkillDetail;
-  fromFolder: boolean;
+  /** The `~/.agents/skills` folder it comes from, or null. */
+  fromFolder: string | null;
 }) {
   const latest = detail.revisions[0];
   const read = useQuery({
@@ -157,7 +158,7 @@ export function SkillInstructions({
           view={view}
           revision={latest}
           path={view.file}
-          note={fromFolder ? copy.agents.fileReadOnly : copy.file.readOnly}
+          note={fromFolder === null ? copy.file.readOnly : copy.agents.fileReadOnly({ folder: fromFolder })}
         />
       )}
     </div>

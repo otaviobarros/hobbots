@@ -13,6 +13,7 @@ import { SkillRemove } from "./skill-remove.tsx";
 import type { Say } from "./skills-flash.ts";
 import {
   agentsFolderOf,
+  agentsRootOf,
   type HobDirectory,
   originOf,
   originText,
@@ -188,7 +189,9 @@ export function SkillAside({
         {folder === null ? (
           <SkillRemove detail={detail} hobs={hobs} say={say} />
         ) : (
-          <span className="text-detail text-text-secondary">{copy.agents.noEdit}</span>
+          <span className="text-detail text-text-secondary">
+            {copy.agents.noEdit({ folder: agentsRootOf(detail.skill, list.sources) ?? "" })}
+          </span>
         )}
       </MemoryCard>
       <SkillFollow skill={detail.skill} list={list} say={say} />

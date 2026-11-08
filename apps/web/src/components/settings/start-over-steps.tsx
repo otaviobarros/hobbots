@@ -34,6 +34,9 @@ export function Deleting({ step }: { step: StartOverStep }) {
   );
 }
 
+/** Opens the app at its root: Welcome on a new hub, or the pairing screen in a browser it forgot. */
+export const startFresh = () => globalThis.location.assign(`${globalThis.location.origin}/`);
+
 /**
  * The hub answers again, empty: Start fresh opens the app at its root, which is Welcome on a new
  * hub. The desktop app's window sets its key again by itself; a browser was one of the devices the
@@ -52,9 +55,7 @@ export function AllClear() {
       </DialogDescription>
       {browser && <p className="m-0 text-ui text-text-secondary">{copy.doneBrowser}</p>}
       <div className="flex justify-end">
-        <Button onClick={() => globalThis.location.assign(`${globalThis.location.origin}/`)}>
-          {browser ? copy.askAgain : copy.startFresh}
-        </Button>
+        <Button onClick={startFresh}>{browser ? copy.askAgain : copy.startFresh}</Button>
       </div>
     </>
   );

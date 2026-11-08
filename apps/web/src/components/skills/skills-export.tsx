@@ -8,7 +8,7 @@ import { useId, useState } from "react";
 import { exportSkills, skillsErrorTag } from "../../api/skills.ts";
 import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
-import { exportRows, type HobDirectory, skillTitle } from "./skills-model.ts";
+import { exportRows, folderName, type HobDirectory, skillTitle } from "./skills-model.ts";
 import { RevTag, ScopeTag, SkillsIcon } from "./skills-parts.tsx";
 
 const copy = messages;
@@ -20,13 +20,13 @@ const parentName = (folder: string, name: string) => {
 };
 
 /** Skills from `~/.agents/skills`, which an export leaves out: they stay in that folder (ADR 029). */
-function NotExported({ skills }: { skills: ReadonlyArray<Skill> }) {
+function NotExported({ skills, folder }: { skills: ReadonlyArray<Skill>; folder: string }) {
   return (
     <section aria-label={copy.export.notExported} className="flex flex-col gap-2 rounded-card bg-card px-3.5 py-3">
       <span className="flex items-center gap-2 text-text-secondary">
         <SkillsIcon name="lock" />
         <h3 className="m-0 flex-1 text-ui font-semibold text-text-strong">{copy.export.notExported}</h3>
-        <ScopeTag scope={{ _tag: "Everyone" }} label={copy.export.notExportedScope} />
+        <ScopeTag scope={{ _tag: "Everyone" }} label={copy.export.notExportedScope({ folder })} />
       </span>
       <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0">
         {skills.map((skill) => (
@@ -36,7 +36,7 @@ function NotExported({ skills }: { skills: ReadonlyArray<Skill> }) {
           </li>
         ))}
       </ul>
-      <span className="text-detail text-text-secondary">{copy.export.notExportedNote}</span>
+      <span className="text-detail text-text-secondary">{copy.export.notExportedNote({ folder })}</span>
     </section>
   );
 }
@@ -48,6 +48,7 @@ function NotExported({ skills }: { skills: ReadonlyArray<Skill> }) {
 export function SkillsExport({ list, hobs, say }: { list: SkillsList; hobs: HobDirectory; say: Say }) {
   const navigate = useNavigate();
   const { rows, notExported } = exportRows(list, hobs);
+  const folder = folderName(list.agentsFolder.path);
   const [off, setOff] = useState<ReadonlySet<SkillId>>(() => new Set());
   const [assignments, setAssignments] = useState(true);
   const [failure, setFailure] = useState<string | null>(null);
@@ -82,7 +83,7 @@ export function SkillsExport({ list, hobs, say }: { list: SkillsList; hobs: HobD
     <div className="flex max-w-[760px] flex-col gap-[18px]">
       <header className="flex flex-col gap-1.5">
         <h2 className="m-0 font-heading text-[26px] leading-8 font-bold text-text-strong">{copy.export.title}</h2>
-        <p className="m-0 text-body text-text-secondary">{copy.export.intro}</p>
+        <p className="m-0 text-body text-text-secondary">{copy.export.intro({ folder })}</p>
       </header>
       <ul
         aria-label={copy.export.list}
@@ -115,7 +116,7 @@ export function SkillsExport({ list, hobs, say }: { list: SkillsList; hobs: HobD
           );
         })}
       </ul>
-      {notExported.length > 0 && <NotExported skills={notExported} />}
+      {notExported.length > 0 && <NotExported skills={notExported} folder={folder} />}
       <div className="flex items-center gap-3 rounded-card bg-card px-3.5 py-3">
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="text-ui font-semibold text-text-strong">{copy.export.assignments}</span>

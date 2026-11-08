@@ -1,27 +1,18 @@
-import type { BackupState } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@hobbots/ui/components/dialog";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useActivity } from "../../api/activity.ts";
-import { backupQuery, backupRunning, type StartOverStep, useStartBackup, useStartOver } from "../../api/backup.ts";
-import { useBackupFolder } from "../../api/backup-folder.ts";
-import { ApiError } from "../../api/client.ts";
+import { backupQuery, backupRunning, type StartOverStep, useStartOver } from "../../api/backup.ts";
 import { agentsQuery, archivedAgentsQuery, threadsQuery } from "../../api/queries.ts";
 import { formatAgo, formatList } from "../../lib/format.ts";
 import { hobState } from "../../lib/hob-state.ts";
 import { messages } from "./messages.ts";
-import { AllClear, Deleting, Failed } from "./start-over-steps.tsx";
+import { AllClear, Deleting, Failed, startFresh } from "./start-over-steps.tsx";
+import { lastBackupAt, reasonOf, WayBack } from "./start-over-way-back.tsx";
 
 const copy = messages.startOver;
-
-/** The words of a refusal: the hub's reason when it gave one. */
-const reasonOf = (error: Error | null) =>
-  error instanceof ApiError && typeof error.fields.reason === "string" ? error.fields.reason : (error?.message ?? "");
-
-/** When the last backup finished, or null when none has. */
-const lastBackupAt = (state: BackupState | undefined) => (state?._tag === "Done" ? state.finishedAt : null);
 
 /**
  * Settings › Your data › Start over (#948): a rose card at the bottom of the section. Delete
@@ -78,14 +69,31 @@ function BinIcon() {
 
 /**
  * The confirmation, then the deleting steps, then All clear. While the hub deletes, the dialog
- * cannot be closed: there is nothing to go back to.
+ * cannot be closed: there is nothing to go back to. Once it is done, closing All clear starts fresh
+ * as its button does, and so does the end of a Start over whose dialog the page lost on the way,
+ * so the window never stays on Settings of an empty hub (#1220).
  */
 function StartOverDialog({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<StartOverStep | null>(null);
-  const startOver = useStartOver(setStep);
+  const shown = useRef(true);
+  useEffect(() => {
+    shown.current = true;
+    return () => {
+      shown.current = false;
+    };
+  }, []);
+  const startOver = useStartOver((next) => {
+    if (shown.current) setStep(next);
+    else if (next === "done") startFresh();
+  });
   const busy = step !== null && step !== "done" && !startOver.isError;
+  const close = () => {
+    if (busy) return;
+    if (step === "done" && !startOver.isError) startFresh();
+    else onClose();
+  };
   return (
-    <Dialog open onOpenChange={(next) => !next && !busy && onClose()}>
+    <Dialog open onOpenChange={(next) => !next && close()}>
       <DialogContent
         aria-describedby="start-over-lead"
         aria-busy={busy}
@@ -205,42 +213,3 @@ function Working() {
     </p>
   );
 }
-
-/** Back up first, to the folder chosen under Backups, without leaving the dialog. */
-function WayBack() {
-  const backup = useQuery(backupQuery);
-  const start = useStartBackup();
-  const state = backup.data?.state;
-  const destination = useBackupFolder(backup.data?.defaultDestination);
-  const running = backupRunning(state) || start.isPending;
-  const last = lastBackupAt(state);
-  const saved = last !== null && start.isSuccess;
-  const line = backupLine(state, running, destination, start.isError ? reasonOf(start.error) : null);
-  return (
-    <div className="flex flex-wrap items-center gap-2.5 rounded-control bg-card px-3 py-2.5">
-      <span className="flex min-w-0 flex-1 flex-col">
-        <strong className="text-ui text-text-strong">{copy.wayBack}</strong>
-        <span role="status" className="text-detail text-text-secondary">
-          {line}
-        </span>
-      </span>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={running || saved || destination === "" || backup.data === undefined}
-        onClick={() => start.mutate(destination)}
-      >
-        {saved ? copy.backedUp : running ? copy.backupRunning : copy.backUp}
-      </Button>
-    </div>
-  );
-}
-
-/** The line beside Back up first: why it waits, how the backup goes, or when the last one finished. */
-const backupLine = (state: BackupState | undefined, running: boolean, destination: string, refused: string | null) => {
-  if (refused !== null) return copy.backupFailed({ reason: refused });
-  if (running) return copy.backupRunning;
-  if (state?._tag === "Failed") return copy.backupFailed({ reason: state.reason });
-  if (state?._tag === "Done") return copy.backupDone({ when: formatAgo(state.finishedAt), path: state.path });
-  return destination === "" ? copy.backupNoFolder : copy.backupNone({ folder: destination });
-};

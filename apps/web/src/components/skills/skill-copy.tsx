@@ -7,7 +7,7 @@ import { useId, useState } from "react";
 import { skillsErrorTag } from "../../api/skills.ts";
 import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
-import { projectName, skillsSearchOf, skillTitle, skillView } from "./skills-model.ts";
+import { agentsRootOf, folderName, projectName, skillsSearchOf, skillTitle, skillView } from "./skills-model.ts";
 import { useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
@@ -49,9 +49,9 @@ const startsLine = (detail: SkillDetail, member: SkillSetSkill | undefined) =>
     : copy.copySkill.startsSet;
 
 /** What is said once the copy is made, on its page. */
-const doneLine = (name: string, detail: SkillDetail, member: SkillSetSkill | undefined) =>
+const doneLine = (name: string, detail: SkillDetail, member: SkillSetSkill | undefined, folder: string) =>
   member === undefined
-    ? copy.copySkill.done({ name: skillTitle(name) })
+    ? copy.copySkill.done({ name: skillTitle(name), folder })
     : copy.copySkill.doneSet({ name: skillTitle(name), set: detail.skill.name });
 
 /**
@@ -100,7 +100,18 @@ export function SkillCopy({
         onSuccess: (copied) => {
           // The line is said on the copy's page, where it opens.
           const at = skillView(copied.skill.id);
-          say({ tone: "done", message: doneLine(copied.skill.name, detail, member) }, at);
+          say(
+            {
+              tone: "done",
+              message: doneLine(
+                copied.skill.name,
+                detail,
+                member,
+                agentsRootOf(detail.skill, list.sources) ?? folderName(null),
+              ),
+            },
+            at,
+          );
           void navigate({ to: "/skills", search: skillsSearchOf(at) });
         },
         onError: (error) =>

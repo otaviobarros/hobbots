@@ -1,4 +1,4 @@
-import type { SkillsList } from "@hobbots/api";
+import type { SkillDetail, SkillsList } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
@@ -219,17 +219,41 @@ export const originOf = (sourceId: Skill["sourceId"], sources: ReadonlyArray<Ski
   sourceId === null ? null : (sources.find((source) => source.id === sourceId)?.origin ?? null);
 
 /**
- * A skill from `~/.agents/skills` (ADR 029): read-only in Hobbots, and out of backups and exports.
- * Its folder there, as `~/.agents/skills/pdf-forms`, or null for any other skill.
+ * The `~/.agents/skills` folder a skill comes from (ADR 029), or the one `HOBBOTS_AGENTS_SKILLS`
+ * names instead, or null for any other skill. Such a skill is read-only in Hobbots, and out of
+ * backups and exports.
  */
+export const agentsRootOf = (skill: Pick<Skill, "sourceId">, sources: ReadonlyArray<SkillSource>): string | null => {
+  const origin = originOf(skill.sourceId, sources);
+  return origin?._tag === "AgentsFolder" ? folderName(origin.path) : null;
+};
+
+/** The folder a skill from `~/.agents/skills` lives in, as `~/.agents/skills/pdf-forms`, or null for any other skill. */
 export const agentsFolderOf = (
   skill: Pick<Skill, "sourceId" | "name">,
   sources: ReadonlyArray<SkillSource>,
   revisions: ReadonlyArray<Pick<SkillRevision, "path">> = [],
 ): string | null => {
-  const origin = originOf(skill.sourceId, sources);
-  if (origin?._tag !== "AgentsFolder") return null;
-  return `${copy.source.agents}/${revisions[0]?.path ?? skill.name}`;
+  const root = agentsRootOf(skill, sources);
+  return root === null ? null : `${root}/${revisions[0]?.path ?? skill.name}`;
+};
+
+/**
+ * A folder on the hub as the Skills page names it, with the home folder as ~: the shared
+ * `~/.agents/skills`, or the folder `HOBBOTS_AGENTS_SKILLS` set instead. Null, when the hub reads
+ * none, names the usual one.
+ */
+export const folderName = (path: string | null): string =>
+  path === null ? copy.source.agents : path.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, "~").replace(/\/+$/, "");
+
+/**
+ * The revision a skill's use line names (ADR 029, The use line): the newest one a place is pinned
+ * to, so a rollback names the revision hobs use now; the newest revision when no place has it.
+ */
+export const usedRevision = (detail: Pick<SkillDetail, "skill" | "revisions" | "assignments">): number => {
+  const pinned = new Set(detail.assignments.map((one) => one.pin));
+  const used = detail.revisions.filter((one) => pinned.has(one.hash)).map((one) => one.number);
+  return used.length === 0 ? detail.skill.revisions : Math.max(...used);
 };
 
 /** A Git address without its scheme and `.git`, as `github.com/acme/skills`. */
@@ -252,7 +276,7 @@ export const originText = (origin: SkillOrigin | null): string => {
     case "Git":
       return origin.ref === null ? shortGit(origin.url) : `${shortGit(origin.url)} · ${origin.ref}`;
     case "AgentsFolder":
-      return copy.source.agents;
+      return folderName(origin.path);
   }
 };
 

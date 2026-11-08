@@ -148,6 +148,14 @@ export const messages = {
       change: ({ step }: { step: string }) => `Change ${step}`,
       changeShort: "Change",
       devicesLater: "Later, in Settings",
+      /** The effort the first hob starts on, beside its AI and model: it can change later in its profile. */
+      effort: {
+        low: "Low effort",
+        medium: "Medium effort",
+        high: "High effort",
+        xhigh: "Extra high effort",
+        max: "Max effort",
+      },
       rejected: ({ name, reason }: { name: string; reason: string }) =>
         `Hobbots could not create ${name}: ${reason}. Go back to change it.`,
       failed: ({ name }: { name: string }) => `Hobbots could not finish summoning ${name}. Try again in a moment.`,

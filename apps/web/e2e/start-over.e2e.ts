@@ -52,8 +52,18 @@ test("[TC-OP-098] starts over from Settings › Your data, and the hub comes bac
   });
   const installation = fileOf(dataDir, "installation-id");
 
-  // Backups saves to a folder the person chose, and so does Back up first.
+  // Before a folder is chosen, Back up first names the hub's default folder as that, never as chosen (#1220).
   await page.goto(`${hub.url}/#/settings/data`);
+  await page.getByRole("region", { name: "Start over" }).getByRole("button", { name: "Delete everything…" }).click();
+  const first = page.getByRole("dialog", { name: "Delete everything and start over?" });
+  await expect(
+    first.getByText("To save it somewhere else, choose a folder under Backups.", { exact: false }),
+  ).toBeVisible();
+  await expect(first.getByText("the folder chosen under Backups", { exact: false })).toHaveCount(0);
+  await first.getByRole("button", { name: "Keep my data" }).click();
+  await expect(first).toBeHidden();
+
+  // Backups saves to a folder the person chose, and so does Back up first.
   await page
     .getByRole("region", { name: "Backups" })
     .getByRole("textbox", { name: "Save the backup in" })
