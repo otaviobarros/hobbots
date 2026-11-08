@@ -1,4 +1,4 @@
-import { realpath, stat } from "node:fs/promises";
+import { opendir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { FolderChecks } from "@hobbots/agents";
@@ -36,6 +36,33 @@ export const checkFolder = (typed: string, home: string = homedir()): Effect.Eff
   );
 };
 
+/** Whether macOS refused to open a folder: what its folder privacy answers (#1225). */
+const refusedByMacOS = (error: unknown) =>
+  error instanceof Error && "code" in error && (error.code === "EPERM" || error.code === "EACCES");
+
+/**
+ * A folder the user is adding, checked as `checkFolder` does and then opened once. On macOS, opening
+ * a protected folder such as Documents is what asks whether Hobbots may use it, so the user answers
+ * while adding it rather than in the middle of a hob's turn, where the question held the turn and a
+ * refusal failed its writes (#1225). A refused folder is not added.
+ */
+export const checkNewFolder = (typed: string, home: string = homedir()): Effect.Effect<string, InvalidFolder> =>
+  Effect.flatMap(checkFolder(typed, home), (folder) =>
+    Effect.tryPromise({
+      try: async () => {
+        await (await opendir(folder)).close();
+        return folder;
+      },
+      catch: (error) =>
+        new InvalidFolder({
+          folder: typed,
+          message: refusedByMacOS(error)
+            ? `Hobbots can't open ${folder}. If macOS asked, allow Hobbots in System Settings › Privacy & Security › Files and Folders, then add the folder again`
+            : `Hobbots can't open ${folder}`,
+        }),
+    }),
+  );
+
 /**
  * The folder a stored path names now: canonical while it is on the hub, else the path as stored.
  * A folder that was missing when it was stored, such as one on an unmounted drive, keeps its
@@ -46,7 +73,7 @@ const folderIdentity = (folder: string): Effect.Effect<string> =>
 
 /** The hub's folder checks, on the filesystem of the machine the server runs on. */
 export const NodeFolderChecks = Layer.succeed(FolderChecks, {
-  check: (typed) => checkFolder(typed),
+  check: (typed) => checkNewFolder(typed),
   identity: folderIdentity,
 });
 
