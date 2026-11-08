@@ -12,6 +12,7 @@ import {
   HobService,
   PermissionSummary,
   type PromptRequest,
+  ROSTER_WITHDRAWN,
   RuntimeAdapter,
   type RuntimeAdapterShape,
   SecretRedaction,
@@ -247,6 +248,14 @@ describe("the hob directory, end to end", () => {
     expect((await request("PATCH", `/api/agents/${pip.id}`, { visibleToHobs: true })).status).toBe(200);
     const back = await exchange(thread, "And now?");
     expect(back.sent.briefing).toContain('"Pip"');
+
+    // With its last other hobs hidden, the session is told its list no longer holds, once.
+    for (const hob of [pip, quill]) await request("PATCH", `/api/agents/${hob.id}`, { visibleToHobs: false });
+    const emptied = await exchange(thread, "And now?");
+    expect(emptied.sent.briefing).toBe(ROSTER_WITHDRAWN);
+    expect((await exchange(thread, "And now?")).sent.briefing).toBeNull();
+    for (const hob of [pip, quill]) await request("PATCH", `/api/agents/${hob.id}`, { visibleToHobs: true });
+    expect((await exchange(thread, "And now?")).sent.briefing).toContain('- "Quill"');
   });
 
   // covers ADR 032 (read_hob), EX-004

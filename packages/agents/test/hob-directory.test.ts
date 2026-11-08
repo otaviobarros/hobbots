@@ -9,6 +9,7 @@ import {
   HobDirectory,
   hobCard,
   ROSTER_LIMITS,
+  ROSTER_WITHDRAWN,
   readHobAnswer,
   renderRoster,
   splitRoster,
@@ -140,6 +141,10 @@ describe("the roster", () => {
       });
       expect(splitRoster(text)).toEqual({ roster: text, rest: null });
     }
+    expect(splitRoster(`${ROSTER_WITHDRAWN}\n\n- Your Task.`)).toEqual({
+      roster: ROSTER_WITHDRAWN,
+      rest: "- Your Task.",
+    });
     expect(splitRoster("Your Task.")).toEqual({ roster: null, rest: "Your Task." });
   });
 
@@ -191,6 +196,24 @@ describe("a turn's roster", () => {
     expect(startedRoster(same ?? first, { sessionId: "s1" }, "s2").digest).toBeNull();
   });
 
+  // covers ADR 032 (The roster, Sent again only when it changed)
+  it("[TC-AG-1234-16] a session given a roster is told when it lists no hob, then is sent nothing while that holds", async () => {
+    const first = await roster([pip]);
+    if (first === null) throw new Error("no roster");
+    const held = deliveredRoster(first, startedRoster(first, undefined, "s1"));
+    // Pip, its last other hob, is hidden or retired.
+    const emptied = await roster([], { received: held, resumed: true });
+    if (emptied === null) throw new Error("no roster");
+    expect(emptied).toMatchObject({ text: ROSTER_WITHDRAWN, sent: true });
+    const told = deliveredRoster(emptied, startedRoster(emptied, { sessionId: "s1" }, "s1"));
+    expect(await roster([], { received: told, resumed: true })).toMatchObject({ text: null, sent: false });
+    // Read other hobs no longer Allow withdraws it the same way.
+    const asked = await roster([pip], { received: held, resumed: true, access: access({ "read-hobs": "ask" }) });
+    expect(asked?.text).toBe(ROSTER_WITHDRAWN);
+    // A new session on a hub with no other hob is told nothing.
+    expect((await roster([]))?.text).toBeNull();
+  });
+
   // covers ADR 032 (Every runtime)
   it("[TC-AG-1234-08] a resumed session of a runtime that keeps its first tools is told of read_hob only when it holds it", async () => {
     // A Codex thread from before the slice holds no read_hob: the roster says nothing of it.
@@ -201,14 +224,21 @@ describe("a turn's roster", () => {
     // One that started with it still holds it, and keeps being told of it.
     const holding = await roster([pip], { resumed: true, keepsTools: true, received: { digest: null, readHob: true } });
     expect(holding?.text).toContain("read_hob returns");
-    // Never while it still shows the tool: no roster, and it keeps holding it for when Allow comes back.
+    // Never while it still shows the tool: no list, only the notice that withdraws one it may hold,
+    // and it keeps holding the tool for when Allow comes back.
     const never = await roster([pip], {
       resumed: true,
       keepsTools: true,
       received: { digest: null, readHob: true },
       access: access({ "read-hobs": "deny" }),
     });
-    expect(never?.text).toBeNull();
+    if (never === null) throw new Error("no roster");
+    expect(never.text).toBe(ROSTER_WITHDRAWN);
+    expect(never.offersReadHob).toBe(false);
+    const kept = deliveredRoster(never, startedRoster(never, { sessionId: "s1" }, "s1"));
+    expect(kept.readHob).toBe(true);
+    const back = await roster([pip], { resumed: true, keepsTools: true, received: kept });
+    expect(back?.text).toContain("read_hob returns");
     // A runtime offered each turn's tools is told of read_hob whenever the turn offers it.
     expect((await roster([pip], { resumed: true }))?.text).toContain("read_hob returns");
     // Without the Directory tools, no turn holds read_hob.

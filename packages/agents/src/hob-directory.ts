@@ -181,14 +181,18 @@ export const renderRoster = (
 
 /**
  * A briefing parted into the roster section it carries, if any, and the rest of it, as the roster
- * was rendered: its heading, its label, its lines and the closing line when hobs were left out. The
- * fake runtime uses it to keep the roster out of its echo, so a test sees it only when it asks.
+ * was rendered: its heading, its label, its lines and the closing line when hobs were left out, or the
+ * notice that withdraws it. The fake runtime uses it to keep the roster out of its echo, so a test sees it only when it asks.
  */
 export const splitRoster = (briefing: string): { readonly roster: string | null; readonly rest: string | null } => {
   const parts = briefing.split("\n\n");
   const start = parts.indexOf(ROSTER_HEADING);
   if (start === -1) return { roster: null, rest: briefing };
-  const end = parts[start + 3]?.startsWith(CLOSING_INTRO) === true ? start + 4 : start + 3;
+  // The notice is its heading and one line; a roster is its heading, label and lines, and its
+  // closing line when it has one.
+  const withdrawn = [ROSTER_HEADING, parts[start + 1]].join("\n\n") === ROSTER_WITHDRAWN;
+  let end = withdrawn ? start + 2 : start + 3;
+  if (!withdrawn && parts[end]?.startsWith(CLOSING_INTRO) === true) end++;
   const rest = [...parts.slice(0, start), ...parts.slice(end)];
   return { roster: parts.slice(start, end).join("\n\n"), rest: rest.length === 0 ? null : rest.join("\n\n") };
 };
@@ -346,6 +350,21 @@ export interface TurnRosterInput {
 }
 
 /**
+ * What replaces a roster a resumed session was given once it lists no hob, as when its last other
+ * hob is hidden or retired or Read other hobs is no longer Allow, so the old list does not stand.
+ */
+export const ROSTER_WITHDRAWN = [
+  ROSTER_HEADING,
+  `${DIRECTORY_LABEL} No other hob is listed for you now: any list of other hobs you were given before no longer holds.`,
+].join("\n\n");
+
+/**
+ * Whether a resumed session may still hold a roster: it was given one, or what it was given is not
+ * known. A new session holds none.
+ */
+const heldRoster = (input: TurnRosterInput) => input.resumed && input.received?.digest !== memoryBriefDigest(null);
+
+/**
  * The roster for a hob's turn, from the directory in the current context, or null without one. It
  * is redacted with the turn's redactor, and sent when the session is new or last received a
  * different roster, as the memory brief is.
@@ -356,11 +375,13 @@ export const turnRoster = (input: TurnRosterInput): Effect.Effect<TurnRoster | n
     if (Option.isNone(directory)) return null;
     const decision = input.access === null ? "deny" : operationDecision(input.access.policy, "read-hobs");
     const offersReadHob = decision !== "deny" && Option.isSome(yield* Effect.serviceOption(DirectoryTools));
-    const resumedHolds = input.keepsTools ? input.received?.readHob === true && offersReadHob : offersReadHob;
-    const holds = input.resumed ? resumedHolds : offersReadHob;
+    // What a resumed session holds stays apart from what this turn may offer: a Codex thread keeps
+    // read_hob through a turn under Never, and is told of it again once Allow is back.
+    const resumedHolds = input.keepsTools ? input.received?.readHob === true : offersReadHob;
+    const holds = (input.resumed ? resumedHolds : offersReadHob) && offersReadHob;
     const listed = decision === "allow" ? yield* directory.value.listed(input.agentId) : null;
     const roster = listed === null ? null : renderRoster(listed.cards, listed.shared, holds);
-    const text = roster === null ? null : input.redactor.text(roster);
+    const text = input.redactor.text(roster ?? (heldRoster(input) ? ROSTER_WITHDRAWN : "")) || null;
     const digest = memoryBriefDigest(text);
     const sent = input.received?.digest !== digest;
     return { text: sent ? text : null, digest, sent, offersReadHob, resumedHolds };
