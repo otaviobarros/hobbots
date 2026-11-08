@@ -4,18 +4,18 @@ import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HubQuestionRepositoryLive, migrations } from "../src/index.ts";
-import hubQuestionCodes from "../src/migrations/0077_hub_question_codes.ts";
+import hubQuestionCodes from "../src/migrations/0078_hub_question_codes.ts";
 import { TestDatabaseAt } from "../src/testing.ts";
 
-// Issue #1045: hub questions stored before 0077 held English text and labels. The migration reads
+// Issue #1045: hub questions stored before 0078 held English text and labels. The migration reads
 // them back into codes and keys, rows and journaled events alike, so an answer given before it is
 // still applied by key, and one still open is answered by key after it.
 
 const NOW = "2026-11-07T00:00:00.000Z";
 const NOREPLY = "35647586+otaviobarros@users.noreply.github.com";
 
-/** The migrations that ran before 0077, which keep a hub question's text and labels. */
-const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0077")) as typeof migrations;
+/** The migrations that ran before 0078, which keep a hub question's text and labels. */
+const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0078")) as typeof migrations;
 
 const GITHUB = {
   label: "My GitHub account, @otaviobarros",
@@ -40,7 +40,7 @@ interface Old {
   readonly picked?: number;
 }
 
-/** A hub question and its HubQuestionRaised entry, as the hub stored them before 0077. */
+/** A hub question and its HubQuestionRaised entry, as the hub stored them before 0078. */
 const stored = (old: Old, sequence: number) =>
   Effect.gen(function* () {
     const sql = (yield* SqlClient.SqlClient).withoutTransforms();
@@ -85,7 +85,7 @@ const stored = (old: Old, sequence: number) =>
     yield* sql`UPDATE event_journal_head SET sequence = ${sequence}`;
   });
 
-describe("0077_hub_question_codes", () => {
+describe("0078_hub_question_codes", () => {
   // covers OR-004, DP-003
   it("[TC-DP-291] turns stored hub questions and their events into codes and keys, and an old answer still applies by key", async () => {
     const result = await Effect.gen(function* () {

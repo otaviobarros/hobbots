@@ -26,7 +26,7 @@ Tasks, steps and Quests are decided in [ADR 018](../decisions/018-tasks-and-ques
 
 Use stable domain identifiers for agents, threads, Quests, tasks, delegations, executions, executors, approvals, messages and events. Runtime session IDs are namespaced by runtime and executor. Persist correlation explicitly rather than parsing prose to discover lineage.
 
-An agent edit, including a change to its own folders or permission overrides ([permissions](permissions.md)), creates a new configuration version. Running work retains its execution snapshot. Archive/disable preserves references and history; handling currently active work must be explicit. Database-managed configuration versus portable JSON/YAML export remains open.
+An agent edit, including a change to its own folders or permission overrides ([permissions](permissions.md)), creates a new configuration version. Every version records its actor: you, you applying a hob's proposal, or a hob under an Allow of the Summoning Charm. A hob records who summoned it (a hob, or you) and the Task it was summoned for ([ADR 034](../decisions/034-summoning-charm.md)). Running work retains its execution snapshot. Archive/disable preserves references and history; handling currently active work must be explicit. Database-managed configuration versus portable JSON/YAML export remains open.
 
 Availability, runtime health, execution status and inbox backlog are different projections. An agent with no active turn may still own unresolved responsibilities. A runtime that is unavailable does not erase its agent or terminate every Quest as failed.
 
@@ -42,5 +42,13 @@ Support a persistent identity with name, avatar, instructions/personality, runti
 On every turn the hub tells the runtime who the hob is, from the configuration version the turn runs with: its name and role (a starter role's title and note, or a title in the user's own words), then the user's instructions, each under its own heading ("About you", "Your instructions, from the user") so the model can tell what Hobbots states from what the user wrote. Neither the name nor the role is written into the instructions, so a rename or a role change applies from the next turn. A role describes the work; it grants no authority.
 
 A hob also has a tone: one voice and one length, picked apart so a hob can be both brief and friendly. The domain fixes the line each choice adds, so the wording can be tested and evaluated. When either differs from its default (Default voice, Balanced length), a "How you talk" section sits between "About you" and the user's instructions, holding the voice line, then the length line, then, for a themed voice, a guard that keeps facts, code, commands, links and warnings plain. At the defaults the section is left out. The user's instructions come last, so a voice they describe themselves takes precedence.
+
+### The hob directory
+
+Every hob has a public card that other hobs read ([ADR 032](../decisions/032-hob-directory.md)): name, role title and sigil, good at, status (active or paused), brain (runtime, model and effort), the connected Charms it holds, and who summoned it once that is recorded. It is built from the hob's current configuration, never from its instructions.
+
+- **Good at** is a stored, versioned field of the configuration: one line of up to 200 characters, prefilled in Summon from the chores or the starter role's note, and editable in Summon and the profile. It tells other hobs when to come to this hob and is never part of the hob's own prompt.
+- **Visible to other hobs** is a configuration switch, on by default. A hidden hob is absent from other hobs' rosters and unknown to `read_hob`, but can still be given work by name.
+- **The roster** of the other visible hobs rides in each turn's context block, not in the instructions, and is sent again only when it changed. `read_hob` returns one hob's full card. Retired hobs are on neither.
 
 Retain the original execution snapshot for audit, while enforcing current applicable authority before new effects; see [permissions](permissions.md). This resolves the difference between reproducible execution provenance and a permission that can expire or be revoked.

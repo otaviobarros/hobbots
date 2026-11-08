@@ -1,0 +1,259 @@
+---
+import { DOWNLOADS, RELEASE, REPORT } from "../data/copy.ts";
+import WaitlistForm from "./WaitlistForm.astro";
+
+const ARROW = ["M12 4v11", "m7 10 5 5 5-5", "M5 20h14"];
+---
+
+<section id="download" class="section tint" aria-labelledby="download-title" data-download>
+  <div class="wrap body">
+    <div class="intro">
+      <p class="lbl">Download</p>
+      <h2 id="download-title" class="h h2">Get Hobbots</h2>
+      <p class="lede">
+        Version {RELEASE.version} beta, released {RELEASE.date} · <a href={RELEASE.notes}>What’s new and known limits</a>
+      </p>
+    </div>
+
+    <div class="only-phone card phone">
+      <p class="strong">You are on a phone</p>
+      <p class="lede">Hobbots installs on a Mac or Linux computer. Send yourself the link and download it there.</p>
+      <button type="button" class="btn" data-share>Send the link to my computer</button>
+    </div>
+
+    <div class="cols">
+      <div class="card main">
+        <fieldset class="seg">
+          <legend class="sr">Your computer</legend>
+          <button type="button" aria-pressed="true" data-os="mac">Mac</button>
+          <button type="button" aria-pressed="false" data-os="linux">Linux · experimental</button>
+        </fieldset>
+
+        <div class="panel" data-os-panel="mac">
+          <div class="links">
+            <a class="btn" href={DOWNLOADS.macArm}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                {ARROW.map((d) => <path d={d} />)}
+              </svg>
+              Mac with Apple silicon
+            </a>
+            <a class="btn2" href={DOWNLOADS.macIntel}>Mac with Intel</a>
+            <span class="hint">Not sure? Apple menu › About This Mac</span>
+          </div>
+          <div class="split">
+            <div class="part">
+              <h3 class="h">You need</h3>
+              <ul class="ticks">
+                <li>macOS 13 Ventura or later</li>
+                <li>A Claude or ChatGPT plan, signed in on this Mac. The first run checks it and tells you what is missing.</li>
+              </ul>
+            </div>
+            <div class="part">
+              <h3 class="h">The first time you open it</h3>
+              <ol class="steps">
+                <li>Drag Hobbots onto Applications and open it.</li>
+                <li>macOS blocks it because it is not signed by Apple yet. Choose Done.</li>
+                <li>In System Settings › Privacy &amp; Security, choose Open Anyway.</li>
+                <li>Confirm, then choose Open. Later launches open normally.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" data-os-panel="linux" hidden>
+          <div class="warn cut" role="note">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+              ><path d="M12 3 2 21h20z"></path><path d="M12 10v5"></path><path d="M12 18h.01"></path></svg
+            >
+            <div>
+              <p class="strong">Experimental. Not fully tested yet.</p>
+              <p class="lede">
+                The Linux build is brand new. Expect rough edges, back up what matters, and <a href={REPORT}
+                  >tell us what breaks</a
+                >.
+              </p>
+            </div>
+          </div>
+          <div class="links">
+            <a class="btn" href={DOWNLOADS.debX64}>.deb for Ubuntu and Debian</a>
+            <a class="btn2" href={DOWNLOADS.rpmX64}>.rpm for Fedora</a>
+          </div>
+          <p class="hint">
+            For x64. On arm64: <a href={DOWNLOADS.debArm}>.deb</a> or <a href={DOWNLOADS.rpmArm}>.rpm</a>.
+          </p>
+          <div class="split">
+            <div class="part">
+              <h3 class="h">You need</h3>
+              <ul class="ticks">
+                <li>Ubuntu 24.04 or later, Debian, or Fedora</li>
+                <li>
+                  A Claude or ChatGPT plan, signed in on this computer. The first run checks it and tells you what is
+                  missing.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card later">
+        <h3 class="h">Coming later</h3>
+        <ul class="soon">
+          <li><span>Windows</span><span class="tag">Later</span></li>
+          <li><span>iPhone and Android</span><span class="tag">Later</span></li>
+        </ul>
+        <WaitlistForm />
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 36px;
+  }
+  .strong {
+    margin: 0;
+    color: var(--color-text);
+    font-weight: 700;
+  }
+  .phone {
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px;
+    border: 2px solid var(--color-moonlight);
+  }
+  .phone .lede {
+    font-size: 15px;
+  }
+  .cols {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 24px;
+  }
+  .main {
+    display: flex;
+    flex: 999 1 520px;
+    flex-direction: column;
+    gap: 24px;
+    min-width: 0;
+    padding: clamp(20px, 3vw, 36px);
+    border: 2px solid var(--color-line-2);
+  }
+  .seg {
+    margin: 0;
+    display: inline-flex;
+    align-self: flex-start;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 3px;
+    border: 2px solid var(--color-line-2);
+    background: var(--color-deep);
+  }
+  .seg button {
+    min-height: 44px;
+    padding: 6px 14px;
+    border: 0;
+    background: transparent;
+    color: var(--color-secondary-text);
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .seg button[aria-pressed="true"] {
+    background: var(--color-card);
+    color: var(--color-text);
+  }
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .panel[hidden] {
+    display: none;
+  }
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+  .hint {
+    margin: 0;
+    color: var(--color-label);
+    font-size: 14px;
+  }
+  .split {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 24px;
+    padding-top: 24px;
+    border-top: 2px solid var(--color-line);
+  }
+  .part {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 15px;
+  }
+  h3 {
+    font-size: 18px;
+  }
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding-left: 22px;
+    color: var(--color-secondary-text);
+  }
+  .warn {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 2px solid var(--color-lantern);
+    background: rgb(242 165 65 / 0.08);
+    color: var(--color-lantern);
+  }
+  .warn svg {
+    flex: none;
+  }
+  .warn .lede {
+    font-size: 15px;
+  }
+  .later {
+    display: flex;
+    flex: 1 1 320px;
+    flex-direction: column;
+    gap: 18px;
+    padding: clamp(20px, 3vw, 32px);
+  }
+  .later h3 {
+    font-size: 20px;
+  }
+  .soon {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 15px;
+  }
+  .soon li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--color-text);
+    font-weight: 700;
+  }
+  @media (max-width: 640px) {
+    .links .btn,
+    .links .btn2 {
+      width: 100%;
+    }
+  }
+</style>

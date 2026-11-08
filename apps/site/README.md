@@ -26,9 +26,11 @@ Locally, the Turnstile widget uses Cloudflare's test site key and the server use
 
 ## The page
 
-`src/pages/index.astro` is the coming soon page from board 1 of the [design canvas](https://claude.ai/artifact/3WYsG82CcZps5toC8sEu6L), built from one component per section in `src/components`. The hobs, the chief and the moon come from [`@hobbots/art`](../../packages/art/README.md), the same drawings the app uses. The page's words and lists are in `src/data/copy.ts`, and the village layout and pixel icons in `src/data/scene.ts`.
+`src/pages/index.astro` is the launch page from boards 4 (1440 px) and 5 (390 px) of the [design canvas](https://claude.ai/artifact/3WYsG82CcZps5toC8sEu6L), built from one component per section in `src/components`. It wears the app's Workshop Night theme only. The hobs, the chief and the moon come from [`@hobbots/art`](../../packages/art/README.md), the same drawings the app uses. The page's words, lists and download links are in `src/data/copy.ts`, and the night scenes in `src/data/scene.ts`. The download links name the release in `RELEASE`; change it with each release, with the version and date in `public/llms.txt` and the `lastmod` in `public/sitemap.xml`.
 
-Only the interactive parts run script, all from `src/scripts/page.ts`: clicking the hobs, the sound switch, rolling a hob, the approval demo, the hob that follows you down the page and the wait-list forms. Every animation is stepped and stops with Reduce motion.
+The screenshots in `src/assets/screens` are the web client running the fake runtime with seeded data (`HOBBOTS_FAKE_QUEST=black-friday`, `HOBBOTS_FAKE_MEMORY=seeded`), taken at 1280 × 800 at twice the pixel density and saved as WebP, with a 1280 px copy (`-1280.webp`) for phones. `src/components/Screen.astro` imports them, so the build gives each a hashed name that is cached for a year ([Caching](RUNBOOK.md#caching)).
+
+Only the interactive parts run script, all from `src/scripts/page.ts`: the hero's Quest, the tour, the theme picker, the video dialog, the hob roller, the Mac and Linux tabs, sharing the link from a phone, the phone menu and the wait-list form. The pixel effects move in steps, and every animation stops with Reduce motion, the tour's autoplay included. The night-to-sunrise sky, the screenshots that lift in and Aldric's stroll along the bottom follow the scroll with CSS scroll-driven animations, so browsers without them show a still page.
 
 ## Checks
 
@@ -36,22 +38,25 @@ Only the interactive parts run script, all from `src/scripts/page.ts`: clicking 
 
 ## Share card and search
 
-`src/components/Meta.astro` writes the page's title, description, canonical URL (always `https://hobbots.app/`), Open Graph and X card tags, and icon links; the words are `SHARE` in `src/data/copy.ts`. The card image, `public/og.png`, is the teaser poster cropped to 1280 × 672 and scaled to 1200 × 630: `magick public/teaser/poster.webp -crop 1280x672+0+0 +repage -filter Lanczos -resize 1200x630! -strip public/og.png`. Card checkers such as opengraph.xyz and X read `https://hobbots.app`, so check the card once production is live. `public/robots.txt` and `public/sitemap.xml` point crawlers at the one page.
+`src/components/Meta.astro` writes the page's title, description, canonical URL (always `https://hobbots.app/`), Open Graph and X card tags, and icon links; the words are `SHARE` in `src/data/copy.ts`. The card image, `public/og.png`, is the video poster scaled to 1200 × 675 and cropped to 1200 × 630: `magick src/assets/video/poster.webp -filter Lanczos -resize 1200x675 -crop 1200x630+0+22 +repage -strip public/og.png`. Card checkers such as opengraph.xyz and X read `https://hobbots.app`, so check the card once production is live. `public/robots.txt` and `public/sitemap.xml` point crawlers at the one page. The page also carries JSON-LD for the app (`SoftwareApplication`) and the questions (`FAQPage`), built from `copy.ts`, and `public/llms.txt` sums Hobbots up in plain Markdown for language models.
 
 Only a build with `CLOUDFLARE_ENV=production` may be indexed. Every other build (local, staging, pull request previews) adds `<meta name="robots" content="noindex, nofollow">`, so never build a preview with `CLOUDFLARE_ENV=production`. A production build served from its `workers.dev` or version preview URL is not noindex; its canonical URL still points at hobbots.app.
 
 The favicons in `public/` (`favicon.svg`, `favicon.ico` and the 180 px `apple-touch-icon.png`) are drawn from the app icon's grid in `apps/desktop/scripts/app-icon.ts`. Run `pnpm --filter @hobbots/site icons` after changing the art.
 
-## Teaser video
+## Video
 
-The teaser is not in this repository. It is served from the public R2 bucket `hobbots-media` at `https://media.hobbots.app` (`TEASER_URL` in `src/data/copy.ts`); only its poster, `public/teaser/poster.webp`, is here. To publish a new cut, compress it to an H.264 MP4 with `-movflags +faststart` and upload it from a machine logged in to Cloudflare:
+The presentation video is not in this repository. It is served from the public R2 bucket `hobbots-media` at `https://media.hobbots.app` (`VIDEO` in `src/data/copy.ts`) and opens in a dialog, loading only when it is opened; its poster, `src/assets/video/poster.webp`, is here. Its captions are part of the picture. To publish a new cut, give it a new name (`hobbots-at-work-2.mp4`, then `-3`), never the old one, compress it to an H.264 MP4 with `-movflags +faststart` and upload it from a machine logged in to Cloudflare:
 
 ```sh
 wrangler r2 bucket create hobbots-media   # once
-wrangler r2 object put hobbots-media/teaser/night-shift-60s.mp4 --file night-shift-60s.mp4 --content-type video/mp4 --remote
+wrangler r2 object put hobbots-media/video/hobbots-at-work-2.mp4 --file hobbots-at-work-2.mp4 --content-type video/mp4 \
+  --cache-control "public, max-age=31536000, immutable" --remote
 ```
 
 The bucket's custom domain, `media.hobbots.app`, is set once on Cloudflare under R2 › hobbots-media › Settings › Custom domains.
+
+Then point `VIDEO.url` in `src/data/copy.ts` at the new name and ship the site. Delete the old object once the new site is live.
 
 ## Environments
 

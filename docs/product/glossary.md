@@ -35,6 +35,10 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Charm site | What a grant for a Charm action names: the Charm, the operation, the folder and only the site fields the operation declares, such as a repository. Never free text such as a title or body. | [ADR 031](../decisions/031-charm-actions-and-registry.md), [ADR 015](../decisions/015-approval-lifetimes-and-grants.md) |
 | Built-in Charm | A Charm written as reviewed Hobbots code, such as GitHub. Used only where the hub must hold a rule a server cannot. | [ADR 031](../decisions/031-charm-actions-and-registry.md) |
 | MCP Charm | A Charm made from an MCP server you add, running outside the hub's process. Its tools are named `mcp_<server>_<tool>`. | [ADR 031](../decisions/031-charm-actions-and-registry.md) |
+| Hob directory | What every hob may see of the others: a public card per hob, the roster each turn carries, and `read_hob`. | [ADR 032](../decisions/032-hob-directory.md) |
+| Public card | A hob's name, role, good at, status, brain, connected Charms and who summoned it, as other hobs see them. Never its instructions, memory, threads or Tasks. | [ADR 032](../decisions/032-hob-directory.md) |
+| Good at | One line, up to 200 characters, that tells other hobs when to come to a hob. Prefilled from the chores or the starter role, editable, and never part of the hob's own prompt. | [ADR 032](../decisions/032-hob-directory.md), [Agent model](../architecture/agent-model.md) |
+| Roster | The short list of the other visible hobs in a turn's context block, sent again only when it changed. | [ADR 032](../decisions/032-hob-directory.md) |
 | Executor | An authorized execution environment with its platform, runtime versions and boundaries. | [Agent model](../architecture/agent-model.md) |
 | Hub | The one computer that runs the server, the database and every runtime connection. Hobs act only on the hub. | [ADR 010](../decisions/010-desktop-hub.md) |
 | Device / client | Another desktop app or browser connected to the hub, approved once and holding a revocable token. | [ADR 010](../decisions/010-desktop-hub.md), [Deployment](../architecture/deployment.md) |

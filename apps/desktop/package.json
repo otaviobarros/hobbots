@@ -2,7 +2,7 @@
   "name": "@hobbots/desktop",
   "version": "0.0.3",
   "description": "Hobbots desktop app",
-  "homepage": "https://hobbots.ai",
+  "homepage": "https://hobbots.app",
   "license": "Apache-2.0",
   "desktopName": "hobbots.desktop",
   "private": true,

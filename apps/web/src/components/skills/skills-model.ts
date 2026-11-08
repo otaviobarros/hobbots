@@ -57,8 +57,11 @@ export interface SkillsSearch {
   /** `skills` opens Export skills. */
   readonly export?: "skills" | undefined;
   readonly q?: string | undefined;
-  /** `changes` opens What changed; `review` To review, with `item` the proposal open there. */
-  readonly view?: "changes" | "review" | undefined;
+  /**
+   * `changes` opens What changed; `review` To review, with `item` the proposal open there; `updates`
+   * Updates, with `item` the skill whose update is open.
+   */
+  readonly view?: "changes" | "review" | "updates" | undefined;
   readonly item?: string | undefined;
 }
 
@@ -66,6 +69,7 @@ export type SkillsView =
   | { readonly _tag: "Overview" }
   | { readonly _tag: "Changes" }
   | { readonly _tag: "Review"; readonly item: string | null }
+  | { readonly _tag: "Updates"; readonly item: SkillId | null }
   | { readonly _tag: "Scope"; readonly scope: SkillScope }
   | { readonly _tag: "Add"; readonly from: ImportFrom }
   | { readonly _tag: "Export" }
@@ -95,7 +99,15 @@ const skillViewOf = (search: SkillsSearch, skillId: SkillId): SkillsView =>
         diff: (search.diff as SkillRevisionHash | undefined) ?? null,
       };
 
-/** The view an address names. A search wins, then the editor, a skill, Add, What changed, To review and a scope; anything else opens the overview. */
+/** What changed, To review or Updates, when the address names one. */
+const listViewOf = (search: SkillsSearch): SkillsView | null => {
+  if (search.view === "changes") return { _tag: "Changes" };
+  if (search.view === "review") return { _tag: "Review", item: search.item ?? null };
+  if (search.view === "updates") return { _tag: "Updates", item: (search.item as SkillId | undefined) ?? null };
+  return null;
+};
+
+/** The view an address names. A search wins, then the editor, a skill, Add, What changed, To review, Updates and a scope; anything else opens the overview. */
 export const skillsViewOf = (search: SkillsSearch): SkillsView => {
   const q = search.q?.trim() ?? "";
   if (q !== "") return { _tag: "Search", q };
@@ -103,8 +115,8 @@ export const skillsViewOf = (search: SkillsSearch): SkillsView => {
   if (search.skill !== undefined && search.skill !== "") return skillViewOf(search, search.skill as SkillId);
   if (search.add !== undefined) return { _tag: "Add", from: search.add };
   if (search.export === "skills") return { _tag: "Export" };
-  if (search.view === "changes") return { _tag: "Changes" };
-  if (search.view === "review") return { _tag: "Review", item: search.item ?? null };
+  const listed = listViewOf(search);
+  if (listed !== null) return listed;
   const scope = search.scope === undefined ? null : memoryScopeOfKey(search.scope);
   return scope === null ? { _tag: "Overview" } : { _tag: "Scope", scope };
 };
@@ -127,6 +139,8 @@ export const skillsSearchOf = (view: SkillsView): SkillsSearch => {
       return { view: "changes" };
     case "Review":
       return { view: "review", item: view.item ?? undefined };
+    case "Updates":
+      return { view: "updates", item: view.item ?? undefined };
     case "Scope":
       return { scope: memoryScopeKey(view.scope) };
     case "Add":

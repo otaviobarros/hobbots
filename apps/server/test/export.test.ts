@@ -258,7 +258,7 @@ const seed = Effect.gen(function* () {
       { id: ArtifactId.make("art-dump"), kind: "file", label: "Dump", value: "dump.bin" },
       { id: ArtifactId.make("art-gone"), kind: "file", label: "Old draft", value: "draft.md" },
       { id: ArtifactId.make("art-env"), kind: "file", label: "Settings", value: ".env" },
-      { id: ArtifactId.make("art-link"), kind: "link", label: "Store", value: "https://hobbots.ai" },
+      { id: ArtifactId.make("art-link"), kind: "link", label: "Store", value: "https://hobbots.app" },
     ],
     at: LATER,
     carried: carriedFrom(Option.getOrThrow(yield* tasks.readLedger(top)), () => true),

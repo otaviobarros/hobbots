@@ -1,11 +1,12 @@
 import { actions, isActionError, isInputError } from "astro:actions";
-import { EMAIL, emailProblem } from "./email.ts";
-import { getMine } from "./mine.ts";
-import { replay } from "./motion.ts";
-import { notes } from "./sound.ts";
+import { emailProblem } from "./email.ts";
 import { humanToken } from "./turnstile.ts";
 
-/** The two wait-list forms share one email. Each checks the address, then saves it with the wait-list action. */
+/**
+ * The wait-list for the apps that are not out yet, in the Download section. It checks the address, then saves it
+ * with the wait-list action. Everyone who joins here asked about the Windows and phone apps, and the stored source
+ * stays "hero", the page's main form, so the table keeps the values it was created with.
+ */
 
 const HUMAN_CHECK_FAILED = "We couldn't check that you're a person. Reload the page and try again.";
 
@@ -15,139 +16,86 @@ const saveProblem = (error: unknown) => {
   if (isActionError(error) && error.code === "TOO_MANY_REQUESTS")
     return "That's a lot of tries. Wait a minute, then try again.";
   if (isActionError(error) && error.code === "FORBIDDEN") return HUMAN_CHECK_FAILED;
-  return "Your spot wasn't saved. Try again in a moment.";
+  return "Your email wasn't saved. Try again in a moment.";
+};
+
+/** Saves the sign-up and returns what went wrong, or "" when it was saved. */
+const save = async (form: HTMLFormElement, email: string) => {
+  const container = form.querySelector<HTMLElement>("[data-turnstile]");
+  let turnstileToken: string;
+  try {
+    if (!container) throw new Error("The form has no Turnstile container");
+    turnstileToken = await humanToken(container);
+  } catch {
+    return HUMAN_CHECK_FAILED;
+  }
+  try {
+    const { error } = await actions.waitlist.join({
+      email,
+      wantsMorePlatforms: true,
+      source: "hero",
+      website: form.querySelector<HTMLInputElement>("[data-website]")?.value ?? "",
+      turnstileToken,
+    });
+    return error ? saveProblem(error) : "";
+  } catch (error) {
+    return saveProblem(error);
+  }
 };
 
 export const initWaitlist = () => {
-  const forms = [...document.querySelectorAll<HTMLFormElement>("[data-join-form]")];
-  const inputs = forms.flatMap((form) => [...form.querySelectorAll<HTMLInputElement>("[data-email]")]);
-  const joined = [...document.querySelectorAll<HTMLElement>("[data-joined]")];
+  const form = document.querySelector<HTMLFormElement>("[data-join-form]");
+  const input = form?.querySelector<HTMLInputElement>("[data-email]");
+  const error = form?.querySelector<HTMLElement>("[data-error]");
+  const submit = form?.querySelector<HTMLButtonElement>("[data-submit]");
+  const joined = document.querySelector<HTMLElement>("[data-joined]");
   const joinedBody = document.querySelector<HTMLElement>("[data-joined-body]");
-  const more = document.querySelector<HTMLInputElement>("[data-more]");
-  const sign = document.querySelector<HTMLElement>("[data-sign]");
-  const signPost = document.querySelector<HTMLElement>("[data-sign-post]");
-  const signText = document.querySelector<HTMLElement>("[data-sign-text]");
-  let focused = false;
+  if (!form || !input || !error || !joined) return;
   let failed = false;
+  let busy = false;
 
-  const showSign = () => {
-    if (!signText) return;
-    const email = inputs[0]?.value.trim() ?? "";
-    signText.textContent = failed
-      ? "Check that one!"
-      : EMAIL.test(email)
-        ? "Looks right!"
-        : focused
-          ? "Type away!"
-          : "Save my spot!";
-  };
-
-  const clearErrors = () => {
+  const clearError = () => {
     failed = false;
-    for (const error of document.querySelectorAll("[data-error]")) error.textContent = "";
-    for (const input of inputs) input.removeAttribute("aria-invalid");
+    error.textContent = "";
+    input.removeAttribute("aria-invalid");
   };
 
-  for (const input of inputs) {
-    input.addEventListener("input", () => {
-      for (const other of inputs) if (other !== input) other.value = input.value;
-      clearErrors();
-      showSign();
-    });
-    input.addEventListener("focus", () => {
-      focused = true;
-      showSign();
-    });
-    input.addEventListener("blur", () => {
-      focused = false;
-      showSign();
-    });
-  }
-
-  const join = (form: HTMLFormElement, email: string, wantsMorePlatforms: boolean) => {
-    for (const form of forms) form.hidden = true;
-    for (const element of joined) element.hidden = false;
-    if (sign) sign.hidden = true;
-    if (joinedBody) {
-      const also = wantsMorePlatforms ? ", and again when the Windows and phone apps are ready" : "";
-      joinedBody.textContent = `${getMine().name} will keep your spot. We'll write to ${email} when the lantern is lit${also}.`;
-    }
-    const sprite = document.querySelector(".joined-sprite");
-    if (sprite) replay(sprite, "fx-hop");
-    notes([523, 659, 784, 1047], 0.08);
-    // The focused button is gone, so focus moves to the confirmation beside the form used.
-    form.closest("[data-waitlist]")?.querySelector<HTMLElement>("[data-joined-focus]")?.focus();
-  };
-
-  const showError = (form: HTMLFormElement, message: string, invalid: boolean) => {
-    const input = form.querySelector<HTMLInputElement>("[data-email]");
-    const error = form.querySelector("[data-error]");
-    if (error) {
-      // Clearing first makes a repeated message announce again.
-      error.textContent = "";
-      window.setTimeout(() => {
-        if (failed) error.textContent = message;
-      }, 50);
-    }
-    if (invalid) input?.setAttribute("aria-invalid", "true");
+  const showError = (message: string, invalid: boolean) => {
+    // Clearing first makes a repeated message announce again.
+    error.textContent = "";
+    window.setTimeout(() => {
+      if (failed) error.textContent = message;
+    }, 50);
+    if (invalid) input.setAttribute("aria-invalid", "true");
     failed = true;
-    showSign();
-    if (signPost) replay(signPost, "fx-shake");
-    input?.focus();
+    input.focus();
   };
 
-  /** Saves the sign-up and returns what went wrong, or "" when it was saved. */
-  const save = async (form: HTMLFormElement, email: string, wantsMorePlatforms: boolean) => {
-    const container = form.querySelector<HTMLElement>("[data-turnstile]");
-    let turnstileToken: string;
-    try {
-      if (!container) throw new Error("The form has no Turnstile container");
-      turnstileToken = await humanToken(container);
-    } catch {
-      return HUMAN_CHECK_FAILED;
-    }
-    try {
-      const { error } = await actions.waitlist.join({
-        email,
-        wantsMorePlatforms,
-        source: form.dataset.source === "roll" ? "roll" : "hero",
-        website: form.querySelector<HTMLInputElement>("[data-website]")?.value ?? "",
-        turnstileToken,
-      });
-      return error ? saveProblem(error) : "";
-    } catch (error) {
-      return saveProblem(error);
-    }
-  };
+  input.addEventListener("input", clearError);
 
-  for (const form of forms) {
-    const submit = form.querySelector<HTMLButtonElement>("[data-submit]");
-    let busy = false;
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (busy) return;
-      const email = form.querySelector<HTMLInputElement>("[data-email]")?.value.trim() ?? "";
-      const message = emailProblem(email);
-      if (message) return showError(form, message, true);
-      clearErrors();
-      busy = true;
-      submit?.setAttribute("aria-disabled", "true");
-      // Read once: the box stays editable while the save is pending, and the message must match what was saved.
-      // One checkbox, in the hero form, serves both forms.
-      const wantsMorePlatforms = more?.checked ?? false;
-      const problem = await save(form, email, wantsMorePlatforms);
-      busy = false;
-      submit?.removeAttribute("aria-disabled");
-      if (problem) showError(form, problem, false);
-      else join(form, email.toLowerCase(), wantsMorePlatforms);
-    });
-  }
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (busy) return;
+    const email = input.value.trim();
+    const message = emailProblem(email);
+    if (message) return showError(message, true);
+    clearError();
+    busy = true;
+    submit?.setAttribute("aria-disabled", "true");
+    const problem = await save(form, email);
+    busy = false;
+    submit?.removeAttribute("aria-disabled");
+    if (problem) return showError(problem, false);
+    form.hidden = true;
+    joined.hidden = false;
+    if (joinedBody) joinedBody.textContent = `We'll write to ${email.toLowerCase()} once, when it is out.`;
+    // The focused button is gone, so focus moves to the confirmation.
+    joined.querySelector<HTMLElement>("[data-joined-focus]")?.focus();
+  });
 
   document.querySelector("[data-reset]")?.addEventListener("click", () => {
-    for (const form of forms) form.hidden = false;
-    for (const element of joined) element.hidden = true;
-    if (sign) sign.hidden = false;
-    showSign();
-    inputs[0]?.focus();
+    form.hidden = false;
+    joined.hidden = true;
+    input.focus();
   });
 };

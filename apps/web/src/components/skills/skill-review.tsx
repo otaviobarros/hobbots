@@ -1,7 +1,5 @@
 import type { SkillProposalView } from "@hobbots/api";
 import { skillProposalOpen } from "@hobbots/domain";
-import { Button } from "@hobbots/ui/components/button";
-import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -13,6 +11,7 @@ import { ProposalDecision, ProposalDiff } from "../skill-review/proposal-card.ts
 import { proposalFoot, proposalWhat } from "../skill-review/proposal-model.ts";
 import { messages } from "./messages.ts";
 import { type HobDirectory, skillsSearchOf } from "./skills-model.ts";
+import { PaneNotRead } from "./skills-views.tsx";
 
 const copy = messages.review;
 
@@ -106,21 +105,15 @@ export function SkillReview({ item, hobs, now }: { item: string | null; hobs: Ho
   const proposals = useQuery(skillProposalsQuery);
   // With none picked, the first that waits opens, and stays open once you decide it.
   const [first, setFirst] = useState<string | null>(null);
-  if (proposals.data === undefined) {
-    return proposals.isError ? (
-      <p role="alert" className="m-0 flex items-center gap-3 rounded-card bg-notice px-4 py-3 text-ui text-text">
-        <span className="flex-1">{copy.failed}</span>
-        <Button variant="outline" size="xs" onClick={() => void proposals.refetch()}>
-          {copy.retry}
-        </Button>
-      </p>
-    ) : (
-      <div aria-busy="true" className="flex flex-col gap-2">
-        <Skeleton width="40ch" />
-        <Skeleton width="60%" />
-      </div>
+  if (proposals.data === undefined)
+    return (
+      <PaneNotRead
+        failed={proposals.isError}
+        text={copy.failed}
+        retry={copy.retry}
+        onRetry={() => void proposals.refetch()}
+      />
     );
-  }
   const picked = item ?? first;
   const shown = shownOf(proposals.data, picked);
   const open = shown.find((view) => view.proposal.id === picked) ?? shown[0];

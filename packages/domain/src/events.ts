@@ -23,9 +23,11 @@ import {
   TaskWait,
 } from "./quest.ts";
 import { SkillFeedback, SkillProposal } from "./skill-proposals.ts";
+import { SkillUpdate } from "./skill-updates.ts";
 import {
   Skill,
   SkillAssignment,
+  SkillId,
   SkillOptOut,
   SkillRevision,
   SkillRevisionHash,
@@ -192,6 +194,23 @@ const SkillProposalRequested = Schema.TaggedStruct("SkillProposalRequested", { p
 const SkillProposalChanged = Schema.TaggedStruct("SkillProposalChanged", { proposal: SkillProposal });
 /** A hob noted that a skill is wrong, outdated or unclear. */
 const SkillFeedbackLeft = Schema.TaggedStruct("SkillFeedbackLeft", { feedback: SkillFeedback });
+/**
+ * A check found an upstream revision of a skill imported from Git (ADR 029, Updates from a source).
+ * It waits in Updates, with its review, until you accept it or say Not now.
+ */
+const SkillUpdateFound = Schema.TaggedStruct("SkillUpdateFound", { update: SkillUpdate });
+/** You said Not now to an update: it leaves Updates until the source changes again. */
+const SkillUpdateDismissed = Schema.TaggedStruct("SkillUpdateDismissed", { update: SkillUpdate });
+/**
+ * An update left Updates: it was accepted, by you or by Update automatically, or the source no longer
+ * holds it, or the library has its content already.
+ */
+const SkillUpdateCleared = Schema.TaggedStruct("SkillUpdateCleared", {
+  skillId: SkillId,
+  hash: SkillRevisionHash,
+});
+/** You turned Update automatically on or off for a skill from Git. */
+const SkillAutoUpdateChanged = Schema.TaggedStruct("SkillAutoUpdateChanged", { skillId: SkillId, on: Schema.Boolean });
 /** A hob used a skill in a turn (ADR 029, The use line): the revision the turn mounted, or an organization's skill. */
 const SkillUsed = Schema.TaggedStruct("SkillUsed", { use: SkillUse });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
@@ -292,6 +311,10 @@ export const JournaledEvent = Schema.Union([
   SkillProposalChanged,
   SkillFeedbackLeft,
   SkillUsed,
+  SkillUpdateFound,
+  SkillUpdateDismissed,
+  SkillUpdateCleared,
+  SkillAutoUpdateChanged,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -339,7 +362,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   QuestionEscalated: 1,
   QuestionWithdrawn: 1,
   // 2: a hub question carries an `ask` and its choices' keys, not text and labels (#1045); migration
-  // 0077 rewrote the stored entries.
+  // 0078 rewrote the stored entries.
   HubQuestionRaised: 2,
   HubQuestionAnswered: 2,
   HubQuestionWithdrawn: 2,
@@ -375,6 +398,10 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   SkillProposalChanged: 1,
   SkillFeedbackLeft: 1,
   SkillUsed: 1,
+  SkillUpdateFound: 1,
+  SkillUpdateDismissed: 1,
+  SkillUpdateCleared: 1,
+  SkillAutoUpdateChanged: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

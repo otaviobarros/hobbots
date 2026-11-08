@@ -114,7 +114,7 @@ describe.each(RUNTIMES)("a Task that returns a file, on %s", (runtime) => {
           summary: "The explainer, as text",
           artifacts: [
             { kind: "text", label: "Explainer", value: "<!doctype html>" },
-            { kind: "link", label: "ADR 029", value: "https://hobbots.ai/docs/skills" },
+            { kind: "link", label: "ADR 029", value: "https://hobbots.app/docs/skills" },
           ],
         }),
       ]),

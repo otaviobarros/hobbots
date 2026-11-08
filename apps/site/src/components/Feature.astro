@@ -1,0 +1,118 @@
+---
+import type { Feature } from "../data/copy.ts";
+import Screen from "./Screen.astro";
+
+interface Props {
+  feature: Feature;
+  /** Puts the screenshots before the words on wide screens. */
+  flip?: boolean;
+  tint?: boolean;
+}
+
+const { feature, flip, tint } = Astro.props;
+---
+
+<section id={feature.id} class:list={["section", { tint }]} aria-labelledby={`${feature.id}-title`}>
+  <div class="wrap body">
+    <div class:list={["row", { flip }]}>
+      <div class="intro words">
+        <p class="lbl">{feature.label}</p>
+        <h2 id={`${feature.id}-title`} class="h h2">{feature.title}</h2>
+        <p class="lede">{feature.lede}</p>
+      </div>
+      <div class="stack">
+        <Screen shot={feature.back} class="shot back" sizes="(max-width: 760px) 100vw, 640px" />
+        <Screen shot={feature.front} class="shot front" sizes="(max-width: 760px) 72vw, 420px" />
+      </div>
+    </div>
+    <div class="grid3">
+      {
+        feature.points.map((point) => (
+          <div class="card point">
+            <p class="lbl mint">{point.title}</p>
+            <p>{point.body}</p>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 48px;
+  }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 48px;
+  }
+  .row.flip {
+    flex-direction: row-reverse;
+  }
+  .words {
+    flex: 1 1 340px;
+    max-width: 460px;
+  }
+  .stack {
+    position: relative;
+    flex: 999 1 560px;
+    min-width: 0;
+    padding-bottom: 12%;
+  }
+  :global(.stack .back) {
+    width: 88%;
+  }
+  :global(.stack .front) {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 58%;
+  }
+  /* The front screenshot lifts into place as it scrolls in, where the browser can drive that from the scroll. */
+  @supports (animation-timeline: view()) {
+    :global(.stack .front) {
+      animation: lift linear both;
+      animation-timeline: view();
+      animation-range: entry 10% cover 45%;
+    }
+  }
+  .point {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 24px;
+  }
+  .point p {
+    margin: 0;
+    font-size: 16px;
+  }
+  .mint {
+    color: var(--color-mint);
+  }
+  @media (max-width: 640px) {
+    .stack {
+      padding-bottom: 22%;
+    }
+    :global(.stack .back) {
+      width: 100%;
+    }
+    :global(.stack .front) {
+      --lift-x: 0px;
+      width: 72%;
+    }
+  }
+  @keyframes lift {
+    from {
+      transform: translate(var(--lift-x, 40px), 80px);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+</style>

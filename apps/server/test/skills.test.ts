@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -419,5 +420,64 @@ describe("skills routes", () => {
       ]),
     );
     expect(save.moved).toHaveLength(2);
+  });
+
+  // covers ADR 029 (Updates from a source), #1097
+  it("[TC-AG-1097-05] shows an upstream change in Updates, accepts it as a new revision, and turns Update automatically on", async () => {
+    const root = await folderWith({ "SKILL.md": skillMd("release") });
+    const git = (...args: Array<string>) =>
+      execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
+        encoding: "utf8",
+      }).trim();
+    git("init", "--quiet", "--initial-branch=main");
+    git("add", "--all");
+    git("commit", "--quiet", "--message", "skills");
+    const source = { _tag: "Git", url: `file://${root}`, ref: "main" };
+    const imported = await request("POST", "/api/skills", { source });
+    const [{ skill, revision }] = imported.body.imported;
+    await request("POST", `/api/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" } });
+
+    const before = await request("GET", "/api/skill-updates");
+    expect(before.body).toEqual({ updates: [], automatic: [], checkedAt: null, problems: [] });
+
+    await writeFile(join(root, "SKILL.md"), skillMd("release", "Use when releasing."));
+    git("commit", "--quiet", "--all", "--message", "describe it");
+    const checked = await request("POST", "/api/skill-updates/check");
+    expect(checked.status).toBe(200);
+    expect(checked.body.checkedAt).not.toBeNull();
+    const [update] = checked.body.updates;
+    expect(update).toMatchObject({ skillId: skill.id, base: revision.hash, state: "waiting", flags: [] });
+    expect(update.instructions[0].after).toContain("Use when releasing.");
+    // Nothing moved yet.
+    expect((await request("GET", `/api/skills/${skill.id}`)).body.skill.revisions).toBe(1);
+
+    const accepted = await request("POST", `/api/skill-updates/${skill.id}/accept`, {
+      hash: update.hash,
+      base: update.base,
+    });
+    expect(accepted.status).toBe(200);
+    expect(accepted.body.revision).toMatchObject({ number: 2, hash: update.hash });
+    expect(accepted.body.rolledOut).toHaveLength(1);
+    expect((await request("GET", "/api/skill-updates")).body.updates).toEqual([]);
+    // Accepting it again finds nothing to accept.
+    expect(
+      (await request("POST", `/api/skill-updates/${skill.id}/accept`, { hash: update.hash, base: update.base })).status,
+    ).toBe(404);
+
+    const on = await request("PUT", `/api/skill-updates/${skill.id}/automatic`, { on: true });
+    expect(on.body.automatic).toEqual([skill.id]);
+    // A skill not from Git cannot follow its source.
+    const folder = await folderWith({ "SKILL.md": skillMd("notes") });
+    const local = (await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } })).body.imported[0];
+    expect((await request("PUT", `/api/skill-updates/${local.skill.id}/automatic`, { on: true })).status).toBe(404);
+
+    await writeFile(join(root, "SKILL.md"), skillMd("release", "Use when releasing the site."));
+    git("commit", "--quiet", "--all", "--message", "say which site");
+    const auto = await request("POST", "/api/skill-updates/check");
+    expect(auto.body.updated).toEqual([skill.id]);
+    const detail = await request("GET", `/api/skills/${skill.id}`);
+    expect(detail.body.revisions[0]).toMatchObject({ number: 3, addedBy: { _tag: "Source" } });
+    const { body } = await request("GET", "/api/skills/changes");
+    expect(body.changes[0]).toMatchObject({ kind: "saved", skillId: skill.id, number: 3, by: { _tag: "Source" } });
   });
 });

@@ -38,6 +38,7 @@ export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./skill-proposals.ts";
 export * from "./skill-tools.ts";
+export * from "./skill-updates.ts";
 export * from "./skills.ts";
 export * from "./steering.ts";
 export * from "./task.ts";
