@@ -16,6 +16,7 @@ import {
   type MemoryStoreShape,
   type PromptRequest,
   QuestionService,
+  RosterReceipts,
   RuntimeAdapter,
   type RuntimeAdapterShape,
   type RuntimeEvent,
@@ -56,6 +57,7 @@ import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/wor
 import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { DispatcherHostLive } from "../src/backpack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
+import { DirectoryToolsLive } from "../src/directory.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 
@@ -158,6 +160,8 @@ export const partyHub = (
     readonly files?: boolean;
     /** The safety preset every hob works under: Balanced unless said. */
     readonly preset?: SafetyPreset;
+    /** Whether every turn sees the other hobs and is offered `read_hob` (ADR 032). */
+    readonly directory?: boolean;
   } = {},
 ) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -253,6 +257,9 @@ export const partyHub = (
             Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(temp, "activity")))),
           )
         : Layer.empty,
+    ),
+    Layer.provideMerge(
+      options.directory === true ? Layer.mergeAll(DirectoryToolsLive, RosterReceipts.layer) : Layer.empty,
     ),
     Layer.provideMerge(party),
     Layer.provideMerge(

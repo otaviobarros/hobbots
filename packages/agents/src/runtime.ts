@@ -480,6 +480,12 @@ export interface RuntimeAdapterShape {
    * the runtime cannot report them, which the Usage screen says.
    */
   readonly planUsage?: Effect.Effect<PlanUsage>;
+  /**
+   * Whether a resumed session keeps the hub tools it started with, whatever a later turn offers, as
+   * a Codex thread does (ADR 024). The hub then tells a resumed session only of the hub tools it
+   * holds, such as `read_hob` in the roster (ADR 032). Absent, a session is offered each turn's own.
+   */
+  readonly resumeKeepsHubTools?: boolean;
   /** Runs one turn. Interrupting the stream cancels the turn. */
   readonly sendPrompt: (request: PromptRequest) => Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached>;
 }

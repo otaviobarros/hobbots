@@ -31,6 +31,17 @@ export const TaskBriefMark = Schema.Struct({
 export type TaskBriefMark = typeof TaskBriefMark.Type;
 
 /**
+ * What a session holds of the roster of other hobs (ADR 032): the fingerprint of the roster it last
+ * received, null when that is not known, and whether it holds `read_hob`. A runtime that keeps a
+ * resumed session's first hub tools, as Codex does, holds it only when the session started with it.
+ */
+export const RosterMark = Schema.Struct({
+  digest: Schema.NullOr(Schema.String),
+  readHob: Schema.Boolean,
+});
+export type RosterMark = typeof RosterMark.Type;
+
+/**
  * A thread's binding to one runtime's session (ADR 017). A thread keeps one per runtime it has
  * used, so switching back resumes that runtime's own session.
  */
@@ -50,6 +61,11 @@ export const RuntimeSession = Schema.Struct({
    * null when it is not known, and the next turn sends the whole briefing.
    */
   taskBrief: Schema.optionalKey(Schema.NullOr(TaskBriefMark)),
+  /**
+   * What the session holds of the roster of other hobs (ADR 032). Absent or null when it is not
+   * known: the next turn sends the roster, and mentions `read_hob` only where the session holds it.
+   */
+  roster: Schema.optionalKey(Schema.NullOr(RosterMark)),
 });
 export type RuntimeSession = typeof RuntimeSession.Type;
 

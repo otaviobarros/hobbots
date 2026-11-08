@@ -1,17 +1,22 @@
 import {
   type ActivityRecorder,
+  contextBlock,
   deliveredMemoryBrief,
+  deliveredRoster,
   type HubOffer,
   nextSteps,
   type Redactor,
   type RuntimeEvent,
   recordMemoryBrief,
+  recordRoster,
   redactEvent,
   type runtimeAdapters,
   sessionMemoryBrief,
+  sessionRoster,
   skillMounter,
   skillUseRecorder,
   startedMemoryBrief,
+  startedRoster,
   type TaskRepository,
   type ToolAccess,
   type ToolStartedEvent,
@@ -28,6 +33,7 @@ import {
   previewToolOutput,
   type ReplyStep,
   type ReplyUsage,
+  type RosterMark,
   RUNTIME_NAMES,
   stripEscapes,
   systemInstructions,
@@ -124,6 +130,14 @@ export const runSessionTurn = (
     // The hob's memory brief (ADR 028), as a chat session gets it: when the session is new, or did not
     // last receive this brief.
     const memory = yield* sessionMemoryBrief(turn.agent.id, turn.access?.folders ?? [], turn.sessionId);
+    // The other hobs on the hub (ADR 032), as a chat session gets them.
+    const roster = yield* sessionRoster({
+      agentId: turn.agent.id,
+      access: turn.access,
+      redactor,
+      sessionId: turn.sessionId,
+      keepsTools: adapter.resumeKeepsHubTools === true,
+    });
     // The hob's skills (ADR 029), resolved as the turn starts, as a chat's are.
     const mounter = yield* skillMounter;
     const given = yield* mounter.resolve({
@@ -154,17 +168,25 @@ export const runSessionTurn = (
         ? Effect.void
         : Effect.flatMap(DateTime.now, (now) => turn.turns.endTurn(counted, usage, DateTime.formatIso(now))),
     );
+    // What the session holds of the roster once the runtime started it, until the prompt is answered.
+    let rosterMark: RosterMark | null = null;
     const confirmBrief = Effect.suspend(() => {
       const digest = memory === null ? null : deliveredMemoryBrief(memory);
-      if (delivered || digest === null || session === null) return Effect.void;
+      const rostered = roster?.sent === true && rosterMark !== null;
+      if (delivered || (digest === null && !rostered) || session === null) return Effect.void;
       delivered = true;
-      return recordMemoryBrief(session, digest);
+      return Effect.andThen(
+        digest === null ? Effect.void : recordMemoryBrief(session, digest),
+        roster === null || rosterMark === null || !rostered
+          ? Effect.void
+          : recordRoster(session, deliveredRoster(roster, rosterMark)),
+      );
     });
     yield* activity
       .run(
         {
           prompt: turn.prompt,
-          briefing: memory?.text ?? null,
+          briefing: contextBlock([memory, roster]),
           sessionId: turn.sessionId,
           instructions: systemInstructions(turn.config.name, turn.config),
           instructionsChanged: false,
@@ -200,6 +222,13 @@ export const runSessionTurn = (
                     memory === null
                       ? Effect.void
                       : recordMemoryBrief(event.sessionId, startedMemoryBrief(memory, expected, event.sessionId)),
+                  ),
+                  Effect.andThen(
+                    Effect.suspend(() => {
+                      if (roster === null) return Effect.void;
+                      rosterMark = startedRoster(roster, expected, event.sessionId);
+                      return recordRoster(event.sessionId, rosterMark);
+                    }),
                   ),
                 ),
             );

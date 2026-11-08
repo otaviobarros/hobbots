@@ -44,10 +44,11 @@ import {
 import { Context, DateTime, Deferred, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
-import { buildBriefing } from "./briefing.ts";
+import { buildBriefing, contextBlock } from "./briefing.ts";
 import { type CharmTurn, hubToolOffer, joinHubTools } from "./charms.ts";
 import { stoppableWait } from "./command-wait.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
+import { deliveredRoster, rosterAtStart, sameRoster, turnRoster } from "./hob-directory.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
 import { MemoryProjects, MemoryStore } from "./memory.ts";
 import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief, turnMemoryBrief } from "./memory-brief.ts";
@@ -56,6 +57,7 @@ import { HobbotsRepository } from "./repository.ts";
 import {
   type CallSteering,
   type HubTools,
+  type RuntimeAdapterShape,
   type RuntimeEvent,
   runtimeAdapters,
   type ToolAccess,
@@ -355,6 +357,21 @@ export class ChatService extends Context.Service<
         Option.isNone(memoryStore)
           ? Effect.succeed<TurnMemoryBrief | null>(null)
           : turnMemoryBrief(memoryStore.value, memoryProjects, agent.id, tools?.folders ?? [], session?.memoryBrief);
+      // The other hobs on the hub (ADR 032), sent when the session is new or last received a different roster.
+      const rosterFor = (
+        agent: Agent,
+        tools: ToolAccess | null,
+        session: RuntimeSession | undefined,
+        adapter: RuntimeAdapterShape,
+      ) =>
+        turnRoster({
+          agentId: agent.id,
+          access: tools,
+          redactor,
+          received: session?.roster,
+          resumed: session !== undefined,
+          keepsTools: adapter.resumeKeepsHubTools === true,
+        });
       // Without a skills library, turns have no skills (ADR 029).
       const skillMounts = yield* skillMounter;
       // The skills recorded with a message of yours when it was accepted (ADR 029), so a queued message
@@ -668,15 +685,26 @@ export class ChatService extends Context.Service<
             // one that was told the rest; a new session in its place is told it all next turn.
             const resumedTold = toldBefore?.taskBrief == null || toldBefore.sessionId === turnSession;
             const told = compacted || !resumedTold ? null : (onTask?.told ?? null);
-            if (briefDelivered || (digest === null && told === null) || turnSession === null) return Effect.void;
+            const rostered = roster?.sent === true;
+            if (briefDelivered || (digest === null && told === null && !rostered) || turnSession === null)
+              return Effect.void;
             briefDelivered = true;
             return changeSession(turnSession, (known) => {
               const next = {
                 ...known,
                 ...(digest === null ? {} : { memoryBrief: digest }),
                 ...(told === null ? {} : { taskBrief: told }),
+                ...(roster === null || !rostered
+                  ? {}
+                  : {
+                      roster: deliveredRoster(roster, known.roster ?? { digest: null, readHob: roster.offersReadHob }),
+                    }),
               };
-              return next.memoryBrief === known.memoryBrief && next.taskBrief === known.taskBrief ? null : next;
+              return next.memoryBrief === known.memoryBrief &&
+                next.taskBrief === known.taskBrief &&
+                sameRoster(next.roster, known.roster)
+                ? null
+                : next;
             });
           });
           // A compacted session keeps a summary of what it was told, not the briefing itself (#1027).
@@ -711,17 +739,20 @@ export class ChatService extends Context.Service<
                       memory === null ? known?.memoryBrief : startedMemoryBrief(memory, expected, event.sessionId);
                     // What it was told of its Task holds only for the session that was told it (#1027).
                     const taskBrief = known?.sessionId === event.sessionId ? known.taskBrief : undefined;
+                    const rosterMark = rosterAtStart(roster, known, expected, event.sessionId);
                     const session: RuntimeSession = {
                       runtime: brain.runtime,
                       sessionId: event.sessionId,
                       seenThrough,
                       ...(memoryBrief === undefined ? {} : { memoryBrief }),
                       ...(taskBrief === undefined ? {} : { taskBrief }),
+                      ...(rosterMark === undefined ? {} : { roster: rosterMark }),
                     };
                     if (
                       known?.sessionId === session.sessionId &&
                       known.seenThrough === seenThrough &&
-                      known.memoryBrief === session.memoryBrief
+                      known.memoryBrief === session.memoryBrief &&
+                      sameRoster(known.roster, session.roster)
                     )
                       return null;
                     const sessions =
@@ -859,6 +890,7 @@ export class ChatService extends Context.Service<
           const tools = yield* grant(thread.id, agent);
           const expected = thread.sessions.find((s) => s.runtime === brain.runtime);
           const memory = yield* memoryBriefFor(agent, tools, expected);
+          const roster = yield* rosterFor(agent, tools, expected, adapter);
           const skills = yield* skillsFor(agent, config, tools, yours);
           yield* update(withSkills(skills.recorded));
           skillUses.given(skills.recorded);
@@ -871,10 +903,7 @@ export class ChatService extends Context.Service<
             .run(
               {
                 prompt: runtimePrompt(prompt, asked, skills.recorded),
-                briefing:
-                  [memory?.text ?? null, briefing, taskTurn?.briefing ?? null]
-                    .filter((part) => part !== null)
-                    .join("\n\n") || null,
+                briefing: contextBlock([memory, roster], briefing, taskTurn?.briefing ?? null),
                 sessionId: expected?.sessionId ?? null,
                 instructions: systemInstructions(config.name, config),
                 instructionsChanged: changed,

@@ -652,6 +652,7 @@ export const messages = {
       "request-skill": "Gives it a skill from your library. You can undo it.",
       "propose-skill": "Drafts a skill. Nothing changes until you add it.",
       "skill-feedback": "Leaves a note on a skill. Nothing changes.",
+      "read-hobs": "Reads only. Nothing changes.",
     },
   },
   charms: {
@@ -1049,6 +1050,7 @@ export const messages = {
       files: "Files",
       memory: "Memory",
       skills: "Skills",
+      hobs: "Other hobs",
       commands: "Commands",
       internet: "Internet",
       outside: "Outside its folders",

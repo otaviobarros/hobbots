@@ -23,6 +23,7 @@ import {
   type MemoryStore,
   PermissionSummary,
   RecoveryLog,
+  RosterReceipts,
   SecretRedaction,
   SkillReviewsLive,
   TaskFiles,
@@ -112,6 +113,7 @@ import { ServerConfig } from "./config.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "./continuations.ts";
 import { SaveDestinationsLive } from "./destination.ts";
 import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from "./devices.ts";
+import { DirectoryToolsLive } from "./directory.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { ExportFoldersLive } from "./exports.ts";
@@ -545,6 +547,9 @@ const ServerLive = Layer.unwrap(
       )
       // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
       .pipe(Layer.provideMerge(HubQuestions.layer))
+      // The other hobs every turn sees, and `read_hob` (ADR 032), before the chat service and the
+      // sessions of Tasks, whose turns offer them; after the Charms, which each hob's card names.
+      .pipe(Layer.provideMerge(DirectoryToolsLive))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
         Layer.provideMerge(Layer.mergeAll(HubCharms, LocalGit, MemoryTooling, SkillTooling, CharmCallService.layer)),
@@ -578,6 +583,8 @@ const ServerLive = Layer.unwrap(
             // projects of its folders, and what each session was briefed from it (ADR 028).
             MemoryProjectsLive,
             MemoryBriefReceipts.layer,
+            // What each session outside a chat holds of the roster of other hobs (ADR 032).
+            RosterReceipts.layer,
             // The skills library's files, import, and ~/.agents/skills read by the hub (ADR 029).
             SkillsLive(dataDir, agentsSkillsFolder(config.agentsSkills, config.runtime)).pipe(
               Layer.provide(Layer.mergeAll(Persistence, EventBus.layer)),

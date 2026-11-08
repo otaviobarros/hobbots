@@ -7,6 +7,7 @@ import {
   MEMORY_SAVE_TOOL,
   MEMORY_SEARCH_TOOL,
   type MessageId,
+  READ_HOB_TOOL,
   SKILL_TOOL_DESCRIPTIONS,
   TASK_TOOLS,
   type ThreadId,
@@ -69,12 +70,13 @@ export interface HubToolOwner {
 
 /**
  * The hub's built-in tool sets beside the Charms (ADR 031), whose names no Charm may take: Local Git,
- * Memory, Skills and the Task tools.
+ * Memory, Skills, the Directory (ADR 032) and the Task tools.
  */
 export const BUILT_IN_HUB_TOOLS: ReadonlyArray<HubToolOwner> = [
   { owner: "Local Git", names: [GIT_INIT_TOOL] },
   { owner: "Memory", names: [MEMORY_SEARCH_TOOL, MEMORY_SAVE_TOOL] },
   { owner: "Skills", names: Object.keys(SKILL_TOOL_DESCRIPTIONS) },
+  { owner: "the Directory", names: [READ_HOB_TOOL] },
   { owner: "the Task tools", names: TASK_TOOLS.map((tool) => tool.name) },
 ];
 
@@ -363,6 +365,18 @@ export class LocalGitTools extends Context.Service<
 >()("@hobbots/agents/LocalGitTools") {}
 
 /**
+ * The Directory set (ADR 032): `read_hob`, which reads one other hob's public card on the hub. The hub
+ * decides every call under the hob's Read other hobs answer. Absent, a turn offers none.
+ */
+export class DirectoryTools extends Context.Service<
+  DirectoryTools,
+  {
+    /** The tools the turn offers, read at its start: none (null) when its answer is Never. */
+    readonly forTurn: (turn: CharmTurn) => Effect.Effect<HubTools | null>;
+  }
+>()("@hobbots/agents/DirectoryTools") {}
+
+/**
  * A hub tool call's answer as the hob reads it: a refusal, with its reason, as a refused answer, and
  * every answer redacted, as everything a hob reads is.
  */
@@ -376,11 +390,11 @@ export const hubAnswer = <R>(
   );
 
 /**
- * The local Git, Charm, memory and skill tools a turn offers, read at its start under the access the turn
+ * The local Git, Charm, memory, skill and directory tools a turn offers, read at its start under the access the turn
  * reads (ADR 014): a chat turn's, a party member's or a step's, each narrowed by its Delegations.
  * Every kind of turn that offers Task tools offers them this one way, so the tools a delegation
  * promises are the tools its member gets (#699), and every runtime that serves hub tools serves
- * memory (ADR 028) and skills (ADR 029). Without a service, a turn offers none of its tools. The
+ * memory (ADR 028), skills (ADR 029) and the directory (ADR 032). Without a service, a turn offers none of its tools. The
  * offer's steering holds the built-in requests its Charms take over (ADR 031).
  */
 export const hubToolOffer = Effect.gen(function* () {
@@ -388,6 +402,7 @@ export const hubToolOffer = Effect.gen(function* () {
   const charms = yield* Effect.serviceOption(Charms);
   const memory = yield* Effect.serviceOption(MemoryTools);
   const skills = yield* Effect.serviceOption(SkillTools);
+  const directory = yield* Effect.serviceOption(DirectoryTools);
   const none = Effect.succeed(null);
   // Each reads the turn's access itself, so they are read side by side.
   return (turn: CharmTurn, offer?: CharmOffer): Effect.Effect<HubOffer> =>
@@ -397,15 +412,17 @@ export const hubToolOffer = Effect.gen(function* () {
         Option.isSome(charms) ? charms.value.forTurn(turn, offer) : Effect.succeed([]),
         Option.isSome(memory) ? memory.value.forTurn(turn) : none,
         Option.isSome(skills) ? skills.value.forTurn(turn) : none,
+        Option.isSome(directory) ? directory.value.forTurn(turn) : none,
       ],
       { concurrency: "unbounded" },
     ).pipe(
-      Effect.map(([git, charmSets, memoryTools, skillTools]) => {
+      Effect.map(([git, charmSets, memoryTools, skillTools, directoryTools]) => {
         const sets = [
           { owner: "Local Git", tools: git },
           ...charmSets,
           { owner: "Memory", tools: memoryTools },
           { owner: "Skills", tools: skillTools },
+          { owner: "the Directory", tools: directoryTools },
         ];
         return { hubTools: joinHubTools(sets), steering: steeringOf(sets) };
       }),
