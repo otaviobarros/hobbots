@@ -151,13 +151,43 @@ test("[TC-AG-410-02] Summoning for every hob reaches the hobs you made, and a ho
   // A change here gives Pip its own grant, starting from Settings' answers.
   await card.getByRole("radiogroup", { name: "Voice" }).getByText("Never", { exact: true }).click();
   await expect(card.getByText("On", { exact: true })).toBeVisible();
-  await expect.poll(async () => (await charmsOf(current, pip))?.overrides).toMatchObject({
-    "summoning.voice": "deny",
-    "summoning.name": "ask",
-  });
+  await expect
+    .poll(async () => (await charmsOf(current, pip))?.overrides)
+    .toMatchObject({
+      "summoning.voice": "deny",
+      "summoning.name": "ask",
+    });
 
   // Taking it away withholds what Settings gives, so it stays off.
   await card.getByRole("switch", { name: "Let Pip summon and manage hobs" }).click();
   await expect(card.getByText("Off", { exact: true })).toBeVisible();
   await expect.poll(async () => (await charmsOf(current, pip))?.withheld).toContain("summoning");
+});
+
+// covers AG-002
+test("[TC-AG-410-03] says when your hobs cannot be read for the hobs you pick, and reads them again on Try again", async ({
+  page,
+}) => {
+  const current = await startHub(dataDir);
+  hub = current;
+  await api(current, "PATCH", "/api/setup", {
+    completed: true,
+    connectedProviders: ["claude-code"],
+    summoningForEveryHob: { scope: { summoned: true, hobs: [], self: false }, overrides: {} },
+  });
+  await summon(current, "Pip");
+
+  // The hob list fails until the stand-in is lifted.
+  const list = (url: URL) => url.pathname === "/api/agents";
+  await page.route(list, (route) => route.fulfill({ status: 500, body: "" }));
+  await page.goto(`${current.url}/#/settings/connections?tab=charms`);
+  const every = page.getByRole("region", { name: "Summoning for every hob" });
+  // The client asks again a few times before it gives up.
+  await expect(every.getByRole("alert")).toContainText("Hobbots could not read your hobs.", { timeout: 20_000 });
+  await expect(every.getByRole("button", { name: "Add a hob" })).toBeHidden();
+
+  await page.unroute(list);
+  await every.getByRole("button", { name: "Try again" }).click();
+  await every.getByRole("button", { name: "Add a hob" }).click();
+  await expect(page.getByRole("menuitem", { name: "Pip" })).toBeVisible();
 });

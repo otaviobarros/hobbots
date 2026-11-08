@@ -6,6 +6,7 @@ import { useId } from "react";
 import { useUpdateSetup, watchedSetupQuery } from "../../api/setup.ts";
 import { CharmMark } from "../hob-profile/github-charm.tsx";
 import { messages } from "./messages.ts";
+import { ReadFailed } from "./read-failed.tsx";
 import { EVERY_HOB_ON, everyHobEditPayload, everyHobSummoning } from "./summoning-model.ts";
 import { SummoningSettings } from "./summoning-settings.tsx";
 
@@ -27,6 +28,13 @@ export function EveryHobSummoning() {
   const pending = update.isPending || setup.data === undefined;
   const save = (summoningForEveryHob: SummoningForEveryHob | null) => update.mutate({ summoningForEveryHob });
 
+  if (setup.isError && setup.data === undefined) {
+    return (
+      <section aria-label={copy.name} className="flex flex-col gap-3.5 rounded-card bg-card p-4">
+        <ReadFailed text={copy.readFailed} retry={() => void setup.refetch()} />
+      </section>
+    );
+  }
   return (
     <section aria-label={copy.name} className="flex flex-col gap-3.5 rounded-card bg-card p-4">
       <div className="flex items-center gap-3">
@@ -35,7 +43,9 @@ export function EveryHobSummoning() {
           <label htmlFor={switchId} className="font-bold text-text-strong">
             {copy.name}
           </label>
-          <span className="text-detail text-text-secondary">{on ? copy.on : copy.off}</span>
+          <span className="text-detail text-text-secondary">
+            {setup.data === undefined ? <Skeleton surface="card" width="40ch" /> : on ? copy.on : copy.off}
+          </span>
         </span>
         {setup.data === undefined ? (
           <Skeleton shape="dot" surface="card" className="h-6 w-[46px]" />

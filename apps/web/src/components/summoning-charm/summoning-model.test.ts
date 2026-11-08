@@ -135,6 +135,45 @@ describe("the Summoning Charm on a hob's Charms tab", () => {
   });
 });
 
+describe("turning Can manage itself on", () => {
+  const selfOn = (scope: {
+    readonly summoned: boolean;
+    readonly hobs: ReadonlyArray<string>;
+    readonly self: boolean;
+  }) => ({
+    _tag: "Scope" as const,
+    scope: { ...scope, self: true },
+  });
+  const selfAnswers: Record<string, "ask"> = {
+    "summoning.self-name": "ask",
+    "summoning.self-good-at": "ask",
+    "summoning.self-look": "ask",
+    "summoning.self-voice": "ask",
+    "summoning.self-brain": "ask",
+    "summoning.self-instructions": "ask",
+  };
+
+  it("asks for every self field when a hob gets its own grant from every hob", () => {
+    const view = hobSummoning(made(EMPTY_HOB_POLICY), everyHob);
+    expect(hobEditPayload(EMPTY_HOB_POLICY, view, selfOn(view.scope)).charms?.overrides).toMatchObject(selfAnswers);
+  });
+
+  it("asks for every self field in Summoning for every hob", () => {
+    const view = everyHobSummoning(everyHob);
+    expect(everyHobEditPayload(view, selfOn(view.scope)).overrides).toMatchObject(selfAnswers);
+  });
+
+  it("keeps self answers you set when the switch was already on", () => {
+    const on: SummoningForEveryHob = {
+      scope: { ...everyHob.scope, self: true },
+      overrides: { ...everyHob.overrides, ...selfAnswers, "summoning.self-name": "allow" },
+    };
+    const view = everyHobSummoning(on);
+    const sent = everyHobEditPayload(view, { _tag: "Scope", scope: { ...on.scope, summoned: false } });
+    expect(sent.overrides["summoning.self-name"]).toBe("allow");
+  });
+});
+
 describe("Summoning for every hob in Settings", () => {
   it("is off without the setting, and sends every answer written out", () => {
     expect(everyHobSummoning(null).held).toBe("off");

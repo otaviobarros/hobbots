@@ -43,7 +43,6 @@ export function HobSummoning({
   const copy = messages.hob;
   const setup = useQuery(watchedSetupQuery);
   const update = useUpdatePermissions(hob.id);
-  const switchId = useId();
   const everyHob = setup.data?.summoningForEveryHob ?? null;
   const ready = permissions !== undefined && setup.data !== undefined;
   const sending = update.isPending ? update.variables : undefined;
@@ -64,35 +63,12 @@ export function HobSummoning({
           : "shadow-[inset_0_0_0_1px_var(--color-line)]",
       )}
     >
-      <div className="flex items-center gap-3.5 px-4.5 py-4">
-        <CharmMark off={!on} mark="✦" />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="flex flex-wrap items-center gap-2">
-            <label htmlFor={switchId} className="text-title font-bold text-text-strong">
-              {copy.name}
-            </label>
-            {ready ? (
-              <Badge variant={STATE_BADGE[view.held]}>{copy.state[view.held]}</Badge>
-            ) : (
-              <Skeleton shape="block" surface="card" width="9ch" />
-            )}
-          </span>
-          <span className="text-detail text-text-secondary">
-            {on ? copy.on({ name: hob.name }) : copy.offLine({ name: hob.name })}
-          </span>
-        </div>
-        {ready ? (
-          <Switch
-            id={switchId}
-            aria-label={copy.grant({ name: hob.name })}
-            checked={on}
-            disabled={pending}
-            onCheckedChange={(next) => update.mutate(hobSwitchPayload(stored, everyHob, next))}
-          />
-        ) : (
-          <Skeleton shape="dot" surface="card" className="h-6 w-[46px]" />
-        )}
-      </div>
+      <SummoningHeader
+        name={hob.name}
+        held={ready ? view.held : null}
+        pending={pending}
+        onSwitch={(next) => update.mutate(hobSwitchPayload(stored, everyHob, next))}
+      />
 
       {on ? (
         <div className="flex animate-hb-in flex-col gap-4.5 ps-16 pe-4.5 pb-4.5">
@@ -133,5 +109,52 @@ export function HobSummoning({
         </span>
       )}
     </section>
+  );
+}
+
+/** The card's head: the Charm's mark, name and tag, what it does, and its switch, with blocks until it is known. */
+function SummoningHeader({
+  name,
+  held,
+  pending,
+  onSwitch,
+}: {
+  name: string;
+  /** Where the Charm comes from, or null while the hub reads it. */
+  held: SummoningHeld | null;
+  pending: boolean;
+  onSwitch: (on: boolean) => void;
+}) {
+  const copy = messages.hob;
+  const switchId = useId();
+  const on = held !== null && held !== "off";
+  return (
+    <div className="flex items-center gap-3.5 px-4.5 py-4">
+      <CharmMark off={!on} mark="✦" />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="flex flex-wrap items-center gap-2">
+          <label htmlFor={switchId} className="text-title font-bold text-text-strong">
+            {copy.name}
+          </label>
+          {held === null ? (
+            <Skeleton shape="block" surface="card" width="9ch" />
+          ) : (
+            <Badge variant={STATE_BADGE[held]}>{copy.state[held]}</Badge>
+          )}
+        </span>
+        <span className="text-detail text-text-secondary">{on ? copy.on({ name }) : copy.offLine({ name })}</span>
+      </div>
+      {held === null ? (
+        <Skeleton shape="dot" surface="card" className="h-6 w-[46px]" />
+      ) : (
+        <Switch
+          id={switchId}
+          aria-label={copy.grant({ name })}
+          checked={on}
+          disabled={pending}
+          onCheckedChange={onSwitch}
+        />
+      )}
+    </div>
   );
 }

@@ -1,26 +1,12 @@
-import type { Agent, CharmOperationId, PolicyDecision, SummoningScope } from "@hobbots/domain";
-import { Button } from "@hobbots/ui/components/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@hobbots/ui/components/menu";
+import type { CharmOperationId, PolicyDecision, SummoningScope } from "@hobbots/domain";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { Switch } from "@hobbots/ui/components/switch";
-import { useQuery } from "@tanstack/react-query";
+import { cn } from "@hobbots/ui/lib/utils";
 import { type ReactNode, useId } from "react";
-import { agentsQuery } from "../../api/queries.ts";
 import { fieldWords, messages } from "./messages.ts";
-import {
-  answersFor,
-  pickHob,
-  type SummoningEdit,
-  type SummoningView,
-  shownAnswer,
-  shownGroups,
-} from "./summoning-model.ts";
+import { PickedHobs } from "./picked-hobs.tsx";
+import { answersFor, type SummoningEdit, type SummoningView, shownAnswer, shownGroups } from "./summoning-model.ts";
+import { SUMMONING_ROW } from "./summoning-row.ts";
 
 /**
  * The Summoning Charm's settings (ADR 034), the same on a hob's Charms tab and in "Summoning for
@@ -107,9 +93,6 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** The frame of one row on the card: a sunken row with an edge. */
-const ROW = "flex gap-3 rounded-control bg-deep px-3.5 py-2.5 shadow-[inset_0_0_0_1px_var(--color-line)]";
-
 /** One of the scope's switches, with its label and what it lets the hob do. */
 function ScopeSwitch({
   label,
@@ -127,7 +110,7 @@ function ScopeSwitch({
   const labelId = useId();
   const noteId = useId();
   return (
-    <div className={`${ROW} items-center`}>
+    <div className={cn(SUMMONING_ROW, "items-center")}>
       <span className="flex min-w-0 flex-1 flex-col">
         <span id={labelId} className="text-text-strong">
           {label}
@@ -143,77 +126,6 @@ function ScopeSwitch({
         disabled={pending}
         onCheckedChange={onChange}
       />
-    </div>
-  );
-}
-
-/** The hobs you picked for the hob to manage too, each with a remove button, and a menu to add one. */
-function PickedHobs({
-  name,
-  self,
-  scope,
-  pending,
-  onChange,
-}: {
-  name: string;
-  self: string | null;
-  scope: SummoningScope;
-  pending: boolean;
-  onChange: (scope: SummoningScope) => void;
-}) {
-  const copy = messages.scope;
-  const hobs = useQuery(agentsQuery);
-  const nameOf = (id: string) => hobs.data?.find((hob) => hob.id === id)?.name ?? copy.someHob;
-  const choices: ReadonlyArray<Agent> = (hobs.data ?? []).filter(
-    (hob) => hob.id !== self && !scope.hobs.includes(hob.id),
-  );
-  return (
-    <div className={`${ROW} flex-col`}>
-      <span className="flex flex-col">
-        <span className="text-text-strong">{copy.picked}</span>
-        <span className="text-detail text-text-secondary">
-          {scope.hobs.length === 0 ? copy.nonePicked({ name }) : copy.pickedNote({ name })}
-        </span>
-      </span>
-      {scope.hobs.length > 0 && (
-        <ul aria-label={copy.pickedList} className="m-0 flex list-none flex-wrap gap-1.5 p-0">
-          {scope.hobs.map((id) => (
-            <li
-              key={id}
-              className="inline-flex items-center gap-1 rounded-tag bg-card ps-2 text-detail text-text-strong shadow-[inset_0_0_0_1px_var(--color-line)]"
-            >
-              {nameOf(id)}
-              <Button
-                variant="ghost"
-                size="xs"
-                disabled={pending}
-                aria-label={copy.remove({ hob: nameOf(id) })}
-                onClick={() => onChange(pickHob(scope, id, false))}
-              >
-                <span aria-hidden>×</span>
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="xs" className="self-start" disabled={pending}>
-            {copy.add}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {choices.length === 0 ? (
-            <DropdownMenuLabel>{copy.noMore}</DropdownMenuLabel>
-          ) : (
-            choices.map((hob) => (
-              <DropdownMenuItem key={hob.id} onSelect={() => onChange(pickHob(scope, hob.id, true))}>
-                {hob.name}
-              </DropdownMenuItem>
-            ))
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   );
 }
@@ -234,7 +146,7 @@ function FieldRow({
   const noteId = useId();
   const offered = answersFor(operation);
   return (
-    <div className={`${ROW} items-center`}>
+    <div className={cn(SUMMONING_ROW, "items-center")}>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="text-text-strong">{words.label}</span>
         {words.note !== "" && (

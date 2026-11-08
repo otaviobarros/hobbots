@@ -12,6 +12,7 @@ import {
   SUMMON_OPERATION,
   SUMMONING_CHARM,
   SUMMONING_CHARM_ID,
+  SUMMONING_SELF_DEFAULTS,
   type SummoningField,
   type SummoningForEveryHob,
   type SummoningScope,
@@ -118,10 +119,19 @@ export type SummoningEdit =
   | { readonly _tag: "Answer"; readonly operation: CharmOperationId; readonly answer: PolicyDecision };
 
 /** The view after `edit`, as the screen shows it while the change is on its way to the hub. */
-const editedView = (view: SummoningView, edit: SummoningEdit): SummoningView =>
-  edit._tag === "Scope"
-    ? { ...view, scope: edit.scope }
-    : { ...view, answers: { ...view.answers, [edit.operation]: edit.answer } };
+/**
+ * The view after `edit`. Turning "Can manage itself" on sets every self field to Ask, as the hub
+ * does (ADR 034), so a change that writes every answer out never allows them by leaving them out.
+ */
+const editedView = (view: SummoningView, edit: SummoningEdit): SummoningView => {
+  if (edit._tag === "Answer") return { ...view, answers: { ...view.answers, [edit.operation]: edit.answer } };
+  const selfTurnedOn = edit.scope.self && !view.scope.self;
+  return {
+    ...view,
+    scope: edit.scope,
+    answers: selfTurnedOn ? { ...view.answers, ...SUMMONING_SELF_DEFAULTS } : view.answers,
+  };
+};
 
 /** The hob's overrides for the Charms other than Summoning, which a Summoning change keeps as they are. */
 const otherOverrides = (policy: HobPolicy): CharmOverrides =>

@@ -18,7 +18,7 @@ export const messages = {
     who: ({ name }: { name: string }) => `Who ${name} may manage`,
     mayDo: ({ name }: { name: string }) => `What ${name} may set`,
     note: ({ name }: { name: string }) =>
-      `Ask puts the call in your Inbox first, and "Always allow" on its card sets the field to Allow here. A hob ${name} summons or changes never gets more than ${name} has.`,
+      `Ask waits for you to approve the call first. A hob ${name} summons or changes never gets more than ${name} has.`,
     saveFailed: "Hobbots could not save that change. Try again.",
   },
   everyHob: {
@@ -29,6 +29,7 @@ export const messages = {
     mayDo: "What each hob may set",
     note: "A hob's own Charms tab can take Summoning away from that hob, or give it its own scope and answers.",
     saveFailed: "Hobbots could not save that change. Try again.",
+    readFailed: "Hobbots could not read Summoning for every hob.",
   },
   scope: {
     summoned: "Hobs it summoned",
@@ -44,8 +45,11 @@ export const messages = {
     noMore: "Every hob is picked.",
     remove: ({ hob }: { hob: string }) => `Remove ${hob}`,
     someHob: "A retired hob",
+    aHob: "a hob",
+    hobsFailed: "Hobbots could not read your hobs.",
     theHob: "the hob",
   },
+  tryAgain: "Try again",
   answers: { allow: "Allow", ask: "Ask", deny: "Never", once: "Ask once" },
   groups: {
     new: "New hobs",
@@ -57,7 +61,7 @@ export const messages = {
     self: ({ name }: { name: string }) => `${name} changing itself`,
   } satisfies Record<SummoningGroupId, unknown>,
   fields: {
-    "summoning.summon": { label: "Summon new hobs", note: "One card per call, a row per hob." },
+    "summoning.summon": { label: "Summon new hobs", note: "Under Ask, each summon waits for you to approve it." },
     "summoning.name": { label: "Name", note: "" },
     "summoning.role": { label: "Role", note: "A starter role or a title of its own." },
     "summoning.good-at": { label: "Good at", note: "When other hobs should come to it." },
