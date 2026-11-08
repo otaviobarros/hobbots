@@ -83,6 +83,7 @@ import hobGoodAt from "./0080_hob_good_at.ts";
 import codingSetupDismissals from "./0081_coding_setup_dismissals.ts";
 import hobActors from "./0082_hob_actors.ts";
 import summoning from "./0083_summoning.ts";
+import threadSkillTrial from "./0084_thread_skill_trial.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -173,4 +174,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0081_coding_setup_dismissals": codingSetupDismissals,
   "0082_hob_actors": hobActors,
   "0083_summoning": summoning,
+  "0084_thread_skill_trial": threadSkillTrial,
 };

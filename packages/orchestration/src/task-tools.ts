@@ -180,7 +180,11 @@ export class TaskTools extends Context.Service<
             separator,
           }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
-          ...makeAsking({ tasks, hobs }),
+          ...makeAsking({
+            tasks,
+            hobs,
+            destinations: { missingAt, approvedRemovals, folderChecks, separator },
+          }),
           ...makeLeading({ tasks }),
         };
 

@@ -61,6 +61,7 @@ import type { Pins } from "../quest/use-work.ts";
 import { ReconnectingCard } from "../shell/reconnecting.tsx";
 import { skillPicking } from "../skill-line/skill-picker-model.ts";
 import { SkillUsedLines } from "../skill-line/skill-used-line.tsx";
+import { TrialNotice } from "../skills/trial-notice.tsx";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { BackIcon } from "./chat-icons.tsx";
 import { ChatTitle } from "./chat-title.tsx";
@@ -438,6 +439,7 @@ export function ChatView({
             </section>
           )}
           <WorkHeldNotice />
+          <TrialNotice thread={thread.data} />
           <NeedsTray entries={needs} />
           {queued.length > 0 && (
             <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
@@ -467,7 +469,7 @@ export function ChatView({
             onStop={() => interrupt.mutate()}
             wait={wait}
             onStopWaiting={() => stopWaiting.mutate()}
-            skills={skillPicking(skills, current.name)}
+            skills={skillPicking(skills, current.name, thread.data?.skillTrial)}
             paused={
               paused
                 ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: threadId !== undefined }

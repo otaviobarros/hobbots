@@ -82,7 +82,7 @@ const membersOf = (rows: ReadonlyArray<CountRow>) =>
 export const skillUses = (
   sql: SqlClient.SqlClient,
   change: ReturnType<typeof makeJournaledChange>,
-): Pick<SkillLibraryShape, "recordUse" | "uses" | "useCounts" | "usesSince" | "lastUses"> => ({
+): Pick<SkillLibraryShape, "recordUse" | "uses" | "useCounts" | "usesSince" | "lastUses" | "lastUsedAt"> => ({
   recordUse: (use) =>
     change<SkillUse, SqlError.SqlError>(() =>
       Effect.gen(function* () {
@@ -153,6 +153,13 @@ export const skillUses = (
         Effect.map((rows) => rows.map((row) => ({ skillId: SkillId.make(row.skillId), count: Number(row.count) }))),
       ),
     ),
+  lastUsedAt: sqlOrDie(
+    sql<{ readonly skillId: string; readonly at: unknown }>`
+      SELECT skill_id, MAX(used_at) AS at FROM skill_uses
+      WHERE skill_id IS NOT NULL GROUP BY skill_id ORDER BY skill_id`.pipe(
+      Effect.map((rows) => rows.map((row) => ({ skillId: SkillId.make(row.skillId), at: String(row.at) }))),
+    ),
+  ),
   // Each skill once: a library skill by its id, one from your organization by its name.
   lastUses: (agentId, limit) =>
     sqlOrDie(

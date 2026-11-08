@@ -117,13 +117,14 @@ const configColumns = (agent: Agent) => ({
   look_color: agent.lookColor,
   runtime: agent.runtime,
 });
-// A thread's sessions and own brain are JSON text columns (migration 0020).
+// A thread's sessions, own brain and the draft it tries are JSON text columns (migrations 0020 and 0083).
 // `read_revision` stays on the hub: a read shows only whether the thread is `unread` (migration 0053).
 export const threadRows = (
   rows: ReadonlyArray<{
     readonly revision?: unknown;
     readonly sessions?: unknown;
     readonly brain?: unknown;
+    readonly skillTrial?: unknown;
     readonly lastContent?: unknown;
     readonly readRevision?: unknown;
     readonly unread?: unknown;
@@ -136,6 +137,7 @@ export const threadRows = (
     revision: Number(row.revision),
     sessions: JSON.parse(String(row.sessions ?? "[]")),
     brain: row.brain == null ? null : JSON.parse(String(row.brain)),
+    skillTrial: row.skillTrial == null ? null : JSON.parse(String(row.skillTrial)),
   }));
 /**
  * The start of the last message a thread's transcript shows, as `last_content`: queued messages, a
@@ -372,6 +374,7 @@ export const HobbotsRepositoryLive = Layer.effect(
             brain: thread.brain === null ? null : JSON.stringify(thread.brain),
             archived_at: thread.archivedAt,
             pinned_at: thread.pinnedAt,
+            skill_trial: thread.skillTrial === null ? null : JSON.stringify(thread.skillTrial),
             created_at: thread.createdAt,
             updated_at: thread.updatedAt,
             revision,
