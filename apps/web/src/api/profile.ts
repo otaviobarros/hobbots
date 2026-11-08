@@ -25,8 +25,8 @@ export interface RoleChoice {
 }
 
 /**
- * The hob profile's editable configuration: its name and look, its role, its tone, its instructions
- * and the model and effort it thinks with. Kept apart from the screen so the edit it sends can be
+ * The hob profile's editable configuration: its name and look, its role, its tone, its instructions,
+ * whether other hobs see it, and the model and effort it thinks with. Kept apart from the screen so the edit it sends can be
  * tested without a browser.
  */
 export interface ProfileDraft extends BrainChoice, RoleChoice {
@@ -36,11 +36,13 @@ export interface ProfileDraft extends BrainChoice, RoleChoice {
   readonly voice: Voice;
   readonly length: ReplyLength;
   readonly instructions: string;
+  /** Whether other hobs see this hob in their directory. */
+  readonly visibleToHobs: boolean;
 }
 
 const ROLE_KEYS = ["role", "roleTitle", "sigil", "hat", "tool"] as const;
 // The parts of a draft that move on their own when it is rebased.
-const OWN_KEYS = ["name", "lookSeed", "lookColor", "voice", "length"] as const;
+const OWN_KEYS = ["name", "lookSeed", "lookColor", "voice", "length", "visibleToHobs"] as const;
 type OwnKey = (typeof OWN_KEYS)[number];
 
 /**
@@ -85,6 +87,7 @@ export const profileDraft = (hob: Agent, models?: RuntimeModels): ProfileDraft =
     voice: hob.voice,
     length: hob.length,
     instructions: hob.instructions,
+    visibleToHobs: hob.visibleToHobs,
     runtime: hob.runtime,
     model: hob.model ?? DEFAULT_MODEL,
     effort: hob.effort,
@@ -118,6 +121,7 @@ export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload
     ...(draft.voice !== hob.voice && { voice: draft.voice }),
     ...(draft.length !== hob.length && { length: draft.length }),
     ...(draft.instructions !== hob.instructions && { instructions: draft.instructions }),
+    ...(draft.visibleToHobs !== hob.visibleToHobs && { visibleToHobs: draft.visibleToHobs }),
     ...(newRuntime && { runtime: draft.runtime }),
     ...((newRuntime || model !== hob.model) && { model }),
     ...((newRuntime || draft.effort !== hob.effort) && { effort: draft.effort }),
@@ -128,8 +132,8 @@ export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload
  * Moves a draft onto a newer baseline, such as a version saved from another window or the answer
  * to a save. Each part the user left as it was in the old baseline takes the new value; each part
  * they changed keeps their edit. The provider, model and effort move together, as the form picks them, and so
- * do the role's title, sigil, hat and tool. The name, the look, the color, the voice and the length
- * move on their own.
+ * do the role's title, sigil, hat and tool. The name, the look, the color, the voice, the length
+ * and being visible to other hobs move on their own.
  *
  * While a save is on its way, the parts it sends stay as the user has them now, even when that is
  * back to the old baseline: the update for the save itself can arrive before the save's answer.
@@ -162,6 +166,7 @@ export const rebaseDraft = (
     voice: keep("voice"),
     length: keep("length"),
     instructions: keepInstructions ? draft.instructions : to.instructions,
+    visibleToHobs: keep("visibleToHobs"),
     runtime: keepBrain ? draft.runtime : to.runtime,
     model: keepBrain ? draft.model : to.model,
     effort: keepBrain ? draft.effort : to.effort,

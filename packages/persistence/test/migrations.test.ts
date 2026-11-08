@@ -21,6 +21,7 @@ import taskGrants from "../src/migrations/0035_task_grants.ts";
 import versionedName from "../src/migrations/0047_versioned_name.ts";
 import threadReads from "../src/migrations/0053_thread_reads.ts";
 import milestoneReachedBy from "../src/migrations/0074_milestone_reached_by.ts";
+import hobVisibility from "../src/migrations/0078_hob_visibility.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1177,6 +1178,84 @@ describe("0074_milestone_reached_by", () => {
     expect(rows.map(({ id, reachedBy }) => ({ id, reachedBy }))).toEqual([
       { id: "built", reachedBy: "nettle" },
       { id: "committed", reachedBy: null },
+    ]);
+  });
+});
+
+describe("0078_hob_visibility", () => {
+  // covers AG-002, DP-003
+  it("[TC-DP-1233-01] leaves every existing hob and version visible to other hobs, and still reads hob events journaled before it", async () => {
+    const before = {
+      _tag: "AgentUpserted",
+      agent: {
+        id: "pip",
+        name: "Pip",
+        role: null,
+        roleTitle: "Writer",
+        sigil: "writer",
+        hat: null,
+        tool: null,
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        status: "active",
+        retiredAt: null,
+        configVersion: 1,
+        createdAt: "2026-11-08T00:00:00.000Z",
+        revision: 1,
+      },
+    };
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+        agentId: "pip",
+        version: 1,
+        name: "Pip",
+        roleTitle: "Writer",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;
+      yield* sql`INSERT INTO event_journal ${sql.insert({
+        sequence: 1,
+        id: "5d1c7a2e-3b4f-4c6d-8e9f-0a1b2c3d4e5f",
+        type: "AgentUpserted",
+        schemaVersion: 1,
+        occurredAt: "2026-11-08T00:00:00.000Z",
+        agentId: "pip",
+        payload: JSON.stringify(before),
+      })}`;
+      yield* hobVisibility;
+      return {
+        agents: yield* sql`SELECT visible_to_hobs FROM agents`,
+        versions: yield* sql`SELECT visible_to_hobs FROM agent_config_versions`,
+        entries: yield* (yield* EventJournal).readAfter(0),
+      };
+    }).pipe(
+      Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(TestDatabaseAt(migrationsBefore("0078"))))),
+      Effect.scoped,
+      Effect.runPromise,
+    );
+
+    expect(result.agents.map((row) => Number(row.visibleToHobs))).toEqual([1]);
+    expect(result.versions.map((row) => Number(row.visibleToHobs))).toEqual([1]);
+    expect(result.entries.map((e) => e.payload)).toMatchObject([
+      { _tag: "AgentUpserted", agent: { id: "pip", visibleToHobs: true } },
     ]);
   });
 });

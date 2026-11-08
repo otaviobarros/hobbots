@@ -36,9 +36,11 @@ const messageId = MessageId.make("m1");
 const project = "/work/project";
 const repository = "otaviobarros/hobbots";
 
-// Keeps 0076 too: the repository that seeds the hobs writes their Charms.
+// Keeps 0076 and 0078 too: the repository that seeds the hobs writes their Charms and whether other hobs see them.
 const before = Object.fromEntries(
-  Object.entries(migrations).filter(([key]) => key < "0071" || key === "0076_charm_grants"),
+  Object.entries(migrations).filter(
+    ([key]) => key < "0071" || key === "0076_charm_grants" || key === "0078_hob_visibility",
+  ),
 ) as typeof migrations;
 
 const seed = Effect.gen(function* () {

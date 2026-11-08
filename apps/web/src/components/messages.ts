@@ -204,6 +204,14 @@ export const messages = {
     talks: ({ name }: { name: string }) => `How ${name} talks`,
     thinks: ({ name }: { name: string }) => `How ${name} thinks`,
     connectAnother: "Connect another AI in Settings",
+    visibility: {
+      heading: "Other hobs",
+      label: "Visible to other hobs",
+      on: ({ name }: { name: string }) =>
+        `Other hobs see ${name}'s name, role, what it is good at, whether it is paused, the AI it thinks with and its Charms. Never its instructions, memory or threads.`,
+      off: ({ name }: { name: string }) =>
+        `Other hobs don't see ${name} at all. A hob you tell to give ${name} a Task can still find it by name.`,
+    },
     changeRole: "Change role",
     noTitle: "No title yet",
     ownRole: "A role in your own words.",

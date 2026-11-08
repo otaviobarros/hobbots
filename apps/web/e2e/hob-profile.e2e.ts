@@ -304,6 +304,39 @@ test("[TC-AG-088] picking a voice and a length in the profile saves them as the 
   await expect(tone.getByRole("radio", { name: /^Brief/ })).toBeChecked();
 });
 
+// covers AG-002
+test("[TC-AG-1233-03] turning Visible to other hobs off and on in the profile saves each as the next version", async ({
+  page,
+}) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+  const profile = page.getByRole("main", { name: "Pip's profile" });
+  const others = profile.getByRole("region", { name: "Other hobs" });
+  const visible = others.getByRole("switch", { name: "Visible to other hobs" });
+  await expect(visible).toBeChecked();
+  await expect(others).toContainText("Other hobs see Pip's name, role");
+
+  const saved = async () =>
+    (await api<Array<Hob & { visibleToHobs: boolean }>>(current, "GET", "/api/agents")).find((h) => h.id === pip.id);
+  const save = async () => {
+    await expect(page.getByText("1 change not saved yet")).toBeVisible();
+    await profile.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
+  };
+
+  await visible.click();
+  await expect(others).toContainText("Other hobs don't see Pip at all.");
+  await save();
+  expect([(await saved())?.visibleToHobs, (await saved())?.configVersion]).toEqual([false, 2]);
+  await page.reload();
+  await expect(visible).not.toBeChecked();
+
+  await visible.click();
+  await save();
+  expect([(await saved())?.visibleToHobs, (await saved())?.configVersion]).toEqual([true, 3]);
+});
+
 interface Permissions {
   readonly configVersion: number;
   readonly folders: ReadonlyArray<string>;
