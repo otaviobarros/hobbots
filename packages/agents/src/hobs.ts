@@ -23,10 +23,12 @@ import {
   type Effort,
   GOOD_AT_MAX,
   goodAtFromInstructions,
+  type HobCharms,
   type HobPolicy,
   heldCharms,
   hobAnswers,
   hobBehind,
+  holdsCharm,
   isNarrowerOrEqual,
   normalizeGoodAt,
   POLICY_OPERATIONS,
@@ -36,7 +38,10 @@ import {
   type RuntimeKind,
   type RuntimeModels,
   type SafetyPreset,
+  SUMMONING_CHARM_ID,
   starterRole,
+  summoningDefaultsFor,
+  summoningScopeOf,
   type TaskId,
   YOU,
 } from "@hobbots/domain";
@@ -101,7 +106,10 @@ export const foundAgent =
     Option.match(agent, { onNone: () => Effect.fail(new AgentNotFound({ agentId })), onSome: Effect.succeed });
 
 /** A starter role keeps its own title; a title in the user's own words goes with no role. */
-const checkRole = (role: { readonly role: RoleId | null; readonly roleTitle: string }): InvalidHob | undefined => {
+export const checkRole = (role: {
+  readonly role: RoleId | null;
+  readonly roleTitle: string;
+}): InvalidHob | undefined => {
   if (role.role === null) return undefined;
   const title = starterRole(role.role).title;
   return role.roleTitle === title
@@ -110,7 +118,7 @@ const checkRole = (role: { readonly role: RoleId | null; readonly roleTitle: str
 };
 
 /** Good at is one line that fits its limit once its whitespace is collapsed; a longer one is refused, never cut. */
-const checkGoodAt = (goodAt: string | null | undefined): InvalidHob | undefined =>
+export const checkGoodAt = (goodAt: string | null | undefined): InvalidHob | undefined =>
   goodAt != null && goodAt.length > GOOD_AT_MAX
     ? new InvalidHob({ field: "goodAt", message: `Good at is one line of up to ${GOOD_AT_MAX} characters` })
     : undefined;
@@ -206,14 +214,39 @@ const changedCharms = (before: HobPolicy, change: UpdateHobPermissionsPayload): 
   return change.githubCharm ? [...others, "github"] : others;
 };
 
-/** `before` with each field the change gives replaced; Charm overrides are left out when there are none. */
-const changedPolicy = (before: HobPolicy, change: UpdateHobPermissionsPayload): HobPolicy => {
-  const charmOverrides = change.charms?.overrides ?? before.charms?.overrides ?? {};
+/**
+ * The Charm overrides a change leaves: the ones it gives, or the hob's own, with the Summoning
+ * Charm's defaults written under the ones it gives when it grants that Charm or turns "Can manage
+ * itself" on (ADR 034).
+ */
+const changedOverrides = (before: HobPolicy, change: UpdateHobPermissionsPayload, granted: ReadonlyArray<CharmId>) => {
+  const given = change.charms?.overrides;
+  const kept = given ?? before.charms?.overrides ?? {};
+  const heldBefore = holdsCharm(before, SUMMONING_CHARM_ID);
+  const granting = !heldBefore && granted.includes(SUMMONING_CHARM_ID);
+  const scope = change.charms?.summoning ?? summoningScopeOf(before);
+  const selfTurnedOn = scope.self && !(heldBefore && summoningScopeOf(before).self);
+  if (!granted.includes(SUMMONING_CHARM_ID)) return kept;
+  return { ...kept, ...summoningDefaultsFor({ granting, selfTurnedOn }), ...given };
+};
+
+/** What a change leaves the hob of the Charms, each part left out when it has none. */
+const changedHobCharms = (before: HobPolicy, change: UpdateHobPermissionsPayload): HobCharms => {
   const granted = changedCharms(before, change);
-  const charms = {
+  const charmOverrides = changedOverrides(before, change, granted ?? heldCharms(before));
+  const summoning = change.charms?.summoning ?? before.charms?.summoning;
+  const withheld = change.charms?.withheld ?? before.charms?.withheld ?? [];
+  return {
     ...(granted === undefined ? {} : { granted }),
     ...(Object.keys(charmOverrides).length === 0 ? {} : { overrides: charmOverrides }),
+    ...(summoning === undefined ? {} : { summoning }),
+    ...(withheld.length === 0 ? {} : { withheld: [...new Set(withheld)] }),
   };
+};
+
+/** `before` with each field the change gives replaced; Charm overrides are left out when there are none. */
+const changedPolicy = (before: HobPolicy, change: UpdateHobPermissionsPayload): HobPolicy => {
+  const charms = changedHobCharms(before, change);
   return {
     ownFolders: change.ownFolders ?? before.ownFolders,
     hiddenSharedFolders: change.hiddenSharedFolders ?? before.hiddenSharedFolders,
@@ -235,6 +268,8 @@ const sameAnswers = (a: Readonly<Record<string, unknown>>, b: Readonly<Record<st
 const samePolicy = (a: HobPolicy, b: HobPolicy) =>
   (a.signCommits === true) === (b.signCommits === true) &&
   sameCharms(heldCharms(a), heldCharms(b)) &&
+  sameCharms(a.charms?.withheld ?? [], b.charms?.withheld ?? []) &&
+  JSON.stringify(a.charms?.summoning ?? null) === JSON.stringify(b.charms?.summoning ?? null) &&
   a.ownFolders.join("\0") === b.ownFolders.join("\0") &&
   a.hiddenSharedFolders.join("\0") === b.hiddenSharedFolders.join("\0") &&
   sameAnswers(hobAnswers(a), hobAnswers(b));
@@ -293,6 +328,11 @@ export interface Summoning {
   readonly taskId?: TaskId | null;
   /** Whether a hob summons it without a card for you; not when left out. */
   readonly unattended?: boolean;
+  /**
+   * The policy it is created with, for a hob a hob summons (ADR 034), already checked against its
+   * manager's, its folders canonical. A hob you summon starts with the empty policy.
+   */
+  readonly policy?: HobPolicy;
 }
 
 const BY_YOU: Summoning = { actor: YOU };
@@ -395,6 +435,7 @@ export class HobService extends Context.Service<
           summonedBy: hobBehind(summoning.actor),
           summonedFor: summoning.taskId ?? null,
           summonedUnattended: summoning.unattended ?? false,
+          ...(summoning.policy === undefined ? {} : { policy: summoning.policy }),
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
         const inserted = yield* repo.insertAgent(agent, summoning.actor);

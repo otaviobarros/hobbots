@@ -221,8 +221,8 @@ describe("tool call keys per Task", () => {
 
   // covers DP-003
   it("[TC-OR-423] 0045 keeps every stored call and refusal readable, each in the work its input names, compared without its turn", async () => {
-    // Keeps 0047, 0076, 0079, 0080 and 0082 too: the repository that seeds the hob writes its name with
-    // each version, its Charms, whether other hobs see it, its good at and who made and summoned it.
+    // Keeps 0047, 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its name with
+    // each version, its Charms, whether other hobs see it, its good at and who made and summoned it, and its Summoning scope.
     const earlier = Object.fromEntries(
       Object.entries(migrations).filter(
         ([id]) =>
@@ -233,6 +233,7 @@ describe("tool call keys per Task", () => {
             "0079_hob_visibility",
             "0080_hob_good_at",
             "0082_hob_actors",
+            "0083_summoning",
           ].includes(id),
       ),
     ) as typeof migrations;

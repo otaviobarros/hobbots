@@ -35,6 +35,8 @@ interface AgentRow {
   readonly policyOverrides?: unknown;
   readonly signCommits?: unknown;
   readonly charms?: unknown;
+  readonly summoningScope?: unknown;
+  readonly withheldCharms?: unknown;
   readonly visibleToHobs?: unknown;
   readonly summonedUnattended?: unknown;
   readonly actor?: unknown;
@@ -42,24 +44,47 @@ interface AgentRow {
 
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every look seed and revision fits a number.
 // The policy's three JSON text columns (migration 0015), its signing flag (0021) and the ids of its
-// Charms (0076) become the hob's one `policy` field. Being visible to other hobs is 0 or 1 (0079), and
+// Charms (0076), its Summoning scope and the Charms withheld from it (0083) become the hob's one
+// `policy` field. Being visible to other hobs is 0 or 1 (0079), and
 // so is being summoned unattended on a hob; a configuration version's actor is JSON text (0082).
 const agentRows = (rows: ReadonlyArray<AgentRow>) =>
-  rows.map(({ ownFolders, hiddenSharedFolders, policyOverrides, signCommits, charms, visibleToHobs, ...row }) => ({
-    ...row,
-    lookSeed: Number(row.lookSeed),
-    visibleToHobs: Number(visibleToHobs) === 1,
-    ...(row.revision === undefined ? {} : { revision: Number(row.revision) }),
-    ...(row.summonedUnattended === undefined ? {} : { summonedUnattended: Number(row.summonedUnattended) === 1 }),
-    ...(row.actor === undefined ? {} : { actor: JSON.parse(String(row.actor)) }),
-    policy: {
-      ownFolders: JSON.parse(String(ownFolders)),
-      hiddenSharedFolders: JSON.parse(String(hiddenSharedFolders)),
-      overrides: JSON.parse(String(policyOverrides)),
-      ...(Number(signCommits) === 1 ? { signCommits: true } : {}),
-      charms: { granted: JSON.parse(String(charms)) },
-    },
-  }));
+  rows.map(
+    ({
+      ownFolders,
+      hiddenSharedFolders,
+      policyOverrides,
+      signCommits,
+      charms,
+      summoningScope,
+      withheldCharms,
+      visibleToHobs,
+      ...row
+    }) => ({
+      ...row,
+      lookSeed: Number(row.lookSeed),
+      visibleToHobs: Number(visibleToHobs) === 1,
+      ...(row.revision === undefined ? {} : { revision: Number(row.revision) }),
+      ...(row.summonedUnattended === undefined ? {} : { summonedUnattended: Number(row.summonedUnattended) === 1 }),
+      ...(row.actor === undefined ? {} : { actor: JSON.parse(String(row.actor)) }),
+      policy: {
+        ownFolders: JSON.parse(String(ownFolders)),
+        hiddenSharedFolders: JSON.parse(String(hiddenSharedFolders)),
+        overrides: JSON.parse(String(policyOverrides)),
+        ...(Number(signCommits) === 1 ? { signCommits: true } : {}),
+        charms: {
+          granted: JSON.parse(String(charms)),
+          ...(summoningScope == null ? {} : { summoning: JSON.parse(String(summoningScope)) }),
+          ...charmsWithheld(withheldCharms),
+        },
+      },
+    }),
+  );
+
+/** The Charms withheld from a hob, left out when there are none. */
+const charmsWithheld = (column: unknown) => {
+  const withheld = column == null ? [] : (JSON.parse(String(column)) as ReadonlyArray<string>);
+  return withheld.length === 0 ? {} : { withheld };
+};
 
 // The columns that store a hob's policy.
 const policyColumns = (policy: HobPolicy) => ({
@@ -69,6 +94,8 @@ const policyColumns = (policy: HobPolicy) => ({
   policy_overrides: JSON.stringify({ ...policy.overrides, ...policy.charms?.overrides }),
   sign_commits: policy.signCommits === true ? 1 : 0,
   charms: JSON.stringify(heldCharms(policy)),
+  summoning_scope: policy.charms?.summoning === undefined ? null : JSON.stringify(policy.charms.summoning),
+  withheld_charms: JSON.stringify(policy.charms?.withheld ?? []),
 });
 // The columns one configuration version sets, on the hob and in its history.
 const configColumns = (agent: Agent) => ({
