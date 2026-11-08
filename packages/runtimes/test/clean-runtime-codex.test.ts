@@ -28,9 +28,11 @@ import {
   ASKED_SKILL,
   type CleanRuntimeFixture,
   CONTRACT_HUB_TOOL,
+  CONTRACT_ROSTER,
   cleanRuntimeFixture,
   FOREIGN_MARKERS,
   LIBRARY_SKILL,
+  ROSTER_INJECTION,
   SET_RULES,
   SET_SIBLING,
   SET_SKILL,
@@ -334,5 +336,22 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     );
     // No thread opened and no model was asked.
     expect(model.requests.length).toBe(asked);
+  });
+
+  // covers ADR 032 (The roster, Every runtime)
+  it("[TC-RT-1235-02] the roster of other hobs reaches the model with the turn's prompt, never in its instructions", {
+    timeout: 60_000,
+  }, async () => {
+    const asked = model.requests.length;
+    const { exit } = await turn({ briefing: CONTRACT_ROSTER, prompt: "Who can push to GitHub?" });
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const requests = model.requests.slice(asked);
+    expect(requests.length).toBeGreaterThan(0);
+    for (const request of requests) {
+      expect(request.instructions ?? "").not.toContain(ROSTER_INJECTION);
+      expect(JSON.stringify(request.input)).toContain(
+        JSON.stringify(`${CONTRACT_ROSTER}\n\nWho can push to GitHub?`).slice(1, -1),
+      );
+    }
   });
 });
