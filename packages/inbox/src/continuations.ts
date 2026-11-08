@@ -1,5 +1,4 @@
 import {
-  APPROVAL_RULE,
   answerHow,
   type BackpackItem,
   CONTINUATION_HEADER,
@@ -95,7 +94,8 @@ const DESTINATION_RULE =
  * A member's approvals are the user's to decide (PE-006, #1216): a lead that answered "may I run
  * rm?" let the user read that a lead approved what the policy gave them to decide.
  */
-const PERMISSION_RULE = `A question that asks permission for a tool call is not yours to grant: ${APPROVAL_RULE} Answer only that the hob should make the call and wait for the user's decision, and never tell the user a lead approved one.`;
+const PERMISSION_RULE =
+  "Only the user approves a tool call: answer a question asking permission for one by telling the hob to make the call, and never tell the user a lead approved one.";
 
 /**
  * A question for a lead, with what it can do about it: answer it, or pass it up when only a lead
