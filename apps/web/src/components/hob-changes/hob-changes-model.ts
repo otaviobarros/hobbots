@@ -118,14 +118,14 @@ export const fieldDiffs = (
     // Whether the field changed is decided by ids, never by names, which two hobs can share.
     if (before !== null && text(after, byId) === text(before, byId)) return [];
     const show = (name: (id: string) => string) => ({
-      now: text(after, name),
-      then: before === null ? "" : text(before, name),
+      after: text(after, name),
+      before: before === null ? "" : text(before, name),
     });
     const named = show(nameOf);
     // Hobs with the same name are told apart by the start of their id.
-    const { now, then } = named.now === named.then ? show((id) => `${nameOf(id)} (${id.slice(0, 8)})`) : named;
-    if (now === "" && then === "") return [];
-    return [{ key, label: messages.fields[key], before: then, after: now, lines }];
+    const shown = named.after === named.before ? show((id) => `${nameOf(id)} (${id.slice(0, 8)})`) : named;
+    if (shown.after === "" && shown.before === "") return [];
+    return [{ key, label: messages.fields[key], ...shown, lines }];
   });
 };
 
