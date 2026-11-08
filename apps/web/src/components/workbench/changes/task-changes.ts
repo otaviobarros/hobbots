@@ -42,9 +42,12 @@ interface Record {
   readonly activity: AttemptActivity;
 }
 
-/** A file there now: where it was before the first try, and every record of it from there. */
+/**
+ * A file there now: the path it was at before the first try, or null for a file a try made on a
+ * path an earlier try emptied by moving its file away; and every record of it from there.
+ */
 interface Live {
-  readonly origin: string;
+  readonly origin: string | null;
   readonly trail: ReadonlyArray<Record>;
 }
 
@@ -140,8 +143,9 @@ const replay = (activities: ReadonlyArray<AttemptActivity>) => {
     touched.set(key, [...(touched.get(key) ?? []), record]);
   };
   for (const activity of activities) {
-    // Each try's changes are against its own start, so every file a move takes is taken out first:
-    // a file made where one was moved from is new, and two files may swap places.
+    // A move pairs a file that left one path with one that appeared at another, both in the same
+    // record, so every file a try's moves take is taken out before any is put down: a file made
+    // where one was moved from is new, and two files may swap places.
     const moves = activity.changes.filter((change) => change.movedFrom !== null);
     const taken = moves.map((change) => {
       const from = keyOf(change.folder, change.movedFrom as string);
@@ -153,13 +157,19 @@ const replay = (activities: ReadonlyArray<AttemptActivity>) => {
     for (const { change, from, found } of taken) {
       const at = keyOf(change.folder, change.path);
       touch(at, null, { change, activity });
-      live.set(at, { origin: found?.origin ?? from, trail: [...(found?.trail ?? []), { change, activity }] });
+      const origin = found === undefined ? from : found.origin;
+      live.set(at, { origin, trail: [...(found?.trail ?? []), { change, activity }] });
     }
     for (const change of activity.changes.filter((each) => each.movedFrom === null)) {
       const at = keyOf(change.folder, change.path);
       const record = { change, activity };
+      // A path no try touched yet holds its first file; one an earlier try moved a file off holds a new one.
+      const untouched = !first.has(at);
       touch(at, change.before, record);
-      const there = live.get(at) ?? { origin: at, trail: gone.get(at) ?? [] };
+      const there = live.get(at) ?? {
+        origin: untouched || gone.has(at) ? at : null,
+        trail: gone.get(at) ?? [],
+      };
       gone.delete(at);
       if (change.after === null) {
         live.delete(at);
@@ -184,16 +194,20 @@ const replay = (activities: ReadonlyArray<AttemptActivity>) => {
 export const taskChanges = (activities: ReadonlyArray<AttemptActivity>): ReadonlyArray<TaskChange> => {
   const { first, live, touched } = replay(activities);
   const held = (key: string) => first.get(key)?.version ?? null;
-  const moved = (at: string, file: Live) => file.origin !== at && held(at) === null && held(file.origin) !== null;
+  const moved = (at: string, file: Live): file is Live & { readonly origin: string } =>
+    file.origin !== null && file.origin !== at && held(at) === null && held(file.origin) !== null;
   // Where a file was before it moved: what was there then is in the file now, not lost.
-  const carried = new Set([...live].filter(([at, file]) => moved(at, file)).map(([, file]) => file.origin));
+  const carried = new Set([...live].flatMap(([at, file]) => (moved(at, file) ? [file.origin] : [])));
   const result: Array<TaskChange> = [];
   for (const [at, file] of live) {
-    const isMove = moved(at, file);
-    const before = isMove ? first.get(file.origin) : carried.has(at) ? undefined : first.get(at);
-    const also = before === undefined || isMove ? [] : (touched.get(at) ?? []);
-    const net = netChange(file.trail, pathOf(at), isMove ? pathOf(file.origin) : null, before, also);
-    if (isMove || !same(net.change.before, net.change.after)) result.push(net);
+    if (moved(at, file)) {
+      result.push(netChange(file.trail, pathOf(at), pathOf(file.origin), first.get(file.origin)));
+      continue;
+    }
+    const before = carried.has(at) || file.origin === null ? undefined : first.get(at);
+    const also = before === undefined ? [] : (touched.get(at) ?? []);
+    const net = netChange(file.trail, pathOf(at), null, before, also);
+    if (!same(net.change.before, net.change.after)) result.push(net);
   }
   for (const [at, kept] of first) {
     if (kept.version === null || live.has(at) || carried.has(at)) continue;

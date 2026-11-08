@@ -234,4 +234,17 @@ describe("a Task's changes across its tries", () => {
     expect(only?.change.sharedWith).toEqual([hers]);
     expect(only?.sharedWithHobs).toEqual([{ attemptId: hers, agentId: ada }]);
   });
+
+  it("reads a file made where an earlier try moved one off, then moved on, as added, not a second move", () => {
+    expect(
+      shown([
+        recorded(first, [change(first, "b.md", "moved", "A", "A", "a.md")]),
+        recorded(second, [change(second, "a.md", "added", null, "X")]),
+        recorded(third, [change(third, "c.md", "moved", "X", "X", "a.md")]),
+      ]),
+    ).toEqual([
+      { path: "b.md", kind: "moved", movedFrom: "a.md", before: "A", after: "A", keptIn: [1, 1], tries: [1] },
+      { path: "c.md", kind: "added", movedFrom: null, before: null, after: "X", keptIn: [3, 3], tries: [2, 3] },
+    ]);
+  });
 });
