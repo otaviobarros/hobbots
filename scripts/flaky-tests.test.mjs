@@ -66,7 +66,7 @@ test("a Playwright test that passed on a retry is flaky, one that never passed i
   assert.doesNotMatch(markdown, /TC-A-001|TC-A-004/);
 });
 
-test("a Vitest test that failed on any repeat is failed", () => {
+test("a Vitest test that failed in its only run is failed", () => {
   const vitest = {
     testResults: [
       {
@@ -85,6 +85,57 @@ test("a Vitest test that failed on any repeat is failed", () => {
     /### Failed tests\n\n- `hub \[TC-OR-403\] recovers` \(`test\/hub\.test\.ts:12`\), passed 0 of 1 runs\n/,
   );
   assert.doesNotMatch(markdown, /Flaky|TC-OR-404|TC-OR-405/);
+});
+
+test("a Vitest test's runs in separate reports count together, so one that failed once is flaky", () => {
+  const run = (status) => ({
+    testResults: [
+      {
+        name: `${process.cwd()}/test/export.test.ts`,
+        assertionResults: [
+          { fullName: "exports [TC-OP-042] never writes over", status, location: { line: 7, column: 3 } },
+          { fullName: "exports [TC-OP-043] steady", status: "passed", location: { line: 30, column: 3 } },
+        ],
+      },
+    ],
+  });
+  const outcomes = [run("passed"), run("failed"), run("passed")].flatMap(outcomesOf);
+  const markdown = flakyTestsMarkdown(outcomes);
+  assert.match(
+    markdown,
+    /### Flaky tests[\s\S]*`exports \[TC-OP-042\] never writes over` \(`test\/export\.test\.ts:7`\), passed 2 of 3 runs\n/,
+  );
+  assert.doesNotMatch(markdown, /Failed tests|TC-OP-043/);
+});
+
+test("a Playwright test's repeats count together, and a test that never passed is listed once", () => {
+  const repeat = (status) => ({ expectedStatus: "passed", results: [result(status)] });
+  const report = {
+    suites: [
+      {
+        title: "quest.e2e.ts",
+        file: "quest.e2e.ts",
+        specs: [
+          {
+            title: "[TC-B-001] sometimes",
+            file: "quest.e2e.ts",
+            line: 5,
+            tests: [repeat("passed"), repeat("timedOut"), repeat("passed")],
+          },
+          {
+            title: "[TC-B-002] never",
+            file: "quest.e2e.ts",
+            line: 11,
+            tests: [repeat("failed"), repeat("failed"), repeat("failed")],
+          },
+        ],
+      },
+    ],
+  };
+  const markdown = flakyTestsMarkdown(outcomesOf(report));
+  assert.match(markdown, /`\[TC-B-001\] sometimes` \(`quest\.e2e\.ts:5`\), passed 2 of 3 runs/);
+  assert.equal(markdown.match(/TC-B-002/g)?.length, 1);
+  assert.match(markdown, /`\[TC-B-002\] never` \(`quest\.e2e\.ts:11`\), passed 0 of 3 runs/);
 });
 
 test("nothing is printed when every test passed on its first run", () => {

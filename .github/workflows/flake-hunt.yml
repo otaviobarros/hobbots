@@ -78,23 +78,42 @@ jobs:
     env:
       HOBBOTS_TEST_DB: ${{ matrix.db }}
       HOBBOTS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-      VITEST_MAX_WORKERS: 2
+      # As in the CI job, so the hunt runs the tests under the same load.
+      VITEST_MAX_WORKERS: 3
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      # Each test runs three times with no retry, so a test that fails on any run fails the job.
-      # Each package writes its report beside its package.json. --continue lets the other package
-      # finish its runs and its report when one fails; the job still fails.
-      - run: >-
-          pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server --force
-          --continue=dependencies-successful -- --repeats=2 --retry=0 --reporter=default --reporter=json --outputFile.json=flake-hunt.json
+      # As in the CI job: a test database needs no crash safety (#1066).
+      - if: matrix.db == 'postgres'
+        name: Let the test database skip flushing to disk
+        run: >-
+          docker exec ${{ job.services.postgres.id }} psql -U postgres
+          -c "ALTER SYSTEM SET fsync = off" -c "ALTER SYSTEM SET synchronous_commit = off"
+          -c "ALTER SYSTEM SET full_page_writes = off" -c "SELECT pg_reload_conf()"
+      # Each suite runs three times with no retry, each run a fresh `vitest run` with its own report,
+      # so no run sees state an earlier one left in its process or data folders. `--repeats` would
+      # run each test again in the same process, which tests that set up once per file do not
+      # survive (#1066). A test that fails on any run fails the job; the report step counts each
+      # test's three runs together. Each package writes its reports beside its package.json.
+      # --continue lets the other package finish its run when one fails.
+      - name: Run the suites three times
+        run: |
+          status=0
+          for run in 1 2 3; do
+            echo "::group::Run $run of 3"
+            pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server --force \
+              --continue=dependencies-successful -- --retry=0 --reporter=default --reporter=json \
+              --outputFile.json="flake-hunt-$run.json" || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
       - if: always()
         uses: actions/upload-artifact@v7
         with:
           name: hunt-server-${{ matrix.db }}
           path: |
-            packages/persistence/flake-hunt.json
-            apps/server/flake-hunt.json
+            packages/persistence/flake-hunt-*.json
+            apps/server/flake-hunt-*.json
           if-no-files-found: ignore
           retention-days: 14
 

@@ -1,8 +1,9 @@
 /**
  * Lists the flaky and failed tests in Playwright and Vitest JSON reports as Markdown, for a CI job
  * summary or the nightly flake hunt's issue (STD-TEST-009). A test is flaky when it failed and
- * then passed on a retry or a repeat; it is failed when no run of it passed. It prints nothing
- * when every test passed on its first run.
+ * then passed on a retry or a repeat; it is failed when no run of it passed. The runs of one test
+ * in several reports, such as the hunt's three separate runs of a suite, count together. It prints
+ * nothing when every test passed on its first run.
  *
  *   node scripts/flaky-tests.mjs <report.json>…
  *
@@ -40,8 +41,9 @@ const playwrightOutcomes = (report) => {
 };
 
 /**
- * Every test in a Vitest JSON report. The report keeps one result per test: with `--repeats`, a
- * test that failed on any of its runs is failed, so it is listed as failed, not flaky.
+ * Every test in a Vitest JSON report, as one run. The report keeps one result per test, so the
+ * flake hunt runs a suite several times, each in a fresh process with its own report, and the
+ * runs are counted together (`mergeOutcomes`).
  */
 const vitestOutcomes = (report) =>
   report.testResults.flatMap((file) =>
@@ -59,17 +61,36 @@ const vitestOutcomes = (report) =>
 export const outcomesOf = (report) =>
   Array.isArray(report.testResults) ? vitestOutcomes(report) : playwrightOutcomes(report);
 
+/**
+ * The outcomes with each test's runs in several reports, or Playwright's repeats of it, added up
+ * into one, in the order each test first appears.
+ */
+export const mergeOutcomes = (outcomes) => {
+  /** @type {Map<string, Outcome>} */
+  const merged = new Map();
+  for (const outcome of outcomes) {
+    const key = `${outcome.where}\u0000${outcome.title}`;
+    const seen = merged.get(key);
+    merged.set(
+      key,
+      seen === undefined ? outcome : { ...seen, runs: seen.runs + outcome.runs, passed: seen.passed + outcome.passed },
+    );
+  }
+  return [...merged.values()];
+};
+
 const line = (outcome) =>
   `- \`${outcome.title}\` (\`${outcome.where}\`), passed ${outcome.passed} of ${outcome.runs} runs`;
 
 /** The Markdown list of flaky and failed tests, or an empty string when there are none. */
 export const flakyTestsMarkdown = (outcomes) => {
-  const flaky = outcomes.filter((outcome) => outcome.passed > 0 && outcome.passed < outcome.runs);
-  const failed = outcomes.filter((outcome) => outcome.runs > 0 && outcome.passed === 0);
+  const tests = mergeOutcomes(outcomes);
+  const flaky = tests.filter((outcome) => outcome.passed > 0 && outcome.passed < outcome.runs);
+  const failed = tests.filter((outcome) => outcome.runs > 0 && outcome.passed === 0);
   const sections = [];
   if (flaky.length > 0) {
     sections.push(
-      `### Flaky tests\n\nThese failed and then passed on a retry. A retry that passes is a bug to fix (STD-TEST-009).\n\n${flaky.map(line).join("\n")}\n`,
+      `### Flaky tests\n\nThese failed on one run and passed on another, a retry or a repeat. A test that passes only sometimes is a bug to fix (STD-TEST-009).\n\n${flaky.map(line).join("\n")}\n`,
     );
   }
   if (failed.length > 0) sections.push(`### Failed tests\n\n${failed.map(line).join("\n")}\n`);
