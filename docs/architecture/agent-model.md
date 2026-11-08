@@ -26,7 +26,7 @@ Tasks, steps and Quests are decided in [ADR 018](../decisions/018-tasks-and-ques
 
 Use stable domain identifiers for agents, threads, Quests, tasks, delegations, executions, executors, approvals, messages and events. Runtime session IDs are namespaced by runtime and executor. Persist correlation explicitly rather than parsing prose to discover lineage.
 
-An agent edit, including a change to its own folders or permission overrides ([permissions](permissions.md)), creates a new configuration version. Running work retains its execution snapshot. Archive/disable preserves references and history; handling currently active work must be explicit. Database-managed configuration versus portable JSON/YAML export remains open.
+An agent edit, including a change to its own folders or permission overrides ([permissions](permissions.md)), creates a new configuration version. Every version records its actor: you, you applying a hob's proposal, or a hob under an Allow of the Summoning Charm. A hob records who summoned it (a hob, or you) and the Task it was summoned for ([ADR 034](../decisions/034-summoning-charm.md)). Running work retains its execution snapshot. Archive/disable preserves references and history; handling currently active work must be explicit. Database-managed configuration versus portable JSON/YAML export remains open.
 
 Availability, runtime health, execution status and inbox backlog are different projections. An agent with no active turn may still own unresolved responsibilities. A runtime that is unavailable does not erase its agent or terminate every Quest as failed.
 
