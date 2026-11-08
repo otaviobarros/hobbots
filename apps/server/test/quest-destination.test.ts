@@ -9,9 +9,10 @@ import { firstPending, hub, partyHub, send, treeWhen } from "./party-hub.ts";
 // lead where to save it instead, the lead answered itself ("save it in the source folder") and
 // completed the Quest with delivered: true, and the Quest read done with a file where you never
 // agreed. complete_task on a Quest's top Task now holds the lead to the files you named: each must
-// be there, unless you answered a question that named it with another place, or the work took it
-// away as you allowed: a rename to a path you named, or a deletion you approved. The hub checks the
-// call, so it holds for every runtime.
+// be there, unless you picked a choice whose consequence, worded by the hub, moves it or leaves it
+// empty, or the work took it away as you asked: a rename to a path you named, or a deletion you
+// approved. Typed answers and safety presets let nothing go. The hub checks the call, so it holds
+// for every runtime.
 
 let dispose: (() => Promise<void>) | undefined;
 afterEach(async () => {
@@ -41,8 +42,21 @@ const asking = (question: string) => [
   `fake:then ${hub("complete_task", { key: "rook", summary: "Saved in the source folder" })}`,
 ];
 
-/** Rook asks where to save the page it could not write at `wanted`, naming it. */
-const askedWhere = (wanted: string) => asking(`I can't write ${wanted} there. Where should I save it instead?`);
+/** Rook asks where to save the page it could not write at `wanted`, naming it, with `options` to pick from. */
+const askedWhere = (wanted: string, options?: ReadonlyArray<object>) => [
+  hub("ask", {
+    key: "where",
+    question: `I can't write ${wanted}. Where should I save it instead?`,
+    ...(options === undefined ? {} : { options }),
+  }),
+  `fake:then ${hub("complete_task", { key: "rook", summary: "Saved in the source folder" })}`,
+];
+
+/** The choices Rook offers: `to` instead of `wanted`, worded as Hobbots words it, or keep `wanted`. */
+const insteadOrKeep = (to: string, wanted: string) => [
+  { label: "Save it there instead", consequence: `Not delivered at ${wanted}: delivered at ${to} instead.` },
+  { label: "Keep the place I asked for", consequence: "The Quest waits until it can go there." },
+];
 
 /** Once Frodo has passed Rook's question up to you, you answer it with `answer`. */
 const escalatedAndAnswered = async (party: ReturnType<typeof partyHub>, answer: string) => {
@@ -89,7 +103,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(answers.get("elsewhere")).not.toContain("Refused");
     expect(answers.get("wrap")).toContain("Refused (not-at-destination)");
     expect(answers.get("wrap")).toContain(wanted);
-    expect(answers.get("wrap")).toContain("ask the user with ask where it should go");
+    expect(answers.get("wrap")).toContain("ask the user with ask, and leave the Quest open until they pick");
     // The source it only reads is there, so it is not named as missing.
     expect(answers.get("wrap")).not.toContain("skills.md");
     expect(refused.tasks[0]?.state).not.toBe("completed");
@@ -122,7 +136,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
   }, 30_000);
 
   // covers OR-004, OR-002, IN-004
-  it("[TC-OR-666] completes somewhere else once you answer the question about where to save it with the new place", async () => {
+  it("[TC-OR-666] completes somewhere else once you pick the choice that delivers it there instead", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, reactions } = party;
@@ -133,12 +147,12 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     await run(
       quest(
         `Have Rook save a short summary as ${wanted}`,
-        askedWhere(wanted),
+        askedWhere(wanted, insteadOrKeep(saved, wanted)),
         { key: "wrap", delivered: true, summary: "Saved in the source folder, as you said", artifacts: [file(saved)] },
         2,
       ),
     );
-    await escalatedAndAnswered(party, `Save it as ${saved}`);
+    await escalatedAndAnswered(party, "Save it there instead");
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     expect(answers.get("wrap")).toContain("is complete");
     expect(done.questions[0]?.answeredBy).toEqual({ _tag: "User" });
@@ -168,7 +182,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
   }, 30_000);
 
   // covers OR-004, OR-002
-  it("[TC-OR-668] stays open when the place you answered with has nothing in it", async () => {
+  it("[TC-OR-668] stays open when the place you picked instead has nothing in it", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, reactions } = party;
@@ -181,12 +195,12 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     await run(
       quest(
         `Have Rook save a short summary as ${wanted}`,
-        askedWhere(wanted),
+        askedWhere(wanted, insteadOrKeep(instead, wanted)),
         { key: "wrap", delivered: true, summary: "Saved in the source folder", artifacts: [file(saved)] },
         2,
       ),
     );
-    await escalatedAndAnswered(party, `Save it as ${instead}`);
+    await escalatedAndAnswered(party, "Save it there instead");
     const refused = await run(treeWhen((tree) => tree.refusals.some((each) => each.reason === "not-at-destination")));
     expect(answers.get("wrap")).toContain(instead);
     expect(answers.get("wrap")).not.toContain(wanted);
@@ -268,5 +282,85 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     const refused = await run(treeWhen((tree) => tree.refusals.some((each) => each.reason === "not-at-destination")));
     expect(answers.get("wrap")).toContain(report);
     expect(refused.quests[0]?.state).toBe("active");
+  }, 30_000);
+
+  // covers OR-004, OR-002
+  it("[TC-OR-672] stays open when your typed answer turns down the place it names", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true });
+    dispose = party.dispose;
+    const { run, answers, project, temp, reactions } = party;
+    const wanted = join(temp, "System", "skills-check.html");
+    const saved = join(project, "skills-check.html");
+    writeFileSync(saved, "<!doctype html>\n");
+    reactions.push(ESCALATES);
+    await run(
+      quest(
+        `Have Rook save a short summary as ${wanted}`,
+        askedWhere(wanted),
+        { key: "wrap", delivered: true, summary: "Saved in the source folder", artifacts: [file(saved)] },
+        2,
+      ),
+    );
+    await escalatedAndAnswered(party, `Do not put it at ${saved}; keep the original destination`);
+    const refused = await run(treeWhen((tree) => tree.refusals.some((each) => each.reason === "not-at-destination")));
+    expect(answers.get("wrap")).toContain(wanted);
+    expect(refused.quests[0]?.state).toBe("active");
+  }, 30_000);
+
+  // covers OR-004, UX-002
+  it("[TC-OR-673] stays open when a hob that may delete without asking removed the file you asked to update", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true, preset: "trusting" });
+    dispose = party.dispose;
+    const { run, answers, project } = party;
+    const report = join(project, "report.html");
+    writeFileSync(report, "<h1>Report</h1>\n");
+    const archive = JSON.stringify({
+      command: "mkdir -p archive && mv report.html archive/report.html",
+      writes: { "report.html": null, "archive/report.html": "<h1>Report</h1>\n" },
+    });
+    await run(
+      quest(
+        `Update ${report} with this week's numbers`,
+        [`fake:run ${archive}`, hub("complete_task", { key: "rook", summary: "Updated and archived" })],
+        { key: "wrap", delivered: true, summary: "The report is updated" },
+      ),
+    );
+    const refused = await run(treeWhen((tree) => tree.refusals.some((each) => each.reason === "not-at-destination")));
+    expect(answers.get("wrap")).toContain(report);
+    expect(refused.quests[0]?.state).toBe("active");
+  }, 30_000);
+
+  // covers OR-004, OR-002
+  it("[TC-OR-674] completes once you pick the choice that leaves nothing at a file the work removed", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true, preset: "trusting" });
+    dispose = party.dispose;
+    const { run, answers, project, reactions } = party;
+    const scratch = join(project, "scratch.txt");
+    writeFileSync(scratch, "draft\n");
+    const remove = JSON.stringify({ command: "rm scratch.txt", writes: { "scratch.txt": null } });
+    reactions.push(ESCALATES);
+    await run(
+      quest(
+        `Clear out ${scratch}`,
+        [
+          `fake:run ${remove}`,
+          hub("ask", {
+            key: "where",
+            question: `I removed ${scratch}. Is that what you wanted?`,
+            options: [
+              { label: "Yes, remove it", consequence: `Not delivered at ${scratch}: nothing is left there.` },
+              { label: "No, put it back", consequence: "Rook restores the file." },
+            ],
+          }),
+          `fake:then ${hub("complete_task", { key: "rook", summary: "Removed" })}`,
+        ],
+        { key: "wrap", delivered: true, summary: "Cleared out as you asked" },
+        2,
+      ),
+    );
+    await escalatedAndAnswered(party, "Yes, remove it");
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    expect(answers.get("wrap")).toContain("is complete");
+    expect(done.quests[0]?.state).not.toBe("active");
   }, 30_000);
 });
