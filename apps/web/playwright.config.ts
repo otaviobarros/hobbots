@@ -7,7 +7,11 @@ import { type Durations, parseShard, shardFilter, tagsInSource } from "./e2e/sha
 //
 // HOBBOTS_E2E_SHARD=2/6 runs one of six shards balanced by the times in e2e/durations.json, with
 // the tests that have no time yet spread over every shard (see e2e/shards.ts); CI runs each shard
-// on its own runner.
+// on its own runner. The plan counts on the two workers a CI runner gives each shard and on the
+// order Playwright runs the tests in, by file name, so a long test late in that order does not
+// leave one shard running long after the rest (#1066). It is the same number on every machine, so
+// every shard computes the same plan.
+const plannedWorkers = 2;
 const testDir = new URL("e2e/", import.meta.url);
 const recorded = new URL("durations.json", testDir);
 const shardOf = (value: string) => {
@@ -15,8 +19,9 @@ const shardOf = (value: string) => {
   const durations = existsSync(recorded) ? (JSON.parse(readFileSync(recorded, "utf8")) as Durations) : undefined;
   const tags = readdirSync(testDir)
     .filter((file) => file.endsWith(".e2e.ts"))
+    .sort((a, b) => a.localeCompare(b))
     .flatMap((file) => tagsInSource(readFileSync(new URL(file, testDir), "utf8")));
-  return shardFilter(durations, current, total, tags);
+  return shardFilter(durations, current, total, tags, plannedWorkers);
 };
 const shard = process.env.HOBBOTS_E2E_SHARD;
 const ci = Boolean(process.env.CI);

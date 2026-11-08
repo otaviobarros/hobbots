@@ -20,6 +20,21 @@ describe("planShards", () => {
     ]);
   });
 
+  it("with two workers, keeps a long test that runs last from ending its shard late", () => {
+    const timed = { "[M]": 40, "[S-1]": 10, "[S-2]": 10, "[S-3]": 10, "[S-4]": 10, "[L]": 40 };
+    const runOrder = ["[M]", "[S-1]", "[S-2]", "[S-3]", "[S-4]", "[L]"];
+    // By time alone each shard holds 60 s, but [L] starts only after two short tests: 50 s.
+    expect(planShards(timed, 2, runOrder)).toEqual([
+      ["[L]", "[S-1]", "[S-3]"],
+      ["[M]", "[S-2]", "[S-4]"],
+    ]);
+    // With the order counted, [L] starts at once and both shards end at 40 s.
+    expect(planShards(timed, 2, runOrder, 2)).toEqual([
+      ["[L]", "[S-1]"],
+      ["[M]", "[S-2]", "[S-3]", "[S-4]"],
+    ]);
+  });
+
   it("places every test once", () => {
     const shards = planShards(durations, 4);
     expect(shards.flat().sort()).toEqual(Object.keys(durations).sort());

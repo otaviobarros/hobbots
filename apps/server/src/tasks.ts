@@ -112,7 +112,11 @@ export const QuestionsHandlers = HttpApiBuilder.group(HobbotsApi, "questions", (
       answerHub: ({ params, payload }) =>
         hubQuestions === undefined
           ? Effect.fail(new HubQuestionNotFound({ hubQuestionId: params.hubQuestionId }))
-          : hubQuestions.answer(params.hubQuestionId, payload.answer, payload.via),
+          : hubQuestions.answer(
+              params.hubQuestionId,
+              payload.picked === undefined ? { words: payload.answer ?? "" } : { picked: payload.picked },
+              payload.via,
+            ),
       leaveNote: ({ params, payload }) => questions.leaveNote(params.taskId, payload.key, payload.text),
     });
   }),

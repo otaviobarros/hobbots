@@ -27,6 +27,7 @@ import { ApprovalDecision } from "../approvals/approval-card.tsx";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
+import { shownHubQuestion } from "../hub-question/shown.ts";
 import { scopeName } from "../memory/memory-model.ts";
 import { messages as memoryCopy } from "../memory/messages.ts";
 import { shareDestination } from "../memory/review-model.ts";
@@ -245,6 +246,7 @@ function HubQuestionDetail({
   targets,
 }: { question: HubQuestion; row: InboxRow } & DetailContext) {
   const hub = copy.row.hub;
+  const shown = shownHubQuestion(question);
   return (
     <DetailFrame
       label={copy.question.label({ name: hub })}
@@ -256,12 +258,12 @@ function HubQuestionDetail({
       <div className="flex items-start gap-3">
         <EntryPortrait hob={undefined} device={false} hub waiting={false} />
         <blockquote className="m-0 min-w-0 flex-1 rounded-[4px_14px_14px_14px] bg-card px-4 py-3 text-reading leading-normal whitespace-pre-wrap text-text-strong [overflow-wrap:anywhere]">
-          {question.text}
+          {shown.text}
         </blockquote>
       </div>
       <Facts
         rows={[
-          [copy.detail.about, question.subject.title],
+          [copy.detail.about, shown.title],
           [copy.detail.thread, question.chat === null ? undefined : directory.threadTitle(question.chat.threadId)],
           [copy.detail.when, formatWhen(question.createdAt, now)],
         ]}

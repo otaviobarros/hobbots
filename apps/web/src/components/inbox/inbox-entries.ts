@@ -17,6 +17,7 @@ import {
 } from "@hobbots/domain";
 import { firstLine } from "../../lib/format.ts";
 import { blockerTries, blockerWhat } from "../blockers/blocker-model.ts";
+import { shownHubQuestion } from "../hub-question/shown.ts";
 import { shareWhat } from "../memory/review-model.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { proposalWhat } from "../skill-review/proposal-model.ts";
@@ -413,7 +414,7 @@ const hubQuestionRow = (question: HubQuestion): InboxRow => ({
   chain: [copy.row.hub, copy.row.youEnd],
   kind: copy.kind.question,
   tag: "needs-you",
-  what: firstLine(question.text),
+  what: firstLine(shownHubQuestion(question).text),
   when: copy.row.waitingOn({ name: copy.row.hub }),
   tone: "plain",
 });

@@ -21,7 +21,7 @@ import taskGrants from "../src/migrations/0035_task_grants.ts";
 import versionedName from "../src/migrations/0047_versioned_name.ts";
 import threadReads from "../src/migrations/0053_thread_reads.ts";
 import milestoneReachedBy from "../src/migrations/0074_milestone_reached_by.ts";
-import hobGoodAt from "../src/migrations/0078_hob_good_at.ts";
+import hobGoodAt from "../src/migrations/0079_hob_good_at.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1182,9 +1182,9 @@ describe("0074_milestone_reached_by", () => {
   });
 });
 
-describe("0078_hob_good_at", () => {
+describe("0079_hob_good_at", () => {
   const longChores = `${"Answer every letter. ".repeat(12)}Then file them.`;
-  // Each hob as the profile showed its good at before 0078: from its chores, else its starter role's note.
+  // Each hob as the profile showed its good at before 0079: from its chores, else its starter role's note.
   const hobs = [
     {
       id: "chores",
@@ -1237,7 +1237,7 @@ describe("0078_hob_good_at", () => {
         agents: yield* sql`SELECT id, good_at FROM agents ORDER BY id`,
         versions: yield* sql`SELECT agent_id, version, good_at FROM agent_config_versions ORDER BY agent_id, version`,
       };
-    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0078"))), Effect.runPromise);
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0079"))), Effect.runPromise);
 
     const note = starterRole("writer").note;
     const shortened = `${longChores.slice(0, 200).slice(0, longChores.slice(0, 200).lastIndexOf(" "))}…`;
@@ -1262,7 +1262,7 @@ describe("0078_hob_good_at", () => {
 
   // covers DP-003
   it("[TC-DP-1232-01] still reads a hob event journaled before good at was stored, with none", async () => {
-    // The AgentUpserted payload as the hub journaled it before 0078, with no good at.
+    // The AgentUpserted payload as the hub journaled it before 0079, with no good at.
     const before = {
       _tag: "AgentUpserted",
       agent: {
@@ -1288,7 +1288,7 @@ describe("0078_hob_good_at", () => {
         revision: 1,
       },
     };
-    const database = TestDatabaseAt(migrationsBefore("0078"));
+    const database = TestDatabaseAt(migrationsBefore("0079"));
     const entries = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;
