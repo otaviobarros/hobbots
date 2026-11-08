@@ -83,8 +83,9 @@ const at = (addresses: ReadonlyArray<string> = [SITE]): WebTarget => ({ host: "s
 const layer = () =>
   WebAccessWith({
     version: "0.0.4",
-    // Only the site's checked address reaches the test server; any other is dialed as itself.
-    dialAs: (address) => (address === SITE ? "127.0.0.1" : address),
+    // Only the site's checked address reaches the test server. Any other is dialed as ::1, where
+    // nothing listens, so it fails at once rather than waiting on a route to TEST-NET-3.
+    dialAs: (address) => (address === SITE ? "127.0.0.1" : "::1"),
   }).pipe(Layer.provide(Dns.layerStatic({ hosts: { "site.test": [OTHER], "both.test": [SITE, "10.0.0.8"] } })));
 
 const run = <A>(effect: Effect.Effect<A, WebFetchFailed, WebFetcher>) =>

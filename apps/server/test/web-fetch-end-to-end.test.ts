@@ -135,7 +135,7 @@ beforeAll(async () => {
   );
   const fetcher = WebAccessWith({
     version: "0.0.4",
-    dialAs: (address) => (address === PUBLIC || address === NAS ? "127.0.0.1" : address),
+    dialAs: (address) => (address === PUBLIC || address === NAS ? "127.0.0.1" : "::1"),
   }).pipe(
     Layer.provide(
       Dns.layerStatic({
