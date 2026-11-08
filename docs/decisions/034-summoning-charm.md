@@ -44,7 +44,7 @@ Every supported runtime (Claude Code and Codex today, and every runtime added la
 - **The same use cases as the screens.** Each write calls the use case behind the matching HTTP route, so a hob can never pass input that Summon or the profile would refuse.
 - **The check tool finds the gaps first.** It names a missing name or role title, a brain this hub does not serve (a runtime that is not installed, a model the runtime does not offer, an effort the model does not take), a folder or Charm wider than the manager's, a field at Never, a target outside the scope, and the fields that would ask. The manager asks about real gaps, not guesses.
 - **Questions go through `ask`.** A manager working on a Task that another hob gave it asks that hob first, as its lead. A manager working on your own request asks you. This is how `ask` routes today (ADR 018), so nothing new is built.
-- **Never twice.** Every write takes the required `key` of ADR 031. A summon derives each new hob's id from the key and the draft's place in the list, so a retried call returns the same hobs. A key reused with other drafts is refused as `key-reused`. The keyed record and what it writes commit in one transaction, so a Summoning write never ends uncertain and needs no read-back.
+- **Never twice.** Every write takes the required `key` of ADR 031, and is a keyed Charm call like any other: unique per hob, scope and key ([persistence](../architecture/persistence.md)), so the same key from two managers, or from one manager in two Tasks, is two calls. A summon mints a fresh id for each new hob the first time the call is sent, and stores the ids on its keyed call record. A retry finds that record and returns the same hobs, also after the call's record moves into its Task's scope. A key reused with other drafts is refused as `key-reused`. The keyed record and what it writes commit in one transaction, so a Summoning write never ends uncertain and needs no read-back.
 
 ### Finding who can summon
 
@@ -96,7 +96,7 @@ The Charm declares one operation per field, mirroring Summon and the profile. Ev
 
 ### Asking is a proposal
 
-A Summoning call that asks becomes a **proposal**: an Inbox item that only you apply, through use cases that require a `UserSession` (PE-006). This is ADR 031's route for changes a hob may not apply itself, and it is the only route here. What is created or changed is made by you on the manager's proposal.
+A Summoning call that asks becomes a **proposal**: an Inbox item the hub creates on the manager's call, and that only you decide and apply, through use cases that require a `UserSession` (PE-006). This is ADR 031's route for changes a hob may not apply itself, and it is the only route here. What is created or changed is made by you on the manager's proposal.
 
 - **One card per call**, with a row per hob. A summon row shows the hob as Summon's Ready step shows it: sprite, name, role and sigil, good at, brain and effort, folders, Charms, and the instructions folded. A change row shows a before and after of the fields that change. A retire card shows the hob, what it owns, the choice for its running replies and the confirmation check box.
 - **A decision per row.** Each row offers Allow and Deny, and a summon row also offers **Edit**, which opens Summon prefilled; you approve your version. Allow all and Deny all act on every row. The proposal settles once every row is decided.
@@ -108,7 +108,7 @@ A Summoning call that asks becomes a **proposal**: an Inbox item that only you a
 
 ### Changes to ADR 031
 
-- **An action may declare that its Ask is a proposal.** The pipeline then decodes, reads the hob's access again, plans, decides and records the step as before. On Ask it writes the proposal instead of an approval request, and never runs `send`. The proposal and its decisions are the action's own records, written through use cases that require a `UserSession`.
+- **An action may declare that its Ask is a proposal.** The pipeline then decodes, reads the hob's access again, plans, decides and records the step as before. On Ask it writes the proposal instead of an approval request, and never runs `send`. The pipeline creates the proposal on the manager's call, as it creates an approval request today, so creating one needs no `UserSession` and grants nothing. Deciding a row, editing it, pressing "Always allow" and applying go through use cases that require a `UserSession` (PE-006), so no hob, the manager included, can decide or apply its own proposal.
 - **A proposal's outcome is the call's answer** when it settles while the call waits, with the parts its apply use cases return.
 
 ### No escalation
@@ -196,7 +196,7 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - A hob without the Charm hands a summon to the hob that holds it, and asks who should be responsible when two hold it. Not proven yet ([#412](https://github.com/otaviobarros/hobbots/issues/412)).
 - A manager checks three drafts, asks its lead about the unclear one, and summons the three from one card after you edit one. All three are created, the edited one as you edited it, each shows who summoned it, and each opens from its card in the chat. Not proven yet ([#409](https://github.com/otaviobarros/hobbots/issues/409), [#412](https://github.com/otaviobarros/hobbots/issues/412)).
 - The check tool names what a draft lacks or gets wrong and writes nothing. Not proven yet ([#406](https://github.com/otaviobarros/hobbots/issues/406)).
-- A retried summon of three hobs returns the same three hobs, and a reused key with other drafts is refused. Not proven yet ([#406](https://github.com/otaviobarros/hobbots/issues/406)).
+- A retried summon of three hobs returns the same three hobs, also after its call moves into its Task's scope, and a reused key with other drafts is refused. The same key from two managers, or from one manager in two Tasks, summons distinct hobs. Not proven yet ([#406](https://github.com/otaviobarros/hobbots/issues/406)).
 - "Always allow" on a summon card sets `summoning.summon` to Allow as a change made by you, shows as Allow in the Charms tab, and lets the next summon run without a card, until the cap. Not proven yet ([#409](https://github.com/otaviobarros/hobbots/issues/409), [#410](https://github.com/otaviobarros/hobbots/issues/410)).
 - A manager changes three hobs in one call, you allow two and deny one, the manager hears which, and History and the Changes log show each change with its actor and diff, live. Not proven yet ([#409](https://github.com/otaviobarros/hobbots/issues/409), [#411](https://github.com/otaviobarros/hobbots/issues/411)).
 - An out-of-scope call, a field at Never and a draft wider than the manager are refused with their reason and nothing written. A hob cannot grant the Summoning Charm or touch the sandbox switch. Not proven yet ([#406](https://github.com/otaviobarros/hobbots/issues/406)).
@@ -204,5 +204,6 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - A hob managing itself changes its own instructions after you allow it, and cannot widen its permissions, pause or retire itself. Not proven yet ([#406](https://github.com/otaviobarros/hobbots/issues/406)).
 - Unattended summons stop at their cap and ask, and retiring a summoned hob frees its place. Not proven yet ([#407](https://github.com/otaviobarros/hobbots/issues/407)).
 - Retire through the Charm is once only with the check box, with each choice for running replies. Not proven yet ([#412](https://github.com/otaviobarros/hobbots/issues/412)).
+- A manager's call that asks creates its proposal without a user session, and no hob can decide, edit or apply a proposal, since those use cases require one. Not proven yet ([#409](https://github.com/otaviobarros/hobbots/issues/409)).
 - Renaming a hob makes a new version, every version names its actor, and existing hobs migrate as made and summoned by you, on SQLite and PostgreSQL. Not proven yet ([#405](https://github.com/otaviobarros/hobbots/issues/405)).
 - Each scenario above runs at hub level with the fake runtime on SQLite and PostgreSQL, against an installed Claude Code and an installed Codex in the clean-runtime contract tests, and in the browser. Not proven yet ([#412](https://github.com/otaviobarros/hobbots/issues/412)).
