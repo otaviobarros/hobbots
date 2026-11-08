@@ -139,9 +139,22 @@ const wordedFor = (consequence: string, path: string) => {
   return instead !== null ? instead[1] === path || instead[2] === path : EMPTY.exec(consequence)?.[1] === path;
 };
 
-/** Words in a choice that put the work somewhere else, or leave it to the user, such as "Move it yourself". */
-const ELSEWHERE =
-  /\b(instead|elsewhere|another (place|folder|path|location)|by hand|yourself|move|moving|copy|copying|relocate|skip|drop)\b/i;
+/**
+ * Phrases in a choice that say where the work goes, or leave it to the user, such as "Move it
+ * yourself" or "Save it in another folder". Each is about a place, not one word alone: "Use
+ * Portuguese instead", "Skip the table of contents" and "Copy edit it lightly" are about the work.
+ */
+const ELSEWHERE = new RegExp(
+  [
+    String.raw`\belsewhere\b`,
+    String.raw`\bsomewhere else\b`,
+    String.raw`\b(another|a different|other) (place|folder|path|location|directory|destination)\b`,
+    String.raw`\bby hand\b`,
+    String.raw`\b(it|this|the file|the page) yourself\b`,
+    String.raw`\b(move|copy|save|put|place|relocate|deliver)\b[^.\n]{0,30}\b(to|into|under|in) (the |your |my |its |a |another )?(folder|directory|workspace|repository|repo|project|home|desktop|downloads|documents)\b`,
+  ].join("|"),
+  "i",
+);
 
 /**
  * Whether a choice decides where the work goes: it names an absolute path the user did not name, or

@@ -413,6 +413,19 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
               { label: "Portuguese", consequence: `${wanted} is written in Portuguese.` },
             ],
           }),
+          // Words such as "instead", "skip" and "copy" in a choice about the content leave it a content question.
+          hub("ask", {
+            key: "contents",
+            question: `How should ${wanted} read?`,
+            options: [
+              {
+                label: "Use Portuguese instead",
+                consequence: `${wanted} is written in Portuguese instead of English.`,
+              },
+              { label: "Skip the table of contents", consequence: `${wanted} has no table of contents.` },
+              { label: "Copy edit it lightly", consequence: `${wanted} keeps its wording, with typos fixed.` },
+            ],
+          }),
           hub("ask", {
             key: "by-hand",
             question: `I can't write ${wanted}. What now?`,
@@ -429,8 +442,9 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
         { key: "wrap", delivered: true, summary: "Saved", artifacts: [file(saved)] },
       ),
     );
-    const asked = await run(treeWhen((tree) => tree.questions.length > 1));
+    const asked = await run(treeWhen((tree) => tree.questions.length > 2));
     expect(answers.get("language")).not.toContain("Refused");
+    expect(answers.get("contents")).not.toContain("Refused");
     expect(answers.get("by-hand")).toContain("Refused (destination-unworded)");
     expect(answers.get("by-hand")).toContain(`The user asked for ${wanted}, and nothing is there yet`);
     expect(answers.get("by-hand")).toContain("Never recommend a choice that leaves the delivery to the user");
@@ -438,6 +452,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     // The question about its content, and the one worded to let the place go, are asked.
     expect(asked.questions.map((each) => each.options.map((option) => option.label))).toEqual([
       ["English", "Portuguese"],
+      ["Use Portuguese instead", "Skip the table of contents", "Copy edit it lightly"],
       ["Save it there instead", "Keep the place I asked for"],
     ]);
     // The question reaches the lead as a turn whose briefing says how such a question is worded.
