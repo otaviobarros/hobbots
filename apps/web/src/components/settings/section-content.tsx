@@ -3,6 +3,8 @@ import { ConnectedHubSettings } from "../devices/connected-hub.tsx";
 import { DeviceList } from "../devices/device-list.tsx";
 import { DiagnosticsSettings } from "../diagnostics/diagnostics-settings.tsx";
 import { messages as diagnosticsMessages } from "../diagnostics/messages.ts";
+import { ChangesLog } from "../hob-changes/changes-log.tsx";
+import type { ChangesSearch } from "../hob-changes/hob-changes-model.ts";
 import { WaitingDevices } from "../pairing/waiting-devices.tsx";
 import { RemoteAccessSettings } from "../remote-access/remote-access-settings.tsx";
 import { AboutSettings } from "./about-settings.tsx";
@@ -19,12 +21,22 @@ import { SettingsGroup } from "./settings-group.tsx";
 import { YourData } from "./your-data.tsx";
 
 /** The open section's settings, below its heading. */
-export function SectionContent({ section, tab }: { section: SettingsSection; tab: ConnectionsTab }) {
+export function SectionContent({
+  section,
+  tab,
+  changes,
+}: {
+  section: SettingsSection;
+  tab: ConnectionsTab;
+  changes: ChangesSearch;
+}) {
   switch (section) {
     case "app":
       return <ThisApp />;
     case "safety":
       return <SafetySection />;
+    case "changes":
+      return <ChangesLog search={changes} />;
     case "connections":
       return <ConnectionsSection tab={tab} />;
     case "devices":

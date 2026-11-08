@@ -42,6 +42,9 @@ import { formatMonthDay } from "../../lib/format.ts";
 import { type HobState, hobState } from "../../lib/hob-state.ts";
 import { ExportDialog } from "../export/export-dialog.tsx";
 import { messages as exportCopy } from "../export/messages.ts";
+import { HistoryTab, useSeeChanges } from "../hob-changes/hob-history.tsx";
+import { NamingHob, useHobsNamed } from "../hob-changes/hob-names.tsx";
+import { messages as changesCopy } from "../hob-changes/messages.ts";
 import { ModelsBrain, ModelsWaiting } from "../hob-form/hob-form.tsx";
 import { stateTag } from "../hob-page/hob-page-model.ts";
 import { HobSkillsManage } from "../hob-skills/profile-skills.tsx";
@@ -56,13 +59,14 @@ import { PermissionsTab } from "./hob-permissions.tsx";
 import { TonePicker } from "./tone-picker.tsx";
 
 /** The profile's tabs; a link may open one other than Profile with `?tab=`. */
-export const ProfileTabName = Schema.Literals(["profile", "charms", "skills", "permissions"]);
+export const ProfileTabName = Schema.Literals(["profile", "charms", "skills", "permissions", "history"]);
 type Tab = typeof ProfileTabName.Type;
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ["profile", "Profile"],
   ["charms", "Charms"],
   ["skills", "Skills"],
   ["permissions", "Permissions"],
+  ["history", "History"],
 ];
 
 /**
@@ -180,6 +184,7 @@ function Profile({
   const [retireOpen, setRetireOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [hops, setHops] = useState(0);
+  useSeeChanges(hob);
 
   return (
     <main
@@ -225,6 +230,9 @@ function Profile({
           </TabsContent>
           <TabsContent value="permissions">
             <PermissionsTab hob={hob} />
+          </TabsContent>
+          <TabsContent value="history">
+            <HistoryTab hob={hob} />
           </TabsContent>
         </Tabs>
       </div>
@@ -292,6 +300,7 @@ function ProfileHero({
           </Badge>
           {good && <span className="truncate">{good}</span>}
         </span>
+        {hob.summonedBy !== null && <SummonedBy summoner={hob.summonedBy} />}
       </span>
       <span className="flex flex-none items-center gap-2">
         <Button asChild>
@@ -302,6 +311,18 @@ function ProfileHero({
         <MoreActions name={hob.name} disabled={disabled} onExport={onExport} />
       </span>
     </header>
+  );
+}
+
+/** "Summoned by Ada" under the name of a hob another hob summoned, with Ada linked to her profile (ADR 034). */
+function SummonedBy({ summoner }: { summoner: AgentId }) {
+  const hobs = useHobsNamed([summoner]);
+  // Until the summoner is read, the line under the profile says who summoned it as far as it knows.
+  if (!hobs.has(summoner)) return null;
+  return (
+    <span className="text-meta text-text-secondary">
+      <NamingHob hobId={summoner} hobs={hobs} line={(name) => changesCopy.profile.summonedBy({ hob: name })} />
+    </span>
   );
 }
 

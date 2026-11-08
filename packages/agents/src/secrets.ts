@@ -67,6 +67,9 @@ export const redactEvent = (event: RuntimeEvent, redactor: Redactor): RuntimeEve
       return { ...event, reason: redactor.text(event.reason) };
     case "ToolFinished":
       return event.output === undefined ? event : { ...event, output: redactor.text(event.output) };
+    // A query can carry what the hob read in the session, so it is redacted as a label is (ADR 036).
+    case "WebSearched":
+      return { ...event, query: redactor.text(event.query) };
     default:
       return event;
   }

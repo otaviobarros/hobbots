@@ -1,5 +1,11 @@
 import type { HobPermissions, UpdateHobPermissionsPayload } from "@hobbots/api";
-import { type Agent, type PolicyDecision, type PolicyOperation, policySandbox } from "@hobbots/domain";
+import {
+  type Agent,
+  type PolicyDecision,
+  type PolicyOperation,
+  policySandbox,
+  type RuntimeKind,
+} from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
@@ -10,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useId } from "react";
 import { ApiError } from "../../api/client.ts";
-import { needsSandbox, sandboxGap } from "../../api/enforcement.ts";
+import { needsSandbox, notOffered, sandboxGap } from "../../api/enforcement.ts";
 import { permissionsQuery, useUpdatePermissions } from "../../api/queries.ts";
 import {
   ANSWER,
@@ -71,12 +77,19 @@ const RULE_GROUPS: ReadonlyArray<readonly [keyof typeof messages.permissions.gro
     ["skills", ["search-skills", "request-skill", "propose-skill", "skill-feedback"]],
     ["hobs", ["read-hobs"]],
     ["commands", ["run-commands", "local-git"]],
-    ["internet", ["use-web"]],
+    ["web", ["search-web", "use-web"]],
     ["outside", ["outside-folders"]],
   ];
 
 const ruleOf = (operation: PolicyOperation): RuleInfo | undefined =>
   PERMISSION_RULES.find((rule) => rule.operation === operation);
+
+/** A rule as the hob's runtime words it: Search the web names the search it uses, or that it has none (ADR 036). */
+const ruleFor = (rule: RuleInfo, runtime: RuntimeKind, permissions: HobPermissions): RuleInfo => {
+  if (rule.operation !== "search-web") return rule;
+  const notes = messages.permissions.searchWeb;
+  return { ...rule, note: notOffered(rule.operation, permissions.enforcement) ? notes.notOffered : notes[runtime] };
+};
 
 /**
  * What the hob may touch (ADR 014): an answer per operation in plain-word groups, then its folders,
@@ -115,7 +128,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
         rule={(rule) => (
           <Rule
             key={rule.operation}
-            rule={rule}
+            rule={ruleFor(rule, hob.runtime, data)}
             permissions={data}
             shown={sendingAnswer(data, sending, rule.operation)}
             pending={locked}
@@ -471,32 +484,67 @@ export function Rule({
         </>
       }
     >
-      <SegmentedControl
-        size="sm"
-        value={current}
-        onValueChange={(answer: PolicyDecision) => {
-          if (answer !== current) onPick(answer);
-        }}
-        aria-label={rule.label}
-        aria-describedby={noteId}
-        className="w-[210px] flex-none"
-      >
-        {(rule.answers ?? (["allow", "ask", "deny"] as const)).map((answer) => {
-          const offered = allowed.includes(answer);
-          return (
-            <SegmentedControlItem
-              key={answer}
-              value={answer}
-              disabled={!offered || pending}
-              title={offered ? undefined : copy.wider}
-              className="flex-1"
-            >
-              {ANSWER[answer]}
-            </SegmentedControlItem>
-          );
-        })}
-      </SegmentedControl>
+      {notOffered(rule.operation, permissions.enforcement) ? (
+        <Badge variant="muted" className="flex-none">
+          {copy.notOffered}
+        </Badge>
+      ) : (
+        <AnswerControl
+          rule={rule}
+          current={current}
+          allowed={allowed}
+          pending={pending}
+          noteId={noteId}
+          onPick={onPick}
+        />
+      )}
     </RuleRow>
+  );
+}
+
+/** Allow, Ask and Never, or the answers the rule takes, with those wider than the preset dimmed. */
+function AnswerControl({
+  rule,
+  current,
+  allowed,
+  pending,
+  noteId,
+  onPick,
+}: {
+  rule: RuleInfo;
+  current: PolicyDecision;
+  allowed: ReadonlyArray<PolicyDecision>;
+  pending: boolean;
+  noteId: string;
+  onPick: (answer: PolicyDecision) => void;
+}) {
+  const copy = messages.permissions;
+  return (
+    <SegmentedControl
+      size="sm"
+      value={current}
+      onValueChange={(answer: PolicyDecision) => {
+        if (answer !== current) onPick(answer);
+      }}
+      aria-label={rule.label}
+      aria-describedby={noteId}
+      className="w-[210px] flex-none"
+    >
+      {(rule.answers ?? (["allow", "ask", "deny"] as const)).map((answer) => {
+        const offered = allowed.includes(answer);
+        return (
+          <SegmentedControlItem
+            key={answer}
+            value={answer}
+            disabled={!offered || pending}
+            title={offered ? undefined : copy.wider}
+            className="flex-1"
+          >
+            {ANSWER[answer]}
+          </SegmentedControlItem>
+        );
+      })}
+    </SegmentedControl>
   );
 }
 

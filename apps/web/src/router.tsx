@@ -420,12 +420,25 @@ const settingsSectionRoute = createRoute({
   beforeLoad: ({ params }) => {
     if (!isSettingsSection(params.section)) throw redirect({ to: "/settings" });
   },
-  // `?tab=charms` opens Connections on its Charms tab.
-  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ tab: searchParam(ConnectionsTab) })),
+  // `?tab=charms` opens Connections on its Charms tab, and `?hob=`, `?by=` and `?charm=` filter Changes.
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({
+      tab: searchParam(ConnectionsTab),
+      hob: searchParam(SearchText),
+      by: searchParam(SearchText),
+      charm: searchParam(SearchText),
+    }),
+  ),
   component: function SettingsSectionPage() {
     const { section } = settingsSectionRoute.useParams();
-    const { tab } = settingsSectionRoute.useSearch();
-    return <SettingsPage section={isSettingsSection(section) ? section : null} tab={tab ?? "ai"} />;
+    const { tab, hob, by, charm } = settingsSectionRoute.useSearch();
+    return (
+      <SettingsPage
+        section={isSettingsSection(section) ? section : null}
+        tab={tab ?? "ai"}
+        changes={{ hob, by, charm }}
+      />
+    );
   },
 });
 // The Archive: archived chats across every hob and retired hobs (CH-009, AG-006). Its pages share

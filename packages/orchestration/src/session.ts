@@ -23,6 +23,7 @@ import {
   type TurnApprovals,
   TurnSkillsInUse,
   trackTurn,
+  turnWebSearch,
 } from "@hobbots/agents";
 import {
   type Agent,
@@ -193,6 +194,8 @@ export const runSessionTurn = (
           model: turn.config.model,
           effort: turn.config.effort,
           tools: turn.access,
+          // Settled from the policy as the turn starts, as a chat turn's is (ADR 036).
+          webSearch: turnWebSearch(turn.access),
           skills,
           approvals: turn.approvals,
           redaction: redactor,

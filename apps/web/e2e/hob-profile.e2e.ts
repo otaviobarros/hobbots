@@ -429,6 +429,24 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
     .toMatchObject({ configVersion: 7, folders: [], policy: { ownFolders: [], overrides: {} } });
 });
 
+// covers AG-004, PE-001, ADR 036
+test("[TC-PE-1266-04] the Permissions tab sets Search the web to Never, and offers it no Ask", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+  await page.getByRole("tab", { name: "Permissions" }).click();
+
+  // The Web group lists the hob's own search first, Allow under every preset, with Allow and Never only.
+  const search = page.getByRole("radiogroup", { name: "Search the web" });
+  await expect(search.getByRole("radio")).toHaveCount(2);
+  await expect(search.getByRole("radio", { name: "Allow" })).toBeChecked();
+  await search.getByText("Never", { exact: true }).click();
+  await expect(search.getByRole("radio", { name: "Never" })).toBeChecked();
+  await expect
+    .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
+    .toMatchObject({ policy: { overrides: { "search-web": "deny" } }, decisions: { "search-web": "deny" } });
+});
+
 // covers AG-004, PE-005
 test("[TC-PE-086] the Permissions tab turns commit signing with 1Password on, with its SSH warning, and off", async ({
   page,

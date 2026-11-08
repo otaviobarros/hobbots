@@ -4,19 +4,23 @@ import {
   InvalidFolder,
   InvalidHob,
   OverrideWidens,
+  RevertRefused,
   UndeclaredOperation,
   UnknownCharm,
+  UnofferedAnswer,
   type UpdateAgentPayload,
   type UpdateHobPermissionsPayload,
 } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  ALLOW_OR_NEVER_OPERATIONS,
   type ChangeActor,
   type CharmDeclaration,
   type CharmId,
   type CharmOperation,
   type CharmOverrides,
+  configurationFields,
   DEFAULT_LENGTH,
   DEFAULT_VOICE,
   declaredOperations,
@@ -153,6 +157,17 @@ const checkOverrides = (
       });
 };
 
+/** An override of Ask for an operation that takes Allow or Never only, which is never stored (ADR 036). */
+const checkOffered = (policy: HobPolicy): UnofferedAnswer | undefined => {
+  const asked = ALLOW_OR_NEVER_OPERATIONS.filter((operation) => policy.overrides[operation] === "ask");
+  return asked.length === 0
+    ? undefined
+    : new UnofferedAnswer({
+        operations: asked,
+        message: `${asked.join(", ")} takes Allow or Never, not Ask`,
+      });
+};
+
 /** An override for a Charm operation no Charm the hub holds declares, which is never stored (ADR 031). */
 const checkDeclared = (
   overrides: CharmOverrides,
@@ -180,14 +195,15 @@ const checkHeld = (
 
 /**
  * The answers a change gives checked, when it gives any: a Charm the hub does not hold is refused
- * first, then a Charm override no Charm declares, then any override that widens its preset.
+ * first, then a Charm override no Charm declares, then an Ask for an operation that takes none,
+ * then any override that widens its preset.
  */
 const checkAnswers = (
   payload: UpdateHobPermissionsPayload,
   preset: SafetyPreset,
   policy: HobPolicy,
   charms: ReadonlyArray<CharmDeclaration>,
-): UnknownCharm | UndeclaredOperation | OverrideWidens | undefined => {
+): UnknownCharm | UndeclaredOperation | UnofferedAnswer | OverrideWidens | undefined => {
   const granted = payload.charms?.granted;
   if (granted !== undefined) {
     const unknown = checkHeld(granted, charms);
@@ -198,6 +214,7 @@ const checkAnswers = (
   const charmOperations = declaredOperations(charms);
   return (
     (charmOverrides && checkDeclared(charmOverrides, charmOperations)) ??
+    checkOffered(policy) ??
     checkOverrides(preset, policy, charmOperations)
   );
 };
@@ -377,7 +394,10 @@ export class HobService extends Context.Service<
       id: AgentId,
       payload: UpdateHobPermissionsPayload,
       actor?: ChangeActor,
-    ) => Effect.Effect<Agent, AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm>;
+    ) => Effect.Effect<
+      Agent,
+      AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm | UnofferedAnswer
+    >;
     /**
      * `update` and `updatePolicy` as one configuration version, made by `actor`: both are checked
      * before either is stored, so a change one of them refuses stores nothing (ADR 034).
@@ -388,8 +408,16 @@ export class HobService extends Context.Service<
       actor: ChangeActor,
     ) => Effect.Effect<
       Agent,
-      InvalidHob | AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm
+      InvalidHob | AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm | UnofferedAnswer
     >;
+    /**
+     * Reverts the hob's latest change, `version`: the version before it becomes the hob's next
+     * version, made by you (ADR 034). Refused once another version followed it, and for the first.
+     */
+    readonly revert: (
+      id: AgentId,
+      version: number,
+    ) => Effect.Effect<Agent, AgentNotFound | InvalidHob | InvalidFolder | RevertRefused>;
   }
 >()("@hobbots/agents/HobService") {
   static readonly layer = Layer.effect(
@@ -593,7 +621,52 @@ export class HobService extends Context.Service<
         );
       });
 
-      return HobService.of({ create, update, updateThen, updatePolicy, change });
+      // The version before the latest one, as a new version made by you; refused once another
+      // version followed the one it reverts. A brain the runtime stopped offering, or a folder of the
+      // hob's own that is shared with every hob since, is refused as an edit to it would be.
+      const revert = Effect.fn("HobService.revert")(function* (id: AgentId, version: number) {
+        if (version <= 1) return yield* new RevertRefused({ agentId: id, version, reason: "first-version" });
+        return yield* nextVersion(
+          id,
+          (agent) =>
+            Effect.gen(function* () {
+              if (agent.configVersion !== version) {
+                return yield* new RevertRefused({ agentId: id, version, reason: "not-latest" });
+              }
+              const previous = yield* repo.findAgentConfig(id, version - 1).pipe(Effect.map(Option.getOrThrow));
+              const fields = configurationFields(previous);
+              // A folder the revert gives back is checked on the hub as adding it would be: it must
+              // still be there, and it is stored canonical. Folders the hob keeps are left as they are.
+              const kept = agent.policy.ownFolders;
+              const ownFolders = [
+                ...new Set(
+                  yield* Effect.forEach(fields.policy.ownFolders, (folder) =>
+                    kept.includes(folder) ? Effect.succeed(folder) : folders.check(folder),
+                  ),
+                ),
+              ];
+              const restored = new Agent({ ...agent, ...fields, policy: { ...fields.policy, ownFolders } });
+              const sameBrain =
+                restored.runtime === agent.runtime &&
+                restored.model === agent.model &&
+                restored.effort === agent.effort;
+              const invalid = sameBrain ? undefined : yield* checkRuntimeBrain(adapters, restored);
+              if (invalid !== undefined) return yield* invalid;
+              const { approvedFolders } = yield* setup.get;
+              const shared = ownFolders.find((folder) => !kept.includes(folder) && approvedFolders.includes(folder));
+              if (shared !== undefined) {
+                return yield* new InvalidFolder({
+                  folder: shared,
+                  message: `${shared} is already shared with every hob`,
+                });
+              }
+              return restored;
+            }),
+          YOU,
+        );
+      });
+
+      return HobService.of({ create, update, updateThen, updatePolicy, change, revert });
     }),
   );
 }

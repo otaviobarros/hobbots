@@ -151,7 +151,7 @@ export const useCreateHob = () => {
  * Writes a hob the hub returned into the hob lists now rather than waiting for the live event. A
  * retired hob leaves the hob list for the retired ones, and one brought back goes the other way.
  */
-const useHobChange = <V>(change: (variables: V) => Promise<Agent>) => {
+export const useHobChange = <V>(change: (variables: V) => Promise<Agent>) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: change,

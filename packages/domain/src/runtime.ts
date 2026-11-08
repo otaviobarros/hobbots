@@ -27,6 +27,11 @@ export const RuntimeEnforcement = Schema.Struct({
   toolEvents: EnforcementCapability,
   /** A running tool can be stopped. */
   toolInterruption: EnforcementCapability,
+  /**
+   * The runtime's own web search can be offered under Search the web (ADR 036). Anything but
+   * verified, and the hob's Permissions shows Search the web as not offered.
+   */
+  webSearch: EnforcementCapability,
 });
 export type RuntimeEnforcement = typeof RuntimeEnforcement.Type;
 
@@ -37,6 +42,7 @@ export const ENFORCEMENT_CAPABILITIES = [
   "hubTools",
   "toolEvents",
   "toolInterruption",
+  "webSearch",
 ] as const satisfies ReadonlyArray<keyof RuntimeEnforcement>;
 
 /**
