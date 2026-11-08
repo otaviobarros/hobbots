@@ -764,6 +764,9 @@ importers:
       '@hobbots/agents':
         specifier: workspace:*
         version: link:../agents
+      '@hobbots/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@hobbots/permissions':
         specifier: workspace:*
         version: link:../permissions

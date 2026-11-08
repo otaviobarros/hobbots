@@ -21,6 +21,7 @@ import {
   SaveDestinations,
   SkillLibrary,
   TaskRepository,
+  WebRecords,
   WorkHold,
 } from "@hobbots/agents";
 import {
@@ -41,6 +42,9 @@ import {
   TaskId,
   Thread,
   ThreadId,
+  WebFetchRecord,
+  WebRecordId,
+  WebSearchRecord,
 } from "@hobbots/domain";
 import {
   checkMemoryArchive,
@@ -60,6 +64,7 @@ import {
   SkillLibraryLive,
   SqliteLive,
   TaskRepositoryLive,
+  WebRecordsLive,
 } from "@hobbots/persistence";
 import { AgentsFolder, SkillImporter, SkillObjects } from "@hobbots/skills";
 import { Effect, Exit, Fiber, Latch, Layer, Option, Redacted, Ref, Stream } from "effect";
@@ -133,6 +138,7 @@ const hubOn = (dir: string, record = migrations) =>
     DeviceRepositoryLive,
     RestoreRepository.layer,
     EventJournal.layer,
+    WebRecordsLive,
   ).pipe(Layer.provideMerge(RestoreRulesLive(dir)), Layer.provideMerge(SqliteLive(databaseOf(dir), record)));
 
 type Hub = Layer.Success<ReturnType<typeof hubOn>>;
@@ -329,6 +335,74 @@ describe("backup and restore", () => {
     expect(await readFile(join(dataDir, "tool-logs/a1.log"), "utf8")).toBe("ran: walk");
     expect(JSON.parse(await readFile(join(dataDir, "network.json"), "utf8"))).toEqual({ port: 4999 });
     await expect(lstat(restoreMarkerFile(dataDir))).rejects.toThrow();
+  });
+
+  // covers OP-003, ADR 036 (Usage and limits: backups)
+  it("[TC-OP-1269-01] brings back web searches, pages read, Settings › Web and a hob's own limits", async () => {
+    const where = {
+      agentId: FRODO,
+      threadId,
+      messageId: MessageId.make("m1"),
+      taskId: null,
+      attemptId: null,
+      turn: "reply:m1",
+      at: now,
+    };
+    const search = new WebSearchRecord({
+      ...where,
+      id: WebRecordId.make("w1"),
+      runtime: "claude-code",
+      query: "the way to Mordor",
+      resultCount: 1,
+      results: [{ title: "Maps", url: "https://maps.test/" }],
+      billing: "subscription (Max)",
+    });
+    const page = new WebFetchRecord({
+      ...where,
+      id: WebRecordId.make("w2"),
+      url: "https://maps.test/",
+      finalUrl: "https://maps.test/",
+      status: 200,
+      bytes: 512,
+      parts: 1,
+      part: 1,
+      tokens: 128,
+    });
+    const settings = {
+      limits: { searchesPerTurn: 4, pagesPerTurn: 8, searchesPerDay: 16 },
+      blockedSites: ["isengard.test"],
+    };
+    const limits = { searchesPerTurn: 2, pagesPerTurn: null, searchesPerDay: null };
+    await onHub(
+      dataDir,
+      Effect.gen(function* () {
+        yield* seed;
+        const records = yield* WebRecords;
+        yield* records.recordSearch(search);
+        yield* records.recordFetch(page);
+        yield* records.setSettings(settings);
+        yield* records.setHobLimits(FRODO, limits);
+      }),
+    );
+    const folder = join(destination, "web.hobbots-backup");
+    await backUp(dataDir, folder);
+    await rm(dataDir, { recursive: true, force: true });
+    await Effect.runPromise(performRestore(dataDir, folder));
+    const restored = await onHub(
+      dataDir,
+      Effect.gen(function* () {
+        const records = yield* WebRecords;
+        return {
+          usage: yield* records.usage({ agentId: FRODO }, 10),
+          settings: yield* records.settings,
+          limits: yield* records.hobLimits(FRODO),
+        };
+      }),
+    );
+    expect(restored.usage.searches).toEqual([search]);
+    expect(restored.usage.pages).toEqual([page]);
+    expect(restored.settings).toEqual(settings);
+    expect(restored.limits).toEqual(limits);
   });
 
   // covers OP-003

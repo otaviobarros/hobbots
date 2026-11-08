@@ -65,6 +65,7 @@ import { SkillsGroup } from "./skills.ts";
 import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
 import { UsageGroup } from "./usage.ts";
 import { DeviceSession } from "./user-session.ts";
+import { WebGroup } from "./web.ts";
 import { WorkbenchGroup } from "./workbench.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
@@ -439,6 +440,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(DiagnosticsGroup)
   .add(ExportsGroup)
   .add(UsageGroup)
+  .add(WebGroup)
   .add(MemoryGroup)
   .add(MemoryPagesGroup)
   .add(MemorySharesGroup)

@@ -38,6 +38,7 @@ import {
 } from "./skills.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { Thread } from "./thread.ts";
+import { HobWebLimits, WebFetchRecord, WebSearchRecord, WebSettings } from "./web-usage.ts";
 
 /**
  * A hob was created, changed, paused, woken, retired or brought back, by `actor` (ADR 034). Events
@@ -227,6 +228,14 @@ const SkillUpdateCleared = Schema.TaggedStruct("SkillUpdateCleared", {
 });
 /** You turned Update automatically on or off for a skill from Git. */
 const SkillAutoUpdateChanged = Schema.TaggedStruct("SkillAutoUpdateChanged", { skillId: SkillId, on: Schema.Boolean });
+/** A search a runtime ran was recorded (ADR 036, Usage and limits). */
+const WebSearched = Schema.TaggedStruct("WebSearched", { search: WebSearchRecord });
+/** A page `web_fetch` read was recorded (ADR 036, Usage and limits). */
+const WebFetched = Schema.TaggedStruct("WebFetched", { fetch: WebFetchRecord });
+/** Settings › Web changed: the limits every hob has, or the blocked sites. */
+const WebSettingsChanged = Schema.TaggedStruct("WebSettingsChanged", { settings: WebSettings });
+/** A hob's own web limits changed. */
+const HobWebLimitsChanged = Schema.TaggedStruct("HobWebLimitsChanged", { agentId: AgentId, limits: HobWebLimits });
 /** A hob used a skill in a turn (ADR 029, The use line): the revision the turn mounted, or an organization's skill. */
 const SkillUsed = Schema.TaggedStruct("SkillUsed", { use: SkillUse });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
@@ -333,6 +342,10 @@ export const JournaledEvent = Schema.Union([
   SkillUpdateDismissed,
   SkillUpdateCleared,
   SkillAutoUpdateChanged,
+  WebSearched,
+  WebFetched,
+  WebSettingsChanged,
+  HobWebLimitsChanged,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -423,6 +436,10 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   SkillUpdateDismissed: 1,
   SkillUpdateCleared: 1,
   SkillAutoUpdateChanged: 1,
+  WebSearched: 1,
+  WebFetched: 1,
+  WebSettingsChanged: 1,
+  HobWebLimitsChanged: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

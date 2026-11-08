@@ -344,6 +344,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               config,
               taskId: task.id,
               attemptId,
+              threadId: task.threadId,
               prompt,
               sessionId,
               access: run.access,

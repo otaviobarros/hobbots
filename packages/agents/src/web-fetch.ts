@@ -1,4 +1,6 @@
 import {
+  blockedSiteFor,
+  estimatedTokens,
   type Task,
   type TaskId,
   type ThreadId,
@@ -7,9 +9,12 @@ import {
   WEB_FETCH_TOOL,
   WEB_PAGE_PART_CHARS,
   WebFetchInput,
+  WebFetchRecord,
+  WebRecordId,
   webFetchJsonSchema,
+  webTurnKey,
 } from "@hobbots/domain";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import type { AskableVerdict } from "./asking.ts";
 import { type CharmTurn, WebTools } from "./charms.ts";
 import {
@@ -23,6 +28,7 @@ import {
 import { HobbotsRepository } from "./repository.ts";
 import type { HubTool, ToolAccess, TurnApprovals, WebSearchedEvent } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
+import { WebRecords, webAnnouncer, webLimitReason, webLimitsOf } from "./web-usage.ts";
 
 /**
  * Reading a web page for a hob on the hub (ADR 036): `web_fetch`, the ports the hub reads pages and
@@ -42,6 +48,8 @@ export interface WebPage {
   /** The URL the page was read from, after any redirect. */
   readonly url: string;
   readonly title: string | null;
+  /** The status the site answered with, a 2xx. */
+  readonly status: number;
   /** The media type the site sent, such as `text/html`. */
   readonly contentType: string;
   /** Its readable text: Markdown for HTML, as the site sent it for the rest. */
@@ -391,6 +399,45 @@ export const makeWebTools = <V extends WebVerdict>(
   Effect.gen(function* () {
     const fetcher = yield* WebFetcher;
     const provenance = yield* makeWebProvenance;
+    const records = yield* Effect.serviceOption(WebRecords);
+    const announce = yield* webAnnouncer;
+
+    /** Refuses a URL on a site Settings › Web blocks (ADR 036, Blocked sites). */
+    const unblocked = (url: URL, blockedSites: ReadonlyArray<string>) => {
+      const site = blockedSiteFor(url.hostname, blockedSites);
+      return site === null ? Effect.void : Effect.fail(new HubRefusal({ message: webLimitReason.blockedSite(site) }));
+    };
+
+    /** Records a page the turn read, with the answer's estimated tokens (ADR 036, Usage and limits). */
+    const recordPage = (turn: CharmTurn, asked: URL, page: WebPage, part: number, answer: string) =>
+      Option.match(records, {
+        onNone: () => Effect.void,
+        onSome: (store) =>
+          Effect.gen(function* () {
+            const messageId = turn.messageId;
+            const attemptId = turn.attemptId ?? null;
+            const entries = yield* store.recordFetch(
+              new WebFetchRecord({
+                id: WebRecordId.make(crypto.randomUUID()),
+                agentId: turn.agentId,
+                threadId: turn.threadId,
+                messageId,
+                taskId: turn.taskId ?? null,
+                attemptId,
+                turn: webTurnKey({ messageId, attemptId }),
+                at: DateTime.formatIso(yield* DateTime.now),
+                url: asked.href,
+                finalUrl: page.url,
+                status: page.status,
+                bytes: page.bytes,
+                parts: pageParts(page.text).length,
+                part,
+                tokens: estimatedTokens(answer.length),
+              }),
+            );
+            yield* announce(entries);
+          }),
+      });
 
     const request = (url: URL, target: WebTarget, found: boolean): WebRequest => ({
       _tag: "Web",
@@ -414,13 +461,15 @@ export const makeWebTools = <V extends WebVerdict>(
 
     /** Reads `url` from `target`, following the redirects the policy allows, and the page's part. */
     const read = (
+      turn: CharmTurn,
       session: WebSession,
-      approvals: TurnApprovals | null,
       access: ToolAccess,
       first: { readonly url: URL; readonly target: WebTarget },
       part: number,
+      blockedSites: ReadonlyArray<string>,
     ) =>
       Effect.gen(function* () {
+        const approvals = turn.approvals;
         let { url, target } = first;
         const hops: Array<string> = [];
         for (;;) {
@@ -438,7 +487,9 @@ export const makeWebTools = <V extends WebVerdict>(
                 message: `${page.url} has ${parts === 1 ? "1 part" : `${parts} parts`}, so there is no part ${part}.`,
               });
             }
-            return pageAnswer(page, part, hops);
+            const answer = pageAnswer(page, part, hops);
+            yield* recordPage(turn, first.url, page, part, answer);
+            return answer;
           }
           hops.push(url.href);
           const next = yield* pageUrl(new URL(fetched.location, url).href);
@@ -449,6 +500,7 @@ export const makeWebTools = <V extends WebVerdict>(
               message: `${hops[0]} redirects more than ${WEB_REDIRECT_LIMIT} times, so web_fetch stopped at ${next.href}.`,
             });
           }
+          yield* unblocked(next, blockedSites);
           const nextTarget = yield* fetcher.resolve(next).pipe(Effect.mapError(refused));
           const verdict = yield* decideAgain(approvals, access, next, nextTarget);
           if (verdict.decision === "deny") {
@@ -480,41 +532,56 @@ export const makeWebTools = <V extends WebVerdict>(
         return target;
       });
 
-    const actionsFor = (approvals: TurnApprovals | null) => [
-      hubAction({
-        tool: WEB_FETCH,
-        input: WebFetchInput,
-        effect: "read",
-        operation: "use-web",
-        otherwise: "no web page can be read",
-        unreadable: () => "Give the page's full URL as `url`, and a part number from 1 as `part` if you want one.",
-        plan: (input, { turn, access }: HubPlanContext) =>
-          Effect.gen(function* () {
-            const url = yield* pageUrl(input.url);
-            const session: WebSession = { threadId: turn.threadId, ...(turn.taskId ? { taskId: turn.taskId } : {}) };
-            const found = (yield* provenance.sources(session, [url.href])).has(url.href);
-            // A URL the hob wrote is not looked up before you approve it: its name could carry your data.
-            const target = found ? yield* fetcher.resolve(url).pipe(Effect.mapError(refused)) : null;
-            const part = input.part ?? 1;
-            return {
-              request: request(url, target ?? { host: url.hostname, addresses: [] }, found),
-              card: {
-                arguments: { url: url.href, ...(input.part === undefined ? {} : { part: input.part }) },
-                summary: found
-                  ? `Reads the web page ${url.href}.`
-                  : `Reads ${url.href}, a URL the hob wrote itself rather than copied from you, a search result or a page it read.`,
-              },
-              send: Effect.gen(function* () {
-                const pinned = target ?? (yield* approvedTarget(session, approvals, access, url));
-                return yield* read(session, approvals, access, { url, target: pinned }, part);
-              }),
-            };
-          }),
-      }),
-    ];
+    const actionsFor = (charmTurn: CharmTurn) => {
+      const approvals = charmTurn.approvals;
+      // The pages this turn started reading, which its pages-per-turn limit counts.
+      let pages = 0;
+      return [
+        hubAction({
+          tool: WEB_FETCH,
+          input: WebFetchInput,
+          effect: "read",
+          operation: "use-web",
+          otherwise: "no web page can be read",
+          unreadable: () => "Give the page's full URL as `url`, and a part number from 1 as `part` if you want one.",
+          plan: (input, { turn, access }: HubPlanContext) =>
+            Effect.gen(function* () {
+              const url = yield* pageUrl(input.url);
+              const { limits, blockedSites } = yield* webLimitsOf(turn.agentId);
+              yield* unblocked(url, blockedSites);
+              if (pages >= limits.pagesPerTurn) {
+                return yield* new HubRefusal({ message: webLimitReason.pagesPerTurn(limits) });
+              }
+              const session: WebSession = { threadId: turn.threadId, ...(turn.taskId ? { taskId: turn.taskId } : {}) };
+              const found = (yield* provenance.sources(session, [url.href])).has(url.href);
+              // A URL the hob wrote is not looked up before you approve it: its name could carry your data.
+              const target = found ? yield* fetcher.resolve(url).pipe(Effect.mapError(refused)) : null;
+              const part = input.part ?? 1;
+              return {
+                request: request(url, target ?? { host: url.hostname, addresses: [] }, found),
+                card: {
+                  arguments: { url: url.href, ...(input.part === undefined ? {} : { part: input.part }) },
+                  summary: found
+                    ? `Reads the web page ${url.href}.`
+                    : `Reads ${url.href}, a URL the hob wrote itself rather than copied from you, a search result or a page it read.`,
+                },
+                send: Effect.gen(function* () {
+                  // Counted as it starts, so calls that run at once cannot pass the limit together.
+                  if (pages >= limits.pagesPerTurn) {
+                    return yield* new HubRefusal({ message: webLimitReason.pagesPerTurn(limits) });
+                  }
+                  pages += 1;
+                  const pinned = target ?? (yield* approvedTarget(session, approvals, access, url));
+                  return yield* read(charmTurn, session, access, { url, target: pinned }, part, blockedSites);
+                }),
+              };
+            }),
+        }),
+      ];
+    };
 
     return WebTools.of({
       forTurn: (turn: CharmTurn) =>
-        offerHubActions({ owner: { _tag: "BuiltIn" }, actions: actionsFor(turn.approvals), decide })(turn),
+        offerHubActions({ owner: { _tag: "BuiltIn" }, actions: actionsFor(turn), decide })(turn),
     });
   });

@@ -816,6 +816,8 @@ export interface ToolTurn extends CallSteers {
    * the web answers Allow under the turn's context. Claude Code's `WebSearch` is then in `tools`.
    */
   readonly webSearch: boolean;
+  /** The hub's limits on each search, asked before it runs (ADR 036, Usage and limits). */
+  readonly checkWebSearch?: (query: string) => Effect.Effect<string | null>;
   /** Claude Code's configuration folder for this hob. */
   readonly runtimeFolder: string;
   /** The hob's bot, when it has its own GitHub App: its commands commit as it (ADR 022). */
@@ -856,7 +858,7 @@ const hubSteers = (hub: Pick<PromptRequest, "hubTools" | "steering"> | null | un
 export const toolTurn = (
   access: ToolAccess | null | undefined,
   sandbox: SandboxState,
-  hub?: Pick<PromptRequest, "hubTools" | "steering" | "webSearch"> | null,
+  hub?: Pick<PromptRequest, "hubTools" | "steering" | "webSearch" | "checkWebSearch"> | null,
   modelHosts: ReadonlyArray<string> = CLAUDE_CODE_MODEL_HOSTS,
 ): ToolTurn | null => {
   if (!access) return null;
@@ -883,6 +885,7 @@ export const toolTurn = (
     folders,
     tools: webSearch ? [...tools, WEB_SEARCH_TOOL] : tools,
     webSearch,
+    ...(webSearch && hub?.checkWebSearch ? { checkWebSearch: hub.checkWebSearch } : {}),
     runtimeFolder: access.runtimeFolder,
     ...hubSteers(hub),
     ...(access.commitAs ? { commitAs: access.commitAs } : {}),
@@ -983,6 +986,13 @@ export const policyHooks = (
     return reason;
   };
   const failed = (tool: string): CallDecision => ({ _tag: "Refuse", verdict: undefined, reason: UNKNOWN_TOOL(tool) });
+  // A search past one of the hub's limits is refused with the words that name it (ADR 036).
+  const limited = async (tool: string, input: Record<string, unknown>, decision: CallDecision) => {
+    if (tool !== WEB_SEARCH_TOOL || turn.checkWebSearch === undefined) return null;
+    const query = typeof input.query === "string" ? input.query : "";
+    const reason = await Effect.runPromise(turn.checkWebSearch(query));
+    return reason === null ? null : ({ _tag: "Refuse", verdict: decision.verdict, reason } satisfies CallDecision);
+  };
   const unrecorded = (decision: CallDecision): CallDecision => ({
     _tag: "Refuse",
     verdict: decision.verdict,
@@ -1007,6 +1017,17 @@ export const policyHooks = (
       () => failed(tool),
     );
     if (decision._tag === "Run") {
+      const over = await limited(tool, toolInput, decision);
+      if (over !== null) {
+        const reason = refuse(call.id, tool, toolInput, over);
+        return {
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: reason,
+          },
+        };
+      }
       if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
         const reason = refuse(call.id, tool, toolInput, unrecorded(decision));
         return {
@@ -1097,7 +1118,9 @@ export const policyHooks = (
       signal: options.signal,
     }).catch(() => failed(tool));
     if (decision._tag === "Run") {
-      // A call the hook allowed was recorded then.
+      // A call the hook allowed was recorded then, and checked against the limits.
+      const over = started.has(call.id) ? null : await limited(tool, input, decision);
+      if (over !== null) return { behavior: "deny", message: refuse(call.id, tool, input, over) };
       if (started.has(call.id) || (await begin(call.id, tool, input, decision.verdict))) {
         if (decision.approval) notes.set(call.id, approvalNote(decision.approval));
         return { behavior: "allow", updatedInput: input };

@@ -32,10 +32,20 @@ const RESPONSE = {
   durationSeconds: 1,
 };
 
-/** Runs one WebSearch call through the hooks as Claude Code would. */
-const search = async (hob: HobPolicy = EMPTY_HOB_POLICY, recordSearch?: PromptRequest["recordSearch"]) => {
-  const turn = toolTurn(access(hob), "on", { webSearch: true });
+/** A turn that may search, with the hub's limits when given. */
+const searchTurn = (hob: HobPolicy, checkWebSearch: PromptRequest["checkWebSearch"]) => {
+  const turn = toolTurn(access(hob), "on", { webSearch: true, ...(checkWebSearch ? { checkWebSearch } : {}) });
   if (turn === null) throw new Error("expected a tool turn");
+  return turn;
+};
+
+/** Runs one WebSearch call through the hooks as Claude Code would. */
+const search = async (
+  hob: HobPolicy = EMPTY_HOB_POLICY,
+  hub: Pick<PromptRequest, "recordSearch" | "checkWebSearch"> = {},
+) => {
+  const { recordSearch, checkWebSearch } = hub;
+  const turn = searchTurn(hob, checkWebSearch);
   const events: Array<RuntimeEvent> = [];
   const { hooks } = policyHooks(
     engine,
@@ -60,8 +70,9 @@ const search = async (hob: HobPolicy = EMPTY_HOB_POLICY, recordSearch?: PromptRe
   const pre = await hooks.PreToolUse?.[0]?.hooks[0]?.({ ...base, hook_event_name: "PreToolUse" } as HookInput, "t1", {
     signal,
   });
-  const decision = (pre as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput
-    ?.permissionDecision;
+  const output = (pre as { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } })
+    .hookSpecificOutput;
+  const decision = output?.permissionDecision;
   const post =
     decision === "allow"
       ? await hooks.PostToolUse?.[0]?.hooks[0]?.(
@@ -72,19 +83,20 @@ const search = async (hob: HobPolicy = EMPTY_HOB_POLICY, recordSearch?: PromptRe
       : undefined;
   const note = (post as { hookSpecificOutput?: { additionalContext?: string } } | undefined)?.hookSpecificOutput
     ?.additionalContext;
-  return { decision, events, note };
+  return { decision, reason: output?.permissionDecisionReason, events, note };
 };
 
 describe("Claude Code's web search", () => {
   // covers ADR 036
   it("[TC-RT-1289-01] records a search's results with the turn's recorder before the hook returns and reports the search", async () => {
     const order: Array<string> = [];
-    const done = await search(EMPTY_HOB_POLICY, (event) =>
-      // Slow on purpose, as a found set written to a busy database would be.
-      Effect.sleep("100 millis").pipe(
-        Effect.andThen(Effect.sync(() => order.push(`found ${event.results?.map((hit) => hit.url).join(" ")}`))),
-      ),
-    );
+    const done = await search(EMPTY_HOB_POLICY, {
+      recordSearch: (event) =>
+        // Slow on purpose, as a found set written to a busy database would be.
+        Effect.sleep("100 millis").pipe(
+          Effect.andThen(Effect.sync(() => order.push(`found ${event.results?.map((hit) => hit.url).join(" ")}`))),
+        ),
+    });
     order.push("returned");
     expect(order).toEqual(["found https://example.com/r", "returned"]);
     expect(done.events.filter((event) => event._tag === "WebSearched")).toHaveLength(1);
@@ -125,6 +137,27 @@ describe("Claude Code's web search", () => {
     const refused = await search(NEVER);
     expect(refused.decision).toBe("deny");
     expect(refused.events.map((event) => event._tag)).not.toContain("WebSearched");
+  });
+
+  // covers ADR 036 (Usage and limits)
+  it("[TC-RT-1269-01] asks the hub's limits before each search and refuses one past them with the hub's words", async () => {
+    const queries: Array<string> = [];
+    const limit = "This turn reached its limit of 1 web search, set in Settings › Web.";
+    const check = (query: string) =>
+      Effect.sync(() => {
+        queries.push(query);
+        return queries.length > 1 ? limit : null;
+      });
+    expect((await search(EMPTY_HOB_POLICY, { checkWebSearch: check })).decision).toBe("allow");
+    const over = await search(EMPTY_HOB_POLICY, { checkWebSearch: check });
+    expect(queries).toEqual(["hobbots releases", "hobbots releases"]);
+    expect(over).toMatchObject({ decision: "deny", reason: limit });
+    expect(over.events).toContainEqual(
+      expect.objectContaining({ _tag: "ToolDenied", operation: "search-web", reason: limit, decidedBy: "policy" }),
+    );
+    expect(over.events.map((event) => event._tag)).not.toContain("ToolStarted");
+    // A turn that may not search never asks the limits.
+    expect(toolTurn(access(NEVER), "on", { webSearch: true, checkWebSearch: check })?.checkWebSearch).toBeUndefined();
   });
 
   it("counts the turn's searches in its usage only when it could search", () => {

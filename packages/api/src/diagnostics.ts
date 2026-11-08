@@ -21,6 +21,7 @@ import {
   TaskState,
   TaskTree,
   ThreadId,
+  WebLimits,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
@@ -223,6 +224,17 @@ export const ReportQuest = Schema.Struct({
 });
 
 /**
+ * Web search and pages read (ADR 036, Usage and limits): the limits and how many sites are blocked,
+ * and how many searches and pages every hob made in the last 24 hours. Never a query, a URL or a site.
+ */
+export const DiagnosticsWeb = Schema.Struct({
+  limits: WebLimits,
+  blockedSites: Schema.Int,
+  lastDay: Schema.Struct({ searches: Schema.Int, pages: Schema.Int }),
+});
+export type DiagnosticsWeb = typeof DiagnosticsWeb.Type;
+
+/**
  * A diagnostics report (ADR 026). The report is encoded from this schema, which names every field
  * it may hold: a field it does not name is never in a report. Message text, briefs, prompts,
  * replies, Task results, tool steps, command lines, tool output, file contents, skill contents, keychain items,
@@ -240,6 +252,8 @@ export const DiagnosticsReport = Schema.Struct({
   recovery: Schema.Array(RecoveryError),
   /** Each hob's skills by name and revision, never their contents (ADR 029). */
   skills: Schema.Array(DiagnosticsHobSkills),
+  /** Absent from a report made before web search was counted. */
+  web: Schema.optionalKey(DiagnosticsWeb),
   quest: Schema.NullOr(ReportQuest),
 });
 export type DiagnosticsReport = typeof DiagnosticsReport.Type;

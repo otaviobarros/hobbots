@@ -31,4 +31,5 @@ export * from "./skills.ts";
 export * from "./tasks.ts";
 export * from "./usage.ts";
 export * from "./user-session.ts";
+export * from "./web.ts";
 export * from "./workbench.ts";
