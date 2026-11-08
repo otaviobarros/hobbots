@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { flakyTestsMarkdown, outcomesOf } from "./flaky-tests.mjs";
+import { flakyTestsMarkdown, outcomesOf, outcomesOfArguments } from "./flaky-tests.mjs";
 
 const result = (status) => ({ status });
 const playwright = {
@@ -106,6 +106,49 @@ test("a Vitest test's runs in separate reports count together, so one that faile
     /### Flaky tests[\s\S]*`exports \[TC-OP-042\] never writes over` \(`test\/export\.test\.ts:7`\), passed 2 of 3 runs\n/,
   );
   assert.doesNotMatch(markdown, /Failed tests|TC-OP-043/);
+});
+
+test("the same test on two databases is two tests: one that fails every run on PostgreSQL is failed there, not flaky", () => {
+  const run = (status) => ({
+    testResults: [
+      {
+        name: `${process.cwd()}/test/export.test.ts`,
+        assertionResults: [
+          { fullName: "exports [TC-OP-042] never writes over", status, location: { line: 7, column: 3 } },
+        ],
+      },
+    ],
+  });
+  const reports = new Map([
+    ["sqlite-1.json", run("passed")],
+    ["sqlite-2.json", run("passed")],
+    ["sqlite-3.json", run("passed")],
+    ["postgres-1.json", run("failed")],
+    ["postgres-2.json", run("failed")],
+    ["postgres-3.json", run("failed")],
+  ]);
+  const outcomes = outcomesOfArguments(
+    [
+      "--on",
+      "SQLite",
+      "sqlite-1.json",
+      "sqlite-2.json",
+      "sqlite-3.json",
+      "--on",
+      "PostgreSQL",
+      "postgres-1.json",
+      "postgres-2.json",
+      "postgres-3.json",
+      "missing.json",
+    ],
+    (file) => reports.get(file),
+  );
+  const markdown = flakyTestsMarkdown(outcomes);
+  assert.doesNotMatch(markdown, /Flaky tests|SQLite/);
+  assert.match(
+    markdown,
+    /### Failed tests\n\n- `exports \[TC-OP-042\] never writes over` \(`test\/export\.test\.ts:7`\) on PostgreSQL, passed 0 of 3 runs\n/,
+  );
 });
 
 test("a Playwright test's repeats count together, and a test that never passed is listed once", () => {

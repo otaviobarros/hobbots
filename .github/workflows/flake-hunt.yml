@@ -144,7 +144,19 @@ jobs:
           path: reports
       - name: Open or update the flake hunt issue
         run: |
-          found=$(find reports -name '*.json' -print0 | xargs -0 --no-run-if-empty node scripts/flaky-tests.mjs)
+          # Each database's runs are counted apart, so a test that fails every run on one database
+          # and passes on the other is listed as failed there, not as flaky. The browser tests run
+          # on SQLite only.
+          args=()
+          for dir in reports/hunt-*/; do
+            case "$dir" in
+              *-postgres/) args+=(--on PostgreSQL) ;;
+              *-sqlite/) args+=(--on SQLite) ;;
+              *) args+=(--on "") ;;
+            esac
+            while IFS= read -r -d '' report; do args+=("$report"); done < <(find "$dir" -name '*.json' -print0)
+          done
+          found=$(node scripts/flaky-tests.mjs "${args[@]}")
           if [[ -z "$found" && "$BROWSER" == success && "$SERVER" == success ]]; then
             echo "No flaky tests tonight." >> "$GITHUB_STEP_SUMMARY"
             issue=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number')
