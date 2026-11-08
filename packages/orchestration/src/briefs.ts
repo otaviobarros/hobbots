@@ -151,12 +151,11 @@ export const RESULTS_RULE =
 
 /**
  * What the lead of a Quest is told in each turn on its Task, after the rule itself. Where the user
- * asked for the work to go is theirs to change (#1215), and so are a member's approvals (#1216).
+ * asked for the work to go is theirs to change (#1215).
  */
 const LEAD_DUTY =
   "So never hand a Task what the Tasks it comes after returned. Call hand_off when a member needs something else, or needs a result while it is already running. " +
-  "Where the user asked for the work to go is theirs to change: when it cannot go there, escalate a member's question about where else to put it, or ask the user, and never choose another place yourself. " +
-  `A member's approvals are the user's too: ${APPROVAL_RULE} When a member asks you for permission to act, answer only that it should make the call and wait for the user's decision, and never tell the user a lead approved one.`;
+  "Where the user asked for the work to go is theirs to change: when it cannot go there, escalate a member's question about where else to put it, or ask the user, and never choose another place yourself.";
 
 /**
  * What a turn on `task` is told when that Task leads a Quest: the rule, then the lead's duty. Both

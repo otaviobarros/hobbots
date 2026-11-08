@@ -29,7 +29,7 @@ export const LEAN_CHAT_RULE =
  * Briefings and tool descriptions carry the same words.
  */
 export const APPROVAL_RULE =
-  "Only the user approves an action. Never ask another hob for permission to run a command, delete or change files, push or make any other tool call, and never give it or say a hob gave it: make the call, and when your policy asks first, Hobbots asks the user and the call waits for their decision.";
+  "Only the user approves an action. Never ask a hob for permission to make a tool call, give it or say one gave it: make the call, and Hobbots asks the user when your policy says to.";
 
 /** What a lead's finish says (#901). */
 export const FINISH_RULE = "The finish says in short what was made, where it is and who did what.";

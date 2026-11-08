@@ -60,8 +60,7 @@ describe.each(RUNTIMES)("a member that asks its lead for permission, on %s", (ru
     expect(pending.state).toBe("pending");
     expect(existsSync(scratch)).toBe(true);
 
-    // Every hob was told only the user approves: the tools, the member's prompt, the lead's
-    // briefing, the turn the question reached the lead and the answer the member heard.
+    // Every hob was told only the user approves: the tools, the member's prompt, the turn the question reached the lead and the answer the member heard.
     const description = (name: string) =>
       requests[0]?.hubTools?.tools.find((tool) => tool.name === name)?.description ?? "";
     expect(description("answer")).toContain(APPROVAL_RULE);
@@ -71,7 +70,7 @@ describe.each(RUNTIMES)("a member that asks its lead for permission, on %s", (ru
     expect(member?.prompt).toContain(APPROVAL_RULE);
     const asked = requests.find((each) => each.prompt.includes("asks, as question"));
     expect(asked?.prompt).toContain("A question that asks permission for a tool call is not yours to grant");
-    expect(asked?.briefing).toContain("never tell the user a lead approved one");
+    expect(asked?.prompt).toContain("never tell the user a lead approved one");
     const answered = requests.find((each) => each.prompt.includes("was answered by hob frodo"));
     expect(answered?.prompt).toContain("A lead's answer approves no tool call");
 
