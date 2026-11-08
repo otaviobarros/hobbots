@@ -647,6 +647,32 @@ export const TaskRepositoryLive = Layer.effect(
         }
       });
 
+    /**
+     * Why the Task could not change hands to `ownerId` once its running turn has stopped, by the
+     * rules `reassignTask` checks, or null when it could (#408). A live Attempt is no reason here:
+     * the hand-over stops it first.
+     */
+    const handOverRefusal = (taskId: TaskId, ownerId: AgentId) =>
+      Effect.gen(function* () {
+        const task = yield* openTask(taskId);
+        if (task.state === "cancelling") return yield* refuse("task-cancelling", `Task ${task.id} is being cancelled`);
+        const [delegation] = yield* read.delegationsOf(task.id);
+        if (delegation === undefined) {
+          return yield* refuse("not-delegated", `Task ${taskId} is not a party member's; only those change hands`);
+        }
+        const tree = yield* newOwner(task, ownerId);
+        if (descendantsOf(task, tree).some((each) => !isTerminalTask(each.state))) {
+          return yield* refuse("children-open", `Task ${task.id} has work still open under it`);
+        }
+        if ((yield* read.questsOn([task.id])).length > 0) {
+          return yield* refuse("quest-exists", `Task ${task.id} leads a Quest of its own`);
+        }
+        return null;
+      }).pipe(
+        Effect.catchTag("TaskRefused", (refused) => Effect.succeed(refused)),
+        Effect.orDie,
+      );
+
     const reassignTask: TaskRepository["Service"]["reassignTask"] = (taskId, expected, ownerId, at) =>
       change((revision) =>
         Effect.gen(function* () {
@@ -1117,6 +1143,14 @@ export const TaskRepositoryLive = Layer.effect(
           Effect.map(([quest]) => Option.fromNullishOr(quest)),
           Effect.orDie,
         ),
+      listOpenTasks: (ownerId) =>
+        sql<{ readonly id: string }>`SELECT id FROM tasks WHERE owner_id = ${ownerId}
+          AND state NOT IN ('completed', 'failed', 'cancelled') ORDER BY created_at, id`.pipe(
+          Effect.flatMap((rows) => Effect.forEach(rows, (row) => read.task(row.id))),
+          Effect.map((found) => found.flat()),
+          Effect.orDie,
+        ),
+      handOverRefusal,
       openTaskCount: (ownerId) =>
         sql<{ readonly count: unknown }>`SELECT COUNT(*) AS count FROM tasks WHERE owner_id = ${ownerId}
           AND state NOT IN ('completed', 'failed', 'cancelled')`.pipe(

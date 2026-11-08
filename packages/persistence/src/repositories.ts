@@ -2,6 +2,7 @@ import { HobbotsRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentConfiguration,
+  type AgentId,
   AgentStatus,
   type ChangeActor,
   type Committed,
@@ -13,6 +14,7 @@ import {
   messageEvents,
   previewLine,
   type ReplyUsage,
+  type Retiring,
   type SkillUse,
   Thread,
   ThreadCheckpoint,
@@ -40,13 +42,15 @@ interface AgentRow {
   readonly visibleToHobs?: unknown;
   readonly summonedUnattended?: unknown;
   readonly actor?: unknown;
+  readonly retiring?: unknown;
 }
 
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every look seed and revision fits a number.
 // The policy's three JSON text columns (migration 0015), its signing flag (0021) and the ids of its
 // Charms (0076), its Summoning scope and the Charms withheld from it (0083) become the hob's one
 // `policy` field. Being visible to other hobs is 0 or 1 (0079), and
-// so is being summoned unattended on a hob; a configuration version's actor is JSON text (0082).
+// so is being summoned unattended on a hob; a configuration version's actor is JSON text (0082), and
+// so is a hob's wait to retire (0088).
 export const agentRows = (rows: ReadonlyArray<AgentRow>) =>
   rows.map(
     ({
@@ -66,6 +70,9 @@ export const agentRows = (rows: ReadonlyArray<AgentRow>) =>
       ...(row.revision === undefined ? {} : { revision: Number(row.revision) }),
       ...(row.summonedUnattended === undefined ? {} : { summonedUnattended: Number(row.summonedUnattended) === 1 }),
       ...(row.actor === undefined ? {} : { actor: JSON.parse(String(row.actor)) }),
+      ...(row.retiring === undefined
+        ? {}
+        : { retiring: row.retiring === null ? null : JSON.parse(String(row.retiring)) }),
       policy: {
         ownFolders: JSON.parse(String(ownFolders)),
         hiddenSharedFolders: JSON.parse(String(hiddenSharedFolders)),
@@ -350,14 +357,28 @@ export const HobbotsRepositoryLive = Layer.effect(
         }),
       );
 
+    // The hob as stored now, in the change's transaction, so its event carries what a read would show.
+    const storedAgent = (id: AgentId) =>
+      findAgent(id).pipe(
+        Effect.flatMap((found) => (Option.isSome(found) ? Effect.succeed(found.value) : Effect.die(`No hob ${id}`))),
+        Effect.catchTag("SchemaError", Effect.die),
+      );
+
+    // A retirement ends any wait to retire. Other moves leave that wait as stored, so a move computed
+    // from a read made before it began never undoes it.
     const setAgentStatus = (input: Agent, from: AgentStatus, actor: ChangeActor = YOU) =>
       journaled(1, (revision) =>
         Effect.gen(function* () {
-          const agent = new Agent({ ...input, revision });
-          const updated = yield* sql`UPDATE agents
-            SET status = ${agent.status}, retired_at = ${agent.retiredAt}, revision = ${revision}
-            WHERE id = ${agent.id} AND status = ${from} RETURNING id`;
+          const updated =
+            input.status === "retired"
+              ? yield* sql`UPDATE agents
+                  SET status = ${input.status}, retired_at = ${input.retiredAt}, retiring = NULL, revision = ${revision}
+                  WHERE id = ${input.id} AND status = ${from} RETURNING id`
+              : yield* sql`UPDATE agents
+                  SET status = ${input.status}, retired_at = ${input.retiredAt}, revision = ${revision}
+                  WHERE id = ${input.id} AND status = ${from} RETURNING id`;
           if (updated.length === 0) return null;
+          const agent = yield* storedAgent(input.id);
           // Kept for the hob's History and the Changes log, which outlive the journal (migration 0085).
           yield* sql`INSERT INTO agent_status_changes ${sql.insert({
             agent_id: agent.id,
@@ -367,6 +388,18 @@ export const HobbotsRepositoryLive = Layer.effect(
             actor: JSON.stringify(actor),
             created_at: DateTime.formatIso(yield* DateTime.now),
           })}`;
+          return { value: agent, events: [{ _tag: "AgentUpserted", agent, actor }] };
+        }),
+      );
+
+    // Only a hob that is not retired and not already waiting starts waiting to retire.
+    const setAgentRetiring = (agentId: AgentId, retiring: Retiring, actor: ChangeActor) =>
+      journaled(1, (revision) =>
+        Effect.gen(function* () {
+          const updated = yield* sql`UPDATE agents SET retiring = ${JSON.stringify(retiring)}, revision = ${revision}
+            WHERE id = ${agentId} AND status <> 'retired' AND retiring IS NULL RETURNING id`;
+          if (updated.length === 0) return null;
+          const agent = yield* storedAgent(agentId);
           return { value: agent, events: [{ _tag: "AgentUpserted", agent, actor }] };
         }),
       );
@@ -525,6 +558,7 @@ export const HobbotsRepositoryLive = Layer.effect(
         statuses.length === 0 ? Effect.succeed([]) : listAgentsWithStatus(statuses).pipe(Effect.orDie),
       findAgent: (id) => findAgent(id).pipe(Effect.orDie),
       setAgentStatus,
+      setAgentRetiring,
       insertAgent,
       findAgentConfig: (agentId, version) => findAgentConfig({ agentId, version }).pipe(Effect.orDie),
       updateAgentConfig: (agent, actor = YOU) =>

@@ -17,6 +17,7 @@ export * from "./memory-pages.ts";
 export * from "./memory-shares.ts";
 export * from "./permissions.ts";
 export * from "./remote-access.ts";
+export * from "./retire.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./setup-bridge.ts";

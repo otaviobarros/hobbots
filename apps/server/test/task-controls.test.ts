@@ -46,6 +46,7 @@ import { DispatcherHostLive } from "../src/backpack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
+import { RetireWhenDone } from "../src/retire.ts";
 
 // Issue #276: Cancel, Retry and Reassign act on a Task directly and report what really happened
 // (OR-006). The fake runtime scripts every hob's calls; the controls are called as the user would
@@ -158,7 +159,7 @@ const Party = Layer.effectDiscard(
 );
 
 const makeApp = (gates: Gates, requests: Array<PromptRequest>) =>
-  Layer.mergeAll(WakeOnArrival, HobLifecycle.layer, TaskControls.layer).pipe(
+  Layer.mergeAll(WakeOnArrival, RetireWhenDone.pipe(Layer.provideMerge(HobLifecycle.layer)), TaskControls.layer).pipe(
     Layer.provideMerge(ChatService.layer),
     Layer.provideMerge(ContinuationsLive),
     Layer.provideMerge(
@@ -872,5 +873,150 @@ describe("retrying and reassigning", () => {
       (each) => each.prompt.includes("Draft the copy") && !each.prompt.includes("delegate_task"),
     );
     expect(fresh.map((each) => each.sessionId)).toEqual([null, null, null]);
+  }, 20_000);
+});
+
+describe("retiring a hob with open work", () => {
+  const lifecycle = <A, E>(use: (each: HobLifecycle["Service"]) => Effect.Effect<A, E>) => HobLifecycle.use(use);
+  const hobNow = (agentId: AgentId) =>
+    HobbotsRepository.use((repo) => repo.findAgent(agentId)).pipe(
+      Effect.flatMap((found) => (found._tag === "Some" ? Effect.succeed(found.value) : Effect.die("no hob"))),
+    );
+
+  // covers AG-006, OR-006
+  it("[TC-AG-1240] Stop and hand over gives each open Task to the hob named, which finishes it, and no Task fails", async () => {
+    const { run, release } = setUp();
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    const before = await run(treeWhen(underWay));
+    const copy = ownedBy(before, QUILL);
+    if (copy === undefined) throw new Error("no Task for Quill");
+
+    const retired = await run(lifecycle((each) => each.handOver(QUILL, ROOK)));
+    expect(retired).toMatchObject({ id: QUILL, status: "retired", retiring: null });
+    // Handed over before the retirement: the Task never failed with its hob.
+    const moved = await run(treeWhen((tree) => tree.tasks.find((task) => task.id === copy.id)?.ownerId === ROOK));
+    expect(moved.tasks.some((task) => task.state === "failed")).toBe(false);
+    expect(moved.delegations.find((each) => each.childTaskId === copy.id)?.memberId).toBe(ROOK);
+
+    await release();
+    const done = await run(
+      treeWhen(
+        (tree) =>
+          tree.tasks.find((task) => task.id === copy.id)?.state === "completed" &&
+          !tree.attempts.some((each) => each.taskId === copy.id && isLive(each.state)),
+      ),
+    );
+    expect(done.tasks.some((task) => task.state === "failed")).toBe(false);
+    expect(
+      attemptsOf(
+        done,
+        done.tasks.find((task) => task.id === copy.id),
+      ),
+    ).toEqual([
+      [QUILL, "interrupted"],
+      [ROOK, "completed"],
+    ]);
+    // Handing over a retired hob again changes nothing.
+    expect(await run(lifecycle((each) => each.handOver(QUILL, ROOK)))).toMatchObject({ status: "retired" });
+  }, 20_000);
+
+  // covers AG-006, OR-006
+  it("[TC-AG-1241] a hand-over is refused with nothing changed when a Task cannot go to that hob", async () => {
+    const { run } = setUp();
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    const before = await run(treeWhen(underWay));
+    const copy = ownedBy(before, QUILL);
+    const top = before.tasks[0];
+    if (copy === undefined || top === undefined) throw new Error("no Tasks");
+
+    const refused = (agentId: AgentId, to: AgentId) =>
+      run(lifecycle((each) => each.handOver(agentId, to)).pipe(Effect.flip));
+    // Aldric leads the work above Quill's Task, so Reassign could not give it to him.
+    expect(await refused(QUILL, ALDRIC)).toMatchObject({
+      _tag: "HandOverRefused",
+      tasks: [{ id: copy.id, block: { reason: "lineage-owner" } }],
+    });
+    // The Task you asked for has no other hob to go to.
+    expect(await refused(ALDRIC, ROOK)).toMatchObject({ tasks: [{ id: top.id, block: { reason: "not-delegated" } }] });
+    expect(await refused(QUILL, QUILL)).toMatchObject({ _tag: "HandOverRefused", tasks: [] });
+    await run(lifecycle((each) => each.retire(PIP, "finish")));
+    expect(await refused(QUILL, PIP)).toMatchObject({ _tag: "HandOverRefused", tasks: [] });
+
+    expect(await run(hobNow(QUILL))).toMatchObject({ status: "active", retiring: null });
+    const after = await run(treeWhen(() => true));
+    expect(ownedBy(after, QUILL)?.id).toBe(copy.id);
+    expect(after.attempts.some((each) => each.agentId === QUILL && isLive(each.state))).toBe(true);
+  }, 20_000);
+
+  // covers AG-006
+  it("[TC-AG-1242] Finish, then retire takes no new work, keeps working the open Task, and retires once it ends", async () => {
+    const { run, release } = setUp();
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    const before = await run(treeWhen(underWay));
+    const copy = ownedBy(before, QUILL);
+    const build = ownedBy(before, ADA);
+    if (copy === undefined || build === undefined) throw new Error("no Tasks");
+
+    const waiting = await run(lifecycle((each) => each.retireWhenDone(QUILL)));
+    expect(waiting).toMatchObject({ status: "active", retiring: { by: { _tag: "You" } } });
+    // Asking again keeps the first request.
+    expect(await run(lifecycle((each) => each.retireWhenDone(QUILL)))).toMatchObject({ retiring: waiting.retiring });
+
+    // No new work: no new thread, and no Task given to it.
+    expect(await run(ChatService.use((chat) => chat.createThread(QUILL)).pipe(Effect.flip))).toMatchObject({
+      _tag: "HobUnavailable",
+      status: "retiring",
+    });
+    expect(await run(controls((each) => each.reassign(build.id, QUILL)).pipe(Effect.flip))).toMatchObject({
+      _tag: "HobUnavailable",
+      status: "retiring",
+    });
+
+    await release();
+    const done = await run(
+      treeWhen(
+        (tree) =>
+          tree.tasks.find((task) => task.id === copy.id)?.state === "completed" &&
+          !tree.attempts.some((each) => each.agentId === QUILL && isLive(each.state)),
+      ),
+    );
+    expect(
+      attemptsOf(
+        done,
+        done.tasks.find((task) => task.id === copy.id),
+      ),
+    ).toEqual([[QUILL, "completed"]]);
+    const retired = await run(
+      retry(
+        Effect.flatMap(hobNow(QUILL), (hob) =>
+          hob.status === "retired" ? Effect.succeed(hob) : Effect.fail("not yet"),
+        ),
+      ),
+    );
+    expect(retired).toMatchObject({ retiring: null });
+    expect(retired.retiredAt).not.toBeNull();
+  }, 20_000);
+
+  // covers AG-006
+  it("[TC-AG-1243] Finish, then retire refuses messages that would start new work, and retires a hob with nothing open at once", async () => {
+    const { run } = setUp();
+    const other = await run(ChatService.use((chat) => chat.createThread(ALDRIC)));
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(treeWhen(underWay));
+
+    expect(await run(lifecycle((each) => each.retireWhenDone(ALDRIC)))).toMatchObject({ status: "active" });
+    // A thread with none of its open Tasks would start a new one.
+    expect(
+      await run(ChatService.use((chat) => chat.sendPrompt(other.id, "Something else")).pipe(Effect.flip)),
+    ).toMatchObject({ _tag: "HobUnavailable", status: "retiring" });
+
+    expect(await run(lifecycle((each) => each.retireWhenDone(PIP)))).toMatchObject({
+      status: "retired",
+      retiring: null,
+    });
+    expect(await run(lifecycle((each) => each.retireWhenDone(PIP)).pipe(Effect.flip))).toMatchObject({
+      _tag: "HobUnavailable",
+      status: "retired",
+    });
   }, 20_000);
 });

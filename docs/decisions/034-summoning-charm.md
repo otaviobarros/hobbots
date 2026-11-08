@@ -155,7 +155,7 @@ A summon you approve on a card is never capped, and the hub has no cap on its nu
 
 ### Retiring
 
-Retiring through the Charm uses today's retire, with its two choices for running replies (`finish` or `stop`). It is once only with the confirmation check box. A hob never retires itself. Retiring a hob with open work by handing it over or letting it finish first is [#408](https://github.com/otaviobarros/hobbots/issues/408), outside this slice.
+Retiring through the Charm uses today's retire, with its two choices for running replies (`finish` or `stop`). It is once only with the confirmation check box. A hob never retires itself. Retiring a hob with open work by handing it over or letting it finish first is [#408](https://github.com/otaviobarros/hobbots/issues/408), outside this slice. The retire use case offers both beside the two choices: a hand-over names the hob that takes the open Tasks, which for the Charm is the manager that asked, and "finish first" leaves the hob retiring, taking no new work, until its last open Task ends.
 
 ### Records and events
 

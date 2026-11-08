@@ -3,6 +3,7 @@ import {
   Agent,
   AgentId,
   AgentTransitions,
+  hobStanding,
   InvalidAgentTransition,
   InvalidMessageTransition,
   isInProgress,
@@ -12,7 +13,9 @@ import {
   MessageTransitions,
   QueuedMessageTransitions,
   ThreadId,
+  takesNewWork,
   titleFromPrompt,
+  YOU,
 } from "../src/index.ts";
 
 const streaming = new Message({
@@ -186,6 +189,25 @@ describe("AgentTransitions", () => {
     const retired = AgentTransitions.retire(hob, "2026-10-30T12:00:00.000Z") as Agent;
     expect(AgentTransitions.pause(retired)).toMatchObject({ _tag: "InvalidAgentTransition", from: "retired" });
     expect(AgentTransitions.wake(retired)).toBeInstanceOf(InvalidAgentTransition);
+  });
+
+  // covers AG-006
+  it("[TC-AG-1245] has a hob finish its open Tasks before it retires, taking no new work meanwhile", () => {
+    const retiring = { since: "2026-11-08T12:00:00.000Z", by: YOU };
+    const waiting = AgentTransitions.retireWhenDone(hob, retiring) as Agent;
+    expect(waiting).toMatchObject({ status: "active", retiring });
+    expect([takesNewWork(hob), takesNewWork(waiting)]).toEqual([true, false]);
+    expect([hobStanding(hob), hobStanding(waiting)]).toEqual(["active", "retiring"]);
+    // Asking again keeps the first request, a paused hob keeps its status, and a retired one is refused.
+    expect(AgentTransitions.retireWhenDone(waiting, { ...retiring, since: "2026-11-09T12:00:00.000Z" })).toBe(waiting);
+    expect(AgentTransitions.retireWhenDone(AgentTransitions.pause(hob) as Agent, retiring)).toMatchObject({
+      status: "paused",
+      retiring,
+    });
+    const retired = AgentTransitions.retire(waiting, "2026-11-08T13:00:00.000Z") as Agent;
+    expect(retired).toMatchObject({ status: "retired", retiring: null });
+    expect(hobStanding(retired)).toBe("retired");
+    expect(AgentTransitions.retireWhenDone(retired, retiring)).toBeInstanceOf(InvalidAgentTransition);
   });
 
   it("brings a retired hob back active, with no retirement time", () => {
