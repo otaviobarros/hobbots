@@ -216,11 +216,11 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     writeFileSync(scratch, "draft\n");
     const remove = JSON.stringify({ command: "rm scratch.txt", writes: { "scratch.txt": null } });
     await run(
-      quest(
-        `Delete ${scratch}`,
-        [`fake:run ${remove}`, hub("complete_task", { key: "rook", summary: "Deleted" })],
-        { key: "wrap", delivered: true, summary: "Deleted as you asked" },
-      ),
+      quest(`Delete ${scratch}`, [`fake:run ${remove}`, hub("complete_task", { key: "rook", summary: "Deleted" })], {
+        key: "wrap",
+        delivered: true,
+        summary: "Deleted as you asked",
+      }),
     );
     // Balanced asks you before the work deletes files; you approve.
     const pending = await run(firstPending);
