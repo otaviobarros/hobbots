@@ -4,7 +4,7 @@ import { declaredOperations } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { checkFolder } from "./folders.ts";
+import { checkFolder, checkNewFolder } from "./folders.ts";
 
 export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers) =>
   Effect.gen(function* () {
@@ -15,13 +15,17 @@ export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers
     return handlers.handleAll({
       get: () => setup.get,
       // Folders are checked on the hub and stored resolved. A folder or provider added twice is
-      // kept once, where it was first added.
+      // kept once, where it was first added. A newly added folder is also opened once, so macOS asks
+      // about a protected one, such as Documents, now rather than in a hob's turn (#1225).
       update: ({ payload }) =>
         Effect.gen(function* () {
+          const before = yield* setup.get;
+          const approved = new Set(before.approvedFolders);
           const folders =
             payload.approvedFolders &&
-            (yield* Effect.forEach(payload.approvedFolders, (folder) => checkFolder(folder)));
-          const before = yield* setup.get;
+            (yield* Effect.forEach(payload.approvedFolders, (folder) =>
+              approved.has(folder) ? checkFolder(folder) : checkNewFolder(folder),
+            ));
           const updated = yield* setup.update({
             ...payload,
             ...(folders && { approvedFolders: [...new Set(folders)] }),
