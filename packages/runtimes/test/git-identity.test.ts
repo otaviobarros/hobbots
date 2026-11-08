@@ -4,7 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { settleCommitsAs } from "@hobbots/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { NO_GIT_IDENTITY_NOTE, turnCommits, userGitIdentity, withUserIdentity } from "../src/git-config.ts";
+import { steerCommitIdentity } from "../src/approval.ts";
+import {
+  COMMIT_IDENTITY_RULE,
+  NO_GIT_IDENTITY_NOTE,
+  SETS_COMMIT_IDENTITY_NOTE,
+  turnCommits,
+  userGitIdentity,
+  withUserIdentity,
+} from "../src/git-config.ts";
 import { gitConfigEnv, UNSIGNED_GIT } from "../src/sandbox.ts";
 
 // Issue #586: a hob without its own app commits as the user, never as an identity Git makes up
@@ -188,7 +196,7 @@ describe("Commits a hob makes without its own app", () => {
     // The user's own config wins over the given one once it sets an email.
     const own = settled(join(root, "home"), given);
     expect(own.as._tag).toBe("UserConfig");
-    expect(own.note).toBe("");
+    expect(own.note).toContain("made as the user");
     expect(commit(repo, "open", own.env(UNSIGNED_GIT))).toBe(
       "Ada Lovelace <ada@example.com>, Ada Lovelace <ada@example.com>",
     );
@@ -196,4 +204,31 @@ describe("Commits a hob makes without its own app", () => {
     const bot = { name: "frodo[bot]", email: "1+frodo[bot]@users.noreply.github.com" };
     expect(settled(empty, given, bot).as).toEqual({ _tag: "Bot", identity: bot });
   });
+});
+
+describe("what a hob is told about who it commits as (#1213)", () => {
+  const given = { name: "otaviobarros", email: "35647586+otaviobarros@users.noreply.github.com" };
+  const bot = { name: "frodo-hobbots[bot]", email: "90001000+frodo-hobbots[bot]@users.noreply.github.com" };
+  const none = { name: null, email: null };
+  const cases = [
+    { why: "no identity set yet", as: settleCommitsAs(null, none, null) },
+    { why: "the identity the user gave Hobbots", as: settleCommitsAs(null, none, given) },
+    { why: "the user's own Git config", as: settleCommitsAs(null, { name: "Ada", email: "ada@example.com" }, null) },
+    { why: "the hob's own bot", as: settleCommitsAs(bot, none, given) },
+  ];
+
+  // covers OR-004
+  it.each(cases)(
+    "[TC-OR-1213-01] tells the hob, for $why, that Hobbots sets who commits and it runs git commit without an identity",
+    ({ as }) => {
+      const commits = turnCommits({ commitsAs: as });
+      // In the system prompt, before the first commit, and again in every resumed session's prompt.
+      expect(commits.note).toContain(SETS_COMMIT_IDENTITY_NOTE);
+      expect(commits.now).toContain(SETS_COMMIT_IDENTITY_NOTE);
+      for (const flag of ["-c user.*", "git config user.*", "--author", "GIT_AUTHOR_*", "GIT_COMMITTER_*", "EMAIL"])
+        expect(SETS_COMMIT_IDENTITY_NOTE).toContain(flag);
+      // The hob is told the same rule the hub refuses a command with.
+      expect(steerCommitIdentity(as)).toContain(COMMIT_IDENTITY_RULE);
+    },
+  );
 });

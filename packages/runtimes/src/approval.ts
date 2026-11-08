@@ -13,6 +13,7 @@ import {
 import { type CommitsAs, leftoverGitNote, steerGitInit } from "@hobbots/domain";
 import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
+import { COMMIT_IDENTITY_RULE } from "./git-config.ts";
 import { inSharedTemp, TEMP_HINT } from "./sandbox.ts";
 import {
   commandWritesTo,
@@ -120,18 +121,16 @@ export const steerPush = (takeover: Pick<Takeover, "charm" | "tool">) =>
  * is set yet and Hobbots asks the user, so the hob neither sets one nor asks itself.
  */
 export const steerCommitIdentity = (commitsAs: CommitsAs) => {
-  const rule =
-    "Run Git without setting who commits: no -c user.*, git config user.*, --author or -C on git commit, and no GIT_AUTHOR_*, GIT_COMMITTER_*, EMAIL or GIT_CONFIG* variables, whether set, exported or unset.";
   switch (commitsAs._tag) {
     case "Missing":
-      return `${rule} Hobbots sets who your commits are made as, never you, and none is set yet: the user's Git config sets no identity, and Hobbots is asking the user who hobs should commit as. Do not ask them or another hob yourself, and do not commit until a later turn: leave your changes uncommitted and say that the commit waits for their answer.`;
+      return `${COMMIT_IDENTITY_RULE} Hobbots sets who your commits are made as, never you, and none is set yet: the user's Git config sets no identity, and Hobbots is asking the user who hobs should commit as. Do not ask them or another hob yourself, and do not commit until a later turn: leave your changes uncommitted and say that the commit waits for their answer.`;
     case "Bot":
     case "UserGiven":
-      return `${rule} Hobbots sets who your commits are made as, and they are made as ${commitsAs.identity.name} <${commitsAs.identity.email}>${
+      return `${COMMIT_IDENTITY_RULE} Hobbots sets who your commits are made as, and they are made as ${commitsAs.identity.name} <${commitsAs.identity.email}>${
         commitsAs._tag === "UserGiven" ? ", the identity the user gave Hobbots" : ""
       }, never as another hob or person.`;
     case "UserConfig":
-      return `${rule} Hobbots sets who your commits are made as, and they are made as the user, with the identity their Git config sets, never as another hob or person.`;
+      return `${COMMIT_IDENTITY_RULE} Hobbots sets who your commits are made as, and they are made as the user, with the identity their Git config sets, never as another hob or person.`;
   }
 };
 
