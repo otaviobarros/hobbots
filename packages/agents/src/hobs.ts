@@ -239,12 +239,14 @@ const createdFields = [
   "model",
   "effort",
   "instructions",
+  "visibleToHobs",
 ] as const satisfies ReadonlyArray<keyof CreateAgentPayload & keyof Agent>;
 
-/** A new hob's request with its tone filled in, so a retry that leaves the tone out matches. */
-const withTone = (payload: CreateAgentPayload) => ({
+/** A new hob's request with its defaults filled in, so a retry that leaves them out matches. */
+const withDefaults = (payload: CreateAgentPayload) => ({
   voice: DEFAULT_VOICE,
   length: DEFAULT_LENGTH,
+  visibleToHobs: true,
   ...payload,
 });
 
@@ -258,6 +260,7 @@ const editableFields = [
   "model",
   "effort",
   "instructions",
+  "visibleToHobs",
 ] as const satisfies ReadonlyArray<keyof UpdateAgentPayload & keyof Agent>;
 
 export class HobService extends Context.Service<
@@ -326,7 +329,7 @@ export class HobService extends Context.Service<
 
       // A retry carries the same id and fields; the same id with other fields is another hob.
       const retried = (existing: Agent, payload: CreateAgentPayload) =>
-        createdFields.every((field) => existing[field] === withTone(payload)[field])
+        createdFields.every((field) => existing[field] === withDefaults(payload)[field])
           ? Effect.succeed(existing)
           : Effect.fail(new InvalidHob({ field: "id", message: "Another hob already has this id" }));
 
