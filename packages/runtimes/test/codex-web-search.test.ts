@@ -117,10 +117,13 @@ describe("reading a Codex search", () => {
 });
 
 describe("a Codex turn that may search the web", () => {
-  const setup = async (server: ReturnType<typeof fakeServer>, hob: HobPolicy = EMPTY_HOB_POLICY) => {
-    const root = realpathSync(mkdtempSync(join(temp, "turn-")));
+  const setup = async (
+    server: ReturnType<typeof fakeServer>,
+    hob: HobPolicy = EMPTY_HOB_POLICY,
+    root = realpathSync(mkdtempSync(join(temp, "turn-"))),
+  ) => {
     const project = join(root, "project");
-    mkdirSync(project);
+    mkdirSync(project, { recursive: true });
     const binary = join(root, "codex");
     writeFileSync(binary, "");
     const engine = await Effect.runPromise(Effect.service(PolicyEngine).pipe(Effect.provide(PolicyEngine.node)));
@@ -156,7 +159,9 @@ describe("a Codex turn that may search the web", () => {
       webSearch: true,
     };
     const settings = () => readFileSync(join(codexFolders(runtimeFolder).home, "config.toml"), "utf8");
-    return { turnConfig, request, settings };
+    // Whether the App Server the turn started was told to search, on its own command line.
+    const searches = () => server.commands.at(-1)?.args.join(" ").includes('web_search="cached"') === true;
+    return { turnConfig, request, settings, searches };
   };
   const run = (turnConfig: CodexTurnConfig, request: PromptRequest) =>
     Effect.runPromise(Stream.runCollect(runCodexTurn(turnConfig, request)).pipe(Effect.exit));
@@ -177,11 +182,13 @@ describe("a Codex turn that may search the web", () => {
   // covers ADR 036
   it("[TC-RT-1266-03] offers cached search on a held Codex, labels the results as other people's text and counts them", async () => {
     const server = searchingTurn();
-    const { turnConfig, request, settings } = await setup(server);
+    const { turnConfig, request, settings, searches } = await setup(server);
     const exit = await run({ ...turnConfig, cachedSearch: Effect.succeed(true) }, request);
     expect(Exit.isSuccess(exit)).toBe(true);
-    expect(settings()).toContain('web_search = "cached"');
-    expect(settings()).not.toMatch(/web_search = "(live|indexed)"/);
+    expect(searches()).toBe(true);
+    // The hob's shared home keeps search off, and never names live or indexed search.
+    expect(settings()).toContain('web_search = "disabled"');
+    expect(settings()).not.toMatch(/web_search = "(live|indexed|cached)"/);
     expect(events(exit)).toContainEqual({
       _tag: "WebSearched",
       id: "s1",
@@ -205,16 +212,38 @@ describe("a Codex turn that may search the web", () => {
   it("[TC-RT-1266-04] turns Codex's search off on a Codex the contract test did not hold, and for a hob set to Never", async () => {
     const unheld = await setup(fakeServer({ script: [completed("completed")] }));
     await run(unheld.turnConfig, unheld.request);
+    expect(unheld.searches()).toBe(false);
     expect(unheld.settings()).toContain('web_search = "disabled"');
 
     const never = { ...EMPTY_HOB_POLICY, overrides: { "search-web": "deny" } } as const;
     const refused = await setup(fakeServer({ script: [completed("completed")] }), never);
     await run({ ...refused.turnConfig, cachedSearch: Effect.succeed(true) }, refused.request);
+    expect(refused.searches()).toBe(false);
     expect(refused.settings()).toContain('web_search = "disabled"');
 
     // A turn the hub did not let search does not either, whatever the version.
     const unasked = await setup(fakeServer({ script: [completed("completed")] }));
     await run({ ...unasked.turnConfig, cachedSearch: Effect.succeed(true) }, { ...unasked.request, webSearch: false });
+    expect(unasked.searches()).toBe(false);
     expect(unasked.settings()).toContain('web_search = "disabled"');
+  });
+
+  // covers ADR 036, STD-SEC-002
+  it("[TC-RT-1266-12] keeps a turn under Never from searching while another turn of the hob that may search starts beside it", async () => {
+    const root = realpathSync(mkdtempSync(join(temp, "shared-")));
+    const never = { ...EMPTY_HOB_POLICY, overrides: { "search-web": "deny" } } as const;
+    const allowed = await setup(fakeServer({ script: [completed("completed")] }), EMPTY_HOB_POLICY, root);
+    const restricted = await setup(fakeServer({ script: [completed("completed")] }), never, root);
+    const held = Effect.succeed(true);
+    // Both start at once in the hob's one Codex home, in either order.
+    for (const pair of [
+      [allowed, restricted],
+      [restricted, allowed],
+    ] as const) {
+      await Promise.all(pair.map((turn) => run({ ...turn.turnConfig, cachedSearch: held }, turn.request)));
+      expect(allowed.searches()).toBe(true);
+      expect(restricted.searches()).toBe(false);
+      expect(restricted.settings()).toContain('web_search = "disabled"');
+    }
   });
 });

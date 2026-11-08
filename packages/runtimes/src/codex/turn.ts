@@ -149,11 +149,6 @@ interface CodexSettings {
   readonly folders: ReadonlyArray<string>;
   /** Whether Codex offers its shell tool: only when the policy would let a command run. */
   readonly shell: boolean;
-  /**
-   * Whether Codex offers its own web search, in cached mode (ADR 036): only when the turn may search
-   * and this Codex version's cached search was held to OpenAI's index by the contract test.
-   */
-  readonly webSearch: boolean;
 }
 
 /**
@@ -169,8 +164,9 @@ const codexConfig = (state: string, settings: CodexSettings) => {
   return [
     `sqlite_home = ${JSON.stringify(state)}`,
     `log_dir = ${JSON.stringify(join(state, "log"))}`,
-    // Live and indexed search could open any page outside the hub, so they are never written (ADR 036).
-    `web_search = ${settings.webSearch ? `"cached"` : `"disabled"`}`,
+    // Search is off in the home every turn of the hob shares; a turn that may search turns it on for
+    // its own process alone (ADR 036). Live and indexed search are never written.
+    `web_search = "disabled"`,
     "",
     "[features]",
     "view_image = false",
@@ -577,7 +573,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
     const governed = governedTurn(config, request);
     const runtimeFolder = request.tools?.runtimeFolder ?? join(config.workspaceDir, "codex-chat");
     const webSearch = governed?.tools.webSearch === true && (yield* config.cachedSearch ?? Effect.succeed(false));
-    const home = yield* prepareHome(runtimeFolder, config.workspaceDir, codexSettings(governed, webSearch));
+    const home = yield* prepareHome(runtimeFolder, config.workspaceDir, codexSettings(governed));
     const cwd = governed?.tools.folders[0] ?? config.workspaceDir;
     // The turn's skills, in a folder of their own for as long as it runs, and every other skill Codex
     // would list turned off (ADR 029).
@@ -586,7 +582,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
       try: () => skillSettings(unusedSkillRoots(home, cwd, repositoryRoot(cwd), config.userHome)),
       catch: (error) => new RuntimeError({ message: `Could not read the skills Codex would load: ${String(error)}` }),
     });
-    const command = appServerCommand(config, binary, home, cwd, skillArgs);
+    const command = appServerCommand(config, binary, home, cwd, [...skillArgs, ...searchArgs(webSearch)]);
     if (governed === null) {
       return {
         command,
@@ -622,11 +618,18 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
   });
 
 /** Codex's settings for the turn: its folders untrusted, and its shell offered only when commands may run. */
-const codexSettings = (governed: ReturnType<typeof governedTurn>, webSearch: boolean): CodexSettings => ({
+const codexSettings = (governed: ReturnType<typeof governedTurn>): CodexSettings => ({
   folders: governed?.tools.folders ?? [],
   shell: governed !== null && offeredTools(governed.tools.context).includes("Bash"),
-  webSearch,
 });
+
+/**
+ * The setting that turns on Codex's cached search for one App Server, when its turn may search
+ * (ADR 036). It goes on that process's command line, never into the home other turns of the hob
+ * share at the same time, so a turn under Never cannot start with a sibling's search on.
+ */
+const searchArgs = (webSearch: boolean): ReadonlyArray<string> =>
+  webSearch ? ["-c", 'web_search="cached"'] : [];
 
 /**
  * The sandbox prepared for the turn, released when the turn ends, or null when none started on this
