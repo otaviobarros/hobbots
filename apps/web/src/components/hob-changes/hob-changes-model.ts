@@ -113,10 +113,18 @@ export const fieldDiffs = (
 ): ReadonlyArray<FieldDiff> => {
   const after = configurationFields(change.config);
   const before = change.previous === null ? null : configurationFields(change.previous);
+  const byId = (id: string) => id;
   return FIELDS.flatMap(([key, text, lines]) => {
-    const now = text(after, nameOf);
-    const then = before === null ? "" : text(before, nameOf);
-    if (now === then) return [];
+    // Whether the field changed is decided by ids, never by names, which two hobs can share.
+    if (before !== null && text(after, byId) === text(before, byId)) return [];
+    const show = (name: (id: string) => string) => ({
+      now: text(after, name),
+      then: before === null ? "" : text(before, name),
+    });
+    const named = show(nameOf);
+    // Hobs with the same name are told apart by the start of their id.
+    const { now, then } = named.now === named.then ? show((id) => `${nameOf(id)} (${id.slice(0, 8)})`) : named;
+    if (now === "" && then === "") return [];
     return [{ key, label: messages.fields[key], before: then, after: now, lines }];
   });
 };

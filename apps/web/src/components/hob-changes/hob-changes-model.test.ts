@@ -83,6 +83,19 @@ describe("a hob's changes", () => {
       ["summoning", "Hobs it summoned: Yes\nItself: No", "Hobs it summoned: No\nItself: No\nPicked by you: Chief"],
     ]);
 
+    // Two hobs named alike: picking the other one still shows, each told apart by its id.
+    const ada1 = AgentId.make("ada-1111-aaaa");
+    const ada2 = AgentId.make("ada-2222-bbbb");
+    const pickedOne = config(1, { policy: summoning({ summoned: true, hobs: [ada1], self: false }) });
+    const swapped = version(2, { policy: summoning({ summoned: true, hobs: [ada2], self: false }) }, YOU, pickedOne);
+    expect(fieldDiffs(swapped, () => "Ada").map(({ key, before, after }) => [key, before, after])).toEqual([
+      [
+        "summoning",
+        "Hobs it summoned: Yes\nItself: No\nPicked by you: Ada (ada-1111)",
+        "Hobs it summoned: Yes\nItself: No\nPicked by you: Ada (ada-2222)",
+      ],
+    ]);
+
     const withheld = version(2, { policy: { ...EMPTY_HOB_POLICY, charms: { withheld: ["github"] } } });
     expect(fieldDiffs(withheld).find((diff) => diff.key === "withheldCharms")).toMatchObject({
       before: "",
