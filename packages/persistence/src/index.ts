@@ -8,6 +8,7 @@ export * from "./devices.ts";
 export * from "./diagnostics.ts";
 export * from "./github-account.ts";
 export * from "./grants.ts";
+export * from "./hob-changes.ts";
 export * from "./hob-github-apps.ts";
 export * from "./hub-questions.ts";
 export * from "./journal.ts";

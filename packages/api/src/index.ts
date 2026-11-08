@@ -9,6 +9,7 @@ export * from "./diagnostics.ts";
 export * from "./errors.ts";
 export * from "./export.ts";
 export * from "./github.ts";
+export * from "./hob-changes.ts";
 export * from "./hob-github-app.ts";
 export * from "./hob-memory.ts";
 export * from "./memory.ts";

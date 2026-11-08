@@ -28,6 +28,7 @@ import { DiagnosticsHandlers } from "./diagnostics.ts";
 import { ExportsHandlers } from "./exports.ts";
 import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
+import { HobChangesHandlers } from "./hob-changes.ts";
 import { HobGitHubAppHandlers } from "./hob-github-app.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { HobMemoryHandlers } from "./hob-memory.ts";
@@ -210,6 +211,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     PairingRequestsHandlers,
     DevicesHandlers,
     AgentsHandlers,
+    HobChangesHandlers,
     ThreadsHandlers,
     SystemHandlers,
     SetupHandlers,

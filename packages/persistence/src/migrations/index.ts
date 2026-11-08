@@ -84,7 +84,8 @@ import codingSetupDismissals from "./0081_coding_setup_dismissals.ts";
 import hobActors from "./0082_hob_actors.ts";
 import summoning from "./0083_summoning.ts";
 import threadSkillTrial from "./0084_thread_skill_trial.ts";
-import webFoundUrls from "./0085_web_found_urls.ts";
+import hobStatusChanges from "./0085_hob_status_changes.ts";
+import webFoundUrls from "./0086_web_found_urls.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -176,5 +177,6 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0082_hob_actors": hobActors,
   "0083_summoning": summoning,
   "0084_thread_skill_trial": threadSkillTrial,
-  "0085_web_found_urls": webFoundUrls,
+  "0085_hob_status_changes": hobStatusChanges,
+  "0086_web_found_urls": webFoundUrls,
 };

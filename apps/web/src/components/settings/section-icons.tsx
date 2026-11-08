@@ -12,6 +12,12 @@ const PATHS: Readonly<Record<SettingsSection | "overview", React.ReactNode>> = {
   ),
   app: <path d="M13.5 2.5 7 9M5.5 9.5c-1.5 0-2.5 1-2.5 2.5 0 1-.5 1.5-1 1.5 1 .8 2.2 1 3.3 1 1.7 0 2.7-1.2 2.7-2.6z" />,
   safety: <path d="M8 1.8 13 3.8v4c0 3-2.2 5.2-5 6.4-2.8-1.2-5-3.4-5-6.4v-4z" />,
+  changes: (
+    <>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 4.5V8l2.5 1.5" />
+    </>
+  ),
   connections: <path d="M5.5 1.5v3M10.5 1.5v3M3.5 4.5h9v3a4.5 4.5 0 0 1-9 0zM8 12v2.5" />,
   devices: (
     <>
