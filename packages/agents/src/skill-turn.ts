@@ -5,6 +5,7 @@ import {
   type MessageId,
   type SkillAssignment,
   type SkillMention,
+  type SkillTrial,
   SkillUse,
   SkillUseId,
   skillMentionOf,
@@ -105,7 +106,27 @@ export interface SkillMounterShape {
   readonly resolve: (hob: SkillHob) => Effect.Effect<ReadonlyArray<TurnSkill> | null>;
   /** The mounts of recorded skills: each the read-only folder of its pinned revision. */
   readonly mounts: (skills: ReadonlyArray<TurnSkill> | null) => Effect.Effect<ReadonlyArray<SkillMount> | null>;
+  /**
+   * The one mount of a chat that tries a draft (ADR 029, Try in a chat): the draft's own folder, which
+   * the hob may pick on its own. Empty when the hub lost its files.
+   */
+  readonly draft: (trial: SkillTrial) => Effect.Effect<ReadonlyArray<SkillMount>>;
 }
+
+/** A skill as `/` names it: its name, and its set's for a skill of a set. */
+export interface NamedSkill {
+  readonly name: string;
+  readonly set?: string | null;
+}
+
+/**
+ * The skills a turn can name with `/`: those it was given, or, in a chat that tries a draft, the
+ * draft alone (ADR 029, Try in a chat).
+ */
+export const namedSkills = (
+  given: ReadonlyArray<TurnSkill> | null,
+  trial: SkillTrial | null,
+): ReadonlyArray<NamedSkill> | null => (trial === null ? given : [{ name: trial.name, set: null }]);
 
 /**
  * What hands each turn its skills (ADR 029, Pins and rollout). A turn is given the skills recorded
@@ -157,6 +178,13 @@ export const skillMounter = Effect.gen(function* () {
               return [];
             }),
           ).pipe(Effect.map((each) => each.flat())),
+    draft: (trial) =>
+      Effect.gen(function* () {
+        const folder = Option.isNone(files) ? null : yield* files.value.draft(trial.hash);
+        if (folder !== null) return [{ name: trial.name, revision: trial.hash, folder, implicit: true, set: null }];
+        yield* Effect.logWarning(`No files for the draft of ${trial.name}; the turn goes on without it.`);
+        return [];
+      }),
   };
   return shape;
 });
@@ -179,8 +207,11 @@ interface ReportedUse {
 
 /** Records the skills a turn uses (ADR 029, The use line), each once per turn. */
 export interface SkillUseRecorderShape {
-  /** The turn's skills, once they are known: what its message was accepted with, or resolved as it started. */
-  readonly given: (skills: ReadonlyArray<TurnSkill> | null) => void;
+  /**
+   * The turn's skills, once they are known: what its message was accepted with, or resolved as it
+   * started, and the draft its chat tries, if any (ADR 029, Try in a chat).
+   */
+  readonly given: (skills: ReadonlyArray<TurnSkill> | null, trial?: SkillTrial | null) => void;
   /** The skills an administrator's settings bring, as the session reported them when it started. */
   readonly organization: (names: ReadonlyArray<string> | undefined) => void;
   /**
@@ -205,6 +236,7 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
   Effect.gen(function* () {
     const library = yield* Effect.serviceOption(SkillLibrary);
     let skills: ReadonlyArray<TurnSkill> = [];
+    let trial: SkillTrial | null = null;
     let organization: ReadonlyArray<string> = [];
     const recorded = new Set<string>();
     const usedOf = (source: "library" | "organization", name: string, explicit: boolean, set: string | null) =>
@@ -216,6 +248,19 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
             skillId: null,
             name,
             pin: null,
+            number: null,
+            explicit,
+            set: null,
+          };
+          return used;
+        }
+        // A draft's use shows under the reply and is never counted: the draft is in no library.
+        if (trial !== null && name === trial.name && set === null) {
+          const used: UsedSkill = {
+            source: "draft",
+            skillId: trial.skillId,
+            name,
+            pin: trial.hash,
             number: null,
             explicit,
             set: null,
@@ -244,13 +289,14 @@ export const skillUseRecorder = (turn: SkillUseTurn) =>
         const used = yield* usedOf(source, name, explicit, source === "library" ? (set ?? null) : null);
         if (used === null) return null;
         recorded.add(key);
-        if (Option.isNone(library)) return { used, use: null };
+        if (Option.isNone(library) || used.source === "draft") return { used, use: null };
         const at = DateTime.formatIso(yield* DateTime.now);
         return { used, use: new SkillUse({ id: SkillUseId.make(crypto.randomUUID()), ...used, ...turn, at }) };
       });
     const shape: SkillUseRecorderShape = {
-      given: (given) => {
+      given: (given, tried) => {
         skills = given ?? [];
+        trial = tried ?? null;
       },
       organization: (names) => {
         organization = names ?? [];
@@ -282,7 +328,7 @@ export const withUsedSkill = (skills: ReadonlyArray<UsedSkill>, used: UsedSkill)
  */
 export const askedSkillOf = (
   yours: { readonly askedSkill: string | null } | undefined,
-  given: ReadonlyArray<TurnSkill> | null,
+  given: ReadonlyArray<NamedSkill> | null,
 ): string | null => {
   const asked = yours?.askedSkill ?? null;
   return asked !== null && (given ?? []).some((skill) => skillMentionOf(skill) === asked) ? asked : null;
@@ -299,7 +345,7 @@ const MENTION = new RegExp(`^\\/((?:${NAME}:)?${NAME})(?=\\s|$)`);
  * of a set can be named with its set, `/agent-engineering:deliver-change`, or alone, `/deliver-change`,
  * when the hob has no other skill of that name (ADR 029, Skill sets). Answers the full name.
  */
-export const mentionedSkill = (content: string, given: ReadonlyArray<TurnSkill> | null): SkillMention | null => {
+export const mentionedSkill = (content: string, given: ReadonlyArray<NamedSkill> | null): SkillMention | null => {
   const typed = MENTION.exec(content)?.[1];
   if (typed === undefined) return null;
   const named = (given ?? []).filter((skill) =>
@@ -314,7 +360,11 @@ export const mentionedSkill = (content: string, given: ReadonlyArray<TurnSkill> 
  * skill, and without the leading `/` of a bare name two of the turn's skills share, so no runtime
  * picks one of them on its own; Claude Code would load the first plugin's.
  */
-export const runtimePrompt = (prompt: string, asked: string | null, given: ReadonlyArray<TurnSkill> | null): string => {
+export const runtimePrompt = (
+  prompt: string,
+  asked: string | null,
+  given: ReadonlyArray<NamedSkill> | null,
+): string => {
   if (asked !== null) return withoutMention(prompt, asked);
   const typed = MENTION.exec(prompt)?.[1];
   if (typed === undefined || typed.includes(":")) return prompt;

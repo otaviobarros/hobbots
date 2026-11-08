@@ -1,11 +1,12 @@
-import type { SkillDetail } from "@hobbots/api";
+import type { SkillDetail, SkillTrialText } from "@hobbots/api";
 import { type SkillId, type SkillRevisionHash, savedSkillInstructions, skillRevisionLabel } from "@hobbots/domain";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { type editSkill, skillQuery, skillRevisionQuery, skillsErrorTag } from "../../api/skills.ts";
+import { skillQuery, skillRevisionQuery, skillsErrorTag } from "../../api/skills.ts";
 import { messages } from "./messages.ts";
+import { type EditInput, holdsOf, savedLine, saveLabelOf } from "./skill-editor-model.ts";
 import { DescriptionField, EditorFooter, InstructionsField } from "./skill-fields.tsx";
 import { movesWith, RollOut, type RollOutChoice } from "./skill-rollout.tsx";
 import type { Say } from "./skills-flash.ts";
@@ -18,31 +19,12 @@ import {
   skillTitle,
   skillView,
 } from "./skills-model.ts";
+import { TrialDraft } from "./trial-draft.tsx";
+import { TryInChat } from "./try-in-chat.tsx";
+import { draftFields } from "./try-in-chat-model.ts";
 import { useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
-
-type EditInput = Parameters<typeof editSkill>[0];
-
-/** The holds you switched that differ from each place's now: the only ones a save changes. */
-const holdsOf = (detail: SkillDetail, choice: RollOutChoice) =>
-  detail.assignments.flatMap((one) => {
-    const on = choice.get(one.id);
-    return on === undefined || !on === one.held ? [] : [{ assignmentId: one.id, held: !on }];
-  });
-
-/** Said once the hub answers a save: a new revision, or the same edit sent again, which finishes its rollout. */
-const savedLine = (saved: { added: boolean; revision: { number: number }; rolledOut: ReadonlyArray<unknown> }) => {
-  const rev = skillRevisionLabel(saved.revision);
-  return saved.added || saved.rolledOut.length > 0
-    ? copy.rollout.saved({ rev, count: saved.rolledOut.length })
-    : copy.editor.same({ rev });
-};
-
-const saveLabelOf = (save: { pending: boolean; finishing: boolean; moving: number; next: string }) => {
-  if (save.pending) return copy.editor.saving;
-  return save.finishing ? copy.editor.finish : copy.rollout.save({ count: save.moving, rev: save.next });
-};
 
 /**
  * The edit of `base`, held for as long as the editor is open: the library changing under it, here or
@@ -53,22 +35,28 @@ function EditForm({
   detail,
   base,
   instructions,
+  initial,
   hobs,
   say,
 }: {
   detail: SkillDetail;
   base: SkillRevisionHash;
   instructions: string;
+  /** The text the editor opens on: the revision's, or the edit you tried in a chat. */
+  initial: { readonly description: string; readonly body: string };
   hobs: HobDirectory;
   say: Say;
 }) {
   const navigate = useNavigate();
   const writes = useSkillWrites();
   const { skill } = detail;
-  const [description, setDescription] = useState(skill.description);
-  const [body, setBody] = useState(() => instructionsOf(instructions));
-  // What the editor opened with, as it saves: the same text makes no revision, so its rollout switches would do nothing.
-  const [opened] = useState(() => ({ description: skill.description.trim(), body: savedSkillInstructions(body) }));
+  const [description, setDescription] = useState(initial.description);
+  const [body, setBody] = useState(initial.body);
+  // The revision's text, as it saves: the same text makes no revision, so its rollout switches would do nothing.
+  const [opened] = useState(() => ({
+    description: skill.description.trim(),
+    body: savedSkillInstructions(instructionsOf(instructions)),
+  }));
   const [choice, setChoice] = useState<RollOutChoice>(new Map());
   const [failure, setFailure] = useState<string | null>(null);
   // A save whose answer never came: it may have reached the hub, so it is sent again as it was.
@@ -160,18 +148,49 @@ function EditForm({
         disabled={pending || (finishing ? false : !valid || unchanged || newer !== null)}
         hint={unchanged && !finishing ? copy.editor.unchanged : undefined}
         back={back}
-      />
+      >
+        <TryInChat
+          disabled={!valid}
+          draft={() => ({ _tag: "Edit", skillId: skill.id, base, description: description.trim(), instructions: body })}
+        />
+      </EditorFooter>
     </form>
   );
 }
 
-/** Reads the SKILL.md of the revision the editor opened on, and keeps that revision as the edit's base. */
-function EditLoader({ detail, hobs, say }: { detail: SkillDetail; hobs: HobDirectory; say: Say }) {
-  const [base] = useState(detail.skill.latest);
+/**
+ * Reads the SKILL.md of the revision the editor opened on, and keeps that revision as the edit's base:
+ * the newest, or, for an edit you tried in a chat, the one that edit was made from.
+ */
+function EditLoader({
+  detail,
+  hobs,
+  say,
+  tried,
+}: {
+  detail: SkillDetail;
+  hobs: HobDirectory;
+  say: Say;
+  tried: SkillTrialText | null;
+}) {
+  const [base] = useState(tried?.trial.base ?? detail.skill.latest);
   const revision = useQuery(skillRevisionQuery(detail.skill.id, base));
   if (revision.isError) return <EditorFailed />;
   if (revision.isPending) return <EditorLoading />;
-  return <EditForm detail={detail} base={base} instructions={revision.data.instructions} hobs={hobs} say={say} />;
+  return (
+    <EditForm
+      detail={detail}
+      base={base}
+      instructions={revision.data.instructions}
+      initial={
+        tried === null
+          ? { description: detail.skill.description, body: instructionsOf(revision.data.instructions) }
+          : draftFields(tried)
+      }
+      hobs={hobs}
+      say={say}
+    />
+  );
 }
 
 function EditorFailed() {
@@ -195,9 +214,34 @@ function EditorLoading() {
  * The editor for a skill in the library: it reads the skill and its newest SKILL.md first. Once open,
  * a read of the skill again, after a change or one that fails, keeps the editor and its text.
  */
-export function SkillEditor({ skillId, hobs, say }: { skillId: SkillId; hobs: HobDirectory; say: Say }) {
+export function SkillEditor({
+  skillId,
+  hobs,
+  say,
+  trial = null,
+}: {
+  skillId: SkillId;
+  hobs: HobDirectory;
+  say: Say;
+  /** The chat whose tried edit the editor opens on (ADR 029, Try in a chat). */
+  trial?: string | null;
+}) {
   const detail = useQuery(skillQuery(skillId));
-  if (detail.data !== undefined) return <EditLoader detail={detail.data} hobs={hobs} say={say} />;
+  const found = detail.data;
+  if (found !== undefined) {
+    return (
+      <TrialDraft key={trial ?? "latest"} trial={trial}>
+        {(draft) => (
+          <EditLoader
+            detail={found}
+            hobs={hobs}
+            say={say}
+            tried={draft !== null && draft.trial.skillId === skillId && draft.trial.base !== null ? draft : null}
+          />
+        )}
+      </TrialDraft>
+    );
+  }
   if (detail.isError) return <EditorFailed />;
   return <EditorLoading />;
 }

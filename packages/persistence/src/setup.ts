@@ -1,5 +1,5 @@
 import { InstallationSettings } from "@hobbots/agents";
-import { InstallationSetup, type RuntimeKind, type SafetyPreset } from "@hobbots/domain";
+import { InstallationSetup, type RuntimeKind, type SafetyPreset, type SummoningForEveryHob } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -9,19 +9,24 @@ export interface SetupChange {
   readonly safetyPreset?: SafetyPreset;
   readonly approvedFolders?: ReadonlyArray<string>;
   readonly connectedProviders?: ReadonlyArray<RuntimeKind>;
+  /** The Summoning Charm for every hob you made, or null to turn it off (ADR 034). */
+  readonly summoningForEveryHob?: SummoningForEveryHob | null;
 }
 
-// `completed` is stored as 0 or 1, the folders and providers as JSON arrays (migrations 0004, 0006).
+// `completed` is stored as 0 or 1, the folders and providers as JSON arrays (migrations 0004, 0006),
+// and "Summoning for every hob" as JSON text, or null for off (migration 0083).
 const fromRow = (row: {
   readonly completed: unknown;
   readonly safetyPreset: unknown;
   readonly approvedFolders: unknown;
   readonly connectedProviders: unknown;
+  readonly summoningEveryHob: unknown;
 }) => ({
   completed: Number(row.completed) === 1,
   safetyPreset: row.safetyPreset,
   approvedFolders: JSON.parse(String(row.approvedFolders)),
   connectedProviders: JSON.parse(String(row.connectedProviders)),
+  summoningForEveryHob: row.summoningEveryHob == null ? null : JSON.parse(String(row.summoningEveryHob)),
 });
 
 /** The installation's setup state; migration 0004 creates its single row. */
@@ -53,7 +58,8 @@ export class SetupRepository extends Context.Service<
                 safetyPreset: unknown;
                 approvedFolders: unknown;
                 connectedProviders: unknown;
-              }>`SELECT completed, safety_preset, approved_folders, connected_providers FROM installation_setup WHERE id = 1`.pipe(
+                summoningEveryHob: unknown;
+              }>`SELECT completed, safety_preset, approved_folders, connected_providers, summoning_every_hob FROM installation_setup WHERE id = 1`.pipe(
                 Effect.map((rows) => rows.map(fromRow)),
               ),
           });
@@ -63,13 +69,17 @@ export class SetupRepository extends Context.Service<
           // and reads the row back in the same transaction.
           const update = (change: SetupChange) =>
             Effect.gen(function* () {
-              const columns: Record<string, string | number> = {};
+              const columns: Record<string, string | number | null> = {};
               if (change.completed) columns.completed = 1;
               if (change.safetyPreset !== undefined) columns.safety_preset = change.safetyPreset;
               if (change.approvedFolders !== undefined)
                 columns.approved_folders = JSON.stringify(change.approvedFolders);
               if (change.connectedProviders !== undefined) {
                 columns.connected_providers = JSON.stringify(change.connectedProviders);
+              }
+              if (change.summoningForEveryHob !== undefined) {
+                columns.summoning_every_hob =
+                  change.summoningForEveryHob === null ? null : JSON.stringify(change.summoningForEveryHob);
               }
               if (Object.keys(columns).length > 0) {
                 yield* sql`UPDATE installation_setup SET ${sql.update(columns)} WHERE id = 1`;

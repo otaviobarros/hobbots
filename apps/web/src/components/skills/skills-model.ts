@@ -63,6 +63,11 @@ export interface SkillsSearch {
    */
   readonly view?: "changes" | "review" | "updates" | undefined;
   readonly item?: string | undefined;
+  /**
+   * With the editor, Write one or To review, the chat whose draft it opens on: the text you tried in
+   * that chat, to go on editing (ADR 029, Try in a chat).
+   */
+  readonly trial?: string | undefined;
 }
 
 export type SkillsView =

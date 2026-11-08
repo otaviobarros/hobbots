@@ -37,6 +37,7 @@ describe("SetupRepository", () => {
       safetyPreset: "balanced",
       approvedFolders: [],
       connectedProviders: [],
+      summoningForEveryHob: null,
     });
   });
 
@@ -50,6 +51,8 @@ describe("SetupRepository", () => {
       yield* (yield* HobbotsRepository).insertAgent(aldric);
       yield* installationSetup;
       yield* connectedProviders;
+      // 0083 adds the Summoning Charm every hob holds to the setup it dropped.
+      yield* sql`ALTER TABLE installation_setup ADD COLUMN summoning_every_hob TEXT`;
       return {
         setup: yield* (yield* SetupRepository).get,
         hobs: yield* (yield* HobbotsRepository).listAgents,
@@ -61,6 +64,7 @@ describe("SetupRepository", () => {
       safetyPreset: "balanced",
       approvedFolders: [],
       connectedProviders: ["claude-code"],
+      summoningForEveryHob: null,
     });
     expect(result.hobs.map((hob) => hob.name)).toEqual(["Aldric"]);
   });
@@ -79,12 +83,14 @@ describe("SetupRepository", () => {
       safetyPreset: "careful",
       approvedFolders: ["/b", "/a"],
       connectedProviders: [],
+      summoningForEveryHob: null,
     });
     expect({ ...result.second }).toEqual({
       completed: true,
       safetyPreset: "careful",
       approvedFolders: ["/b", "/a"],
       connectedProviders: [],
+      summoningForEveryHob: null,
     });
     expect({ ...result.stored }).toEqual({ ...result.second });
   });
@@ -111,6 +117,7 @@ describe("SetupRepository", () => {
       safetyPreset: "careful",
       approvedFolders: ["/a"],
       connectedProviders: [],
+      summoningForEveryHob: null,
     });
   });
 

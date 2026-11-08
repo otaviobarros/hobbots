@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 import { Brain, RuntimeSession } from "./brain.ts";
 import { AgentId, ThreadId } from "./ids.ts";
 import { Revision } from "./revision.ts";
+import { SkillTrial } from "./skills.ts";
 
 export class Thread extends Schema.Class<Thread>("Thread")({
   id: ThreadId,
@@ -52,6 +53,14 @@ export class Thread extends Schema.Class<Thread>("Thread")({
   unread: Schema.Boolean.pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(false)),
     Schema.withConstructorDefault(Effect.succeed(false)),
+  ),
+  /**
+   * The draft this chat tries (ADR 029, Try in a chat), or null for an ordinary chat. Set when the chat
+   * is made and never changed: its turns load that draft and no other skill.
+   */
+  skillTrial: Schema.NullOr(SkillTrial).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
   ),
   createdAt: Schema.String,
   updatedAt: Schema.String,

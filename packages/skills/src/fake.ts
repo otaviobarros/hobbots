@@ -247,6 +247,11 @@ export const makeSkillLibraryFake = (now: () => string = () => new Date().toISOS
     usesSince: (since) => Effect.sync(() => skillUsesSince(uses, since)),
     lastUses: (agentId, limit) =>
       Effect.sync(() => lastSkillUses(uses.filter((use) => use.agentId === agentId)).slice(0, limit)),
+    lastUsedAt: Effect.sync(() =>
+      lastSkillUses(uses)
+        .flatMap((use) => (use.skillId === null ? [] : [{ skillId: use.skillId, at: use.at }]))
+        .sort((a, b) => a.skillId.localeCompare(b.skillId)),
+    ),
   };
   return library;
 };

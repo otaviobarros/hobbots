@@ -117,6 +117,7 @@ describe("the setup API", () => {
       safetyPreset: "balanced",
       approvedFolders: [],
       connectedProviders: [],
+      summoningForEveryHob: null,
     });
 
     const hobs = await request("GET", "/api/agents");
@@ -135,6 +136,7 @@ describe("the setup API", () => {
       safetyPreset: "trusting",
       approvedFolders: [code, notes],
       connectedProviders: [],
+      summoningForEveryHob: null,
     });
 
     const finished = {
@@ -142,6 +144,7 @@ describe("the setup API", () => {
       safetyPreset: "trusting",
       approvedFolders: [code, notes],
       connectedProviders: [],
+      summoningForEveryHob: null,
     };
     const done = await request("PATCH", "/api/setup", { completed: true });
     expect(await done.json()).toEqual(finished);
@@ -159,6 +162,7 @@ describe("the setup API", () => {
       safetyPreset: "balanced",
       approvedFolders: [],
       connectedProviders: [],
+      summoningForEveryHob: null,
     });
   });
 

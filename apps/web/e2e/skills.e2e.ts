@@ -452,3 +452,76 @@ test("[TC-UX-1143] a plugin comes in as one set, opens on its own page, and a sk
   await expect(main).toContainText("linked/references/workflow-contract.md");
   await expectAccessible(page, main);
 });
+
+// covers ADR 029 (Try in a chat, Health checks), #1099
+test("[TC-UX-1099] the Overview shows every finding and what each hob carries, and Try in a chat opens a chat with only the draft and leads back to it", async ({
+  page,
+}) => {
+  const { url, folder, api } = await hubWithHobs();
+  const vague = join(dataDir, "to-import", "tidy-up");
+  mkdirSync(vague, { recursive: true });
+  writeFileSync(join(vague, "SKILL.md"), "---\nname: tidy-up\ndescription: Tidies things.\n---\n\nTidy it.\n");
+  const added = async (path: string) => {
+    const imported = (await api("POST", "/skills", { source: { _tag: "Folder", path } })) as unknown as {
+      readonly imported: ReadonlyArray<{ readonly skill: { readonly id: string } }>;
+    };
+    const skill = imported.imported[0]?.skill;
+    if (skill === undefined) throw new Error(`Nothing imported from ${path}`);
+    await api("POST", `/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" }, held: false });
+  };
+  await added(folder);
+  await added(vague);
+  // Eight more whose descriptions say nothing of when to use them, so the card lists more than it shows at first.
+  for (let n = 1; n <= 8; n += 1) {
+    const one = join(dataDir, "to-import", `chore-${n}`);
+    mkdirSync(one, { recursive: true });
+    writeFileSync(join(one, "SKILL.md"), `---\nname: chore-${n}\ndescription: Chores.\n---\n\nDo it.\n`);
+    await api("POST", "/skills", { source: { _tag: "Folder", path: one } });
+  }
+
+  await page.goto(`${url}/#/`);
+  await page.getByRole("link", { name: "Skills", exact: true }).first().click();
+  const main = page.getByRole("main", { name: "Skills" });
+  const worth = main.getByRole("region", { name: "Worth a look" });
+  const findings = worth.getByRole("link", { name: /description may not trigger/ });
+  await expect(findings).toHaveCount(8);
+  await worth.getByRole("button", { name: "Show 1 more" }).click();
+  await expect(findings).toHaveCount(9);
+  await expect(worth).toContainText("Tidy up's description may not trigger");
+  const carries = main.getByRole("region", { name: "What each hob carries" });
+  await expect(carries).toContainText("Pip");
+  await expect(carries).toContainText("Wren");
+  await expectAccessible(page, main);
+
+  // A line opens where you act on it: the skill, to edit its description, and from there Try in a chat.
+  await worth.getByRole("link", { name: /Tidy up's description may not trigger/ }).click();
+  await expect(main.getByRole("heading", { name: "Tidy up", level: 2 })).toBeVisible();
+  const aside = page.getByRole("complementary", { name: "About this skill" });
+  await aside.getByRole("link", { name: "Edit" }).click();
+  await main.getByLabel("When to use it").fill("Use when a folder needs tidying before a release.");
+  // Reading the draft back fails on the way until `failing` is turned off: never taken as gone.
+  let failing = true;
+  await page.route("**/api/skill-trials/*", (route) =>
+    failing && route.request().method() === "GET" ? route.fulfill({ status: 500, body: "{}" }) : route.fallback(),
+  );
+  await main.getByRole("button", { name: "Try in a chat" }).click();
+  await page.getByRole("menuitem", { name: /Wren/ }).click();
+
+  await expect(page).toHaveURL(/\/threads\//);
+  const notice = page.getByRole("region", { name: "Trying the draft of Tidy up." });
+  await expect(notice).toContainText("nothing here reaches the library");
+  await expect(notice.getByRole("link", { name: "Back to the draft" })).toBeVisible();
+  await expectAccessible(page, page.getByRole("main"));
+  // Back to the draft opens the editor on the text you tried, so you save what you tested. A read that
+  // fails on the way says so with Try again, and never opens the editor without your text.
+  await notice.getByRole("link", { name: "Back to the draft" }).click();
+  await expect(main.getByRole("alert")).toContainText("Hobbots could not open the draft you tried.");
+  await expect(main.getByLabel("When to use it")).toHaveCount(0);
+  failing = false;
+  await main.getByRole("button", { name: "Try again" }).click();
+  await expect(main.getByRole("heading", { name: "Edit Tidy up" })).toBeVisible();
+  await expect(main.getByLabel("When to use it")).toHaveValue("Use when a folder needs tidying before a release.");
+  await main.getByRole("button", { name: "Save and roll out to 1 place" }).click();
+  await expect(main).toContainText("Saved r2 and rolled it out to 1 place from their next chat.");
+  await expect(main).toContainText("Use when a folder needs tidying before a release.");
+});

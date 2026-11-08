@@ -398,6 +398,7 @@ const skillsRoute = createRoute({
       q: searchParam(SearchText),
       view: searchParam(Schema.Literals(["changes", "review", "updates"])),
       item: searchParam(Schema.String),
+      trial: searchParam(Schema.String),
     }),
   ),
   component: function Skills() {
