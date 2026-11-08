@@ -267,6 +267,31 @@ describe("a Task's changes across its tries", () => {
       { path: "a.md", kind: "edited", movedFrom: null, before: "A", after: "X", keptIn: [1, 2], tries: [1, 2] },
     ]);
   });
+
+  it("reads a file made, deleted and made again where one was moved off, then moved on, as added", () => {
+    const fourth = new Attempt({ ...tryOf(4), id: AttemptId.make("try-4"), number: 4 });
+    const fifth = new Attempt({ ...tryOf(5), id: AttemptId.make("try-5"), number: 5 });
+    expect(
+      shown([
+        recorded(first, [change(first, "b.md", "moved", "A", "A", "a.md")]),
+        recorded(second, [change(second, "a.md", "added", null, "X")]),
+        recorded(third, [change(third, "a.md", "deleted", "X", null)]),
+        recorded(fourth, [change(fourth, "a.md", "added", null, "Y")]),
+        recorded(fifth, [change(fifth, "c.md", "moved", "Y", "Y", "a.md")]),
+      ]),
+    ).toEqual([
+      { path: "b.md", kind: "moved", movedFrom: "a.md", before: "A", after: "A", keptIn: [1, 1], tries: [1] },
+      {
+        path: "c.md",
+        kind: "added",
+        movedFrom: null,
+        before: null,
+        after: "Y",
+        keptIn: [5, 5],
+        tries: [2, 3, 4, 5],
+      },
+    ]);
+  });
 });
 
 /** A small PRNG, so the generated tries are the same on every run. */
@@ -279,13 +304,14 @@ type Listing = Map<string, { readonly kind: "file" | "link"; readonly size: numb
 
 /** One try's work on a folder of a few paths: moves, deletions, new files, edits and links. */
 const work = (next: () => number, start: Listing): Listing => {
-  const paths = ["a", "b", "c", "d"];
+  const paths = ["a", "b", "c"];
   const pick = <A>(items: ReadonlyArray<A>) => items[Math.floor(next() * items.length)] as A;
   const now = new Map(start);
-  for (let step = Math.floor(next() * 4); step > 0; step -= 1) {
+  for (let step = 1 + Math.floor(next() * 2); step > 0; step -= 1) {
     const at = pick(paths);
     const to = pick(paths);
-    const action = pick(["move", "delete", "write", "link"]);
+    // Moves come up most, as they are what the tries' records can confuse.
+    const action = pick(["move", "move", "move", "delete", "write", "write", "link"]);
     const there = now.get(at);
     if (action === "move" && there !== undefined && !now.has(to)) {
       now.delete(at);
@@ -300,30 +326,34 @@ const work = (next: () => number, start: Listing): Listing => {
 /** What each path held first and holds last, for every path that differs, with a move split back into its two paths. */
 const byPath = (changes: ReadonlyArray<Pick<FileChange, "path" | "movedFrom" | "before" | "after">>) => {
   const facts = new Map<string, { before: string | null; after: string | null }>();
+  // Each side of each path is said once: two rows that name one path's first or last contents,
+  // such as two moves from one path, are a fault, not two facts to merge.
+  const said = new Set<string>();
   const show = (version: FileVersion | null) => (version === null ? null : `${version.kind}:${version.hash}`);
-  const at = (path: string) => facts.get(path) ?? { before: null, after: null };
+  const say = (path: string, side: "before" | "after", version: FileVersion | null) => {
+    if (said.has(`${side}:${path}`)) throw new Error(`Two rows say what ${path} held ${side}`);
+    said.add(`${side}:${path}`);
+    facts.set(path, { ...(facts.get(path) ?? { before: null, after: null }), [side]: show(version) });
+  };
   for (const each of changes) {
-    if (each.movedFrom === null) {
-      facts.set(each.path, { ...at(each.path), before: show(each.before), after: show(each.after) });
-    } else {
-      facts.set(each.movedFrom, { ...at(each.movedFrom), before: show(each.before) });
-      facts.set(each.path, { ...at(each.path), after: show(each.after) });
-    }
+    say(each.movedFrom ?? each.path, "before", each.before);
+    say(each.path, "after", each.after);
   }
   return [...facts].sort(([a], [b]) => (a < b ? -1 : 1));
 };
 
 describe("a Task's changes across generated tries", () => {
   it("always sum to what the folder held before the first try against what the last left", () => {
-    for (let seed = 1; seed <= 3000; seed += 1) {
+    for (let seed = 1; seed <= 10000; seed += 1) {
       const next = random(seed);
+      // Half the runs start with a second file, so moves land both on empty paths and beside others.
       const start: Listing = new Map([
         ["a", { kind: "file", size: 1, hash: "A" }],
-        ["b", { kind: "file", size: 1, hash: "B" }],
+        ...(seed % 2 === 0 ? ([["b", { kind: "file", size: 1, hash: "B" }]] as const) : []),
       ]);
       let now = start;
       const activities: Array<AttemptActivity> = [];
-      const count = 1 + Math.floor(next() * 4);
+      const count = 1 + Math.floor(next() * 8);
       for (let number = 1; number <= count; number += 1) {
         const of = new Attempt({ ...tryOf(1), id: AttemptId.make(`gen-${number}`), number });
         const after = work(next, now);

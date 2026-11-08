@@ -163,13 +163,11 @@ const replay = (activities: ReadonlyArray<AttemptActivity>) => {
     for (const change of activity.changes.filter((each) => each.movedFrom === null)) {
       const at = keyOf(change.folder, change.path);
       const record = { change, activity };
-      // A path no try touched yet holds its first file; one an earlier try moved a file off holds a new one.
+      // A file keeps the path it began at only while it is there without a break: one made on a path
+      // a try emptied, by a move or a deletion, is new, whatever it holds.
       const untouched = !first.has(at);
       touch(at, change.before, record);
-      const there = live.get(at) ?? {
-        origin: untouched || gone.has(at) ? at : null,
-        trail: gone.get(at) ?? [],
-      };
+      const there = live.get(at) ?? { origin: untouched ? at : null, trail: gone.get(at) ?? [] };
       gone.delete(at);
       if (change.after === null) {
         live.delete(at);
