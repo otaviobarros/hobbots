@@ -1,4 +1,4 @@
-import type { GitHubStatus } from "@hobbots/api";
+import type { CodingSetupChoices, GitHubStatus } from "@hobbots/api";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 
@@ -67,6 +67,24 @@ export const useGitHubChange = () => {
         ? call((c) => c.github.use({ payload: { source: change.source } }))
         : call((c) => c.github[change.kind]()),
     onSuccess: (status) => queryClient.setQueryData(githubStatusKey, status),
+  });
+};
+
+const codingSetupKey = [...githubStatusKey, "coding-setup"] as const;
+
+/** Where you said not to ask whether a hob will write code (#1241); read again whenever it is shown. */
+export const codingSetupQuery = queryOptions({
+  queryKey: codingSetupKey,
+  queryFn: () => call((c) => c.github.codingSetup()),
+  staleTime: 0,
+});
+
+/** Asks about every hob again; the answer replaces what is shown. */
+export const useClearCodingSetup = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (): Promise<CodingSetupChoices> => call((c) => c.github.clearCodingSetup()),
+    onSuccess: (choices) => queryClient.setQueryData(codingSetupKey, choices),
   });
 };
 

@@ -7,6 +7,7 @@ import { githubStatusQuery } from "../../api/github.ts";
 import { runtimesQuery } from "../../api/queries.ts";
 import { setupQuery } from "../../api/setup.ts";
 import { PROVIDERS } from "../../lib/providers.ts";
+import { CodingSetupSetting } from "../coding-setup/coding-setup.tsx";
 import { messages as sharedMessages } from "../messages.ts";
 import { GitHubSettings } from "./github-settings.tsx";
 import { messages } from "./messages.ts";
@@ -84,6 +85,7 @@ export function ConnectionsSection({ tab }: { tab: ConnectionsTab }) {
         <p className="m-0 text-text-secondary">{sharedMessages.github.intro}</p>
         <section aria-label={sharedMessages.github.heading} className="flex flex-col gap-3 rounded-card bg-card p-4">
           <GitHubSettings />
+          <CodingSetupSetting />
         </section>
       </TabsContent>
     </Tabs>

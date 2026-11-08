@@ -23,7 +23,7 @@ import threadReads from "../src/migrations/0053_thread_reads.ts";
 import milestoneReachedBy from "../src/migrations/0074_milestone_reached_by.ts";
 import hobVisibility from "../src/migrations/0079_hob_visibility.ts";
 import hobGoodAt from "../src/migrations/0080_hob_good_at.ts";
-import hobActors from "../src/migrations/0081_hob_actors.ts";
+import hobActors from "../src/migrations/0082_hob_actors.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1391,10 +1391,10 @@ describe("0080_hob_good_at", () => {
   });
 });
 
-describe("0081_hob_actors", () => {
+describe("0082_hob_actors", () => {
   // covers AG-002, DP-003
   it("[TC-AG-405-02] records you as the maker of every stored version and the summoner of every hob, and reads older hob events as yours", async () => {
-    // The AgentUpserted payload as the hub journaled it before 0081, with no actor and no summoner.
+    // The AgentUpserted payload as the hub journaled it before 0082, with no actor and no summoner.
     const before = {
       _tag: "AgentUpserted",
       agent: {
@@ -1464,7 +1464,7 @@ describe("0081_hob_actors", () => {
         entries: yield* (yield* EventJournal).readAfter(0),
       };
     }).pipe(
-      Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(TestDatabaseAt(migrationsBefore("0081"))))),
+      Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(TestDatabaseAt(migrationsBefore("0082"))))),
       Effect.scoped,
       Effect.runPromise,
     );

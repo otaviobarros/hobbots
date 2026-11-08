@@ -74,8 +74,10 @@ export const HobToolsLive = Layer.effect(
             app !== null
               ? { _tag: "Bot", identity: hobAppCommitIdentity(app) }
               : Option.isSome(identities)
-                ? yield* identities.value.forTurn(agent.id, commits ? turn : undefined)
+                ? yield* identities.value.forTurn(agent, commits ? turn : undefined)
                 : settleCommitsAs(null, userGitIdentity(homedir()), null);
+          // A hob with its own app needs no coding setup card (#1241).
+          if (app !== null && Option.isSome(identities)) yield* identities.value.settled(agent.id);
           return {
             policy,
             folders: turnFolders,

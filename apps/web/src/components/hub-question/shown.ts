@@ -1,4 +1,11 @@
-import type { CommitIdentityAsk, FakeCheckAsk, HubQuestion, HubQuestionChoice, QuestionOption } from "@hobbots/domain";
+import type {
+  CodingSetupAsk,
+  CommitIdentityAsk,
+  FakeCheckAsk,
+  HubQuestion,
+  HubQuestionChoice,
+  QuestionOption,
+} from "@hobbots/domain";
 import { messages } from "./messages.ts";
 
 /**
@@ -40,6 +47,20 @@ const commitIdentity = (ask: CommitIdentityAsk): Words => {
   };
 };
 
+const codingSetup = (ask: CodingSetupAsk): Words => {
+  const copy = messages.codingSetup;
+  const hob = ask.hob.length > 40 ? `${ask.hob.slice(0, 39)}…` : ask.hob;
+  const choices: Record<HubQuestionChoice<"coding-setup">, QuestionOption> = {
+    "not-this-hob": copy.notThisHob({ hob }),
+    "no-hob": copy.noHob,
+  };
+  return {
+    title: copy.title({ hob }),
+    text: copy.text({ hob }),
+    choice: (key) => choices[key as HubQuestionChoice<"coding-setup">],
+  };
+};
+
 const fakeCheck = (ask: FakeCheckAsk): Words => {
   const copy = messages.fakeCheck;
   const choices: Record<HubQuestionChoice<"fake-check">, QuestionOption> = {
@@ -64,6 +85,8 @@ const wordsOf = (question: HubQuestion): Words => {
   switch (question.ask.kind) {
     case "commit-identity":
       return commitIdentity(question.ask);
+    case "coding-setup":
+      return codingSetup(question.ask);
     case "fake-check":
       return fakeCheck(question.ask);
   }

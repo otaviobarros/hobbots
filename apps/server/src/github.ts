@@ -1,4 +1,11 @@
-import { GitHubConnectFailed, type GitHubStatus, GitHubUnreachable, HobbotsApi } from "@hobbots/api";
+import { CommitIdentityQuestions } from "@hobbots/agents";
+import {
+  type CodingSetupChoices,
+  GitHubConnectFailed,
+  type GitHubStatus,
+  GitHubUnreachable,
+  HobbotsApi,
+} from "@hobbots/api";
 import { GitHubConnection } from "@hobbots/charms";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -6,9 +13,20 @@ import { HttpApiBuilder } from "effect/http-api";
 /** What a hub without the GitHub Charm, as in tests, answers: no app to connect through. */
 const NO_APP: GitHubStatus = { _tag: "Disconnected", problem: null, cannotConnect: "no-app" };
 
+const NONE_DISMISSED: CodingSetupChoices = { allHobs: false, hobs: [] };
+
 // Settings › Charms › GitHub: the connected account, the device flow and disconnecting (ADR 020).
 export const GitHubHandlers = HttpApiBuilder.group(HobbotsApi, "github", (handlers) =>
   Effect.gen(function* () {
+    // Where you said not to ask whether a hob will write code (#1241), which Settings clears.
+    const setup = yield* Effect.serviceOption(CommitIdentityQuestions);
+    const codingSetup = {
+      codingSetup: () => (Option.isSome(setup) ? setup.value.dismissed : Effect.succeed(NONE_DISMISSED)),
+      clearCodingSetup: () =>
+        Option.isSome(setup)
+          ? setup.value.clearDismissed.pipe(Effect.andThen(setup.value.dismissed))
+          : Effect.succeed(NONE_DISMISSED),
+    };
     const found = yield* Effect.serviceOption(GitHubConnection);
     if (Option.isNone(found)) {
       const absent = new GitHubConnectFailed({ reason: "no-app", message: "This hub does not connect GitHub." });
@@ -20,6 +38,7 @@ export const GitHubHandlers = HttpApiBuilder.group(HobbotsApi, "github", (handle
         cancel: () => Effect.succeed(NO_APP),
         disconnect: () => Effect.succeed(NO_APP),
         repositories: () => Effect.fail(new GitHubUnreachable({ message: absent.message })),
+        ...codingSetup,
       });
     }
     const connection = found.value;
@@ -43,6 +62,7 @@ export const GitHubHandlers = HttpApiBuilder.group(HobbotsApi, "github", (handle
           Effect.map((repositories) => ({ repositories, installUrl: connection.installUrl })),
           Effect.mapError((error) => new GitHubUnreachable({ message: error.message })),
         ),
+      ...codingSetup,
     });
   }),
 );
