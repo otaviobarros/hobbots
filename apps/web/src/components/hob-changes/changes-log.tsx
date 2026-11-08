@@ -4,8 +4,9 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { changesLogQuery } from "../../api/hob-changes.ts";
-import { ChangeList, namedIn, useHobsNamed } from "./change-list.tsx";
+import { ChangeList } from "./change-list.tsx";
 import { type ChangeFilters, filterChoices, matchesFilters, NO_FILTERS } from "./hob-changes-model.ts";
+import { namedIn, useHobsNamed } from "./hob-names.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.log;
