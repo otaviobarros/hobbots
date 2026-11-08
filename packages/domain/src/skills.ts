@@ -299,9 +299,10 @@ export type TurnSkill = typeof TurnSkill.Type;
 
 /**
  * Where a skill a reply used came from (ADR 029, The use line): the library, at the revision the turn
- * was given, or an administrator's settings for the runtime, which have no revision.
+ * was given, an administrator's settings for the runtime, which have no revision, or the draft a chat
+ * tries (ADR 029, Try in a chat), which is in no library and is never counted.
  */
-export const SkillUseSource = Schema.Literals(["library", "organization"]);
+export const SkillUseSource = Schema.Literals(["library", "organization", "draft"]);
 export type SkillUseSource = typeof SkillUseSource.Type;
 
 /**
@@ -325,6 +326,25 @@ export const UsedSkill = Schema.Struct({
   ),
 });
 export type UsedSkill = typeof UsedSkill.Type;
+
+/**
+ * A draft tried in a chat (ADR 029, Try in a chat, #1099): a hob's proposal, or an edit or a new skill
+ * you have not saved, loaded alone in one new chat with one hob before anyone else gets it. Its files
+ * are kept outside the library, by content hash, and nothing about it reaches the library: no skill,
+ * revision, assignment or use.
+ */
+export class SkillTrial extends Schema.Class<SkillTrial>("SkillTrial")({
+  name: SkillName,
+  description: Schema.String,
+  /** The draft's content hash, which names its files. */
+  hash: SkillRevisionHash,
+  /** The library's skill it changes, or null for a new skill. */
+  skillId: Schema.NullOr(SkillId),
+  /** The revision it was made from, or null for a new skill. */
+  base: Schema.NullOr(SkillRevisionHash),
+  /** The hob's proposal it tries, or null for your own draft. */
+  proposalId: Schema.NullOr(Schema.String),
+}) {}
 
 /** A use of a skill, journaled as `SkillUsed`. */
 export const SkillUseId = Schema.String.pipe(Schema.brand("SkillUseId"));

@@ -6,6 +6,7 @@ import {
   SkillName,
   SkillRevisionHash,
   type SkillScope,
+  SkillTrial,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
@@ -77,5 +78,21 @@ describe("picking a skill with / (ADR 029, Explicit use)", () => {
     expect(skillPicking({ data: undefined, isError: false, refetch }, "Pip").status).toBe("loading");
     expect(skillPicking({ data: undefined, isError: true, refetch }, "Pip").status).toBe("failed");
     expect(skillPicking({ data: view, isError: true, refetch }, "Pip").status).toBe("ready");
+  });
+
+  // covers ADR 029 (Try in a chat), #1099
+  it("[TC-UI-1099-06] offers only the draft in a chat that tries one, whatever the hob has", () => {
+    const refetch = () => undefined;
+    const trial = new SkillTrial({
+      name: SkillName.make("changelog"),
+      description: "Writes the changelog when you cut a release.",
+      hash: SkillRevisionHash.make("1".repeat(64)),
+      skillId: null,
+      base: null,
+      proposalId: "p1",
+    });
+    const picking = skillPicking({ data: view, isError: false, refetch }, "Pip", trial);
+    expect(picking.status).toBe("ready");
+    expect(picking.skills.map((one) => [one.name, one.sub])).toEqual([["changelog", "The draft this chat tries"]]);
   });
 });

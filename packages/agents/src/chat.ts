@@ -28,6 +28,7 @@ import {
   type RuntimeKind,
   type RuntimeSession,
   type SkillMention,
+  type SkillTrial,
   sameBrain,
   stripEscapes,
   systemInstructions,
@@ -67,6 +68,7 @@ import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
 import {
   askedSkillOf,
   mentionedSkill,
+  namedSkills,
   runtimePrompt,
   skillMounter,
   skillUseRecorder,
@@ -207,7 +209,14 @@ const missedBy = (runtime: RuntimeKind, seenThrough: string | null, before: Read
 export class ChatService extends Context.Service<
   ChatService,
   {
-    readonly createThread: (agentId: AgentId) => Effect.Effect<Thread, AgentNotFound | HobUnavailable>;
+    /**
+     * Starts a new thread for the hob. With `skillTrial`, the thread tries that draft (ADR 029, Try in a
+     * chat): every turn of it loads the draft and no other skill, under `title`.
+     */
+    readonly createThread: (
+      agentId: AgentId,
+      options?: { readonly title?: string; readonly skillTrial?: SkillTrial },
+    ) => Effect.Effect<Thread, AgentNotFound | HobUnavailable>;
     /** Starts a turn, or queues the message while the thread's reply runs (assistantMessage is then null). */
     readonly sendPrompt: (
       threadId: ThreadId,
@@ -382,14 +391,27 @@ export class ChatService extends Context.Service<
               skillMounts.resolve({ agentId: agent.id, policy: agent.policy, folders: access?.folders ?? [] }),
             )
           : Effect.succeed(null);
+      // A chat that tries a draft records no library skill with a message, and `/` names the draft
+      // (ADR 029, Try in a chat).
+      const acceptedIn = (thread: Thread, agent: Agent) =>
+        thread.skillTrial === null ? acceptedSkills(agent) : Effect.succeed<Message["skills"]>([]);
       // A turn's skills: those its message was accepted with, or, for a continuation or a message
       // from before, the hob's as the turn starts. The reply records them, and the runtime gets their mounts.
-      const skillsFor = (agent: Agent, config: AgentConfiguration, tools: ToolAccess | null, yours?: Message) =>
+      // A chat that tries a draft loads the draft alone, and records no library skill (ADR 029, Try in a chat).
+      const skillsFor = (
+        agent: Agent,
+        config: AgentConfiguration,
+        tools: ToolAccess | null,
+        thread: Thread,
+        yours?: Message,
+      ) =>
         Effect.gen(function* () {
+          const trial = thread.skillTrial;
+          if (trial !== null) return { recorded: [], mounts: yield* skillMounts.draft(trial), trial };
           const recorded =
             yours?.skills ??
             (yield* skillMounts.resolve({ agentId: agent.id, policy: config.policy, folders: tools?.folders ?? [] }));
-          return { recorded, mounts: yield* skillMounts.mounts(recorded) };
+          return { recorded, mounts: yield* skillMounts.mounts(recorded), trial };
         });
       const withSkills = (recorded: Message["skills"]) => (message: Message) =>
         recorded === null ? undefined : new Message({ ...message, skills: recorded });
@@ -484,7 +506,10 @@ export class ChatService extends Context.Service<
         );
 
       // Status is read under the hob's lock, so a pause or retirement cannot slip in before the thread is saved.
-      const createThread = Effect.fn("ChatService.createThread")(function* (agentId: AgentId) {
+      const createThread = Effect.fn("ChatService.createThread")(function* (
+        agentId: AgentId,
+        options: { readonly title?: string; readonly skillTrial?: SkillTrial } = {},
+      ) {
         return yield* admission.withHob(
           agentId,
           Effect.gen(function* () {
@@ -495,7 +520,8 @@ export class ChatService extends Context.Service<
             const thread = new Thread({
               id: ThreadId.make(crypto.randomUUID()),
               agentId,
-              title: DEFAULT_THREAD_TITLE,
+              title: options.title ?? DEFAULT_THREAD_TITLE,
+              skillTrial: options.skillTrial ?? null,
               createdAt: now,
               updatedAt: now,
             });
@@ -891,18 +917,19 @@ export class ChatService extends Context.Service<
           const expected = thread.sessions.find((s) => s.runtime === brain.runtime);
           const memory = yield* memoryBriefFor(agent, tools, expected);
           const roster = yield* rosterFor(agent, tools, expected, adapter);
-          const skills = yield* skillsFor(agent, config, tools, yours);
+          const skills = yield* skillsFor(agent, config, tools, thread, yours);
           yield* update(withSkills(skills.recorded));
-          skillUses.given(skills.recorded);
+          skillUses.given(skills.recorded, skills.trial);
+          const named = namedSkills(skills.recorded, skills.trial);
           // The skill you picked goes to the runtime as its own mention, so the prompt drops your `/name`.
-          const asked = askedSkillOf(yours, skills.recorded);
+          const asked = askedSkillOf(yours, named);
           // What the turn runs and changes, recorded for the Workbench on the Attempt it works on (ADR 023).
           // Acquired after the Task's turn, so the end-of-turn compare lands before its Attempt ends.
           const activity = yield* activityOf(tools, taskTurn);
           yield* activity
             .run(
               {
-                prompt: runtimePrompt(prompt, asked, skills.recorded),
+                prompt: runtimePrompt(prompt, asked, named),
                 briefing: contextBlock([memory, roster], briefing, taskTurn?.briefing ?? null),
                 sessionId: expected?.sessionId ?? null,
                 instructions: systemInstructions(config.name, config),
@@ -1328,7 +1355,8 @@ export class ChatService extends Context.Service<
             // Work you stopped here, and routine progress, ride along: the message starts through the
             // dispatcher, under their claims.
             const carries = !waits && (yield* workRidesAlong(threadId, agent.id));
-            const accepted = yield* acceptedSkills(agent);
+            const accepted = yield* acceptedIn(thread, agent);
+            const named = namedSkills(accepted, thread.skillTrial);
             const userMessage = new Message({
               id: MessageId.make(crypto.randomUUID()),
               threadId,
@@ -1341,8 +1369,8 @@ export class ChatService extends Context.Service<
               // A skill of a set picked by its name alone is recorded with its set, when that names one.
               askedSkill:
                 askedSkill === null
-                  ? mentionedSkill(content, accepted)
-                  : (mentionedSkill(`/${askedSkill}`, accepted) ?? askedSkill),
+                  ? mentionedSkill(content, named)
+                  : (mentionedSkill(`/${askedSkill}`, named) ?? askedSkill),
               createdAt: yield* nowIso,
             });
             const saved = yield* saveMessage(userMessage);

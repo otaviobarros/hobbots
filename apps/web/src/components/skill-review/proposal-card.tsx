@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { proposalClosed, useCheckProposal, useDecideProposal } from "../../api/skill-proposals.ts";
 import { DraftForm } from "../draft-form/draft-form.tsx";
+import { TryInChat } from "../skills/try-in-chat.tsx";
 import { messages } from "./messages.ts";
 import {
   addLabel,
@@ -117,6 +118,33 @@ function ProposalFlags({ view, check }: { view: SkillProposalView; check: SkillP
   );
 }
 
+/**
+ * Try in a chat (ADR 029, #1099): the proposal, or your edit of it, loaded alone in a new chat, the
+ * hob that proposed it offered first.
+ */
+function TryProposal({
+  proposal,
+  instructions,
+  disabled,
+}: {
+  proposal: SkillProposalView["proposal"];
+  /** Your edit as it stands, or null for the proposal as the hob made it. */
+  instructions: string | null;
+  disabled: boolean;
+}) {
+  return (
+    <TryInChat
+      first={proposal.agentId}
+      disabled={disabled}
+      draft={() => ({
+        _tag: "Proposal",
+        proposalId: proposal.id,
+        ...(instructions === null ? {} : { instructions }),
+      })}
+    />
+  );
+}
+
 /** What a failed decision says. */
 const errorText = (error: unknown) => {
   if (proposalClosed(error)) return copy.closed;
@@ -133,6 +161,8 @@ export function ProposalDecision({ view, who }: { view: SkillProposalView; who: 
   const decide = useDecideProposal(proposal);
   const checking = useCheckProposal(proposal);
   const [editing, setEditing] = useState(false);
+  // Your edit as it stands, which Try in a chat loads while you edit.
+  const [edited, setEdited] = useState(proposal.instructions);
   // Your edit as the checks last found it: it is added only once you have seen what they found.
   const [checked, setChecked] = useState<{ readonly draft: string; readonly check: SkillProposalCheck } | null>(null);
   const waiting = proposal.state === "waiting";
@@ -157,25 +187,32 @@ export function ProposalDecision({ view, who }: { view: SkillProposalView; who: 
     <div className="flex flex-col gap-3">
       {waiting && <ProposalFlags view={view} check={editing && checked !== null ? checked.check : view.check} />}
       {waiting && editing && (
-        <DraftForm
-          initial={proposal.instructions}
-          label={copy.editLabel}
-          hint={copy.editHint}
-          submit={checked === null ? copy.addEdited : copy.addAnyway}
-          back={copy.cancelEdit}
-          rows={12}
-          code
-          busy={busy}
-          onSubmit={addEdit}
-          onChange={() => {
-            setChecked(null);
-            checking.reset();
-          }}
-          onBack={() => {
-            setEditing(false);
-            setChecked(null);
-          }}
-        />
+        <>
+          <DraftForm
+            initial={proposal.instructions}
+            label={copy.editLabel}
+            hint={copy.editHint}
+            submit={checked === null ? copy.addEdited : copy.addAnyway}
+            back={copy.cancelEdit}
+            rows={12}
+            code
+            busy={busy}
+            onSubmit={addEdit}
+            onChange={(draft) => {
+              setEdited(draft);
+              setChecked(null);
+              checking.reset();
+            }}
+            onBack={() => {
+              setEditing(false);
+              setEdited(proposal.instructions);
+              setChecked(null);
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <TryProposal proposal={proposal} instructions={edited} disabled={busy} />
+          </div>
+        </>
       )}
       {waiting && !editing && (
         <div className="flex flex-wrap gap-2">
@@ -185,6 +222,7 @@ export function ProposalDecision({ view, who }: { view: SkillProposalView; who: 
           <Button variant="outline" onClick={() => setEditing(true)} disabled={busy}>
             {copy.editThenAdd}
           </Button>
+          <TryProposal proposal={proposal} instructions={null} disabled={busy} />
           <Button variant="quiet" onClick={() => decide.mutate({ _tag: "decline" })} disabled={busy}>
             {copy.notNow}
           </Button>

@@ -382,6 +382,7 @@ describe("a Task's steps in fresh sessions", () => {
       Layer.succeed(SkillLibrary, library),
       Layer.succeed(SkillFiles, {
         folder: (pin) => Effect.succeed(`/hobbots/skills/objects/${pin}`),
+        draft: () => Effect.succeed(null),
         read: (pin, path) => Effect.fail(new SkillSourceUnreadable({ message: `${path} of ${pin} is not read here.` })),
       }),
     );

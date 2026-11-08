@@ -18,6 +18,7 @@ import {
   skillTitle,
   skillView,
 } from "./skills-model.ts";
+import { TryInChat } from "./try-in-chat.tsx";
 import { giveAll, useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
@@ -110,7 +111,9 @@ export function SkillNew({
         saveLabel={pending ? copy.editor.saving : copy.editor.saveNew}
         disabled={!valid || pending}
         back={{ _tag: "Add", from: "write" }}
-      />
+      >
+        <TryInChat disabled={!valid} draft={() => ({ _tag: "Written", text: newSkillFile(name, description, body) })} />
+      </EditorFooter>
     </form>
   );
 }

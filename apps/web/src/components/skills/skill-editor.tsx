@@ -18,6 +18,7 @@ import {
   skillTitle,
   skillView,
 } from "./skills-model.ts";
+import { TryInChat } from "./try-in-chat.tsx";
 import { useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
@@ -160,7 +161,12 @@ function EditForm({
         disabled={pending || (finishing ? false : !valid || unchanged || newer !== null)}
         hint={unchanged && !finishing ? copy.editor.unchanged : undefined}
         back={back}
-      />
+      >
+        <TryInChat
+          disabled={!valid}
+          draft={() => ({ _tag: "Edit", skillId: skill.id, base, description: description.trim(), instructions: body })}
+        />
+      </EditorFooter>
     </form>
   );
 }

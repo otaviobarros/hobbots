@@ -452,3 +452,50 @@ test("[TC-UX-1143] a plugin comes in as one set, opens on its own page, and a sk
   await expect(main).toContainText("linked/references/workflow-contract.md");
   await expectAccessible(page, main);
 });
+
+// covers ADR 029 (Try in a chat, Health checks), #1099
+test("[TC-UX-1099] the Overview shows what deserves a look and what each hob carries, and Try in a chat opens a chat with only the draft", async ({
+  page,
+}) => {
+  const { url, folder, api } = await hubWithHobs();
+  const vague = join(dataDir, "to-import", "tidy-up");
+  mkdirSync(vague, { recursive: true });
+  writeFileSync(join(vague, "SKILL.md"), "---\nname: tidy-up\ndescription: Tidies things.\n---\n\nTidy it.\n");
+  const added = async (path: string) => {
+    const imported = (await api("POST", "/skills", { source: { _tag: "Folder", path } })) as unknown as {
+      readonly imported: ReadonlyArray<{ readonly skill: { readonly id: string } }>;
+    };
+    const skill = imported.imported[0]?.skill;
+    if (skill === undefined) throw new Error(`Nothing imported from ${path}`);
+    await api("POST", `/skills/${skill.id}/assignments`, { scope: { _tag: "Everyone" }, held: false });
+  };
+  await added(folder);
+  await added(vague);
+
+  await page.goto(`${url}/#/`);
+  await page.getByRole("link", { name: "Skills", exact: true }).first().click();
+  const main = page.getByRole("main", { name: "Skills" });
+  const worth = main.getByRole("region", { name: "Worth a look" });
+  await expect(worth).toContainText("Tidy up's description may not trigger");
+  const carries = main.getByRole("region", { name: "What each hob carries" });
+  await expect(carries).toContainText("Pip");
+  await expect(carries).toContainText("Wren");
+  await expectAccessible(page, main);
+
+  // A line opens where you act on it: the skill, to edit its description, and from there Try in a chat.
+  await worth.getByRole("link", { name: /Tidy up's description may not trigger/ }).click();
+  await expect(main.getByRole("heading", { name: "Tidy up", level: 2 })).toBeVisible();
+  const aside = page.getByRole("complementary", { name: "About this skill" });
+  await aside.getByRole("link", { name: "Edit" }).click();
+  await main.getByLabel("When to use it").fill("Use when a folder needs tidying before a release.");
+  await main.getByRole("button", { name: "Try in a chat" }).click();
+  await page.getByRole("menuitem", { name: /Wren/ }).click();
+
+  await expect(page).toHaveURL(/\/threads\//);
+  const notice = page.getByRole("region", { name: "Trying the draft of Tidy up." });
+  await expect(notice).toContainText("nothing here reaches the library");
+  await expectAccessible(page, page.getByRole("main"));
+  await notice.getByRole("link", { name: "Back to the skill" }).click();
+  await expect(main.getByRole("heading", { name: "Tidy up", level: 2 })).toBeVisible();
+  await expect(main).toContainText("Tidies things.");
+});

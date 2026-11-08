@@ -15,10 +15,11 @@ import { SkillReview } from "./skill-review.tsx";
 import { SkillUpdates } from "./skill-updates.tsx";
 import { SkillsExport } from "./skills-export.tsx";
 import { type Say, useFlash } from "./skills-flash.ts";
+import { WorthALook } from "./skills-health.tsx";
 import { SkillsImport } from "./skills-import.tsx";
 import { agentsFolderOf, type SkillsSearch, type SkillsView, skillsSearchOf, skillsViewOf } from "./skills-model.ts";
 import { SkillsNav } from "./skills-nav.tsx";
-import { SkillsOverview, WorthALook } from "./skills-overview.tsx";
+import { SkillsOverview } from "./skills-overview.tsx";
 import { SkillsEmpty, SkillsFailed, SkillsLoading, SkillsScope, SkillsSearchResults } from "./skills-views.tsx";
 import { type SkillsReads, useSkills } from "./use-skills.ts";
 
