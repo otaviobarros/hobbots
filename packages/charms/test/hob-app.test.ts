@@ -663,7 +663,7 @@ describe("A hob's own GitHub App", () => {
 
   // covers ADR 022
   it("[TC-PE-257] counts a platform without a keychain Hobbots can use as having none", async () => {
-    const windows = HobAppKeysLive("win32", {}).pipe(Layer.provide(NodeServices.layer));
+    const windows = HobAppKeysLive("win32", {}, "0123456789abcdef").pipe(Layer.provide(NodeServices.layer));
     const outcome = await Effect.runPromise(
       Effect.gen(function* () {
         const usable = yield* (yield* HobAppKeys).usable;

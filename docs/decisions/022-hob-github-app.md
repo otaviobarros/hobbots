@@ -74,7 +74,7 @@ You never create an app by hand or handle a key file. Connecting a hob's app (#2
 
 ### The private key
 
-- **In the keychain on the hub.** The private key is one item in the OS keychain per hob: the macOS Keychain, or the Secret Service on Linux, through the same keychain access as ADR 020. It never goes on a command line, in the database, the event journal, logs, the browser or the sandbox. Without a usable keychain the hub refuses to create the app rather than write the key to a file.
+- **In the keychain on the hub.** The private key is one item in the OS keychain per hob: the macOS Keychain, or the Secret Service on Linux, through the same keychain access as ADR 020. Like the sign-in, the keys are the hub's own, under a service named after its data folder (`ai.hobbots.hub-<id>.github.hob-app`), and a hub moves the key of each hob with an app out of the service every hub shared before ([#1214](https://github.com/otaviobarros/hobbots/issues/1214)). It never goes on a command line, in the database, the event journal, logs, the browser or the sandbox. Without a usable keychain the hub refuses to create the app rather than write the key to a file.
 - **Written before it is used.** The hub writes the key to the keychain before it marks the hob's app connected. If the write fails, the Charms tab says so and links to the app's settings page on GitHub, so you can delete the app GitHub already made.
 - **Redacted by value.** The key, every JWT and every installation token join the known values the hub redacts (permissions contract). Private key blocks are already redacted by shape.
 - **No key files and no rotation.** GitHub keys do not expire. The hub never asks for a key file. If a key is revoked or lost, you reconnect, which creates a new app.

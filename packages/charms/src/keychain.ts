@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { AgentId } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Redacted, Ref, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
@@ -39,8 +40,27 @@ export class Keychain extends Context.Service<
   }
 >()("@hobbots/charms/Keychain") {}
 
-/** The item's service name in the keychain: one item, for the GitHub account the hub connected. */
-export const KEYCHAIN_SERVICE = "ai.hobbots.github";
+/**
+ * Which hub's items these are (#1214): every hub on one computer shares its keychain, so each one
+ * keeps its items under its own name, made from its data folder. Start over on one hub, or Connect
+ * on another, then leaves the other hubs' sign-ins alone. `dataDir` is the data folder's real path,
+ * so two spellings of one folder name one hub. A restore into the same folder keeps the name, and
+ * with it the sign-ins, as before.
+ */
+export const hubKeychainScope = (dataDir: string) =>
+  createHash("sha256").update(dataDir, "utf8").digest("hex").slice(0, 16);
+
+/** The service name of the hub's GitHub sign-in in the keychain: one item, for the account it connected. */
+export const signInService = (scope: string) => `ai.hobbots.hub-${scope}.github`;
+/** The keychain service of every hob's app key on the hub; the item's account is the hob's ID. */
+export const hobAppService = (scope: string) => `ai.hobbots.hub-${scope}.github.hob-app`;
+
+/**
+ * The service names every hub on a computer shared before #1214. A hub moves what it finds there
+ * into its own items once (`LegacyKeychain`), and never writes there again.
+ */
+export const LEGACY_SIGN_IN_SERVICE = "ai.hobbots.github";
+export const LEGACY_HOB_APP_SERVICE = "ai.hobbots.github.hob-app";
 const KEYCHAIN_ACCOUNT = "github.com";
 
 // A stored secret holds only these characters (base64url), so it needs no quoting on `security`'s input line.
@@ -72,13 +92,13 @@ interface Item {
   readonly label: string;
 }
 
-/** The item the connected GitHub account's tokens live in. */
-const SIGN_IN_ITEM: Item = {
-  service: KEYCHAIN_SERVICE,
+/** The item the connected GitHub account's tokens live in, under `service`. */
+const signInItem = (service: string): Item => ({
+  service,
   account: KEYCHAIN_ACCOUNT,
   what: "the GitHub sign-in",
   label: "Hobbots GitHub",
-};
+});
 
 const failed = (item: Item, verb: string, code: number) =>
   new KeychainError({ reason: "failed", message: `The keychain could not ${verb} ${item.what} (${code}).` });
@@ -197,13 +217,16 @@ const platformItems =
     };
   };
 
-/** The keychain of the hub's platform: macOS Keychain, the Secret Service on Linux, else none. */
-export const KeychainLive = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv) =>
+/**
+ * The hub's GitHub sign-in in the keychain of its platform: macOS Keychain, the Secret Service on
+ * Linux, else none. `scope` is the hub's own, from `hubKeychainScope`.
+ */
+export const KeychainLive = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv, scope: string) =>
   Layer.effect(
     Keychain,
     Effect.gen(function* () {
       const run = runner(yield* ChildProcessSpawner.ChildProcessSpawner, env);
-      return Keychain.of(platformItems(platform, run)(SIGN_IN_ITEM));
+      return Keychain.of(platformItems(platform, run)(signInItem(signInService(scope))));
     }),
   );
 
@@ -250,7 +273,7 @@ export const DeviceTokenKeychainMemory = Layer.effect(DeviceTokenKeychain, memor
  * A keychain held in memory for the hub's lifetime, for tests and for a hub started with
  * `HOBBOTS_FAKE_KEYCHAIN=memory` to try the flow without touching the real keychain.
  */
-export const KeychainMemory = Layer.effect(Keychain, memoryItem(SIGN_IN_ITEM));
+export const KeychainMemory = Layer.effect(Keychain, memoryItem(signInItem("memory")));
 
 /**
  * Each hob's own GitHub App private key (ADR 022): one keychain item per hob, beside the connected
@@ -270,11 +293,8 @@ export class HobAppKeys extends Context.Service<
   }
 >()("@hobbots/charms/HobAppKeys") {}
 
-/** The keychain service of every hob's app key; the item's account is the hob's ID. */
-export const HOB_APP_KEYCHAIN_SERVICE = "ai.hobbots.github.hob-app";
-
-const hobAppItem = (agentId: AgentId): Item => ({
-  service: HOB_APP_KEYCHAIN_SERVICE,
+const hobAppItem = (service: string, agentId: AgentId): Item => ({
+  service,
   account: agentId,
   what: "the hob's GitHub app key",
   label: "Hobbots hob GitHub app",
@@ -288,18 +308,21 @@ const encodeKey = (pem: Redacted.Redacted<string>) =>
 const decodeKey = (stored: Redacted.Redacted<string>) =>
   Redacted.make(Buffer.from(Redacted.value(stored), "base64url").toString("utf8"));
 
-/** `supported`: false on a platform with no keychain Hobbots can use, where nothing can be kept. */
-const hobAppKeys = (items: (item: Item) => ItemAccess, supported: boolean) => {
+/**
+ * The hobs' app keys under `service`. `supported`: false on a platform with no keychain Hobbots can
+ * use, where nothing can be kept.
+ */
+const hobAppKeys = (items: (item: Item) => ItemAccess, supported: boolean, service: string) => {
   const itemFor = (agentId: AgentId): Effect.Effect<ItemAccess, KeychainError> =>
     SAFE_ACCOUNT.test(agentId)
-      ? Effect.succeed(items(hobAppItem(agentId)))
+      ? Effect.succeed(items(hobAppItem(service, agentId)))
       : Effect.fail(
           new KeychainError({ reason: "failed", message: "The hob's ID is not one Hobbots keeps a key for." }),
         );
   return HobAppKeys.of({
     // A read the keychain cannot run means there is none; a locked one still counts as usable.
     usable: supported
-      ? items(hobAppItem("probe" as AgentId)).read.pipe(
+      ? items(hobAppItem(service, "probe" as AgentId)).read.pipe(
           Effect.as(true),
           Effect.catch((error) => Effect.succeed(error.reason !== "unavailable")),
         )
@@ -314,22 +337,22 @@ const hobAppKeys = (items: (item: Item) => ItemAccess, supported: boolean) => {
   });
 };
 
-/** The hobs' app keys in the keychain of the hub's platform. */
-export const HobAppKeysLive = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv) =>
+/** The hobs' app keys in the keychain of the hub's platform, under the hub's own `scope`. */
+export const HobAppKeysLive = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv, scope: string) =>
   Layer.effect(
     HobAppKeys,
     Effect.gen(function* () {
       return hobAppKeys(
         platformItems(platform, runner(yield* ChildProcessSpawner.ChildProcessSpawner, env)),
         hasKeychain(platform),
+        hobAppService(scope),
       );
     }),
   );
 
-/** The hobs' app keys held in memory, for tests and a hub started with `HOBBOTS_FAKE_GITHUB=on`. */
-export const HobAppKeysMemory = Layer.sync(HobAppKeys, () => {
-  const kept = new Map<string, Redacted.Redacted<string>>();
-  return hobAppKeys(
+/** Hobs' app keys held in a map, as the real keychain checks what it stores. */
+const memoryHobAppKeys = (kept: Map<string, Redacted.Redacted<string>>, service: string) =>
+  hobAppKeys(
     (item) => ({
       read: Effect.sync(() => Option.fromNullishOr(kept.get(item.account))),
       write: (secret) =>
@@ -337,5 +360,39 @@ export const HobAppKeysMemory = Layer.sync(HobAppKeys, () => {
       remove: Effect.sync(() => void kept.delete(item.account)),
     }),
     true,
+    service,
   );
-});
+
+/** The hobs' app keys held in memory, for tests and a hub started with `HOBBOTS_FAKE_GITHUB=on`. */
+export const HobAppKeysMemory = Layer.sync(HobAppKeys, () => memoryHobAppKeys(new Map(), "memory"));
+
+/**
+ * The items every hub on a computer shared before #1214: the GitHub sign-in and each hob's app key
+ * under one service name each. A hub only reads them to move what is its own into its items, and
+ * deletes each one it moved (`claimLegacySignIns` in the server).
+ */
+export class LegacyKeychain extends Context.Service<
+  LegacyKeychain,
+  { readonly signIn: Keychain["Service"]; readonly hobAppKeys: HobAppKeys["Service"] }
+>()("@hobbots/charms/LegacyKeychain") {}
+
+/** The shared items in the keychain of the hub's platform. */
+export const LegacyKeychainLive = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv) =>
+  Layer.effect(
+    LegacyKeychain,
+    Effect.gen(function* () {
+      const items = platformItems(platform, runner(yield* ChildProcessSpawner.ChildProcessSpawner, env));
+      return LegacyKeychain.of({
+        signIn: items(signInItem(LEGACY_SIGN_IN_SERVICE)),
+        hobAppKeys: hobAppKeys(items, hasKeychain(platform), LEGACY_HOB_APP_SERVICE),
+      });
+    }),
+  );
+
+/** The shared items held in memory, empty at first: for tests and a hub with a fake keychain. */
+export const LegacyKeychainMemory = Layer.effect(
+  LegacyKeychain,
+  Effect.map(memoryItem(signInItem(LEGACY_SIGN_IN_SERVICE)), (signIn) =>
+    LegacyKeychain.of({ signIn, hobAppKeys: memoryHobAppKeys(new Map(), LEGACY_HOB_APP_SERVICE) }),
+  ),
+);
