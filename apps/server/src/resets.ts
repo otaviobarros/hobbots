@@ -99,9 +99,9 @@ export const eraseKeychain = (hobs: ReadonlyArray<Pick<Agent, "id" | "name">>) =
  * hub shared into this hub's own, then deletes its own. While anything may still be in the shared
  * items, it deletes nothing and answers what, so the records that say the hub stored them stay.
  */
-export const forgetKeychain = (hobs: ReadonlyArray<Pick<Agent, "id" | "name">>, lock: string) =>
+export const forgetKeychain = (dataDir: string, hobs: ReadonlyArray<Pick<Agent, "id" | "name">>, lock: string) =>
   Effect.gen(function* () {
-    const left = yield* claimLegacySignIns(lock);
+    const left = yield* claimLegacySignIns(dataDir, lock);
     return left.length > 0 ? [...left] : yield* eraseKeychain(hobs);
   });
 

@@ -1,13 +1,14 @@
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir, userInfo } from "node:os";
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GitHubAccounts, HobbotsRepository, HobGitHubApps } from "@hobbots/agents";
-import { HobAppKeys, Keychain, type KeychainError, LegacyKeychain } from "@hobbots/charms";
-import { Context, Effect, Layer, Option, Redacted, Schedule } from "effect";
-import { processAlive } from "./hub-presence.ts";
+import { HobAppKeys, Keychain, KeychainError, LegacyKeychain } from "@hobbots/charms";
+import { Context, Effect, Layer, Option, Redacted, Schedule, Schema } from "effect";
+import { lockToken, releaseLock, tryTakeLock } from "./keychain-lock.ts";
 
 /** One keychain item to move: where the hub keeps it now, and where every hub kept it before. */
 interface Move {
+  /** Its name in the list of moves under way. */
+  readonly key: string;
   readonly what: string;
   readonly legacy: {
     readonly read: Effect.Effect<Option.Option<Redacted.Redacted<string>>, KeychainError>;
@@ -23,19 +24,28 @@ const same = (a: Redacted.Redacted<string>, b: Redacted.Redacted<string>) => Red
 
 /**
  * Moves one shared item into the hub's own, and deletes the shared one once the hub's own holds it.
- * When the hub already has its own item, the shared one may be another hub's, so it stays, unless
- * it holds the same secret: a move that stopped before its delete. Answers what may still be in the
- * shared item because the keychain did not read, save or delete it, or null when nothing of it is.
+ * The item is listed in `moves` before the hub's own copy is written and leaves the list once the
+ * shared one is gone. When the hub already has its own item, the shared one may be another hub's,
+ * so it stays, unless the list names it or it holds the same secret: a move that stopped before its
+ * delete, even if the hub refreshed its copy since. Answers what may still be in the shared item
+ * because the keychain did not read, save or delete it, or null when nothing of it is.
  */
-const move = ({ what, legacy, own }: Move) =>
+const move = (dataDir: string, moves: Set<string>, { key, what, legacy, own }: Move) =>
   Effect.gen(function* () {
+    const listed = moves.has(key);
     const shared = yield* legacy.read;
-    if (Option.isNone(shared)) return null;
-    const mine = yield* own.read;
-    if (Option.isSome(mine) && !same(mine.value, shared.value)) return null;
-    if (Option.isNone(mine)) yield* own.write(shared.value);
-    yield* legacy.remove;
-    yield* Effect.log(`Moved ${what} into this hub's own keychain item`);
+    if (Option.isSome(shared)) {
+      const mine = yield* own.read;
+      if (Option.isSome(mine) && !listed && !same(mine.value, shared.value)) return null;
+      if (Option.isNone(mine)) {
+        moves.add(key);
+        yield* writeMoves(dataDir, moves);
+        yield* own.write(shared.value);
+      }
+      yield* legacy.remove;
+      yield* Effect.log(`Moved ${what} into this hub's own keychain item`);
+    }
+    if (moves.delete(key)) yield* writeMoves(dataDir, moves);
     return null;
   }).pipe(
     Effect.catch((error) =>
@@ -46,66 +56,64 @@ const move = ({ what, legacy, own }: Move) =>
 const capitalize = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 /**
- * The lock every hub of this user takes while it moves sign-ins out of the shared items: a folder
- * made with `mkdir`, which only one process can do at a time, beside the user's own temporary files.
- * Without it, two hubs starting together could both copy the same sign-in, and a refresh by one
- * would retire the other's token.
+ * Takes the lock as `token`, waiting up to `wait` for another hub to let it go (`keychain-lock.ts`).
+ * Fails when another hub still holds it.
  */
-export const legacyKeychainLock = () => join(tmpdir(), `hobbots-${userInfo().uid}-legacy-keychain.lock`);
-
-const owner = (lock: string) => join(lock, "pid");
-
-/** The process holding the lock, or null while the holder has not written it yet. */
-const holder = (lock: string) => {
-  try {
-    return Number.parseInt(readFileSync(owner(lock), "utf8"), 10) || null;
-  } catch {
-    return null;
-  }
-};
-
-/** Whether a lock was left by a hub that stopped while it held it: its process is gone, or it never wrote one. */
-const abandoned = (lock: string) => {
-  const pid = holder(lock);
-  if (pid !== null) return !processAlive(pid);
-  try {
-    return Date.now() - statSync(lock).mtimeMs > 60_000;
-  } catch {
-    return false;
-  }
-};
-
-/**
- * Takes the lock, waiting up to `wait` for another hub to let it go. An abandoned lock is taken
- * over. Fails when another hub still holds it.
- */
-const take = (lock: string, wait: number) =>
+const take = (lock: string, token: string, wait: number) =>
   Effect.try({
     try: () => {
-      try {
-        mkdirSync(lock);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST" || !abandoned(lock)) throw error;
-        rmSync(lock, { recursive: true, force: true });
-        mkdirSync(lock);
-      }
-      writeFileSync(owner(lock), `${process.pid}\n`, { mode: 0o600 });
+      if (!tryTakeLock(lock, token)) throw new Held();
     },
-    catch: (error) => error as NodeJS.ErrnoException,
+    catch: (error) => error,
   }).pipe(
     Effect.retry({
-      while: (error) => error.code === "EEXIST",
+      while: (error) => error instanceof Held,
       schedule: Schedule.spaced("100 millis"),
       times: Math.ceil(wait / 100),
     }),
     Effect.mapError((error) =>
-      error.code === "EEXIST"
+      error instanceof Held
         ? "Another hub on this computer is moving its sign-ins out of the keychain items every hub shared. Try again once it has started."
-        : `The hub could not make ${lock}, so it did not move its sign-ins out of the keychain items every hub shared: ${error.message}`,
+        : `The hub could not take ${lock}, so it did not move its sign-ins out of the keychain items every hub shared: ${String(error)}`,
     ),
   );
 
-const release = (lock: string) => Effect.sync(() => rmSync(lock, { recursive: true, force: true }));
+class Held {}
+
+/**
+ * The file in the data folder that lists the shared items this hub moved and has not yet deleted
+ * (#1214). An item is listed before the hub writes its own copy, and only leaves the list once the
+ * shared one is gone, so the hub still knows the shared item is its own after it refreshed its copy.
+ * Start over and the reset command delete nothing while the list names an item still there.
+ */
+const legacyMovesFile = (dataDir: string) => join(dataDir, "legacy-keychain.json");
+
+const decodeMoves = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.String)));
+
+/** The items listed, or null when the file cannot be read. */
+const readMoves = (dataDir: string): Set<string> | null => {
+  let text: string;
+  try {
+    text = readFileSync(legacyMovesFile(dataDir), "utf8");
+  } catch (error) {
+    return code(error) === "ENOENT" ? new Set() : null;
+  }
+  return Option.match(decodeMoves(text), { onNone: () => null, onSome: (items) => new Set(items) });
+};
+
+const code = (error: unknown) => (error as NodeJS.ErrnoException).code;
+
+/** Written beside the file and renamed over it, so a reader never sees half a list. */
+const writeMoves = (dataDir: string, items: ReadonlySet<string>) =>
+  Effect.try({
+    try: () => {
+      const file = legacyMovesFile(dataDir);
+      if (items.size === 0) return rmSync(file, { force: true });
+      writeFileSync(`${file}.tmp`, `${JSON.stringify([...items].sort())}\n`, { mode: 0o600 });
+      renameSync(`${file}.tmp`, file);
+    },
+    catch: (error) => new KeychainError({ reason: "failed", message: `${legacyMovesFile(dataDir)}: ${String(error)}` }),
+  });
 
 /**
  * Moves the sign-ins this hub kept in the keychain items every hub on the computer shared before
@@ -119,7 +127,7 @@ const release = (lock: string) => Effect.sync(() => rmSync(lock, { recursive: tr
  * next start, but Start over and the reset command delete nothing while anything is answered, so
  * the records that say the hub stored those items stay (ADR 026).
  */
-export const claimLegacySignIns = (lock: string, wait = 30_000) =>
+export const claimLegacySignIns = (dataDir: string, lock: string, wait = 30_000) =>
   Effect.gen(function* () {
     const legacy = yield* LegacyKeychain;
     const signIn = yield* Keychain;
@@ -129,22 +137,34 @@ export const claimLegacySignIns = (lock: string, wait = 30_000) =>
     const hobs = yield* HobbotsRepository;
     const moves: Array<Move> = [];
     if ((yield* accounts.get)?.source === "app") {
-      moves.push({ what: "the GitHub sign-in", legacy: legacy.signIn, own: signIn });
+      moves.push({ key: "sign-in", what: "the GitHub sign-in", legacy: legacy.signIn, own: signIn });
     }
     for (const hob of yield* hobs.listAgentsWithStatus(["active", "paused", "retired"])) {
       const recorded = (yield* apps.get(hob.id)) !== null || (yield* apps.leftOver(hob.id)) !== null;
       if (!recorded) continue;
       moves.push({
+        key: `hob-app:${hob.id}`,
         what: `${hob.name}'s GitHub app key`,
         legacy: { read: legacy.hobAppKeys.read(hob.id), remove: legacy.hobAppKeys.remove(hob.id) },
         own: { read: keys.read(hob.id), write: (pem) => keys.write(hob.id, pem) },
       });
     }
     if (moves.length === 0) return [];
+    const token = lockToken();
     const kept = yield* Effect.acquireUseRelease(
-      take(lock, wait),
-      () => Effect.forEach(moves, move),
-      () => release(lock),
+      take(lock, token, wait),
+      () =>
+        Effect.gen(function* () {
+          // Read under the lock: the list is this data folder's, and one hub runs on it at a time.
+          const listed = readMoves(dataDir);
+          if (listed === null) {
+            return [
+              `${legacyMovesFile(dataDir)} cannot be read, so the hub cannot tell which shared keychain items it moved.`,
+            ];
+          }
+          return yield* Effect.forEach(moves, (item) => move(dataDir, listed, item));
+        }),
+      () => Effect.sync(() => releaseLock(lock, token)),
     ).pipe(Effect.catch((reason) => Effect.succeed([reason])));
     const problems: Array<string> = [];
     for (const problem of kept) if (problem !== null) problems.push(problem);
@@ -162,14 +182,14 @@ export class LegacySignIns extends Context.Service<
   LegacySignIns,
   { readonly claim: Effect.Effect<ReadonlyArray<string>> }
 >()("@hobbots/server/LegacySignIns") {
-  static readonly layer = (lock: string) =>
+  static readonly layer = (dataDir: string, lock: string) =>
     Layer.effect(
       LegacySignIns,
       Effect.gen(function* () {
         const context = yield* Effect.context<
           LegacyKeychain | Keychain | HobAppKeys | GitHubAccounts | HobGitHubApps | HobbotsRepository
         >();
-        return LegacySignIns.of({ claim: claimLegacySignIns(lock).pipe(Effect.provide(context)) });
+        return LegacySignIns.of({ claim: claimLegacySignIns(dataDir, lock).pipe(Effect.provide(context)) });
       }),
     );
 }

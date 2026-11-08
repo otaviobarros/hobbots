@@ -124,7 +124,8 @@ import { ApiRoutes } from "./http.ts";
 import { claimHubPresence, forgetHubPresence } from "./hub-presence.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
-import { LegacySignIns, legacyKeychainLock } from "./legacy-keychain.ts";
+import { legacyKeychainLock } from "./keychain-lock.ts";
+import { LegacySignIns } from "./legacy-keychain.ts";
 import { HubListenersLive } from "./listeners.ts";
 import { MemoryChanges } from "./memory.ts";
 import { MemorySettingsStore, readMemorySettings } from "./memory-settings.ts";
@@ -353,7 +354,7 @@ const ServerLive = Layer.unwrap(
     const keychainScope = hubKeychainScope(dataDir);
     const SignInKeychain = fakeGitHub ? KeychainMemory : KeychainLive(process.platform, process.env, keychainScope);
     const AppKeys = fakeGitHub ? HobAppKeysMemory : HobAppKeysLive(process.platform, process.env, keychainScope);
-    const Legacy = LegacySignIns.layer(legacyKeychainLock()).pipe(
+    const Legacy = LegacySignIns.layer(dataDir, legacyKeychainLock()).pipe(
       Layer.provide(
         Layer.mergeAll(
           SignInKeychain,

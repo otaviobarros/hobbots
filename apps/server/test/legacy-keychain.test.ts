@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { GitHubAccounts, HobbotsRepository, HobGitHubApps } from "@hobbots/agents";
 import {
   HobAppKeys,
@@ -24,6 +25,19 @@ afterAll(() => rmSync(folder, { recursive: true, force: true }));
 let locks = 0;
 /** A lock of the tests' own, so they never wait on a hub running on this computer. */
 const newLock = () => join(folder, `lock-${locks++}`);
+/** A data folder of its own, for the list of moves under way. */
+const newData = () => {
+  const dir = join(folder, `data-${locks++}`);
+  mkdirSync(dir);
+  return dir;
+};
+/** A lock held as `token`, as a hub holding it leaves it. */
+const heldAs = (token: string) => {
+  const lock = newLock();
+  mkdirSync(lock);
+  writeFileSync(join(lock, "owner"), `${token}\n`);
+  return lock;
+};
 
 const FRODO = AgentId.make("frodo");
 const SAM = AgentId.make("sam");
@@ -52,7 +66,7 @@ const claim = (
 ) =>
   Effect.gen(function* () {
     yield* seed;
-    const problems = yield* claimLegacySignIns(newLock());
+    const problems = yield* claimLegacySignIns(newData(), newLock());
     const own = yield* Keychain;
     const keys = yield* HobAppKeys;
     const legacy = yield* LegacyKeychain;
@@ -134,7 +148,7 @@ describe("Moving sign-ins out of the shared keychain items", () => {
     });
     const outcome = await Effect.gen(function* () {
       yield* sharedItems;
-      const problems = yield* claimLegacySignIns(newLock());
+      const problems = yield* claimLegacySignIns(newData(), newLock());
       return { problems, shared: value(yield* (yield* LegacyKeychain).signIn.read) };
     }).pipe(
       Effect.provide(Layer.mergeAll(refusing, HobAppKeysMemory, LegacyKeychainMemory, records([], "app"))),
@@ -158,7 +172,7 @@ describe("Moving sign-ins out of the shared keychain items", () => {
     ).pipe(Layer.provide(LegacyKeychainMemory));
     const outcome = await Effect.gen(function* () {
       yield* sharedItems;
-      const kept = yield* forgetKeychain([], newLock());
+      const kept = yield* forgetKeychain(newData(), [], newLock());
       return {
         kept,
         own: value(yield* (yield* Keychain).read),
@@ -189,7 +203,7 @@ describe("Moving sign-ins out of the shared keychain items", () => {
         signIn: { ...shared.signIn, read: shared.signIn.read.pipe(Effect.tap(() => Effect.sleep("50 millis"))) },
       });
       const hub = Effect.gen(function* () {
-        yield* claimLegacySignIns(lock);
+        yield* claimLegacySignIns(newData(), lock);
         return value(yield* (yield* Keychain).read);
       }).pipe(
         Effect.provide(Layer.mergeAll(KeychainMemory, HobAppKeysMemory, records([], "app"))),
@@ -206,22 +220,90 @@ describe("Moving sign-ins out of the shared keychain items", () => {
     const run = (lock: string) =>
       Effect.gen(function* () {
         yield* sharedItems;
-        return yield* claimLegacySignIns(lock, 200);
+        return yield* claimLegacySignIns(newData(), lock, 200);
       }).pipe(
         Effect.provide(Layer.mergeAll(KeychainMemory, HobAppKeysMemory, LegacyKeychainMemory, records([], "app"))),
         Effect.runPromise,
       );
     // Held by a live process (this one): the move waits, then says so and moves nothing.
-    const held = newLock();
-    mkdirSync(held);
-    writeFileSync(join(held, "pid"), `${process.pid}\n`);
+    const held = heldAs(`${process.pid}-a-hold`);
     expect(await run(held)).toEqual([
       "Another hub on this computer is moving its sign-ins out of the keychain items every hub shared. Try again once it has started.",
     ]);
     // Left by a process that is gone: taken over.
-    const left = newLock();
-    mkdirSync(left);
-    writeFileSync(join(left, "pid"), "2147483646\n");
+    const left = heldAs("2147483646-a-hold");
     expect(await run(left)).toEqual([]);
+    // Let go of after the move, and the stopped hub's lock kept aside as a tombstone.
+    expect(readdirSync(folder).filter((name) => name.startsWith(basename(left)))).toEqual([
+      `${basename(left)}.dead-2147483646-a-hold`,
+    ]);
   });
+
+  it("[TC-OP-1214-08] still deletes a shared sign-in it moved after it refreshed its own copy", async () => {
+    const dataDir = newData();
+    const refused = new KeychainError({ reason: "failed", message: "The keychain refused the delete (161)." });
+    let deletes = 0;
+    const outcome = await Effect.gen(function* () {
+      const real = yield* LegacyKeychain;
+      // The first delete of the shared item fails; later ones work.
+      const flaky = LegacyKeychain.of({
+        ...real,
+        signIn: {
+          ...real.signIn,
+          remove: Effect.suspend(() => (deletes++ === 0 ? Effect.fail(refused) : real.signIn.remove)),
+        },
+      });
+      yield* sharedItems;
+      const atStart = yield* claimLegacySignIns(dataDir, newLock()).pipe(Effect.provideService(LegacyKeychain, flaky));
+      // GitHub renews the sign-in, so the hub's copy no longer matches the shared one.
+      yield* (yield* Keychain).write(Redacted.make("cmVuZXdlZA"));
+      const atReset = yield* forgetKeychain(dataDir, [], newLock()).pipe(Effect.provideService(LegacyKeychain, flaky));
+      return {
+        atStart,
+        atReset,
+        own: value(yield* (yield* Keychain).read),
+        shared: value(yield* real.signIn.read),
+      };
+    }).pipe(
+      Effect.provide(Layer.mergeAll(KeychainMemory, HobAppKeysMemory, LegacyKeychainMemory, records([], "app"))),
+      Effect.runPromise,
+    );
+    expect(outcome.atStart).toHaveLength(1);
+    // The reset deletes the shared item the hub moved, then its own.
+    expect(outcome).toMatchObject({ atReset: [], own: Option.none(), shared: Option.none() });
+    expect(readdirSync(dataDir)).toEqual([]);
+  });
+
+  it("[TC-OP-1214-09] lets one hub at a time take over a lock a stopped hub left, across processes", async () => {
+    // Hubs racing to take over the same dead owner's lock, each in its own process.
+    const lock = heldAs("2147483646-a-hold");
+    const log = join(folder, "holds.log");
+    const script = join(folder, "contender.mjs");
+    writeFileSync(
+      script,
+      `import { appendFileSync } from "node:fs";
+import { lockToken, releaseLock, tryTakeLock } from ${JSON.stringify(join(import.meta.dirname, "../src/keychain-lock.ts"))};
+const [lock, log, start] = process.argv.slice(2);
+while (Date.now() < Number(start)) {}
+const token = lockToken();
+while (!tryTakeLock(lock, token)) {}
+appendFileSync(log, "in\\n");
+const until = Date.now() + 30;
+while (Date.now() < until) {}
+appendFileSync(log, "out\\n");
+releaseLock(lock, token);
+`,
+    );
+    const start = Date.now() + 1500;
+    const contenders = Array.from(
+      { length: 6 },
+      () =>
+        new Promise<number | null>((done) =>
+          spawn(process.execPath, [script, lock, log, String(start)], { stdio: "inherit" }).on("exit", done),
+        ),
+    );
+    expect(await Promise.all(contenders)).toEqual([0, 0, 0, 0, 0, 0]);
+    // Every hold ends before the next begins.
+    expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(Array.from({ length: 6 }, () => ["in", "out"]).flat());
+  }, 20_000);
 });
