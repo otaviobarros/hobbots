@@ -12,8 +12,8 @@ import {
 import { Console, Effect, Layer } from "effect";
 import { exitOnFailure, freeDataFolder } from "./command-line.ts";
 import { ServerConfig } from "./config.ts";
-import { claimLegacySignIns } from "./legacy-keychain.ts";
-import { eraseKeychain, keptReason, wipeHubData } from "./resets.ts";
+import { legacyKeychainLock } from "./legacy-keychain.ts";
+import { forgetKeychain, keptReason, wipeHubData } from "./resets.ts";
 
 const hubDatabase = (dataDir: string) => join(dataDir, "hobbots.sqlite");
 
@@ -63,8 +63,7 @@ const reset = Effect.gen(function* () {
     yield* Console.log("Your folders, backups saved elsewhere and your runtime accounts stay. It cannot be undone.");
     if (!confirmed) return null;
     // A hub that never started since #1214 still has its sign-ins in the items every hub shared.
-    yield* claimLegacySignIns;
-    return yield* eraseKeychain(hobs);
+    return yield* forgetKeychain(hobs, legacyKeychainLock());
   }).pipe(
     Effect.provide(Layer.mergeAll(recordsOf(dataDir), keychains)),
     Effect.mapError(() => `The hub's database in ${dataDir} could not be read, so what it stored is not known.`),

@@ -14,6 +14,7 @@ import { Agent, AgentId } from "@hobbots/domain";
 import { HobbotsRepositoryLive, SqliteLive } from "@hobbots/persistence";
 import { Effect, Exit, Layer, Option, Redacted } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { LegacySignIns } from "../src/legacy-keychain.ts";
 import { eraseKeychain, finishReset, HubReset, resetMarkerFile, wipeHubData } from "../src/resets.ts";
 import { HubRestart } from "../src/restores.ts";
 
@@ -85,9 +86,15 @@ const hobs = ["frodo", "sam"].map(
 );
 
 /** Runs Start over with a keychain that keeps what `kept` names, and answers what was called. */
-const startOver = async (kept: Partial<Record<string, string>> = {}) => {
+const startOver = async (kept: Partial<Record<string, string>> = {}, legacyLeft: ReadonlyArray<string> = []) => {
   const calls: Array<string> = [];
   const services = Layer.mergeAll(
+    Layer.succeed(LegacySignIns, {
+      claim: Effect.sync(() => {
+        calls.push("move shared");
+        return legacyLeft;
+      }),
+    }),
     Layer.succeed(HubRestart, {
       restore: () => Effect.void,
       reset: Effect.sync(() => void calls.push("restart")),
@@ -173,13 +180,24 @@ describe("start over", () => {
   it("[TC-OP-096] forgets the GitHub sign-in and every hob's own app, then asks the hub to restart empty", async () => {
     const { calls, exit } = await startOver();
     expect(Exit.isSuccess(exit)).toBe(true);
-    expect(calls).toEqual(["app frodo", "app sam", "github", "restart"]);
+    expect(calls).toEqual(["move shared", "app frodo", "app sam", "github", "restart"]);
+  });
+
+  // covers #948, #1214
+  it("[TC-OP-1214-07] deletes nothing while a sign-in may still be in the keychain items every hub shared", async () => {
+    const left =
+      "The GitHub sign-in may still be in the keychain item every hub shared: The keychain refused the delete (161).";
+    const { calls, exit } = await startOver({}, [left]);
+    // Neither this hub's own items nor its data go, so its records still say what is in the keychain.
+    expect(calls).toEqual(["move shared"]);
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(JSON.stringify(exit)).toContain(left);
   });
 
   // covers #948
   it("[TC-OP-099] deletes nothing and says why when the keychain keeps a sign-in", async () => {
     const { calls, exit } = await startOver({ sam: "The hub's keychain did not delete the app's key: locked." });
-    expect(calls).toEqual(["app frodo", "app sam", "github"]);
+    expect(calls).toEqual(["move shared", "app frodo", "app sam", "github"]);
     expect(Exit.isFailure(exit)).toBe(true);
     expect(JSON.stringify(exit)).toContain("sam: The hub's keychain did not delete the app's key: locked.");
   });

@@ -6,6 +6,7 @@ import { deleteOutcome, GitHubConnection, HobAppKeys, Keychain } from "@hobbots/
 import type { Agent } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { HUB_ENTRIES, removeTree } from "./backup-files.ts";
+import { claimLegacySignIns, LegacySignIns } from "./legacy-keychain.ts";
 import { HubRestart } from "./restores.ts";
 import { runtimeFolders } from "./tools.ts";
 
@@ -93,6 +94,17 @@ export const eraseKeychain = (hobs: ReadonlyArray<Pick<Agent, "id" | "name">>) =
     return kept;
   });
 
+/**
+ * The reset command's keychain step (#948, #1214): moves what an earlier hub left in the items every
+ * hub shared into this hub's own, then deletes its own. While anything may still be in the shared
+ * items, it deletes nothing and answers what, so the records that say the hub stored them stay.
+ */
+export const forgetKeychain = (hobs: ReadonlyArray<Pick<Agent, "id" | "name">>, lock: string) =>
+  Effect.gen(function* () {
+    const left = yield* claimLegacySignIns(lock);
+    return left.length > 0 ? [...left] : yield* eraseKeychain(hobs);
+  });
+
 /** The words of a reset that stopped because the keychain kept items. */
 export const keptReason = (kept: ReadonlyArray<string>) =>
   `Nothing was deleted, because sign-ins may still be in the keychain. ${kept.join(" ")} Unlock the keychain, check that it answers, and try again.`;
@@ -112,12 +124,19 @@ export class HubReset extends Context.Service<HubReset, { readonly start: Effect
       const hobs = yield* HobbotsRepository;
       const github = yield* Effect.serviceOption(GitHubConnection);
       const hobApps = yield* Effect.serviceOption(RetiredHobGitHubApp);
+      const legacy = yield* Effect.serviceOption(LegacySignIns);
 
       // The keychain is outside the data folder, so its items go while the services that own them
       // still run. A hob's own GitHub app also loses its installations, as when the hob retires.
       // Answers what the keychain kept: nothing is deleted then, so the database keeps the record of
       // it and Start over can be tried again.
       const forgetSignIns = Effect.gen(function* () {
+        // What an earlier hub kept in the items every hub shared is this hub's to delete too (#1214):
+        // it is moved into the hub's own items first, and while any may still be there, nothing goes.
+        if (Option.isSome(legacy)) {
+          const left = yield* legacy.value.claim;
+          if (left.length > 0) return [...left];
+        }
         const kept: Array<string> = [];
         if (Option.isSome(hobApps)) {
           for (const hob of yield* hobs.listAgentsWithStatus(["active", "paused", "retired"])) {

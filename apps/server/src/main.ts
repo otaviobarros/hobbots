@@ -124,7 +124,7 @@ import { ApiRoutes } from "./http.ts";
 import { claimHubPresence, forgetHubPresence } from "./hub-presence.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
-import { claimLegacySignIns } from "./legacy-keychain.ts";
+import { LegacySignIns, legacyKeychainLock } from "./legacy-keychain.ts";
 import { HubListenersLive } from "./listeners.ts";
 import { MemoryChanges } from "./memory.ts";
 import { MemorySettingsStore, readMemorySettings } from "./memory-settings.ts";
@@ -353,7 +353,7 @@ const ServerLive = Layer.unwrap(
     const keychainScope = hubKeychainScope(dataDir);
     const SignInKeychain = fakeGitHub ? KeychainMemory : KeychainLive(process.platform, process.env, keychainScope);
     const AppKeys = fakeGitHub ? HobAppKeysMemory : HobAppKeysLive(process.platform, process.env, keychainScope);
-    const LegacySignInsClaimed = Layer.effectDiscard(claimLegacySignIns).pipe(
+    const Legacy = LegacySignIns.layer(legacyKeychainLock()).pipe(
       Layer.provide(
         Layer.mergeAll(
           SignInKeychain,
@@ -364,6 +364,10 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       ),
+      Layer.provide(NodeServices.layer),
+    );
+    const LegacySignInsClaimed = Layer.effectDiscard(Effect.flatMap(LegacySignIns, (legacy) => legacy.claim)).pipe(
+      Layer.provide(Legacy),
     );
     const Account = GitHubAccountLive({
       clientId: fakeGitHub ? "fake" : config.githubClientId,
@@ -457,8 +461,8 @@ const ServerLive = Layer.unwrap(
             // Settings › Backup & export (ADR 026).
             HubBackups.layer,
             HubRestores.layer,
-            // Settings › Your data › Start over (#948).
-            HubReset.layer,
+            // Settings › Your data › Start over (#948), which first moves what is left in the shared keychain items (#1214).
+            HubReset.layer.pipe(Layer.provide(Legacy)),
             fakePlays(config),
             memoryPageLayer(config, PageStore),
           ),
