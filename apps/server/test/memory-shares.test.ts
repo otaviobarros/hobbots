@@ -102,6 +102,7 @@ const App = (store: MemoryStoreShape) => {
         Layer.succeed(MemoryProjects, {
           of: (folder: string) =>
             Effect.succeed(memoryProjectIdentity(folder === siteFolder ? "git@github.com:me/site.git" : null, "x")),
+          origin: (folder: string) => Effect.succeed(folder === siteFolder ? "git@github.com:me/site.git" : null),
         }),
         PolicyEngine.node,
       ),

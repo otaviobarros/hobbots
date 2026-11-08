@@ -11,6 +11,7 @@ import { ImportCandidates, ImportRefused } from "./import-candidates.tsx";
 import { doneOf, foundLine, importLabel } from "./import-result.ts";
 import { FileSource, GitSource, SourceTabs } from "./import-sources.tsx";
 import { messages } from "./messages.ts";
+import { RepositorySource } from "./skill-repository.tsx";
 import type { Say } from "./skills-flash.ts";
 import { type HobDirectory, type ImportFrom, importable, scopeName, skillsSearchOf } from "./skills-model.ts";
 import { giveAll, importRunKey, useImporting, useSkillWrites } from "./use-skill-writes.ts";
@@ -156,12 +157,15 @@ function ScanResult({
 /** Add a skill: from Git, a folder or a .zip, or written here or by a hob. A source is scanned first, writing nothing. */
 export function SkillsImport({
   from,
+  project,
   active,
   projects,
   hobs,
   say,
 }: {
   from: ImportFrom;
+  /** From a repository, the project whose repository it reads. */
+  project?: string | undefined;
   active: ReadonlyArray<Agent>;
   projects: ReadonlyArray<MemoryProjectIdentity>;
   hobs: HobDirectory;
@@ -185,8 +189,9 @@ export function SkillsImport({
       <SourceTabs from={from} />
       {from === "git" && <GitSource looking={scan.isPending} locked={importing} onLook={look} />}
       {from === "file" && <FileSource looking={scan.isPending} locked={importing} onLook={look} />}
+      {from === "repo" && <RepositorySource project={project} hobs={hobs} say={say} />}
       {from === "write" && <WriteOne />}
-      {scan.isError && from !== "write" && (
+      {scan.isError && (from === "git" || from === "file") && (
         <p role="alert" className="m-0 rounded-card bg-notice px-3.5 py-2.5 text-ui text-text-strong">
           {copy.import.unreadable}
         </p>

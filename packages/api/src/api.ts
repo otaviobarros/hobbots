@@ -53,6 +53,7 @@ import { RemoteAccessGroup } from "./remote-access.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
 import { SkillProposalsGroup } from "./skill-proposals.ts";
+import { SkillRepositoriesGroup } from "./skill-repositories.ts";
 import { SkillUpdatesGroup } from "./skill-updates.ts";
 import { SkillsGroup } from "./skills.ts";
 import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
@@ -430,4 +431,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(HobMemoryGroup)
   .add(SkillsGroup)
   .add(SkillProposalsGroup)
-  .add(SkillUpdatesGroup) {}
+  .add(SkillUpdatesGroup)
+  .add(SkillRepositoriesGroup) {}

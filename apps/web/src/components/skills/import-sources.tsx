@@ -5,6 +5,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { messages } from "./messages.ts";
+import { useRepositoryTab } from "./skill-repository.tsx";
 import { type ImportFrom, skillsSearchOf } from "./skills-model.ts";
 import { SkillsIcon } from "./skills-parts.tsx";
 
@@ -143,16 +144,21 @@ export function FileSource({
   );
 }
 
-const TABS: ReadonlyArray<{ from: ImportFrom; icon: "git" | "file" | "write" }> = [
+const TABS: ReadonlyArray<{ from: ImportFrom; icon: "git" | "file" | "repo" | "write" }> = [
   { from: "git", icon: "git" },
   { from: "file", icon: "file" },
+  { from: "repo", icon: "repo" },
   { from: "write", icon: "write" },
 ];
 
-/** Where to add a skill from: Git, a file, or written here. */
+/** Where to add a skill from: Git, a file, a repository a hob works in, or written here. */
 export function SourceTabs({ from }: { from: ImportFrom }) {
+  const repoSub = useRepositoryTab();
   return (
-    <nav aria-label={copy.import.from} className="grid grid-cols-3 gap-2.5 max-[900px]:grid-cols-1">
+    <nav
+      aria-label={copy.import.from}
+      className="grid grid-cols-4 gap-2.5 max-[1100px]:grid-cols-2 max-[700px]:grid-cols-1"
+    >
       {TABS.map((tab) => {
         const on = tab.from === from;
         return (
@@ -170,7 +176,9 @@ export function SourceTabs({ from }: { from: ImportFrom }) {
               <SkillsIcon name={tab.icon} size={18} />
             </span>
             <span className="text-ui font-semibold">{copy.import.tabs[tab.from].label}</span>
-            <span className="text-meta text-label">{copy.import.tabs[tab.from].sub}</span>
+            <span className="text-meta text-label">
+              {tab.from === "repo" ? repoSub : copy.import.tabs[tab.from].sub}
+            </span>
           </Link>
         );
       })}
