@@ -1,5 +1,6 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { RuntimeKind } from "./agent.ts";
+import { SummoningForEveryHob } from "./summoning.ts";
 
 /** The onboarding safety presets (ADR 008). Balanced is Trusted Workspace and the default (ADR 003). */
 export const SafetyPreset = Schema.Literals(["careful", "balanced", "trusting"]);
@@ -13,4 +14,9 @@ export class InstallationSetup extends Schema.Class<InstallationSetup>("Installa
   approvedFolders: Schema.Array(Schema.String),
   /** Providers the user chose to connect, in the order they connected them. */
   connectedProviders: Schema.Array(RuntimeKind),
+  /** The Summoning Charm granted to every hob you made, with its scope and answers, or null for off (ADR 034). */
+  summoningForEveryHob: Schema.NullOr(SummoningForEveryHob).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
 }) {}

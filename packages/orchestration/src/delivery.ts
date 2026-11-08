@@ -32,7 +32,9 @@ const instead = (folders: ReadonlyArray<string>) => {
   const where = folders.length === 0 ? "" : ` (${folders.join(", ")})`;
   return (
     `Save each file inside one of your folders${where} and attach that path, or return it as kind "text". ` +
-    "If the file has to go where you cannot write, report a blocker with report_checkpoint that says so, rather than complete the Task."
+    "If the file has to go where you cannot write, report a blocker with report_checkpoint that says so, rather than complete the Task. " +
+    // A lead's summary once said a refused file "succeeded" (#1219): a summary says what Hobbots kept.
+    "A file Hobbots refused is not delivered: never call it a success. Your summary names the files you attach as they are, and says the refused one was not kept there."
   );
 };
 

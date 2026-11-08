@@ -113,6 +113,7 @@ const RacingWriter = Layer.effect(
     const importer = yield* SkillImporter;
     return SkillWriter.of({
       check: real.check,
+      stage: real.stage,
       write: (files, options) =>
         Effect.gen(function* () {
           const race = races.shift();

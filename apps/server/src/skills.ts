@@ -642,24 +642,46 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
 );
 
 /**
- * Each hob's skills as its next turn would get them, in the folders it works in now, by name and
- * revision only, for Diagnostics (ADR 029): the same on every runtime. Empty on a hub without skills.
+ * Each hob that works, active or paused, with its skills as its next turn would get them in the
+ * folders it works in now: what Diagnostics and the Overview's health checks read (ADR 029). Empty on
+ * a hub without skills.
  */
-export const hobSkillLines = Effect.gen(function* () {
+export const workingHobSkills = Effect.gen(function* () {
   const library = yield* Effect.serviceOption(SkillLibrary);
   const repo = yield* Effect.serviceOption(HobbotsRepository);
   const permissions = yield* Effect.serviceOption(PermissionSummary);
   const projects = yield* Effect.serviceOption(MemoryProjects);
   return Effect.gen(function* () {
     if (Option.isNone(library) || Option.isNone(repo)) return [];
-    const skills = library.value;
     const hobs = yield* repo.value.listAgentsWithStatus(["active", "paused"]);
     return yield* Effect.forEach(hobs, (agent) =>
       Effect.gen(function* () {
         const folders = Option.isSome(permissions)
           ? (yield* permissions.value.of(agent)).folders
           : agent.policy.ownFolders;
-        const resolved = yield* hobSkills(skills, projects, { agentId: agent.id, policy: agent.policy, folders });
+        const resolved = yield* hobSkills(library.value, projects, {
+          agentId: agent.id,
+          policy: agent.policy,
+          folders,
+        });
+        return { agent, resolved };
+      }),
+    );
+  });
+});
+
+/**
+ * Each hob's skills as its next turn would get them, in the folders it works in now, by name and
+ * revision only, for Diagnostics (ADR 029): the same on every runtime. Empty on a hub without skills.
+ */
+export const hobSkillLines = Effect.gen(function* () {
+  const library = yield* Effect.serviceOption(SkillLibrary);
+  const working = yield* workingHobSkills;
+  return Effect.gen(function* () {
+    if (Option.isNone(library)) return [];
+    const skills = library.value;
+    return yield* Effect.forEach(yield* working, ({ agent, resolved }) =>
+      Effect.gen(function* () {
         return {
           agentId: agent.id,
           runtime: agent.runtime,

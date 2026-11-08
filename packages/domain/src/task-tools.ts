@@ -149,7 +149,7 @@ export const TaskToolInputs = {
     milestone_id: Schema.optionalKey(id("The milestone reached, for a milestone checkpoint.")),
     reached_by: Schema.optionalKey(
       text(
-        "For a milestone another hob in this work reached, such as your lead making a commit you could not: that hob's name or id. Leave it out when your own work reached it.",
+        "For a milestone a lead above you reached, such as your lead making a commit you could not: that lead's name or id. Leave it out when your own work reached it, and when a member you gave a Task did: that work is your Task's own.",
       ),
     ),
   }),
@@ -387,6 +387,10 @@ export const TaskToolRefusal = Schema.Literals([
   "not-delivered",
   // A Quest's lead saying it delivered while nothing is where the user asked for it (#1215).
   "not-at-destination",
+  // A question with choices about a file the user named and is not there, none worded to let it go (#1219).
+  "destination-unworded",
+  // A lead's answer that puts the user's work somewhere they did not name (#1219).
+  "destination-theirs",
   // A Charm call, such as `git_init` or a GitHub write, the hub refused (#664): its message says why.
   "charm-refused",
 ]);

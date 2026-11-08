@@ -1,10 +1,40 @@
 import { CharmDeclarations, ChatService, GrantService, setupLoss } from "@hobbots/agents";
-import { HobbotsApi } from "@hobbots/api";
-import { declaredOperations } from "@hobbots/domain";
+import { HobbotsApi, UndeclaredOperation } from "@hobbots/api";
+import {
+  declaredOperations,
+  type InstallationSetup,
+  SUMMONING_CHARM,
+  type SummoningForEveryHob,
+  summoningDefaultsFor,
+} from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { checkFolder, checkNewFolder } from "./folders.ts";
+
+/**
+ * "Summoning for every hob" as a change sets it (ADR 034): turning it on, or turning "Can manage
+ * itself" on, writes the Charm's defaults under the answers the change gives. An answer for an
+ * operation the Summoning Charm does not declare is refused.
+ */
+const everyHobChange = (before: InstallationSetup, given: SummoningForEveryHob | null) =>
+  Effect.gen(function* () {
+    if (given === null) return null;
+    const declared = new Set(SUMMONING_CHARM.operations.map((operation) => operation.id));
+    const undeclared = Object.keys(given.overrides).filter((id) => !declared.has(id as never));
+    if (undeclared.length > 0) {
+      return yield* new UndeclaredOperation({
+        operations: undeclared,
+        message: `The Summoning Charm does not declare ${undeclared.join(", ")}`,
+      });
+    }
+    const was = before.summoningForEveryHob;
+    const defaults = summoningDefaultsFor({
+      granting: was === null,
+      selfTurnedOn: given.scope.self && !(was?.scope.self ?? false),
+    });
+    return { scope: given.scope, overrides: { ...(was?.overrides ?? {}), ...defaults, ...given.overrides } };
+  });
 
 export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers) =>
   Effect.gen(function* () {
@@ -26,8 +56,13 @@ export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers
             (yield* Effect.forEach(payload.approvedFolders, (folder) =>
               approved.has(folder) ? checkFolder(folder) : checkNewFolder(folder),
             ));
+          const everyHob =
+            payload.summoningForEveryHob === undefined
+              ? undefined
+              : yield* everyHobChange(before, payload.summoningForEveryHob);
           const updated = yield* setup.update({
             ...payload,
+            ...(everyHob !== undefined && { summoningForEveryHob: everyHob }),
             ...(folders && { approvedFolders: [...new Set(folders)] }),
             ...(payload.connectedProviders && { connectedProviders: [...new Set(payload.connectedProviders)] }),
           });

@@ -57,6 +57,11 @@ export interface HubPlanContext {
    * redactor's text function, never what it learned.
    */
   readonly redact?: (text: string) => string;
+  /**
+   * For a Charm write: the key the hob sent, so a change the call makes can name the call behind it
+   * (ADR 034). Never a way to answer a retry, which the pipeline does before planning.
+   */
+  readonly key?: string;
 }
 
 /** What the policy decided for a call: its targets as the engine resolved them, such as a folder with its links followed. */
@@ -259,7 +264,11 @@ export interface HubActionsOptions<R extends HubRequest, V extends AskableVerdic
  * so the turn's approvals and grants never reach an action, whatever it reads at run time. A Charm
  * write is also told which fields were redacted, and may redact text it builds.
  */
-const planContext = (turn: CharmTurn, access: ToolAccess, redacted?: ReadonlyArray<string>): HubPlanContext => ({
+const planContext = (
+  turn: CharmTurn,
+  access: ToolAccess,
+  write?: { readonly redacted: ReadonlyArray<string>; readonly key: string },
+): HubPlanContext => ({
   turn: {
     agentId: turn.agentId,
     threadId: turn.threadId,
@@ -270,7 +279,9 @@ const planContext = (turn: CharmTurn, access: ToolAccess, redacted?: ReadonlyArr
     ...(turn.also === undefined ? {} : { also: turn.also }),
   },
   access,
-  ...(redacted === undefined ? {} : { redacted, redact: (text: string) => turn.redactor.text(text) }),
+  ...(write === undefined
+    ? {}
+    : { redacted: write.redacted, key: write.key, redact: (text: string) => turn.redactor.text(text) }),
 });
 
 /** The fields of `input` whose values redaction changed in `redacted`. */
@@ -515,7 +526,9 @@ export const makeHubActions =
         const plan = yield* planned(
           action,
           keyed?.input ?? input,
-          keyed === null ? planContext(turn, access) : planContext(turn, access, changedFields(input, keyed.input)),
+          keyed === null
+            ? planContext(turn, access)
+            : planContext(turn, access, { redacted: changedFields(input, keyed.input), key: keyed.key }),
         );
         if ("_tag" in plan) return plan.text;
         const rest = decideAndSend(action, plan, access, keyed, step);

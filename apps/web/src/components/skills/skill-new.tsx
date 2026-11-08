@@ -18,28 +18,33 @@ import {
   skillTitle,
   skillView,
 } from "./skills-model.ts";
+import { TrialDraft } from "./trial-draft.tsx";
+import { TryInChat } from "./try-in-chat.tsx";
+import { draftFields } from "./try-in-chat-model.ts";
 import { giveAll, useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
 
 /** Write one: a new skill from a blank one, checked as you type, added as r1 and given to whom you pick. */
-export function SkillNew({
+function NewForm({
   active,
   projects,
   hobs,
   say,
+  initial,
 }: {
   active: ReadonlyArray<Agent>;
   projects: ReadonlyArray<MemoryProjectIdentity>;
   hobs: HobDirectory;
   say: Say;
+  initial: { readonly name: string; readonly description: string; readonly body: string } | null;
 }) {
   const navigate = useNavigate();
   const writes = useSkillWrites();
   const ids = { name: useId(), nameHint: useId() };
-  const [typed, setTyped] = useState("");
-  const [description, setDescription] = useState("");
-  const [body, setBody] = useState("");
+  const [typed, setTyped] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [body, setBody] = useState(initial?.body ?? "");
   const [give, setGive] = useState<GiveTo>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const name = nameOf(typed);
@@ -110,7 +115,30 @@ export function SkillNew({
         saveLabel={pending ? copy.editor.saving : copy.editor.saveNew}
         disabled={!valid || pending}
         back={{ _tag: "Add", from: "write" }}
-      />
+      >
+        <TryInChat disabled={!valid} draft={() => ({ _tag: "Written", text: newSkillFile(name, description, body) })} />
+      </EditorFooter>
     </form>
+  );
+}
+
+/**
+ * Write one, or, from a chat that tried a new skill, Write one again on the text you tried there
+ * (ADR 029, Try in a chat).
+ */
+export function SkillNew(props: {
+  active: ReadonlyArray<Agent>;
+  projects: ReadonlyArray<MemoryProjectIdentity>;
+  hobs: HobDirectory;
+  say: Say;
+  trial: string | null;
+}) {
+  const { trial, ...rest } = props;
+  return (
+    <TrialDraft key={trial ?? "blank"} trial={trial}>
+      {(draft) => (
+        <NewForm {...rest} initial={draft !== null && draft.trial.skillId === null ? draftFields(draft) : null} />
+      )}
+    </TrialDraft>
   );
 }

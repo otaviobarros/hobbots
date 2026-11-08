@@ -19,6 +19,12 @@ export interface SkillObjectsShape {
   readonly folder: (hash: SkillRevisionHash) => Effect.Effect<string | null>;
   /** The folder every revision's folder is in, which backups take as a whole. */
   readonly root: string;
+  /**
+   * Writes a draft's files for a chat that tries it (ADR 029, Try in a chat), in a folder of their own
+   * beside the revisions', so a draft is never a revision and no backup takes it; answers the folder.
+   */
+  readonly putDraft: (hash: SkillRevisionHash, contents: ReadonlyArray<SkillContent>) => Effect.Effect<string>;
+  readonly draft: (hash: SkillRevisionHash) => Effect.Effect<string | null>;
 }
 
 export class SkillObjects extends Context.Service<SkillObjects, SkillObjectsShape>()("@hobbots/skills/SkillObjects") {}
@@ -77,17 +83,21 @@ const write = async (objects: string, hash: string, contents: ReadonlyArray<Skil
 /** The object store under `skills` in `dataFolder`, with `SkillFiles` for the hub to read it. */
 export const SkillObjectsLive = (dataFolder: string) => {
   const root = join(dataFolder, "skills", "objects");
+  const drafts = join(dataFolder, "skills", "drafts");
   const objects = Layer.effect(
     SkillObjects,
     Effect.gen(function* () {
       yield* Effect.promise(() => mkdir(root, { recursive: true, mode: 0o700 }));
+      yield* Effect.promise(() => mkdir(drafts, { recursive: true, mode: 0o700 }));
       yield* Effect.promise(() => openSealedRevisions(root));
-      const folder = (hash: SkillRevisionHash) =>
-        Effect.promise(async () => ((await exists(join(root, hash))) ? join(root, hash) : null));
+      const inside = (base: string) => (hash: SkillRevisionHash) =>
+        Effect.promise(async () => ((await exists(join(base, hash))) ? join(base, hash) : null));
       return SkillObjects.of({
         root,
-        folder,
+        folder: inside(root),
         put: (hash, contents) => Effect.promise(() => write(root, hash, contents)),
+        putDraft: (hash, contents) => Effect.promise(() => write(drafts, hash, contents)),
+        draft: inside(drafts),
       });
     }),
   );
@@ -97,6 +107,13 @@ export const SkillObjectsLive = (dataFolder: string) => {
       const store = yield* SkillObjects;
       return SkillFiles.of({
         folder: store.folder,
+        draft: store.draft,
+        draftText: (hash) =>
+          Effect.gen(function* () {
+            const folder = yield* store.draft(hash);
+            if (folder === null) return null;
+            return yield* Effect.promise(() => readFile(join(folder, "SKILL.md"), "utf8").catch(() => null));
+          }),
         read: (hash, path) =>
           Effect.gen(function* () {
             const folder = yield* store.folder(hash);

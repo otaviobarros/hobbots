@@ -5,8 +5,9 @@ import { Link } from "@tanstack/react-router";
 import { skillUpdatesQuery } from "../../api/skill-updates.ts";
 import { formatAgo, formatCount } from "../../lib/format.ts";
 import { RowList } from "../memory/memory-overview.tsx";
-import { GroupLabel, MemoryCard } from "../memory/memory-parts.tsx";
+import { GroupLabel } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
+import { SkillHealthCards } from "./skills-health.tsx";
 import {
   type HobDirectory,
   libraryGroups,
@@ -104,36 +105,7 @@ function Group({ group, hobs, now }: { group: SkillGroup; hobs: HobDirectory; no
   );
 }
 
-/** What deserves a look: skills in `~/.agents/skills` the hub did not take, and why. */
-/** What `~/.agents/skills` held that was not added, and why: shown on an empty library too. */
-export function WorthALook({ list }: { list: SkillsList }) {
-  const problems = list.agentsFolder.problems;
-  if (problems.length === 0) return null;
-  return (
-    <MemoryCard label={copy.overview.worth}>
-      <h3 className="lbl m-0 text-label">{copy.overview.worth}</h3>
-      <ul className="m-0 flex list-none flex-col gap-2 p-0">
-        {problems.map((problem) => (
-          <li key={problem.folder} className="flex items-start gap-2.5">
-            <span aria-hidden className="mt-1.5 size-2 flex-none rounded-dot bg-lantern" />
-            <span className="flex min-w-0 flex-col">
-              <span className="text-ui text-text-strong">
-                {problem.folder === ""
-                  ? copy.overview.agentsUnreadable
-                  : copy.overview.agentsProblem({ folder: problem.folder })}
-              </span>
-              <span className="text-meta text-label">
-                {problem.check === null ? problem.message : copy.checks[problem.check]}
-              </span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </MemoryCard>
-  );
-}
-
-/** The overview: the library by scope, then what deserves a look. */
+/** The overview: the library by scope, then what deserves a look and what each hob carries. */
 export function SkillsOverview({ list, hobs, now }: { list: SkillsList; hobs: HobDirectory; now: Date }) {
   const groups = libraryGroups(list, hobs);
   return (
@@ -159,7 +131,7 @@ export function SkillsOverview({ list, hobs, now }: { list: SkillsList; hobs: Ho
           </Button>
         </div>
       </section>
-      <WorthALook list={list} />
+      <SkillHealthCards list={list} hobs={hobs} now={now} />
     </div>
   );
 }
