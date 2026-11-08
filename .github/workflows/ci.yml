@@ -45,10 +45,17 @@ jobs:
           # CPUs, so a test that waits on the hub is not starved (#985).
           VITEST_MAX_WORKERS: 2
 
-  postgres:
-    name: Persistence and server tests (PostgreSQL)
+  # The PostgreSQL suites run in two shards side by side, each half of every suite's files, so the
+  # job takes about as long as the SQLite one (#1066). The check the main ruleset requires is the
+  # job after them, which passes only when both shards pass.
+  postgres-shards:
+    name: Persistence and server tests (PostgreSQL ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     services:
       postgres:
         # Debian image: its en_US.utf8 collation is what the tie-order test needs to detect a missing COLLATE "C".
@@ -75,8 +82,8 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
-          restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ matrix.shard }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-${{ github.job }}-${{ matrix.shard }}-
       # Each test copies a fresh database from a migrated template, and a test database needs no
       # crash safety, so the server skips flushing each commit to disk (#1066).
       - name: Let the test database skip flushing to disk
@@ -84,7 +91,22 @@ jobs:
           docker exec ${{ job.services.postgres.id }} psql -U postgres
           -c "ALTER SYSTEM SET fsync = off" -c "ALTER SYSTEM SET synchronous_commit = off"
           -c "ALTER SYSTEM SET full_page_writes = off" -c "SELECT pg_reload_conf()"
-      - run: pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server
+      - run: >-
+          pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server
+          -- --shard=${{ matrix.shard }}/2
+
+  postgres:
+    name: Persistence and server tests (PostgreSQL)
+    needs: postgres-shards
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULT: ${{ needs.postgres-shards.result }}
+        run: |
+          echo "The PostgreSQL shards ended: $RESULT."
+          [[ "$RESULT" == success ]]
 
   # The browser tests run in eight shards side by side, balanced by recorded test times
   # (apps/web/e2e/shards.ts), with two workers to a runner so each hub and browser gets a CPU
