@@ -44,7 +44,7 @@ export interface HubRequest {
  * decide, ask or record on its own. An action reads its tool set's own services from where it was made.
  */
 export interface HubPlanContext {
-  readonly turn: Pick<CharmTurn, "agentId" | "threadId" | "messageId" | "attemptId" | "scope" | "also">;
+  readonly turn: Pick<CharmTurn, "agentId" | "threadId" | "messageId" | "attemptId" | "taskId" | "scope" | "also">;
   readonly access: ToolAccess;
   /**
    * For a Charm write, whose input is planned redacted (ADR 031): the fields of the input redaction
@@ -275,6 +275,7 @@ const planContext = (
     messageId: turn.messageId,
     scope: turn.scope,
     ...(turn.attemptId === undefined ? {} : { attemptId: turn.attemptId }),
+    ...(turn.taskId === undefined ? {} : { taskId: turn.taskId }),
     ...(turn.also === undefined ? {} : { also: turn.also }),
   },
   access,

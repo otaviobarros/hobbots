@@ -49,5 +49,6 @@ export * from "./tasks.ts";
 export * from "./tool-output.ts";
 export * from "./tools.ts";
 export * from "./turn-activity.ts";
+export * from "./web-fetch.ts";
 export * from "./work-hold.ts";
 export * from "./workspace.ts";

@@ -133,14 +133,16 @@ export const ruleOffered = (approval: ApprovalRequest, rule: GrantRule): boolean
 
 /**
  * Whether the hob's access now still gives a rule the authority it relies on (ADR 015): only the
- * preset asks for its operation, no override or restriction asks or answers Never, and its folders
- * are still the hob's. A decision checks this as it saves, so a grant never outlives a narrowing.
+ * preset asks for its operation (or allows the web, for a host on your local network, ADR 036), no
+ * override or restriction asks or answers Never, and its folders are still the hob's. A decision checks this as it saves, so a grant never outlives a narrowing.
  */
 export const ruleHolds = (access: ToolAccess | null, rule: GrantRule): boolean => {
   if (access === null) return false;
   const operation = ruleOperation(rule);
   const { preset, hob, restrictions, charmOperations = [] } = access.policy;
-  if (presetDecision(preset, operation, charmOperations) !== "ask") return false;
+  const answer = presetDecision(preset, operation, charmOperations);
+  // A host's rule also answers a page on your local network, which asks where the preset allows the web (ADR 036).
+  if (answer !== "ask" && !(rule._tag === "Host" && answer === "allow")) return false;
   const layers = [hobAnswers(hob)[operation], ...restrictions.map((restriction) => restriction[operation])];
   if (layers.some((decision) => decision !== undefined && decision !== "allow")) return false;
   return rulePaths(rule).every((path) => access.folders.some((folder) => within(path, folder)));

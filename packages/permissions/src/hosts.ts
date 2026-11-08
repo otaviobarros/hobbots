@@ -1,4 +1,5 @@
-import { Context, Effect } from "effect";
+import { Context, Effect, Result } from "effect";
+import { IpNetwork, NetAddress } from "effect/net";
 
 /**
  * Network hosts as the sandbox proxy reports them (ADR 014). Loopback (the hub's own API
@@ -109,4 +110,24 @@ export const isBlockedHost = (host: string): boolean => {
   }
   const v4 = parseIpv4(host);
   return v4 !== null && blockedIpv4(v4);
+};
+
+/**
+ * The private network ranges a hub's own fetch asks about rather than reaches on its own (ADR 036):
+ * RFC 1918, the shared address space Tailscale and carrier NAT use, and IPv6 unique-local addresses.
+ * They hold a router, a printer or a NAS whose admin pages often need no sign-in.
+ */
+const PRIVATE_NETWORKS = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fc00::/7"].map(
+  IpNetwork.fromStringUnsafe,
+);
+
+/**
+ * Whether a normalized host or a resolved address is on a private network, an IPv4-mapped IPv6
+ * address by the address it maps. A name is not an address, so it is never private by itself: what
+ * it resolves to is.
+ */
+export const isPrivateNetworkHost = (host: string): boolean => {
+  const plain = unmappedHost(host);
+  const address = NetAddress.ipFromString(plain.startsWith("[") ? plain.slice(1, -1) : plain);
+  return Result.isSuccess(address) && PRIVATE_NETWORKS.some((network) => IpNetwork.contains(network, address.success));
 };

@@ -27,7 +27,7 @@ import {
   stableJson,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
-import { HubHosts, isBlockedHost, normalizeHost, unmappedHost } from "./hosts.ts";
+import { HubHosts, isBlockedHost, isPrivateNetworkHost, normalizeHost, unmappedHost } from "./hosts.ts";
 import { type CanonicalPath, isInside, PathResolver, type ScopeGitResources } from "./paths.ts";
 
 /**
@@ -129,8 +129,17 @@ export const PolicyRequest = Schema.TaggedUnion({
     cwd: Schema.optionalKey(Schema.String),
     exact: Schema.optionalKey(Schema.Boolean),
   },
-  /** A host the sandbox proxy was asked to reach, with the addresses it resolved to, if known. */
-  Web: { host: Schema.String, addresses: Schema.Array(Schema.String) },
+  /**
+   * A host the sandbox proxy was asked to reach, with the addresses it resolved to, if known. `page`
+   * is set when the hub itself reads a page there for a hob (`web_fetch`, ADR 036): the URL, and
+   * whether it is found, copied from you, a search result or a page read in the session. The hub
+   * connects from your network, so a private network address asks, and a URL the hob wrote asks.
+   */
+  Web: {
+    host: Schema.String,
+    addresses: Schema.Array(Schema.String),
+    page: Schema.optionalKey(Schema.Struct({ url: Schema.String, found: Schema.Boolean })),
+  },
   /**
    * A Charm call (ADR 031): one of `charm`'s declared operations, which the hub runs outside the
    * sandbox, so it is decided on the hob's answers for the operation. `folder`, when the call was
@@ -203,6 +212,10 @@ export const ReasonCode = Schema.Literals([
   "undeclared-operation",
   /** A Charm operation declared once only is high risk: it always asks, once only, unless refused. */
   "once-only-operation",
+  /** A page the hub reads on a private network address asks under every preset, until a grant for the host (ADR 036). */
+  "private-address",
+  /** A page at a URL the hob wrote itself asks under every preset, once only: it could carry your data (ADR 036). */
+  "written-url",
 ]);
 export type ReasonCode = typeof ReasonCode.Type;
 
@@ -631,15 +644,17 @@ const evaluateWeb = (
   if (host === null)
     return { targets, answers: [deny("use-web", "invalid-host", `${request.host} is not a host name or address.`)] };
   const addresses = request.addresses.map(normalizeHost);
+  // The hub reads a page outside the sandbox, from your computer, and reaches these no more than it does.
+  const never = request.page === undefined ? "never reachable from the sandbox" : "which Hobbots never reads pages on";
   if (isBlockedHost(host) || addresses.some((a) => a === null || isBlockedHost(a))) {
-    const message = `${host} is a loopback, link-local or cloud metadata address, never reachable from the sandbox.`;
+    const message = `${host} is a loopback, link-local or cloud metadata address, ${never}.`;
     return { targets, answers: [deny("use-web", "blocked-host", message)] };
   }
   // An IPv4-mapped IPv6 address reaches the IPv4 address it maps, so both compare unmapped.
   const hub = new Set((context.hubHosts ?? []).flatMap((name) => normalizeHost(name) ?? []).map(unmappedHost));
   const isHub = (name: string | null) => name !== null && hub.has(unmappedHost(name));
   if (isHub(host) || addresses.some(isHub)) {
-    const message = `${host} is this hub's own address on the tailnet, never reachable from the sandbox.`;
+    const message = `${host} is this hub's own address on the tailnet, ${never}.`;
     return { targets, answers: [deny("use-web", "blocked-host", message)] };
   }
   const sandbox = needsSandbox(context, "use-web");
@@ -652,7 +667,40 @@ const evaluateWeb = (
     rule: { _tag: "Host", host },
     matches: (rule) => rule._tag === "Host" && normalizeHost(rule.host) === host,
   };
-  return { targets, answers: [fromLayers(context, "use-web", site)] };
+  const answer = fromLayers(context, "use-web", site);
+  if (request.page === undefined) return { targets, answers: [answer] };
+  return { targets, answers: [pageAnswer(context, answer, site, host, [host, ...addresses], request.page)] };
+};
+
+/**
+ * A page the hub reads for a hob (ADR 036), past what the site rules said. Never stays Never. A URL
+ * the hob wrote asks under every preset, and no grant answers it: a grant says the site is fine,
+ * not that this URL is. A page on a private network address asks with Always for its host, and
+ * only a saved grant for that host answers it.
+ */
+const pageAnswer = (
+  context: PolicyContext,
+  answer: Answer,
+  site: Site,
+  host: string,
+  names: ReadonlyArray<string | null>,
+  page: { readonly url: string; readonly found: boolean },
+): Answer => {
+  if (answer.decision === "deny") return answer;
+  if (!page.found) {
+    const message = `This URL was not copied from you, a search result or a page read in this session, so it waits for you: it could carry your data to ${host}.`;
+    return { decision: "ask", operation: "use-web", code: "written-url", message };
+  }
+  if (!names.some((name) => name !== null && isPrivateNetworkHost(name)) || answer.code === "grant") return answer;
+  // An Ask your own settings narrowed to stays one no grant answers.
+  if (answer.decision === "ask" && answer.rule === undefined) return answer;
+  const grant = matchingGrant(context, "use-web", site);
+  if (grant !== undefined) {
+    const message = `Your saved rule allows reading pages on ${host}.`;
+    return { decision: "allow", operation: "use-web", code: "grant", message, grantId: grant.id };
+  }
+  const message = `${host} is on your local network, so reading it waits for you.`;
+  return { decision: "ask", operation: "use-web", code: "private-address", message, rule: site.rule };
 };
 
 /**

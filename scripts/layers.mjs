@@ -35,6 +35,9 @@ export const layers = {
   // Skills (ADR 029): the object store, import from a folder, an archive or Git with its checks, and
   // `~/.agents/skills`. No other package imports it, and it imports no runtime and no Charm.
   "@hobbots/skills": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"] },
+  // Reading web pages for hobs (ADR 036): the HTTP client, the address guard, page to text and the cache,
+  // behind `WebFetcher`. No other package imports it, and it imports no runtime and no Charm.
+  "@hobbots/web-access": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"] },
   // Pixel art that the app and the site both draw. Plain data and pure functions.
   "@hobbots/art": { layer: "adapter", may: ["@hobbots/domain"] },
   "@hobbots/ui": { layer: "adapter", may: ["@hobbots/art"] },
@@ -52,6 +55,7 @@ export const layers = {
       "@hobbots/persistence",
       "@hobbots/runtimes",
       "@hobbots/skills",
+      "@hobbots/web-access",
       "@hobbots/workbench",
     ],
   },
