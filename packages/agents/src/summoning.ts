@@ -1238,10 +1238,22 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             return yield* new HobProposalRefused({ proposalId: proposal.id, message: "That hob is not on this hub." });
           }
           const manager = found.value;
+          const allowed = { [operation]: "allow" } as CharmOverrides;
+          const own = holdsCharm(manager.policy, SUMMONING_CHARM_ID);
+          const everyHob = own ? null : (yield* services.setup.get).summoningForEveryHob;
           // A change made by you: the manager's own answer for the operation becomes Allow (ADR 034).
-          const overrides = { ...manager.policy.charms?.overrides, [operation]: "allow" } as CharmOverrides;
+          // A manager with the Charm from "Summoning for every hob" gets its own grant from that
+          // setting's scope and answers first, as a change on its Charms tab gives it.
+          const charms =
+            everyHob === null
+              ? { overrides: { ...manager.policy.charms?.overrides, ...allowed } }
+              : {
+                  granted: [...heldCharms(manager.policy), SUMMONING_CHARM_ID],
+                  overrides: { ...everyHob.overrides, ...manager.policy.charms?.overrides, ...allowed },
+                  summoning: everyHob.scope,
+                };
           yield* services.hobs
-            .change(manager.id, { permissions: { charms: { overrides } } }, YOU)
+            .change(manager.id, { permissions: { charms } }, YOU)
             .pipe(Effect.mapError((error) => proposalRefused(proposal, null, failure(error))));
         }),
     };

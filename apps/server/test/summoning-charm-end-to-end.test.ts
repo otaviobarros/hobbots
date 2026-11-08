@@ -872,6 +872,26 @@ describe("the Summoning Charm, end to end", () => {
     expect(next.reply?.content).toContain("Summoned 1 hob:");
   });
 
+  // covers ADR 034 (Asking is a proposal: Always allow; The Charm: Every hob), #409, #410
+  it("[TC-AG-409-05] Always allow for a manager with the Charm from every hob gives it its own grant from that setting", async () => {
+    const wren = await create("Wren", 4005);
+    const scope = { summoned: true, hobs: [], self: false };
+    expect((await request("PATCH", "/api/setup", { summoningForEveryHob: { scope, overrides: {} } })).status).toBe(200);
+    try {
+      const asked = await turn(wren, hub("summoning_summon", { key: "hire-ivy", hobs: [draft("Ivy")] }));
+      const view = asked.proposal as HobProposalView;
+      expect((await onProposal(view, "always-allow", { operation: "summoning.summon" })).status).toBe(200);
+      const after = await hob(wren.id);
+      expect(after.policy.charms?.granted).toContain("summoning");
+      expect(after.policy.charms?.summoning).toEqual(scope);
+      expect(after.policy.charms?.overrides).toMatchObject({ ...SUMMONING_DEFAULTS, "summoning.summon": "allow" });
+      expect((await versions(wren.id)).at(-1)?.actor).toEqual({ _tag: "You" });
+      await decideProposal(asked, "deny-all");
+    } finally {
+      await request("PATCH", "/api/setup", { summoningForEveryHob: null });
+    }
+  });
+
   // covers ADR 034 (The call waits on its step; outcome as a backpack item), PE-006
   it("[TC-AG-409-04] only a user session decides a proposal, and one decided after its turn stopped reaches the chief's backpack", async () => {
     await chiefAnswers({});

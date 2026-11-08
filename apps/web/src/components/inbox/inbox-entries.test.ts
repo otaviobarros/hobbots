@@ -1,5 +1,14 @@
 import type { WaitingDevice } from "@hobbots/api";
-import { type AgentId, ApprovalRequest, PairingRequest, type TaskId, ThreadId } from "@hobbots/domain";
+import {
+  type AgentId,
+  ApprovalRequest,
+  HobProposal,
+  HobProposalId,
+  PairingRequest,
+  Revision,
+  type TaskId,
+  ThreadId,
+} from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   ADA,
@@ -216,6 +225,67 @@ describe("entries", () => {
     expect(selectedEntry(entries, "stuck:b1")?.kind).toBe("stuck");
     expect(selectedEntry(entries, "gone")?.kind).toBe("device");
     expect(selectedEntry([], "ap-copy")).toBeUndefined();
+  });
+});
+
+describe("hob proposals", () => {
+  const proposal = (state: HobProposal["state"]) =>
+    new HobProposal({
+      id: HobProposalId.make(`hp-${state}`),
+      agentId: ALDRIC,
+      kind: "summon",
+      tool: "summoning_summon",
+      call: { scope: "reply:m1", key: "k1" },
+      threadId: THREAD,
+      messageId: null,
+      taskId: COPY,
+      stepId: null,
+      rows: [
+        {
+          id: "1",
+          hobId: ADA,
+          label: "Ada",
+          draft: { name: "Ada" },
+          change: null,
+          before: null,
+          configVersion: null,
+          status: null,
+          runningReplies: null,
+          edited: null,
+          state: state === "open" ? "pending" : "allowed",
+          outcome: null,
+          decidedAt: null,
+        },
+      ],
+      asks: [],
+      safety: null,
+      highRisk: false,
+      alwaysAllowed: [],
+      state,
+      createdAt: at,
+      updatedAt: at,
+      settledAt: null,
+      revision: Revision.make(1),
+    });
+
+  it("[TC-AG-409-06] lists a manager's open proposal under its Task's quest, and keeps a settled one only while it is open", () => {
+    const base = { devices: [], questions: [], blockers: [], failed: [], requests: [] };
+    const open = { proposal: proposal("open"), changedSince: [] };
+    const settled = { proposal: proposal("settled"), changedSince: [] };
+    const listed = needsEntries({ ...base, hobProposals: [open, settled] });
+    expect(listed.map((entry) => entry.key)).toEqual(["hob-proposal:hp-open"]);
+    expect(needsEntries({ ...base, hobProposals: [settled], selected: "hob-proposal:hp-settled" })).toHaveLength(1);
+    const [entry] = listed;
+    expect(entry && entryRow(entry, names, undefined, now)).toMatchObject({
+      chain: ["Aldric", "you"],
+      kind: "Hobs",
+      tag: "needs-you",
+      what: "Aldric proposes 1 new hob",
+    });
+    const top = quest();
+    expect(groupByPlace(listed, (taskId) => (taskId === COPY ? top : undefined)).map((group) => group.key)).toEqual([
+      "quest:quest-bf",
+    ]);
   });
 });
 

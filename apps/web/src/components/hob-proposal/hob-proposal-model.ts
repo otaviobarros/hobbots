@@ -177,16 +177,10 @@ export const changeLines = (row: HobProposalRow): ReadonlyArray<ChangeLine> => {
 export const summonFormDraft = (row: HobProposalRow, makeId: () => string = () => row.hobId): FirstHobDraft => {
   const draft = rowDraft(row);
   const base = newDraft(Math.random, makeId);
-  const role = draft.role === undefined ? base.role : draft.role;
-  const gear = role === null ? { hat: null, tool: null } : { hat: starterRole(role).hat, tool: starterRole(role).tool };
   const look = rowLook(draft);
   return {
     ...base,
-    role,
-    ownTitle: draft.role_title ?? "",
-    ownSigil: draft.sigil ?? base.ownSigil,
-    hat: draft.hat === undefined ? gear.hat : draft.hat,
-    tool: draft.tool === undefined ? gear.tool : draft.tool,
+    ...formRole(draft, base),
     chores: draft.instructions ?? "",
     choresEdited: true,
     goodAt: draft.good_at ?? "",
@@ -199,8 +193,21 @@ export const summonFormDraft = (row: HobProposalRow, makeId: () => string = () =
     voice: draft.voice ?? base.voice,
     length: draft.length ?? base.length,
     runtime: draft.runtime ?? base.runtime,
-    model: draft.model === undefined ? null : draft.model,
-    effort: draft.effort === undefined ? null : draft.effort,
+    model: draft.model ?? null,
+    effort: draft.effort ?? null,
+  };
+};
+
+/** A draft's role, title, sigil and gear as Summon holds them: what it leaves out is its role's. */
+const formRole = (draft: SummoningDraft, base: FirstHobDraft) => {
+  const role = draft.role === undefined ? base.role : draft.role;
+  const gear = role === null ? { hat: null, tool: null } : { hat: starterRole(role).hat, tool: starterRole(role).tool };
+  return {
+    role,
+    ownTitle: draft.role_title ?? "",
+    ownSigil: draft.sigil ?? base.ownSigil,
+    hat: draft.hat === undefined ? gear.hat : draft.hat,
+    tool: draft.tool === undefined ? gear.tool : draft.tool,
   };
 };
 
