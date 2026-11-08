@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { type PromptRequest, RuntimeError, type RuntimeEvent, type RuntimeLimitReached } from "@hobbots/agents";
+import {
+  type PromptRequest,
+  RuntimeError,
+  type RuntimeEvent,
+  type RuntimeLimitReached,
+  WEB_RESULTS_LINE,
+} from "@hobbots/agents";
 import type { AnyOperation, SandboxState } from "@hobbots/domain";
 import type { PolicyEngine } from "@hobbots/permissions";
 import { Deferred, type Duration, Effect, Queue, type Scope, Stream } from "effect";
@@ -143,6 +149,11 @@ interface CodexSettings {
   readonly folders: ReadonlyArray<string>;
   /** Whether Codex offers its shell tool: only when the policy would let a command run. */
   readonly shell: boolean;
+  /**
+   * Whether Codex offers its own web search, in cached mode (ADR 036): only when the turn may search
+   * and this Codex version's cached search was held to OpenAI's index by the contract test.
+   */
+  readonly webSearch: boolean;
 }
 
 /**
@@ -158,7 +169,8 @@ const codexConfig = (state: string, settings: CodexSettings) => {
   return [
     `sqlite_home = ${JSON.stringify(state)}`,
     `log_dir = ${JSON.stringify(join(state, "log"))}`,
-    `web_search = "disabled"`,
+    // Live and indexed search could open any page outside the hub, so they are never written (ADR 036).
+    `web_search = ${settings.webSearch ? `"cached"` : `"disabled"`}`,
     "",
     "[features]",
     "view_image = false",
@@ -242,6 +254,11 @@ export interface CodexTurnConfig {
   readonly userHome?: string;
   /** More `codex app-server` arguments, such as `-c` settings for a stand-in model. */
   readonly extraArgs?: ReadonlyArray<string>;
+  /**
+   * Whether the Codex a turn runs offers cached web search as the contract test held it (ADR 036):
+   * its version is one the test passed on. Absent, no turn searches.
+   */
+  readonly cachedSearch?: Effect.Effect<boolean>;
 }
 
 /** How a turn with tools is decided and confined. */
@@ -359,19 +376,26 @@ const openThread = (server: AppServer, request: PromptRequest, cwd: string, inst
  */
 type TurnSignal = TurnEnd | "lost" | "commandEnded";
 
-/** Reads the turn's notifications into events and signals, until the App Server exits. */
+/**
+ * Reads the turn's notifications into events and signals, until the App Server exits. Once a search
+ * ends, the running turn is told its results are other people's text (ADR 036), as Claude Code's
+ * hook says with them, since they reach the model inside Codex's turn.
+ */
 const follow = (
   notifications: Stream.Stream<{ readonly method: string; readonly params: unknown }>,
   mapper: CodexTurnEvents,
   report: (event: RuntimeEvent) => void,
   signals: Queue.Queue<TurnSignal>,
   now: CodexTurnNow,
+  tell: (turnId: string, text: string) => Effect.Effect<void>,
 ) =>
   notifications.pipe(
     Stream.runForEach((notification) =>
       Effect.gen(function* () {
         const step = mapper.map(notification);
         for (const event of step.events) report(event);
+        // Told aside, so the notifications read on while Codex takes it.
+        if (step.searched && now.turnId !== null) yield* Effect.forkScoped(tell(now.turnId, WEB_RESULTS_LINE));
         if (step.end) {
           yield* Deferred.succeed(now.ended, undefined);
           yield* Queue.offer(signals, step.end);
@@ -552,7 +576,8 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
   Effect.gen(function* () {
     const governed = governedTurn(config, request);
     const runtimeFolder = request.tools?.runtimeFolder ?? join(config.workspaceDir, "codex-chat");
-    const home = yield* prepareHome(runtimeFolder, config.workspaceDir, codexSettings(governed));
+    const webSearch = governed?.tools.webSearch === true && (yield* config.cachedSearch ?? Effect.succeed(false));
+    const home = yield* prepareHome(runtimeFolder, config.workspaceDir, codexSettings(governed, webSearch));
     const cwd = governed?.tools.folders[0] ?? config.workspaceDir;
     // The turn's skills, in a folder of their own for as long as it runs, and every other skill Codex
     // would list turned off (ADR 029).
@@ -571,6 +596,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
         commits: "",
         gate: refuseTools,
         session: {},
+        webSearch,
       };
     }
     const { tools, sandbox, policy, commits } = governed;
@@ -591,13 +617,15 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
       commits: commits.now,
       gate: withPolicy(policyGate(policy.engine, tools, request, sandbox !== null)),
       session: sessionPolicy(tools),
+      webSearch,
     };
   });
 
 /** Codex's settings for the turn: its folders untrusted, and its shell offered only when commands may run. */
-const codexSettings = (governed: ReturnType<typeof governedTurn>): CodexSettings => ({
+const codexSettings = (governed: ReturnType<typeof governedTurn>, webSearch: boolean): CodexSettings => ({
   folders: governed?.tools.folders ?? [],
   shell: governed !== null && offeredTools(governed.tools.context).includes("Bash"),
+  webSearch,
 });
 
 /**
@@ -712,6 +740,7 @@ const turnEvents = (
         skillRootsOf(launch.skills),
         admitted.organizationFiles,
         setSkillFilesOf(launch.skills, request.skills),
+        launch.webSearch,
       );
       // The skill you picked loads with the turn's first input, as Codex's own skill item (ADR 029).
       const askedOne = askedMount(request.askedSkill, request.skills);
@@ -737,7 +766,7 @@ const turnEvents = (
       const notifications = yield* server.subscribe;
       const signals = yield* Queue.unbounded<TurnSignal>();
       const now: CodexTurnNow = { turnId: null, ended: yield* Deferred.make<void>() };
-      yield* Effect.forkScoped(follow(notifications, mapper, report, signals, now));
+      yield* Effect.forkScoped(follow(notifications, mapper, report, signals, now, tellTurn(server, threadId)));
 
       // A follow-up turn about a command that outlived its turn carries text only.
       const startTurn = (text: string, skill: typeof asked = null) =>

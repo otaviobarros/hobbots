@@ -48,6 +48,7 @@ const requests = (h: Home): Record<PolicyOperation | GitHubOperation, PolicyRequ
   "request-skill": { _tag: "Skills", operation: "request-skill", skill: "release-steps" },
   "propose-skill": { _tag: "Skills", operation: "propose-skill", skill: "release-steps" },
   "skill-feedback": { _tag: "Skills", operation: "skill-feedback", skill: "release-steps" },
+  "search-web": { _tag: "Search", operation: "search-web", query: "effect 4 release notes" },
 });
 
 type GitHubOperation = "github.read" | "github.open-pull-request" | "github.comment";
@@ -76,6 +77,8 @@ const ADR_014: Record<PolicyOperation | GitHubOperation, readonly [PolicyDecisio
   "skill-feedback": ["allow", "allow", "allow"],
   // ADR 032's Read other hobs.
   "read-hobs": ["allow", "allow", "allow"],
+  // ADR 036's Search the web, in the Web group.
+  "search-web": ["allow", "allow", "allow"],
 };
 
 /** Ways a path can name something outside the hob's folders. */
@@ -711,6 +714,32 @@ describe("the hob directory", () => {
         rules: [],
       });
     }
+  });
+});
+
+describe("searching the web", () => {
+  // covers ADR 036 (Search the web, in the policy)
+  it("[TC-PE-1266-01] decides a search on the hob's answers alone, Allow or Never, with an Ask refusing it", async () => {
+    const request: PolicyRequest = { _tag: "Search", operation: "search-web", query: "effect 4 release" };
+    for (const preset of ["careful", "balanced", "trusting"] as const) {
+      expect(await decide(contextFor(home, preset), request)).toMatchObject({
+        decision: "allow",
+        operation: "search-web",
+        targets: ["effect 4 release"],
+      });
+    }
+    const never = contextFor(home, "trusting", {
+      hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { "search-web": "deny" } },
+    });
+    expect(await decide(never, request)).toMatchObject({ decision: "deny", reason: { code: "override" } });
+    // A Quest narrowing to Ask is Never for a search: no runtime can pause one (ADR 036).
+    const asked = { ...contextFor(home, "trusting"), restrictions: [{ "search-web": "ask" as const }] };
+    expect(await decide(asked, request)).toMatchObject({
+      decision: "deny",
+      reason: { code: "restriction" },
+      grantable: false,
+      rules: [],
+    });
   });
 });
 

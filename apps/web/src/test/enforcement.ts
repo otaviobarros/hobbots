@@ -15,4 +15,5 @@ export const enforcementFixture = (
   },
   toolEvents: { status: "verified", evidence: "Hooks report each call." },
   toolInterruption: { status: "verified", evidence: "Cancelling the turn aborts the runtime." },
+  webSearch: { status: "verified", evidence: "Its own search passes the policy hook." },
 });

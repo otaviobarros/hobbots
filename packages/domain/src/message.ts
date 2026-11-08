@@ -125,6 +125,11 @@ export const ReplyUsage = Schema.Struct({
   outputTokens: Measured,
   cacheReadTokens: Measured,
   cacheWriteTokens: Measured,
+  /**
+   * The web searches the runtime ran in the turn (ADR 036), as it reported them; absent from a
+   * runtime that cannot search and from usage stored before searches were counted.
+   */
+  webSearches: Schema.optionalKey(Measured),
 });
 export type ReplyUsage = typeof ReplyUsage.Type;
 

@@ -1,3 +1,4 @@
+import type { CodexWebSearchAction } from "../web-search.ts";
 /**
  * The parts of the Codex App Server protocol Hobbots speaks (ADR 024).
  *
@@ -414,7 +415,18 @@ export type ThreadItem =
       readonly error: unknown;
     }
   | { readonly type: "dynamicToolCall"; readonly id: string; readonly status: "inProgress" | "completed" | "failed" }
-  | { readonly type: "userMessage" | "plan" | "webSearch" | "imageView" | "contextCompaction"; readonly id: string };
+  | {
+      /**
+       * A search Codex ran on OpenAI's servers (ADR 036). Started with an empty query and no action
+       * or results; completed with the action and, in cached mode, the results as opaque JSON.
+       */
+      readonly type: "webSearch";
+      readonly id: string;
+      readonly query: string;
+      readonly action: CodexWebSearchAction | null;
+      readonly results: ReadonlyArray<unknown> | null;
+    }
+  | { readonly type: "userMessage" | "plan" | "imageView" | "contextCompaction"; readonly id: string };
 
 export interface TokenUsageBreakdown {
   readonly totalTokens: number;
