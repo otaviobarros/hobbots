@@ -61,3 +61,23 @@ test("[TC-GEN-1224-08] describes the app and its questions to search engines and
   expect(llms.status()).toBe(200);
   expect(await llms.text()).toContain(`Current version: ${app.softwareVersion} beta`);
 });
+
+test("[TC-GEN-1224-09] serves every picture from a hashed name, so it can be cached for good", async ({ page }) => {
+  // covers #1224: a changed picture gets a new URL, so no cache purge is needed
+  await page.goto("/");
+  const sources = await page
+    .locator("img[src], img[srcset], video[poster]")
+    .evaluateAll((elements) =>
+      elements.flatMap((element) =>
+        [
+          element.getAttribute("src"),
+          element.getAttribute("poster"),
+          ...(element.getAttribute("srcset") ?? "").split(","),
+        ]
+          .map((value) => value?.trim().split(" ")[0])
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+  expect(sources.length).toBeGreaterThan(20);
+  for (const source of sources) expect(source).toMatch(/^\/_astro\/[\w-]+\.[\w-]+\.webp$/);
+});

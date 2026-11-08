@@ -34,12 +34,11 @@ export const NAV = [
 ] as const;
 
 /**
- * The presentation video lives in the public R2 bucket behind media.hobbots.app, not in this repository.
- * Upload a new cut with `wrangler r2 object put hobbots-media/video/hobbots-at-work.mp4 --file … --remote`.
+ * The presentation video lives in the public R2 bucket behind media.hobbots.app, not in this repository. Each cut
+ * gets a new object name, so the long cache on the old one never serves a stale video (see RUNBOOK.md › Caching).
  */
 export const VIDEO = {
   url: "https://media.hobbots.app/video/hobbots-at-work.mp4",
-  poster: "/video/poster.webp",
   length: "2:14",
 } as const;
 
@@ -49,7 +48,7 @@ export const HERO = {
 } as const;
 
 export interface Shot {
-  /** The file in public/screens, without its extension. Each has a 2560 and a 1280 pixel wide copy. */
+  /** The file in src/assets/screens, without its extension. Each has a 2560 and a 1280 pixel wide copy. */
   readonly file: string;
   readonly alt: string;
 }

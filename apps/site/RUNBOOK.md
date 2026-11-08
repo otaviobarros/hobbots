@@ -12,7 +12,7 @@ Do these in order. Staging works after step 8, and production after step 9.
 4. [The hobbots.app zone](#the-hobbotsapp-zone).
 5. [Wait-list database](#wait-list-database) for staging.
 6. [Turnstile](#turnstile): the widget.
-7. [Media bucket](#media-bucket).
+7. [Media bucket](#media-bucket). [Caching](#caching) explains how every file stays fresh without purges.
 8. [API token and GitHub Environments](#api-token-and-github-environments) for `site-staging`. Push a site change to `main` to deploy staging, then set the staging Turnstile secret key.
 9. Production: the wait-list database, the Turnstile secret key, the `site-production` environment, a site release, then the [custom domain](#workers-and-environments).
 
@@ -90,6 +90,15 @@ wrangler r2 bucket dev-url get hobbots-media   # should report that the r2.dev U
 - `--min-tls 1.2` matters because R2 custom domains default to TLS 1.0 and ignore the zone's setting. Check it with `wrangler r2 bucket domain list hobbots-media`, and change it with `wrangler r2 bucket domain update hobbots-media --domain media.hobbots.app --min-tls 1.2`.
 - Leave the `r2.dev` URL disabled. If it was turned on, `wrangler r2 bucket dev-url disable hobbots-media` turns it off.
 - The bucket holds only public files. The deploy token has no R2 permission, so uploads always come from a maintainer's own login.
+
+## Caching
+
+Nothing on the site needs a cache purge. A file that changes gets a new URL instead:
+
+- **Pictures and scripts** under `/_astro/`: the build names each file by its content (`home-1280.Bx3k9a.webp`), and the Cloudflare adapter serves them with `Cache-Control: public, max-age=31536000, immutable`. A changed screenshot gets a new name, and the new page points at it. Screenshots and the video poster live in `src/assets` for this reason; never put a picture that will change in `public/`.
+- **The page itself** (`index.html`) keeps the Workers default, which revalidates on every visit, so a deploy shows at once.
+- **Files in `public/` that keep their name**: `public/_headers` gives `og.png` and `llms.txt` a one-hour cache. Favicons, `robots.txt` and `sitemap.xml` keep the default. Social networks keep their own copy of a share card; re-scrape it with their card tools after changing `og.png`.
+- **The video** on `media.hobbots.app`: each cut gets a new object name with `--cache-control "public, max-age=31536000, immutable"` ([README](README.md#video)), never an overwrite. If an object ever has to change in place, purge its URL under Caching › Configuration › Purge Cache › Custom Purge in the hobbots.app zone.
 
 ## API token and GitHub Environments
 

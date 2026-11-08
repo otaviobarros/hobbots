@@ -1,4 +1,5 @@
 ---
+import poster from "../assets/video/poster.webp";
 import { VIDEO } from "../data/copy.ts";
 import Roll from "./Roll.astro";
 
@@ -20,7 +21,7 @@ const PLAY = "M7 4v16l13-8z";
       </button>
     </div>
     <button type="button" class="film cut" data-video-open aria-label={`Play the video, ${VIDEO.length}`}>
-      <img src={VIDEO.poster} alt="" width="1600" height="900" loading="lazy" decoding="async" />
+      <img src={poster.src} alt="" width="1600" height="900" loading="lazy" decoding="async" />
       <span class="play cut" aria-hidden="true"
         ><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={PLAY}></path></svg></span
       >
@@ -34,7 +35,7 @@ const PLAY = "M7 4v16l13-8z";
 <dialog class="overlay" aria-label="Hobbots at work, a 2 minute video" data-video>
   <div class="box cut">
     <!-- biome-ignore lint/a11y/useMediaCaption: the captions are part of the picture, so every player shows them. -->
-    <video controls playsinline preload="none" poster={VIDEO.poster} data-src={VIDEO.url} width="1920" height="1080"
+    <video controls playsinline preload="none" poster={poster.src} data-src={VIDEO.url} width="1920" height="1080"
     ></video>
     <div class="bar">
       <p>Hobbots at work · {VIDEO.length} · with captions</p>
