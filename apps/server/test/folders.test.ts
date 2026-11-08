@@ -47,10 +47,14 @@ describe("adding a folder on the hub", () => {
     "[TC-RT-1225-02] refuses a folder it can't open, saying where to allow it",
     async () => {
       chmodSync(join(home, "closed"), 0o000);
-      const exit = await Effect.runPromiseExit(checkNewFolder("~/closed", home));
+      const onMac = await Effect.runPromiseExit(checkNewFolder("~/closed", home, true));
+      const elsewhere = await Effect.runPromiseExit(checkNewFolder("~/closed", home, false));
       chmodSync(join(home, "closed"), 0o755);
-      expect(Exit.isFailure(exit)).toBe(true);
-      expect(JSON.stringify(exit)).toContain("Privacy & Security");
+      expect(Exit.isFailure(onMac) && Exit.isFailure(elsewhere)).toBe(true);
+      // macOS's folder privacy is the likely cause only on macOS; elsewhere it is the folder's permissions.
+      expect(JSON.stringify(onMac)).toContain("Privacy & Security");
+      expect(JSON.stringify(elsewhere)).not.toContain("Privacy & Security");
+      expect(JSON.stringify(elsewhere)).toContain("permission to read it");
     },
   );
 });

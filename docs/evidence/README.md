@@ -80,3 +80,4 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-07 Skill sets through the Hobbots adapters, on Claude Code and Codex](2026-11-07-skill-sets-delivery.md)
 - [2026-11-07 The skills library on the packaged Mac app with real Claude Code and Codex hobs](2026-11-07-skills-library-mac.md)
 - [2026-11-07 The hub action pipeline and the Charm registry, end to end, with a fake second Charm beside GitHub](2026-11-07-charm-actions-end-to-end.md)
+- [2026-11-08 macOS asks about a protected folder when it is added, and hobs on both runtimes then write there](2026-11-08-protected-folders-mac.md)

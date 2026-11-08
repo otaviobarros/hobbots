@@ -1,5 +1,5 @@
 import { opendir, realpath, stat } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { FolderChecks } from "@hobbots/agents";
 import { InvalidFolder } from "@hobbots/api";
@@ -36,9 +36,15 @@ export const checkFolder = (typed: string, home: string = homedir()): Effect.Eff
   );
 };
 
-/** Whether macOS refused to open a folder: what its folder privacy answers (#1225). */
-const refusedByMacOS = (error: unknown) =>
+/** Whether opening a folder was refused: what macOS's folder privacy and file permissions answer. */
+const refused = (error: unknown) =>
   error instanceof Error && "code" in error && (error.code === "EPERM" || error.code === "EACCES");
+
+/** What to do about a folder the hub may not open: on macOS, most often its folder privacy (#1225). */
+const refusedAdvice = (isMac: boolean) =>
+  isMac
+    ? "If macOS asked, allow Hobbots in System Settings › Privacy & Security › Files and Folders, then add the folder again"
+    : "Give the user Hobbots runs as permission to read it, then add the folder again";
 
 /**
  * A folder the user is adding, checked as `checkFolder` does and then opened once. On macOS, opening
@@ -46,7 +52,11 @@ const refusedByMacOS = (error: unknown) =>
  * while adding it rather than in the middle of a hob's turn, where the question held the turn and a
  * refusal failed its writes (#1225). A refused folder is not added.
  */
-export const checkNewFolder = (typed: string, home: string = homedir()): Effect.Effect<string, InvalidFolder> =>
+export const checkNewFolder = (
+  typed: string,
+  home: string = homedir(),
+  isMac: boolean = platform() === "darwin",
+): Effect.Effect<string, InvalidFolder> =>
   Effect.flatMap(checkFolder(typed, home), (folder) =>
     Effect.tryPromise({
       try: async () => {
@@ -56,8 +66,8 @@ export const checkNewFolder = (typed: string, home: string = homedir()): Effect.
       catch: (error) =>
         new InvalidFolder({
           folder: typed,
-          message: refusedByMacOS(error)
-            ? `Hobbots can't open ${folder}. If macOS asked, allow Hobbots in System Settings › Privacy & Security › Files and Folders, then add the folder again`
+          message: refused(error)
+            ? `Hobbots can't open ${folder}. ${refusedAdvice(isMac)}`
             : `Hobbots can't open ${folder}`,
         }),
     }),
