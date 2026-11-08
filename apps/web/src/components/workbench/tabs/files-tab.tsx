@@ -9,20 +9,22 @@ import type { DockSource } from "../dock-model.ts";
 import { FilePicker } from "../file-picker.tsx";
 import { FileActions } from "../files/file-actions.tsx";
 import { FilePreview } from "../files/file-preview.tsx";
-import { fileDirectory, fileName } from "../files/files-model.ts";
+import { fileName } from "../files/files-model.ts";
 import { messages } from "../files/messages.ts";
 import { HobBy, HobMark, manyHobs } from "../hob-mark.tsx";
 import { LIST_CARD, listRow } from "../list-row.ts";
+import { shownDir, shownPath } from "../shown-paths.ts";
 import type { WorkbenchTabProps } from "./tab-props.ts";
 
-/** A file in the one list, with the Attempt that made or touched it and the hob it is for. */
+/** A file in the one list, with the Attempt that made or touched it and its Task's source, for its hob. */
 interface Entry {
   readonly file: TaskFile;
+  readonly activity: AttemptActivity;
   readonly source: DockSource;
 }
 
 /** A file's key in the one list: two Attempts can each list the same file. */
-const keyOf = (entry: Entry): string => `${entry.source.attempt.id}/${entry.file.id}`;
+const keyOf = (entry: Entry): string => `${entry.activity.attempt.id}/${entry.file.id}`;
 
 /**
  * The Files tab (ADR 023, ADR 027): the files every hob in view made or touched, in one list with
@@ -30,7 +32,7 @@ const keyOf = (entry: Entry): string => `${entry.source.attempt.id}/${entry.file
  * elsewhere. Only files inside the hob's folders are listed. The tree's one read lists them as they
  * are now, and reads them again when you come back to the app.
  */
-export function FilesTab({ sources, hobs, focus, from, onTab }: WorkbenchTabProps) {
+export function FilesTab({ sources, roots, hobs, focus, from, onTab }: WorkbenchTabProps) {
   const [picked, setPicked] = useState<string | null>(null);
   // A file another tab asks for wins over the one picked here before.
   const [asked, setAsked] = useState(focus);
@@ -38,7 +40,9 @@ export function FilesTab({ sources, hobs, focus, from, onTab }: WorkbenchTabProp
     setAsked(focus);
     if (focus !== undefined) setPicked(null);
   }
-  const entries: ReadonlyArray<Entry> = sources.flatMap((source) => source.files.map((file) => ({ file, source })));
+  const entries: ReadonlyArray<Entry> = sources.flatMap((source) =>
+    source.files.map(({ file, activity }) => ({ file, activity, source })),
+  );
   const made = entries.filter((each) => each.file.origin === "made");
   const touched = entries.filter((each) => each.file.origin !== "made");
   const listed = [...made, ...touched];
@@ -49,6 +53,10 @@ export function FilesTab({ sources, hobs, focus, from, onTab }: WorkbenchTabProp
   if (shown === undefined) return <div data-slot="files" />;
   // Each row shows whose work it is once the list holds more than one hob's.
   const party = manyHobs(sources);
+  // Paths read from the Quest's folders, the same on every Task, each led by its folder's name when several (#643).
+  const place = (entry: Entry) => shownPath(roots, entry.file.folder, entry.file.path);
+  const manyRoots = new Set(listed.map((each) => place(each).root)).size > 1;
+  const dirOf = (entry: Entry) => shownDir(place(entry), manyRoots);
   return (
     <div data-slot="files" className="flex h-full min-h-0 flex-col gap-3 px-5 py-4">
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 @min-[720px]:flex-row @min-[720px]:items-start">
@@ -64,7 +72,7 @@ export function FilesTab({ sources, hobs, focus, from, onTab }: WorkbenchTabProp
               </span>
             </>
           }
-          row={(entry) => <RowContent entry={entry} hobs={hobs} party={party} />}
+          row={(entry) => <RowContent entry={entry} dir={dirOf(entry)} hobs={hobs} party={party} />}
           onPick={(index) => {
             const entry = listed[index];
             if (entry !== undefined) setPicked(keyOf(entry));
@@ -77,11 +85,20 @@ export function FilesTab({ sources, hobs, focus, from, onTab }: WorkbenchTabProp
             "hidden gap-2 @min-[720px]:sticky @min-[720px]:top-0 @min-[720px]:flex @min-[720px]:w-64",
           )}
         >
-          <FileGroup title={messages.made} entries={made} shown={shown} hobs={hobs} party={party} onPick={setPicked} />
+          <FileGroup
+            title={messages.made}
+            entries={made}
+            shown={shown}
+            dirOf={dirOf}
+            hobs={hobs}
+            party={party}
+            onPick={setPicked}
+          />
           <FileGroup
             title={messages.touched}
             entries={touched}
             shown={shown}
+            dirOf={dirOf}
             hobs={hobs}
             party={party}
             onPick={setPicked}
@@ -89,13 +106,9 @@ export function FilesTab({ sources, hobs, focus, from, onTab }: WorkbenchTabProp
         </nav>
         <FileDetail
           key={keyOf(shown)}
-          activity={shown.source.activity}
+          activity={shown.activity}
           file={shown.file}
-          onSeeChanges={
-            hasChange(shown.source.activity, shown.file)
-              ? () => onTab("changes", shown.file.location, shown.source.attempt.id)
-              : null
-          }
+          onSeeChanges={seeChanges(shown, onTab)}
         />
       </div>
     </div>
@@ -105,13 +118,14 @@ export function FilesTab({ sources, hobs, focus, from, onTab }: WorkbenchTabProp
 /** The file a link asks for: the one its try recorded, as two Tasks can touch one path, else any. */
 const linkedFile = (listed: ReadonlyArray<Entry>, focus: string, from: AttemptId | undefined): Entry | undefined => {
   const at = listed.filter((each) => each.file.location === focus);
-  return at.find((each) => each.source.attempt.id === from) ?? at[0];
+  return at.find((each) => each.activity.attempt.id === from) ?? at[0];
 };
 
 function FileGroup({
   title,
   entries,
   shown,
+  dirOf,
   hobs,
   party,
   onPick,
@@ -119,6 +133,7 @@ function FileGroup({
   title: string;
   entries: ReadonlyArray<Entry>;
   shown: Entry;
+  dirOf: (entry: Entry) => string;
   hobs: HobLookup;
   party: boolean;
   onPick: (key: string) => void;
@@ -136,7 +151,7 @@ function FileGroup({
               onClick={() => onPick(keyOf(entry))}
               className={cn(listRow(entry === shown), "items-center")}
             >
-              <RowContent entry={entry} hobs={hobs} party={party} />
+              <RowContent entry={entry} dir={dirOf(entry)} hobs={hobs} party={party} />
             </button>
           </li>
         ))}
@@ -146,9 +161,8 @@ function FileGroup({
 }
 
 /** A file as the list and the picker's menu show it: its hob's sprite in a party's list, its name, where it is and its status note. */
-function RowContent({ entry, hobs, party }: { entry: Entry; hobs: HobLookup; party: boolean }) {
+function RowContent({ entry, dir, hobs, party }: { entry: Entry; dir: string; hobs: HobLookup; party: boolean }) {
   const { file } = entry;
-  const folder = fileDirectory(file);
   const note = messages.now[file.now];
   const hob = hobs(entry.source.ownerId);
   return (
@@ -160,11 +174,7 @@ function RowContent({ entry, hobs, party }: { entry: Entry; hobs: HobLookup; par
           {party && <HobBy hob={hob} />}
         </span>
         <span className="w-full truncate text-meta text-label">
-          {[
-            messages.origin[file.origin],
-            folder === "" ? null : `${folder}/`,
-            file.label === null ? null : fileName(file),
-          ]
+          {[messages.origin[file.origin], dir === "" ? null : dir, file.label === null ? null : fileName(file)]
             .filter((part) => part !== null)
             .join(" · ")}
         </span>
@@ -178,9 +188,11 @@ function RowContent({ entry, hobs, party }: { entry: Entry; hobs: HobLookup; par
   );
 }
 
-/** Whether Changes has a change that left this file, so See changes can open it there. */
-const hasChange = (activity: AttemptActivity, file: TaskFile): boolean =>
-  activity.changes.some((change) => leavesFile(change) && changePath(change) === file.location);
+/** Opens the change that left this file in Changes, at the latest try that changed it; null when Changes has none. */
+const seeChanges = ({ file, source }: Entry, onTab: WorkbenchTabProps["onTab"]): (() => void) | null => {
+  const change = source.changes.find((each) => leavesFile(each.change) && changePath(each.change) === file.location);
+  return change === undefined ? null : () => onTab("changes", file.location, change.activity.attempt.id);
+};
 
 function FileDetail({
   activity,

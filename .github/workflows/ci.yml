@@ -180,13 +180,14 @@ jobs:
   # Runs each browser test a pull request adds or changes, and each test whose spec file imports a
   # changed helper, five times, and fails on one that passes only on a retry. A new flaky test then
   # fails its own pull request instead of main (STD-TEST-009). A change that reaches more tests than
-  # MAX_TESTS, such as one to e2e/hub.ts, is left to the nightly flake hunt (flake-hunt.yml), so this
-  # job finishes in about the time the shards take.
+  # MAX_TESTS, such as one to e2e/hub.ts, is left to the nightly flake hunt (flake-hunt.yml). Five
+  # runs of a spec file's slow orchestration tests take longer than a shard, so the run's own time
+  # limit is raised to fit, as the flake hunt does.
   burn-in:
     name: Burn in changed browser tests
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
     env:
       BASE_REF: ${{ github.base_ref }}
       MAX_TESTS: 16
@@ -215,7 +216,7 @@ jobs:
         uses: ./.github/actions/playwright
       - if: steps.run.outcome == 'success'
         working-directory: apps/web
-        run: pnpm exec playwright test --only-changed="origin/$BASE_REF" --repeat-each=5 --fail-on-flaky-tests
+        run: pnpm exec playwright test --only-changed="origin/$BASE_REF" --repeat-each=5 --fail-on-flaky-tests --global-timeout=1800000
       - id: flaky
         if: always() && steps.run.outcome == 'success'
         name: List flaky and failed tests in the job summary

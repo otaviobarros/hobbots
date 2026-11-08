@@ -73,7 +73,7 @@ You act where the work is.
 There is **one Workbench per Quest**, docked under the lanes.
 
 - **Folded**, it is a strip of counts: "Workbench · Changes 4 · Files 2 · Terminal 3 · Browser Soon". Clicking a count or a lane slides it open on that tab. It can be dragged taller and folded again.
-- **Filters.** Changes, Files and Terminal list every hob's work, each row with its owner's sprite. A lane filters every tab to that hob, and the attempt picked in a lane filters it to that try. With no try picked, each Task shows the Attempt ADR 023 picks.
+- **Filters.** Changes, Files and Terminal list every hob's work, each row with its owner's sprite. A lane filters every tab to that hob, and the attempt picked in a lane filters it to that try. With no try picked, each Task shows the Attempt ADR 023 picks. Changes and Files hold the tries before the one shown too, as ADR 023 says, and read every path from the Quest's folders.
 - **Summary goes away.** The lanes are the summary. What Summary listed under Still open lives in the lanes, the Needs-you tray and the Inbox.
 - **Labels stay**, per hob: Live, History, Unavailable with why, and Not used.
 - **One read.** The Workbench reads the whole tree in one call and stays live through one stream for every hob ([#899](https://github.com/otaviobarros/hobbots/issues/899)). The same rules apply as per Attempt: redaction, the 30-day details window, the Unavailable reasons and the per-Attempt budgets. The per-Attempt endpoints stay for anything else that uses them.

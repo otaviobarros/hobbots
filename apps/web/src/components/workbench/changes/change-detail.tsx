@@ -1,4 +1,4 @@
-import type { AttemptActivity, FileChange } from "@hobbots/domain";
+import type { Attempt, FileChange } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { useState } from "react";
@@ -11,22 +11,26 @@ import { ImageView } from "./image-view.tsx";
 import { KindTag } from "./kind-tag.tsx";
 import { messages } from "./messages.ts";
 import { NotKeptNote } from "./not-kept-note.tsx";
+import type { KeptChange, TaskChange } from "./task-changes.ts";
 import { sideText, type TextSide, useTextSide } from "./use-version.ts";
 
 /**
- * One changed file: its name with its folder under it and how it changed, who else worked in its
- * folder meanwhile, whether it may still change, and its before and after in the form that suits it
- * (ADR 023). A document opens rendered, with Source one click away.
+ * One changed file: its name with its folder under it and how it changed, the earlier tries that
+ * changed it, who else worked in its folder meanwhile, whether it may still change, and its before
+ * and after in the form that suits it (ADR 023). A document opens rendered, with Source one click away.
  */
 export function ChangeDetail({
-  change,
-  activity,
+  item,
+  place,
+  shownTry,
   live,
   hobs,
   onOpenFiles,
 }: {
-  change: FileChange;
-  activity: AttemptActivity;
+  item: TaskChange;
+  place: Place;
+  /** The try the Workbench shows, so a file only earlier tries changed says which. */
+  shownTry: Attempt;
   /** The Attempt is running a turn, so a change not yet settled may change again. */
   live: boolean;
   hobs: HobLookup;
@@ -34,12 +38,12 @@ export function ChangeDetail({
   onOpenFiles: (() => void) | null;
 }) {
   const [view, setView] = useState<DocumentShow>("rendered");
+  const { change } = item;
   const show = changeShow(change);
-  const shared = sharedHobs(change, activity).map((id) => hobs(id).name);
-  const cleared = activity.detailsClearedAt !== null;
-  const { dir, name } = splitPath(change.path);
+  const { name } = splitPath(change.path);
+  const { dir } = place;
   return (
-    <article aria-label={change.path} className="flex min-w-0 flex-col gap-2.5">
+    <article aria-label={place.path} className="flex min-w-0 flex-col gap-2.5">
       <header className="flex flex-col gap-2.5">
         <div className="flex min-h-[30px] min-w-0 flex-wrap items-center gap-2">
           <span className="flex min-w-0 flex-col">
@@ -63,40 +67,12 @@ export function ChangeDetail({
             </Button>
           )}
         </div>
-        {change.movedFrom !== null && (
-          <p className="m-0 text-detail text-text-secondary">{messages.movedFrom({ path: change.movedFrom })}</p>
-        )}
-        {change.sharedWith.length > 0 && (
-          <SharedWarning>
-            {shared.length > 0 ? messages.shared({ names: shared }) : messages.sharedUnknown}
-          </SharedWarning>
-        )}
-        {live && !change.settled && (
-          <p className="m-0 flex items-center gap-2 text-detail text-lantern">
-            <span
-              aria-hidden
-              className="size-2 shrink-0 animate-hb-blink rounded-dot bg-lantern motion-reduce:animate-none"
-            />
-            {messages.soFar}
-          </p>
-        )}
-        {change.kind === "deleted" && <p className="m-0 text-detail text-text-secondary">{messages.deletedHeld}</p>}
+        <ChangeNotes item={item} place={place} shownTry={shownTry} live={live} hobs={hobs} />
       </header>
       {show === "document" || show === "code" ? (
-        <TextChange
-          change={change}
-          activity={activity}
-          cleared={cleared}
-          rendered={show === "document" && view === "rendered"}
-        />
+        <TextChange item={item} rendered={show === "document" && view === "rendered"} />
       ) : show === "image" ? (
-        <ImageView
-          attemptId={activity.attempt.id}
-          path={change.path}
-          before={change.before}
-          after={change.after}
-          cleared={cleared}
-        />
+        <ImageView item={item} />
       ) : show === "link" ? (
         <p className="m-0 text-detail text-text-secondary">{messages.link}</p>
       ) : (
@@ -107,6 +83,62 @@ export function ChangeDetail({
 }
 
 type DocumentShow = "rendered" | "source";
+
+/** Where the file is as the list reads it, from the Quest's folder: its path, its folders, and where a moved file was. */
+interface Place {
+  readonly path: string;
+  readonly dir: string;
+  readonly movedFrom: string | null;
+}
+
+/**
+ * The lines under a file's name: where a moved file was, the tries that changed it when they are
+ * not just the one shown, who else worked in its folder, whether it may still change, and that a
+ * deleted file shows what it held.
+ */
+function ChangeNotes({
+  item,
+  place,
+  shownTry,
+  live,
+  hobs,
+}: {
+  item: TaskChange;
+  place: Place;
+  shownTry: Attempt;
+  live: boolean;
+  hobs: HobLookup;
+}) {
+  const { change, activity } = item;
+  // Who else worked there while any of its tries changed it, not just the latest.
+  const shared = sharedHobs(change, { attempt: activity.attempt, sharedWithHobs: item.sharedWithHobs }).map(
+    (id) => hobs(id).name,
+  );
+  const tries = item.attempts.map((each) => each.number);
+  return (
+    <>
+      {place.movedFrom !== null && (
+        <p className="m-0 text-detail text-text-secondary">{messages.movedFrom({ path: place.movedFrom })}</p>
+      )}
+      {(tries.length > 1 || tries[0] !== shownTry.number) && (
+        <p className="m-0 text-detail text-text-secondary">{messages.changedIn({ tries })}</p>
+      )}
+      {change.sharedWith.length > 0 && (
+        <SharedWarning>{shared.length > 0 ? messages.shared({ names: shared }) : messages.sharedUnknown}</SharedWarning>
+      )}
+      {live && !change.settled && (
+        <p className="m-0 flex items-center gap-2 text-detail text-lantern">
+          <span
+            aria-hidden
+            className="size-2 shrink-0 animate-hb-blink rounded-dot bg-lantern motion-reduce:animate-none"
+          />
+          {messages.soFar}
+        </p>
+      )}
+      {change.kind === "deleted" && <p className="m-0 text-detail text-text-secondary">{messages.deletedHeld}</p>}
+    </>
+  );
+}
 
 /** "Changed while Ada was also working here." on a lantern wash, with a round warning mark. */
 function SharedWarning({ children }: { children: string }) {
@@ -141,19 +173,16 @@ function OtherFile({ change }: { change: FileChange }) {
 
 /** A text file's change: both versions read, then shown rendered (documents) or as a diff. */
 function TextChange({
-  change,
-  activity,
-  cleared,
+  item,
   rendered,
 }: {
-  change: FileChange;
-  activity: AttemptActivity;
-  cleared: boolean;
+  item: KeptChange;
   /** A document shown rendered, not as its source. */
   rendered: boolean;
 }) {
-  const before = useTextSide(activity.attempt.id, change.before, cleared);
-  const after = useTextSide(activity.attempt.id, change.after, cleared);
+  const { change } = item;
+  const before = useTextSide(item.beforeIn, change.before);
+  const after = useTextSide(item.afterIn, change.after);
   const sides = [before, after];
   if (sides.some((side) => side.kind === "loading")) {
     return <p className="m-0 text-detail text-label">{messages.reading}</p>;

@@ -3,7 +3,6 @@ import { diffArrays, diffLines } from "diff";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
-import { folderName } from "../../quest/member-folders.ts";
 
 /**
  * How the Changes tab shows a file (ADR 023): a document rendered before and after, code and other
@@ -59,15 +58,6 @@ export const changeCounts = (changes: ReadonlyArray<FileChange>): Readonly<Recor
 };
 
 /**
- * Where a changed file sits, for the list's second line: its folders inside the hob's, led by the
- * hob's folder's name when the Task changed files in more than one.
- */
-export const changeDir = (change: Pick<FileChange, "folder" | "path">, manyFolders: boolean): string => {
-  const { dir } = splitPath(change.path);
-  return manyFolders ? `${folderName(change.folder)}/${dir}` : dir;
-};
-
-/**
  * The change the tab shows: the one asked for by its path on the hub (a link from Summary), else
  * the one picked in the list, else the first.
  */
@@ -82,7 +72,10 @@ export const selectedChange = (
   null;
 
 /** The hobs that worked in the same folder while a change was made, for "Changed while Ada was also working here". */
-export const sharedHobs = (change: FileChange, activity: AttemptActivity): ReadonlyArray<AgentId> => {
+export const sharedHobs = (
+  change: FileChange,
+  activity: Pick<AttemptActivity, "attempt" | "sharedWithHobs">,
+): ReadonlyArray<AgentId> => {
   const hobs = new Set<AgentId>();
   for (const attemptId of change.sharedWith) {
     const found = activity.sharedWithHobs.find((each) => each.attemptId === attemptId);

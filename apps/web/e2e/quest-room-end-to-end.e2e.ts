@@ -225,17 +225,22 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
   expect(left !== null && right !== null && left.x + left.width <= right.x + 1 && left.y === right.y).toBe(true);
   await scan();
 
-  // Unfiltered, Changes lists Aldric's work and not the copy Quill's failed try wrote.
+  // Unfiltered, Changes lists the copy Quill's failed try wrote: her retry works on what it left (#1218).
   const changesTab = bench.getByRole("tab", { name: /^Changes/ });
   await changesTab.click();
   const changed = bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("navigation", { name: "Changed files" });
-  await expect(changed.getByRole("button", { name: /^copy\.md/ })).toHaveCount(0);
+  await expect(changed.getByRole("button", { name: /^copy\.md\s*, by Quill/ })).toHaveCount(1);
 
-  // Quill's lane filters every tab to her work; her latest try changed nothing.
+  // Quill's lane filters every tab to her work; her latest try changed nothing itself, so the copy
+  // says it came from her first.
   await laneHead(page, "Quill").click();
   await expect(bench.getByRole("button", { name: /^Quill only/ })).toBeVisible();
-  await expect(changesTab).toHaveText("ChangesNot used in this task");
+  await expect(changesTab).toHaveText("Changes1");
   await expect(terminalTab).toHaveText("TerminalNot used in this task");
+  await expect(changed.getByRole("button")).toHaveText([/^copy\.md/]);
+  await expect(
+    bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("article", { name: "copy.md" }),
+  ).toContainText("Changed in attempt 1.");
 
   // Her first try, picked in her lane, is what every tab shows: the copy it wrote, kept in the address.
   const tries = lane(page, "Quill").getByRole("group", { name: "Quill's attempts" });
@@ -247,6 +252,9 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
   ).toBeChecked();
   await changesTab.click();
   await expect(changed.getByRole("button")).toHaveText([/^copy\.md/]);
+  await expect(
+    bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("article", { name: "copy.md" }),
+  ).not.toContainText("Changed in attempt");
   await page.reload();
   await expect(questRoom(page, TITLE)).toBeVisible();
   await expect(tries.getByRole("button", { name: "Attempt 1, failed" })).toHaveAttribute("aria-pressed", "true");

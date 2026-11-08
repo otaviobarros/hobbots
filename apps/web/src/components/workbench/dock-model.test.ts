@@ -117,20 +117,31 @@ const read = new TreeActivity({
 });
 
 describe("the docked Workbench's sources", () => {
-  it("shows every hob's latest try, in tree order, and counts what each tab lists", () => {
+  it("shows every hob's latest try, in tree order, and counts what each tab lists, the earlier tries' changes too", () => {
     const sources = dockSources(quest, read, undefined, undefined);
     expect(sources.map((each) => [each.ownerId, each.attempt.id])).toEqual([
       [ALDRIC, lead.id],
       [QUILL, copySecond.id],
       [ADA, build.id],
     ]);
-    expect(dockCounts(sources)).toEqual({ changes: 3, files: 1, terminal: 2 });
+    // Quill's second try works on what her first left: its changes and files hold the first try's draft too (#1218).
+    const quill = sources[1];
+    expect(quill?.changes.map((each) => [each.change.path, each.activity.attempt.id])).toEqual([
+      ["copy.md", copySecond.id],
+      ["draft.md", copyFirst.id],
+      ["notes.md", copySecond.id],
+    ]);
+    expect(quill?.files.map((each) => [each.file.path, each.activity.attempt.id])).toEqual([
+      ["draft.md", copyFirst.id],
+      ["copy.md", copySecond.id],
+    ]);
+    expect(dockCounts(sources)).toEqual({ changes: 4, files: 2, terminal: 2 });
   });
 
   it("filters every tab to the lit lane's hob", () => {
     const sources = dockSources(quest, read, undefined, { ownerId: QUILL });
     expect(sources.map((each) => each.attempt.id)).toEqual([copySecond.id]);
-    expect(dockCounts(sources)).toEqual({ changes: 2, files: 1, terminal: 0 });
+    expect(dockCounts(sources)).toEqual({ changes: 3, files: 2, terminal: 0 });
   });
 
   it("narrows to one Task when it alone was shown", () => {
@@ -141,6 +152,8 @@ describe("the docked Workbench's sources", () => {
   it("follows an earlier try picked for its Task, and the latest for every other Task", () => {
     const sources = dockSources(quest, read, copyFirst.id, undefined);
     expect(sources.map((each) => each.attempt.id)).toEqual([lead.id, copyFirst.id, build.id]);
+    // An earlier try's work stops at it: the tries after it are left out.
+    expect(sources[1]?.changes.map((each) => each.change.path)).toEqual(["draft.md"]);
     expect(dockCounts(sources)).toEqual({ changes: 2, files: 1, terminal: 2 });
   });
 
@@ -151,6 +164,21 @@ describe("the docked Workbench's sources", () => {
 });
 
 describe("the docked Workbench's labels", () => {
+  it("reads History on Changes for a retry that changed nothing itself after an earlier try did", () => {
+    const idle = new TreeActivity({
+      taskId: CAMPAIGN,
+      attempts: read.attempts.map((each) =>
+        each.activity.attempt.id === copySecond.id ? recorded(copySecond, QUILL) : each,
+      ),
+    });
+    const sources = dockSources(quest, idle, copySecond.id, { ownerId: QUILL });
+    expect(dockStates(sources)).toMatchObject({
+      changes: { kind: "history" },
+      files: { kind: "history" },
+      terminal: { kind: "not-used" },
+    });
+  });
+
   it("keeps each hob's label, and marks a tab by the most telling one", () => {
     const sources = dockSources(quest, read, undefined, undefined);
     expect(hobStates(sources, "changes")).toEqual([

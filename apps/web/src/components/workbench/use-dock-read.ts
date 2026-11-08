@@ -4,6 +4,7 @@ import { workbenchTreeQuery } from "../../api/workbench.ts";
 import { useWorkbenchStream } from "../../api/workbench-stream.ts";
 import type { RoomView } from "../quest-room/room-search.ts";
 import { type DockFilter, dockCounts, dockSources, dockStates, sameStates } from "./dock-model.ts";
+import { questRoots } from "./shown-paths.ts";
 import type { TabState } from "./workbench-model.ts";
 
 /**
@@ -45,6 +46,7 @@ export const useDockRead = (
     litTask,
     only,
     sources,
+    roots: data === undefined ? [] : questRoots(tree, data.activity),
     states: data === undefined ? sameStates(unread) : dockStates(sources),
     counts: data === undefined ? null : dockCounts(sources),
     retry: () => void read.refetch(),

@@ -12,6 +12,8 @@ export interface WorkbenchTabProps {
   readonly tree: TaskTree;
   /** Each Task's shown Attempt in view, in tree order: every hob's, or the lit lane's. */
   readonly sources: ReadonlyArray<DockSource>;
+  /** The folders the Quest's paths are shown from, so a file reads the same on every Task (#643). */
+  readonly roots: ReadonlyArray<string>;
   /** The tab's label across the hobs in view, whose reasons the dock shows above the tab. */
   readonly state: TabState;
   readonly hobs: HobLookup;

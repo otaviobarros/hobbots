@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import { attempt, CAMPAIGN } from "../../../test/quests.ts";
 import {
   changeCounts,
-  changeDir,
   changePath,
   changeShow,
   codeDiff,
@@ -74,7 +73,7 @@ describe("how the Changes tab shows a file", () => {
     expect(fileKindLabel("Makefile")).toBeNull();
   });
 
-  it("counts changes by kind, and names each one's folders, led by the hob's folder when there are several", () => {
+  it("counts changes by kind", () => {
     const changes = [
       change("a.md", { kind: "added", before: null }),
       change("b.md"),
@@ -82,10 +81,6 @@ describe("how the Changes tab shows a file", () => {
       change("d.md", { kind: "deleted", after: null }),
     ];
     expect(changeCounts(changes)).toEqual({ added: 1, edited: 2, deleted: 1, moved: 0, link: 0 });
-    expect(changeDir(change("src/lib/app.ts"), false)).toBe("src/lib/");
-    expect(changeDir(change("app.ts"), false)).toBe("");
-    expect(changeDir(change("src/app.ts", { folder: "/home/me/site" }), true)).toBe("site/src/");
-    expect(changeDir(change("app.ts", { folder: "/home/me/site/" }), true)).toBe("site/");
   });
 
   it("knows which changes left a file for Files to list", () => {

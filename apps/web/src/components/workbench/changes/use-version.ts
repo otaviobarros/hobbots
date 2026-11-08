@@ -1,4 +1,4 @@
-import type { AttemptId, ContentId, FileVersion, NotKept } from "@hobbots/domain";
+import type { AttemptActivity, ContentId, FileVersion, NotKept } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { attemptContentQuery } from "../../../api/workbench.ts";
 
@@ -17,13 +17,15 @@ const decoder = new TextDecoder();
 const textOf = (bytes: Uint8Array) => decoder.decode(bytes);
 
 /**
- * Reads one version's kept text. A version that kept none says why; a read refused once the
- * Attempt's details were cleared reads as cleared, as the record would say if read again.
+ * Reads one version's kept text through the records of the Attempt that kept it. A version that
+ * kept none says why; a read refused once that Attempt's details were cleared reads as cleared, as
+ * the record would say if read again.
  */
-export const useTextSide = (attemptId: AttemptId, version: FileVersion | null, cleared: boolean): TextSide => {
+export const useTextSide = (keptIn: AttemptActivity, version: FileVersion | null): TextSide => {
   const contentId = version?.contentId ?? null;
+  const cleared = keptIn.detailsClearedAt !== null;
   const read = useQuery({
-    ...attemptContentQuery(attemptId, contentId ?? ("" as ContentId)),
+    ...attemptContentQuery(keptIn.attempt.id, contentId ?? ("" as ContentId)),
     enabled: contentId !== null,
     select: textOf,
   });

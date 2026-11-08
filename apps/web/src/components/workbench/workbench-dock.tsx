@@ -38,12 +38,12 @@ export function WorkbenchDock({
   hobs: HobLookup;
   moves: RoomMoves;
 }) {
-  const { top, ownerId, litTask, only, sources, states, counts, retry } = useDockRead(tree, party, lit, view);
+  const { top, ownerId, litTask, only, sources, roots, states, counts, retry } = useDockRead(tree, party, lit, view);
   const height = useDockHeight();
   const heading = useRef<HTMLHeadingElement>(null);
   if (top === undefined) return null;
   const open = view.tab !== undefined;
-  const shared = { tree, sources, hobs, onTab: moves.tab };
+  const shared = { tree, sources, roots, hobs, onTab: moves.tab };
   return (
     <section
       aria-label={roomCopy.dock.named({ title: taskTitle(top) })}
