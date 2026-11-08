@@ -5,6 +5,7 @@ import {
   SkillUpdate,
   SkillUpdateCheck,
   type SkillUpdateProblem,
+  skillUpdateKept,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -97,8 +98,9 @@ export const SkillUpdateLogLive = Layer.effect(
         journaled(1, () =>
           Effect.gen(function* () {
             const before = yield* rowOf(update.skillId);
-            // The same upstream content found again: a waiting one keeps its review, a dismissed one stays so.
-            if (before?.hash === update.hash) return null;
+            // The same upstream content found again: a dismissed one stays so, and a waiting one keeps its
+            // review unless the skill has a newer revision since, which it is reviewed against again.
+            if (skillUpdateKept(before, update)) return null;
             const row = toRow(update);
             yield* sql`DELETE FROM skill_updates WHERE skill_id = ${update.skillId}`;
             yield* sql`INSERT INTO skill_updates ${sql.insert(row)}`;

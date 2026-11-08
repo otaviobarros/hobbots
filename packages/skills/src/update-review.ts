@@ -54,6 +54,8 @@ export const raisedFlags = (
 /** The most of one `SKILL.md` a review keeps, in characters; a longer one is cut. */
 const INSTRUCTIONS_KEPT_MAX = 200_000;
 
-/** A `SKILL.md` as a review keeps it: its text, cut to `INSTRUCTIONS_KEPT_MAX`. */
-export const keptInstructions = (text: string | null): string | null =>
-  text === null || text.length <= INSTRUCTIONS_KEPT_MAX ? text : text.slice(0, INSTRUCTIONS_KEPT_MAX);
+/** A `SKILL.md` as a review keeps it: its text, cut to `INSTRUCTIONS_KEPT_MAX`, and whether it was cut. */
+export const keptInstructions = (text: string | null): { readonly text: string | null; readonly cut: boolean } =>
+  text === null || text.length <= INSTRUCTIONS_KEPT_MAX
+    ? { text, cut: false }
+    : { text: text.slice(0, INSTRUCTIONS_KEPT_MAX), cut: true };

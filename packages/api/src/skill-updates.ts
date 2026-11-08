@@ -6,8 +6,9 @@ import { DeviceSession } from "./user-session.ts";
 
 /**
  * Updates from a source (ADR 029, Updates from a source): what the checks of the library's Git sources
- * found, Check now, and your decisions. Nothing here changes the library but Accept, which adds the
- * update as a new revision and rolls it out like your own edit. Only a user session decides.
+ * found, Check now, and your decisions. Accept adds an update as a new revision and rolls it out like
+ * your own edit. A check changes the library only for a skill set to Update automatically, whose clean
+ * updates it accepts and rolls out by their source. Only a user session decides.
  */
 
 /**

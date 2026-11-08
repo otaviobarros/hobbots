@@ -68,14 +68,14 @@ export const SkillUpdatesHandlers = HttpApiBuilder.group(HobbotsApi, "skillUpdat
         updates.accept(params.skillId, payload.hash, { _tag: "You" }).pipe(Effect.mapError(importError)),
       dismiss: ({ params, payload }) =>
         Effect.gen(function* () {
-          const dismissed = yield* log.dismiss(params.skillId, payload.hash);
+          const dismissed = yield* updates.dismiss(params.skillId, payload.hash);
           if (dismissed === null) return yield* new SkillMissing({ id: payload.hash });
           return yield* view;
         }),
       automatic: ({ params, payload }) =>
         Effect.gen(function* () {
           yield* fromGit(params.skillId);
-          yield* log.setAutomatic(params.skillId, payload.on);
+          yield* updates.setAutomatic(params.skillId, payload.on);
           return yield* view;
         }),
     });

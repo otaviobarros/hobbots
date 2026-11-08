@@ -1,5 +1,5 @@
 import { SkillUpdateLog, type SkillUpdateLogShape } from "@hobbots/agents";
-import { type Committed, type SkillId, SkillUpdate, type SkillUpdateCheck } from "@hobbots/domain";
+import { type Committed, type SkillId, SkillUpdate, type SkillUpdateCheck, skillUpdateKept } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 
 /**
@@ -20,7 +20,7 @@ export const makeSkillUpdateLogFake = (): SkillUpdateLogShape => {
     get: (skillId) => Effect.sync(() => updates.get(skillId) ?? null),
     found: (update) =>
       Effect.sync(() => {
-        if (updates.get(update.skillId)?.hash === update.hash) return null;
+        if (skillUpdateKept(updates.get(update.skillId), update)) return null;
         updates.set(update.skillId, update);
         return committed(update);
       }),

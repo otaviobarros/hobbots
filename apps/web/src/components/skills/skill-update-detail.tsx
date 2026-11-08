@@ -1,6 +1,7 @@
 import type { SkillsList } from "@hobbots/api";
 import { type SkillUpdate, skillRevisionLabel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { useState } from "react";
 import { skillsErrorTag } from "../../api/skills.ts";
 import { formatAgo } from "../../lib/format.ts";
 import { MemoryCard } from "../memory/memory-parts.tsx";
@@ -56,31 +57,47 @@ function UpdateDecision({ update, list, say }: { update: SkillUpdate; list: Skil
   const title = skillTitle(update.name);
   const { from, to } = revsOf(update);
   const input = { skillId: update.skillId, hash: update.hash };
+  // A review that leaves part of a SKILL.md out cannot show every change: you say you read it first.
+  const cut = update.instructions.some((one) => one.cut);
+  const [read, setRead] = useState(false);
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button
-        disabled={writes.busy}
-        onClick={() =>
-          writes.accept.mutate(input, {
-            onSuccess: () => say({ tone: "done", message: copy.accepted({ title, to, from }) }),
-            onError: (error) => say({ tone: "failed", message: acceptFailure(error) }),
-          })
-        }
-      >
-        {copy.accept({ count: rolloutOf(update.skillId, list).length })}
-      </Button>
-      <Button
-        variant="outline"
-        disabled={writes.busy}
-        onClick={() =>
-          writes.dismiss.mutate(input, {
-            onSuccess: () => say({ tone: "done", message: copy.dismissed({ title, rev: from }) }),
-            onError: () => say({ tone: "failed", message: copy.failed }),
-          })
-        }
-      >
-        {copy.notNow}
-      </Button>
+    <div className="flex flex-col gap-2">
+      {cut && (
+        <label className="flex items-start gap-2.5 text-ui text-text-strong">
+          <input
+            type="checkbox"
+            className="mt-1 size-4 flex-none accent-(--color-mint-deep)"
+            checked={read}
+            onChange={(event) => setRead(event.target.checked)}
+          />
+          {copy.readWhole}
+        </label>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          disabled={writes.busy || (cut && !read)}
+          onClick={() =>
+            writes.accept.mutate(input, {
+              onSuccess: () => say({ tone: "done", message: copy.accepted({ title, to, from }) }),
+              onError: (error) => say({ tone: "failed", message: acceptFailure(error) }),
+            })
+          }
+        >
+          {copy.accept({ count: rolloutOf(update.skillId, list).length })}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={writes.busy}
+          onClick={() =>
+            writes.dismiss.mutate(input, {
+              onSuccess: () => say({ tone: "done", message: copy.dismissed({ title, rev: from }) }),
+              onError: () => say({ tone: "failed", message: copy.failed }),
+            })
+          }
+        >
+          {copy.notNow}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -126,6 +143,11 @@ export function UpdateDetail({
           className="overflow-hidden rounded-card border border-line-2 bg-card"
         >
           <div className="border-b border-line bg-deep px-3 py-2.5 font-mono text-detail">{one.path}</div>
+          {one.cut && (
+            <p role="note" className="m-0 border-b border-line bg-notice px-3 py-2.5 text-detail text-text">
+              {copy.cut({ where: update.commit === null ? where : `${where} · ${update.commit.slice(0, 7)}` })}
+            </p>
+          )}
           <DiffLines before={one.before ?? ""} after={one.after ?? ""} />
         </section>
       ))}

@@ -152,6 +152,9 @@ export const messages = {
         ? "Update"
         : `Update and roll out to ${formatCount(count)} ${plural(count, { one: "hob", other: "hobs" })}`,
     notNow: "Not now",
+    cut: ({ where }: { where: string }) =>
+      `This SKILL.md is too long to show whole: only its first 200,000 characters are here, so a change after them does not show. Read the whole file in ${where} before you update.`,
+    readWhole: "I read the whole SKILL.md in the repository, and want this update",
     accepted: ({ title, to, from }: { title: string; to: string; from: string }) =>
       `${title} ${to} is in your library and rolls out from each hob's next chat. ${from} stays in the history.`,
     dismissed: ({ title, rev }: { title: string; rev: string }) =>

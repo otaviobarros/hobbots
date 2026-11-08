@@ -1,10 +1,12 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { SkillLibrary, SkillUpdateLog } from "@hobbots/agents";
+import { SkillRevisionHash } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { SkillImporter, SkillImporterLive, SkillObjectsLive, SkillUpdates, SkillUpdatesLive } from "../src/index.ts";
 import { SkillLibraryFake, SkillUpdateLogFake } from "../src/testing.ts";
+import { keptInstructions } from "../src/update-review.ts";
 import { type Fixture, repositoryOf, skillMd, temp } from "./fixtures.ts";
 
 // #1097: updates from a skill's Git source (ADR 029, Updates from a source).
@@ -146,7 +148,7 @@ describe("skill updates from Git", () => {
         const updates = yield* SkillUpdates;
         const log = yield* SkillUpdateLog;
         const library = yield* SkillLibrary;
-        yield* log.setAutomatic(first.skill.id, true);
+        yield* updates.setAutomatic(first.skill.id, true);
 
         yield* Effect.promise(() => upstream.commit({ "SKILL.md": skillMd("writing", "Plain words, short lines.") }));
         const clean = yield* updates.check;
@@ -210,7 +212,8 @@ describe("skill updates from Git", () => {
 
         // Not now: the same upstream content stays out of Updates.
         if (update === undefined) return;
-        expect((yield* log.dismiss(first.skill.id, update.hash))?.value.state).toBe("dismissed");
+        expect((yield* updates.dismiss(first.skill.id, update.hash))?.state).toBe("dismissed");
+        expect(yield* updates.dismiss(first.skill.id, update.hash)).toBeNull();
         yield* updates.check;
         expect(yield* log.waiting).toEqual([]);
 
@@ -249,5 +252,87 @@ describe("skill updates from Git", () => {
         expect((yield* log.lastCheck).problems).toEqual(checked.problems);
       }),
     );
+  });
+
+  // covers ADR 029 (Updates from a source), #1097
+  it("[TC-AG-1097-06] reviews a waiting update again after you edit the skill, so Update still adds it", async () => {
+    const upstream = await upstreamOf({ "SKILL.md": skillMd("triage") });
+    await run(await updatesLayer())(
+      Effect.gen(function* () {
+        const first = yield* imported(upstream.source, "");
+        const updates = yield* SkillUpdates;
+        const log = yield* SkillUpdateLog;
+        const library = yield* SkillLibrary;
+        yield* Effect.promise(() => upstream.commit({ "notes.md": "Upstream." }));
+        yield* updates.check;
+        const [found] = yield* log.waiting;
+        expect(found?.base).toBe(first.revision.hash);
+
+        // You edit the skill in Hobbots: r2 is now its newest, and the next check reviews against it.
+        const edited = yield* library.addRevision(first.skill.id, {
+          ...first.revision,
+          hash: SkillRevisionHash.make("e".repeat(64)),
+          origin: null,
+          commit: null,
+          addedBy: you,
+        });
+        yield* updates.check;
+        const [again] = yield* log.waiting;
+        expect(again).toMatchObject({ hash: found?.hash, base: edited.value.revision.hash, baseNumber: 2 });
+
+        if (again === undefined) return;
+        const accepted = yield* updates.accept(first.skill.id, again.hash, you);
+        expect(accepted.revision.number).toBe(3);
+        expect(yield* log.waiting).toEqual([]);
+      }),
+    );
+  });
+
+  // covers ADR 029 (Updates from a source), #1097
+  it("[TC-AG-1097-07] finishes the rollout of an Update that stopped after adding its revision", async () => {
+    const upstream = await upstreamOf({ "SKILL.md": skillMd("deploy") });
+    await run(await updatesLayer())(
+      Effect.gen(function* () {
+        const first = yield* imported(upstream.source, "");
+        const updates = yield* SkillUpdates;
+        const log = yield* SkillUpdateLog;
+        const library = yield* SkillLibrary;
+        yield* Effect.promise(() => upstream.commit({ "notes.md": "One." }));
+        yield* updates.check;
+        const [update] = yield* log.waiting;
+        if (update === undefined) return yield* Effect.die("no update");
+
+        // Update adds the revision, then the hub stops before its rollout and before Updates is cleared.
+        yield* (yield* SkillImporter).add(upstream.source, {
+          skillId: first.skill.id,
+          folders: [""],
+          scanned: new Map([["", update.hash]]),
+          after: update.base,
+          by: you,
+        });
+        expect((yield* library.assignments(first.skill.id)).map((one) => one.pin)).toEqual([first.revision.hash]);
+
+        // The next check rolls it out and clears it.
+        yield* updates.check;
+        expect((yield* library.assignments(first.skill.id)).map((one) => one.pin)).toEqual([update.hash]);
+        expect(yield* log.get(first.skill.id)).toBeNull();
+
+        // A rollback made after it stays: a finished rollout is not made again.
+        const [assignment] = yield* library.assignments(first.skill.id);
+        if (assignment === undefined) return;
+        yield* library.rollOut(assignment.id, first.revision.hash, you);
+        yield* updates.check;
+        expect((yield* library.assignments(first.skill.id)).map((one) => one.pin)).toEqual([first.revision.hash]);
+      }),
+    );
+  });
+
+  // covers ADR 029 (Updates from a source), #1097
+  it("[TC-AG-1097-08] says when a review cuts a SKILL.md too long to keep whole", () => {
+    expect(keptInstructions("Short.")).toEqual({ text: "Short.", cut: false });
+    const long = keptInstructions("x".repeat(200_001));
+    expect(long.cut).toBe(true);
+    expect(long.text).toHaveLength(200_000);
+    expect(keptInstructions(null)).toEqual({ text: null, cut: false });
   });
 });

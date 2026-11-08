@@ -63,6 +63,10 @@ export interface SkillUpdatesShape {
     hash: SkillRevisionHash,
     by: SkillBy,
   ) => Effect.Effect<SkillUpdateAccepted, SkillImportError>;
+  /** Not now: the update of `hash` leaves Updates until the source changes again. Null when none waits. */
+  readonly dismiss: (skillId: SkillId, hash: SkillRevisionHash) => Effect.Effect<SkillUpdate | null>;
+  /** Turns Update automatically on or off for a skill; nothing changes when it already was. */
+  readonly setAutomatic: (skillId: SkillId, on: boolean) => Effect.Effect<void>;
 }
 
 export class SkillUpdates extends Context.Service<SkillUpdates, SkillUpdatesShape>()("@hobbots/skills/SkillUpdates") {}
@@ -118,14 +122,11 @@ export const SkillUpdatesLive = Layer.effect(
         const instructions = yield* Effect.forEach(
           changed.filter((file) => isInstructions(file.path)),
           (file) =>
-            Effect.map(
-              file.change === "added" ? Effect.succeed(null) : storedText(latest.hash, file.path),
-              (before) => ({
-                path: file.path,
-                before: keptInstructions(before),
-                after: keptInstructions(file.change === "removed" ? null : upstreamText(upstream, file.path)),
-              }),
-            ),
+            Effect.map(file.change === "added" ? Effect.succeed(null) : storedText(latest.hash, file.path), (text) => {
+              const before = keptInstructions(text);
+              const after = keptInstructions(file.change === "removed" ? null : upstreamText(upstream, file.path));
+              return { path: file.path, before: before.text, after: after.text, cut: before.cut || after.cut };
+            }),
         );
         return new SkillUpdate({
           skillId: skill.id,
@@ -182,7 +183,16 @@ export const SkillUpdatesLive = Layer.effect(
         const upstream = found?.skill;
         if (upstream == null) return { problem: null, updated: false };
         // Content the library has already, upstream unchanged or back to an earlier revision, is no update.
-        if (revisions.some((revision) => revision.hash === upstream.hash)) {
+        const had = revisions.find((revision) => revision.hash === upstream.hash);
+        if (had !== undefined) {
+          // An Update that stopped after adding the revision and before its rollout: the rollout is
+          // finished first. A `pending` rollout moves nothing once it ran, so a rollback made since stays.
+          if ((yield* log.get(skill.id))?.hash === upstream.hash) {
+            const finished = yield* library
+              .rollOutRevision(skill.id, upstream.hash, had.addedBy, "pending")
+              .pipe(Effect.orElseSucceed(() => null));
+            if (finished !== null) yield* announce(finished.entries);
+          }
           const cleared = yield* log.clear(skill.id);
           if (cleared !== null) yield* announce(cleared.entries);
           return { problem: null, updated: false };
@@ -243,6 +253,20 @@ export const SkillUpdatesLive = Layer.effect(
       return { checkedAt: at, problems, updated };
     }).pipe(one.withPermits(1));
 
-    return SkillUpdates.of({ check, accept });
+    const dismiss: SkillUpdatesShape["dismiss"] = (skillId, hash) =>
+      Effect.gen(function* () {
+        const dismissed = yield* log.dismiss(skillId, hash);
+        if (dismissed === null) return null;
+        yield* announce(dismissed.entries);
+        return dismissed.value;
+      });
+
+    const setAutomatic: SkillUpdatesShape["setAutomatic"] = (skillId, on) =>
+      Effect.gen(function* () {
+        const changed = yield* log.setAutomatic(skillId, on);
+        if (changed !== null) yield* announce(changed.entries);
+      });
+
+    return SkillUpdates.of({ check, accept, dismiss, setAutomatic });
   }),
 );

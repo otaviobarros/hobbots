@@ -37,6 +37,11 @@ export const SkillUpdateInstructions = Schema.Struct({
   path: SkillFilePath,
   before: Schema.NullOr(Schema.String),
   after: Schema.NullOr(Schema.String),
+  /**
+   * Whether either text was too long to keep whole: the review then shows only their start, so a
+   * change past it does not show, and you read the file itself before you update.
+   */
+  cut: Schema.Boolean,
 });
 export type SkillUpdateInstructions = typeof SkillUpdateInstructions.Type;
 
@@ -78,6 +83,17 @@ export class SkillUpdate extends Schema.Class<SkillUpdate>("SkillUpdate")({
   state: SkillUpdateState,
   foundAt: Schema.String,
 }) {}
+
+/**
+ * Whether an update found now is the one already recorded, so recording it changes nothing: the same
+ * upstream content, and either set aside with Not now, or reviewed against the same newest revision.
+ * One that waits against an older revision is reviewed again, so Update compares it with the newest.
+ */
+export const skillUpdateKept = (
+  recorded: Pick<SkillUpdate, "hash" | "base" | "state"> | null | undefined,
+  found: Pick<SkillUpdate, "hash" | "base">,
+): boolean =>
+  recorded != null && recorded.hash === found.hash && (recorded.state === "dismissed" || recorded.base === found.base);
 
 /** Whether an update may apply on its own, on a skill set to Update automatically: only one with no flag. */
 export const skillUpdateIsClean = (update: Pick<SkillUpdate, "flags">): boolean => update.flags.length === 0;

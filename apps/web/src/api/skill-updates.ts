@@ -4,7 +4,8 @@ import { call } from "./client.ts";
 
 /**
  * Updates from a source (ADR 029, Updates from a source): what the checks of the library's Git sources
- * found, Check now, and your decisions on it. Only Accept changes the library.
+ * found, Check now, and your decisions on it. Accept changes the library, and so does a check for a
+ * skill set to Update automatically, whose clean updates it accepts and rolls out.
  */
 
 /** Under the skills' key, so reading the library again after a change reads the updates too. */

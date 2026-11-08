@@ -16,6 +16,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, SkillLibrary | SkillUpdateLog | E
 const H1 = SkillRevisionHash.make("a".repeat(64));
 const H2 = SkillRevisionHash.make("b".repeat(64));
 const H3 = SkillRevisionHash.make("c".repeat(64));
+const H4 = SkillRevisionHash.make("d".repeat(64));
 
 /** A skill from Git at r1, and an update of it to `hash`. */
 const seeded = Effect.gen(function* () {
@@ -35,19 +36,19 @@ const seeded = Effect.gen(function* () {
     addedBy: { _tag: "You" },
   });
   const sourceId = value.skill.sourceId ?? SkillSourceId.make("none");
-  const updateTo = (hash: SkillRevisionHash) =>
+  const updateTo = (hash: SkillRevisionHash, base: SkillRevisionHash = H1) =>
     new SkillUpdate({
       skillId: value.skill.id,
       name: value.skill.name,
       sourceId,
-      base: H1,
-      baseNumber: 1,
+      base,
+      baseNumber: base === H1 ? 1 : 2,
       hash,
       commit: "89abcde",
       label: "v1.1.0",
       path: "skills/release",
       files: [{ path: "scripts/tag.sh", change: "added", mode: "executable", size: 20 }],
-      instructions: [{ path: "SKILL.md", before: "Tag.", after: "Tag, then push." }],
+      instructions: [{ path: "SKILL.md", before: "Tag.", after: "Tag, then push.", cut: false }],
       flags: [{ _tag: "Script", path: "scripts/tag.sh" }],
       state: "waiting",
       foundAt: "2026-11-08T09:00:00.000Z",
@@ -67,12 +68,20 @@ describe("skill updates", () => {
         expect(yield* log.waiting).toEqual([updateTo(H2)]);
         // The same content found again changes nothing.
         expect(yield* log.found(updateTo(H2))).toBeNull();
+        // Against a newer revision of the skill, the waiting one is reviewed again, so Update compares
+        // it with the newest; found again against the first, it goes back.
+        const rebased = yield* log.found(updateTo(H2, H4));
+        expect(rebased?.entries.map((entry) => entry.type)).toEqual(["SkillUpdateFound"]);
+        expect((yield* log.get(skill.id))?.base).toBe(H4);
+        yield* log.found(updateTo(H2));
 
         const dismissed = yield* log.dismiss(skill.id, H2);
         expect(dismissed?.value.state).toBe("dismissed");
         expect(dismissed?.entries.map((entry) => entry.type)).toEqual(["SkillUpdateDismissed"]);
         expect(yield* log.dismiss(skill.id, H2)).toBeNull();
         expect(yield* log.found(updateTo(H2))).toBeNull();
+        // Not now holds whatever the skill's newest revision is.
+        expect(yield* log.found(updateTo(H2, H4))).toBeNull();
         expect(yield* log.waiting).toEqual([]);
         expect((yield* log.get(skill.id))?.state).toBe("dismissed");
 

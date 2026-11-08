@@ -102,7 +102,7 @@ const update = (flags: SkillUpdate["flags"] = []) =>
       { path: "scripts/check.sh", change: "added", mode: "executable", size: 20 },
       { path: "notes.md", change: "removed", mode: "regular", size: 5 },
     ],
-    instructions: [{ path: "SKILL.md", before: "a", after: "b" }],
+    instructions: [{ path: "SKILL.md", before: "a", after: "b", cut: false }],
     flags,
     state: "waiting",
     foundAt: AT,
