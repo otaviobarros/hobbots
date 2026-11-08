@@ -109,7 +109,7 @@ Verify denial, grant scoping/expiry, policy changes during waits, child privileg
 - **Search the web** is the runtime's own search, settled per turn by the hub: Claude Code's `WebSearch`, decided by the policy hook, and Codex's search in cached mode, never live or indexed. Allow under every preset, Never per hob or Quest, with no Ask, since Codex's search cannot pause. A runtime with no search of its own shows it as not offered.
 - **Reading a page** is `web_fetch`, a hub tool decided as Use the web for the page's host, with the same presets, overrides and site grants as a command's host. Claude Code's `WebFetch` stays closed. GET only, no cookies or credentials, a `Hobbots` user agent; the answer is labeled as outside data.
 - **Egress.** Every address is resolved once, checked and pinned. Loopback, link-local, cloud metadata and the hub's tailnet addresses are refused; a private network address asks, with Once or Always for its host; each redirect is decided again.
-- **Provenance.** A URL from you, a reported search result or a page read in the session follows the site rules. A URL the hob wrote itself asks under every preset.
+- **Provenance.** A URL from text you wrote, a reported search result or a page read in the session follows the site rules. A URL the hob wrote itself asks under every preset, also when it reaches another hob's session through a Task brief, a step brief or a message: a hob's text never makes a URL found.
 - **The read-the-web mark.** Once a session has searched or read a page, a URL the hob wrote, a new host from a command, Charm writes, pushes and shared memory saves ask until the session ends. Local work and found links do not.
 
 ## The hob directory

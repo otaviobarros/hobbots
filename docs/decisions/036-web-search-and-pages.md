@@ -1,6 +1,6 @@
 # ADR 036 — Searching and reading the web
 
-Status: **Proposed.** Amends the operations, presets and Charms of [ADR 014](014-tool-policy-and-enforcement.md) (a new built-in Search the web operation, and web search is built in rather than a future Charm), the tools Codex keeps off in [ADR 024](024-codex-adapter.md) (cached web search can be on), and the outside-data label of [ADR 031](031-charm-actions-and-registry.md) (built-in reads of the web carry it too). Refines the [permissions contract](../architecture/permissions.md) and the [runtime adapters](../architecture/runtime-adapters.md). Records the design of the web search slice ([#1264](https://github.com/otaviobarros/hobbots/issues/1264)) for [#1265](https://github.com/otaviobarros/hobbots/issues/1265).
+Status: **Accepted.** Amends the operations, presets and Charms of [ADR 014](014-tool-policy-and-enforcement.md) (a new built-in Search the web operation, and web search is built in rather than a future Charm), the tools Codex keeps off in [ADR 024](024-codex-adapter.md) (cached web search can be on), and the outside-data label of [ADR 031](031-charm-actions-and-registry.md) (built-in reads of the web carry it too). Refines the [permissions contract](../architecture/permissions.md) and the [runtime adapters](../architecture/runtime-adapters.md). Records the design of the web search slice ([#1264](https://github.com/otaviobarros/hobbots/issues/1264)) for [#1265](https://github.com/otaviobarros/hobbots/issues/1265).
 
 ## Context
 
@@ -45,7 +45,7 @@ A new built-in operation, **Search the web** (`search-web`), in a new Web group 
 
 ### Reading a page: `web_fetch`
 
-`web_fetch` is a built-in tool set on the hub action pipeline (ADR 031), like Local Git, Memory and Skills. It is offered through `HubTools` on Claude Code, Codex and the fake runtime, and no adapter imports `@hobbots/web`. Its name is checked against every other hub tool in the registry.
+`web_fetch` is a built-in tool set on the hub action pipeline (ADR 031), like Local Git, Memory and Skills. It is offered through `HubTools` on Claude Code, Codex and the fake runtime, and no adapter imports `@hobbots/web-access`. Its name is checked against every other hub tool in the registry.
 
 - **Input:** `url`, and `part` for the next part of a long page.
 - **Answer:** the page's title, final URL, fetch time, its readable text as Markdown (headings, lists, tables and links kept), and its links as a numbered list. The text is capped at 100,000 characters a part. A longer page ends with how many parts it has and the `part` that comes next.
@@ -71,9 +71,11 @@ The hub fetches outside the sandbox, from your computer and your network, so it 
 
 A URL counts as **found** when it came from:
 
-- one of your messages in the thread or the Task's brief;
+- text you wrote yourself: your messages in the thread, and a Task brief or Quest goal you wrote or edited;
 - a search result the runtime reported in this session;
 - a link on a page `web_fetch` read in this session, or a page's final URL.
+
+The hub keeps each session's **found set**: every URL from those sources, with where it came from. Text a hob wrote never makes a URL found, whatever it is stored as. A Task brief from `delegate_task`, a step brief from `plan_steps`, a message between hobs or a result is a hob's text, so a URL in it is found in the child's session only when it was already in the found set of the session that wrote it; the hub passes that part of the set on with the Task and its origin. Otherwise a hob could put your file's contents into a URL in a child's brief and the child would read it without asking.
 
 The hub compares the URL character for character, after normalizing the host and dropping the fragment. A found URL is decided by the site rules. A URL that is not found was written by the hob, perhaps with your data in it, so it **asks under every preset**, with the full URL on the card. Once answers it. A site grant does not answer it: a grant says the site is fine, not that this URL is.
 
@@ -106,14 +108,14 @@ The narrower answer comes from the hub on every runtime, from its own record of 
 - **Counts.** Searches come from `WebSearched` events: on Claude Code, checked against `web_search_requests`; on Codex, one per `webSearch` item with a `search` action. Pages come from `WebFetched`. They are counted per turn, Task, Quest and hob.
 - **Limits, configurable.** In Settings › Web, with per-hob overrides: 10 searches and 30 pages per turn, and 200 searches per hob per day, by default. The hub enforces them. Past a limit, Claude Code's `WebSearch` and `web_fetch` are refused with an answer that says which limit. Codex's search cannot be stopped mid-turn, so its per-turn search limit is soft: a turn over it, or a hob over its daily limit, starts its next turn with search off.
 - **Blocked sites.** Settings › Web holds a list `web_fetch` refuses. It cannot filter what a provider's search returns, and the setting says so.
-- **Cost.** Shown only where the sign-in is billed per search (an API key: Anthropic bills each search), from a price table in `@hobbots/web`. A subscription shows counts, not money. No adapter knows prices or limits.
+- **Cost.** Shown only where the sign-in is billed per search (an API key: Anthropic bills each search), from a price table in `@hobbots/web-access`. A subscription shows counts, not money. No adapter knows prices or limits.
 - **Backups.** Records and settings are in backups and exports (ADR 026). Diagnostics include counts and settings, not queries or URLs.
 
 ### Packages
 
 - `@hobbots/domain`: the `search-web` operation and its preset answers, the mark, the web events and settings, and their stored-data decoding.
 - `@hobbots/agents`: the `WebFetcher` and `WebSearchProvider` ports, and the pure rules: provenance, the mark, limits.
-- `@hobbots/web` (new, adapter layer): the HTTP client, the address guard, page to text, paging, the cache and the price table. No other module imports it, and it imports no runtime and no Charm; the layer check holds that. `@hobbots/server` composes it behind the ports.
+- `@hobbots/web-access` (new, adapter layer; `@hobbots/web` is already the browser app): the HTTP client, the address guard, page to text, paging, the cache and the price table. No other module imports it, and it imports no runtime and no Charm; the layer check holds that. `@hobbots/server` composes it behind the ports.
 - **Libraries, not our own.** Effect's HTTP client over undici (`NodeHttpClient.layerUndiciOptions` from `@effect/platform-node` 4.1.0), with undici's `connect.lookup` resolving once, checking and pinning the address, and redirects handled by the hub. `undici` 8.12.4 if a guard needs it directly. For the text, `@mozilla/readability` 0.6.0 on `linkedom` 0.18.15 with `turndown` 7.2.5 for Markdown, or `defuddle` 0.19.6, which returns Markdown itself. #1267 compares the two on a fixed set of real pages (articles, docs, release notes, a license file, a GitHub page) and records the pick and its reasons. Each is added at its latest stable release, as an exact version, after reading its current documentation.
 
 ### Browser use (#382)
@@ -141,7 +143,7 @@ What leaves your computer, for `PRIVACY.md`, `SECURITY.md` and the Permissions t
 ## Consequences
 
 - [#1266](https://github.com/otaviobarros/hobbots/issues/1266) adds Search the web, `PromptRequest.webSearch`, `WebSearch` on Claude Code, `"cached"` on Codex, the fake runtime's scripted search, `WebSearched` and the not-offered state, and probes both runtimes' search with a real sign-in.
-- [#1267](https://github.com/otaviobarros/hobbots/issues/1267) creates `@hobbots/web` and `web_fetch`: the address guard, provenance, robots.txt, the cache and the library comparison.
+- [#1267](https://github.com/otaviobarros/hobbots/issues/1267) creates `@hobbots/web-access` and `web_fetch`: the address guard, provenance, robots.txt, the cache and the library comparison.
 - [#1268](https://github.com/otaviobarros/hobbots/issues/1268) adds the read-the-web mark and what asks while it holds.
 - [#1269](https://github.com/otaviobarros/hobbots/issues/1269) records searches and pages, enforces the limits and adds Settings › Web.
 - [#1270](https://github.com/otaviobarros/hobbots/issues/1270) and [#1271](https://github.com/otaviobarros/hobbots/issues/1271) design and build the step lines, sources, approval card variants, the Web group in Permissions, Built in rows in the Charms tab, Settings › Web and usage. No Browser tab history in this slice.
@@ -160,7 +162,7 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - A hob reads a page and gets its title, final URL, text and links, and a long page in parts; a PDF is answered as not readable this way. Not proven yet ([#1267](https://github.com/otaviobarros/hobbots/issues/1267)).
 - Under Careful the first page on a new site asks and Always for the site answers the next; Never for Use the web refuses it. Not proven yet ([#1267](https://github.com/otaviobarros/hobbots/issues/1267)).
 - `localhost`, `127.0.0.1`, `169.254.169.254`, a host that resolves to one and a redirect to one are refused; a private address asks with Once and Always for its host. Not proven yet ([#1267](https://github.com/otaviobarros/hobbots/issues/1267)).
-- A URL the hob built with data in it asks under every preset, while a link from a page it read does not. Not proven yet ([#1267](https://github.com/otaviobarros/hobbots/issues/1267)).
+- A URL the hob built with data in it asks under every preset, while a link from a page it read does not. A URL with data in it that a hob put into a child's Task brief or step brief asks in the child's session, while a URL the parent had found passes on as found. Not proven yet ([#1267](https://github.com/otaviobarros/hobbots/issues/1267)).
 - On Claude Code, Codex and the fake runtime, a `web_fetch` call is recorded before it is sent. Not proven yet ([#1267](https://github.com/otaviobarros/hobbots/issues/1267)).
 - After a hob reads a page that tells it to send a file's contents elsewhere, the request asks, whether it goes through a built URL, `curl` to a new host, a GitHub comment or a memory share, on Claude Code and Codex, also in the session's next turn. Not proven yet ([#1268](https://github.com/otaviobarros/hobbots/issues/1268)).
 - A hob that searches, opens two result links, edits files and runs tests is asked nothing under Balanced, and a thread that never touched the web is not affected. Not proven yet ([#1268](https://github.com/otaviobarros/hobbots/issues/1268)).
