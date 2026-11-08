@@ -15,7 +15,6 @@ import { useActivity } from "../../api/activity.ts";
 import { ApiError } from "../../api/client.ts";
 import { settleBrain } from "../../api/first-hob.ts";
 import {
-  aboutLine,
   changeCount,
   draftProblem,
   INSTRUCTIONS_MAX,
@@ -26,6 +25,8 @@ import {
   RETIRE_OPTIONS,
   rebaseDraft,
   retiredSummary,
+  type Summoner,
+  summonerOf,
 } from "../../api/profile.ts";
 import {
   agentsQuery,
@@ -37,6 +38,7 @@ import {
   useRetireHob,
   useUpdateHob,
 } from "../../api/queries.ts";
+import { formatMonthDay } from "../../lib/format.ts";
 import { type HobState, hobState } from "../../lib/hob-state.ts";
 import { ExportDialog } from "../export/export-dialog.tsx";
 import { messages as exportCopy } from "../export/messages.ts";
@@ -305,15 +307,47 @@ function ProfileHero({
 
 /**
  * Where the hob works, who summoned it and when, and its version. A summoner that is not among the
- * live hobs is looked for among the retired ones, read only then.
+ * live hobs is looked for among the retired ones, read only then; until that read answers the line
+ * names no summoner, and if it fails it says so with Try again.
  */
 function AboutLine({ hob }: { hob: Agent }) {
+  const copy = messages.profile.about;
   const live = useQuery(agentsQuery);
   const summoner = hob.summonedBy;
   const missing = summoner !== null && live.data?.some((other) => other.id === summoner) === false;
   const retired = useQuery({ ...archivedAgentsQuery, enabled: missing });
-  return <p className="m-0 text-meta text-label">{aboutLine(hob, [...(live.data ?? []), ...(retired.data ?? [])])}</p>;
+  const complete = live.isSuccess && (!missing || retired.isSuccess);
+  const failed = live.isError || (missing && retired.isError);
+  const by = summonerOf(hob, [...(live.data ?? []), ...(retired.data ?? [])], complete);
+  const line = copy.line({
+    summoned: summonedLine(by, formatMonthDay(new Date(hob.createdAt))),
+    version: hob.configVersion,
+  });
+  if (!failed) return <p className="m-0 text-meta text-label">{line}</p>;
+  return (
+    <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-label">
+      <span>{line}</span>
+      <span role="alert">{copy.failed}</span>
+      <Button variant="chip" size="xs" onClick={() => void (live.isError ? live.refetch() : retired.refetch())}>
+        {copy.retry}
+      </Button>
+    </p>
+  );
 }
+
+const summonedLine = (by: Summoner, date: string): string => {
+  const copy = messages.profile.about;
+  switch (by.kind) {
+    case "you":
+      return copy.byYou({ date });
+    case "hob":
+      return copy.byHob({ hob: by.name, date });
+    case "gone":
+      return copy.byGone({ date });
+    case "unknown":
+      return copy.byUnknown({ date });
+  }
+};
 
 /** Pause or wake the hob, and the way to retire it. Both act at once, outside the save bar. */
 function TakeABreak({

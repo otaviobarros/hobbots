@@ -229,6 +229,19 @@ export const messages = {
       `Saved. ${name}'s next reply uses the new settings. Replies already running finish the old way.`,
     undo: "Undo",
     save: "Save changes",
+    /** The line under the profile: where the hob works, who summoned it and when, and its version. */
+    about: {
+      line: ({ summoned, version }: { summoned: string; version: number }) =>
+        `Works on the hub · ${summoned} · Version ${version}`,
+      byYou: ({ date }: { date: string }) => `Summoned by you on ${date}`,
+      byHob: ({ hob, date }: { hob: string; date: string }) => `Summoned by ${hob} on ${date}`,
+      /** A summoner that is no longer kept. */
+      byGone: ({ date }: { date: string }) => `Summoned by another hob on ${date}`,
+      /** While the hob that summoned it is still being looked up, or could not be. */
+      byUnknown: ({ date }: { date: string }) => `Summoned on ${date}`,
+      failed: "Hobbots could not read which hob summoned it.",
+      retry: "Try again",
+    },
     rest: {
       heading: "Take a break",
       pause: ({ name }: { name: string }) => `Pause ${name}`,
