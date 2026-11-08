@@ -52,12 +52,12 @@ You never create an app by hand or handle a key file. Connecting a hob's app (#2
 | Field | Value |
 |---|---|
 | `name` | `<hob name>-hobbots`, cut to GitHub's 34 characters. You can change it on GitHub before you click Create. |
-| `url` | `https://hobbots.ai` |
+| `url` | `https://hobbots.app` |
 | `description` | Says the app is the hob's identity on GitHub, made by Hobbots. |
 | `public` | `false` |
 | `default_permissions` | The permissions of ADR 020's app, and nothing else: Metadata read; Contents, Issues and Pull requests read and write; Checks, Actions and Commit statuses read; Workflows write. |
 | `default_events` | None |
-| `hook_attributes` | `active: false`, with `url` set to `https://hobbots.ai`, since GitHub requires one. If #223 finds that GitHub accepts a manifest without `hook_attributes`, it is left out instead. |
+| `hook_attributes` | `active: false`, with `url` set to `https://hobbots.app`, since GitHub requires one. If #223 finds that GitHub accepts a manifest without `hook_attributes`, it is left out instead. |
 | `redirect_url` | The hub's callback on loopback (below) |
 | `callback_urls`, `setup_url`, `request_oauth_on_install` | Not set. The hob's app never acts as you, so it needs no user sign-in. |
 

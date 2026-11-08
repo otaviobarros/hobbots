@@ -254,12 +254,12 @@ describe("A hob's own GitHub App", () => {
     const posted = github.apps[0];
     expect(posted?.manifest).toEqual({
       name: "frodo-hobbots",
-      url: "https://hobbots.ai",
+      url: "https://hobbots.app",
       description: expect.stringContaining("Frodo"),
       public: false,
       default_permissions: HOB_APP_PERMISSIONS,
       default_events: [],
-      hook_attributes: { url: "https://hobbots.ai", active: false },
+      hook_attributes: { url: "https://hobbots.app", active: false },
       redirect_url: `${HUB}/github/hob-app/callback`,
     });
     expect(result.made.app).toMatchObject({
