@@ -499,15 +499,26 @@ test("[TC-UX-1099] the Overview shows every finding and what each hob carries, a
   const aside = page.getByRole("complementary", { name: "About this skill" });
   await aside.getByRole("link", { name: "Edit" }).click();
   await main.getByLabel("When to use it").fill("Use when a folder needs tidying before a release.");
+  // Reading the draft back fails on the way until `failing` is turned off: never taken as gone.
+  let failing = true;
+  await page.route("**/api/skill-trials/*", (route) =>
+    failing && route.request().method() === "GET" ? route.fulfill({ status: 500, body: "{}" }) : route.fallback(),
+  );
   await main.getByRole("button", { name: "Try in a chat" }).click();
   await page.getByRole("menuitem", { name: /Wren/ }).click();
 
   await expect(page).toHaveURL(/\/threads\//);
   const notice = page.getByRole("region", { name: "Trying the draft of Tidy up." });
   await expect(notice).toContainText("nothing here reaches the library");
+  await expect(notice.getByRole("link", { name: "Back to the draft" })).toBeVisible();
   await expectAccessible(page, page.getByRole("main"));
-  // Back to the draft opens the editor on the text you tried, so you save what you tested.
+  // Back to the draft opens the editor on the text you tried, so you save what you tested. A read that
+  // fails on the way says so with Try again, and never opens the editor without your text.
   await notice.getByRole("link", { name: "Back to the draft" }).click();
+  await expect(main.getByRole("alert")).toContainText("Hobbots could not open the draft you tried.");
+  await expect(main.getByLabel("When to use it")).toHaveCount(0);
+  failing = false;
+  await main.getByRole("button", { name: "Try again" }).click();
   await expect(main.getByRole("heading", { name: "Edit Tidy up" })).toBeVisible();
   await expect(main.getByLabel("When to use it")).toHaveValue("Use when a folder needs tidying before a release.");
   await main.getByRole("button", { name: "Save and roll out to 1 place" }).click();

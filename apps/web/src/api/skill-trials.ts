@@ -1,7 +1,7 @@
 import type { SkillHealth, SkillTrialDraftPayload, SkillTrialText } from "@hobbots/api";
 import type { AgentId, Thread, ThreadId } from "@hobbots/domain";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
-import { call } from "./client.ts";
+import { ApiError, call } from "./client.ts";
 import { queryKeys } from "./queries.ts";
 
 /**
@@ -42,5 +42,9 @@ export const skillTrialDraftQuery = (threadId: ThreadId) =>
     queryKey: ["skills", "trial", threadId] as const,
     queryFn: (): Promise<SkillTrialText> => call((c) => c.skillTrials.draft({ params: { threadId } })),
     staleTime: Number.POSITIVE_INFINITY,
-    retry: false,
+    // A draft the hub no longer has stays gone; any other failure is tried again.
+    retry: (count, error) => !draftGone(error) && count < 2,
   });
+
+/** Whether a read of a tried draft failed because the hub no longer has it, not on the way there. */
+export const draftGone = (error: unknown): boolean => error instanceof ApiError && error.tag === "SkillDraftGone";

@@ -1,7 +1,7 @@
 import { skillTitle, type Thread } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { skillTrialDraftQuery } from "../../api/skill-trials.ts";
+import { draftGone, skillTrialDraftQuery } from "../../api/skill-trials.ts";
 import { SkillIcon } from "../skill-line/skill-picker.tsx";
 import { messages } from "./messages.ts";
 import { draftSearch } from "./try-in-chat-model.ts";
@@ -19,6 +19,9 @@ export function TrialNotice({ thread }: { thread: Thread | undefined }) {
   const draft = useQuery({ ...skillTrialDraftQuery(thread?.id ?? ("" as Thread["id"])), enabled: trial !== null });
   if (thread === undefined || trial === null) return null;
   const title = skillTitle(trial.name);
+  // Only the hub saying so makes the draft gone; a read that failed on the way leaves Back to the draft,
+  // whose editor reads it again.
+  const gone = draft.isError && draftGone(draft.error);
   return (
     <section
       aria-label={copy.notice({ name: title })}
@@ -29,9 +32,9 @@ export function TrialNotice({ thread }: { thread: Thread | undefined }) {
       </span>
       <span className="min-w-0 flex-1 text-text-secondary">
         <b className="font-semibold text-text-strong">{copy.notice({ name: title })}</b>{" "}
-        {draft.isError ? <span role="alert">{copy.draftGone}</span> : copy.noticeHint}
+        {gone ? <span role="alert">{copy.draftGone}</span> : copy.noticeHint}
       </span>
-      {!draft.isError && (
+      {!gone && (
         <Link to="/skills" search={draftSearch(trial, thread.id)} className="text-ui text-link">
           {copy.backToDraft}
         </Link>

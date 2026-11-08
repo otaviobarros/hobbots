@@ -64,6 +64,7 @@ export const messages = {
       "The draft this chat tries is no longer on this hub, as after a restore, so nothing runs here. Try in a chat again from where you wrote it.",
     editorGone: "The draft you tried is no longer on this hub, as after a restore, so this opens without it.",
     loadingDraft: "Opening the draft you tried…",
+    draftFailed: "Hobbots could not open the draft you tried.",
   },
   health: {
     aHob: "A hob",

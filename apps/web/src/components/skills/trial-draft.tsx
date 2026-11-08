@@ -1,15 +1,27 @@
 import type { SkillTrialText } from "@hobbots/api";
 import { ThreadId } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { skillTrialDraftQuery } from "../../api/skill-trials.ts";
+import { draftGone, skillTrialDraftQuery } from "../../api/skill-trials.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.trial;
 
 function DraftRead({ trial, children }: { trial: string; children: (draft: SkillTrialText | null) => ReactNode }) {
   const draft = useQuery(skillTrialDraftQuery(ThreadId.make(trial)));
+  // A read that failed on the way: the draft may still be there, so the editor waits for it.
+  if (draft.isError && !draftGone(draft.error)) {
+    return (
+      <p role="alert" className="m-0 flex max-w-[760px] flex-wrap items-center gap-3 text-ui text-text-secondary">
+        {copy.draftFailed}
+        <Button variant="outline" size="xs" onClick={() => void draft.refetch()} disabled={draft.isFetching}>
+          {copy.tryAgain}
+        </Button>
+      </p>
+    );
+  }
   if (draft.isError) {
     return (
       <>
