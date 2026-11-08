@@ -227,7 +227,7 @@ const rollOutAll = (
   );
 
 /** The folders a hob works in now, as its permissions give them, or its own folders on a hub without them. */
-export const hobFolders = (permissions: Option.Option<PermissionSummary["Service"]>, agent: Agent) =>
+const hobFolders = (permissions: Option.Option<PermissionSummary["Service"]>, agent: Agent) =>
   Option.isSome(permissions)
     ? Effect.map(permissions.value.of(agent), (summary) => summary.folders)
     : Effect.succeed(agent.policy.ownFolders);

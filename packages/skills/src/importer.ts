@@ -167,6 +167,11 @@ export interface SkillImportOptions {
   readonly skillId?: SkillId;
   /** The revision of `skillId` the new one was made from; the import fails once the skill's newest is another. */
   readonly after?: SkillRevisionHash;
+  /**
+   * Follow the source itself, even for a skill its `skills-lock.json` says the `skills` CLI installed
+   * from elsewhere: a repository's own skills are followed on its default branch (ADR 029, Scopes).
+   */
+  readonly followSource?: boolean;
   readonly by: SkillBy;
 }
 
@@ -633,7 +638,11 @@ export const SkillImporterLive = Layer.effect(
           const one = checked.find((each) => !each.fromExport.older && folderOf(each) === folder);
           if (one === undefined) return yield* new SkillNotFound({ id: folder });
           if (one.result._tag === "Refused") return yield* one.result.refusal;
-          chosen.push({ skill: one.result.skill, locked: one.locked, fromExport: one.fromExport });
+          chosen.push({
+            skill: one.result.skill,
+            locked: options.followSource === true ? null : one.locked,
+            fromExport: one.fromExport,
+          });
         }
         if (chosen.length === 0) return yield* new SkillSourceUnreadable({ message: "There is no SKILL.md in it." });
         if (options.skillId !== undefined && chosen.length > 1) {

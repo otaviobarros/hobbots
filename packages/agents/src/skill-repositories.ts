@@ -16,3 +16,15 @@ export interface SkillRepositoryOffersShape {
 export class SkillRepositoryOffers extends Context.Service<SkillRepositoryOffers, SkillRepositoryOffersShape>()(
   "@hobbots/agents/SkillRepositoryOffers",
 ) {}
+
+/**
+ * The skill folders a clone holds in `.claude/skills` and `.agents/skills`, each `<root>/<name>` with
+ * a `SKILL.md`, sorted: it only lists, so Hobbots can offer them. A folder that cannot be read holds none.
+ */
+export interface RepositorySkillFinderShape {
+  readonly folders: (checkout: string) => Effect.Effect<ReadonlyArray<string>>;
+}
+
+export class RepositorySkillFinder extends Context.Service<RepositorySkillFinder, RepositorySkillFinderShape>()(
+  "@hobbots/agents/RepositorySkillFinder",
+) {}

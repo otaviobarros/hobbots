@@ -29,6 +29,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
+import { RepositorySkillFinderLive, SkillRepositoriesLive } from "@hobbots/skills";
 import { Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -84,6 +85,7 @@ beforeEach(async () => {
         GrantService.layer,
         HobService.layer,
         PermissionSummary.layer,
+        SkillRepositoriesLive.pipe(Layer.provide(Layer.mergeAll(RepositorySkillFinderLive, PermissionSummary.layer))),
       ),
     ),
     Layer.provideMerge(SkillsLive(data, null)),
@@ -294,5 +296,45 @@ describe("a repository's own skills", () => {
     });
     expect(accepted.status).toBe(200);
     expect(await loaded()).toEqual([update.hash]);
+  });
+  // covers ADR 029 (Scopes, Updates from a source), #1098
+  it("[TC-AG-1098-03] follows the repository's default branch even for a skill its skills-lock.json says came from elsewhere", async () => {
+    const { site } = await repositoryWithSkills();
+    // The skills CLI installed refunds from another repository, and the lock says so.
+    const lock = {
+      version: 1,
+      skills: { refunds: { source: "acme/skills", sourceType: "github", computedHash: "0" } },
+    };
+    await writeIn(site, { "skills-lock.json": JSON.stringify(lock) });
+    git(site, "add", "--all");
+    git(site, "commit", "--quiet", "--message", "lock");
+    git(site, "push", "--quiet", "origin", "main");
+    const [repository] = (await request("GET", "/api/skill-repositories")).body.repositories;
+    const { candidates, commit } = (
+      await request("POST", "/api/skill-repositories/scan", { project: repository.project })
+    ).body.scan;
+    const refunds = candidates.find((one: { name: string }) => one.name === "refunds");
+    const imported = await request("POST", "/api/skill-repositories/import", {
+      project: repository.project,
+      scanned: [{ folder: refunds.folder, hash: refunds.hash }],
+    });
+    expect(imported.status).toBe(200);
+    expect(imported.body.imported[0].revision).toMatchObject({ commit, path: ".agents/skills/refunds" });
+    const sources = (await request("GET", "/api/skills")).body.sources;
+    expect(sources.map((one: { origin: unknown }) => one.origin)).toEqual([
+      { _tag: "Git", url: repository.url, ref: null },
+    ]);
+
+    // A change on the project's default branch is the update, not one at the lock's source.
+    await writeIn(site, {
+      ".agents/skills/refunds/SKILL.md": skillMd("refunds", "When a customer asks for money back."),
+    });
+    git(site, "commit", "--quiet", "--all", "--message", "describe refunds");
+    git(site, "push", "--quiet", "origin", "main");
+    const checked = await request("POST", "/api/skill-updates/check");
+    expect(checked.body.problems).toEqual([]);
+    expect(checked.body.updates.map((one: { name: string; path: string }) => [one.name, one.path])).toEqual([
+      ["refunds", ".agents/skills/refunds"],
+    ]);
   });
 });

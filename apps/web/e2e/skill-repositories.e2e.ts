@@ -152,3 +152,27 @@ test("[TC-UX-1098-02] Not now closes the offer until the repository holds a new 
   await expect(offer).toContainText("Found in .claude/skills and .agents/skills while Pip worked in");
   await expectAccessible(page, main);
 });
+
+// covers ADR 029 (Scopes), STD-REACT-015, #1098
+test("[TC-UX-1098-03] a repository list that cannot be read says so, with Try again, on the overview and in From a project", async ({
+  page,
+}) => {
+  const { url } = await hubWithRepository();
+  const list = "**/api/skill-repositories";
+  await page.route(list, (route) => route.fulfill({ status: 500, body: "" }));
+  await page.goto(`${url}/#/skills`);
+  const main = page.getByRole("main", { name: "Skills" });
+  // The client asks again a few times before it gives up.
+  const failed = main.getByRole("alert").filter({ hasText: "could not check the folders your hobs work in" });
+  await expect(failed).toBeVisible({ timeout: 20_000 });
+  await expectAccessible(page, main);
+
+  await page.goto(`${url}/#/skills?add=repo`);
+  await expect(failed).toBeVisible({ timeout: 20_000 });
+  await expect(main).not.toContainText("Opening your skills");
+
+  await page.unroute(list);
+  await failed.getByRole("button", { name: "Try again" }).click();
+  await expect(main).toContainText("Found in");
+  await expect(main.getByRole("checkbox", { name: "Import Triage" })).toBeChecked();
+});

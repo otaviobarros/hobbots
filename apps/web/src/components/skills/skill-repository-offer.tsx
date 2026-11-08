@@ -67,9 +67,24 @@ function Offer({ repository, hobs, say }: { repository: SkillRepository; hobs: H
   );
 }
 
+/** A read that failed: what happened, and Try again. */
+export function ReadFailed({ text, retrying, onRetry }: { text: string; retrying: boolean; onRetry: () => void }) {
+  return (
+    <p role="alert" className="m-0 flex items-center gap-3 rounded-card bg-notice px-4 py-3 text-ui text-text">
+      <span className="flex-1">{text}</span>
+      <Button variant="outline" size="xs" disabled={retrying} onClick={onRetry}>
+        {copy.retry}
+      </Button>
+    </p>
+  );
+}
+
 /** The repositories whose skills Hobbots still offers, one card each, above the library. */
 export function RepositoryOffers({ hobs, say }: { hobs: HobDirectory; say: Say }) {
-  const offered = (useQuery(skillRepositoriesQuery).data?.repositories ?? []).filter((one) => one.offered);
+  const read = useQuery(skillRepositoriesQuery);
+  if (read.isError && read.data === undefined)
+    return <ReadFailed text={copy.listFailed} retrying={read.isFetching} onRetry={() => void read.refetch()} />;
+  const offered = (read.data?.repositories ?? []).filter((one) => one.offered);
   return offered.map((repository) => <Offer key={repository.project} repository={repository} hobs={hobs} say={say} />);
 }
 

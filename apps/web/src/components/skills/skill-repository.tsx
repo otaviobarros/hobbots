@@ -9,7 +9,7 @@ import { importSkillRepository, scanSkillRepository, skillRepositoriesQuery } fr
 import { refreshSkills, skillsErrorTag } from "../../api/skills.ts";
 import { ImportCandidates } from "./import-candidates.tsx";
 import { messages } from "./messages.ts";
-import { hobName, rootsOf, useDismiss } from "./skill-repository-offer.tsx";
+import { hobName, ReadFailed, rootsOf, useDismiss } from "./skill-repository-offer.tsx";
 import type { Say } from "./skills-flash.ts";
 import { type HobDirectory, importable, projectName, skillsSearchOf, skillTitle } from "./skills-model.ts";
 
@@ -151,14 +151,7 @@ function RepositoryRead({ repository, hobs, say }: { repository: SkillRepository
     retry: false,
   });
   if (read.isError)
-    return (
-      <p role="alert" className="m-0 flex items-center gap-3 rounded-card bg-notice px-4 py-3 text-ui text-text">
-        <span className="flex-1">{copy.unreadable}</span>
-        <Button variant="outline" size="xs" disabled={read.isFetching} onClick={() => void read.refetch()}>
-          {copy.retry}
-        </Button>
-      </p>
-    );
+    return <ReadFailed text={copy.unreadable} retrying={read.isFetching} onRetry={() => void read.refetch()} />;
   if (read.data === undefined)
     return (
       <p role="status" className="m-0 text-ui text-text-secondary">
@@ -189,6 +182,14 @@ export function RepositorySource({
   const repositories = useQuery(skillRepositoriesQuery);
   const all = repositories.data?.repositories ?? [];
   const open = all.find((one) => one.project === project) ?? all[0];
+  if (repositories.isError && repositories.data === undefined)
+    return (
+      <ReadFailed
+        text={copy.listFailed}
+        retrying={repositories.isFetching}
+        onRetry={() => void repositories.refetch()}
+      />
+    );
   if (repositories.data === undefined)
     return (
       <p role="status" className="m-0 text-ui text-text-secondary">

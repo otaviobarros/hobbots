@@ -322,6 +322,7 @@ export const messages = {
     unreadable:
       "Hobbots could not read the repository's default branch from its origin. Check that this computer can fetch it, then try again.",
     retry: "Try again",
+    listFailed: "Hobbots could not check the folders your hobs work in for a repository's skills.",
     found: ({ folders, commit, name }: { folders: ReadonlyArray<string>; commit: string | null; name: string }) =>
       commit === null
         ? `Found in ${formatList(folders)}, on its default branch. They become the ${name} project's skills, with revisions like any other. When the default branch changes them, you see an update.`
