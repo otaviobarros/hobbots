@@ -1,5 +1,6 @@
 import { clip } from "@hobbots/agents";
 import {
+  APPROVAL_RULE,
   ancestorsOf,
   answerHow,
   type BackpackItem,
@@ -150,11 +151,12 @@ export const RESULTS_RULE =
 
 /**
  * What the lead of a Quest is told in each turn on its Task, after the rule itself. Where the user
- * asked for the work to go is theirs to change (#1215).
+ * asked for the work to go is theirs to change (#1215), and so are a member's approvals (#1216).
  */
 const LEAD_DUTY =
   "So never hand a Task what the Tasks it comes after returned. Call hand_off when a member needs something else, or needs a result while it is already running. " +
-  "Where the user asked for the work to go is theirs to change: when it cannot go there, escalate a member's question about where else to put it, or ask the user, and never choose another place yourself.";
+  "Where the user asked for the work to go is theirs to change: when it cannot go there, escalate a member's question about where else to put it, or ask the user, and never choose another place yourself. " +
+  `A member's approvals are the user's too: ${APPROVAL_RULE} When a member asks you for permission to act, answer only that it should make the call and wait for the user's decision, and never tell the user a lead approved one.`;
 
 /**
  * What a turn on `task` is told when that Task leads a Quest: the rule, then the lead's duty. Both
@@ -186,6 +188,7 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
     `${lead} gave you this Task as part of a Quest ${lead} leads. You work on it in your own session, and you deal only with ${lead}, never with the other hobs on the Quest.`,
     RESULTS_RULE,
     COMMIT_RULE,
+    APPROVAL_RULE,
     ...(delegation?.expectedOutput == null ? [] : [`${lead} expects back: ${delegation.expectedOutput}`]),
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(task, tree),

@@ -95,8 +95,13 @@ describe("a dependent member's prompt", () => {
       ),
     ]);
     const prompt = memberPrompt(read.tasks.at(-1) as Task, read, "Frodo");
-    // Each result is cut to 4,000 characters, and all of them together to 16,000.
-    expect(prompt.length).toBeLessThan(17_000);
+    const alone = memberPrompt(
+      task("frontend", ROOK, "queued", []),
+      tree([task("frontend", ROOK, "queued", [])]),
+      "Frodo",
+    );
+    // Each result is cut to 4,000 characters, and all of them together to 16,000, beside the lines every member is told.
+    expect(prompt.length - alone.length).toBeLessThanOrEqual(16_001);
     expect(prompt).toContain("Task dep0 (Brief for dep0) returned:");
     expect(prompt.endsWith("Task id: frontend.")).toBe(true);
   });
