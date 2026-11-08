@@ -522,6 +522,10 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
 
     const colors = HobColor.literals;
 
+    /** The fields given a value, so one left out stays out of the request. */
+    const defined = (fields: Record<string, unknown>) =>
+      Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+
     /** A summon draft as Summon's request, with what it leaves out filled with Summon's defaults. */
     const createPayload = (draft: SummoningDraft, id: AgentId, manager: Agent, seed: number): CreateAgentPayload => {
       const role = draft.role ?? null;
@@ -534,9 +538,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         sigil: draft.sigil ?? role ?? DEFAULT_SIGIL,
         hat: draft.hat ?? null,
         tool: draft.tool ?? null,
-        ...(draft.good_at === undefined ? {} : { goodAt: draft.good_at }),
-        ...(draft.voice === undefined ? {} : { voice: draft.voice }),
-        ...(draft.length === undefined ? {} : { length: draft.length }),
+        ...defined({ goodAt: draft.good_at, voice: draft.voice, length: draft.length }),
         lookSeed,
         lookColor: draft.look_color ?? (colors[lookSeed % colors.length] as HobColor),
         runtime: draft.runtime ?? manager.runtime,
@@ -565,9 +567,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         model: change.model,
         effort: change.effort,
       };
-      return Object.fromEntries(
-        Object.entries(fields).filter(([, value]) => value !== undefined),
-      ) as UpdateAgentPayload;
+      return defined(fields) as UpdateAgentPayload;
     };
 
     /** A change's folders, Charms and answers, as the Charms tab's change, never touching the Summoning Charm. */
@@ -592,12 +592,12 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
               ...(granted === undefined ? {} : { granted }),
               ...(charmAnswers === undefined ? {} : { overrides: { ...charmAnswers, ...summoning } as CharmOverrides }),
             };
-      return {
-        ...(change.own_folders === undefined ? {} : { ownFolders: change.own_folders }),
-        ...(change.hidden_shared_folders === undefined ? {} : { hiddenSharedFolders: change.hidden_shared_folders }),
-        ...(builtIn === undefined ? {} : { overrides: builtIn as PolicyOverrides }),
-        ...(charms === undefined ? {} : { charms }),
-      };
+      return defined({
+        ownFolders: change.own_folders,
+        hiddenSharedFolders: change.hidden_shared_folders,
+        overrides: builtIn as PolicyOverrides | undefined,
+        charms,
+      }) as UpdateHobPermissionsPayload;
     };
 
     const card = (input: object, summary: string) => ({ arguments: { ...input }, summary });
