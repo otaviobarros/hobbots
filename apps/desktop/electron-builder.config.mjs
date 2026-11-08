@@ -15,6 +15,10 @@ const memoryEngine = (platform) => ({
 /** Every installer's file name, such as Hobbots-1.2.3-arm64.dmg, Hobbots-1.2.3-amd64.deb or Hobbots-1.2.3-x86_64.rpm. */
 const ARTIFACT_NAME = "${productName}-${version}-${arch}.${ext}";
 
+/** Why Hobbots asks macOS for a protected folder, such as Documents, in the system's prompt. */
+const FOLDER_ACCESS_REASON =
+  "Your hobs read and write the folders you give them, and this one needs your permission first.";
+
 /** What the tool sandbox, sandbox-runtime, needs on Linux (ADR 014); the same names on Debian and Fedora. */
 const SANDBOX_DEPENDENCIES = ["bubblewrap", "socat", "ripgrep"];
 
@@ -84,6 +88,15 @@ export default {
     hardenedRuntime: false,
     // The memory engine is signed by afterPack, before its checksum is written.
     signIgnore: [MEMORY_ENGINE_SIGN_IGNORE],
+    // What macOS shows when it asks whether Hobbots may open a protected folder you gave your hobs.
+    // Without these the prompt gives no reason (#1225).
+    extendInfo: {
+      NSDocumentsFolderUsageDescription: FOLDER_ACCESS_REASON,
+      NSDesktopFolderUsageDescription: FOLDER_ACCESS_REASON,
+      NSDownloadsFolderUsageDescription: FOLDER_ACCESS_REASON,
+      NSRemovableVolumesUsageDescription: FOLDER_ACCESS_REASON,
+      NSNetworkVolumesUsageDescription: FOLDER_ACCESS_REASON,
+    },
   },
   dmg: {
     artifactName: ARTIFACT_NAME,

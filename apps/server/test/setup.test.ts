@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
@@ -172,6 +172,26 @@ describe("the setup API", () => {
     const stored = (await (await request("GET", "/api/setup")).json()) as { approvedFolders: unknown };
     expect(stored.approvedFolders).toEqual([]);
   });
+
+  // covers #1225: a new shared folder is opened once, so macOS asks about Documents then. Root opens
+  // any folder, so the refusal shows only for an ordinary user.
+  it.skipIf(process.getuid?.() === 0)(
+    "[TC-RT-1225-03] refuses a new folder the hub can't open, and stores none",
+    async () => {
+      const closed = join(temp, "closed");
+      mkdirSync(closed);
+      chmodSync(closed, 0o000);
+      try {
+        const response = await request("PATCH", "/api/setup", { approvedFolders: [code, closed] });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({ _tag: "InvalidFolder", folder: closed });
+      } finally {
+        chmodSync(closed, 0o755);
+      }
+      const stored = (await (await request("GET", "/api/setup")).json()) as { approvedFolders: unknown };
+      expect(stored.approvedFolders).toEqual([]);
+    },
+  );
 
   // covers OP-001, DP-001
   it("[TC-OP-010] connects and disconnects a provider and keeps the choice", async () => {
