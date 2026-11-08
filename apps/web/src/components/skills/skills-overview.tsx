@@ -7,7 +7,7 @@ import { formatAgo, formatCount } from "../../lib/format.ts";
 import { RowList } from "../memory/memory-overview.tsx";
 import { GroupLabel, MemoryCard } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
-import { RepositoryOffers } from "./skill-repository.tsx";
+import { RepositoryOffers } from "./skill-repository-offer.tsx";
 import type { Say } from "./skills-flash.ts";
 import {
   type HobDirectory,

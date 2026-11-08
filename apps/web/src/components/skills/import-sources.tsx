@@ -5,7 +5,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { messages } from "./messages.ts";
-import { useRepositoryTab } from "./skill-repository.tsx";
+import { useRepositoryTab } from "./skill-repository-offer.tsx";
 import { type ImportFrom, skillsSearchOf } from "./skills-model.ts";
 import { SkillsIcon } from "./skills-parts.tsx";
 

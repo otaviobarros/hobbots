@@ -11,7 +11,7 @@ import { SkillEditor } from "./skill-editor.tsx";
 import { CheckForUpdates } from "./skill-follow.tsx";
 import { SkillNew } from "./skill-new.tsx";
 import { SkillPage } from "./skill-page.tsx";
-import { RepositoryOffers } from "./skill-repository.tsx";
+import { RepositoryOffers } from "./skill-repository-offer.tsx";
 import { SkillReview } from "./skill-review.tsx";
 import { SkillUpdates } from "./skill-updates.tsx";
 import { SkillsExport } from "./skills-export.tsx";
