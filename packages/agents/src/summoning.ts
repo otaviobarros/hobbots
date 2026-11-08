@@ -224,10 +224,14 @@ const labelProblems = (draft: SummoningDraft): ReadonlyArray<string> =>
     return value.trim().length > HOB_LABEL_MAX ? [`Its ${words} is longer than ${HOB_LABEL_MAX} characters.`] : [];
   });
 
+/** Whether a hob could use an operation: every built-in one, and a Charm's only while it holds that Charm. */
+const heldBefore = (authority: Authority, operation: AnyOperation) =>
+  !isCharmOperation(operation) || authority.charms.includes(operation.split(".")[0] as CharmId);
+
 /**
  * What a change would leave a hob able to do that neither its manager nor the hob itself could
  * before (ADR 034): a shared folder it would see that the manager does not, or an answer wider than
- * both, such as an override a replaced answer map drops. A hob already wider is asked about instead.
+ * both, such as an override a replaced answer map drops, or an operation of a Charm newly granted. A hob already wider is asked about instead.
  */
 const escalations = (
   before: Authority,
@@ -242,7 +246,8 @@ const escalations = (
     .filter(
       (operation) =>
         !isNarrowerOrEqual(after.answer(operation), manager.answer(operation)) &&
-        !isNarrowerOrEqual(after.answer(operation), before.answer(operation)),
+        // A Charm the hob did not hold gave it none of its operations, whatever their answers read.
+        (!heldBefore(before, operation) || !isNarrowerOrEqual(after.answer(operation), before.answer(operation))),
     )
     .map((operation) => `authority-wider: answers, since ${operation} would be wider than your own.`),
 ];

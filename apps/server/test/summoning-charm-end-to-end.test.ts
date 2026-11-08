@@ -464,7 +464,12 @@ describe("the Summoning Charm, end to end", () => {
 
   // covers ADR 034 (No escalation), #406 (same validation as the screens)
   it("[TC-AG-406-11] a change is checked by the policy it leaves, so a replaced answer map or a shown folder never widens a hob, and a label the profile refuses is refused", async () => {
-    await chiefAnswers({ "summoning.name": "allow", "summoning.folders": "allow", "summoning.charms": "allow" });
+    await chiefAnswers({
+      "summoning.name": "allow",
+      "summoning.folders": "allow",
+      "summoning.charms": "allow",
+      "github.read": "deny",
+    });
     const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
     // The chief may not run commands, nor see the shared folder, and neither may Bo.
     await permissions(chief, { overrides: { "run-commands": "deny" }, hiddenSharedFolders: [shared] });
@@ -482,6 +487,8 @@ describe("the Summoning Charm, end to end", () => {
       [{ hob: bo.id, name: "B".repeat(41) }, "Its name is longer than 40 characters."],
       [{ hob: bo.id, role: null, role_title: "  " }, "Its role title cannot be empty."],
       [{ hob: bo.id, name: "Bo Renamed", hidden_shared_folders: [elsewhere] }, `${elsewhere} is not a shared folder.`],
+      // The chief holds GitHub but may not read with it: Bo, who holds no Charm, gains no GitHub reads.
+      [{ hob: bo.id, charms: ["github"] }, "authority-wider: answers, since github.read would be wider than your own."],
     ] as const;
     for (const [change, reason] of refusals) {
       const before = await hob(bo.id);
