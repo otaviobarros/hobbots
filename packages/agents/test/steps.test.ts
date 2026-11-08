@@ -133,6 +133,10 @@ describe("a reply that waits on commands (#1056)", () => {
     });
     const told = stoppedCommands(stopped ?? []) ?? "";
     expect(told).toContain("the user stopped these commands");
+    // The hob does not start what you stopped again on its own (#1217).
+    expect(told).toContain(
+      "Do not run any of them again, in the foreground or in the background, unless the user asks",
+    );
     expect(told.split("\n").filter((line) => line.startsWith("- "))).toEqual(["- Running pnpm dev"]);
     expect(stoppedCommands(both())).toBeNull();
   });

@@ -139,8 +139,8 @@ export const uncertainCalls = (steps: ReadonlyArray<ReplyStep>): string | null =
 
 /**
  * What the turn after a reply is told about the commands you stopped while that reply waited on
- * them (#1056), so the hob never goes on believing one still runs or ran to its end. Null when there
- * are none.
+ * them (#1056), so the hob never goes on believing one still runs or ran to its end, and does not
+ * start one again on its own (#1217). Every runtime is told the same. Null when there are none.
  */
 export const stoppedCommands = (steps: ReadonlyArray<ReplyStep>): string | null => {
   const commands = steps.flatMap((step) => (step.state === "stopped" ? [`- ${step.label}`] : []));
@@ -148,5 +148,6 @@ export const stoppedCommands = (steps: ReadonlyArray<ReplyStep>): string | null 
   return [
     "When your last reply ended, the user stopped these commands while the reply waited for them to end. They did not run to their end and are no longer running:",
     ...commands,
+    "The user chose to stop them. Do not run any of them again, in the foreground or in the background, unless the user asks you to. If you still need what one would have done, say so and ask.",
   ].join("\n");
 };

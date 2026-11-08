@@ -315,18 +315,32 @@ export const withUserIdentity = (
 };
 
 /**
+ * The commands that set who commits, which a hob never runs, since Hobbots sets it (#700). The hub
+ * refuses them with this rule, and every turn with tools is told it up front (#1213).
+ */
+export const COMMIT_IDENTITY_RULE =
+  "Run Git without setting who commits: no -c user.*, git config user.*, --author or -C on git commit, and no GIT_AUTHOR_*, GIT_COMMITTER_*, EMAIL or GIT_CONFIG* variables, whether set, exported or unset.";
+
+/**
+ * What every hob that may commit is told before its first commit (#1213). Naming the identity alone
+ * invited hobs to pass it on the command line, which the hub refuses, so the rule comes with it.
+ */
+export const SETS_COMMIT_IDENTITY_NOTE = `Hobbots sets who your commits are made as, never you, so run git commit as it is. ${COMMIT_IDENTITY_RULE} Hobbots refuses a command that does.`;
+
+/**
  * What a hob is told when no identity applies to its commits (#741). It can set none, and Hobbots
  * asks the user itself, so asking again in chat only goes round in circles.
  */
 export const NO_GIT_IDENTITY_NOTE = [
   "No Git identity is set for your commits yet: the user's Git config sets none, and Hobbots is asking the user who hobs should commit as.",
-  "Do not ask the user or another hob who to commit as, and never set an identity: Hobbots applies the user's answer to your next turn.",
+  "Do not ask the user or another hob who to commit as: Hobbots applies the user's answer to your next turn.",
+  SETS_COMMIT_IDENTITY_NOTE,
   "Until then, do not commit. Do the rest of the work, leave your changes uncommitted, and say in your reply that the commit waits for the user to answer Hobbots' question about who hobs commit as.",
 ].join(" ");
 
 /** What a hob is told when it commits under the identity the user gave Hobbots (#741). */
 export const givenIdentityNote = (identity: CommitIdentity) =>
-  `Your commits are made as ${identity.name} <${identity.email}>, the identity the user gave Hobbots, since their Git config sets none.`;
+  `Your commits are made as ${identity.name} <${identity.email}>, the identity the user gave Hobbots, since their Git config sets none. ${SETS_COMMIT_IDENTITY_NOTE}`;
 
 /**
  * What every runtime does with who a turn's commits are made as (#586, #741), so that each one
@@ -334,7 +348,10 @@ export const givenIdentityNote = (identity: CommitIdentity) =>
  * the line said again in every resumed session's prompt. A runtime adapter applies all three.
  */
 export interface TurnCommits {
-  /** What the system prompt says of it, when there is more to say than the bot note. */
+  /**
+   * What the system prompt says of it: who commits, with the rule that the hob never sets it
+   * (#1213). A hob with its own app is told who commits by the bot note, so it gets the rule alone.
+   */
   readonly note: string;
   /**
    * Who the turn's commits are made as, said again in every resumed session's prompt, since a
@@ -354,9 +371,9 @@ export const commitIdentityNow = (as: CommitsAs): string => {
     case "UserGiven":
       return givenIdentityNote(as.identity);
     case "UserConfig":
-      return "Your commits are made as the user, with the identity their Git config sets.";
+      return `Your commits are made as the user, with the identity their Git config sets. ${SETS_COMMIT_IDENTITY_NOTE}`;
     case "Bot":
-      return `Your commits are made as ${as.identity.name} <${as.identity.email}>, the bot of your own GitHub App.`;
+      return `Your commits are made as ${as.identity.name} <${as.identity.email}>, the bot of your own GitHub App. ${SETS_COMMIT_IDENTITY_NOTE}`;
   }
 };
 
@@ -382,7 +399,6 @@ const commitEnv =
 export const turnCommits = (tools: { readonly commitsAs: CommitsAs } | null): TurnCommits => {
   if (tools === null) return { note: "", now: "", env: (env) => env };
   const as = tools.commitsAs;
-  const note =
-    as._tag === "Missing" ? NO_GIT_IDENTITY_NOTE : as._tag === "UserGiven" ? givenIdentityNote(as.identity) : "";
-  return { note, now: commitIdentityNow(as), env: commitEnv(as) };
+  const now = commitIdentityNow(as);
+  return { note: as._tag === "Bot" ? SETS_COMMIT_IDENTITY_NOTE : now, now, env: commitEnv(as) };
 };
