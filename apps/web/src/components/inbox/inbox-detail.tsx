@@ -27,6 +27,7 @@ import { ApprovalDecision } from "../approvals/approval-card.tsx";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
+import { CodingSetupActions, isCodingSetup } from "../coding-setup/coding-setup.tsx";
 import { scopeName } from "../memory/memory-model.ts";
 import { messages as memoryCopy } from "../memory/messages.ts";
 import { shareDestination } from "../memory/review-model.ts";
@@ -266,13 +267,17 @@ function HubQuestionDetail({
           [copy.detail.when, formatWhen(question.createdAt, now)],
         ]}
       />
-      <HubAnswerForm
-        question={question}
-        askerName={copy.row.hubInSentence}
-        via="inbox"
-        hint={copy.question.goesToHub}
-        targets={targets}
-      />
+      {isCodingSetup(question) ? (
+        <CodingSetupActions question={question} askerName={copy.row.hubInSentence} via="inbox" targets={targets} />
+      ) : (
+        <HubAnswerForm
+          question={question}
+          askerName={copy.row.hubInSentence}
+          via="inbox"
+          hint={copy.question.goesToHub}
+          targets={targets}
+        />
+      )}
     </DetailFrame>
   );
 }

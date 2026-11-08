@@ -24,16 +24,21 @@ export function QuestionChoices({
   look,
   disabled,
   onPick,
+  inWords = true,
 }: {
   question: Choices;
   askerName: string;
   look: ChoicesLook;
   disabled: boolean;
   onPick: (label: string) => void;
+  /** Whether an answer box follows, which the line below the choices leads to. */
+  inWords?: boolean;
 }) {
+  const list = <ChoiceList question={question} askerName={askerName} look={look} disabled={disabled} onPick={onPick} />;
+  if (!inWords) return list;
   return (
     <>
-      <ChoiceList question={question} askerName={askerName} look={look} disabled={disabled} onPick={onPick} />
+      {list}
       <span className="flex items-center gap-2 text-meta text-label before:h-px before:flex-1 before:bg-line after:h-px after:flex-1 after:bg-line">
         {copy.orInWords}
       </span>

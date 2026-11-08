@@ -1,4 +1,4 @@
-import { HubCommitIdentities } from "@hobbots/agents";
+import { CodingSetupDismissals, HubCommitIdentities } from "@hobbots/agents";
 import { Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 
@@ -24,6 +24,26 @@ export const HubCommitIdentityRepository = Layer.effect(
           ON CONFLICT (id) DO UPDATE
           SET name = excluded.name, email = excluded.email, set_at = excluded.set_at
         `.pipe(Effect.asVoid, Effect.orDie),
+    });
+  }),
+);
+
+/** Where the user said not to ask whether a hob will write code (migration 0077, #1241). */
+export const CodingSetupDismissalRepository = Layer.effect(
+  CodingSetupDismissals,
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    return CodingSetupDismissals.of({
+      list: sql<{ scope: string }>`SELECT scope FROM coding_setup_dismissals ORDER BY dismissed_at, scope`.pipe(
+        Effect.map((rows) => rows.map((row) => row.scope)),
+        Effect.orDie,
+      ),
+      dismiss: (scope, at) =>
+        sql`
+          INSERT INTO coding_setup_dismissals (scope, dismissed_at) VALUES (${scope}, ${at})
+          ON CONFLICT (scope) DO NOTHING
+        `.pipe(Effect.asVoid, Effect.orDie),
+      clear: sql`DELETE FROM coding_setup_dismissals`.pipe(Effect.asVoid, Effect.orDie),
     });
   }),
 );

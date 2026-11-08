@@ -83,6 +83,12 @@ export const hobAppCommitIdentity = (app: Pick<HobGitHubApp, "slug" | "botUserId
   };
 };
 
+/**
+ * The subject kind of the hub's question whether a hob will write code (#1241). Its key is the hob's
+ * id, and a card for it leads to the hob's GitHub section instead of asking for a name and email.
+ */
+export const CODING_SETUP_KIND = "coding-setup";
+
 /** The name and email the user's own Git config sets, either of which may be missing. */
 export interface GitIdentity {
   readonly name: string | null;

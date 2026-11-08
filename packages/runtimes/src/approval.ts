@@ -13,7 +13,7 @@ import {
 import { type CommitsAs, leftoverGitNote, steerGitInit } from "@hobbots/domain";
 import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
-import { COMMIT_IDENTITY_RULE } from "./git-config.ts";
+import { COMMIT_IDENTITY_RULE, SETUP_GITHUB } from "./git-config.ts";
 import { inSharedTemp, TEMP_HINT } from "./sandbox.ts";
 import {
   commandWritesTo,
@@ -118,12 +118,12 @@ export const steerPush = (takeover: Pick<Takeover, "charm" | "tool">) =>
  * Why a command that sets its own commit identity is refused (#700), naming the one the hub sets:
  * the hob's bot when it has its own GitHub App (ADR 022), else the user's (ADR 018), from their Git
  * config or, when it sets none, the one they gave Hobbots (#741). With neither, it says no identity
- * is set yet and Hobbots asks the user, so the hob neither sets one nor asks itself.
+ * is set yet, and the hob tells the user in plain words where to set up GitHub (#1241).
  */
 export const steerCommitIdentity = (commitsAs: CommitsAs) => {
   switch (commitsAs._tag) {
     case "Missing":
-      return `${COMMIT_IDENTITY_RULE} Hobbots sets who your commits are made as, never you, and none is set yet: the user's Git config sets no identity, and Hobbots is asking the user who hobs should commit as. Do not ask them or another hob yourself, and do not commit until a later turn: leave your changes uncommitted and say that the commit waits for their answer.`;
+      return `${COMMIT_IDENTITY_RULE} Hobbots sets who your commits are made as, never you, and none is set yet. ${SETUP_GITHUB}`;
     case "Bot":
     case "UserGiven":
       return `${COMMIT_IDENTITY_RULE} Hobbots sets who your commits are made as, and they are made as ${commitsAs.identity.name} <${commitsAs.identity.email}>${

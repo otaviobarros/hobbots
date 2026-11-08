@@ -1,5 +1,6 @@
 import type { ApprovalSurface, HubQuestion } from "@hobbots/domain";
 import { formatWhen } from "../../lib/time.ts";
+import { CodingSetupActions, isCodingSetup } from "../coding-setup/coding-setup.tsx";
 import { messages as inboxCopy } from "../inbox/messages.ts";
 import { HubAnswerForm } from "../quest/answer-form.tsx";
 import { Details } from "./details.tsx";
@@ -11,7 +12,16 @@ export function HubQuestionBody({ question, via }: { question: HubQuestion; via:
   return (
     <>
       <p className="m-0 whitespace-pre-wrap text-text">{question.text}</p>
-      <HubAnswerForm question={question} askerName={inboxCopy.row.hubInSentence} via={via} targets={trayTargets} />
+      {isCodingSetup(question) ? (
+        <CodingSetupActions
+          question={question}
+          askerName={inboxCopy.row.hubInSentence}
+          via={via}
+          targets={trayTargets}
+        />
+      ) : (
+        <HubAnswerForm question={question} askerName={inboxCopy.row.hubInSentence} via={via} targets={trayTargets} />
+      )}
       <Details summary={messages.details.question}>
         {messages.fromHub({ about: question.subject.title, when: formatWhen(question.createdAt) })}
       </Details>

@@ -112,6 +112,7 @@ export interface HobAppManifestForm {
 }
 
 export interface HobAppMade {
+  readonly agentId: AgentId;
   readonly hobName: string;
   readonly app: HobGitHubApp;
   readonly installUrl: string;
@@ -430,7 +431,7 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
             yield* grants.switchIdentity(GITHUB_CHARM, open.agentId, apps.save(open.agentId, app));
             yield* tokens.forget(open.agentId);
             yield* Effect.logInfo("A hob's GitHub app was made", { agentId: open.agentId, slug: app.slug });
-            return { hobName: open.hobName, app, installUrl: installUrl(app) };
+            return { agentId: open.agentId, hobName: open.hobName, app, installUrl: installUrl(app) };
           }),
         );
 
