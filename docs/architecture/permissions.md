@@ -18,6 +18,7 @@ Trusted Workspace is the default. The [design](../decisions/008-design.md) names
 | Push (a Charm) | Ask | Ask | Allow |
 | Push with force, or to the default branch | Ask, once only | Ask, once only | Ask, once only |
 | Use the web | Ask, per host | Allow | Allow |
+| Search the web (the runtime's own search) | Allow | Allow | Allow |
 | Read GitHub (a Charm) | Allow | Allow | Allow |
 | Open pull requests (a Charm) | Ask | Ask | Allow |
 | Comment on GitHub (a Charm) | Ask | Ask | Allow |
@@ -100,6 +101,16 @@ Credentials remain scoped to the hub's execution environment or secrets provider
 
 Verify denial, grant scoping/expiry, policy changes during waits, child privilege escalation attempts, duplicate decisions, changed arguments after approval, unsupported enforcement and separate computer opt-in. Full Access does not remove application-level authentication or create administrative agent APIs.
 
+
+## The web
+
+[ADR 036](../decisions/036-web-search-and-pages.md) decides how hobs search and read the web, as built-in operations rather than a Charm:
+
+- **Search the web** is the runtime's own search, settled per turn by the hub: Claude Code's `WebSearch`, decided by the policy hook, and Codex's search in cached mode, never live or indexed. Allow under every preset, Never per hob or Quest, with no Ask, since Codex's search cannot pause. A runtime with no search of its own shows it as not offered.
+- **Reading a page** is `web_fetch`, a hub tool decided as Use the web for the page's host, with the same presets, overrides and site grants as a command's host. Claude Code's `WebFetch` stays closed. GET only, no cookies or credentials, a `Hobbots` user agent; the answer is labeled as outside data.
+- **Egress.** Every address is resolved once, checked and pinned. Loopback, link-local, cloud metadata and the hub's tailnet addresses are refused; a private network address asks, with Once or Always for its host; each redirect is decided again.
+- **Provenance.** A URL from you, a reported search result or a page read in the session follows the site rules. A URL the hob wrote itself asks under every preset.
+- **The read-the-web mark.** Once a session has searched or read a page, a URL the hob wrote, a new host from a command, Charm writes, pushes and shared memory saves ask until the session ends. Local work and found links do not.
 
 ## The hob directory
 
