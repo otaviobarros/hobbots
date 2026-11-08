@@ -10,10 +10,12 @@ SQLite/PostgreSQL repositories, transactions, journal, outbox and migrations. `T
 
 Tests take their database from `TestDatabase` in `@hobbots/persistence/testing`. Each build of the layer is a fresh, isolated database with every migration applied.
 
-| `HOBBOTS_TEST_DB`  | Database                                                                                        |
-| ------------------ | ----------------------------------------------------------------------------------------------- |
-| `sqlite` (default) | In-memory SQLite                                                                                |
-| `postgres`         | A new schema in the database at `HOBBOTS_TEST_DATABASE_URL`, dropped when the layer is released |
+| `HOBBOTS_TEST_DB`  | Database                                                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `sqlite` (default) | In-memory SQLite                                                                                                                    |
+| `postgres`         | A new database on the server at `HOBBOTS_TEST_DATABASE_URL`, copied from a migrated template and dropped when the layer is released |
+
+On PostgreSQL the first test to need it migrates a template database, `hobbots_template_` and a hash of the migrations' source, so a changed migration gets a new one. Each test then copies it, which is several times faster than migrating a fresh schema. The user in `HOBBOTS_TEST_DATABASE_URL` therefore needs to create databases (`CREATEDB`). `TestDatabaseAt`, with only some migrations, uses a new schema in the URL's database instead. Templates from older migrations stay on the server until you drop them.
 
 The persistence and server suites use it, so both run on either database. Where the dialects differ, the query chooses explicitly: ties sort by `id` byte by byte (`COLLATE "C"` on PostgreSQL), and migration `0003_look_seed_bigint` widens the look seed on PostgreSQL only. The tie-order test detects a missing `COLLATE "C"` only on a PostgreSQL database whose default collation is not C, such as the official image's `en_US.utf8`.
 
