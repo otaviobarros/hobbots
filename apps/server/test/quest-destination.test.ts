@@ -1,16 +1,16 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { QuestionService } from "@hobbots/agents";
+import { ApprovalService, QuestionService } from "@hobbots/agents";
 import type { RuntimeKind } from "@hobbots/domain";
 import { afterEach, describe, expect, it } from "vitest";
-import { hub, partyHub, send, treeWhen } from "./party-hub.ts";
+import { firstPending, hub, partyHub, send, treeWhen } from "./party-hub.ts";
 
 // Issue #1215: you asked for a summary at a path its member could not write. The member asked its
 // lead where to save it instead, the lead answered itself ("save it in the source folder") and
 // completed the Quest with delivered: true, and the Quest read done with a file where you never
-// agreed. complete_task on a Quest's top Task now holds the lead to the files your request names:
-// each must be there, unless you spoke since, such as by answering a question about it. The hub
-// checks the call, so it holds for every runtime.
+// agreed. complete_task on a Quest's top Task now holds the lead to the files you named: each must
+// be there, unless the work took it away, as a rename or a deletion does, or you answered a question
+// that named it. The hub checks the call, so it holds for every runtime.
 
 let dispose: (() => Promise<void>) | undefined;
 afterEach(async () => {
@@ -34,11 +34,28 @@ const quest = (request: string, rook: ReadonlyArray<string>, wrapUp: object, tur
     `${"fake:then ".repeat(turns)}${hub("complete_task", wrapUp)}`,
   ]);
 
-/** Rook asks where to save the page it could not write, then completes once it hears back. */
-const ASKED_WHERE = [
-  hub("ask", { key: "where", question: "I can't write there. Where should I save it instead?" }),
+/** Rook asks `question`, then completes once it hears back. */
+const asking = (question: string) => [
+  hub("ask", { key: "where", question }),
   `fake:then ${hub("complete_task", { key: "rook", summary: "Saved in the source folder" })}`,
 ];
+
+/** Rook asks where to save the page it could not write at `wanted`, naming it. */
+const askedWhere = (wanted: string) => asking(`I can't write ${wanted} there. Where should I save it instead?`);
+
+/** Once Frodo has passed Rook's question up to you, you answer it with `answer`. */
+const escalatedAndAnswered = async (party: ReturnType<typeof partyHub>, answer: string) => {
+  const { run } = party;
+  const escalated = await run(treeWhen((tree) => tree.questions[0]?.recipientId === null));
+  const question = escalated.questions[0];
+  if (question === undefined) throw new Error("no question for you");
+  await run(QuestionService.use((questions) => questions.answer(question.id, answer)));
+};
+
+const ESCALATES = {
+  on: "asks, as question",
+  lines: [hub("escalate", { key: "up", question_id: "$where.question_id" })],
+};
 
 describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtime) => {
   // covers OR-004, OR-002
@@ -62,7 +79,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     await run(
       quest(
         `Have Rook save a short summary of ${join(project, "skills.md")} as ${wanted}`,
-        ASKED_WHERE,
+        askedWhere(wanted),
         { key: "wrap", delivered: true, summary: "The summary is saved", artifacts: [file(saved)] },
         2,
       ),
@@ -111,24 +128,97 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     const wanted = join(temp, "System", "skills-check.html");
     const saved = join(project, "skills-check.html");
     writeFileSync(saved, "<!doctype html>\n");
-    reactions.push({
-      on: "asks, as question",
-      lines: [hub("escalate", { key: "up", question_id: "$where.question_id" })],
-    });
+    reactions.push(ESCALATES);
     await run(
       quest(
         `Have Rook save a short summary as ${wanted}`,
-        ASKED_WHERE,
+        askedWhere(wanted),
         { key: "wrap", delivered: true, summary: "Saved in the source folder, as you said", artifacts: [file(saved)] },
         2,
       ),
     );
-    const escalated = await run(treeWhen((tree) => tree.questions[0]?.recipientId === null));
-    const question = escalated.questions[0];
-    if (question === undefined) throw new Error("no question for you");
-    await run(QuestionService.use((questions) => questions.answer(question.id, "Save it in the source folder")));
+    await escalatedAndAnswered(party, "Save it in the source folder");
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     expect(answers.get("wrap")).toContain("is complete");
     expect(done.questions[0]?.answeredBy).toEqual({ _tag: "User" });
+  }, 30_000);
+
+  // covers OR-004, OR-002
+  it("[TC-OR-667] stays open when the question you answered was about something else", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true });
+    dispose = party.dispose;
+    const { run, answers, project, temp, reactions } = party;
+    const wanted = join(temp, "System", "skills-check.html");
+    const saved = join(project, "skills-check.html");
+    writeFileSync(saved, "<!doctype html>\n");
+    reactions.push(ESCALATES);
+    await run(
+      quest(
+        `Have Rook save a short summary as ${wanted}`,
+        asking("Should the summary be short or long?"),
+        { key: "wrap", delivered: true, summary: "Saved in the source folder", artifacts: [file(saved)] },
+        2,
+      ),
+    );
+    await escalatedAndAnswered(party, "Short");
+    const refused = await run(treeWhen((tree) => tree.refusals.some((each) => each.reason === "not-at-destination")));
+    expect(answers.get("wrap")).toContain(wanted);
+    expect(refused.quests[0]?.state).toBe("active");
+  }, 30_000);
+
+  // covers OR-004, OR-002
+  it("[TC-OR-668] stays open when the place you answered with has nothing in it", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true });
+    dispose = party.dispose;
+    const { run, answers, project, temp, reactions } = party;
+    const wanted = join(temp, "System", "skills-check.html");
+    const instead = join(project, "out", "skills-check.html");
+    mkdirSync(join(project, "out"), { recursive: true });
+    const saved = join(project, "skills-check.html");
+    writeFileSync(saved, "<!doctype html>\n");
+    reactions.push(ESCALATES);
+    await run(
+      quest(
+        `Have Rook save a short summary as ${wanted}`,
+        askedWhere(wanted),
+        { key: "wrap", delivered: true, summary: "Saved in the source folder", artifacts: [file(saved)] },
+        2,
+      ),
+    );
+    await escalatedAndAnswered(party, `Save it as ${instead}`);
+    const refused = await run(treeWhen((tree) => tree.refusals.some((each) => each.reason === "not-at-destination")));
+    expect(answers.get("wrap")).toContain(instead);
+    expect(answers.get("wrap")).not.toContain(wanted);
+    expect(refused.quests[0]?.state).toBe("active");
+  }, 30_000);
+
+  // covers OR-004, UX-002
+  it("[TC-OR-669] completes once the work renamed and deleted the files you asked it to", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true });
+    dispose = party.dispose;
+    const { run, answers, project } = party;
+    writeFileSync(join(project, "old.html"), "<p>Skills</p>\n");
+    writeFileSync(join(project, "scratch.txt"), "draft\n");
+    const tidy = JSON.stringify({
+      command: "mv old.html new.html && rm scratch.txt",
+      writes: { "new.html": "<p>Skills</p>\n", "old.html": null, "scratch.txt": null },
+    });
+    await run(
+      quest(
+        `Rename ${join(project, "old.html")} to ${join(project, "new.html")} and delete ${join(project, "scratch.txt")}`,
+        [`fake:run ${tidy}`, hub("complete_task", { key: "rook", summary: "Renamed and deleted" })],
+        { key: "wrap", delivered: true, summary: "Renamed and deleted as you asked" },
+      ),
+    );
+    // Balanced asks you before the work deletes files; you approve.
+    const pending = await run(firstPending);
+    await run(
+      ApprovalService.use((approvals) =>
+        approvals.decide(pending.id, { decision: "approve", actionDigest: pending.actionDigest }),
+      ),
+    );
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    expect(answers.get("wrap")).toContain("is complete");
+    expect(done.quests[0]?.state).not.toBe("active");
   }, 30_000);
 });

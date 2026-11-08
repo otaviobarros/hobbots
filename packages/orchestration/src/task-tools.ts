@@ -161,7 +161,7 @@ export class TaskTools extends Context.Service<
         const hobs = yield* HobbotsRepository;
         const wrapUp = yield* makeWrapUp;
         const delivered = yield* makeDeliveryCheck;
-        const missingAt = yield* makeDestinationCheck;
+        const missingAt = yield* makeDestinationCheck(separator);
         const settle = yield* makeSettle;
         // A lead's commit of a member's open work is held, whichever runtime makes it (#742).
         const heldCommit = yield* makeHeldCommits;

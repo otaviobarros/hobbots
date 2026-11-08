@@ -1,6 +1,8 @@
-import { HobFiles } from "@hobbots/agents";
-import type { ArtifactKind } from "@hobbots/domain";
+import { ActivityRepository, FolderChecks, HobFiles } from "@hobbots/agents";
+import type { ArtifactKind, AttemptId, FileChange } from "@hobbots/domain";
 import { Effect, Option } from "effect";
+import type { PathSeparator } from "./authority.ts";
+import { parentOf } from "./default-folders.ts";
 
 /**
  * Whether the files a Task returns are there for whoever reads its result. `complete_task` once
@@ -58,14 +60,52 @@ export const makeDeliveryCheck = Effect.gen(function* () {
     });
 });
 
+/** Where a change took a file away from, as an absolute path on a hub that divides at `separator`. */
+const removedFrom = (change: FileChange, separator: PathSeparator): ReadonlyArray<string> => {
+  const from = change.kind === "moved" ? change.movedFrom : change.kind === "deleted" ? change.path : null;
+  if (from === null) return [];
+  const folder = change.folder.endsWith(separator) ? change.folder : `${change.folder}${separator}`;
+  return [`${folder}${from.split("/").join(separator)}`];
+};
+
 /**
- * Reads, of the absolute paths a user's request names, those where no regular file is now (#1215).
- * A hub that does not read files, as in tests of the tools alone, finds none missing.
+ * Reads, of the absolute paths the user named, those where no regular file is now and that the
+ * work did not take away (#1215). A file the work deleted or moved, as a request to remove or rename
+ * it asks, is gone because the work was done, so it is not missing: the Workbench's records of the
+ * Attempts given say so, compared by the folder the path sits in as the hub stores it. A hub that
+ * does not read files, as in tests of the tools alone, finds none missing; one that keeps no
+ * Workbench records finds none taken away.
  */
-export const makeDestinationCheck = Effect.gen(function* () {
-  const files = yield* Effect.serviceOption(HobFiles);
-  return (paths: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
-    Option.isNone(files)
-      ? Effect.succeed([])
-      : Effect.filter(paths, (path) => Effect.map(files.value.isFile(path), (there) => !there), { concurrency: 8 });
-});
+export const makeDestinationCheck = (separator: PathSeparator) =>
+  Effect.gen(function* () {
+    const files = yield* Effect.serviceOption(HobFiles);
+    const activity = yield* Effect.serviceOption(ActivityRepository);
+    const checks = yield* FolderChecks;
+    const removedIn = (attempts: ReadonlyArray<AttemptId>) =>
+      Option.isNone(activity) || attempts.length === 0
+        ? Effect.succeed(new Set<string>())
+        : Effect.map(
+            activity.value.readMany(attempts),
+            (read) => new Set(read.flatMap((each) => each.changes.flatMap((change) => removedFrom(change, separator)))),
+          );
+    /** The path as the hub stores its folder, which a file that is gone still sits in. */
+    const stored = (path: string) => {
+      const parent = parentOf(path, separator);
+      if (parent === null) return Effect.succeed(path);
+      const name = path.slice(path.lastIndexOf(separator) + separator.length);
+      return checks.check(parent).pipe(
+        Effect.map((folder) => `${folder.endsWith(separator) ? folder : `${folder}${separator}`}${name}`),
+        Effect.orElseSucceed(() => path),
+      );
+    };
+    return (paths: ReadonlyArray<string>, attempts: ReadonlyArray<AttemptId>): Effect.Effect<ReadonlyArray<string>> =>
+      Effect.gen(function* () {
+        if (Option.isNone(files)) return [];
+        const missing = yield* Effect.filter(paths, (path) => Effect.map(files.value.isFile(path), (there) => !there), {
+          concurrency: 8,
+        });
+        if (missing.length === 0) return [];
+        const removed = yield* removedIn(attempts);
+        return yield* Effect.filter(missing, (path) => Effect.map(stored(path), (at) => !removed.has(at)));
+      });
+  });
