@@ -33,7 +33,7 @@ The [glossary](docs/product/glossary.md) has the full list.
 
 ## Status
 
-**Beta.** Hobbots runs as a Mac app and in the browser. Hobs on Claude Code or Codex chat in persistent threads, use tools within the folders you choose under a policy you set, and lead Quests that other hobs join. The [0.0.2 release notes](docs/releases/0.0.2.md) list what is new in the second beta, including memory, and its known limits.
+**Beta.** Hobbots runs as a desktop app on macOS and Linux and in the browser. Hobs on Claude Code or Codex chat in persistent threads, use tools within the folders you choose under a policy you set, and lead Quests that other hobs join. The [0.0.3 release notes](docs/releases/0.0.3.md) list what is new in the third beta, including the skills library and Linux packages, and its known limits.
 
 The [status page](docs/STATUS.md) lists what has been proven end to end, on which setup, and what is not proven yet.
 
@@ -56,6 +56,16 @@ Hobbots keeps its data, including every thread, in `~/Library/Application Suppor
 **Update:** quit Hobbots, download the new `.dmg` and drag the app onto Applications again, replacing the old copy. Your data stays where it is. A new version may need Open Anyway once more.
 
 **Remove:** quit Hobbots and drag it from Applications to the Trash. To delete your data as well, remove `~/Library/Application Support/Hobbots` (in Finder, Go › Go to Folder).
+
+## Install on Linux
+
+Hobbots ships a `.deb` for Ubuntu 24.04 and Debian and an `.rpm` for Fedora, each for x64 and arm64. The runtime requirements are the same as on the Mac.
+
+1. Download the package for your system from the [latest release](https://github.com/otaviobarros/hobbots/releases/latest): `amd64.deb` or `arm64.deb`, `x86_64.rpm` or `aarch64.rpm`.
+2. Install it with `sudo apt install ./Hobbots-<version>-amd64.deb` or `sudo dnf install ./Hobbots-<version>-x86_64.rpm`. This also installs what the tool sandbox needs (`bubblewrap`, `socat` and `ripgrep`).
+3. Open Hobbots from your desktop's app list, or run `hobbots`.
+
+Hobbots keeps its data in `~/.hobbots`, outside the app. To update, install the new package the same way. Opening at login is macOS only for now.
 
 ## Run from source
 
