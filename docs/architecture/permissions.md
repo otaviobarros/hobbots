@@ -107,7 +107,7 @@ Verify denial, grant scoping/expiry, policy changes during waits, child privileg
 
 - **Public cards only.** Another hob sees a hob's name, role, good at, status, brain and the connected Charms it holds, and who summoned it once that is recorded. Never its instructions, memory, threads, Tasks, folders, overrides, grants, credentials or GitHub app.
 - **A display setting, not authority.** "Visible to other hobs" keeps a hob out of other hobs' rosters and `read_hob`, but delegation by name still reaches it. Seeing a hob's Charms grants nothing: a hob that lacks a Charm forwards the work.
-- **Outside data.** Good at, names and role titles reach other hobs quoted, labeled as data and never instructions, and redacted with the reading turn's redactor.
+- **Outside data.** Good at, names and role titles reach other hobs quoted, labeled as data and never instructions, and redacted with the reading turn's redactor, best effort like all redaction below. Good at is public to every hob, so nothing private belongs in it.
 
 ## Secrets in tool activity
 
