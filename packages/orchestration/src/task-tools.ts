@@ -11,6 +11,7 @@ import {
   hubToolOffer,
   joinHubTools,
   makeRedactor,
+  makeWebProvenance,
   type Redactor,
   SecretRedaction,
   TaskRepository,
@@ -164,6 +165,8 @@ export class TaskTools extends Context.Service<
         const missingAt = yield* makeDestinationCheck(separator);
         const approvedRemovals = yield* makeApprovedRemovals;
         const settle = yield* makeSettle;
+        // Where the URLs a brief carries came from (ADR 036).
+        const web = yield* makeWebProvenance;
         // A lead's commit of a member's open work is held, whichever runtime makes it (#742).
         const heldCommit = yield* makeHeldCommits;
         const handlers: Record<TaskToolName, ToolHandler> = {
@@ -258,6 +261,11 @@ export class TaskTools extends Context.Service<
             );
             if (seen.resolved !== null) committed(seen.resolved);
             for (const item of outcome.shown ?? []) source.shown.set(item.itemId, item);
+            // A brief is a hob's text: its URLs are found in the new Task's sessions only when the
+            // session that wrote it had found them (ADR 036).
+            for (const entry of outcome.entries) {
+              if (entry.payload._tag === "TaskCreated") yield* web.passOn(entry.payload.task);
+            }
             // Committed already: a client that misses the announcement replays it from the journal.
             if (outcome.entries.length > 0) yield* announce(outcome.entries);
             return outcome.done;
@@ -466,6 +474,7 @@ export class TaskTools extends Context.Service<
                 agentId: caller.agentId,
                 threadId: null,
                 messageId: null,
+                taskId: caller.taskId,
                 scope,
               },
               { writes: false },

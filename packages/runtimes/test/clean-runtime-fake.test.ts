@@ -14,6 +14,7 @@ import {
   SET_SKILL,
   stepRecordingContract,
   TEAM_SET,
+  WEB_FETCH_CONTRACT_TOOL,
 } from "./clean-runtime.ts";
 
 // The clean-runtime contract test on the fake runtime (ADR 029): it loads exactly the skills the turn
@@ -59,11 +60,15 @@ describe("a clean fake runtime (ADR 029)", () => {
     expect(await skillsOf(null)).toEqual(["No skills."]);
   });
 
-  const hubCall = (records: boolean) => {
-    const contract = stepRecordingContract(records);
+  const hubCall = (records: boolean, tool = CONTRACT_HUB_TOOL) => {
+    const contract =
+      tool === CONTRACT_HUB_TOOL
+        ? stepRecordingContract(records)
+        : stepRecordingContract(records, WEB_FETCH_CONTRACT_TOOL);
+    const input = tool === CONTRACT_HUB_TOOL ? "{}" : JSON.stringify({ url: "https://example.test/lamp" });
     return makeFakeRuntime()
       .sendPrompt({
-        prompt: `${FAKE_HUB_DIRECTIVE} ${CONTRACT_HUB_TOOL} {}`,
+        prompt: `${FAKE_HUB_DIRECTIVE} ${tool} ${input}`,
         sessionId: null,
         instructions: "",
         instructionsChanged: false,
@@ -80,5 +85,12 @@ describe("a clean fake runtime (ADR 029)", () => {
   it("[TC-PE-470] records a hub tool call's step with the turn's recorder before the hub runs it", async () => {
     expect(await hubCall(true)).toEqual([`recorded ${CONTRACT_HUB_TOOL} as fake-hub-1`, "ran"]);
     expect(await hubCall(false)).toEqual([`recorded ${CONTRACT_HUB_TOOL} as fake-hub-1`, "not run"]);
+  });
+
+  // covers ADR 036 (On every runtime)
+  it("[TC-PE-1267-15] records a web_fetch call's step before the hub reads the page", async () => {
+    const tool = WEB_FETCH_CONTRACT_TOOL.name;
+    expect(await hubCall(true, tool)).toEqual([`recorded ${tool} as fake-hub-1`, "ran"]);
+    expect(await hubCall(false, tool)).toEqual([`recorded ${tool} as fake-hub-1`, "not run"]);
   });
 });

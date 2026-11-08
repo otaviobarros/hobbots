@@ -10,7 +10,9 @@ import {
   READ_HOB_TOOL,
   SKILL_TOOL_DESCRIPTIONS,
   TASK_TOOLS,
+  type TaskId,
   type ThreadId,
+  WEB_FETCH_TOOL,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Schema, type Scope } from "effect";
 import type { AskableVerdict } from "./asking.ts";
@@ -46,6 +48,8 @@ export interface CharmTurn {
   readonly messageId: MessageId | null;
   /** The Attempt a turn outside any chat runs as, so a call it makes names the session it belongs to (#1049). */
   readonly attemptId?: AttemptId;
+  /** The Task a turn outside any chat works on, whose found URLs it reads (ADR 036). */
+  readonly taskId?: TaskId;
   /** The work the turn's call keys belong to now (#660), from `callScope`, as its Task tools key theirs. */
   readonly scope: () => string;
   /** Another scope a retry of a key is found in: the turn's reply, as for its Task tools. */
@@ -70,13 +74,14 @@ export interface HubToolOwner {
 
 /**
  * The hub's built-in tool sets beside the Charms (ADR 031), whose names no Charm may take: Local Git,
- * Memory, Skills, the Directory (ADR 032) and the Task tools.
+ * Memory, Skills, the Directory (ADR 032), the Web tools (ADR 036) and the Task tools.
  */
 export const BUILT_IN_HUB_TOOLS: ReadonlyArray<HubToolOwner> = [
   { owner: "Local Git", names: [GIT_INIT_TOOL] },
   { owner: "Memory", names: [MEMORY_SEARCH_TOOL, MEMORY_SAVE_TOOL] },
   { owner: "Skills", names: Object.keys(SKILL_TOOL_DESCRIPTIONS) },
   { owner: "the Directory", names: [READ_HOB_TOOL] },
+  { owner: "the Web tools", names: [WEB_FETCH_TOOL] },
   { owner: "the Task tools", names: TASK_TOOLS.map((tool) => tool.name) },
 ];
 
@@ -377,6 +382,18 @@ export class DirectoryTools extends Context.Service<
 >()("@hobbots/agents/DirectoryTools") {}
 
 /**
+ * The Web set (ADR 036): `web_fetch`, which reads one public page on the hub, decided as Use the web
+ * for the page's host. Absent, a turn offers none.
+ */
+export class WebTools extends Context.Service<
+  WebTools,
+  {
+    /** The tools the turn offers, read at its start: none (null) when its Use the web answer is Never. */
+    readonly forTurn: (turn: CharmTurn) => Effect.Effect<HubTools | null>;
+  }
+>()("@hobbots/agents/WebTools") {}
+
+/**
  * A hub tool call's answer as the hob reads it: a refusal, with its reason, as a refused answer, and
  * every answer redacted, as everything a hob reads is.
  */
@@ -390,11 +407,11 @@ export const hubAnswer = <R>(
   );
 
 /**
- * The local Git, Charm, memory, skill and directory tools a turn offers, read at its start under the access the turn
+ * The local Git, Charm, memory, skill, directory and web tools a turn offers, read at its start under the access the turn
  * reads (ADR 014): a chat turn's, a party member's or a step's, each narrowed by its Delegations.
  * Every kind of turn that offers Task tools offers them this one way, so the tools a delegation
  * promises are the tools its member gets (#699), and every runtime that serves hub tools serves
- * memory (ADR 028), skills (ADR 029) and the directory (ADR 032). Without a service, a turn offers none of its tools. The
+ * memory (ADR 028), skills (ADR 029), the directory (ADR 032) and `web_fetch` (ADR 036). Without a service, a turn offers none of its tools. The
  * offer's steering holds the built-in requests its Charms take over (ADR 031).
  */
 export const hubToolOffer = Effect.gen(function* () {
@@ -403,6 +420,7 @@ export const hubToolOffer = Effect.gen(function* () {
   const memory = yield* Effect.serviceOption(MemoryTools);
   const skills = yield* Effect.serviceOption(SkillTools);
   const directory = yield* Effect.serviceOption(DirectoryTools);
+  const web = yield* Effect.serviceOption(WebTools);
   const none = Effect.succeed(null);
   // Each reads the turn's access itself, so they are read side by side.
   return (turn: CharmTurn, offer?: CharmOffer): Effect.Effect<HubOffer> =>
@@ -413,16 +431,18 @@ export const hubToolOffer = Effect.gen(function* () {
         Option.isSome(memory) ? memory.value.forTurn(turn) : none,
         Option.isSome(skills) ? skills.value.forTurn(turn) : none,
         Option.isSome(directory) ? directory.value.forTurn(turn) : none,
+        Option.isSome(web) ? web.value.forTurn(turn) : none,
       ],
       { concurrency: "unbounded" },
     ).pipe(
-      Effect.map(([git, charmSets, memoryTools, skillTools, directoryTools]) => {
+      Effect.map(([git, charmSets, memoryTools, skillTools, directoryTools, webTools]) => {
         const sets = [
           { owner: "Local Git", tools: git },
           ...charmSets,
           { owner: "Memory", tools: memoryTools },
           { owner: "Skills", tools: skillTools },
           { owner: "the Directory", tools: directoryTools },
+          { owner: "the Web tools", tools: webTools },
         ];
         return { hubTools: joinHubTools(sets), steering: steeringOf(sets) };
       }),

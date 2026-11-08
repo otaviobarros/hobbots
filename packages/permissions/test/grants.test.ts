@@ -279,6 +279,61 @@ describe("standing grants", () => {
     expect((await decide(deleting, files("delete-files", home.project, "src/index.ts"))).decision).toBe("ask");
   });
 
+  // covers ADR 036 (Addresses)
+  it("[TC-PE-1267-18] asks before a page on a private address under every preset, and Always answers that host alone", async () => {
+    const page = (host: string, addresses: ReadonlyArray<string>, found = true) =>
+      ({ _tag: "Web", host, addresses, page: { url: `http://${host}/`, found } }) as const;
+    for (const preset of ["careful", "balanced", "trusting"] as const) {
+      const context = contextFor(home, preset);
+      for (const [host, addresses] of [
+        ["10.0.0.8", ["10.0.0.8"]],
+        ["nas.home", ["192.168.1.20"]],
+        ["printer.lan", ["172.16.4.4"]],
+        ["box.ts.example", ["100.64.0.9"]],
+        ["v6.home", ["[fd12:3456::1]"]],
+      ] as const) {
+        expect(await decide(context, page(host, addresses))).toMatchObject({
+          decision: "ask",
+          grantable: true,
+          reason: { code: "private-address" },
+          rules: [{ _tag: "Host", host }],
+        });
+      }
+      // A page on a public address is the site rules' to decide, and loopback stays refused.
+      expect((await decide(context, page("example.com", ["93.184.215.14"]))).reason.code).not.toBe("private-address");
+      expect((await decide(context, page("loop.example", ["127.0.0.1"]))).decision).toBe("deny");
+      const nas = await approveAlways(context, page("nas.home", ["192.168.1.20"]));
+      expect((await decide(nas, page("nas.home", ["192.168.1.20"]))).decision).toBe("allow");
+      expect((await decide(nas, page("printer.lan", ["172.16.4.4"]))).decision).toBe("ask");
+    }
+    // Never for Use the web stays Never, whatever the address.
+    const balanced = contextFor(home, "balanced");
+    const never = { ...balanced, hob: { ...balanced.hob, overrides: { "use-web": "deny" as const } } };
+    expect((await decide(never, page("nas.home", ["192.168.1.20"]))).decision).toBe("deny");
+  });
+
+  // covers ADR 036 (Found URLs)
+  it("[TC-PE-1267-19] asks once before a URL the hob wrote itself, under every preset and whatever was granted", async () => {
+    const written = {
+      _tag: "Web",
+      host: "example.com",
+      addresses: ["93.184.215.14"],
+      page: { url: "https://example.com/?key=secret", found: false },
+    } as const;
+    for (const preset of ["careful", "balanced", "trusting"] as const) {
+      const context = contextFor(home, preset);
+      expect(await decide(context, written)).toMatchObject({
+        decision: "ask",
+        grantable: false,
+        rules: [],
+        reason: { code: "written-url" },
+      });
+      const granted = { ...context, grants: [grantOf({ _tag: "Host", host: "example.com" })] };
+      expect((await decide(granted, written)).decision).toBe("ask");
+      expect((await decide(granted, { ...written, page: { ...written.page, found: true } })).decision).toBe("allow");
+    }
+  });
+
   // covers PE-007
   it("leaves grants out of the policy version, and a This Task grant answers like any grant it is given", async () => {
     const careful = contextFor(home, "careful");
