@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { type RuntimeEvent, type ToolAccess, WEB_RESULTS_LINE } from "@hobbots/agents";
+import { type PromptRequest, type RuntimeEvent, type ToolAccess, WEB_RESULTS_LINE } from "@hobbots/agents";
 import { EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect } from "effect";
@@ -33,11 +33,21 @@ const RESPONSE = {
 };
 
 /** Runs one WebSearch call through the hooks as Claude Code would. */
-const search = async (hob: HobPolicy = EMPTY_HOB_POLICY) => {
+const search = async (hob: HobPolicy = EMPTY_HOB_POLICY, recordSearch?: PromptRequest["recordSearch"]) => {
   const turn = toolTurn(access(hob), "on", { webSearch: true });
   if (turn === null) throw new Error("expected a tool turn");
   const events: Array<RuntimeEvent> = [];
-  const { hooks } = policyHooks(engine, turn, (event) => events.push(event));
+  const { hooks } = policyHooks(
+    engine,
+    turn,
+    (event) => events.push(event),
+    null,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    recordSearch,
+  );
   const signal = new AbortController().signal;
   const base = {
     session_id: "s",
@@ -66,6 +76,20 @@ const search = async (hob: HobPolicy = EMPTY_HOB_POLICY) => {
 };
 
 describe("Claude Code's web search", () => {
+  // covers ADR 036
+  it("[TC-RT-1289-01] records a search's results with the turn's recorder before the hook returns and reports the search", async () => {
+    const order: Array<string> = [];
+    const done = await search(EMPTY_HOB_POLICY, (event) =>
+      // Slow on purpose, as a found set written to a busy database would be.
+      Effect.sleep("100 millis").pipe(
+        Effect.andThen(Effect.sync(() => order.push(`found ${event.results?.map((hit) => hit.url).join(" ")}`))),
+      ),
+    );
+    order.push("returned");
+    expect(order).toEqual(["found https://example.com/r", "returned"]);
+    expect(done.events.filter((event) => event._tag === "WebSearched")).toHaveLength(1);
+  });
+
   // covers ADR 036
   it("[TC-RT-1266-05] offers WebSearch only to a turn the hub let search and a hob allowed to, and never WebFetch", () => {
     expect(toolTurn(access(), "on", { webSearch: true })?.tools).toContain("WebSearch");

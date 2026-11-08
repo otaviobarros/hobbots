@@ -1,6 +1,6 @@
 import { TaskId, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { briefWriterOf, foundUrlKey, pageAnswer, pageParts, urlsIn, webWorkOf } from "../src/web-fetch.ts";
+import { briefWriterOf, foundUrlKey, pageAnswer, pageParts, searchFound, urlsIn, webWorkOf } from "../src/web-fetch.ts";
 
 // The pure rules of web_fetch (ADR 036): which URLs a text holds, whose session wrote a brief, and how
 // a long page is cut into parts.
@@ -50,6 +50,43 @@ describe("web_fetch's found URLs (ADR 036)", () => {
       threadId: null,
       taskId: "mid",
     });
+  });
+});
+
+describe("a search's results as found URLs (ADR 036)", () => {
+  // covers ADR 036 (Where a URL came from)
+  it("[TC-PE-1289-01] takes only the runtime's structured results, keyed, and leaves out anything not http or https", () => {
+    expect(
+      searchFound({
+        query: "lamp oil https://example.com/from-the-query",
+        results: [
+          { title: "Overview", url: "https://Search.example.com/lamp-oil#top", snippet: "See https://example.com/x" },
+          { title: "Notes", url: "http://search.example.com:80/notes" },
+          { title: "Script", url: "javascript:alert(1)" },
+          { title: "File", url: "file:///etc/passwd" },
+          { title: "Broken", url: "not a url" },
+        ],
+      }),
+    ).toEqual([
+      {
+        url: "https://search.example.com/lamp-oil",
+        source: 'a result of the search "lamp oil https://example.com/from-the-query"',
+      },
+      {
+        url: "http://search.example.com/notes",
+        source: 'a result of the search "lamp oil https://example.com/from-the-query"',
+      },
+    ]);
+  });
+
+  it("[TC-PE-1289-02] adds nothing for a search that reported no structured results", () => {
+    expect(searchFound({ query: "lamp oil", results: null })).toEqual([]);
+    expect(searchFound({ query: "lamp oil", results: [] })).toEqual([]);
+  });
+
+  it("quotes a long query only in part", () => {
+    const [found] = searchFound({ query: "q".repeat(500), results: [{ title: "A", url: "https://example.com/" }] });
+    expect(found?.source).toBe(`a result of the search "${"q".repeat(200)}…"`);
   });
 });
 

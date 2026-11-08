@@ -24,8 +24,11 @@ export interface FakeCodexOptions {
   readonly pages?: ReadonlyArray<ReadonlyArray<Partial<Model>>>;
   /** What `account/rateLimits/read` answers; left out, Codex answers it with an error. */
   readonly rateLimits?: unknown;
-  /** `silent` never answers; `exit` exits after `initialize`; `ask` sends the client a request first. */
-  readonly behavior?: "answer" | "silent" | "exit" | "ask";
+  /**
+   * `silent` never answers; `exit` exits after `initialize`; `ask` sends the client a request first;
+   * `search` sends a finished search and then a hub tool call, back to back.
+   */
+  readonly behavior?: "answer" | "silent" | "exit" | "ask" | "search";
 }
 
 const model = (fields: Partial<Model>): Model => ({
@@ -99,6 +102,10 @@ process.stdin.on("data", (chunk) => {
     if (config.behavior === "ask" && message.method === "initialize") {
       send({ id: "ask-1", method: "item/tool/call", params: { tool: "lookup" } });
       send({ id: "ask-2", method: "unknown/thing", params: {} });
+    }
+    if (config.behavior === "search" && message.method === "initialize") {
+      send({ method: "item/completed", params: { threadId: "thr-1", turnId: "turn-1", item: { type: "webSearch", id: "s1" } } });
+      send({ id: "ask-1", method: "item/tool/call", params: { tool: "web_fetch" } });
     }
     const result = message.method === "account/rateLimits/read" && config.rateLimits === null ? undefined : results[message.method];
     if (result === undefined) send({ id: message.id, error: { code: -32601, message: "unknown method" } });

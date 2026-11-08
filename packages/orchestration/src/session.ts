@@ -4,6 +4,7 @@ import {
   deliveredMemoryBrief,
   deliveredRoster,
   type HubOffer,
+  makeWebProvenance,
   nextSteps,
   type Redactor,
   type RuntimeEvent,
@@ -52,6 +53,8 @@ export interface SessionTurn {
   readonly agent: Agent;
   readonly config: AgentConfiguration;
   readonly prompt: string;
+  /** The Task the session works on, whose found URLs (ADR 036) a search's results join. */
+  readonly taskId: TaskId;
   /** The Attempt the turn runs as, which its commands and file changes are recorded on (ADR 023). */
   readonly attemptId: AttemptId;
   /** The runtime session to resume, or null for a fresh one with nothing of the hob's chat. */
@@ -85,6 +88,7 @@ export const runSessionTurn = (
       } as Ending;
     }
     let ending: Ending = { _tag: "Failed", reason: "The runtime ended without a result." };
+    const web = yield* makeWebProvenance;
     const startedAt = DateTime.formatIso(yield* DateTime.now);
     let usage: ReplyUsage | null = null;
     // The turn's steps, kept on its Attempt as a chat reply keeps its own (#892). Saved in order, each
@@ -201,6 +205,8 @@ export const runSessionTurn = (
           redaction: redactor,
           recordToolStart: (event) =>
             turn.recordToolStart(event).pipe(Effect.tap((recorded) => (recorded ? stepOf(event) : Effect.void))),
+          // A search's results are found URLs in the Task's session before the hob can act on them (ADR 036).
+          recordSearch: web.searched({ threadId: null, taskId: turn.taskId }, redactor),
           // A hub tool reads the revisions this turn mounted, not what a rollout moved since.
           ...(yield* Effect.provideService(turn.offer, TurnSkillsInUse, given)),
         },

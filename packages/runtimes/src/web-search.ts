@@ -1,4 +1,5 @@
-import type { RuntimeEvent, WebSearchResult } from "@hobbots/agents";
+import type { PromptRequest, RuntimeEvent, WebSearchResult } from "@hobbots/agents";
+import { Effect } from "effect";
 
 /**
  * Each runtime's report of a web search in Hobbots' terms (ADR 036): the query and the hits the
@@ -78,3 +79,10 @@ export const codexWebSearched = (item: {
     results: hitsOf(item.results ?? []),
   };
 };
+
+/**
+ * Waits for the turn's `recordSearch` (ADR 036), which makes a search's results found before the
+ * model can act on them. A defect is ignored, so a search is never lost to a failed record.
+ */
+export const recordSearched = (record: PromptRequest["recordSearch"], searched: Searched): Effect.Effect<void> =>
+  record ? record(searched).pipe(Effect.catchDefect(() => Effect.void)) : Effect.void;

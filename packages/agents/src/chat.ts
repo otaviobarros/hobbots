@@ -85,6 +85,7 @@ import { callScope, TaskRepository } from "./tasks.ts";
 import { keepToolOutput } from "./tool-output.ts";
 import { accessNow, HobTools, narrows, turnWebSearch } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
+import { makeWebProvenance } from "./web-fetch.ts";
 import { workHeld } from "./work-hold.ts";
 
 interface Reply {
@@ -349,6 +350,8 @@ export class ChatService extends Context.Service<
       const toolLogs = yield* Effect.serviceOption(ToolLogs);
       // Records what each turn runs and changes for the Workbench (ADR 023); absent, nothing is recorded.
       const recorder = yield* Effect.serviceOption(ActivityRecorder);
+      // Each chat's found URLs (ADR 036), which a search's results join.
+      const web = yield* makeWebProvenance;
       const activityOf = (tools: ToolAccess | null, taskTurn: ChatTaskTurn | null) =>
         trackTurn(recorder, {
           folders: tools?.folders ?? [],
@@ -977,6 +980,8 @@ export class ChatService extends Context.Service<
                 approvals: turnApprovals?.approvals ?? null,
                 redaction: redactor,
                 recordToolStart,
+                // A search's results are found URLs in the chat before the hob can act on them (ADR 036).
+                recordSearch: web.searched({ threadId: thread.id }, redactor),
                 // Its hub tools read the revisions this turn mounted, not what a rollout moved since.
                 ...(yield* Effect.gen(function* () {
                   const messageId = (yield* Ref.get(reply.current)).id;

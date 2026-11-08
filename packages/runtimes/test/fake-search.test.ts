@@ -1,12 +1,12 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RuntimeEvent, ToolAccess } from "@hobbots/agents";
+import type { HubTools, RuntimeEvent, ToolAccess } from "@hobbots/agents";
 import { EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import { FAKE_SEARCH_DIRECTIVE, fakeSearchResults, makeFakeRuntime } from "../src/fake.ts";
+import { FAKE_HUB_DIRECTIVE, FAKE_SEARCH_DIRECTIVE, fakeSearchResults, makeFakeRuntime } from "../src/fake.ts";
 
 // The fake runtime's scripted web search, which end-to-end tests drive (ADR 036, #1266).
 
@@ -59,5 +59,34 @@ describe("the fake runtime's web search", () => {
       expect(events.filter((event) => event._tag.startsWith("Tool") || event._tag === "WebSearched")).toEqual([]);
       expect(events.at(-1)).not.toHaveProperty("usage.webSearches");
     }
+  });
+
+  // covers ADR 036
+  it("[TC-RT-1289-02] records a search's results with the turn's recorder before a hub call after it runs", async () => {
+    const order: Array<string> = [];
+    const hubTools: HubTools = {
+      tools: [{ name: "web_fetch", description: "Reads a page.", inputSchema: { type: "object" }, label: "Reading" }],
+      call: () =>
+        Effect.sync(() => {
+          order.push("web_fetch");
+          return { text: "A page.", refused: false };
+        }),
+    };
+    await makeFakeRuntime({ engine })
+      .sendPrompt({
+        prompt: [`${FAKE_SEARCH_DIRECTIVE} hobbots releases`, `${FAKE_HUB_DIRECTIVE} web_fetch {"url":"x"}`].join("\n"),
+        sessionId: null,
+        instructions: "",
+        instructionsChanged: false,
+        model: null,
+        effort: null,
+        tools: access(),
+        webSearch: true,
+        hubTools,
+        recordSearch: (event) =>
+          Effect.sleep("50 millis").pipe(Effect.andThen(Effect.sync(() => order.push(`found ${event.query}`)))),
+      })
+      .pipe(Stream.runDrain, Effect.runPromise);
+    expect(order).toEqual(["found hobbots releases", "web_fetch"]);
   });
 });

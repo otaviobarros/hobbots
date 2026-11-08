@@ -55,6 +55,12 @@ export interface AppServer {
 
 export interface AppServerOptions {
   readonly handlers?: ServerRequestHandlers | undefined;
+  /**
+   * Runs for each notification as it is read, before the next message is: a request Codex sent
+   * after the notification is handled only once this ends. For what a later request relies on,
+   * such as a search's results being found (ADR 036).
+   */
+  readonly beforeNotification?: ((notification: AppServerNotification) => Effect.Effect<void>) | undefined;
   /** Hobbots' version, which Codex adds to its user agent. */
   readonly clientVersion: string;
 }
@@ -125,7 +131,11 @@ export const startAppServer = (
         return Effect.forkScoped(answer(message.id, message.method, message.params)).pipe(Effect.asVoid);
       }
       if (message.method !== undefined) {
-        return PubSub.publish(notifications, { method: message.method, params: message.params }).pipe(Effect.asVoid);
+        const notification = { method: message.method, params: message.params };
+        return Effect.andThen(
+          options.beforeNotification?.(notification) ?? Effect.void,
+          PubSub.publish(notifications, notification),
+        ).pipe(Effect.asVoid);
       }
       if (message.id === undefined) return Effect.void;
       const waiting = pending.get(message.id);
