@@ -4,6 +4,7 @@ import {
   deliveredMemoryBrief,
   deliveredRoster,
   type HubOffer,
+  makeWebProvenance,
   nextSteps,
   type Redactor,
   type RuntimeEvent,
@@ -52,6 +53,8 @@ export interface SessionTurn {
   readonly agent: Agent;
   readonly config: AgentConfiguration;
   readonly prompt: string;
+  /** The Task the session works on, whose found URLs (ADR 036) a search's results join. */
+  readonly taskId: TaskId;
   /** The Attempt the turn runs as, which its commands and file changes are recorded on (ADR 023). */
   readonly attemptId: AttemptId;
   /** The runtime session to resume, or null for a fresh one with nothing of the hob's chat. */
@@ -85,6 +88,7 @@ export const runSessionTurn = (
       } as Ending;
     }
     let ending: Ending = { _tag: "Failed", reason: "The runtime ended without a result." };
+    const web = yield* makeWebProvenance;
     const startedAt = DateTime.formatIso(yield* DateTime.now);
     let usage: ReplyUsage | null = null;
     // The turn's steps, kept on its Attempt as a chat reply keeps its own (#892). Saved in order, each
@@ -240,7 +244,13 @@ export const runSessionTurn = (
             ending = { _tag: "Replied", text: event.text };
             usage = event.usage ?? null;
           }
-          return Effect.andThen(confirmBrief, stepOf(event));
+          // A search's results are found URLs in the Task's session, so web_fetch reads them under the
+          // site rules (ADR 036). The step's own record is redacted, and so is the query the source quotes.
+          const found =
+            event._tag === "WebSearched"
+              ? web.searched({ threadId: null, taskId: turn.taskId }, { ...event, query: redactor.text(event.query) })
+              : Effect.void;
+          return Effect.andThen(confirmBrief, Effect.andThen(found, stepOf(event)));
         }),
         Effect.catchTags({
           RuntimeError: (error) =>

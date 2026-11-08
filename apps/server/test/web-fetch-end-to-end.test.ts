@@ -19,6 +19,7 @@ import {
   SecretRedaction,
   TaskFiles,
   UNASKABLE,
+  WebFetcher,
 } from "@hobbots/agents";
 import {
   type Agent,
@@ -76,6 +77,8 @@ const dataDir = join(temp, "data");
 for (const folder of [project, dataDir]) mkdirSync(folder, { recursive: true });
 
 const PUBLIC = "203.0.113.7";
+/** Where the fake runtime's search results are (`fakeSearchResults`). */
+const SEARCH_HOST = "search.hobbots.test";
 const NAS = "10.0.0.8";
 
 /** Each path the test site was asked for, in order. */
@@ -133,7 +136,7 @@ beforeAll(async () => {
     Layer.provide(FakeRuntimeLayer()),
     Layer.provide(PolicyEngine.node),
   );
-  const fetcher = WebAccessWith({
+  const reach = WebAccessWith({
     version: "0.0.4",
     dialAs: (address) => (address === PUBLIC || address === NAS ? "127.0.0.1" : "::1"),
   }).pipe(
@@ -144,10 +147,28 @@ beforeAll(async () => {
           "oil.test": [PUBLIC],
           "nas.test": [NAS],
           "loop.test": ["127.0.0.1"],
+          [SEARCH_HOST]: [PUBLIC],
         },
       }),
     ),
   );
+  // The fake runtime's search results are https pages on its search host; the test site stands in
+  // for them over http, as lamps.test, once the policy has decided the result's own URL.
+  const fetcher = Layer.effect(
+    WebFetcher,
+    Effect.map(WebFetcher, (real) =>
+      WebFetcher.of({
+        resolve: real.resolve,
+        fetch: (page, target) =>
+          page.hostname === SEARCH_HOST
+            ? real.fetch(new URL(`${page.pathname}${page.search}`, url("lamps.test", "/")), {
+                ...target,
+                host: "lamps.test",
+              })
+            : real.fetch(page, target),
+      }),
+    ),
+  ).pipe(Layer.provide(reach));
   const App = Layer.mergeAll(HobLifecycle.layer, WakeOnArrival)
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))
     .pipe(Layer.provideMerge(ChatService.layer))
@@ -277,6 +298,8 @@ const settled = (thread: Thread, before: number) =>
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 const fetchOf = (raw: string) => `fake:hub web_fetch {"url":"${raw}"}`;
+/** A search result's URL as a hob passes it to web_fetch, so it is no URL in your message. */
+const result = (path: string) => `https://${SEARCH_HOST}${path}`.replaceAll("/", "\\/");
 
 const summon = async (name: string, lookSeed: number) =>
   (
@@ -480,5 +503,56 @@ describe("hobs read web pages through the hub, end to end", () => {
     expect(asked.slice(before).filter((line) => line.includes("/member-page"))).toEqual(["lamps.test /member-page"]);
     expect(asked.slice(before).some((line) => line.includes("/collect"))).toBe(false);
     await decide(pending, { decision: "deny" });
+  }, 30_000);
+  // covers ADR 036 (Where a URL came from)
+  it("[TC-PE-1289-03] after a search, a result link follows the site rules, while a URL the hob wrote on the same site asks", async () => {
+    await preset("balanced");
+    const fern = await summon("Fern", 1289);
+    const thread = (await request<Thread>("POST", `/api/agents/${fern.id}/threads`)).body;
+    const before = asked.length;
+    // The fake runtime's search reports its results under the search host, and none is in your message.
+    const read = await send(thread, "Look up lamp oil", "fake:search lamp oil", fetchOf(result("/lamp-oil/releases")));
+    expect(read.pending).toBeUndefined();
+    expect(read.reply?.content).toContain("Title: Lamps on lamps.test");
+    expect(asked.slice(before)).toContain("lamps.test /lamp-oil/releases");
+
+    // The reply named a page the search did not report: it asks, and nothing is sent.
+    const sent = asked.length;
+    const written = await send(thread, "Go on", fetchOf(result("/lamp-oil/notes?key=launch-key-7f3a")));
+    const pending = written.pending as ApprovalRequest;
+    expect(pending).toMatchObject({ tool: "web_fetch", grantable: false });
+    expect(pending.reason).toContain("not copied from you, a search result or a page read in this session");
+    expect(asked.slice(sent)).toEqual([]);
+    await decide(pending, { decision: "deny" });
+    await settled(thread, written.before);
+  }, 30_000);
+
+  // covers ADR 036 (Where a URL came from)
+  it("[TC-PE-1289-04] a step reads its own search's results and those its parent's chat found, and a result the parent never found is held", async () => {
+    await preset("balanced");
+    const sage = await summon("Sage", 1290);
+    const thread = (await request<Thread>("POST", `/api/agents/${sage.id}/threads`)).body;
+    const brief = [
+      fetchOf(result("/lamp-wick")),
+      "fake:search lamp glass",
+      fetchOf(result("/lamp-glass")),
+      fetchOf(result("/lamp-mantle")),
+    ].join("\n");
+    // The chat searches lamp wick before it plans: that result passes on with the brief. lamp-glass
+    // is found by the step's own search, and lamp-mantle by no search at all.
+    const plan = hub("plan_steps", { key: "plan", steps: [{ brief }] }).replaceAll("\\\\/", "\\/");
+    const before = asked.length;
+    await request("POST", `/api/threads/${thread.id}/messages`, {
+      content: ["Search lamp wick, then read it in a step", "fake:search lamp wick", plan].join("\n"),
+    });
+    const held = await eventually(async () =>
+      (await messages(thread)).find((message) => message.content.includes("was not copied from you")),
+    );
+    expect(held.content).toContain(UNASKABLE);
+    const read = asked.slice(before);
+    expect(read).toContain("lamps.test /lamp-wick");
+    expect(read).toContain("lamps.test /lamp-glass");
+    expect(read.some((line) => line.includes("/lamp-mantle"))).toBe(false);
+    expect(await pendingIn(thread)).toEqual([]);
   }, 30_000);
 });
