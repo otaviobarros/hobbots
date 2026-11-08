@@ -306,4 +306,55 @@ releaseLock(lock, token);
     // Every hold ends before the next begins.
     expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(Array.from({ length: 6 }, () => ["in", "out"]).flat());
   }, 20_000);
+
+  it("[TC-OP-1214-10] deletes a shared item it moved after GitHub was disconnected or switched to another sign-in", async () => {
+    const refused = new KeychainError({ reason: "failed", message: "The keychain refused the delete (161)." });
+    for (const after of [null, "gh"] as const) {
+      const dataDir = newData();
+      let failing = true;
+      const outcome = await Effect.gen(function* () {
+        const real = yield* LegacyKeychain;
+        // The shared items cannot be deleted at first; later they can.
+        const flaky = LegacyKeychain.of({
+          signIn: {
+            ...real.signIn,
+            remove: Effect.suspend(() => (failing ? Effect.fail(refused) : real.signIn.remove)),
+          },
+          hobAppKeys: {
+            ...real.hobAppKeys,
+            remove: (id) => Effect.suspend(() => (failing ? Effect.fail(refused) : real.hobAppKeys.remove(id))),
+          },
+        });
+        yield* sharedItems;
+        const atStart = yield* claimLegacySignIns(dataDir, newLock()).pipe(
+          Effect.provideService(LegacyKeychain, flaky),
+          Effect.provide(records([FRODO], "app")),
+        );
+        // Disconnect deletes the hub's own items and its records; Frodo's app is removed too.
+        yield* (yield* Keychain).remove;
+        yield* (yield* HobAppKeys).remove(FRODO);
+        const stillStuck = yield* forgetKeychain(dataDir, [], newLock()).pipe(
+          Effect.provideService(LegacyKeychain, flaky),
+          Effect.provide(records([], after)),
+        );
+        failing = false;
+        const atReset = yield* forgetKeychain(dataDir, [], newLock()).pipe(
+          Effect.provideService(LegacyKeychain, flaky),
+          Effect.provide(records([], after)),
+        );
+        return {
+          atStart: atStart.length,
+          stillStuck: stillStuck.length,
+          atReset,
+          shared: [value(yield* real.signIn.read), value(yield* real.hobAppKeys.read(FRODO))],
+        };
+      }).pipe(
+        Effect.provide(Layer.mergeAll(KeychainMemory, HobAppKeysMemory, LegacyKeychainMemory)),
+        Effect.runPromise,
+      );
+      // Reset refuses while the shared items it moved are still there, and deletes them once it can.
+      expect(outcome).toEqual({ atStart: 2, stillStuck: 2, atReset: [], shared: [Option.none(), Option.none()] });
+      expect(readdirSync(dataDir)).toEqual([]);
+    }
+  });
 });

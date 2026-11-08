@@ -2,6 +2,7 @@ import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GitHubAccounts, HobbotsRepository, HobGitHubApps } from "@hobbots/agents";
 import { HobAppKeys, Keychain, KeychainError, LegacyKeychain } from "@hobbots/charms";
+import type { AgentId } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Redacted, Schedule, Schema } from "effect";
 import { lockToken, releaseLock, tryTakeLock } from "./keychain-lock.ts";
 
@@ -14,10 +15,14 @@ interface Move {
     readonly read: Effect.Effect<Option.Option<Redacted.Redacted<string>>, KeychainError>;
     readonly remove: Effect.Effect<void, KeychainError>;
   };
+  /**
+   * Where the hub keeps it now, or null when the hub no longer keeps it: it disconnected GitHub,
+   * chose another sign-in, or the hob's app is gone. A listed shared item is then only deleted.
+   */
   readonly own: {
     readonly read: Effect.Effect<Option.Option<Redacted.Redacted<string>>, KeychainError>;
     readonly write: (secret: Redacted.Redacted<string>) => Effect.Effect<void, KeychainError>;
-  };
+  } | null;
 }
 
 const same = (a: Redacted.Redacted<string>, b: Redacted.Redacted<string>) => Redacted.value(a) === Redacted.value(b);
@@ -33,6 +38,12 @@ const same = (a: Redacted.Redacted<string>, b: Redacted.Redacted<string>) => Red
 const move = (dataDir: string, moves: Set<string>, { key, what, legacy, own }: Move) =>
   Effect.gen(function* () {
     const listed = moves.has(key);
+    if (own === null) {
+      // Moved earlier and no longer kept: the shared item is still this hub's to delete.
+      yield* legacy.remove;
+      if (moves.delete(key)) yield* writeMoves(dataDir, moves);
+      return null;
+    }
     const shared = yield* legacy.read;
     if (Option.isSome(shared)) {
       const mine = yield* own.read;
@@ -115,6 +126,22 @@ const writeMoves = (dataDir: string, items: ReadonlySet<string>) =>
     catch: (error) => new KeychainError({ reason: "failed", message: `${legacyMovesFile(dataDir)}: ${String(error)}` }),
   });
 
+/** A listed item the hub's records no longer name: only its shared item is deleted. */
+const leftOverMove = (key: string, legacy: LegacyKeychain["Service"]): Move => {
+  const hob = key.startsWith(HOB_APP) ? (key.slice(HOB_APP.length) as AgentId) : null;
+  return hob === null
+    ? { key, what: "the GitHub sign-in", legacy: legacy.signIn, own: null }
+    : {
+        key,
+        what: `the GitHub app key of hob ${hob}`,
+        legacy: { read: legacy.hobAppKeys.read(hob), remove: legacy.hobAppKeys.remove(hob) },
+        own: null,
+      };
+};
+
+const SIGN_IN = "sign-in";
+const HOB_APP = "hob-app:";
+
 /**
  * Moves the sign-ins this hub kept in the keychain items every hub on the computer shared before
  * #1214 into its own items, once, so an upgrade keeps it signed in. Only what the hub's records say
@@ -137,19 +164,21 @@ export const claimLegacySignIns = (dataDir: string, lock: string, wait = 30_000)
     const hobs = yield* HobbotsRepository;
     const moves: Array<Move> = [];
     if ((yield* accounts.get)?.source === "app") {
-      moves.push({ key: "sign-in", what: "the GitHub sign-in", legacy: legacy.signIn, own: signIn });
+      moves.push({ key: SIGN_IN, what: "the GitHub sign-in", legacy: legacy.signIn, own: signIn });
     }
     for (const hob of yield* hobs.listAgentsWithStatus(["active", "paused", "retired"])) {
       const recorded = (yield* apps.get(hob.id)) !== null || (yield* apps.leftOver(hob.id)) !== null;
       if (!recorded) continue;
       moves.push({
-        key: `hob-app:${hob.id}`,
+        key: `${HOB_APP}${hob.id}`,
         what: `${hob.name}'s GitHub app key`,
         legacy: { read: legacy.hobAppKeys.read(hob.id), remove: legacy.hobAppKeys.remove(hob.id) },
         own: { read: keys.read(hob.id), write: (pem) => keys.write(hob.id, pem) },
       });
     }
-    if (moves.length === 0) return [];
+    // Items the hub listed as moving stay its own to delete whatever its records say now (#1214).
+    const pending = readMoves(dataDir);
+    if (moves.length === 0 && pending !== null && pending.size === 0) return [];
     const token = lockToken();
     const kept = yield* Effect.acquireUseRelease(
       take(lock, token, wait),
@@ -162,7 +191,9 @@ export const claimLegacySignIns = (dataDir: string, lock: string, wait = 30_000)
               `${legacyMovesFile(dataDir)} cannot be read, so the hub cannot tell which shared keychain items it moved.`,
             ];
           }
-          return yield* Effect.forEach(moves, (item) => move(dataDir, listed, item));
+          const kept = new Set(moves.map((item) => item.key));
+          const leftOver = [...listed].filter((key) => !kept.has(key)).map((key) => leftOverMove(key, legacy));
+          return yield* Effect.forEach([...moves, ...leftOver], (item) => move(dataDir, listed, item));
         }),
       () => Effect.sync(() => releaseLock(lock, token)),
     ).pipe(Effect.catch((reason) => Effect.succeed([reason])));
