@@ -24,7 +24,8 @@ const Identity = Schema.Struct({
 });
 
 /**
- * Who hobs on your account commit as (#741). `reason` says why the hub asks: your Git config sets
+ * Who hobs on your account commit as (#741). The hub no longer asks it since #1241; questions
+ * raised before are still read. `reason` says why the hub asks: your Git config sets
  * no identity, or it could not read one in your last answer, which `unread` holds. `github` is the
  * connected GitHub account, with the identity its choice commits as, when the hub reached one.
  */
@@ -40,6 +41,16 @@ export const CommitIdentityAsk = Schema.Struct({
   unread: Schema.NullOr(Schema.String.check(Schema.isMaxLength(200))),
 });
 export type CommitIdentityAsk = typeof CommitIdentityAsk.Type;
+
+/**
+ * Whether a hob will write code (#1241), asked when it may commit and no identity applies. The
+ * question's key is the hob's id, and `hob` its name as the card shows it.
+ */
+export const CodingSetupAsk = Schema.Struct({
+  kind: Schema.Literal("coding-setup"),
+  hob: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(200)),
+});
+export type CodingSetupAsk = typeof CodingSetupAsk.Type;
 
 /**
  * The made-up questions behind `HOBBOTS_FAKE_HUB_QUESTIONS`, for trying hub questions and for
@@ -59,13 +70,14 @@ export const FakeCheckAsk = Schema.Struct({
 export type FakeCheckAsk = typeof FakeCheckAsk.Type;
 
 /** What a hub question asks, by kind: the part of the hub that raised it and applies the answer. */
-export const HubQuestionAsk = Schema.Union([CommitIdentityAsk, FakeCheckAsk]);
+export const HubQuestionAsk = Schema.Union([CommitIdentityAsk, CodingSetupAsk, FakeCheckAsk]);
 export type HubQuestionAsk = typeof HubQuestionAsk.Type;
 export type HubQuestionKind = HubQuestionAsk["kind"];
 
 /** The choices each kind of hub question can offer, by their stable keys. */
 export const HUB_QUESTION_CHOICES = {
   "commit-identity": ["github", "own-git"],
+  "coding-setup": ["not-this-hob", "no-hob"],
   "fake-check": ["nightly", "weekly"],
 } as const satisfies Record<HubQuestionKind, ReadonlyArray<string>>;
 export type HubQuestionChoice<K extends HubQuestionKind = HubQuestionKind> = (typeof HUB_QUESTION_CHOICES)[K][number];

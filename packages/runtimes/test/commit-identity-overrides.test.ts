@@ -128,6 +128,6 @@ describe("commit identity overrides", () => {
     // #741: with no identity at all it never claims the user's config sets one, and never sends the hob to ask.
     expect(missing).not.toContain("their Git config sets,");
     expect(missing).toContain("none is set yet");
-    expect(missing).toContain("Do not ask them or another hob yourself");
+    expect(missing).toContain("never ask the user or another hob for a name and email");
   });
 });

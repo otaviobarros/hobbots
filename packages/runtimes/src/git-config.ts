@@ -328,15 +328,14 @@ export const COMMIT_IDENTITY_RULE =
 export const SETS_COMMIT_IDENTITY_NOTE = `Hobbots sets who your commits are made as, never you, so run git commit as it is. ${COMMIT_IDENTITY_RULE} Hobbots refuses a command that does.`;
 
 /**
- * What a hob is told when no identity applies to its commits (#741). It can set none, and Hobbots
- * asks the user itself, so asking again in chat only goes round in circles.
+ * What a hob without a commit identity tells the user (#1241): where to set up GitHub, in words for
+ * someone who may not code, never Git's settings.
  */
-export const NO_GIT_IDENTITY_NOTE = [
-  "No Git identity is set for your commits yet: the user's Git config sets none, and Hobbots is asking the user who hobs should commit as.",
-  "Do not ask the user or another hob who to commit as: Hobbots applies the user's answer to your next turn.",
-  SETS_COMMIT_IDENTITY_NOTE,
-  "Until then, do not commit. Do the rest of the work, leave your changes uncommitted, and say in your reply that the commit waits for the user to answer Hobbots' question about who hobs commit as.",
-].join(" ");
+export const SETUP_GITHUB =
+  "Do not commit, and never ask the user or another hob for a name and email. Do the rest of the work and leave your changes uncommitted. If your work needed a commit, say in plain words, with no Git terms, that to save code changes the user can open your profile and set up GitHub in its GitHub section.";
+
+/** What a hob is told when no identity applies to its commits (#741, #1241). It can set none itself. */
+export const NO_GIT_IDENTITY_NOTE = `No identity is set for your commits yet: the user's Git config sets none, and you have no GitHub account of your own. ${SETS_COMMIT_IDENTITY_NOTE} ${SETUP_GITHUB}`;
 
 /** What a hob is told when it commits under the identity the user gave Hobbots (#741). */
 export const givenIdentityNote = (identity: CommitIdentity) =>

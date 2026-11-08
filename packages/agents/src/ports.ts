@@ -104,6 +104,20 @@ export class HubCommitIdentities extends Context.Service<
 >()("@hobbots/agents/HubCommitIdentities") {}
 
 /**
+ * Where you said not to ask whether a hob will write code (#1241): a hob's id, or `ALL_HOBS` for
+ * every hob, with when.
+ */
+export class CodingSetupDismissals extends Context.Service<
+  CodingSetupDismissals,
+  {
+    readonly list: Effect.Effect<ReadonlyArray<string>>;
+    /** Keeps the choice; making it again changes nothing. */
+    readonly dismiss: (scope: string, at: string) => Effect.Effect<void>;
+    readonly clear: Effect.Effect<void>;
+  }
+>()("@hobbots/agents/CodingSetupDismissals") {}
+
+/**
  * Each hob's own GitHub App, by hob (ADR 022): its identity only. Its private key is kept in the OS
  * keychain, never here.
  */

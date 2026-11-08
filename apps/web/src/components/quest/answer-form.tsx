@@ -25,6 +25,8 @@ interface FormPlace {
   look?: ChoicesLook;
   /** Where focus goes once the answer is sent and the question leaves (#995). */
   targets?: FocusTargets;
+  /** False for a question answered by its choices only, with no box (#1241). */
+  inWords?: boolean;
 }
 
 /**
@@ -98,6 +100,7 @@ function ChoicesForm({
   route,
   look = "rows",
   targets = NO_TARGETS,
+  inWords = true,
 }: { question: Pick<Question, "options" | "recommended">; send: AnswerSend } & FormPlace) {
   const [answer, setAnswer] = useState("");
   const form = useRef<HTMLFormElement>(null);
@@ -136,25 +139,35 @@ function ChoicesForm({
           look={look}
           disabled={send.pending}
           onPick={answerWith}
+          inWords={inWords}
         />
       )}
-      <Textarea
-        aria-label={copy.answerLabel({ name: askerName })}
-        placeholder={choices ? copy.somethingElse : copy.answerTo({ name: askerName })}
-        value={answer}
-        onChange={(event) => setAnswer(event.target.value)}
-        onKeyDown={enterSends(submit)}
-        variant={composer ? "bare" : "deep"}
-        className={cn(composer ? "min-h-14" : "min-h-10")}
-      />
-      <SendRow
-        line={line}
-        composer={composer}
-        error={send.error}
-        quiet={choices}
-        disabled={text === "" || send.pending}
-        pending={send.pending}
-      />
+      {!inWords && send.error !== null && (
+        <span role="alert" className="text-ui text-rose">
+          {send.error}
+        </span>
+      )}
+      {inWords && (
+        <>
+          <Textarea
+            aria-label={copy.answerLabel({ name: askerName })}
+            placeholder={choices ? copy.somethingElse : copy.answerTo({ name: askerName })}
+            value={answer}
+            onChange={(event) => setAnswer(event.target.value)}
+            onKeyDown={enterSends(submit)}
+            variant={composer ? "bare" : "deep"}
+            className={cn(composer ? "min-h-14" : "min-h-10")}
+          />
+          <SendRow
+            line={line}
+            composer={composer}
+            error={send.error}
+            quiet={choices}
+            disabled={text === "" || send.pending}
+            pending={send.pending}
+          />
+        </>
+      )}
     </form>
   );
 }
