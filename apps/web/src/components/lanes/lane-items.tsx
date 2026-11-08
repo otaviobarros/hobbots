@@ -5,6 +5,7 @@ import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { messages as plainCopy } from "../plain-words/messages.ts";
 import type { StepOutcome } from "../plain-words/plain-words.ts";
 import type { HobLookup } from "../quest/use-work.ts";
+import { keptIn } from "../workbench/changes/task-changes.ts";
 import { useLineCounts } from "../workbench/changes/use-line-counts.ts";
 import type { LaneFoldable, LaneItem, LaneMark, LaneStep } from "./lane-model.ts";
 import { LaneStatusRow } from "./lane-status.tsx";
@@ -85,7 +86,7 @@ function FoldableRow({ item }: { item: LaneFoldable }) {
 
 /** An edit, with the lines it added once the kept versions are read. */
 function EditRow({ mark }: { mark: Mark }) {
-  const counts = useLineCounts(mark.change, mark.activity);
+  const counts = useLineCounts(keptIn(mark.change, mark.activity));
   const outcome =
     counts !== null && counts.added > 0
       ? { text: messages.added({ count: counts.added }), label: messages.addedLabel({ count: counts.added }) }

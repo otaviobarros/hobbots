@@ -3,7 +3,6 @@ import { diffArrays, diffLines } from "diff";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
-import { folderName } from "../../quest/member-folders.ts";
 
 /**
  * How the Changes tab shows a file (ADR 023): a document rendered before and after, code and other
@@ -56,15 +55,6 @@ export const changeCounts = (changes: ReadonlyArray<FileChange>): Readonly<Recor
   const counts: Record<FileChangeKind, number> = { added: 0, edited: 0, deleted: 0, moved: 0, link: 0 };
   for (const change of changes) counts[change.kind] += 1;
   return counts;
-};
-
-/**
- * Where a changed file sits, for the list's second line: its folders inside the hob's, led by the
- * hob's folder's name when the Task changed files in more than one.
- */
-export const changeDir = (change: Pick<FileChange, "folder" | "path">, manyFolders: boolean): string => {
-  const { dir } = splitPath(change.path);
-  return manyFolders ? `${folderName(change.folder)}/${dir}` : dir;
 };
 
 /**

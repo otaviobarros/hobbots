@@ -107,7 +107,7 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
 });
 
 // covers UX-002, OR-001, OR-007
-test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and every other Task's latest that did work", async ({
+test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, with the tries before it, and every other Task's latest that did work", async ({
   page,
 }) => {
   // Quill writes the copy and fails; on her second try she changes nothing and finishes with a result.
@@ -122,31 +122,34 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and ev
   const sheet = laneTask(page, "Draft the copy");
   await expect(sheet).toContainText("attempt 2", { timeout: 30_000 });
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
-  const { bench, changes } = lists(page);
+  const { bench, changes, files } = lists(page);
 
-  // With no try picked, Quill's work is her latest try's, which finished with nothing changed.
+  // With no try picked, Quill's work is her latest try's, which works on what her first left: her
+  // copy from the first try is still listed (#1218).
   await bench.getByRole("tab", { name: /^Changes/ }).click();
-  await expect(changes.getByRole("button")).toHaveText([/^notes\.md, by Aldric/]);
+  await expect(changes.getByRole("button")).toHaveText([/^notes\.md, by Aldric/, /^copy\.md, by Quill/]);
 
-  // Lit, her lane's Task names its tries, the latest checked: it changed nothing.
+  // Lit, her lane's Task names its tries, the latest checked: it changed nothing itself, so the
+  // copy says which try changed it.
   await laneHead(page, "Quill").click();
   const attempts = bench.getByRole("radiogroup", { name: "Attempts" });
   await expect(attempts.getByRole("radio", { name: "Attempt 2" })).toBeChecked();
-  await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveText("ChangesNot used in this task");
-  await expect(bench.getByRole("tabpanel", { name: /^Changes/ })).toContainText(
-    "Quill did not change any files in this task.",
-  );
+  await expect(changes.getByRole("button")).toHaveText([/^copy\.md/]);
+  await expect(
+    bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("article", { name: "copy.md" }),
+  ).toContainText("Changed in attempt 1.");
   await bench.getByRole("tab", { name: /^Files/ }).click();
-  await expect(bench.getByRole("tabpanel", { name: /^Files/ })).toContainText(
-    "Quill did not make or touch any files in this task.",
-  );
+  await expect(files.getByRole("button")).toHaveText([/^copy\.md/]);
 
-  // Picking the first try changes every tab, and the address keeps it: her copy is there.
+  // Picking the first try changes every tab, and the address keeps it: her copy is its own.
   await attempts.getByRole("radio", { name: "Attempt 1" }).click();
   await expect(page).toHaveURL(/attempt=/);
-  await expect(bench.getByRole("tabpanel", { name: /^Files/ })).not.toContainText("did not make or touch");
+  await expect(files.getByRole("button")).toHaveText([/^copy\.md/]);
   await bench.getByRole("tab", { name: /^Changes/ }).click();
   await expect(changes.getByRole("button")).toHaveText([/^copy\.md/]);
+  await expect(
+    bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("article", { name: "copy.md" }),
+  ).not.toContainText("Changed in attempt");
 
   // Her lane's summary opens the copy on the same try, which the address keeps.
   const picked = new URL(page.url()).hash.match(/attempt=([^&]+)/)?.[1];
@@ -156,6 +159,77 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and ev
     .click();
   await expect(page).toHaveURL(new RegExp(`attempt=${picked}`));
   await expect(changes.getByRole("button", { name: /^copy\.md/ })).toHaveAttribute("aria-pressed", "true");
+});
+
+// covers UX-002, OR-007
+test("[TC-UX-1145] a file a stopped try made and its retry rewrote reads Added with every line, not Edited by the retry", async ({
+  page,
+}) => {
+  const script13 = Array.from({ length: 13 }, (_, i) => `echo step ${i + 1}`).join("\n");
+  const script20 = Array.from({ length: 20 }, (_, i) => `echo step ${i + 1}`).join("\n");
+  // Quill's first try writes the script with a shell command and is cut off; her retry, a turn of
+  // its own that starts from what the first left, writes it again, longer.
+  await startParty(page, [
+    "Write the check script",
+    `fake:once fake:run ${JSON.stringify({ command: "cat > check.sh <<EOF", writes: { "check.sh": `${script13}\n` } })}`,
+    "fake:fail",
+    `fake:then fake:run ${JSON.stringify({ command: "cat > check.sh <<EOF", writes: { "check.sh": `${script20}\n` } })}`,
+    `fake:then ${script("complete_task", { delivered: true, key: "checked", summary: "Wrote the check script." })}`,
+  ]);
+  await expect(laneTask(page, "Write the check script")).toContainText("attempt 2", { timeout: 30_000 });
+  await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
+  const { bench, changes } = lists(page);
+
+  await bench.getByRole("tab", { name: /^Changes/ }).click();
+  const row = changes.getByRole("button", { name: /^check\.sh\s*, by Quill/ });
+  await expect(row).toContainText("Added");
+  await expect(row).toContainText("+20");
+  await row.click();
+  await expect(
+    bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("article", { name: "check.sh" }),
+  ).toContainText("Changed in attempts 1 and 2.");
+});
+
+// covers UX-002, OR-001
+test("[TC-UX-1146] a file reads under the same path for a lead and for a member narrowed to a subfolder", async ({
+  page,
+}) => {
+  const { url, aldric, members, api, folder } = await aldricHub({ "test/README.md": "# Tests\n" }, ["Quill"]);
+  await api("PATCH", `/agents/${members[0]}/permissions`, { ownFolders: [folder] });
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  // Aldric writes the notes in his folder; Quill, given only its test folder, edits the same file,
+  // which the hub records from her folder as docs/NOTES.md.
+  await composer.fill(
+    [
+      TITLE,
+      'fake:write test/docs/NOTES.md "# Notes\\n"',
+      script("start_quest", { key: "quest", goal: TITLE }),
+      script("delegate_task", {
+        key: "notes",
+        hob: "Quill",
+        folders: [`${folder}/test`],
+        brief: [
+          "Add to the notes",
+          `fake:write ${folder}/test/docs/NOTES.md "# Notes\\n\\nTested.\\n"`,
+          script("complete_task", { delivered: true, key: "noted", summary: "Added to the notes." }),
+        ].join("\n"),
+      }),
+    ].join("\n"),
+  );
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+  await openRoom(page, TITLE);
+  await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
+  const { bench, changes, files } = lists(page);
+
+  // Both changes read from the Quest's folder, so both sit under test/docs/.
+  await bench.getByRole("tab", { name: /^Changes/ }).click();
+  await expect(changes.getByRole("button")).toHaveText([/^NOTES\.md, by Aldric/, /^NOTES\.md, by Quill/]);
+  await expect(changes.getByRole("button", { name: /^NOTES\.md\s*, by Quill/ })).toContainText("Edited");
+  for (const row of await changes.getByRole("button").all()) await expect(row).toContainText("test/docs/");
+  await bench.getByRole("tab", { name: /^Files/ }).click();
+  for (const row of await files.getByRole("button").all()) await expect(row).toContainText("test/docs/");
 });
 
 // covers UX-002, UX-006

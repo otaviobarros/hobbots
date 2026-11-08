@@ -24,6 +24,8 @@ export const messages = {
   lines: ({ added, removed }: { added: number; removed: number }) =>
     `${formatCount(added)} ${added === 1 ? "line" : "lines"} added, ${formatCount(removed)} removed`,
   movedFrom: ({ path }: { path: string }) => `Moved from ${path}`,
+  changedIn: ({ tries }: { tries: ReadonlyArray<number> }) =>
+    `Changed in ${tries.length === 1 ? "attempt" : "attempts"} ${formatList(tries.map((each) => formatCount(each)))}.`,
   shared: ({ names }: { names: ReadonlyArray<string> }) =>
     `Changed while ${formatList(names)} ${names.length === 1 ? "was" : "were"} also working here.`,
   sharedUnknown: "Changed while another hob was also working here.",

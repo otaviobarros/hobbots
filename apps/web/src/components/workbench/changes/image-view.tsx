@@ -1,28 +1,18 @@
-import type { AttemptId, FileVersion } from "@hobbots/domain";
+import type { AttemptActivity, FileVersion } from "@hobbots/domain";
 import { useState } from "react";
 import { attemptContentUrl } from "../../../api/workbench.ts";
 import { formatBytes } from "../../../lib/format.ts";
 import { messages } from "./messages.ts";
 import { NotKeptNote } from "./not-kept-note.tsx";
+import type { KeptChange } from "./task-changes.ts";
 
 /**
  * An image's change: the earlier and the later version side by side where both were kept. A version
  * that was not kept says why in its place, so a deleted or overwritten image past the size limit
  * reads "Earlier version not kept: too large".
  */
-export function ImageView({
-  attemptId,
-  path,
-  before,
-  after,
-  cleared,
-}: {
-  attemptId: AttemptId;
-  path: string;
-  before: FileVersion | null;
-  after: FileVersion | null;
-  cleared: boolean;
-}) {
+export function ImageView({ item }: { item: KeptChange }) {
+  const { path, before, after } = item.change;
   return (
     <div className="grid min-w-0 gap-3 @min-[720px]:grid-cols-2">
       {before !== null && (
@@ -30,9 +20,8 @@ export function ImageView({
           title={messages.before}
           side="before"
           alt={messages.image.before({ path })}
-          attemptId={attemptId}
+          keptIn={item.beforeIn}
           version={before}
-          cleared={cleared}
         />
       )}
       {after !== null && (
@@ -40,9 +29,8 @@ export function ImageView({
           title={messages.after}
           side="after"
           alt={messages.image.after({ path })}
-          attemptId={attemptId}
+          keptIn={item.afterIn}
           version={after}
-          cleared={cleared}
         />
       )}
     </div>
@@ -53,19 +41,18 @@ function Side({
   title,
   side,
   alt,
-  attemptId,
+  keptIn,
   version,
-  cleared,
 }: {
   title: string;
   side: "before" | "after";
   alt: string;
-  attemptId: AttemptId;
+  /** The records of the Attempt that kept this version. */
+  keptIn: AttemptActivity;
   version: FileVersion;
-  cleared: boolean;
 }) {
   const [failed, setFailed] = useState(false);
-  const contentId = cleared ? null : version.contentId;
+  const contentId = keptIn.detailsClearedAt !== null ? null : version.contentId;
   return (
     <figure className="m-0 flex min-w-0 flex-col gap-2 rounded-card border border-line bg-card px-4 pt-3 pb-3.5">
       <figcaption className="flex items-baseline justify-between gap-2">
@@ -78,7 +65,7 @@ function Side({
         <p className="m-0 text-detail text-text-secondary">{messages.image.failed}</p>
       ) : (
         <img
-          src={attemptContentUrl(attemptId, contentId)}
+          src={attemptContentUrl(keptIn.attempt.id, contentId)}
           alt={alt}
           onError={() => setFailed(true)}
           className="max-h-120 max-w-full self-start object-contain"

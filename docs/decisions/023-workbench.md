@@ -26,6 +26,10 @@ It is docked in the Quest room, under the lanes, beside the chat column. It neve
 
 A lane filters it to that hob, and the attempt picked in a lane filters it to that try. For a Task with no try picked it shows the latest Attempt that recorded work (a command, a changed file, a reference, a report or the result), so a retry that ended before doing anything does not hide the one that did; a running Attempt, or one whose stop was never confirmed, is shown whatever it recorded, and with none that recorded anything it shows the Task's current Attempt.
 
+A retry works on what the tries before it left in the hob's folders. So Changes and Files show a try together with the tries before it: each file once, from what it held before the first try that changed it to what the latest left, and a file one try made and the next rewrote reads Added ([#1218](https://github.com/otaviobarros/hobbots/issues/1218)). A file the shown try did not change says which tries did. Terminal shows the shown try's own commands.
+
+Paths read from the Quest's folders: the folders its Quests work in and each folder a Task in it changed or touched files in, less any another of them holds. A member narrowed to a subfolder and its lead then show one file under the same path, and a list with files in more than one of these folders leads each path with its folder's name ([#643](https://github.com/otaviobarros/hobbots/issues/643)).
+
 ### The header
 
 The Workbench has no header of its own any more. The Quest room's header holds the Quest's title, and each lane's header holds its hob, its brain, where it runs (**In the sandbox**, or the **Unsandboxed** tag of ADR 014) and the attempt picker, "Try 1 ✗ · 2" ([ADR 027](027-quest-room.md)).
@@ -154,6 +158,8 @@ Comparing the folders before and after the turn is the only way to catch edits a
 
 Saying when a change happened while another hob worked in the same folder is more honest than guessing whose it was.
 
+Each Attempt keeps its own records against its own start, so a single try still reads as it ran. The Workbench joins a Task's tries when it shows them, since what is on disk and in a commit is their sum: a retry shown alone hid what a stopped try made and called a file it rewrote Edited.
+
 Keeping the small records with the Task and the heavy details for 30 days keeps the Workbench useful for every Task while bounding disk use, and matches the backpack's window.
 
 ## Consequences
@@ -184,3 +190,4 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - The whole slice runs end to end with the fake runtime. A Task that edits files with a file tool and a command and runs commands reads Live while its turn runs and History once it ends, from its records and from the event stream, with a client that lost its connection mid-turn catching up from its cursor, its kept contents, whole log and files served: `[TC-UX-060]`; a Task that runs no command records none while its changes and files are kept: `[TC-UX-061]`. Both at hub level over the HTTP API on SQLite and PostgreSQL. In the browser, the same kind of Task is followed through every tab while it runs and read again as History once it ends, with Browser reading Coming soon: `[TC-UX-062]`; and a Task that changed no file and ran no command greys out Changes, Files and Terminal, each saying why: `[TC-UX-063]` ([#391](https://github.com/otaviobarros/hobbots/issues/391), [evidence](../evidence/2026-11-03-workbench-end-to-end.md)). Real Claude Code is not verified.
 - Every command on Claude Code keeps its exit code, read from the hooks as Claude Code reports it, and one that exits non-zero is Failed. Proven with Claude Code's recorded hook payloads and the fake runtime reporting the same: `[TC-RT-100]` to `[TC-RT-103]`; at hub level on SQLite and PostgreSQL: `[TC-RT-104]`; in the browser: `[TC-RT-105]` ([#591](https://github.com/otaviobarros/hobbots/issues/591)).
 - A turn records only the changes it made, from its file tools and from listing its folders around each of its commands, while other turns work in the same folder; build caches and `.DS_Store` are left out. Proven at hub level on SQLite and PostgreSQL: `[TC-RT-106]` to `[TC-RT-108]`, and with the tool calls of two turns interleaved in an exact order: `[TC-RT-110]` to `[TC-RT-115]`; in the browser, two steps working in one folder at once each list only their own changes: `[TC-RT-109]` ([#595](https://github.com/otaviobarros/hobbots/issues/595)).
+- A retry shows the work of the stopped try before it, and a file the stopped try made and the retry rewrote reads Added with every line, saying which tries changed it; a member narrowed to a subfolder and its lead show one file under the same path in Changes and Files. Proven in the browser with the fake runtime: `[TC-UX-281]`, `[TC-UX-292]`, `[TC-UX-1145]` and `[TC-UX-1146]` ([#1218](https://github.com/otaviobarros/hobbots/issues/1218), [#643](https://github.com/otaviobarros/hobbots/issues/643)).

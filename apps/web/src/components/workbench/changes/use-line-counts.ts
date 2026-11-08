@@ -1,5 +1,5 @@
-import type { AttemptActivity, FileChange } from "@hobbots/domain";
 import { changeShow, type LineCounts, lineCounts } from "./changes-model.ts";
+import type { KeptChange } from "./task-changes.ts";
 import { sideText, useTextSide } from "./use-version.ts";
 
 /**
@@ -8,12 +8,11 @@ import { sideText, useTextSide } from "./use-version.ts";
  * they load, and for a file whose diff has nothing to count against: an image, a link, another
  * kind of file, or a version that was not kept.
  */
-export const useLineCounts = (change: FileChange, activity: AttemptActivity): LineCounts | null => {
+export const useLineCounts = ({ change, beforeIn, afterIn }: KeptChange): LineCounts | null => {
   const show = changeShow(change);
   const text = show === "code" || show === "document";
-  const cleared = activity.detailsClearedAt !== null;
-  const before = useTextSide(activity.attempt.id, text ? change.before : null, cleared);
-  const after = useTextSide(activity.attempt.id, text ? change.after : null, cleared);
+  const before = useTextSide(beforeIn, text ? change.before : null);
+  const after = useTextSide(afterIn, text ? change.after : null);
   const was = sideText(before);
   const now = sideText(after);
   const ready = text && [before, after].every((side) => side.kind === "none" || side.kind === "text");
