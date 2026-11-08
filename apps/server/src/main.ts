@@ -40,8 +40,11 @@ import {
   HobAppKeysLive,
   HobAppKeysMemory,
   HobGitHubAppNode,
+  hubKeychainScope,
   KeychainLive,
   KeychainMemory,
+  LegacyKeychainLive,
+  LegacyKeychainMemory,
   LocalGitHubSignInsFake,
   LocalGitHubSignInsLive,
   LocalGitToolsLive,
@@ -121,6 +124,7 @@ import { ApiRoutes } from "./http.ts";
 import { claimHubPresence, forgetHubPresence } from "./hub-presence.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
+import { claimLegacySignIns } from "./legacy-keychain.ts";
 import { HubListenersLive } from "./listeners.ts";
 import { MemoryChanges } from "./memory.ts";
 import { MemorySettingsStore, readMemorySettings } from "./memory-settings.ts";
@@ -343,6 +347,24 @@ const ServerLive = Layer.unwrap(
     // account the user connected in Settings, whose tokens stay in the OS keychain (ADR 020). A push
     // reads the hob's branch with Git in the hob's sandbox.
     const fakeGitHub = config.fakeGitHub === "on";
+    // Each hub keeps its own keychain items, named after its data folder, so hubs on one computer
+    // never sign each other out (#1214). Before anything reads them, the hub moves its sign-ins out
+    // of the items every hub shared before.
+    const keychainScope = hubKeychainScope(dataDir);
+    const SignInKeychain = fakeGitHub ? KeychainMemory : KeychainLive(process.platform, process.env, keychainScope);
+    const AppKeys = fakeGitHub ? HobAppKeysMemory : HobAppKeysLive(process.platform, process.env, keychainScope);
+    const LegacySignInsClaimed = Layer.effectDiscard(claimLegacySignIns).pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          SignInKeychain,
+          AppKeys,
+          fakeGitHub ? LegacyKeychainMemory : LegacyKeychainLive(process.platform, process.env),
+          Layer.mergeAll(HobbotsRepositoryLive, GitHubAccountRepository, HobGitHubAppRepository).pipe(
+            Layer.provide(Sqlite),
+          ),
+        ),
+      ),
+    );
     const Account = GitHubAccountLive({
       clientId: fakeGitHub ? "fake" : config.githubClientId,
       slug: config.githubAppSlug,
@@ -350,7 +372,8 @@ const ServerLive = Layer.unwrap(
     }).pipe(
       Layer.provide(
         Layer.mergeAll(
-          fakeGitHub ? KeychainMemory : KeychainLive(process.platform, process.env),
+          SignInKeychain,
+          LegacySignInsClaimed,
           fakeGitHub ? GitHubSignInFake : GitHubSignInNode(),
           fakeGitHub ? LocalGitHubSignInsFake : LocalGitHubSignInsLive(process.env),
           GitHubAccountRepository.pipe(Layer.provide(Sqlite)),
@@ -359,12 +382,7 @@ const ServerLive = Layer.unwrap(
     );
     // Each hob's own GitHub App (ADR 022): its identity in the database, its key in the keychain.
     const HobApp = HobGitHubAppNode().pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          fakeGitHub ? HobAppKeysMemory : HobAppKeysLive(process.platform, process.env),
-          HobGitHubAppRepository.pipe(Layer.provide(Sqlite)),
-        ),
-      ),
+      Layer.provide(Layer.mergeAll(AppKeys, LegacySignInsClaimed, HobGitHubAppRepository.pipe(Layer.provide(Sqlite)))),
     );
     // Each hob acts on GitHub as its own app when it has one, as the user's account otherwise (#224).
     // The hobs' apps are given on, so a hob with its own app commits as its bot (ADR 022).

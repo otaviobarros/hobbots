@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { GitHubAccounts, HobbotsRepository, HobGitHubApps } from "@hobbots/agents";
-import { HobAppKeysLive, KeychainLive } from "@hobbots/charms";
+import { HobAppKeysLive, hubKeychainScope, KeychainLive, LegacyKeychainLive } from "@hobbots/charms";
 import {
   GitHubAccountRepository,
   HobbotsRepositoryLive,
@@ -12,6 +12,7 @@ import {
 import { Console, Effect, Layer } from "effect";
 import { exitOnFailure, freeDataFolder } from "./command-line.ts";
 import { ServerConfig } from "./config.ts";
+import { claimLegacySignIns } from "./legacy-keychain.ts";
 import { eraseKeychain, keptReason, wipeHubData } from "./resets.ts";
 
 const hubDatabase = (dataDir: string) => join(dataDir, "hobbots.sqlite");
@@ -46,9 +47,12 @@ const reset = Effect.gen(function* () {
   const config = yield* ServerConfig;
   const confirmed = process.argv.slice(2).includes("--yes");
   const dataDir = yield* freeDataFolder(config.dataDir, "start over from its Settings");
+  // Only this hub's own items (#1214): other hubs on the computer keep their sign-ins.
+  const scope = hubKeychainScope(dataDir);
   const keychains = Layer.mergeAll(
-    KeychainLive(process.platform, process.env),
-    HobAppKeysLive(process.platform, process.env),
+    KeychainLive(process.platform, process.env, scope),
+    HobAppKeysLive(process.platform, process.env, scope),
+    LegacyKeychainLive(process.platform, process.env),
   ).pipe(Layer.provide(NodeServices.layer));
   const kept = yield* Effect.gen(function* () {
     const hobs = yield* Effect.flatMap(HobbotsRepository, (repo) =>
@@ -58,6 +62,8 @@ const reset = Effect.gen(function* () {
     yield* Console.log("its runtimes folder, and the GitHub sign-in and hobs' GitHub app keys in the keychain.");
     yield* Console.log("Your folders, backups saved elsewhere and your runtime accounts stay. It cannot be undone.");
     if (!confirmed) return null;
+    // A hub that never started since #1214 still has its sign-ins in the items every hub shared.
+    yield* claimLegacySignIns;
     return yield* eraseKeychain(hobs);
   }).pipe(
     Effect.provide(Layer.mergeAll(recordsOf(dataDir), keychains)),
