@@ -65,8 +65,10 @@ jobs:
     env:
       HOBBOTS_TEST_DB: postgres
       HOBBOTS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-      # The two suites run at once, beside the database: two workers each fill the four CPUs.
-      VITEST_MAX_WORKERS: 2
+      # The two suites run at once, beside the database. The tests mostly wait on the database, so
+      # three workers each keep the four CPUs busy; the persistence suite ends well before the
+      # server suite, which then has them to itself (#1066).
+      VITEST_MAX_WORKERS: 3
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
@@ -75,6 +77,13 @@ jobs:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
+      # Each test copies a fresh database from a migrated template, and a test database needs no
+      # crash safety, so the server skips flushing each commit to disk (#1066).
+      - name: Let the test database skip flushing to disk
+        run: >-
+          docker exec ${{ job.services.postgres.id }} psql -U postgres
+          -c "ALTER SYSTEM SET fsync = off" -c "ALTER SYSTEM SET synchronous_commit = off"
+          -c "ALTER SYSTEM SET full_page_writes = off" -c "SELECT pg_reload_conf()"
       - run: pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server
 
   # The browser tests run in eight shards side by side, balanced by recorded test times
