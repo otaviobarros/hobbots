@@ -270,8 +270,8 @@ export const SHARE = {
   title: "Hobbots: a home for the AI you already use",
   description:
     "Hobbots turns the Claude or ChatGPT you already pay for into a little team on your computer. Free and open source, for Mac, with an experimental Linux build.",
-  /** 1200 × 630, cropped from the video's poster. */
+  /** 1200 × 630, drawn by scripts/og.ts (`pnpm --filter @hobbots/site og`). */
   image: "/og.png",
   imageAlt:
-    "Aldric, the chief of the hobs, with his lantern staff above the words: You already have powerful AI agents.",
+    "A team of AI agents that plan and work together for you, on the Claude or ChatGPT plan you already pay for. Free, open source, open beta. Aldric leads a Quest while Quill, Ada and Rook each work their task. hobbots.app",
 } as const;
