@@ -10,8 +10,8 @@ import { firstPending, hub, partyHub, send, treeWhen } from "./party-hub.ts";
 // completed the Quest with delivered: true, and the Quest read done with a file where you never
 // agreed. complete_task on a Quest's top Task now holds the lead to the files you named: each must
 // be there, unless you picked a choice whose consequence, worded by the hub, moves it or leaves it
-// empty, or the work took it away as you asked: a rename to a path you named, or a deletion you
-// approved. Typed answers and safety presets let nothing go. The hub checks the call, so it holds
+// empty, or you approved the work deleting it. Typed answers, safety presets, and a move to another
+// path you named let nothing go. The hub checks the call, so it holds
 // for every runtime.
 
 let dispose: (() => Promise<void>) | undefined;
@@ -208,21 +208,18 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
   }, 30_000);
 
   // covers OR-004, UX-002
-  it("[TC-OR-669] completes once the work renamed a file to the path you named and deleted one you approved deleting", async () => {
+  it("[TC-OR-669] completes once the work deleted the file you asked it to, as you approved", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true });
     dispose = party.dispose;
     const { run, answers, project } = party;
-    writeFileSync(join(project, "old.html"), "<p>Skills</p>\n");
-    writeFileSync(join(project, "scratch.txt"), "draft\n");
-    const tidy = JSON.stringify({
-      command: "mv old.html new.html && rm scratch.txt",
-      writes: { "new.html": "<p>Skills</p>\n", "old.html": null, "scratch.txt": null },
-    });
+    const scratch = join(project, "scratch.txt");
+    writeFileSync(scratch, "draft\n");
+    const remove = JSON.stringify({ command: "rm scratch.txt", writes: { "scratch.txt": null } });
     await run(
       quest(
-        `Rename ${join(project, "old.html")} to ${join(project, "new.html")} and delete ${join(project, "scratch.txt")}`,
-        [`fake:run ${tidy}`, hub("complete_task", { key: "rook", summary: "Renamed and deleted" })],
-        { key: "wrap", delivered: true, summary: "Renamed and deleted as you asked" },
+        `Delete ${scratch}`,
+        [`fake:run ${remove}`, hub("complete_task", { key: "rook", summary: "Deleted" })],
+        { key: "wrap", delivered: true, summary: "Deleted as you asked" },
       ),
     );
     // Balanced asks you before the work deletes files; you approve.
@@ -362,5 +359,31 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     expect(answers.get("wrap")).toContain("is complete");
     expect(done.quests[0]?.state).not.toBe("active");
+  }, 30_000);
+
+  // covers OR-004, UX-002
+  it("[TC-OR-675] stays open when the work moved the file you asked to copy, though the copy is where you asked", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true });
+    dispose = party.dispose;
+    const { run, answers, project } = party;
+    const source = join(project, "source.txt");
+    const copy = join(project, "copy.txt");
+    writeFileSync(source, "Original\n");
+    // A script moves it, which the safety preset does not ask about, as no command it can read deletes it.
+    const moved = JSON.stringify({
+      command: "python3 copy.py",
+      writes: { "source.txt": null, "copy.txt": "Original\n" },
+    });
+    await run(
+      quest(
+        `Copy ${source} to ${copy}, keeping the original`,
+        [`fake:run ${moved}`, hub("complete_task", { key: "rook", summary: "Copied" })],
+        { key: "wrap", delivered: true, summary: "Copied as you asked" },
+      ),
+    );
+    const refused = await run(treeWhen((tree) => tree.refusals.some((each) => each.reason === "not-at-destination")));
+    expect(answers.get("wrap")).toContain(source);
+    expect(answers.get("wrap")).not.toContain(copy);
+    expect(refused.quests[0]?.state).toBe("active");
   }, 30_000);
 });

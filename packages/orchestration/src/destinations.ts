@@ -11,8 +11,7 @@ import type { MissingFile } from "./delivery.ts";
  * not write the file where the user asked answered the member's question itself, saved it elsewhere,
  * and completed the Quest as delivered. The hub now holds the lead to every file the user named, and
  * lets one go only on the user's own say: a choice they pick whose consequence, worded by the hub,
- * moves it or leaves it empty, or, for a file the work took away, a rename to a path they named or a
- * deletion they approved.
+ * moves it or leaves it empty, or, for a file the work took away, a deletion they approved.
  */
 
 export interface DestinationDeps {
@@ -88,13 +87,14 @@ const heldBy = (targets: ReadonlyArray<string>, path: string, separator: PathSep
   );
 
 /**
- * Whether the work took `missing` away as the user asked: it moved it to another path they named, as
- * "rename A to B" asks, or they approved deleting it in this request's work. A record says only what
- * the work did, and a hob's leave to delete files says nothing of what the user asked for, so any
- * other removal keeps the file required until they pick a choice that lets it go.
+ * Whether the work took `missing` away as the user allowed: they approved deleting it in this
+ * request's work. A record says only what the work did: a move to another path they named may be
+ * the rename they asked for, or the copy they asked for done wrong, and a hob's leave to delete files
+ * says nothing of what they asked for. Any other removal keeps the file required until they pick a
+ * choice that lets it go.
  */
 const removalAllowed = (deps: DestinationDeps, missing: MissingFile, approved: ReadonlyArray<string>) =>
-  missing.removed !== null && (missing.removed.toNamed || heldBy(approved, missing.stored, deps.separator));
+  missing.removed && heldBy(approved, missing.stored, deps.separator);
 
 /** The absolute paths in `texts` that may name a file: not a folder's spelling, and not right under the root. */
 const filePaths = (texts: ReadonlyArray<string>, separator: PathSeparator) =>
@@ -122,6 +122,6 @@ export const missingDestinations = (deps: DestinationDeps, scope: CallScope, top
       scope.tree.attempts.map((attempt) => attempt.id),
     );
     if (missing.length === 0) return [];
-    const approved = missing.some((each) => each.removed !== null) ? yield* deps.approvedRemovals(top) : [];
+    const approved = missing.some((each) => each.removed) ? yield* deps.approvedRemovals(top) : [];
     return missing.filter((each) => !removalAllowed(deps, each, approved)).map((each) => each.path);
   });

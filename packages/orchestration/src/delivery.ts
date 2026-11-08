@@ -1,5 +1,5 @@
 import { ActivityRepository, ApprovalRepository, FolderChecks, HobFiles } from "@hobbots/agents";
-import type { ArtifactKind, AttemptId, FileChange, Task, TaskId } from "@hobbots/domain";
+import type { ArtifactKind, AttemptId, FileChange, Task } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import type { PathSeparator } from "./authority.ts";
 import { parentOf } from "./default-folders.ts";
@@ -60,36 +60,32 @@ export const makeDeliveryCheck = Effect.gen(function* () {
     });
 });
 
-/** A file the user named that is not there now, and the change that took it away, if one did. */
+/** A file the user named that is not there now, and whether the work took it away. */
 export interface MissingFile {
   readonly path: string;
   /** The path as the hub stores it: its folder canonical, as approvals and the Workbench name it. */
   readonly stored: string;
-  /** The Task whose work deleted or moved it away, and for a move, whether it went to another path the user named. */
-  readonly removed: { readonly taskId: TaskId; readonly toNamed: boolean } | null;
+  /** Whether the Workbench recorded the work deleting it or moving it away. */
+  readonly removed: boolean;
 }
 
 /** An absolute path on a hub that divides at `separator`, from a folder and a path inside it with `/`. */
 const inFolder = (folder: string, path: string, separator: PathSeparator) =>
   `${folder.endsWith(separator) ? folder : `${folder}${separator}`}${path.split("/").join(separator)}`;
 
-/** Where a change took a file away from, and where a move took it, as absolute paths. */
-const removal = (change: FileChange, separator: PathSeparator) => {
-  if (change.kind === "deleted") return { from: inFolder(change.folder, change.path, separator), to: null };
-  if (change.kind === "moved" && change.movedFrom !== null) {
-    return {
-      from: inFolder(change.folder, change.movedFrom, separator),
-      to: inFolder(change.folder, change.path, separator),
-    };
-  }
-  return null;
+/** Where a change took a file away from, as an absolute path: a deleted file, or a moved file's old place. */
+const removedFrom = (change: FileChange, separator: PathSeparator): ReadonlyArray<string> => {
+  if (change.kind === "deleted") return [inFolder(change.folder, change.path, separator)];
+  if (change.kind === "moved" && change.movedFrom !== null)
+    return [inFolder(change.folder, change.movedFrom, separator)];
+  return [];
 };
 
 /**
  * Reads, of the absolute paths the user named, those where no regular file is now (#1215), each with
- * the change that took it away when the Workbench recorded one for the Attempts given: a deletion,
- * or a move, as a request to remove or rename a file asks. Whether the user allowed that removal is
- * the caller's to decide, since a record says only what the work did. Paths compare by the folder
+ * whether the Workbench recorded the Attempts given deleting it or moving it away. Whether the user
+ * allowed that is the caller's to decide, since a record says only what the work did: a move to a
+ * path the user also named may be the rename they asked for, or the copy they asked for done wrong. Paths compare by the folder
  * they sit in as the hub stores it, which a file that is gone still sits in. A hub that does not read
  * files, as in tests of the tools alone, finds none missing; one that keeps no Workbench records
  * finds none taken away.
@@ -101,14 +97,10 @@ export const makeDestinationCheck = (separator: PathSeparator) =>
     const checks = yield* FolderChecks;
     const removalsIn = (attempts: ReadonlyArray<AttemptId>) =>
       Option.isNone(activity) || attempts.length === 0
-        ? Effect.succeed([])
-        : Effect.map(activity.value.readMany(attempts), (read) =>
-            read.flatMap((each) =>
-              each.changes.flatMap((change) => {
-                const found = removal(change, separator);
-                return found === null ? [] : [{ ...found, taskId: change.taskId }];
-              }),
-            ),
+        ? Effect.succeed(new Set<string>())
+        : Effect.map(
+            activity.value.readMany(attempts),
+            (read) => new Set(read.flatMap((each) => each.changes.flatMap((change) => removedFrom(change, separator)))),
           );
     /** The path as the hub stores its folder, which a file that is gone still sits in. */
     const stored = (path: string) => {
@@ -131,19 +123,8 @@ export const makeDestinationCheck = (separator: PathSeparator) =>
         });
         if (missing.length === 0) return [];
         const removals = yield* removalsIn(attempts);
-        const named = new Set(yield* Effect.forEach(paths, stored, { concurrency: 8 }));
         return yield* Effect.forEach(missing, (path) =>
-          Effect.map(stored(path), (at): MissingFile => {
-            const change = removals.findLast((each) => each.from === at);
-            return {
-              path,
-              stored: at,
-              removed:
-                change === undefined
-                  ? null
-                  : { taskId: change.taskId, toNamed: change.to !== null && named.has(change.to) },
-            };
-          }),
+          Effect.map(stored(path), (at): MissingFile => ({ path, stored: at, removed: removals.has(at) })),
         );
       });
   });
