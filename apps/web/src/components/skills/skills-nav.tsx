@@ -1,7 +1,9 @@
 import type { SkillsList } from "@hobbots/api";
 import { memoryScopeKey } from "@hobbots/domain";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useWaitingProposals } from "../../api/skill-proposals.ts";
+import { skillUpdatesQuery } from "../../api/skill-updates.ts";
 import { formatCount } from "../../lib/format.ts";
 import { NavSkeleton } from "../memory/memory-nav.tsx";
 import { messages } from "./messages.ts";
@@ -42,6 +44,7 @@ export function SkillsNav({ view, reads }: { view: SkillsView; reads: SkillsRead
   const entries = scopeEntries(list, reads.active, reads.hobs);
   const open = view._tag === "Scope" ? memoryScopeKey(view.scope) : null;
   const waiting = useWaitingProposals().length;
+  const updates = useQuery(skillUpdatesQuery).data?.updates.length ?? 0;
   return (
     <nav
       aria-label={copy.nav.label}
@@ -70,6 +73,18 @@ export function SkillsNav({ view, reads }: { view: SkillsView; reads: SkillsRead
         </span>
         <span className="flex-1 text-ui">{copy.nav.review}</span>
         {waiting > 0 && <span className="text-meta text-label tabular-nums">{formatCount(waiting)}</span>}
+      </Link>
+      <Link
+        to="/skills"
+        search={{ view: "updates" }}
+        aria-current={view._tag === "Updates" ? "page" : undefined}
+        className={row}
+      >
+        <span className="text-text-secondary">
+          <SkillsIcon name="git" />
+        </span>
+        <span className="flex-1 text-ui">{copy.nav.updates}</span>
+        {updates > 0 && <span className="text-meta text-label tabular-nums">{formatCount(updates)}</span>}
       </Link>
       <Link
         to="/skills"

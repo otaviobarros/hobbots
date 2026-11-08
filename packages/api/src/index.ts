@@ -20,6 +20,7 @@ export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./setup-bridge.ts";
 export * from "./skill-proposals.ts";
+export * from "./skill-updates.ts";
 export * from "./skills.ts";
 export * from "./tasks.ts";
 export * from "./usage.ts";

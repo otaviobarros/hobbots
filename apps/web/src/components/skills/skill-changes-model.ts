@@ -1,9 +1,9 @@
 import type { SkillChange } from "@hobbots/api";
-import { skillRevisionLabel } from "@hobbots/domain";
+import { type SkillSource, skillRevisionLabel } from "@hobbots/domain";
 import { formatList } from "../../lib/format.ts";
 import { formatDay } from "../../lib/time.ts";
 import { messages } from "./messages.ts";
-import { type HobDirectory, scopeName, skillTitle } from "./skills-model.ts";
+import { type HobDirectory, originText, scopeName, skillTitle } from "./skills-model.ts";
 
 const copy = messages.changes;
 
@@ -44,14 +44,25 @@ const byOf = (change: SkillChange, hobs: HobDirectory) => {
   }
 };
 
-const savedText = (change: SkillChange, hobs: HobDirectory, name: string) => ({
-  kind: copy.saved({ by: byOf(change, hobs) }),
-  line: copy.savedLine({ name, rev: rev(change.number), count: change.scopes.length }),
-  note:
+/** The Git source a save came from on its own, by Update automatically, or null for any other save. */
+const updatedFrom = (change: SkillChange, sources: ReadonlyArray<SkillSource>) => {
+  if (change.by?._tag !== "Source") return null;
+  const sourceId = change.by.sourceId;
+  const origin = sources.find((one) => one.id === sourceId)?.origin;
+  return origin?._tag === "Git" ? origin : null;
+};
+
+const savedText = (change: SkillChange, hobs: HobDirectory, name: string, sources: ReadonlyArray<SkillSource>) => {
+  const held =
     change.held.length === 0
       ? null
-      : copy.heldNote({ who: formatList(change.held.map((scope) => scopeName(scope, hobs))) }),
-});
+      : copy.heldNote({ who: formatList(change.held.map((scope) => scopeName(scope, hobs))) });
+  const line = copy.savedLine({ name, rev: rev(change.number), count: change.scopes.length });
+  const git = updatedFrom(change, sources);
+  if (git !== null)
+    return { kind: copy.updatedAutomatically, line, note: copy.updatedFrom({ where: originText(git) }) };
+  return { kind: copy.saved({ by: byOf(change, hobs) }), line, note: held };
+};
 
 const rolledOutText = (change: SkillChange, name: string, who: string) => {
   const back = change.previousNumber !== null && change.number !== null && change.previousNumber > change.number;
@@ -66,14 +77,17 @@ const rolledOutText = (change: SkillChange, name: string, who: string) => {
 const optedName = (change: SkillChange, name: string) =>
   change.member === null ? name : copy.memberOf({ member: skillTitle(change.member), set: name });
 
-/** A change's kind line, its sentence, and the note under it. */
-export const changeText = (change: SkillChange, hobs: HobDirectory) => {
+/**
+ * A change's kind line, its sentence, and the note under it. `sources` tells a save Update
+ * automatically made from Git apart from one `~/.agents/skills` made.
+ */
+export const changeText = (change: SkillChange, hobs: HobDirectory, sources: ReadonlyArray<SkillSource> = []) => {
   const name = skillTitle(change.name);
   const who = formatList(change.scopes.map((scope) => scopeName(scope, hobs)));
   const hob = change.agentId === null ? "" : (hobs.get(change.agentId)?.name ?? messages.scopes.formerHob);
   switch (change.kind) {
     case "saved":
-      return savedText(change, hobs, name);
+      return savedText(change, hobs, name, sources);
     case "rolledOut":
       return rolledOutText(change, name, who);
     case "assigned":

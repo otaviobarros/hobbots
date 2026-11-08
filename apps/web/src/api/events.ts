@@ -38,6 +38,7 @@ import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
 import { skillProposalsChanged } from "./skill-proposals.ts";
+import { refreshSkillUpdates } from "./skill-updates.ts";
 import { refreshSkillFeedback, refreshSkills, refreshSkillUses } from "./skills.ts";
 import {
   newer,
@@ -146,6 +147,21 @@ const SKILL_LIBRARY_CHANGES: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "SkillOptOutChanged",
   "SkillRemoved",
 ]);
+
+/** What the checks of Git sources found, and Update automatically: the Skills page's Updates reads them again. */
+const SKILL_UPDATE_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  "SkillUpdateFound",
+  "SkillUpdateDismissed",
+  "SkillUpdateCleared",
+  "SkillAutoUpdateChanged",
+]);
+type SkillUpdateEvent = Extract<
+  HobbotsEvent,
+  {
+    readonly _tag: "SkillUpdateFound" | "SkillUpdateDismissed" | "SkillUpdateCleared" | "SkillAutoUpdateChanged";
+  }
+>;
+const isSkillUpdateEvent = (event: HobbotsEvent): event is SkillUpdateEvent => SKILL_UPDATE_EVENTS.has(event._tag);
 type SkillLibraryChange = Extract<
   HobbotsEvent,
   {
@@ -287,7 +303,11 @@ const isProposalEvent = (event: HobbotsEvent): event is ProposalEvent => PROPOSA
 const applySkillEvent = (
   queryClient: QueryClient,
   event: HobbotsEvent,
-): event is ProposalEvent | SkillLibraryChange => {
+): event is ProposalEvent | SkillLibraryChange | SkillUpdateEvent => {
+  if (isSkillUpdateEvent(event)) {
+    void refreshSkillUpdates(queryClient);
+    return true;
+  }
   // A skill changed here, on another device or in `~/.agents/skills`: the Skills page reads it again,
   // and what a hob's next turn gets may have changed, which the composer's `/` list shows (ADR 029).
   if (isSkillLibraryChange(event)) {
