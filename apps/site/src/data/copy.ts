@@ -150,7 +150,7 @@ export const MEMORY: Feature = {
     },
     {
       title: "Why it is different",
-      body: "Nothing is hidden. Edit, pin or delete any page, with Undo. When a hob wants to share a lesson with other hobs, it waits for your OK first.",
+      body: "Nothing is hidden. Edit, pin or delete any page, with Undo.",
     },
     {
       title: "How it works",
@@ -189,7 +189,7 @@ export const SAFETY: { shot: Shot; ticks: ReadonlyArray<string> } = {
   shot: { file: "inbox", alt: "The Inbox: Ada’s question about the shipping cutoff, waiting for your answer." },
   ticks: [
     "Hobs work only inside the folders you give them",
-    "Pushing to GitHub waits for your approval",
+    "You choose which tools need your OK",
     "History keeps every decision you made",
   ],
 };

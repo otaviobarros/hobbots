@@ -7,8 +7,10 @@ const SWIPE = 40;
 export const pick = (shots: ReadonlyArray<HTMLElement>, buttons: ReadonlyArray<HTMLElement>, index: number) => {
   shots.forEach((shot, i) => {
     shot.classList.toggle("on", i === index);
-    shot.toggleAttribute("aria-hidden", i !== index);
-    if (i === index) shot.setAttribute("loading", "eager");
+    if (i === index) {
+      shot.removeAttribute("aria-hidden");
+      shot.setAttribute("loading", "eager");
+    } else shot.setAttribute("aria-hidden", "true");
   });
   buttons.forEach((button, i) => {
     button.setAttribute("aria-pressed", String(i === index));

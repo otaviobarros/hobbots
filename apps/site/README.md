@@ -30,7 +30,7 @@ Locally, the Turnstile widget uses Cloudflare's test site key and the server use
 
 The screenshots in `src/assets/screens` are the web client running the fake runtime with seeded data (`HOBBOTS_FAKE_QUEST=black-friday`, `HOBBOTS_FAKE_MEMORY=seeded`), taken at 1280 × 800 at twice the pixel density and saved as WebP, with a 1280 px copy (`-1280.webp`) for phones. `src/components/Screen.astro` imports them, so the build gives each a hashed name that is cached for a year ([Caching](RUNBOOK.md#caching)).
 
-Only the interactive parts run script, all from `src/scripts/page.ts`: the hero's Quest, the tour, the theme picker, the video dialog, the hob roller, the Mac and Linux tabs, sharing the link from a phone, the phone menu and the wait-list form. Every animation is stepped and stops with Reduce motion, the tour's autoplay included. The night-to-sunrise sky, the screenshots that lift in and Aldric's stroll along the bottom follow the scroll with CSS scroll-driven animations, so browsers without them show a still page.
+Only the interactive parts run script, all from `src/scripts/page.ts`: the hero's Quest, the tour, the theme picker, the video dialog, the hob roller, the Mac and Linux tabs, sharing the link from a phone, the phone menu and the wait-list form. The pixel effects move in steps, and every animation stops with Reduce motion, the tour's autoplay included. The night-to-sunrise sky, the screenshots that lift in and Aldric's stroll along the bottom follow the scroll with CSS scroll-driven animations, so browsers without them show a still page.
 
 ## Checks
 

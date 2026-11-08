@@ -117,6 +117,11 @@ import Screen from "./Screen.astro";
   [data-playing][data-held] .tab[aria-pressed="true"] .fill {
     animation-play-state: paused;
   }
+  /* The screen's slow drift stops with the tour too; the pixel wipe still finishes. */
+  [data-held] :global(.shot-in.on),
+  [data-tour]:not([data-playing]) :global(.shot-in.on) {
+    animation-play-state: running, paused;
+  }
   .tour {
     display: grid;
     grid-template-columns: minmax(0, 1fr);

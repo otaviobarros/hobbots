@@ -58,6 +58,8 @@ test("[TC-GEN-1224-02] plays the tour by itself, and stops when a screen is pick
   await tour.getByRole("button", { name: "Skills" }).click();
   await expect(tour.getByText("Your standards, every time")).toBeVisible();
   await expect(tour.getByRole("img", { name: /The Skills page/ })).toBeVisible();
+  await expect(tour.locator(".shot-in:not(.on)").first()).toHaveAttribute("aria-hidden", "true");
+  await expect(tour.locator(".shot-in.on")).not.toHaveAttribute("aria-hidden", /.*/);
   await tour.getByRole("button", { name: "Play the tour" }).click();
   await expect(tour.getByRole("button", { name: "Pause the tour" })).toBeFocused();
   await expect(tour.getByRole("button", { name: "A hob’s page" })).toHaveAttribute("aria-pressed", "true", {
@@ -164,7 +166,7 @@ test.describe("with Reduce motion", () => {
     await expect(page.getByRole("button", { name: /Pause the tour|Play the tour/ })).toBeHidden();
     await expect(page.getByRole("button", { name: /Dec 12 for international/ })).toBeVisible();
     expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
-    await page.waitForTimeout(5500);
+    await expect(page.locator("#tour")).not.toHaveAttribute("data-playing", /.*/);
     await expect(page.locator("#tour").getByRole("button", { name: "Home" })).toHaveAttribute("aria-pressed", "true");
   });
 });

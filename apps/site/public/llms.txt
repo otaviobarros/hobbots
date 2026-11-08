@@ -13,7 +13,7 @@
 
 - Quests: a lead hob splits a goal into tasks, hands them to other hobs, and each works in its own lane while you watch.
 - Questions and approvals: real decisions and risky steps wait for you in one Inbox, with a recommended answer. Every tool a hob uses is Allow, Ask or Never.
-- Memory: each hob keeps what it learned as pages you can read, edit, pin or delete. Sharing a lesson with other hobs waits for your OK.
+- Memory: each hob keeps what it learned as pages you can read, edit, pin or delete.
 - Skills: your way of doing something, written down (a checklist, a brand voice). Give one to a single hob or to all; every change is a version you roll out when ready.
 - Themes: Workshop (pixel art) and Lamplight (smooth), each in dark and light.
 
