@@ -34,7 +34,9 @@ const startParty = async (page: Page, quillBrief: ReadonlyArray<string>) => {
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+  // When Quill finishes before Aldric's reply does, the hub wakes him twice more, with her result and
+  // then with the Quest left open, each reply paced a word at a time: under load that runs past 30s.
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 60_000 });
   return openRoom(page, TITLE);
 };
 
@@ -219,7 +221,7 @@ test("[TC-UX-1146] a file reads under the same path for a lead and for a member 
     ].join("\n"),
   );
   await composer.press("Enter");
-  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 60_000 });
   await openRoom(page, TITLE);
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
   const { bench, changes, files } = lists(page);
@@ -310,7 +312,7 @@ test("[TC-UX-283] a member's History opens an archived Quest's room in its lead'
     ].join("\n"),
   );
   await composer.press("Enter");
-  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 60_000 });
   await openRoom(page, TITLE);
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
   const threadId = /threads\/([^?/]+)/.exec(page.url())?.[1] ?? "";
