@@ -5,6 +5,7 @@ import type { PathSeparator } from "./authority.ts";
 import type { CallScope } from "./call-scope.ts";
 import { parentOf, pathsIn } from "./default-folders.ts";
 import type { MissingFile } from "./delivery.ts";
+import { DESTINATION_WORDING, EMPTY, INSTEAD } from "./destination-words.ts";
 
 /**
  * Where the user asked a Quest's work to go is theirs to change (#1215). A lead whose member could
@@ -25,25 +26,6 @@ export interface DestinationDeps {
   readonly folderChecks: FolderChecksShape;
   readonly separator: PathSeparator;
 }
-
-/** The consequence of a choice that moves a file the user named to `to` instead, as they pick it. */
-const deliveredInstead = (to: string, from: string) => `Not delivered at ${from}: delivered at ${to} instead.`;
-
-/** The consequence of a choice that leaves nothing at a file the user named, as they pick it. */
-const leftEmpty = (path: string) => `Not delivered at ${path}: nothing is left there.`;
-
-const INSTEAD = /^Not delivered at (.+): delivered at (.+) instead\.$/;
-const EMPTY = /^Not delivered at (.+): nothing is left there\.$/;
-
-/**
- * How a question to the user about a place they asked for is worded, so the choice they pick lets it
- * go. A lead hears it before its first such question, not only once the hub refuses a completion
- * (#1219), and never recommends that the user deliver the work themselves.
- */
-export const DESTINATION_WORDING =
-  "Only a choice the user picks lets the place go, and only with its consequence worded exactly as Hobbots words it: " +
-  `"${deliveredInstead("<new absolute path>", "<the path they asked for>")}" for another place, or "${leftEmpty("<the path they asked for>")}" when nothing should be there, ` +
-  "offered beside a choice to keep the place they asked for. Never recommend a choice that leaves the delivery to the user, such as moving the file by hand: delivering it is the work.";
 
 /** What the lead is told when a file the user named is not there. */
 export const notThere = (task: Task, missing: ReadonlyArray<string>) =>

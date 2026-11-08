@@ -17,7 +17,7 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { type BriefPart, fixed, renderBrief, rule } from "./brief-parts.ts";
-import { DESTINATION_WORDING } from "./destinations.ts";
+import { DESTINATION_WORDING } from "./destination-words.ts";
 
 /**
  * What a step's fresh session and its owner's chat are told (ADR 018). A step sees only its brief
@@ -152,24 +152,33 @@ export const RESULTS_RULE =
 
 /**
  * What the lead of a Quest is told in each turn on its Task, after the rule itself. Where the user
- * asked for the work to go is theirs to change (#1215): their answer is passed on as they gave it,
- * and a question to them about it is worded as the hub words it from the first one (#1219).
+ * asked for the work to go is theirs to change (#1215).
  */
 const LEAD_DUTY =
   "So never hand a Task what the Tasks it comes after returned. Call hand_off when a member needs something else, or needs a result while it is already running. " +
-  "Where the user asked for the work to go is theirs to change: when it cannot go there, escalate a member's question about where else to put it, or ask the user, and never choose another place yourself. " +
-  "Once the user has answered, pass their answer on to a member in their own words, never a place of your own. " +
-  DESTINATION_WORDING;
+  "Where the user asked for the work to go is theirs to change: when it cannot go there, escalate a member's question about where else to put it, or ask the user, and never choose another place yourself.";
+
+/**
+ * What the lead of a Quest whose request names a file is told besides (#1219): the user's answer is
+ * passed on as they gave it, and a question to them about the place is worded as the hub words it
+ * from the first one, not only once a completion is refused.
+ */
+const PLACE_DUTY = `Once the user has answered, pass their answer on to a member in their own words, never a place of your own. ${DESTINATION_WORDING}`;
+
+/** Whether a request names an absolute path, on a hub that divides at `/` or at `\`. */
+const namesAPath = (text: string) => /(^|[\s"'`(])(\/[^\s/]|[A-Za-z]:\\)/.test(text);
 
 /**
  * What a turn on `task` is told when that Task leads a Quest: the rule, then the lead's duty. Both
  * the owner's chat turns and a member's later turns carry it, so a member that leads a nested Quest
  * hears it on every turn too.
  */
-const leadGuidance = (task: Task, tree: TaskTree): ReadonlyArray<string> =>
-  tree.quests.some((quest) => quest.taskId === task.id)
-    ? [`You lead the Quest on this Task. ${RESULTS_RULE} ${LEAD_DUTY}`]
-    : [];
+const leadGuidance = (task: Task, tree: TaskTree): ReadonlyArray<string> => {
+  if (!tree.quests.some((quest) => quest.taskId === task.id)) return [];
+  const top = tree.tasks.find((each) => each.parentId === null) ?? task;
+  const place = namesAPath(top.brief) ? ` ${PLACE_DUTY}` : "";
+  return [`You lead the Quest on this Task. ${RESULTS_RULE} ${LEAD_DUTY}${place}`];
+};
 
 /**
  * The prompt a party member's session starts from (ADR 018): the lead's brief first, then what the
