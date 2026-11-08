@@ -221,10 +221,12 @@ describe("a repository's own skills", () => {
     ]);
     // The hob working in the repository gets them, as the project's.
     const hob = await request("GET", `/api/skills/hobs/${agentId}`);
-    expect(hob.body.skills.map((one: { name: string; scope: { _tag: string } }) => [one.name, one.scope._tag])).toEqual([
-      ["refunds", "Project"],
-      ["triage", "Project"],
-    ]);
+    expect(hob.body.skills.map((one: { name: string; scope: { _tag: string } }) => [one.name, one.scope._tag])).toEqual(
+      [
+        ["refunds", "Project"],
+        ["triage", "Project"],
+      ],
+    );
 
     // Offered once: after the import it is not offered again.
     expect((await request("GET", "/api/skill-repositories")).body.repositories[0].offered).toBe(false);

@@ -116,7 +116,9 @@ test("[TC-UX-1098] a repository's own skills: offered once, read from the defaul
   git(site, "commit", "--quiet", "--all", "--message", "draft");
 
   await main.getByRole("button", { name: "Import 2 skills for the site project" }).click();
-  await expect(main).toContainText("Imported Refunds and Triage for the site project. Pip uses them from its next chat.");
+  await expect(main).toContainText(
+    "Imported Refunds and Triage for the site project. Pip uses them from its next chat.",
+  );
   await expect(main.getByRole("region", { name: "Found in a repository" })).toHaveCount(0);
   const project = main.getByRole("region", { name: "site project" });
   await expect(project).toContainText("Sort support emails by urgency and product.");
