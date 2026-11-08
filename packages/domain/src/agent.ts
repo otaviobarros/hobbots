@@ -181,6 +181,15 @@ export class AgentConfiguration extends Schema.Class<AgentConfiguration>("AgentC
   createdAt: Schema.String,
 }) {}
 
+/** The fields a configuration version sets on its hob: everything but its version, actor and time. */
+export const configurationFields = ({
+  agentId: _agentId,
+  version: _version,
+  actor: _actor,
+  createdAt: _createdAt,
+  ...fields
+}: AgentConfiguration) => fields;
+
 /** What happens to a retiring hob's running replies: they finish on their own, or stop now. */
 export const RetireWork = Schema.Literals(["finish", "stop"]);
 export type RetireWork = typeof RetireWork.Type;

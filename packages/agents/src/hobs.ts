@@ -4,6 +4,7 @@ import {
   InvalidFolder,
   InvalidHob,
   OverrideWidens,
+  RevertRefused,
   UndeclaredOperation,
   UnknownCharm,
   type UpdateAgentPayload,
@@ -17,6 +18,7 @@ import {
   type CharmId,
   type CharmOperation,
   type CharmOverrides,
+  configurationFields,
   DEFAULT_LENGTH,
   DEFAULT_VOICE,
   declaredOperations,
@@ -332,6 +334,14 @@ export class HobService extends Context.Service<
       payload: UpdateHobPermissionsPayload,
       actor?: ChangeActor,
     ) => Effect.Effect<Agent, AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm>;
+    /**
+     * Reverts the hob's latest change, `version`: the version before it becomes the hob's next
+     * version, made by you (ADR 034). Refused once another version followed it, and for the first.
+     */
+    readonly revert: (
+      id: AgentId,
+      version: number,
+    ) => Effect.Effect<Agent, AgentNotFound | InvalidHob | InvalidFolder | RevertRefused>;
   }
 >()("@hobbots/agents/HobService") {
   static readonly layer = Layer.effect(
@@ -508,7 +518,43 @@ export class HobService extends Context.Service<
         );
       });
 
-      return HobService.of({ create, update, updateThen, updatePolicy });
+      // The version before the latest one, as a new version made by you; refused once another
+      // version followed the one it reverts. A brain the runtime stopped offering, or a folder of the
+      // hob's own that is shared with every hob since, is refused as an edit to it would be.
+      const revert = Effect.fn("HobService.revert")(function* (id: AgentId, version: number) {
+        if (version <= 1) return yield* new RevertRefused({ agentId: id, version, reason: "first-version" });
+        return yield* nextVersion(
+          id,
+          (agent) =>
+            Effect.gen(function* () {
+              if (agent.configVersion !== version) {
+                return yield* new RevertRefused({ agentId: id, version, reason: "not-latest" });
+              }
+              const previous = yield* repo.findAgentConfig(id, version - 1).pipe(Effect.map(Option.getOrThrow));
+              const restored = new Agent({ ...agent, ...configurationFields(previous) });
+              const sameBrain =
+                restored.runtime === agent.runtime &&
+                restored.model === agent.model &&
+                restored.effort === agent.effort;
+              const invalid = sameBrain ? undefined : yield* checkRuntimeBrain(adapters, restored);
+              if (invalid !== undefined) return yield* invalid;
+              const { approvedFolders } = yield* setup.get;
+              const shared = restored.policy.ownFolders.find(
+                (folder) => !agent.policy.ownFolders.includes(folder) && approvedFolders.includes(folder),
+              );
+              if (shared !== undefined) {
+                return yield* new InvalidFolder({
+                  folder: shared,
+                  message: `${shared} is already shared with every hob`,
+                });
+              }
+              return restored;
+            }),
+          YOU,
+        );
+      });
+
+      return HobService.of({ create, update, updateThen, updatePolicy, revert });
     }),
   );
 }

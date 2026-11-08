@@ -95,6 +95,20 @@ export class InvalidHob extends Schema.TaggedError<InvalidHob>()(
   { httpApiStatus: 400 },
 ) {}
 
+/**
+ * Revert undoes only the hob's latest change (ADR 034): refused as `not-latest` once another version
+ * followed it, and as `first-version` for the version the hob was summoned with.
+ */
+export class RevertRefused extends Schema.TaggedError<RevertRefused>()(
+  "RevertRefused",
+  {
+    agentId: AgentId,
+    version: Schema.Int,
+    reason: Schema.Literals(["not-latest", "first-version"]),
+  },
+  { httpApiStatus: 409 },
+) {}
+
 /** A folder the hub will not let hobs work in: not an absolute path, or not a folder on the hub. */
 export class InvalidFolder extends Schema.TaggedError<InvalidFolder>()(
   "InvalidFolder",

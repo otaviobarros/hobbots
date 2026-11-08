@@ -44,7 +44,7 @@ interface AgentRow {
 // The policy's three JSON text columns (migration 0015), its signing flag (0021) and the ids of its
 // Charms (0076) become the hob's one `policy` field. Being visible to other hobs is 0 or 1 (0079), and
 // so is being summoned unattended on a hob; a configuration version's actor is JSON text (0082).
-const agentRows = (rows: ReadonlyArray<AgentRow>) =>
+export const agentRows = (rows: ReadonlyArray<AgentRow>) =>
   rows.map(({ ownFolders, hiddenSharedFolders, policyOverrides, signCommits, charms, visibleToHobs, ...row }) => ({
     ...row,
     lookSeed: Number(row.lookSeed),
@@ -329,6 +329,15 @@ export const HobbotsRepositoryLive = Layer.effect(
             SET status = ${agent.status}, retired_at = ${agent.retiredAt}, revision = ${revision}
             WHERE id = ${agent.id} AND status = ${from} RETURNING id`;
           if (updated.length === 0) return null;
+          // Kept for the hob's History and the Changes log, which outlive the journal (migration 0083).
+          yield* sql`INSERT INTO agent_status_changes ${sql.insert({
+            agent_id: agent.id,
+            revision,
+            from_status: from,
+            status: agent.status,
+            actor: JSON.stringify(actor),
+            created_at: DateTime.formatIso(yield* DateTime.now),
+          })}`;
           return { value: agent, events: [{ _tag: "AgentUpserted", agent, actor }] };
         }),
       );

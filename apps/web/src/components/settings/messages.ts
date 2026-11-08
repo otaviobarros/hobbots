@@ -14,6 +14,10 @@ export const messages = {
       name: "Safety",
       intro: "How often hobs ask you first, and what they can open. Any hob can be made more careful from its profile.",
     },
+    changes: {
+      name: "Changes",
+      intro: "Every change to your hobs, newest first: what changed, who changed it and the request behind it.",
+    },
     connections: {
       name: "Connections",
       intro: "The AI your hobs think with, and the Charms (other apps) they can use for you.",
@@ -36,6 +40,7 @@ export const messages = {
     nothing: "Nothing by that name.",
     entries: [
       { label: "Reduce motion", words: ["animation", "motion"], section: "app" },
+      { label: "Changes to hobs", words: ["history", "log", "revert", "audit", "who changed"], section: "changes" },
       { label: "Open at login", words: ["start", "login", "startup"], section: "app" },
       { label: "Menu bar", words: ["close the window", "keep running"], section: "app" },
       { label: "Notifications", words: ["notify", "alerts", "sound"], section: "app" },

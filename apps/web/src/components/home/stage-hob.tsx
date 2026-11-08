@@ -6,9 +6,13 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ActivityMap } from "../../api/activity.ts";
+import { changesLogQuery, readChangesSeen } from "../../api/hob-changes.ts";
 import { useHobQuestWork } from "../../api/quest-work.ts";
 import { threadTasksQuery } from "../../api/tasks.ts";
 import type { HobState } from "../../lib/hob-state.ts";
+import { useHobsNamed } from "../hob-changes/change-list.tsx";
+import { changedByNote } from "../hob-changes/hob-changes-model.ts";
+import { messages as changesCopy } from "../hob-changes/messages.ts";
 import { doingOf, stateTag } from "../hob-page/hob-page-model.ts";
 import { HobSprite, stateLabel } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
@@ -63,7 +67,30 @@ export function StageHob({
           <HobPeek hob={hob} state={state} threads={threads} activity={activity} />
         </PopoverContent>
       </Popover>
+      <ChangedBy hob={hob} />
     </div>
+  );
+}
+
+/**
+ * "Changed by Ada" under a hob another hob changed last, until you open its profile, which the
+ * note links to (ADR 034).
+ */
+function ChangedBy({ hob }: { hob: Agent }) {
+  const log = useQuery(changesLogQuery);
+  const by = log.data === undefined ? null : changedByNote(hob.id, log.data.changes, readChangesSeen()[hob.id]);
+  const hobs = useHobsNamed(by === null ? [] : [by]);
+  if (by === null) return null;
+  const name = hobs.get(by)?.name ?? changesCopy.someHob;
+  return (
+    <Link
+      to="/hobs/$hobId/profile"
+      params={{ hobId: hob.id }}
+      search={{ tab: "history" }}
+      className="max-w-[150px] truncate rounded-tag bg-[color-mix(in_srgb,var(--color-lantern)_16%,var(--color-card))] px-2 py-px text-meta text-text"
+    >
+      {changesCopy.home.changedBy({ hob: name })}
+    </Link>
   );
 }
 
