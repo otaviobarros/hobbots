@@ -455,9 +455,10 @@ describe("hobs see each other, end to end", () => {
         expect(text.indexOf(DIRECTORY_LABEL), run.name).toBeLessThan(text.indexOf(INJECTION));
         const lines = text.split("\n").filter((line) => line.includes(INJECTION));
         for (const line of lines) {
-          expect(line, run.name).toMatch(
-            new RegExp(`(^- "Quill".*good at|^- Good at:) "${INJECTION.replace(/\./g, "\\.")}"`),
-          );
+          // A roster line, `- "Quill": …; good at "…"`, or the card's `- Good at: "…"`, ending with it.
+          const quoted = `"${INJECTION}"`;
+          const roster = line.startsWith('- "Quill": ') && line.endsWith(`good at ${quoted}`);
+          expect(roster || line === `- Good at: ${quoted}`, `${run.name}: ${line}`).toBe(true);
         }
       }
       // Never in the hob's own instructions.
