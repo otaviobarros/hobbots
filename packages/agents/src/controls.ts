@@ -184,6 +184,11 @@ export class TaskControls extends Context.Service<
           Effect.gen(function* () {
             yield* UserSession;
             yield* activeHob(agentId);
+            // A hob finishing its open Tasks before it retires takes no new ones (#408).
+            const taker = yield* repo.findAgent(agentId);
+            if (Option.isSome(taker) && taker.value.retiring !== null) {
+              return yield* new HobUnavailable({ agentId, status: "retiring" });
+            }
             const { task } = yield* subtree(taskId);
             if (task.ownerId === agentId && task.state !== "failed") return;
             yield* tasks

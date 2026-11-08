@@ -254,11 +254,28 @@ export const messages = {
       retireLine: ({ name }: { name: string }) =>
         `Retiring puts ${name} to sleep for good. Its threads stay readable in the Archive.`,
       retire: ({ name }: { name: string }) => `Retire ${name}…`,
+      retiringLine: ({ name }: { name: string }) =>
+        `${name} is finishing its open Tasks, then retires. It takes no new work meanwhile.`,
+      retireNow: ({ name }: { name: string }) => `Retire ${name} now…`,
     },
     retire: {
       title: ({ name }: { name: string }) => `Retire ${name}?`,
       busy: ({ name }: { name: string }) => `${name} is writing a reply right now. What should happen to it?`,
       idle: ({ name }: { name: string }) => `${name} stops working and goes to sleep. Nothing is deleted.`,
+      open: ({ name }: { name: string }) => `${name} still has work open. What should happen to it?`,
+      unread: ({ name }: { name: string }) => `Hobbots could not read ${name}'s open work. Close and try again.`,
+      runningHeading: "Writing now",
+      tasksHeading: ({ count }: { count: number }) => (count === 1 ? "1 open Task" : `${count} open Tasks`),
+      waitingOn: ({ approvals, items }: { approvals: number; items: number }) =>
+        [
+          ...(approvals > 0 ? [approvals === 1 ? "1 approval waits" : `${approvals} approvals wait`] : []),
+          ...(items > 0 ? [items === 1 ? "1 item in its backpack" : `${items} items in its backpack`] : []),
+        ].join(" · "),
+      handTo: "Hand them to",
+      pickTaker: "Pick a hob",
+      noTaker: "No other hob takes new work right now, so there is nobody to hand the Tasks to.",
+      cannotTake: ({ taker, count }: { taker: string; count: number }) =>
+        `${taker} cannot take ${count === 1 ? "one of these Tasks" : `${count} of these Tasks`}. Pick another hob, or let it finish first.`,
       choices: ({ name }: { name: string }) => `What happens to ${name}'s work`,
       kept: "Its threads are kept and stay readable. Retiring can't be undone, but you can summon a new hob any time.",
       failed: ({ name }: { name: string }) => `Hobbots could not retire ${name}. Try again.`,
@@ -266,6 +283,9 @@ export const messages = {
       confirm: ({ name }: { name: string }) => `Retire ${name}`,
       retiring: "Retiring…",
       done: ({ name }: { name: string }) => `${name} is asleep`,
+      waiting: ({ name }: { name: string }) => `${name} retires when done`,
+      whenDone: ({ name }: { name: string }) => `${name} then goes to the Archive, under Retired hobs.`,
+      close: "Close",
       find: ({ name }: { name: string }) => `You find ${name} in the Archive, under Retired hobs.`,
       archived: "Open the Archive",
       home: "Go to Home",

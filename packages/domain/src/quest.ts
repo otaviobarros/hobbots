@@ -479,6 +479,8 @@ export const TaskRefusal = Schema.Literals([
   "not-delegated",
   "same-owner",
   "lineage-owner",
+  "owner-unavailable",
+  "task-changed",
   "options-collide",
 ]);
 export type TaskRefusal = typeof TaskRefusal.Type;

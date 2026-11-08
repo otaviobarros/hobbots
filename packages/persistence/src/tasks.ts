@@ -620,11 +620,29 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
-    /** Who may take a member's Task: a hob that exists, is not its owner and owns nothing on its way up. */
+    // The hob taking a Task, read in the write's transaction. On PostgreSQL its row stays locked until
+    // the write commits, so retiring it waits; SQLite's one connection already runs writes one at a time.
+    const lockTaker = (ownerId: AgentId) =>
+      sql.onDialectOrElse({
+        pg: () =>
+          sql<{ readonly status: string; readonly retiring: string | null }>`SELECT status, retiring FROM agents
+            WHERE id = ${ownerId} FOR UPDATE`,
+        orElse: () =>
+          sql<{ readonly status: string; readonly retiring: string | null }>`SELECT status, retiring FROM agents
+            WHERE id = ${ownerId}`,
+      });
+
+    /**
+     * Who may take a member's Task: a hob that exists, is neither retired nor finishing its open Tasks
+     * before it retires (#408), is not its owner and owns nothing on its way up.
+     */
     const newOwner = (task: Task, ownerId: AgentId) =>
       Effect.gen(function* () {
-        const [owner] = yield* sql`SELECT id FROM agents WHERE id = ${ownerId}`;
+        const [owner] = yield* lockTaker(ownerId);
         if (owner === undefined) return yield* refuse("owner-missing", `No hob ${ownerId}`);
+        if (owner.status === "retired" || owner.retiring != null) {
+          return yield* refuse("owner-unavailable", `${ownerId} is retired or retiring, so it takes no new work`);
+        }
         if (task.ownerId === ownerId) return yield* refuse("same-owner", `Task ${task.id} is already ${ownerId}'s`);
         const tree = yield* read.treeOf(task.rootId);
         if (ancestorsOf(task, tree).some((above) => above.ownerId === ownerId)) {
@@ -646,6 +664,32 @@ export const TaskRepositoryLive = Layer.effect(
           return yield* refuse("quest-exists", `Task ${task.id} leads a Quest of its own`);
         }
       });
+
+    /**
+     * Why the Task could not change hands to `ownerId` once its running turn has stopped, by the
+     * rules `reassignTask` checks, or null when it could (#408). A live Attempt is no reason here:
+     * the hand-over stops it first.
+     */
+    const handOverRefusal = (taskId: TaskId, ownerId: AgentId) =>
+      Effect.gen(function* () {
+        const task = yield* openTask(taskId);
+        if (task.state === "cancelling") return yield* refuse("task-cancelling", `Task ${task.id} is being cancelled`);
+        const [delegation] = yield* read.delegationsOf(task.id);
+        if (delegation === undefined) {
+          return yield* refuse("not-delegated", `Task ${taskId} is not a party member's; only those change hands`);
+        }
+        const tree = yield* newOwner(task, ownerId);
+        if (descendantsOf(task, tree).some((each) => !isTerminalTask(each.state))) {
+          return yield* refuse("children-open", `Task ${task.id} has work still open under it`);
+        }
+        if ((yield* read.questsOn([task.id])).length > 0) {
+          return yield* refuse("quest-exists", `Task ${task.id} leads a Quest of its own`);
+        }
+        return null;
+      }).pipe(
+        Effect.catchTag("TaskRefused", (refused) => Effect.succeed(refused)),
+        Effect.orDie,
+      );
 
     const reassignTask: TaskRepository["Service"]["reassignTask"] = (taskId, expected, ownerId, at) =>
       change((revision) =>
@@ -1117,6 +1161,14 @@ export const TaskRepositoryLive = Layer.effect(
           Effect.map(([quest]) => Option.fromNullishOr(quest)),
           Effect.orDie,
         ),
+      listOpenTasks: (ownerId) =>
+        sql<{ readonly id: string }>`SELECT id FROM tasks WHERE owner_id = ${ownerId}
+          AND state NOT IN ('completed', 'failed', 'cancelled') ORDER BY created_at, id`.pipe(
+          Effect.flatMap((rows) => Effect.forEach(rows, (row) => read.task(row.id))),
+          Effect.map((found) => found.flat()),
+          Effect.orDie,
+        ),
+      handOverRefusal,
       openTaskCount: (ownerId) =>
         sql<{ readonly count: unknown }>`SELECT COUNT(*) AS count FROM tasks WHERE owner_id = ${ownerId}
           AND state NOT IN ('completed', 'failed', 'cancelled')`.pipe(

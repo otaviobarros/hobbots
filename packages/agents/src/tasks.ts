@@ -385,6 +385,13 @@ export class TaskRepository extends Context.Service<
     readonly findQuest: (questId: QuestId) => Effect.Effect<Option.Option<Quest>>;
     /** How many Tasks the hob owns that have not ended, across every tree. */
     readonly openTaskCount: (ownerId: AgentId) => Effect.Effect<number>;
+    /** The Tasks the hob owns that have not ended, across every tree, oldest first. */
+    readonly listOpenTasks: (ownerId: AgentId) => Effect.Effect<ReadonlyArray<Task>>;
+    /**
+     * Why the Task could not go to `ownerId` once its running turn stopped, by Reassign's rules, or
+     * null when it could (#408). Writes nothing.
+     */
+    readonly handOverRefusal: (taskId: TaskId, ownerId: AgentId) => Effect.Effect<TaskRefused | null>;
     /**
      * A hob's Tasks as a party member on Quests still active, oldest first. A member's Task stays
      * listed once it ends, until its Quest does, so its outcome shows where its work did.
