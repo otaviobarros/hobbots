@@ -527,6 +527,69 @@ describe("editing hobs", () => {
   });
 });
 
+describe("what a hob is good at", () => {
+  // covers AG-001, AG-002
+  it("[TC-AG-1232-01] prefills good at from the chores or the starter role, and stores what a create gives as one line", async () => {
+    const fromRole: Agent = (await request("POST", "/api/agents", hob)).body;
+    expect(fromRole.goodAt).toBe(starterRole("writer").note);
+    const fromChores: Agent = (
+      await request("POST", "/api/agents", {
+        ...hob,
+        instructions: "Your chores, in the user's words:\nSort the inbox.\n\nPay the bills.",
+      })
+    ).body;
+    expect(fromChores.goodAt).toBe("Sort the inbox. Pay the bills.");
+    const own: Agent = (
+      await request("POST", "/api/agents", { ...hob, role: null, roleTitle: "Gardener", instructions: "" })
+    ).body;
+    expect(own.goodAt).toBeNull();
+
+    const id = crypto.randomUUID();
+    const given = { ...hob, id, goodAt: "  Release notes\n and   changelogs " };
+    const created: Agent = (await request("POST", "/api/agents", given)).body;
+    expect(created.goodAt).toBe("Release notes and changelogs");
+    // A retry matches once its good at is stored the same way.
+    expect((await request("POST", "/api/agents", given)).body).toEqual(created);
+    const other = await request("POST", "/api/agents", { ...given, goodAt: "Poems" });
+    expect(other).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "id" } });
+
+    const long = await request("POST", "/api/agents", { ...hob, goodAt: "x".repeat(201) });
+    expect(long).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "goodAt" } });
+  });
+
+  // covers AG-002
+  it("[TC-AG-1232-02] stores an edit of good at as a new version that the instructions never change, and never tells the hob", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const send = async (content: string, count: number) => {
+      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === count);
+    };
+
+    await send("first", 2);
+    const edited = await request("PATCH", `/api/agents/${agent.id}`, { goodAt: " Short,  sharp\tcopy " });
+    expect(edited.body).toMatchObject({ goodAt: "Short, sharp copy", configVersion: 2 });
+    const same = await request("PATCH", `/api/agents/${agent.id}`, { goodAt: "Short, sharp copy" });
+    expect(same.body.configVersion).toBe(2);
+    const instructions = await request("PATCH", `/api/agents/${agent.id}`, {
+      instructions: "Your chores, in the user's words:\nWrite poems.",
+    });
+    expect(instructions.body).toMatchObject({ goodAt: "Short, sharp copy", configVersion: 3 });
+    const long = await request("PATCH", `/api/agents/${agent.id}`, { goodAt: "word ".repeat(41) });
+    expect(long).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "goodAt" } });
+    const cleared = await request("PATCH", `/api/agents/${agent.id}`, { goodAt: "   " });
+    expect(cleared.body).toMatchObject({ goodAt: null, configVersion: 4 });
+    await send("second", 4);
+
+    expect(prompts.map((p) => p.instructions)).toEqual([
+      told("Write short answers."),
+      told("Your chores, in the user's words:\nWrite poems."),
+    ]);
+    expect(prompts.some((p) => p.instructions.includes("sharp"))).toBe(false);
+  });
+});
+
 describe("several hobs at once", () => {
   // covers AG-001, AG-002, AG-006
   it("[TC-AG-097] three hobs with different models chat at once, an edit mid-reply reaches only the next reply, and a retired hob refuses messages but stays readable", async () => {

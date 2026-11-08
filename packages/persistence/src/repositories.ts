@@ -69,6 +69,7 @@ const configColumns = (agent: Agent) => ({
   sigil: agent.sigil,
   hat: agent.hat,
   tool: agent.tool,
+  good_at: agent.goodAt,
   voice: agent.voice,
   length: agent.length,
   ...policyColumns(agent.policy),

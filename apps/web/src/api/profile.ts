@@ -1,7 +1,9 @@
 import type { UpdateAgentPayload } from "@hobbots/api";
 import {
   type Agent,
+  GOOD_AT_MAX,
   type HobColor,
+  normalizeGoodAt,
   type ReplyLength,
   type RetireWork,
   type RoleHat,
@@ -31,6 +33,8 @@ export interface RoleChoice {
  */
 export interface ProfileDraft extends BrainChoice, RoleChoice {
   readonly name: string;
+  /** What the hob is good at, for other hobs; empty for none. */
+  readonly goodAt: string;
   readonly lookSeed: number;
   readonly lookColor: HobColor;
   readonly voice: Voice;
@@ -40,15 +44,20 @@ export interface ProfileDraft extends BrainChoice, RoleChoice {
 
 const ROLE_KEYS = ["role", "roleTitle", "sigil", "hat", "tool"] as const;
 // The parts of a draft that move on their own when it is rebased.
-const OWN_KEYS = ["name", "lookSeed", "lookColor", "voice", "length"] as const;
+const OWN_KEYS = ["name", "lookSeed", "lookColor", "voice", "length", "goodAt"] as const;
 type OwnKey = (typeof OWN_KEYS)[number];
 
 /**
  * Picks a starter role, which brings its title, sigil, hat and tool, or the user's own words
  * (`null`), which keep the title, sigil, hat and tool the hob has until the user changes them.
+ * Good at follows a starter role only while it still holds the old role's note word for word, since
+ * then it was never the user's own (ADR 032).
  */
-export const pickRole = <D extends RoleChoice>(draft: D, role: RoleId | null): D =>
-  role === null ? { ...draft, role: null } : { ...draft, ...roleFields(role) };
+export const pickRole = <D extends RoleChoice & { readonly goodAt: string }>(draft: D, role: RoleId | null): D => {
+  if (role === null) return { ...draft, role: null };
+  const refill = draft.role !== null && draft.goodAt.trim() === starterRole(draft.role).note;
+  return { ...draft, ...roleFields(role), ...(refill && { goodAt: starterRole(role).note }) };
+};
 
 /** Why the role cannot be saved as it is, or undefined when it can. */
 export const roleProblem = (draft: RoleChoice): string | undefined =>
@@ -58,8 +67,11 @@ export const roleProblem = (draft: RoleChoice): string | undefined =>
 export const NAME_MAX = 40;
 
 /** Why the draft cannot be saved as it is, or undefined when it can. */
-export const draftProblem = (draft: ProfileDraft): string | undefined =>
-  draft.name.trim() === "" ? "Give the hob a name." : roleProblem(draft);
+export const draftProblem = (draft: ProfileDraft): string | undefined => {
+  if (draft.name.trim() === "") return "Give the hob a name.";
+  if ((normalizeGoodAt(draft.goodAt) ?? "").length > GOOD_AT_MAX) return `Keep good at to ${GOOD_AT_MAX} characters.`;
+  return roleProblem(draft);
+};
 
 /** The API's limit on instructions. */
 export const INSTRUCTIONS_MAX = 20_000;
@@ -75,6 +87,7 @@ const storedModel = (model: string | null) => (model === null || model === DEFAU
 export const profileDraft = (hob: Agent, models?: RuntimeModels): ProfileDraft => {
   const draft: ProfileDraft = {
     name: hob.name,
+    goodAt: hob.goodAt ?? "",
     lookSeed: hob.lookSeed,
     lookColor: hob.lookColor,
     role: hob.role,
@@ -106,6 +119,7 @@ const lookEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload => {
 export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload => {
   const model = storedModel(draft.model);
   const role: RoleChoice = { ...draft, roleTitle: draft.roleTitle.trim() };
+  const goodAt = normalizeGoodAt(draft.goodAt);
   // The hub checks the model and effort against the runtime, so a new runtime sends both.
   const newRuntime = draft.runtime !== hob.runtime;
   return {
@@ -115,6 +129,7 @@ export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload
     ...(role.sigil !== hob.sigil && { sigil: role.sigil }),
     ...(role.hat !== hob.hat && { hat: role.hat }),
     ...(role.tool !== hob.tool && { tool: role.tool }),
+    ...(goodAt !== hob.goodAt && { goodAt }),
     ...(draft.voice !== hob.voice && { voice: draft.voice }),
     ...(draft.length !== hob.length && { length: draft.length }),
     ...(draft.instructions !== hob.instructions && { instructions: draft.instructions }),
@@ -152,6 +167,7 @@ export const rebaseDraft = (
     draft[key] !== from[key] || (sending !== undefined && sending[key] !== from[key]) ? draft[key] : to[key];
   return {
     name: keep("name"),
+    goodAt: keep("goodAt"),
     lookSeed: keep("lookSeed"),
     lookColor: keep("lookColor"),
     role: role.role,
@@ -181,28 +197,6 @@ export const changeCount = (base: ProfileDraft, draft: ProfileDraft): number =>
 
 /** Whether the draft differs from where the form started. */
 export const isDirty = (base: ProfileDraft, draft: ProfileDraft): boolean => changeCount(base, draft) > 0;
-
-// Summon and onboarding fold the chores into the instructions under this line (see first-hob.ts).
-const CHORES_HEADING = "Your chores, in the user's words:\n";
-
-/**
- * What the hob is good at, for the profile's role chip: the chores the user gave it, or else its
- * starter role's note. Undefined for a title in the user's own words with no chores.
- */
-export const goodAt = (hob: Pick<Agent, "instructions" | "role">): string | undefined => {
-  const at = hob.instructions.lastIndexOf(CHORES_HEADING);
-  const chores =
-    at === -1
-      ? ""
-      : hob.instructions
-          .slice(at + CHORES_HEADING.length)
-          .split("\n")
-          .map((line) => line.trim())
-          .filter((line) => line !== "")
-          .join(" ");
-  if (chores !== "") return chores;
-  return hob.role === null ? undefined : starterRole(hob.role).note;
-};
 
 /** Where the hob works, when it was summoned and its version, for the line under the profile. */
 export const aboutLine = (hob: Pick<Agent, "createdAt" | "configVersion">): string =>

@@ -196,9 +196,11 @@ describe("Charm call records", () => {
 
   // covers DP-003, ADR 031
   it("[TC-DP-289] 0075 names every stored call's Charm and moves its applied text out of its plan, readable after", async () => {
-    // Keeps 0076 too: the repository that seeds the hob writes its Charms.
+    // Keeps 0076 and 0078 too: the repository that seeds the hob writes its Charms and its good at.
     const earlier = Object.fromEntries(
-      Object.entries(migrations).filter(([id]) => id < "0075" || id === "0076_charm_grants"),
+      Object.entries(migrations).filter(
+        ([id]) => id < "0075" || id === "0076_charm_grants" || id === "0078_hob_good_at",
+      ),
     ) as typeof migrations;
     const stored = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

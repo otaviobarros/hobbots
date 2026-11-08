@@ -1,5 +1,5 @@
 import { HOB_COLORS } from "@hobbots/art/look";
-import { type Agent, type AgentId, type RetireWork, starterRole } from "@hobbots/domain";
+import { type Agent, type AgentId, GOOD_AT_MAX, type RetireWork, starterRole } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
@@ -17,7 +17,6 @@ import {
   aboutLine,
   changeCount,
   draftProblem,
-  goodAt,
   INSTRUCTIONS_MAX,
   type ProfileDraft,
   pickRole,
@@ -259,7 +258,7 @@ function ProfileHero({
   onExport: () => void;
 }) {
   const tag = stateTag(state);
-  const good = goodAt(hob);
+  const good = hob.goodAt;
   return (
     <header
       className="flex flex-wrap items-end gap-4 rounded-card px-5 pt-5 pb-6"
@@ -438,6 +437,23 @@ function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
           </button>
         </span>
         <RoleLine draft={draft} />
+        <label htmlFor="hob-good-at" className="lbl pt-1 text-label">
+          {copy.goodAt}
+        </label>
+        <input
+          id="hob-good-at"
+          aria-describedby="hob-good-at-note"
+          value={draft.goodAt}
+          maxLength={GOOD_AT_MAX}
+          onChange={(e) => {
+            const goodAt = e.target.value;
+            setDraft((d) => ({ ...d, goodAt }));
+          }}
+          className="rounded-control border-(length:--edge) border-control bg-deep px-2.5 py-2 text-text-strong"
+        />
+        <span id="hob-good-at-note" className="text-detail text-label">
+          {copy.goodAtNote({ name })}
+        </span>
         <label htmlFor="hob-instructions" className="lbl pt-1 text-label">
           {copy.shouldDo({ name })}
         </label>

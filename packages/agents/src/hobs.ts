@@ -20,10 +20,13 @@ import {
   DEFAULT_VOICE,
   declaredOperations,
   type Effort,
+  GOOD_AT_MAX,
+  goodAtFromInstructions,
   type HobPolicy,
   heldCharms,
   hobAnswers,
   isNarrowerOrEqual,
+  normalizeGoodAt,
   POLICY_OPERATIONS,
   PRESET_DECISIONS,
   type RoleId,
@@ -101,6 +104,12 @@ const checkRole = (role: { readonly role: RoleId | null; readonly roleTitle: str
     ? undefined
     : new InvalidHob({ field: "roleTitle", message: `The ${title} role is titled "${title}"` });
 };
+
+/** Good at is one line that fits its limit once its whitespace is collapsed; a longer one is refused, never cut. */
+const checkGoodAt = (goodAt: string | null | undefined): InvalidHob | undefined =>
+  goodAt != null && goodAt.length > GOOD_AT_MAX
+    ? new InvalidHob({ field: "goodAt", message: `Good at is one line of up to ${GOOD_AT_MAX} characters` })
+    : undefined;
 
 /**
  * An override that would allow more than the preset, naming each operation it widens, built-in or a
@@ -232,6 +241,7 @@ const toneFields = ["voice", "length"] as const;
 const createdFields = [
   "name",
   ...roleFields,
+  "goodAt",
   ...toneFields,
   "lookSeed",
   "lookColor",
@@ -241,16 +251,21 @@ const createdFields = [
   "instructions",
 ] as const satisfies ReadonlyArray<keyof CreateAgentPayload & keyof Agent>;
 
-/** A new hob's request with its tone filled in, so a retry that leaves the tone out matches. */
-const withTone = (payload: CreateAgentPayload) => ({
+/**
+ * A new hob's request with what it leaves out filled in, so a retry that leaves it out matches: the
+ * default tone, and good at stored as one line, or the prefill of its chores and role when it gives none.
+ */
+const withDefaults = (payload: CreateAgentPayload) => ({
   voice: DEFAULT_VOICE,
   length: DEFAULT_LENGTH,
   ...payload,
+  goodAt: payload.goodAt === undefined ? goodAtFromInstructions(payload) : normalizeGoodAt(payload.goodAt),
 });
 
 const editableFields = [
   "name",
   ...roleFields,
+  "goodAt",
   ...toneFields,
   "lookSeed",
   "lookColor",
@@ -326,16 +341,17 @@ export class HobService extends Context.Service<
 
       // A retry carries the same id and fields; the same id with other fields is another hob.
       const retried = (existing: Agent, payload: CreateAgentPayload) =>
-        createdFields.every((field) => existing[field] === withTone(payload)[field])
+        createdFields.every((field) => existing[field] === withDefaults(payload)[field])
           ? Effect.succeed(existing)
           : Effect.fail(new InvalidHob({ field: "id", message: "Another hob already has this id" }));
 
       const create = Effect.fn("HobService.create")(function* (payload: CreateAgentPayload) {
-        const { id = AgentId.make(crypto.randomUUID()), ...fields } = payload;
+        const { id = AgentId.make(crypto.randomUUID()), ...fields } = withDefaults(payload);
         // Reconcile first, so a retry succeeds even if the runtime's model list changed since.
         const earlier = Option.getOrUndefined(yield* repo.findAgent(id));
         if (earlier !== undefined) return yield* retried(earlier, payload);
-        const invalid = checkRole(payload) ?? (yield* checkRuntimeBrain(adapters, payload));
+        const invalid =
+          checkRole(payload) ?? checkGoodAt(fields.goodAt) ?? (yield* checkRuntimeBrain(adapters, payload));
         if (invalid !== undefined) return yield* invalid;
         const agent = new Agent({
           ...fields,
@@ -355,11 +371,12 @@ export class HobService extends Context.Service<
 
       // The edit applied to the hob as it is stored now; the hob itself when it changes nothing.
       const applyEdit = (edit: UpdateAgentPayload) => {
-        // Taking a starter role brings its title.
-        const payload =
-          edit.role != null && edit.roleTitle === undefined
-            ? { ...edit, roleTitle: starterRole(edit.role).title }
-            : edit;
+        // Taking a starter role brings its title; good at is stored as one line.
+        const payload = {
+          ...edit,
+          ...(edit.role != null && edit.roleTitle === undefined && { roleTitle: starterRole(edit.role).title }),
+          ...(edit.goodAt !== undefined && { goodAt: normalizeGoodAt(edit.goodAt) }),
+        };
         return (agent: Agent) =>
           Effect.gen(function* () {
             if (editableFields.every((field) => payload[field] === undefined || payload[field] === agent[field])) {
@@ -375,7 +392,7 @@ export class HobService extends Context.Service<
               if (invalid !== undefined) return yield* invalid;
             }
             const next = new Agent({ ...agent, ...payload });
-            const invalidRole = checkRole(next);
+            const invalidRole = checkRole(next) ?? checkGoodAt(payload.goodAt);
             if (invalidRole !== undefined) return yield* invalidRole;
             return next;
           });
