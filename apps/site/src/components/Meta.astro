@@ -1,10 +1,39 @@
 ---
 import { CLOUDFLARE_ENV } from "astro:env/server";
-import { SHARE } from "../data/copy.ts";
+import { CONTACT, DOWNLOADS, FAQ, GITHUB, RELEASE, SHARE } from "../data/copy.ts";
 
 // Astro.site is https://hobbots.app, so staging and preview pages still point search engines and share cards there.
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
 const image = new URL(SHARE.image, Astro.site).href;
+
+// Structured data, so search engines and AI answer engines can read what Hobbots is and the page's questions.
+const app = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Hobbots",
+  url: canonical,
+  description: SHARE.description,
+  image,
+  applicationCategory: "ProductivityApplication",
+  operatingSystem: "macOS 13 or later; Linux (Ubuntu 24.04, Debian, Fedora), experimental",
+  softwareVersion: RELEASE.version,
+  releaseNotes: RELEASE.notes,
+  downloadUrl: [DOWNLOADS.macArm, DOWNLOADS.macIntel, DOWNLOADS.debX64, DOWNLOADS.rpmX64],
+  license: "https://www.apache.org/licenses/LICENSE-2.0",
+  isAccessibleForFree: true,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  codeRepository: GITHUB,
+  author: { "@type": "Organization", name: "The Hobbots contributors", url: GITHUB, email: CONTACT },
+};
+const faq = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: FAQ.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: { "@type": "Answer", text: item.a },
+  })),
+};
 ---
 
 <title>{SHARE.title}</title>
@@ -31,3 +60,6 @@ const image = new URL(SHARE.image, Astro.site).href;
 <meta name="twitter:description" content={SHARE.description} />
 <meta name="twitter:image" content={image} />
 <meta name="twitter:image:alt" content={SHARE.imageAlt} />
+<script type="application/ld+json" set:html={JSON.stringify(app)} />
+<script type="application/ld+json" set:html={JSON.stringify(faq)} />
+<link rel="alternate" type="text/plain" href="/llms.txt" title="Hobbots for language models" />

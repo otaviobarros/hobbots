@@ -1,8 +1,6 @@
 ---
 import { SLIDES } from "../data/copy.ts";
 import Screen from "./Screen.astro";
-
-const first = SLIDES[0];
 ---
 
 <section id="tour" class="section" aria-labelledby="tour-title" data-tour>
@@ -45,14 +43,17 @@ const first = SLIDES[0];
           ))
         }
       </div>
-      <div class="cap">
-        <p class="lbl step" data-tour-name>{first?.name}</p>
-        <p class="h cap-title" data-tour-title>{first?.title}</p>
-        <p class="lede" data-tour-body>{first?.body}</p>
-      </div>
+      {
+        SLIDES.map((slide, i) => (
+          <div class="cap" hidden={i !== 0} data-tour-cap>
+            <p class="lbl step">{slide.name}</p>
+            <h3 class="h cap-title">{slide.title}</h3>
+            <p class="lede">{slide.body}</p>
+          </div>
+        ))
+      }
     </div>
   </div>
-  <script type="application/json" data-tour-slides set:html={JSON.stringify(SLIDES)} />
 </section>
 
 <style>

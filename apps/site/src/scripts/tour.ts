@@ -1,4 +1,3 @@
-import type { Slide } from "../data/copy.ts";
 import { reducedMotion } from "./motion.ts";
 
 /** Pixels a finger has to move sideways before a swipe changes the screen. */
@@ -23,27 +22,21 @@ export const pick = (shots: ReadonlyArray<HTMLElement>, buttons: ReadonlyArray<H
  */
 export const initTour = () => {
   const tour = document.querySelector<HTMLElement>("[data-tour]");
-  const data = tour?.querySelector("[data-tour-slides]")?.textContent;
-  if (!tour || !data) return;
-  const slides: ReadonlyArray<Slide> = JSON.parse(data);
+  if (!tour) return;
   const tabs = [...tour.querySelectorAll<HTMLButtonElement>("[data-tour-tab]")];
   const frame = tour.querySelector<HTMLElement>("[data-tour-frame]");
   const shots = [...(frame?.querySelectorAll<HTMLElement>(".shot-in") ?? [])];
   const play = tour.querySelector<HTMLButtonElement>("[data-tour-play]");
-  const name = tour.querySelector("[data-tour-name]");
-  const title = tour.querySelector("[data-tour-title]");
-  const body = tour.querySelector("[data-tour-body]");
+  // Every caption is in the page, so search engines read them all; only the shown screen's is visible.
+  const captions = [...tour.querySelectorAll<HTMLElement>("[data-tour-cap]")];
   let current = 0;
 
   const show = (index: number) => {
-    current = (index + slides.length) % slides.length;
-    const slide = slides[current];
+    current = (index + tabs.length) % tabs.length;
     pick(shots, tabs, current);
-    if (slide && name && title && body) {
-      name.textContent = slide.name;
-      title.textContent = slide.title;
-      body.textContent = slide.body;
-    }
+    captions.forEach((caption, i) => {
+      caption.hidden = i !== current;
+    });
   };
 
   const setPlaying = (playing: boolean) => {

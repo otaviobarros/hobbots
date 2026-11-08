@@ -38,3 +38,26 @@ test("[TC-GEN-015] keeps a build that is not for production out of search result
   await page.goto("/");
   expect(await content(page, 'meta[name="robots"]')).toBe("noindex, nofollow");
 });
+
+test("[TC-GEN-1224-08] describes the app and its questions to search engines and language models", async ({
+  page,
+  request,
+}) => {
+  // covers #1224
+  await page.goto("/");
+  const data = await page
+    .locator('script[type="application/ld+json"]')
+    .evaluateAll((scripts) => scripts.map((script) => JSON.parse(script.textContent ?? "")));
+  const app = data.find((item) => item["@type"] === "SoftwareApplication");
+  expect(app.isAccessibleForFree).toBe(true);
+  expect(app.offers.price).toBe("0");
+  const faq = data.find((item) => item["@type"] === "FAQPage");
+  expect(faq.mainEntity.map((question: { name: string }) => question.name)).toEqual(
+    await page.locator("#faq summary").allTextContents(),
+  );
+  // Every caption of the tour is in the page, for crawlers that run no script.
+  expect(await page.locator("#tour [data-tour-cap]").count()).toBe(await page.locator("#tour [data-tour-tab]").count());
+  const llms = await request.get("/llms.txt");
+  expect(llms.status()).toBe(200);
+  expect(await llms.text()).toContain(`Current version: ${app.softwareVersion} beta`);
+});

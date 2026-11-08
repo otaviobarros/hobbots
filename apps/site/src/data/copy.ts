@@ -54,7 +54,7 @@ export interface Shot {
   readonly alt: string;
 }
 
-export interface Slide extends Shot {
+interface Slide extends Shot {
   readonly name: string;
   readonly title: string;
   readonly body: string;
