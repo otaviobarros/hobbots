@@ -139,13 +139,31 @@ const wordedFor = (consequence: string, path: string) => {
   return instead !== null ? instead[1] === path || instead[2] === path : EMPTY.exec(consequence)?.[1] === path;
 };
 
+/** Words in a choice that put the work somewhere else, or leave it to the user, such as "Move it yourself". */
+const ELSEWHERE =
+  /\b(instead|elsewhere|another (place|folder|path|location)|by hand|yourself|move|moving|copy|copying|relocate|skip|drop)\b/i;
+
 /**
- * Why a question with choices about a file the user named, which is not there yet, cannot be asked
- * as it is, or null (#1219). A lead's first such question came before the hub had told it how the
- * choice is worded, so no choice it offered could let the place go, and the one it recommended had
- * the user move the file by hand. Each such file needs a choice worded as Hobbots words it; the
- * question is asked as it is once one is there. A question with no choices, or about anything else,
- * is asked as it is.
+ * Whether a choice decides where the work goes: it names an absolute path the user did not name, or
+ * puts the work somewhere else in words. A choice about the work itself, such as its language, does not.
+ */
+const decidesPlace = (
+  option: { readonly label: string; readonly consequence: string },
+  named: ReadonlyArray<string>,
+  separator: PathSeparator,
+) => {
+  const text = `${option.label}\n${option.consequence}`;
+  return ELSEWHERE.test(text) || filePaths([text], separator).some((path) => !named.includes(path));
+};
+
+/**
+ * Why a question with choices about where a file the user named goes, while nothing is there yet,
+ * cannot be asked as it is, or null (#1219). A lead's first such question came before the hub had
+ * told it how the choice is worded, so no choice it offered could let the place go, and the one it
+ * recommended had the user move the file by hand. A question whose choices decide the place, naming
+ * such a file, needs a choice worded as Hobbots words it for that file; it is asked as it is once one
+ * is there. A question with no choices, or whose choices are about the work itself, such as which
+ * language a page the user asked for is written in, is asked as it is.
  */
 export const destinationQuestionProblem = (
   deps: DestinationDeps,
@@ -157,8 +175,9 @@ export const destinationQuestionProblem = (
     const options = input.options ?? [];
     if (top === undefined || options.length === 0) return null;
     const asked = [input.question, ...options.flatMap((option) => [option.label, option.consequence])].join("\n");
-    const named = namedIn(asked, namedByUser(scope, top, deps.separator), deps.separator);
-    if (named.length === 0) return null;
+    const byUser = namedByUser(scope, top, deps.separator);
+    const named = namedIn(asked, byUser, deps.separator);
+    if (named.length === 0 || !options.some((option) => decidesPlace(option, byUser, deps.separator))) return null;
     const missing = yield* missingDestinations(deps, scope, top);
     const unworded = missing.filter(
       (path) => named.includes(path) && !options.some((option) => wordedFor(option.consequence, path)),
@@ -172,8 +191,9 @@ export const destinationQuestionProblem = (
  * Why a lead's answer to a member's question about a file the user named cannot go back as it is, or
  * null (#1219). After the user redirected the work, a lead answered its member's next question about
  * it with a place of its own instead of passing their answer on. A lead that answers a question
- * naming such a file with another absolute path is refused, unless its answer gives the user's own
- * words; it may still pass the question up with escalate.
+ * naming such a file with an absolute path the user never named is refused, whatever else its answer
+ * quotes: their words passed on name only places they named. It may still pass the question up with
+ * escalate.
  */
 export const destinationAnswerProblem = (
   scope: CallScope,
@@ -187,7 +207,6 @@ export const destinationAnswerProblem = (
   const about = namedIn(question.text, named, separator);
   if (about.length === 0) return null;
   const said = userWordsSince(scope);
-  if (said.some((words) => words.trim().length > 0 && answer.includes(words.trim()))) return null;
   const elsewhere = filePaths([answer], separator).filter(
     (path) => !named.some((each) => each === path || heldBy([each], path, separator)),
   );
