@@ -378,7 +378,7 @@ const memoryRoute = createRoute({
 });
 // Skills (ADR 029): `?scope=` opens a scope, `?skill=` a skill with `&tab=` its tab, `&file=` a file and
 // `&diff=` what a revision changed; `&member=` a skill of a set, by its name in the set; `&edit=skill` opens its editor and `?edit=new` a new skill; `?add=`
-// opens Add a skill from Git, a folder or written here; `?export=skills` opens Export skills; `?view=changes`
+// opens Add a skill from Git, a folder, a repository a hob works in (`&item=` its project) or written here; `?export=skills` opens Export skills; `?view=changes`
 // What changed and `?view=updates` Updates, with `&item=` the skill whose update is open; `?q=` searches.
 const skillsRoute = createRoute({
   getParentRoute: () => shellRoute,

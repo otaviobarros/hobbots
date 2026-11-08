@@ -81,6 +81,7 @@ export function SkillsScope({
         </RowList>
       )}
       {scope._tag !== "Hob" && <p className="m-0 text-detail text-label">{copy.scope.foot}</p>}
+      {scope._tag === "Project" && <p className="m-0 text-detail text-label">{copy.scope.projectFoot}</p>}
     </div>
   );
 }

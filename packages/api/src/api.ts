@@ -56,6 +56,7 @@ import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
 import { SkillHealthGroup } from "./skill-health.ts";
 import { SkillProposalsGroup } from "./skill-proposals.ts";
+import { SkillRepositoriesGroup } from "./skill-repositories.ts";
 import { SkillTrialsGroup } from "./skill-trials.ts";
 import { SkillUpdatesGroup } from "./skill-updates.ts";
 import { SkillsGroup } from "./skills.ts";
@@ -437,4 +438,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(SkillProposalsGroup)
   .add(SkillUpdatesGroup)
   .add(SkillTrialsGroup)
-  .add(SkillHealthGroup) {}
+  .add(SkillHealthGroup)
+  .add(SkillRepositoriesGroup) {}

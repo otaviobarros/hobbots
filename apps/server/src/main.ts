@@ -105,7 +105,7 @@ import {
   FolderSandboxLive,
   ProcessSandbox,
 } from "@hobbots/runtimes";
-import { SkillToolsLive } from "@hobbots/skills";
+import { RepositorySkillFinderLive, SkillRepositoriesLive, SkillToolsLive } from "@hobbots/skills";
 import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
 import { Deferred, Duration, Effect, Layer, Option, Redacted, References } from "effect";
 import { FetchHttpClient, HttpRouter } from "effect/http";
@@ -473,6 +473,10 @@ const ServerLive = Layer.unwrap(
             SkillUpdateChecks,
             // Try in a chat: a draft loaded alone in a new chat, outside the library (ADR 029).
             SkillTrialsLive,
+            // A repository's own skills, offered once and imported from its default branch (ADR 029).
+            SkillRepositoriesLive.pipe(
+              Layer.provide(Layer.mergeAll(RepositorySkillFinderLive, PermissionSummary.layer)),
+            ),
             // What happens in each thread goes to its hob's memory (ADR 028).
             memoryCaptureLayer(config),
             // The Workbench's heavy details are cleared past their retention window (ADR 023).

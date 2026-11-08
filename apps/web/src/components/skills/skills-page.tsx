@@ -11,6 +11,7 @@ import { SkillEditor } from "./skill-editor.tsx";
 import { CheckForUpdates } from "./skill-follow.tsx";
 import { SkillNew } from "./skill-new.tsx";
 import { SkillPage } from "./skill-page.tsx";
+import { RepositoryOffers } from "./skill-repository-offer.tsx";
 import { SkillReview } from "./skill-review.tsx";
 import { SkillUpdates } from "./skill-updates.tsx";
 import { SkillsExport } from "./skills-export.tsx";
@@ -47,14 +48,15 @@ const headLine = (reads: SkillsReads) => {
 };
 
 /** The Overview: the library by who has each skill, or how to start when it is empty. */
-function OverviewBody({ list, hobs, now }: { list: SkillsList; hobs: SkillsReads["hobs"]; now: Date }) {
+function OverviewBody({ list, hobs, say, now }: { list: SkillsList; hobs: SkillsReads["hobs"]; say: Say; now: Date }) {
   return list.skills.length === 0 ? (
     <div className="flex max-w-[760px] flex-col gap-5">
+      <RepositoryOffers hobs={hobs} say={say} />
       <SkillsEmpty />
       <WorthALook list={list} />
     </div>
   ) : (
-    <SkillsOverview list={list} hobs={hobs} now={now} />
+    <SkillsOverview list={list} hobs={hobs} say={say} now={now} />
   );
 }
 
@@ -109,7 +111,16 @@ function ViewBody({
 }) {
   const projects = reads.list.data?.projects ?? [];
   if (view._tag === "Add")
-    return <SkillsImport from={view.from} active={reads.active} projects={projects} hobs={reads.hobs} say={say} />;
+    return (
+      <SkillsImport
+        from={view.from}
+        project={view.project}
+        active={reads.active}
+        projects={projects}
+        hobs={reads.hobs}
+        say={say}
+      />
+    );
   if (view._tag === "New")
     return <SkillNew active={reads.active} projects={projects} hobs={reads.hobs} say={say} trial={trial} />;
   if (view._tag === "Edit") return <EditBody skillId={view.skillId} reads={reads} say={say} trial={trial} />;
@@ -143,7 +154,7 @@ function LibraryBody({ view, reads, say, now }: { view: LibraryView; reads: Skil
     case "Scope":
       return <SkillsScope scope={view.scope} list={list} hobs={reads.hobs} now={now} />;
     case "Overview":
-      return <OverviewBody list={list} hobs={reads.hobs} now={now} />;
+      return <OverviewBody list={list} hobs={reads.hobs} say={say} now={now} />;
   }
 }
 

@@ -7,6 +7,8 @@ import { formatAgo, formatCount } from "../../lib/format.ts";
 import { RowList } from "../memory/memory-overview.tsx";
 import { GroupLabel } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
+import { RepositoryOffers } from "./skill-repository-offer.tsx";
+import type { Say } from "./skills-flash.ts";
 import { SkillHealthCards } from "./skills-health.tsx";
 import {
   type HobDirectory,
@@ -105,11 +107,22 @@ function Group({ group, hobs, now }: { group: SkillGroup; hobs: HobDirectory; no
   );
 }
 
-/** The overview: the library by scope, then what deserves a look and what each hob carries. */
-export function SkillsOverview({ list, hobs, now }: { list: SkillsList; hobs: HobDirectory; now: Date }) {
+/** The overview: the repositories whose skills are offered, the library by scope, then what deserves a look and what each hob carries. */
+export function SkillsOverview({
+  list,
+  hobs,
+  say,
+  now,
+}: {
+  list: SkillsList;
+  hobs: HobDirectory;
+  say: Say;
+  now: Date;
+}) {
   const groups = libraryGroups(list, hobs);
   return (
     <div className="flex max-w-[920px] flex-col gap-7">
+      <RepositoryOffers hobs={hobs} say={say} />
       <section aria-label={copy.overview.library} className="flex flex-col gap-2.5">
         <GroupLabel>
           <h2 className="lbl m-0 text-label">{copy.overview.library}</h2>

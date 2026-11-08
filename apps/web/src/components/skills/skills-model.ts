@@ -29,8 +29,8 @@ const copy = messages;
 export const draftingHobs = (active: ReadonlyArray<Agent>, preset: SafetyPreset): ReadonlyArray<Agent> =>
   active.filter((hob) => effectiveDecision(preset, hobAnswers(hob.policy), "propose-skill") !== "deny");
 
-/** Where Add a skill takes it from. */
-export const ImportFrom = Schema.Literals(["git", "file", "write"]);
+/** Where Add a skill takes it from: Git, a file, a repository a hob works in, or written here. */
+export const ImportFrom = Schema.Literals(["git", "file", "repo", "write"]);
 export type ImportFrom = typeof ImportFrom.Type;
 
 /** A skill's tabs. Instructions is the default and has no value in the address. */
@@ -52,7 +52,7 @@ export interface SkillsSearch {
   readonly diff?: string | undefined;
   /** `skill` opens the open skill in the editor; `new` the editor for a new skill. */
   readonly edit?: "skill" | "new" | undefined;
-  /** Add a skill, from where. */
+  /** Add a skill, from where; from a repository, `item` is the project whose repository it reads. */
   readonly add?: ImportFrom | undefined;
   /** `skills` opens Export skills. */
   readonly export?: "skills" | undefined;
@@ -76,7 +76,12 @@ export type SkillsView =
   | { readonly _tag: "Review"; readonly item: string | null }
   | { readonly _tag: "Updates"; readonly item: SkillId | null }
   | { readonly _tag: "Scope"; readonly scope: SkillScope }
-  | { readonly _tag: "Add"; readonly from: ImportFrom }
+  | {
+      readonly _tag: "Add";
+      readonly from: ImportFrom;
+      /** From a repository, the project whose repository it reads; the first one when absent. */
+      readonly project?: string | undefined;
+    }
   | { readonly _tag: "Export" }
   | { readonly _tag: "New" }
   | {
@@ -118,7 +123,10 @@ export const skillsViewOf = (search: SkillsSearch): SkillsView => {
   if (q !== "") return { _tag: "Search", q };
   if (search.edit === "new") return { _tag: "New" };
   if (search.skill !== undefined && search.skill !== "") return skillViewOf(search, search.skill as SkillId);
-  if (search.add !== undefined) return { _tag: "Add", from: search.add };
+  if (search.add !== undefined)
+    return search.add === "repo" && search.item !== undefined
+      ? { _tag: "Add", from: search.add, project: search.item }
+      : { _tag: "Add", from: search.add };
   if (search.export === "skills") return { _tag: "Export" };
   const listed = listViewOf(search);
   if (listed !== null) return listed;
@@ -149,7 +157,7 @@ export const skillsSearchOf = (view: SkillsView): SkillsSearch => {
     case "Scope":
       return { scope: memoryScopeKey(view.scope) };
     case "Add":
-      return { add: view.from };
+      return { add: view.from, item: view.project };
     case "Export":
       return { export: "skills" };
     case "New":

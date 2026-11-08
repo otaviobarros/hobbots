@@ -62,5 +62,6 @@ export const MemoryProjectsLive = Layer.succeed(
       Effect.promise(() => originOf(folder).catch(() => null)).pipe(
         Effect.map((origin) => memoryProjectIdentity(origin, basename(folder))),
       ),
+    origin: (folder) => Effect.promise(() => originOf(folder).catch(() => null)),
   }),
 );

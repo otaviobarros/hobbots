@@ -306,6 +306,40 @@ export const messages = {
     failed: "Its uses could not be read.",
     retry: "Try again",
   },
+  repository: {
+    offer: "Found in a repository",
+    offerTitle: ({ count, name }: { count: number; name: string }) => `${skills(count)} in the ${name} repository`,
+    offerLine: ({ roots, hob, folder }: { roots: ReadonlyArray<string>; hob: string; folder: string }) =>
+      `Found in ${formatList(roots)} while ${hob} worked in ${folder}. Hobs do not load them until you import them.`,
+    see: "See them",
+    notNow: "Not now",
+    dismissed: "Hobbots will not offer these again until the repository holds a skill it does not hold now.",
+    dismissFailed: "That did not save. Try again in a moment.",
+    pick: "Which project",
+    pickLine: ({ hob, folder }: { hob: string; folder: string }) => `${hob} works in ${folder}`,
+    none: "No repository a hob works in holds skills in .claude/skills or .agents/skills.",
+    reading: "Reading the repository's default branch…",
+    unreadable:
+      "Hobbots could not read the repository's default branch from its origin. Check that this computer can fetch it, then try again.",
+    retry: "Try again",
+    listFailed: "Hobbots could not check the folders your hobs work in for a repository's skills.",
+    found: ({ folders, commit, name }: { folders: ReadonlyArray<string>; commit: string | null; name: string }) =>
+      commit === null
+        ? `Found in ${formatList(folders)}, on its default branch. They become the ${name} project's skills, with revisions like any other. When the default branch changes them, you see an update.`
+        : `Found in ${formatList(folders)}, on its default branch at ${commit.slice(0, 7)}. They become the ${name} project's skills, with revisions like any other. When the default branch changes them, you see an update.`,
+    nothing: "The repository's default branch holds no skills in .claude/skills or .agents/skills.",
+    sameName: ({ name }: { name: string }) => `Another ${name} is picked; only one of a name can be imported.`,
+    importN: ({ count, name }: { count: number; name: string }) =>
+      count === 0 ? "Pick a skill to import" : `Import ${skills(count)} for the ${name} project`,
+    imported: ({ names, name, hob }: { names: ReadonlyArray<string>; name: string; hob: string }) =>
+      `Imported ${formatList(names)} for the ${name} project. ${hob} uses them from its next chat.`,
+    moved: "The default branch changed since you looked. Look again to see what it holds now.",
+    failed: "Nothing was imported. Try again in a moment.",
+    elsewhere:
+      "Your library already has this skill from another source, so its updates would not come from this repository. Nothing was imported.",
+    leftOut: ({ names }: { names: ReadonlyArray<string> }) =>
+      `${formatList(names)} came into your library from another source while this ran, so the project did not get ${names.length === 1 ? "it" : "them"}.`,
+  },
   scope: {
     title: ({ name }: { name: string }) => `${name}'s skills`,
     everyoneTitle: "Everyone's skills",
@@ -315,6 +349,8 @@ export const messages = {
     hobLine: "Only this hob has them. A hob's own skill replaces Everyone's or a project's of the same name.",
     empty: "No skill is given here yet. Open a skill and use Also give it to.",
     foot: "Open a hob in the list to turn an Everyone or project skill off for that hob alone.",
+    projectFoot:
+      "Skills checked into the repository itself are not loaded from the clone. Hobbots offers to import them here, where they get revisions.",
     openPage: ({ name }: { name: string }) => `Open ${name}'s page`,
   },
   loading: "Opening your skills…",
@@ -654,8 +690,10 @@ export const messages = {
     tabs: {
       git: { label: "From Git", sub: "A repository, pinned to a commit" },
       file: { label: "Folder or .zip", sub: "From this computer" },
+      repo: { label: "From a project", sub: "None found yet" },
       write: { label: "Write one", sub: "Here, or with a hob" },
     },
+    repoFound: ({ count, name }: { count: number; name: string }) => `${formatCount(count)} found in ${name}`,
     repository: "Repository",
     ref: "Branch, tag or commit",
     refHint: "The default branch when empty",

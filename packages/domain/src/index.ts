@@ -41,6 +41,7 @@ export * from "./runtime.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./skill-proposals.ts";
+export * from "./skill-repositories.ts";
 export * from "./skill-tools.ts";
 export * from "./skill-updates.ts";
 export * from "./skills.ts";
