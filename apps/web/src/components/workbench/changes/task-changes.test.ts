@@ -3,10 +3,12 @@ import {
   Attempt,
   AttemptActivity,
   AttemptId,
+  compareListings,
   FileChange,
   FileChangeId,
   type FileChangeKind,
   type FileVersion,
+  type FolderListing,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { attempt, COPY } from "../../../test/quests.ts";
@@ -17,7 +19,13 @@ const AT = "2026-11-01T10:00:00.000Z";
 const tryOf = (number: number): Attempt =>
   new Attempt({ ...attempt(COPY, number === 3 ? "completed" : "failed"), id: AttemptId.make(`try-${number}`), number });
 
-const text = (hash: string): FileVersion => ({ hash, size: 4, kind: "text", contentId: null, notKept: null });
+const text = (hash: string, kind: "file" | "link" = "file"): FileVersion => ({
+  hash,
+  size: 4,
+  kind: kind === "link" ? "link" : "text",
+  contentId: null,
+  notKept: null,
+});
 
 const change = (
   of: Attempt,
@@ -159,7 +167,7 @@ describe("a Task's changes across its tries", () => {
     ]);
   });
 
-  it("reads a file moved off a path where a new one is then made as two changes", () => {
+  it("reads a file moved off a path where a new one is then made as that path's edit and a new file, as a commit would", () => {
     expect(
       shown([
         recorded(first, [change(first, "a.md", "edited", "a0", "a1")]),
@@ -169,8 +177,8 @@ describe("a Task's changes across its tries", () => {
         ]),
       ]),
     ).toEqual([
-      { path: "a.md", kind: "added", movedFrom: null, before: null, after: "x", keptIn: [2, 2], tries: [2] },
-      { path: "b.md", kind: "moved", movedFrom: "a.md", before: "a0", after: "a1", keptIn: [1, 2], tries: [1, 2] },
+      { path: "a.md", kind: "edited", movedFrom: null, before: "a0", after: "x", keptIn: [1, 2], tries: [1, 2] },
+      { path: "b.md", kind: "added", movedFrom: null, before: null, after: "a1", keptIn: [2, 2], tries: [1, 2] },
     ]);
   });
 
@@ -246,5 +254,103 @@ describe("a Task's changes across its tries", () => {
       { path: "b.md", kind: "moved", movedFrom: "a.md", before: "A", after: "A", keptIn: [1, 1], tries: [1] },
       { path: "c.md", kind: "added", movedFrom: null, before: null, after: "X", keptIn: [3, 3], tries: [2, 3] },
     ]);
+  });
+
+  it("drops a file moved off, made again as it was, and the moved one deleted, as the folder is as it began", () => {
+    const tries = (again: string) => [
+      recorded(first, [change(first, "b.md", "moved", "A", "A", "a.md")]),
+      recorded(second, [change(second, "a.md", "added", null, again)]),
+      recorded(third, [change(third, "b.md", "deleted", "A", null)]),
+    ];
+    expect(shown(tries("A"))).toEqual([]);
+    expect(shown(tries("X"))).toEqual([
+      { path: "a.md", kind: "edited", movedFrom: null, before: "A", after: "X", keptIn: [1, 2], tries: [1, 2] },
+    ]);
+  });
+});
+
+/** A small PRNG, so the generated tries are the same on every run. */
+const random = (seed: number) => () => {
+  seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) | 0;
+  return ((seed ^ (seed >>> 13)) >>> 0) / 2 ** 32;
+};
+
+type Listing = Map<string, { readonly kind: "file" | "link"; readonly size: number; readonly hash: string }>;
+
+/** One try's work on a folder of a few paths: moves, deletions, new files, edits and links. */
+const work = (next: () => number, start: Listing): Listing => {
+  const paths = ["a", "b", "c", "d"];
+  const pick = <A>(items: ReadonlyArray<A>) => items[Math.floor(next() * items.length)] as A;
+  const now = new Map(start);
+  for (let step = Math.floor(next() * 4); step > 0; step -= 1) {
+    const at = pick(paths);
+    const to = pick(paths);
+    const action = pick(["move", "delete", "write", "link"]);
+    const there = now.get(at);
+    if (action === "move" && there !== undefined && !now.has(to)) {
+      now.delete(at);
+      now.set(to, there);
+    } else if (action === "delete") now.delete(at);
+    else if (action === "write") now.set(at, { kind: "file", size: 1, hash: pick(["A", "B", "X"]) });
+    else if (action === "link") now.set(at, { kind: "link", size: 1, hash: pick(["A", "X"]) });
+  }
+  return now;
+};
+
+/** What each path held first and holds last, for every path that differs, with a move split back into its two paths. */
+const byPath = (changes: ReadonlyArray<Pick<FileChange, "path" | "movedFrom" | "before" | "after">>) => {
+  const facts = new Map<string, { before: string | null; after: string | null }>();
+  const show = (version: FileVersion | null) => (version === null ? null : `${version.kind}:${version.hash}`);
+  const at = (path: string) => facts.get(path) ?? { before: null, after: null };
+  for (const each of changes) {
+    if (each.movedFrom === null) {
+      facts.set(each.path, { ...at(each.path), before: show(each.before), after: show(each.after) });
+    } else {
+      facts.set(each.movedFrom, { ...at(each.movedFrom), before: show(each.before) });
+      facts.set(each.path, { ...at(each.path), after: show(each.after) });
+    }
+  }
+  return [...facts].sort(([a], [b]) => (a < b ? -1 : 1));
+};
+
+describe("a Task's changes across generated tries", () => {
+  it("always sum to what the folder held before the first try against what the last left", () => {
+    for (let seed = 1; seed <= 3000; seed += 1) {
+      const next = random(seed);
+      const start: Listing = new Map([
+        ["a", { kind: "file", size: 1, hash: "A" }],
+        ["b", { kind: "file", size: 1, hash: "B" }],
+      ]);
+      let now = start;
+      const activities: Array<AttemptActivity> = [];
+      const count = 1 + Math.floor(next() * 4);
+      for (let number = 1; number <= count; number += 1) {
+        const of = new Attempt({ ...tryOf(1), id: AttemptId.make(`gen-${number}`), number });
+        const after = work(next, now);
+        const version = (file: { kind: "file" | "link"; size: number; hash: string } | null): FileVersion | null =>
+          file === null
+            ? null
+            : { ...file, kind: file.kind === "link" ? "link" : "text", contentId: null, notKept: null };
+        const records = compareListings(now as FolderListing, after as FolderListing).map(
+          (each) =>
+            new FileChange({
+              ...change(of, each.path, each.kind, null, null, each.movedFrom),
+              before: version(each.before),
+              after: version(each.after),
+            }),
+        );
+        activities.push(recorded(of, records));
+        now = after;
+      }
+      // Path by path, with no move paired: what each path held before the first try and holds now.
+      const show = (file: Listing extends Map<string, infer F> ? F | undefined : never) =>
+        file === undefined ? null : `${file.kind === "link" ? "link" : "text"}:${file.hash}`;
+      const expected = [...new Set([...start.keys(), ...now.keys()])]
+        .map((path) => [path, { before: show(start.get(path)), after: show(now.get(path)) }] as const)
+        .filter(([, each]) => each.before !== each.after)
+        .sort(([a], [b]) => (a < b ? -1 : 1));
+      const got = byPath(taskChanges(activities).map((each) => each.change));
+      expect(got, `seed ${seed}`).toEqual(expected);
+    }
   });
 });
