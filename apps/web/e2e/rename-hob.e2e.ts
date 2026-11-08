@@ -129,8 +129,19 @@ test("[TC-AG-405-06] the profile names a retired hob that summoned it, and says 
   await expect(profile.getByText(/^Works on the hub · Summoned on \w+ \d+ · Version 1$/)).toBeVisible();
   await scan();
 
+  // Try again sits inside the profile's form: with an unsaved edit, it reads again and saves nothing.
+  const edits: Array<string> = [];
+  page.on("request", (request) => {
+    if (request.method() === "PATCH" && request.url().includes(`/api/agents/${pip.id}`)) edits.push(request.url());
+  });
+  await profile.getByRole("textbox", { name: "What Pip should do" }).fill("Write longer answers.");
+  await expect(page.getByText("1 change not saved yet")).toBeVisible();
   failRetired = false;
   await profile.getByRole("button", { name: "Try again" }).click();
   await expect(profile.getByText(/^Works on the hub · Summoned by Ada on \w+ \d+ · Version 1$/)).toBeVisible();
   await expect(profile.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByText("1 change not saved yet")).toBeVisible();
+  expect(edits).toEqual([]);
+  const saved = await api<ReadonlyArray<Hob>>(current, "GET", "/api/agents");
+  expect(saved.find((h) => h.id === pip.id)).toMatchObject({ configVersion: 1 });
 });

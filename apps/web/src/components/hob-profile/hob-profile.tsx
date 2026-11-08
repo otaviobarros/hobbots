@@ -328,7 +328,13 @@ function AboutLine({ hob }: { hob: Agent }) {
     <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-label">
       <span>{line}</span>
       <span role="alert">{copy.failed}</span>
-      <Button variant="chip" size="xs" onClick={() => void (live.isError ? live.refetch() : retired.refetch())}>
+      {/* Not a submit button: the line sits inside the profile's form, and retrying must never save it. */}
+      <Button
+        type="button"
+        variant="chip"
+        size="xs"
+        onClick={() => void (live.isError ? live.refetch() : retired.refetch())}
+      >
         {copy.retry}
       </Button>
     </p>
