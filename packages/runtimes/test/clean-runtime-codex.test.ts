@@ -36,6 +36,7 @@ import {
   SET_SKILL,
   stepRecordingContract,
   TEAM_SET,
+  WEB_FETCH_CONTRACT_TOOL,
 } from "./clean-runtime.ts";
 import { approvalsAnswering, approve } from "./codex-fixture.ts";
 
@@ -206,6 +207,22 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
       ]);
       expect(Exit.isSuccess(exit), String(exit)).toBe(true);
       expect(contract.order).toEqual([`recorded ${CONTRACT_HUB_TOOL} as call-${records}`, records ? "ran" : "not run"]);
+    }
+  });
+
+  // covers ADR 036 (On every runtime)
+  it("[TC-PE-1267-17] records a web_fetch call's step before the hub reads the page", {
+    timeout: 60_000,
+  }, async () => {
+    const tool = WEB_FETCH_CONTRACT_TOOL.name;
+    for (const records of [true, false]) {
+      const contract = stepRecordingContract(records, WEB_FETCH_CONTRACT_TOOL);
+      const { exit } = await turn({ hubTools: contract.hubTools, recordToolStart: contract.recordToolStart }, [
+        functionCall(tool, { url: "https://example.test/lamp" }, `web-${records}`),
+        { say: "Done." },
+      ]);
+      expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+      expect(contract.order).toEqual([`recorded ${tool} as web-${records}`, records ? "ran" : "not run"]);
     }
   });
 

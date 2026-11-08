@@ -27,6 +27,7 @@ import {
   SET_SKIPPED,
   stepRecordingContract,
   TEAM_SET,
+  WEB_FETCH_CONTRACT_TOOL,
 } from "./clean-runtime.ts";
 
 /**
@@ -271,6 +272,24 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
       expect(Exit.isSuccess(exit), String(exit)).toBe(true);
       expect(contract.order).toEqual([
         expect.stringMatching(new RegExp(`^recorded ${CONTRACT_HUB_TOOL} as `)),
+        records ? "ran" : "not run",
+      ]);
+    }
+  });
+
+  // covers ADR 036 (On every runtime)
+  it("[TC-PE-1267-16] records a web_fetch call's step before the hub reads the page", {
+    timeout: 120_000,
+  }, async () => {
+    for (const records of [true, false]) {
+      const contract = stepRecordingContract(records, WEB_FETCH_CONTRACT_TOOL);
+      const { exit } = await turn({ hubTools: contract.hubTools, recordToolStart: contract.recordToolStart }, [
+        { tool: `mcp__hobbots__${WEB_FETCH_CONTRACT_TOOL.name}`, input: { url: "https://example.test/lamp" } },
+        { say: "Done." },
+      ]);
+      expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+      expect(contract.order).toEqual([
+        expect.stringMatching(new RegExp(`^recorded ${WEB_FETCH_CONTRACT_TOOL.name} as `)),
         records ? "ran" : "not run",
       ]);
     }

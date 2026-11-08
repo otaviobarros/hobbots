@@ -33,6 +33,9 @@ The use cases reach storage, runtimes and the filesystem only through these port
 | `DeviceSecrets`        | `DeviceSecretsLive` in `apps/server`                                                                  |
 | `WindowKey`            | `WindowKeyLive` in `apps/server`                                                                      |
 | `TaskTurns`            | `StepRunnerLive` in `@hobbots/orchestration`; absent, chat turns offer no Task tools and no step runs |
+| `WebFetcher`           | `WebAccessLive` in `@hobbots/web-access`                                                              |
+| `WebFoundUrls`         | `WebFoundUrlsLive` in `@hobbots/persistence`, or `WebFoundUrls.memory`                                |
+| `WebTools`             | `WebToolsLive` in `apps/server`; absent, no turn offers `web_fetch`                                   |
 
 The server suites test these use cases with the test database and the fake runtime.
 

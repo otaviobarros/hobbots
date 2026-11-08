@@ -92,6 +92,7 @@ import {
   SqliteLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
+  WebFoundUrlsLive,
 } from "@hobbots/persistence";
 import {
   ClaudeCodeLayer,
@@ -152,6 +153,7 @@ import { TaskFileRoute } from "./task-files.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
+import { WebToolsLive } from "./web-access.ts";
 import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
 
@@ -313,6 +315,7 @@ const ServerLive = Layer.unwrap(
       HubQuestionRepositoryLive,
       HubCommitIdentityRepository,
       CodingSetupDismissalRepository,
+      WebFoundUrlsLive,
       RestoreRepository.layer,
       EventJournal.layer,
       SetupRepository.layer,
@@ -439,6 +442,8 @@ const ServerLive = Layer.unwrap(
     // The skill tools (ADR 029), beside the memory tools on every runtime, and your reviews of what
     // hobs propose with them, which wait for you under every preset.
     const SkillTooling = SkillToolsLive.pipe(Layer.provideMerge(SkillReviewsLive), Layer.provide(PolicyEngine.node));
+    // `web_fetch` (ADR 036) on every runtime, refusing the hub's own tailnet addresses as the sandbox does.
+    const WebTooling = WebToolsLive(config.version).pipe(Layer.provide(Remote));
     // The memory engine (ADR 028): the bundled ai-memory, run beside the hub and stopped with it. Its
     // two keys stay in the data folder and reach only the engine's environment. Without an engine,
     // or one that fails its checksum, memory is off and everything else works.
@@ -554,7 +559,9 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(DirectoryToolsLive))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
-        Layer.provideMerge(Layer.mergeAll(HubCharms, LocalGit, MemoryTooling, SkillTooling, CharmCallService.layer)),
+        Layer.provideMerge(
+          Layer.mergeAll(HubCharms, LocalGit, MemoryTooling, SkillTooling, WebTooling, CharmCallService.layer),
+        ),
       )
       // Before approvals, so a decision can save grants and every call reads the hob's live ones; before
       // the hob's own GitHub app, which revokes GitHub grants whenever the hob's identity changes (ADR 022).
