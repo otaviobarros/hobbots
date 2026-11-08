@@ -42,6 +42,7 @@ import { RemoteAccessHandlers } from "./remote-access.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
 import { SkillProposalsHandlers } from "./skill-proposals.ts";
+import { SkillHealthHandlers, SkillTrialsHandlers } from "./skill-trials.ts";
 import { SkillUpdatesHandlers } from "./skill-updates.ts";
 import { SkillsHandlers } from "./skills.ts";
 import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
@@ -240,6 +241,8 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     SkillsHandlers,
     SkillProposalsHandlers,
     SkillUpdatesHandlers,
+    SkillTrialsHandlers,
+    SkillHealthHandlers,
   ]),
   Layer.provide(DeviceSessionLive),
 );

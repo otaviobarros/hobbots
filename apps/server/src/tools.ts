@@ -11,7 +11,13 @@ import {
   openTools,
   operationDecision,
 } from "@hobbots/agents";
-import { type CommitsAs, declaredOperations, hobAppCommitIdentity, settleCommitsAs } from "@hobbots/domain";
+import {
+  type CommitsAs,
+  declaredOperations,
+  hobAppCommitIdentity,
+  settleCommitsAs,
+  withSummoningForEveryHob,
+} from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { userGitIdentity } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
@@ -44,7 +50,7 @@ export const HobToolsLive = Layer.effect(
     return HobTools.of({
       access: (agent, turn) =>
         Effect.gen(function* () {
-          const { safetyPreset, approvedFolders } = yield* setup.get;
+          const { safetyPreset, approvedFolders, summoningForEveryHob } = yield* setup.get;
           const folders = yield* effectiveFolders(folderChecks, approvedFolders, agent.policy);
           const app = Option.isSome(apps) ? yield* apps.value.get(agent.id) : null;
           // A folder that holds every hob's runtime state would open one hob's sessions to another,
@@ -57,7 +63,8 @@ export const HobToolsLive = Layer.effect(
           const policy = {
             preset: safetyPreset,
             sharedFolders: approvedFolders,
-            hob: agent.policy,
+            // "Summoning for every hob" reaches the hobs you made (ADR 034).
+            hob: withSummoningForEveryHob(agent, summoningForEveryHob),
             dataFolder: dataDir,
             // Threads, Quests and delegations add no restrictions yet.
             restrictions: [],

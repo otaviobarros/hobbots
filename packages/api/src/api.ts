@@ -4,6 +4,7 @@ import {
   AgentStatus,
   Brain,
   Effort,
+  HOB_LABEL_MAX,
   HobColor,
   LookSeed,
   Message,
@@ -53,7 +54,9 @@ import { PermissionsGroup } from "./permissions.ts";
 import { RemoteAccessGroup } from "./remote-access.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
+import { SkillHealthGroup } from "./skill-health.ts";
 import { SkillProposalsGroup } from "./skill-proposals.ts";
+import { SkillTrialsGroup } from "./skill-trials.ts";
 import { SkillUpdatesGroup } from "./skill-updates.ts";
 import { SkillsGroup } from "./skills.ts";
 import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
@@ -62,7 +65,7 @@ import { DeviceSession } from "./user-session.ts";
 import { WorkbenchGroup } from "./workbench.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
-const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(40));
+const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(HOB_LABEL_MAX));
 
 /** A new hob: who it is, how it looks and what it thinks with. */
 export const CreateAgentPayload = Schema.Struct({
@@ -432,4 +435,6 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(HobMemoryGroup)
   .add(SkillsGroup)
   .add(SkillProposalsGroup)
-  .add(SkillUpdatesGroup) {}
+  .add(SkillUpdatesGroup)
+  .add(SkillTrialsGroup)
+  .add(SkillHealthGroup) {}

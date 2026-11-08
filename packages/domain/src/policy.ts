@@ -296,13 +296,32 @@ export const StoredPolicyLayer = Schema.Record(Schema.String, PolicyDecision).pi
 );
 
 /**
+ * Which hobs a hob holding the Summoning Charm may manage (ADR 034): the hobs it summoned, on by
+ * default; a list of hobs you pick, empty by default; and itself, off by default. A retired hob is
+ * outside every scope. Only you change it.
+ */
+export const SummoningScope = Schema.Struct({
+  summoned: Schema.Boolean,
+  /** The ids of the hobs you picked. */
+  hobs: Schema.Array(Schema.String),
+  self: Schema.Boolean,
+});
+export type SummoningScope = typeof SummoningScope.Type;
+
+/** The scope the Summoning Charm's grant holds until you change it (ADR 034). */
+export const DEFAULT_SUMMONING_SCOPE: SummoningScope = { summoned: true, hobs: [], self: false };
+
+/**
  * What a hob holds of the Charms (ADR 031): `granted`, the ids of the Charms you gave it, and its
  * overrides for their operations, keyed by id. Without `granted`, the hob holds the Charms every hob
- * starts with (`DEFAULT_HOB_CHARMS`).
+ * starts with (`DEFAULT_HOB_CHARMS`). `summoning` is the Summoning Charm's scope, beside its
+ * overrides, and `withheld` the Charms you gave every hob that you took away from this one (ADR 034).
  */
 export const HobCharms = Schema.Struct({
   granted: Schema.optionalKey(Schema.Array(CharmId)),
   overrides: Schema.optionalKey(CharmOverrides),
+  summoning: Schema.optionalKey(SummoningScope),
+  withheld: Schema.optionalKey(Schema.Array(CharmId)),
 });
 export type HobCharms = typeof HobCharms.Type;
 
@@ -343,6 +362,8 @@ const currentPolicy = (stored: StoredHobPolicy): CurrentHobPolicy => {
   const held: HobCharms = {
     ...(granted === undefined ? {} : { granted }),
     ...(Object.keys(charm).length === 0 ? {} : { overrides: charm as CharmOverrides }),
+    ...(charms?.summoning === undefined ? {} : { summoning: charms.summoning }),
+    ...(charms?.withheld === undefined || charms.withheld.length === 0 ? {} : { withheld: charms.withheld }),
   };
   return { ...rest, overrides: builtIn, ...(Object.keys(held).length === 0 ? {} : { charms: held }) };
 };

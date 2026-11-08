@@ -39,7 +39,7 @@ const file = (value: string) => ({ kind: "file", label: "skills-feature-explaine
 const RUNTIMES: ReadonlyArray<RuntimeKind> = ["claude-code", "codex"];
 
 describe.each(RUNTIMES)("a Task that returns a file, on %s", (runtime) => {
-  // covers OR-004, EX-002
+  // covers OR-004, EX-002 (#1219)
   it("[TC-OR-657] is refused while the file is outside its folders, and completes once the file is saved inside them", async () => {
     const party = partyHub({ members: runtime, files: true });
     dispose = party.dispose;
@@ -70,6 +70,12 @@ describe.each(RUNTIMES)("a Task that returns a file, on %s", (runtime) => {
     expect(answers.get("in-temp")).toContain("Refused (artifact-unreachable)");
     expect(answers.get("in-temp")).toContain(`outside this Task's folders`);
     expect(answers.get("in-temp")).toContain(`Save each file inside one of your folders (${project})`);
+    // The summary says what Hobbots kept, never that the refused file succeeded (#1219).
+    expect(answers.get("in-temp")).toContain("A file Hobbots refused is not delivered: never call it a success.");
+    expect(answers.get("in-folder")).toContain(
+      `Hobbots kept "skills-feature-explained.html" at ${join(project, "skills-feature-explained.html")}.`,
+    );
+    expect(answers.get("in-folder")).toContain("one it refused was not delivered");
     expect(pip?.state).toBe("completed");
     expect(pip?.result?.summary).toBe("The page is saved");
     // Only the file someone can open is on the Task.

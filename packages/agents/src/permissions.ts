@@ -1,7 +1,10 @@
 import type { HobPermissions } from "@hobbots/api";
+import { AgentNotFound } from "@hobbots/api";
 import {
   type Agent,
+  type AgentId,
   type AnyOperation,
+  type CharmDeclaration,
   type CharmOperation,
   declaredOperations,
   EMPTY_HOB_POLICY,
@@ -12,10 +15,12 @@ import {
   type PolicyDecision,
   type SafetyPreset,
 } from "@hobbots/domain";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
+import type { ChatService } from "./chat.ts";
 import { sameFolderIn } from "./folders.ts";
-import { CharmDeclarations } from "./grants.ts";
+import { CharmDeclarations, type GrantService, policyLoss } from "./grants.ts";
 import { FolderChecks, type FolderChecksShape, InstallationSettings } from "./ports.ts";
+import type { HobbotsRepository } from "./repository.ts";
 import { missingRuntimeHealth, runtimeAdapters } from "./runtime.ts";
 
 /**
@@ -92,3 +97,31 @@ export class PermissionSummary extends Context.Service<
     }),
   );
 }
+
+/**
+ * Writes a change to a hob's permissions with `write`, then takes back what it took away: the
+ * hob's grants that relied on it are revoked (ADR 015, ADR 031), and a running turn keeps nothing
+ * it took away (PE-008). The Charms tab and the Summoning Charm change permissions through it alike.
+ */
+export const changePermissions =
+  (services: {
+    readonly repo: HobbotsRepository["Service"];
+    readonly grants: GrantService["Service"];
+    readonly chat: ChatService["Service"];
+    readonly charms: ReadonlyArray<CharmDeclaration>;
+  }) =>
+  <E>(agentId: AgentId, write: Effect.Effect<Agent, E>): Effect.Effect<Agent, E | AgentNotFound> =>
+    Effect.gen(function* () {
+      const before = yield* services.repo.findAgent(agentId).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.fail(new AgentNotFound({ agentId })),
+            onSome: Effect.succeed,
+          }),
+        ),
+      );
+      const after = yield* write;
+      yield* services.grants.revokeLost(agentId, policyLoss(before.policy, after.policy, services.charms));
+      yield* services.chat.reviewAuthority(agentId);
+      return after;
+    });

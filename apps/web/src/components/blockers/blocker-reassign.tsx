@@ -12,7 +12,7 @@ import { useState } from "react";
 import { agentsQuery } from "../../api/queries.ts";
 import { useTaskControl } from "../../api/task-controls.ts";
 import { threadTasksQuery } from "../../api/tasks.ts";
-import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { HobMenuItems } from "../hob-sprite/hob-menu-items.tsx";
 import { HubWait } from "../loading/hub-wait.tsx";
 import { controlError, reassignTargets } from "../quest/control-room.ts";
 import { taskTitle } from "../quest/work-model.ts";
@@ -113,12 +113,7 @@ function ReassignTargets({ tree, task, onPick }: { tree: TaskTree; task: Task; o
     read.data.filter((hob) => hob.status !== "retired"),
   );
   if (targets.length === 0) return <DropdownMenuLabel>{copy.noOneElse}</DropdownMenuLabel>;
-  return targets.map((hob) => (
-    <DropdownMenuItem key={hob.id} inset onSelect={() => onPick(hob)}>
-      <HobSprite hob={hob} size={16} />
-      {hob.name}
-    </DropdownMenuItem>
-  ));
+  return <HobMenuItems hobs={targets} onPick={onPick} />;
 }
 
 /** A read the card needs failed: what could not be read, and Try again. */

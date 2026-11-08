@@ -24,6 +24,8 @@ import milestoneReachedBy from "../src/migrations/0074_milestone_reached_by.ts";
 import hobVisibility from "../src/migrations/0079_hob_visibility.ts";
 import hobGoodAt from "../src/migrations/0080_hob_good_at.ts";
 import hobActors from "../src/migrations/0082_hob_actors.ts";
+import summoning from "../src/migrations/0083_summoning.ts";
+import threadSkillTrial from "../src/migrations/0084_thread_skill_trial.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1483,5 +1485,77 @@ describe("0082_hob_actors", () => {
         agent: { id: "pip", summonedBy: null, summonedFor: null, summonedUnattended: false },
       },
     ]);
+  });
+});
+
+describe("0083_summoning", () => {
+  // covers ADR 034 (Scope, The Charm), DP-003
+  it("[TC-DP-406-01] leaves every hob and version with the default Summoning scope and no Charm withheld, and Summoning for every hob off", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        configVersion: 1,
+        createdAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+        agentId: "pip",
+        version: 1,
+        name: "Pip",
+        roleTitle: "Writer",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      yield* summoning;
+      return {
+        agents: yield* sql`SELECT summoning_scope, withheld_charms FROM agents`,
+        versions: yield* sql`SELECT summoning_scope, withheld_charms FROM agent_config_versions`,
+        setup: yield* sql`SELECT summoning_every_hob FROM installation_setup`,
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0083"))), Effect.scoped, Effect.runPromise);
+
+    for (const rows of [result.agents, result.versions]) {
+      expect(rows.map((row) => [row.summoningScope, row.withheldCharms])).toEqual([[null, "[]"]]);
+    }
+    expect(result.setup.map((row) => row.summoningEveryHob)).toEqual([null]);
+  });
+});
+
+describe("0084_thread_skill_trial", () => {
+  // covers DP-003, ADR 029 (Try in a chat), #1099
+  it("[TC-DP-1099-01] keeps every thread from before it as an ordinary chat, trying no draft", async () => {
+    const threads = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "hob1",
+        name: "Aldric",
+        roleTitle: "Guide",
+        runtime: "codex",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        configVersion: 1,
+        createdAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO threads ${sql.insert({
+        id: "t1",
+        agentId: "hob1",
+        title: "Plan",
+        createdAt: "2026-11-08T00:00:00.000Z",
+        updatedAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      yield* threadSkillTrial;
+      return yield* sql<{ id: string; skillTrial: unknown }>`SELECT id, skill_trial FROM threads`;
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0084"))), Effect.runPromise);
+
+    expect(threads).toEqual([{ id: "t1", skillTrial: null }]);
   });
 });

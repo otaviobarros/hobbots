@@ -4,7 +4,8 @@ import { messages } from "./messages.ts";
 
 /**
  * What one used skill's line says after "Used": its title, then the set it comes from, if any, and its
- * revision (the set's, for a set's skill) or where it came from (ADR 029, The use line).
+ * revision (the set's, for a set's skill) or where it came from (ADR 029, The use line): your
+ * organization, or the draft a chat tries, which has no page in the library yet.
  */
 export const usedLine = (used: UsedSkill): { readonly title: string; readonly detail: string } => {
   const where =
@@ -12,7 +13,9 @@ export const usedLine = (used: UsedSkill): { readonly title: string; readonly de
       ? messages.revision({ number: used.number })
       : used.source === "organization"
         ? messages.organization
-        : "";
+        : used.source === "draft"
+          ? messages.draft
+          : "";
   return {
     title: skillTitle(used.name),
     detail: [used.set === null ? "" : messages.fromSet({ set: used.set }), where]

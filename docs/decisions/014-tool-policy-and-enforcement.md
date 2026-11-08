@@ -1,6 +1,6 @@
 # ADR 014 — Tool policy and enforcement
 
-Status: **Accepted.** Refines the [permissions contract](../architecture/permissions.md) and the [runtime adapters](../architecture/runtime-adapters.md) for Slice 7, and closes the open preset mapping of [ADR 003](003-autonomy.md). [ADR 020](020-github-charm.md) extends its Charms section for the GitHub Charm. Amended by [ADR 031](031-charm-actions-and-registry.md): Charm operations are declared by their Charm, every hub tool call runs through one pipeline and is recorded before it runs, and Read GitHub can ask. [ADR 032](032-hob-directory.md) adds Read other hobs.
+Status: **Accepted.** Refines the [permissions contract](../architecture/permissions.md) and the [runtime adapters](../architecture/runtime-adapters.md) for Slice 7, and closes the open preset mapping of [ADR 003](003-autonomy.md). [ADR 020](020-github-charm.md) extends its Charms section for the GitHub Charm. Amended by [ADR 031](031-charm-actions-and-registry.md): Charm operations are declared by their Charm, every hub tool call runs through one pipeline and is recorded before it runs, and Read GitHub can ask. [ADR 032](032-hob-directory.md) adds Read other hobs. Amended by [ADR 036](036-web-search-and-pages.md): Search the web is a built-in operation, and searching and reading public pages are built in rather than a Charm.
 
 ## Context
 
@@ -53,6 +53,7 @@ Allow proceeds without asking, Ask pauses the turn for an approval, Deny refuses
 | Push | Ask | Ask | Allow |
 | Push with force, or to the default branch | Ask (once only) | Ask (once only) | Ask (once only) |
 | Use the web | Ask, per host | Allow | Allow |
+| Search the web ([ADR 036](036-web-search-and-pages.md)) | Allow | Allow | Allow |
 | Read GitHub | Allow | Allow | Allow |
 | Search memory | Allow | Allow | Allow |
 | Save to memory (the hob's own scope) | Allow | Allow | Allow |
@@ -167,7 +168,7 @@ Added in #133. A call the policy answers Ask for pauses its turn until the user 
 
 ### Charms
 
-A **Charm** is a connection that gives a hob abilities beyond its runtime's own tools: an integration with another app or service that lets it reach tools, do additional work and create things there. GitHub, Slack, Google Drive, Notion, Figma, any MCP server, and later web search, computer use, purchases or phone calls are all Charms.
+A **Charm** is a connection that gives a hob abilities beyond its runtime's own tools: an integration with another app or service that lets it reach tools, do additional work and create things there. GitHub, Slack, Google Drive, Notion, Figma, any MCP server, and later a search provider with your API key, signed-in browsing, computer use, purchases or phone calls are all Charms. Searching through the runtime's own search and reading public pages are built in ([ADR 036](036-web-search-and-pages.md)).
 
 - **Connect once, grant per hob.** The user connects a Charm on the hub once (signing in or adding a key), then grants it to each hob from that hob's Charms tab. A hob without the grant cannot see the Charm.
 - **Each action has its own answer.** A Charm lists its actions, and each is Allow, Ask or Never per hob (for Slack, reading channels can be Allow while sending a message is Ask).

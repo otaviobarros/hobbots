@@ -196,13 +196,19 @@ describe("Charm call records", () => {
 
   // covers DP-003, ADR 031
   it("[TC-DP-289] 0075 names every stored call's Charm and moves its applied text out of its plan, readable after", async () => {
-    // Keeps 0076, 0079, 0080 and 0082 too: the repository that seeds the hob writes its Charms, whether
-    // other hobs see it, its good at and who made and summoned it.
+    // Keeps 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its Charms, whether
+    // other hobs see it, its good at and who made and summoned it, and its Summoning scope.
     const earlier = Object.fromEntries(
       Object.entries(migrations).filter(
         ([id]) =>
           id < "0075" ||
-          ["0076_charm_grants", "0079_hob_visibility", "0080_hob_good_at", "0082_hob_actors"].includes(id),
+          [
+            "0076_charm_grants",
+            "0079_hob_visibility",
+            "0080_hob_good_at",
+            "0082_hob_actors",
+            "0083_summoning",
+          ].includes(id),
       ),
     ) as typeof migrations;
     const stored = await Effect.gen(function* () {

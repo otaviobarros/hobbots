@@ -199,6 +199,8 @@ export interface SkillLibraryShape {
   readonly usesSince: (since: string) => Library<ReadonlyArray<{ readonly skillId: SkillId; readonly count: number }>>;
   /** A hob's most recent use of each skill it used, the most recent first, at most `limit`. */
   readonly lastUses: (agentId: AgentId, limit: number) => Library<ReadonlyArray<SkillUse>>;
+  /** When each library skill was last used, by any hob; a skill never used is left out (ADR 029, Health checks). */
+  readonly lastUsedAt: Library<ReadonlyArray<{ readonly skillId: SkillId; readonly at: string }>>;
 }
 
 /** Which uses to read: a skill's, a hob's, a reply's, or those they share when several are given. */
@@ -220,6 +222,13 @@ export interface SkillFilesShape {
   readonly folder: (hash: SkillRevisionHash) => Effect.Effect<string | null>;
   /** One file of a revision, by its path in the skill; unreadable when the hub has no such file. */
   readonly read: (hash: SkillRevisionHash, path: string) => Effect.Effect<Uint8Array, SkillSourceUnreadable>;
+  /**
+   * The read-only folder of a draft a chat tries (ADR 029, Try in a chat), kept apart from every
+   * revision's, or null when the hub has none for it.
+   */
+  readonly draft: (hash: SkillRevisionHash) => Effect.Effect<string | null>;
+  /** The `SKILL.md` of a draft a chat tries, or null when the hub has none for it. */
+  readonly draftText: (hash: SkillRevisionHash) => Effect.Effect<string | null>;
 }
 
 export class SkillFiles extends Context.Service<SkillFiles, SkillFilesShape>()("@hobbots/agents/SkillFiles") {}
@@ -272,6 +281,36 @@ export interface SkillWriterShape {
     files: ReadonlyArray<WrittenFile>,
     options: { readonly by: SkillBy; readonly skillId?: SkillId; readonly after?: SkillRevisionHash },
   ) => Effect.Effect<SkillRevisionAdded, SkillImportError>;
+  /**
+   * Checks a draft as import would and keeps its files where `SkillFiles.draft` finds them, outside
+   * the library: no skill, revision or assignment is written (ADR 029, Try in a chat). A set's skill
+   * is refused, since a set changes only as a whole.
+   */
+  readonly stage: (
+    draft: SkillDraftSource,
+  ) => Effect.Effect<SkillDraftStaged, SkillRefused | SkillSourceUnreadable | SkillNotFound>;
+}
+
+/**
+ * A draft to try in a chat (ADR 029, Try in a chat): files written in Hobbots, as a proposal's are,
+ * or an edit of a revision, as the editor saves one.
+ */
+export type SkillDraftSource =
+  | { readonly _tag: "Written"; readonly files: ReadonlyArray<WrittenFile> }
+  | {
+      readonly _tag: "Edited";
+      readonly skillId: SkillId;
+      readonly base: SkillRevisionHash;
+      readonly description: string;
+      /** The `SKILL.md` text after its front matter. */
+      readonly instructions: string;
+    };
+
+/** A draft's files, checked and kept outside the library, ready to load in a chat. */
+export interface SkillDraftStaged {
+  readonly name: SkillName;
+  readonly description: string;
+  readonly hash: SkillRevisionHash;
 }
 
 export class SkillWriter extends Context.Service<SkillWriter, SkillWriterShape>()("@hobbots/agents/SkillWriter") {}
