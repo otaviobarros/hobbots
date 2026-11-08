@@ -245,7 +245,7 @@ const changedHobCharms = (before: HobPolicy, change: UpdateHobPermissionsPayload
 };
 
 /** `before` with each field the change gives replaced; Charm overrides are left out when there are none. */
-const changedPolicy = (before: HobPolicy, change: UpdateHobPermissionsPayload): HobPolicy => {
+export const changedPolicy = (before: HobPolicy, change: UpdateHobPermissionsPayload): HobPolicy => {
   const charms = changedHobCharms(before, change);
   return {
     ownFolders: change.ownFolders ?? before.ownFolders,
@@ -337,6 +337,12 @@ export interface Summoning {
 
 const BY_YOU: Summoning = { actor: YOU };
 
+/** A change to a hob's profile and permissions together, each left out when it changes none. */
+export interface HobChange {
+  readonly profile?: UpdateAgentPayload;
+  readonly permissions?: UpdateHobPermissionsPayload;
+}
+
 export class HobService extends Context.Service<
   HobService,
   {
@@ -372,6 +378,18 @@ export class HobService extends Context.Service<
       payload: UpdateHobPermissionsPayload,
       actor?: ChangeActor,
     ) => Effect.Effect<Agent, AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm>;
+    /**
+     * `update` and `updatePolicy` as one configuration version, made by `actor`: both are checked
+     * before either is stored, so a change one of them refuses stores nothing (ADR 034).
+     */
+    readonly change: (
+      id: AgentId,
+      change: HobChange,
+      actor: ChangeActor,
+    ) => Effect.Effect<
+      Agent,
+      InvalidHob | AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm
+    >;
   }
 >()("@hobbots/agents/HobService") {
   static readonly layer = Layer.effect(
@@ -495,61 +513,87 @@ export class HobService extends Context.Service<
           .withHob(id, check.pipe(Effect.andThen(storeVersion(id, applyEdit(edit), YOU)), Effect.flatMap(then)))
           .pipe(Effect.withSpan("HobService.updateThen"));
 
+      /** A permissions change's folders, canonical, as it is stored. */
+      const canonicalPolicy = (payload: UpdateHobPermissionsPayload) =>
+        Effect.gen(function* () {
+          // Own folders are checked on the hub and stored canonical, once each, where first added.
+          const ownFolders = payload.ownFolders && [
+            ...new Set(yield* Effect.forEach(payload.ownFolders, (folder) => folders.check(folder))),
+          ];
+          // A hidden folder is stored canonical too, so any spelling of a shared folder hides it. One
+          // missing from the hub keeps its spelling; it is compared by identity whenever it is read.
+          const hiddenSharedFolders = payload.hiddenSharedFolders && [
+            ...new Set(yield* Effect.forEach(payload.hiddenSharedFolders, folders.identity)),
+          ];
+          return { ownFolders, hiddenSharedFolders };
+        });
+
+      /** The hob with a permissions change applied, checked against the setup as it is now. */
+      const applyPolicy =
+        (payload: UpdateHobPermissionsPayload, canonical: Effect.Success<ReturnType<typeof canonicalPolicy>>) =>
+        (agent: Agent) =>
+          Effect.gen(function* () {
+            const { ownFolders, hiddenSharedFolders } = canonical;
+            // Read inside the retry, so each attempt checks against the setup as it is then.
+            const { safetyPreset, approvedFolders } = yield* setup.get;
+            const policy = changedPolicy(agent.policy, {
+              ...payload,
+              ...(ownFolders && { ownFolders }),
+              ...(hiddenSharedFolders && { hiddenSharedFolders }),
+            });
+            if (samePolicy(policy, agent.policy)) return agent;
+            // Only what changes is checked, so a shared folder removed in setup since does not block
+            // an unrelated change, and a stricter preset does not reject an override kept as it was.
+            if (ownFolders !== undefined) {
+              const shared = ownFolders.find((folder) => approvedFolders.includes(folder));
+              if (shared !== undefined) {
+                return yield* new InvalidFolder({
+                  folder: shared,
+                  message: `${shared} is already shared with every hob`,
+                });
+              }
+            }
+            if (hiddenSharedFolders !== undefined) {
+              const isShared = yield* sameFolderIn(folders, approvedFolders);
+              const unknown = yield* Effect.findFirst(policy.hiddenSharedFolders, (folder) =>
+                Effect.map(isShared(folder), (shared) => !shared),
+              ).pipe(Effect.map(Option.getOrUndefined));
+              if (unknown !== undefined) {
+                return yield* new InvalidFolder({ folder: unknown, message: `${unknown} is not a shared folder` });
+              }
+            }
+            const refused = checkAnswers(payload, safetyPreset, policy, charms);
+            if (refused !== undefined) return yield* refused;
+            return new Agent({ ...agent, policy });
+          });
+
       const updatePolicy = Effect.fn("HobService.updatePolicy")(function* (
         id: AgentId,
         payload: UpdateHobPermissionsPayload,
         actor: ChangeActor = YOU,
       ) {
-        // Own folders are checked on the hub and stored canonical, once each, where first added.
-        const ownFolders = payload.ownFolders && [
-          ...new Set(yield* Effect.forEach(payload.ownFolders, (folder) => folders.check(folder))),
-        ];
-        // A hidden folder is stored canonical too, so any spelling of a shared folder hides it. One
-        // missing from the hub keeps its spelling; it is compared by identity whenever it is read.
-        const hiddenSharedFolders = payload.hiddenSharedFolders && [
-          ...new Set(yield* Effect.forEach(payload.hiddenSharedFolders, folders.identity)),
-        ];
+        const canonical = yield* canonicalPolicy(payload);
+        return yield* nextVersion(id, applyPolicy(payload, canonical), actor);
+      });
+
+      const change = Effect.fn("HobService.change")(function* (id: AgentId, change: HobChange, actor: ChangeActor) {
+        const canonical = change.permissions && (yield* canonicalPolicy(change.permissions));
+        const permissions = change.permissions;
         return yield* nextVersion(
           id,
           (agent) =>
-            Effect.gen(function* () {
-              // Read inside the retry, so each attempt checks against the setup as it is then.
-              const { safetyPreset, approvedFolders } = yield* setup.get;
-              const policy = changedPolicy(agent.policy, {
-                ...payload,
-                ...(ownFolders && { ownFolders }),
-                ...(hiddenSharedFolders && { hiddenSharedFolders }),
-              });
-              if (samePolicy(policy, agent.policy)) return agent;
-              // Only what changes is checked, so a shared folder removed in setup since does not block
-              // an unrelated change, and a stricter preset does not reject an override kept as it was.
-              if (ownFolders !== undefined) {
-                const shared = ownFolders.find((folder) => approvedFolders.includes(folder));
-                if (shared !== undefined) {
-                  return yield* new InvalidFolder({
-                    folder: shared,
-                    message: `${shared} is already shared with every hob`,
-                  });
-                }
-              }
-              if (hiddenSharedFolders !== undefined) {
-                const isShared = yield* sameFolderIn(folders, approvedFolders);
-                const unknown = yield* Effect.findFirst(policy.hiddenSharedFolders, (folder) =>
-                  Effect.map(isShared(folder), (shared) => !shared),
-                ).pipe(Effect.map(Option.getOrUndefined));
-                if (unknown !== undefined) {
-                  return yield* new InvalidFolder({ folder: unknown, message: `${unknown} is not a shared folder` });
-                }
-              }
-              const refused = checkAnswers(payload, safetyPreset, policy, charms);
-              if (refused !== undefined) return yield* refused;
-              return new Agent({ ...agent, policy });
-            }),
+            applyEdit(change.profile ?? {})(agent).pipe(
+              Effect.flatMap((edited) =>
+                permissions === undefined || canonical === undefined
+                  ? Effect.succeed(edited)
+                  : applyPolicy(permissions, canonical)(edited),
+              ),
+            ),
           actor,
         );
       });
 
-      return HobService.of({ create, update, updateThen, updatePolicy });
+      return HobService.of({ create, update, updateThen, updatePolicy, change });
     }),
   );
 }

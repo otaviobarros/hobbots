@@ -92,8 +92,7 @@ const recorded = (fake: RuntimeAdapterShape): RuntimeAdapterShape => ({
   },
 });
 const runtime = Layer.effect(RuntimeAdapter, Effect.map(RuntimeAdapter, recorded)).pipe(
-  Layer.provide(FakeRuntimeLayer()),
-  Layer.provide(PolicyEngine.node),
+  Layer.provide(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node))),
 );
 const Database = Layer.mergeAll(
   HobbotsRepositoryLive,
@@ -461,6 +460,98 @@ describe("the Summoning Charm, end to end", () => {
     );
     expect(wider.reply?.content).toContain("No hob was summoned.");
     expect((await allHobs()).some((agent) => agent.name === "Wide")).toBe(false);
+  });
+
+  // covers ADR 034 (No escalation), #406 (same validation as the screens)
+  it("[TC-AG-406-11] a change is checked by the policy it leaves, so a replaced answer map or a shown folder never widens a hob, and a label the profile refuses is refused", async () => {
+    await chiefAnswers({ "summoning.name": "allow", "summoning.folders": "allow", "summoning.charms": "allow" });
+    const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
+    // The chief may not run commands, nor see the shared folder, and neither may Bo.
+    await permissions(chief, { overrides: { "run-commands": "deny" }, hiddenSharedFolders: [shared] });
+    await permissions(bo, {
+      overrides: { "edit-files": "ask", "run-commands": "deny" },
+      hiddenSharedFolders: [shared],
+    });
+    const refusals = [
+      [{ hob: bo.id, answers: {} }, "authority-wider: answers, since run-commands would be wider than your own."],
+      [
+        { hob: bo.id, hidden_shared_folders: [] },
+        `authority-wider: shared folders, since ${shared} is hidden from you.`,
+      ],
+      [{ hob: bo.id, name: "" }, "It needs a name."],
+      [{ hob: bo.id, name: "B".repeat(41) }, "Its name is longer than 40 characters."],
+      [{ hob: bo.id, role: null, role_title: "  " }, "Its role title cannot be empty."],
+      [{ hob: bo.id, name: "Bo Renamed", hidden_shared_folders: [elsewhere] }, `${elsewhere} is not a shared folder.`],
+    ] as const;
+    for (const [change, reason] of refusals) {
+      const before = await hob(bo.id);
+      const { reply } = await turn(chief, hub("summoning_change", { key: crypto.randomUUID(), changes: [change] }));
+      expect(reply?.content).toContain("No hob was changed.");
+      expect(reply?.content).toContain(reason);
+      expect(await hob(bo.id)).toMatchObject({ name: before.name, configVersion: before.configVersion });
+    }
+    // A change that keeps Bo within the chief applies, its profile and permissions as one version.
+    const before = await hob(bo.id);
+    const kept = await turn(
+      chief,
+      hub("summoning_change", {
+        key: "keep-bo",
+        changes: [{ hob: bo.id, name: "Bo", answers: { "edit-files": "deny", "run-commands": "deny" } }],
+      }),
+    );
+    expect(kept.reply?.content).toContain("- Bo: changed name, charms.");
+    expect((await hob(bo.id)).configVersion).toBe(before.configVersion + 1);
+    await permissions(chief, { overrides: {}, hiddenSharedFolders: [] });
+    await permissions(bo, { overrides: { "edit-files": "ask" }, hiddenSharedFolders: [] });
+  });
+
+  // covers PE-008, ADR 034 (The same use cases as the screens)
+  it("[TC-AG-406-12] a Summoning change takes back the grants that relied on what it took away, as the Charms tab does", async () => {
+    await chiefAnswers({ "summoning.charms": "allow" });
+    const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
+    // With every edit open, Bo is offered commands, and deleting files asks.
+    await permissions(bo, { overrides: {} });
+    const asked = await turn(bo, "fake:tool Bash rm build");
+    const pending = asked.pending as ApprovalRequest;
+    expect(pending, asked.reply?.content).toMatchObject({ operation: "delete-files" });
+    const decided = await request("POST", `/api/approvals/${pending.id}/decision`, {
+      decision: "approve",
+      actionDigest: pending.actionDigest,
+      lifetime: "always",
+    });
+    expect(decided.status).toBe(200);
+    await settled(asked.thread);
+    const grantsOf = () => hobs.runPromise(GrantService.use((grants) => grants.list({ agentId: bo.id, all: true })));
+    expect((await grantsOf()).filter((grant) => grant.revokedAt === null)).toHaveLength(1);
+
+    const narrowed = await turn(
+      chief,
+      hub("summoning_change", {
+        key: "no-deleting",
+        changes: [{ hob: bo.id, answers: { "delete-files": "deny" } }],
+      }),
+    );
+    expect(narrowed.reply?.content).toContain("- Bo: changed charms.");
+    const [grant] = await grantsOf();
+    expect(grant).toMatchObject({ revokedBy: "hub", revokeReason: "narrowed" });
+    await permissions(bo, { overrides: { "edit-files": "ask" } });
+  });
+
+  // covers ADR 034 (The same use cases as the screens), #406 (refusals write nothing)
+  it("[TC-AG-406-13] a hob's profile and permissions change as one version, so a change either part refuses stores nothing", async () => {
+    const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
+    const before = await hob(bo.id);
+    const refused = await hobs.runPromise(
+      HobService.use((service) =>
+        service.change(
+          bo.id,
+          { profile: { name: "Bo Renamed" }, permissions: { hiddenSharedFolders: [elsewhere] } },
+          { _tag: "Hob", hobId: chief.id, call: { scope: "reply:test", key: "atomic" } },
+        ),
+      ).pipe(Effect.flip),
+    );
+    expect(refused).toMatchObject({ _tag: "InvalidFolder" });
+    expect(await hob(bo.id)).toMatchObject({ name: before.name, configVersion: before.configVersion });
   });
 
   // covers ADR 034 (The confused deputy)

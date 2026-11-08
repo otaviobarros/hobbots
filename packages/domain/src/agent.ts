@@ -122,6 +122,9 @@ const summonedSchemaFields = {
   ),
 };
 
+/** The longest name or role title a hob takes: short enough for a name tag and a tile. */
+export const HOB_LABEL_MAX = 40;
+
 export class Agent extends Schema.Class<Agent>("Agent")({
   id: AgentId,
   name: Schema.String,

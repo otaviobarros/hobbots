@@ -1,6 +1,6 @@
 import type { CreateAgentPayload, UpdateAgentPayload, UpdateHobPermissionsPayload } from "@hobbots/api";
 import {
-  type Agent,
+  Agent,
   AgentId,
   type AnyOperation,
   type ChangeActor,
@@ -12,6 +12,7 @@ import {
   DEFAULT_SIGIL,
   DRAFT_FIELDS,
   fieldsSet,
+  HOB_LABEL_MAX,
   HobColor,
   type HobPolicy,
   heldCharms,
@@ -49,9 +50,13 @@ import {
 import { Context, Deferred, Effect, Layer, Option } from "effect";
 import type { AskableVerdict } from "./asking.ts";
 import { type Charm, defineCharm } from "./charms.ts";
-import { checkGoodAt, checkRole, checkRuntimeBrain, HobService } from "./hobs.ts";
+import { ChatService } from "./chat.ts";
+import { sameFolderIn } from "./folders.ts";
+import { CharmDeclarations, GrantService } from "./grants.ts";
+import { changedPolicy, checkGoodAt, checkRole, checkRuntimeBrain, HobService } from "./hobs.ts";
 import { type HubAction, type HubPlanContext, HubRefusal, hubAction } from "./hub-actions.ts";
 import { HobLifecycle } from "./lifecycle.ts";
+import { changePermissions } from "./permissions.ts";
 import { FolderChecks, HobGitHubApps, InstallationSettings } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import {
@@ -79,6 +84,8 @@ export interface SummoningServices {
   readonly folders: FolderChecks["Service"];
   readonly setup: InstallationSettings["Service"];
   readonly apps: Option.Option<HobGitHubApps["Service"]>;
+  /** Writes a permissions change and takes back from the hob's grants and turns what it took away. */
+  readonly changePermissions: ReturnType<typeof changePermissions>;
 }
 
 /**
@@ -116,6 +123,12 @@ export class SummoningHub extends Context.Service<
         folders: yield* FolderChecks,
         setup: yield* InstallationSettings,
         apps: yield* Effect.serviceOption(HobGitHubApps),
+        changePermissions: changePermissions({
+          repo: yield* HobbotsRepository,
+          grants: yield* GrantService,
+          chat: yield* ChatService,
+          charms: yield* CharmDeclarations,
+        }),
       });
     }),
   );
@@ -196,6 +209,42 @@ interface Authority {
 const answeredBy = (charms: ReadonlyArray<CharmId>, declared: ReadonlyArray<CharmOperation>) => [
   ...POLICY_OPERATIONS,
   ...declared.filter((operation) => charms.includes(operation.id.split(".")[0] as CharmId)).map((each) => each.id),
+];
+
+/** A name or role title the profile would refuse: empty once trimmed, or longer than a name tag takes. */
+const labelProblems = (draft: SummoningDraft): ReadonlyArray<string> =>
+  (
+    [
+      ["name", draft.name, "It needs a name."],
+      ["role title", draft.role_title, "Its role title cannot be empty."],
+    ] as const
+  ).flatMap(([words, value, empty]) => {
+    if (value === undefined) return [];
+    if (value.trim() === "") return [empty];
+    return value.trim().length > HOB_LABEL_MAX ? [`Its ${words} is longer than ${HOB_LABEL_MAX} characters.`] : [];
+  });
+
+/**
+ * What a change would leave a hob able to do that neither its manager nor the hob itself could
+ * before (ADR 034): a shared folder it would see that the manager does not, or an answer wider than
+ * both, such as an override a replaced answer map drops. A hob already wider is asked about instead.
+ */
+const escalations = (
+  before: Authority,
+  after: Authority,
+  manager: Authority,
+  operations: ReadonlyArray<CharmOperation>,
+): ReadonlyArray<string> => [
+  ...after.shared
+    .filter((folder) => !manager.shared.includes(folder) && !before.shared.includes(folder))
+    .map((folder) => `authority-wider: shared folders, since ${folder} is hidden from you.`),
+  ...answeredBy(after.charms, operations)
+    .filter(
+      (operation) =>
+        !isNarrowerOrEqual(after.answer(operation), manager.answer(operation)) &&
+        !isNarrowerOrEqual(after.answer(operation), before.answer(operation)),
+    )
+    .map((operation) => `authority-wider: answers, since ${operation} would be wider than your own.`),
 ];
 
 /** One row of a call, as it is checked: the hob it names and what is wrong with it, or what it asks. */
@@ -324,8 +373,8 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
 
     const wordsOf = (operation: CharmOperationId) => declared.find((each) => each.id === operation)?.words ?? operation;
 
-    /** Problems with the folders, Charms and answers a draft or change gives, against the manager (ADR 034). */
-    const authorityProblems = (
+    /** Problems with the folders a draft or change gives: own folders within the manager's, hidden ones shared. */
+    const folderProblems = (
       draft: SummoningDraft,
       manager: Authority,
       services: SummoningServices,
@@ -341,22 +390,44 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             problems.push(`authority-wider: folders, since ${folder} is not one of your own folders or inside one.`);
           }
         }
-        for (const charm of draft.charms ?? []) {
-          if (charm === SUMMONING_CHARM_ID) problems.push("Only the user grants the Summoning Charm.");
-          else if (!manager.charms.includes(charm)) {
-            problems.push(`authority-wider: charms, since you do not hold the ${charm} Charm.`);
-          }
-        }
-        for (const [operation, answer] of Object.entries(draft.answers ?? {})) {
-          if (answer === undefined) continue;
-          if (operation.startsWith(`${SUMMONING_CHARM_ID}.`)) {
-            problems.push("Only the user sets the Summoning Charm's answers.");
-          } else if (!isNarrowerOrEqual(answer, manager.answer(operation as AnyOperation))) {
-            problems.push(`authority-wider: answers, since ${operation} would be wider than your own.`);
+        if (draft.hidden_shared_folders !== undefined) {
+          const isShared = yield* sameFolderIn(services.folders, (yield* services.setup.get).approvedFolders);
+          for (const folder of draft.hidden_shared_folders) {
+            if (!(yield* isShared(folder))) problems.push(`${folder} is not a shared folder.`);
           }
         }
         return problems;
       });
+
+    /** Problems with the Charms and answers a draft or change gives, against the manager. */
+    const grantProblems = (draft: SummoningDraft, manager: Authority): ReadonlyArray<string> => [
+      ...(draft.charms ?? []).flatMap((charm) => {
+        if (charm === SUMMONING_CHARM_ID) return ["Only the user grants the Summoning Charm."];
+        return manager.charms.includes(charm)
+          ? []
+          : [`authority-wider: charms, since you do not hold the ${charm} Charm.`];
+      }),
+      ...Object.entries(draft.answers ?? {}).flatMap(([operation, answer]) => {
+        if (answer === undefined) return [];
+        if (operation.startsWith(`${SUMMONING_CHARM_ID}.`))
+          return ["Only the user sets the Summoning Charm's answers."];
+        return isNarrowerOrEqual(answer, manager.answer(operation as AnyOperation))
+          ? []
+          : [`authority-wider: answers, since ${operation} would be wider than your own.`];
+      }),
+    ];
+
+    /** Problems with the folders, Charms and answers a draft or change gives, against the manager (ADR 034). */
+    const authorityProblems = (
+      draft: SummoningDraft,
+      manager: Authority,
+      services: SummoningServices,
+      shared: ReadonlyArray<string>,
+    ) =>
+      Effect.map(folderProblems(draft, manager, services, shared), (folders) => [
+        ...folders,
+        ...grantProblems(draft, manager),
+      ]);
 
     /** Problems with a draft's name, role, good at and brain, as Summon and the profile refuse them. */
     const fieldProblems = (
@@ -366,6 +437,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
     ) =>
       Effect.gen(function* () {
         const problems: Array<string> = [];
+        problems.push(...labelProblems(draft));
         if (draft.role != null && draft.role_title !== undefined) {
           const invalid = checkRole({ role: draft.role, roleTitle: draft.role_title });
           if (invalid !== undefined) problems.push(`${invalid.message}.`);
@@ -410,8 +482,8 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
     ) =>
       Effect.gen(function* () {
         const problems: Array<string> = [];
-        if (draft.name === undefined || draft.name.trim() === "") problems.push("It needs a name.");
-        if (draft.role == null && (draft.role_title === undefined || draft.role_title.trim() === "")) {
+        if (draft.name === undefined) problems.push("It needs a name.");
+        if (draft.role == null && draft.role_title === undefined) {
           problems.push("It needs a role: a starter role or a title in your own words.");
         }
         problems.push(...(yield* fieldProblems(draft, manager.agent, services)));
@@ -454,6 +526,17 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           problems.push(...(yield* authorityProblems(change, manager, services, shared)));
         }
         const authority = yield* authorityOf(agent.id, policy, context.access.policy, services);
+        if (!self) {
+          const permissions = permissionsPayload(change, agent.policy);
+          if (permissions !== null) {
+            const after = yield* effectivePolicy(
+              new Agent({ ...agent, policy: changedPolicy(agent.policy, permissions) }),
+              services,
+            );
+            const resulting = yield* authorityOf(agent.id, after, context.access.policy, services);
+            problems.push(...escalations(authority, resulting, manager, operationsOf(context)));
+          }
+        }
         const wider = self ? [] : widerFields(authority, manager, operationsOf(context));
         const safety =
           wider.length === 0
@@ -551,9 +634,9 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
     /** A change's profile fields, as the profile's edit. */
     const updatePayload = (change: SummoningChange): UpdateAgentPayload => {
       const fields: Record<string, unknown> = {
-        name: change.name,
+        name: change.name?.trim(),
         role: change.role,
-        roleTitle: change.role_title,
+        roleTitle: change.role_title?.trim(),
         goodAt: change.good_at,
         sigil: change.sigil,
         hat: change.hat,
@@ -741,10 +824,18 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
               const each = input.changes[index] as SummoningChange;
               const profile = updatePayload(each);
               const permissions = permissionsPayload(each, row.agent.policy);
-              const applied = yield* Effect.gen(function* () {
-                if (Object.keys(profile).length > 0) yield* services.hobs.update(row.agent.id, profile, actor);
-                if (permissions !== null) yield* services.hobs.updatePolicy(row.agent.id, permissions, actor);
-              }).pipe(Effect.result);
+              // Profile and permissions are one version, so a change either part refuses stores nothing.
+              const write = services.hobs.change(
+                row.agent.id,
+                {
+                  ...(Object.keys(profile).length === 0 ? {} : { profile }),
+                  ...(permissions === null ? {} : { permissions }),
+                },
+                actor,
+              );
+              const applied = yield* (
+                permissions === null ? write : services.changePermissions(row.agent.id, write)
+              ).pipe(Effect.result);
               if (applied._tag === "Success") done.push(`- ${row.agent.name}: changed ${fieldsSet(each).join(", ")}.`);
               else failed.push(`- ${row.agent.name}: ${failure(applied.failure)}`);
             }
