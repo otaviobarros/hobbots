@@ -48,6 +48,7 @@ import {
   ActivityRepositoryLive,
   ApprovalRepositoryLive,
   BackpackLive,
+  CodingSetupDismissalRepository,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -146,6 +147,7 @@ beforeAll(() => {
             ActivityRepositoryLive,
             HubQuestionRepositoryLive,
             HubCommitIdentityRepository,
+            CodingSetupDismissalRepository,
             EventJournal.layer,
             BackpackLive,
             SetupRepository.layer,
@@ -294,9 +296,11 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         return task !== undefined && settled ? task : undefined;
       });
 
-      // The user is asked who hobs commit as, in the Quest's chat, and not by any hob.
+      // The hub asks the user whether Bracken will write code, in the Quest's chat, and no hob asks (#1241).
       const { body } = await request<{ readonly questions: ReadonlyArray<HubQuestion> }>("GET", "/api/hub-questions");
-      const asked = body.questions.filter((question) => question.ask.kind === "commit-identity");
+      const asked = body.questions.filter(
+        (question) => question.ask.kind === "coding-setup" && question.key === member.id,
+      );
       expect(asked).toEqual([expect.objectContaining({ chat: { agentId: lead.id, threadId: thread.id } })]);
 
       // The lead's commit of Bracken's open work is refused, naming whose it is, and nothing is committed.

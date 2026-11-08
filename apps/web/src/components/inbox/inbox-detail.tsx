@@ -27,6 +27,7 @@ import { ApprovalDecision } from "../approvals/approval-card.tsx";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
+import { HubQuestionAnswer } from "../coding-setup/coding-setup.tsx";
 import { shownHubQuestion } from "../hub-question/shown.ts";
 import { scopeName } from "../memory/memory-model.ts";
 import { messages as memoryCopy } from "../memory/messages.ts";
@@ -37,7 +38,7 @@ import type { FocusTargets } from "../move-on/follow-focus.ts";
 import { useMoveOn } from "../move-on/move-on.tsx";
 import { DeviceFacts, MatchingCode, PairingActions } from "../pairing/device-request.tsx";
 import { messages as pairingCopy } from "../pairing/messages.ts";
-import { AnswerForm, HubAnswerForm } from "../quest/answer-form.tsx";
+import { AnswerForm } from "../quest/answer-form.tsx";
 import { controlError } from "../quest/control-room.ts";
 import { useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
@@ -268,7 +269,7 @@ function HubQuestionDetail({
           [copy.detail.when, formatWhen(question.createdAt, now)],
         ]}
       />
-      <HubAnswerForm
+      <HubQuestionAnswer
         question={question}
         askerName={copy.row.hubInSentence}
         via="inbox"

@@ -80,6 +80,7 @@ import skillUpdates from "./0077_skill_updates.ts";
 import hubQuestionCodes from "./0078_hub_question_codes.ts";
 import hobVisibility from "./0079_hob_visibility.ts";
 import hobGoodAt from "./0080_hob_good_at.ts";
+import codingSetupDismissals from "./0081_coding_setup_dismissals.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -167,4 +168,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0078_hub_question_codes": hubQuestionCodes,
   "0079_hob_visibility": hobVisibility,
   "0080_hob_good_at": hobGoodAt,
+  "0081_coding_setup_dismissals": codingSetupDismissals,
 };

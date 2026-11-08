@@ -1,4 +1,4 @@
-import { GitHubAccount, GitHubReachableRepository } from "@hobbots/domain";
+import { AgentId, GitHubAccount, GitHubReachableRepository } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { DeviceSession } from "./user-session.ts";
@@ -67,6 +67,16 @@ export const GitHubFoundSignIn = Schema.Struct({
 });
 export type GitHubFoundSignIn = typeof GitHubFoundSignIn.Type;
 
+/**
+ * Where you told the hub not to ask whether a hob will write code (#1241): for every hob, or for
+ * the hobs listed. Settings clears them all at once.
+ */
+export const CodingSetupChoices = Schema.Struct({
+  allHobs: Schema.Boolean,
+  hobs: Schema.Array(AgentId),
+});
+export type CodingSetupChoices = typeof CodingSetupChoices.Type;
+
 export class GitHubGroup extends HttpApiGroup.make("github")
   .add(
     HttpApiEndpoint.get("status", "/charms/github", { success: GitHubStatus }),
@@ -85,6 +95,9 @@ export class GitHubGroup extends HttpApiGroup.make("github")
       success: GitHubRepositories,
       error: GitHubUnreachable,
     }),
+    HttpApiEndpoint.get("codingSetup", "/charms/github/coding-setup", { success: CodingSetupChoices }),
+    // Asks about every hob again, as if you had never answered.
+    HttpApiEndpoint.delete("clearCodingSetup", "/charms/github/coding-setup", { success: CodingSetupChoices }),
   )
   .middleware(DeviceSession)
   .prefix("/api") {}

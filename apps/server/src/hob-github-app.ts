@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { CommitIdentityQuestions } from "@hobbots/agents";
 import {
   AgentNotFound,
   GitHubUnreachable,
@@ -166,7 +167,10 @@ const CallbackPage = HttpRouter.add(
     Effect.gen(function* () {
       const service = yield* Effect.serviceOption(HobGitHubAppService);
       if (Option.isNone(service)) return notFound;
+      // The hob commits as its own app now, so its coding setup card is no longer needed (#1241).
+      const codingSetup = yield* Effect.serviceOption(CommitIdentityQuestions);
       return yield* service.value.complete(params.get("state") ?? "", params.get("code") ?? "").pipe(
+        Effect.tap((made) => (Option.isSome(codingSetup) ? codingSetup.value.settled(made.agentId) : Effect.void)),
         Effect.map((made) =>
           page(
             `${made.hobName} has its own GitHub app`,

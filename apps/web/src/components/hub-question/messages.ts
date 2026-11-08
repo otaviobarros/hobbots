@@ -26,6 +26,20 @@ export const messages = {
         "Run git config --global user.name and user.email on the hub's computer. Hobs use them from their next turn.",
     },
   },
+  /** Whether a hob will write code (#1241), in words for someone who may not code. */
+  codingSetup: {
+    title: ({ hob }: { hob: string }) => `Coding setup for ${hob}`,
+    text: ({ hob }: { hob: string }) =>
+      `Will ${hob} write code?\n\nIf ${hob} will work on code, link a GitHub account so its changes are saved under a name. It takes a minute in the GitHub section of ${hob}'s profile.\n\nIf ${hob} is just for writing, research or chatting, you don't need this.`,
+    notThisHob: ({ hob }: { hob: string }) => ({
+      label: `Not for ${hob}`,
+      consequence: `Hobbots won't ask about ${hob} again.`,
+    }),
+    noHob: {
+      label: "Don't ask for any hob",
+      consequence: "Hobbots won't ask about any hob. You can turn it back on in Settings › Connections › Charms.",
+    },
+  },
   /** The made-up questions the hub asks for trying hub questions out. */
   fakeCheck: {
     backups: { title: "Nightly backups", text: "How often should the hub back up your data?" },
