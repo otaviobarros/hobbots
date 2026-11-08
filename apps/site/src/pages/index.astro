@@ -2,15 +2,21 @@
 import "@fontsource-variable/atkinson-hyperlegible-next";
 import "@fontsource-variable/pixelify-sans";
 import "../styles/global.css";
-import Coming from "../components/Coming.astro";
-import Everywhere from "../components/Everywhere.astro";
+import Download from "../components/Download.astro";
+import End from "../components/End.astro";
+import Faq from "../components/Faq.astro";
+import Feature from "../components/Feature.astro";
+import Film from "../components/Film.astro";
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import Hero from "../components/Hero.astro";
 import Meta from "../components/Meta.astro";
-import Roll from "../components/Roll.astro";
-import Teaser from "../components/Teaser.astro";
+import Safety from "../components/Safety.astro";
+import Steps from "../components/Steps.astro";
+import Themes from "../components/Themes.astro";
+import Tour from "../components/Tour.astro";
 import Trust from "../components/Trust.astro";
+import { MEMORY, SKILLS } from "../data/copy.ts";
 ---
 
 <html lang="en">
@@ -24,15 +30,45 @@ import Trust from "../components/Trust.astro";
     <Header />
     <main id="top">
       <Hero />
-      <Teaser />
-      <Coming />
-      <Everywhere />
-      <Roll />
+      <Tour />
+      <Steps />
+      <Feature feature={MEMORY} tint />
+      <Feature feature={SKILLS} flip />
+      <Safety />
+      <Themes />
+      <Film />
       <Trust />
+      <Download />
+      <Faq />
+      <End />
     </main>
     <Footer />
+    <p class="toast cut" aria-hidden="true" data-share-toast hidden></p>
+    <p class="sr" role="status" data-share-status></p>
     <script>
       import "../scripts/page.ts";
     </script>
   </body>
 </html>
+
+<style>
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 88px;
+    z-index: 30;
+    max-width: calc(100% - 32px);
+    margin: 0;
+    padding: 12px 16px;
+    transform: translateX(-50%);
+    border: 2px solid var(--color-mint);
+    background: var(--color-card);
+    color: var(--color-mint);
+    font-size: 15px;
+    font-weight: 700;
+    box-sizing: border-box;
+  }
+  .toast[hidden] {
+    display: none;
+  }
+</style>

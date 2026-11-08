@@ -1,58 +1,43 @@
 ---
 import { TRUST } from "../data/copy.ts";
-import Companion from "./Companion.astro";
 ---
 
-<section id="open" aria-label="Built in the open">
-  <Companion />
-  <div class="wrap">
-    {
-      TRUST.map((item) => (
-        <div class="item">
-          <span class="swatch" style={`background: ${item.color}`} aria-hidden="true" />
-          <div class="text">
-            <span class="pxf title">{item.title}</span>
-            <span class="body">{item.body}</span>
+<section class="section" aria-labelledby="trust-title">
+  <div class="wrap body">
+    <h2 id="trust-title" class="h h2">Your hobs live on your computer</h2>
+    <div class="grid3">
+      {
+        TRUST.map((item) => (
+          <div class="card item">
+            <h3 class="h">{item.title}</h3>
+            <p>{item.body}</p>
           </div>
-        </div>
-      ))
-    }
+        ))
+      }
+    </div>
   </div>
 </section>
 
 <style>
-  section {
-    position: relative;
-    padding-block: 40px;
-    background: var(--color-deep);
-    border-top: 8px solid var(--color-line);
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 36px;
   }
-  .wrap {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-    gap: 22px;
+  h2 {
+    max-width: 20ch;
   }
   .item {
     display: flex;
-    align-items: flex-start;
-    gap: 14px;
-  }
-  .swatch {
-    flex-shrink: 0;
-    width: 14px;
-    height: 14px;
-    margin-top: 6px;
-  }
-  .text {
-    display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 10px;
+    padding: 28px;
   }
-  .title {
-    color: var(--color-moonlight);
-    font-size: 19px;
+  h3 {
+    font-size: 20px;
   }
-  .body {
+  p {
+    margin: 0;
     color: var(--color-secondary-text);
     font-size: 16px;
   }

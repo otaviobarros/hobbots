@@ -40,8 +40,9 @@ export interface JoinDeps {
 /** "joined" also covers a repeated email and a filled honeypot, so the answer never reveals who is on the list. */
 export type JoinOutcome = "joined" | "limited" | "unverified";
 
+/** A repeated email keeps its row and source, and only ever adds interest in the Windows and phone apps. */
 const INSERT =
-  "INSERT INTO waitlist (email, wants_more_platforms, source) VALUES (?, ?, ?) ON CONFLICT(email) DO NOTHING";
+  "INSERT INTO waitlist (email, wants_more_platforms, source) VALUES (?, ?, ?) ON CONFLICT(email) DO UPDATE SET wants_more_platforms = max(wants_more_platforms, excluded.wants_more_platforms)";
 
 export const joinWaitlist = async (input: JoinInput, deps: JoinDeps): Promise<JoinOutcome> => {
   if (input.website) return "joined";

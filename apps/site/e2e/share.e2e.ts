@@ -3,15 +3,16 @@ import { expect, test } from "@playwright/test";
 const content = (page: import("@playwright/test").Page, selector: string) =>
   page.locator(selector).getAttribute("content");
 
-test("[TC-GEN-014] shows the share card and icons, and serves every file they name", async ({ page, request }) => {
-  // covers #186
+test("[TC-GEN-014] shows the share card and icons, and serves every file they and the page name", async ({
+  page,
+  request,
+}) => {
+  // covers #186 and #1224
   await page.goto("/");
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://hobbots.app/");
   expect(await content(page, 'meta[name="twitter:card"]')).toBe("summary_large_image");
   expect(await content(page, 'meta[property="og:title"]')).toBe(await page.title());
-  expect(await content(page, 'meta[property="og:description"]')).toBe(
-    await page.locator("#teaser .lede").textContent(),
-  );
+  expect(await content(page, 'meta[property="og:description"]')).toBe(await content(page, 'meta[name="description"]'));
 
   const image = await content(page, 'meta[property="og:image"]');
   expect(image).toBe("https://hobbots.app/og.png");
@@ -24,6 +25,7 @@ test("[TC-GEN-014] shows the share card and icons, and serves every file they na
     "/apple-touch-icon.png",
     "/robots.txt",
     "/sitemap.xml",
+    ...(await page.locator("img[src^='/']").evaluateAll((images) => images.map((i) => i.getAttribute("src")))),
   ]) {
     const response = await request.get(path ?? "");
     expect(response.status(), path ?? "").toBe(200);

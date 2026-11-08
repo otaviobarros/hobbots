@@ -1,5 +1,5 @@
 import type { HobColor } from "@hobbots/art/look";
-import { getMine, MINE_CHIRP, NAMES, setMine } from "./mine.ts";
+import { getMine, NAMES, setMine } from "./mine.ts";
 import { replay } from "./motion.ts";
 import { say } from "./say.ts";
 
@@ -28,7 +28,7 @@ export const initRoll = () => {
     bounce();
     const line = LINES[rolls % LINES.length] ?? "Ta-da!";
     rolls += 1;
-    window.setTimeout(() => say(roller, line, MINE_CHIRP, 1600), 350);
+    window.setTimeout(() => say(roller, line, 1600), 350);
   });
 
   section.querySelector("[data-rename]")?.addEventListener("click", () => {

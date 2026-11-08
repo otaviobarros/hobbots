@@ -1,0 +1,29 @@
+---
+import type { Shot } from "../data/copy.ts";
+
+interface Props {
+  shot: Shot;
+  class?: string | undefined;
+  /** The screenshot's width on the page, for picking the 1280 or 2560 pixel copy. */
+  sizes?: string | undefined;
+  /** Screens below the fold, or hidden until picked, load lazily. */
+  eager?: boolean | undefined;
+  /** Only the shown screen of a group is described; the rest are hidden from screen readers too. */
+  hidden?: boolean | undefined;
+}
+
+const { shot, class: className, sizes = "(max-width: 760px) 100vw, 760px", eager, hidden } = Astro.props;
+---
+
+<img
+  class={className}
+  src={`/screens/${shot.file}-1280.webp`}
+  srcset={`/screens/${shot.file}-1280.webp 1280w, /screens/${shot.file}.webp 2560w`}
+  sizes={sizes}
+  alt={shot.alt}
+  width="2560"
+  height="1600"
+  loading={eager ? "eager" : "lazy"}
+  decoding="async"
+  aria-hidden={hidden ? "true" : undefined}
+/>

@@ -1,57 +1,27 @@
 ---
 import { TURNSTILE_SITE_KEY } from "astro:env/client";
 import { CONTACT } from "../data/copy.ts";
-import Hob from "./Hob.astro";
-import Sparks from "./Sparks.astro";
-
-interface Props {
-  /** Where the form sits: the hero, or beside the hob roller. */
-  place: "hero" | "roll";
-}
-
-const { place } = Astro.props;
-const id = `email-${place}`;
 ---
 
-<div class:list={["waitlist", place]} data-waitlist={place}>
-  <form data-join-form data-source={place} novalidate>
-    {
-      place === "hero" ? (
-        <label for={id} class="sr">
-          Email address
-        </label>
-      ) : (
-        <label for={id} class="label">
-          Email for the wait-list
-        </label>
-      )
-    }
+<div class="waitlist" data-waitlist>
+  <form data-join-form novalidate>
+    <label for="waitlist-email" class="label">Get one email when yours is out</label>
     <div class="row">
       <input
-        id={id}
+        id="waitlist-email"
         name="email"
         class="inp cut"
         type="email"
         autocomplete="email"
         placeholder="you@example.com"
-        aria-describedby={`${id}-error ${id}-help`}
+        aria-describedby="waitlist-error waitlist-help"
         data-email
       />
-      <button class="btn cut" type="submit" data-submit>
-        {place === "hero" ? "Join the wait-list" : <span data-save-label>Save Pip’s spot</span>}
-      </button>
+      <button class="btn2 cut" type="submit" data-submit>Tell me</button>
     </div>
-    <p id={`${id}-error`} role="alert" class="error" data-error></p>
-    {
-      place === "hero" && (
-        <label class="check">
-          <input type="checkbox" name="wantsMorePlatforms" data-more />
-          Also tell me about the Windows and phone apps
-        </label>
-      )
-    }
-    <p id={`${id}-help`} class="help">
-      One email when Hobbots is ready for macOS and Linux. No spam. To be removed, write to{" "}
+    <p id="waitlist-error" role="alert" class="error" data-error></p>
+    <p id="waitlist-help" class="help">
+      One email when the Windows or phone app is out. No spam. To be removed, write to{" "}
       <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
     </p>
     <!-- Only bots fill this field; people never see it. -->
@@ -61,27 +31,11 @@ const id = `email-${place}`;
     <!-- Turnstile shows a check here only when it is unsure the visitor is a person. -->
     <div class="turnstile" data-turnstile data-sitekey={TURNSTILE_SITE_KEY}></div>
   </form>
-  {
-    place === "hero" ? (
-      <div class="card cut joined" role="status" data-joined hidden>
-        <div class="joined-hob">
-          <Hob seed={11} color="violet" size={56} class="joined-sprite" mine />
-          <Sparks x={26} y={20} />
-        </div>
-        <div class="joined-text">
-          <span class="pxf joined-title" tabindex="-1" data-joined-focus>You're on the list!</span>
-          <span class="joined-body" data-joined-body />
-          <button type="button" class="quiet" data-reset>
-            Use a different email
-          </button>
-        </div>
-      </div>
-    ) : (
-      <p role="status" class="pxf saved" tabindex="-1" data-joined data-joined-focus hidden>
-        <span data-mine-name>Pip</span> is saved. See you at launch.
-      </p>
-    )
-  }
+  <div class="joined" role="status" data-joined hidden>
+    <p class="joined-title" tabindex="-1" data-joined-focus>You are on the list.</p>
+    <p class="joined-body" data-joined-body></p>
+    <button type="button" class="quiet" data-reset>Use a different email</button>
+  </div>
 </div>
 
 <style>
@@ -94,8 +48,9 @@ const id = `email-${place}`;
     flex-direction: column;
     gap: 10px;
   }
-  .roll form {
-    padding-top: 6px;
+  form[hidden],
+  .joined[hidden] {
+    display: none;
   }
   .label {
     font-size: 15px;
@@ -104,43 +59,23 @@ const id = `email-${place}`;
   .row {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 8px;
   }
-  .row .btn {
+  .row .btn2 {
     flex: 1 0 auto;
   }
   .error {
     margin: 0;
     color: var(--color-rose);
     font-size: 15px;
-    text-align: left;
   }
   .error:empty {
     display: none;
   }
-  .check {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    min-height: 44px;
-    font-size: 15px;
-    cursor: pointer;
-  }
-  .check input {
-    flex-shrink: 0;
-    width: 22px;
-    height: 22px;
-    margin: 0;
-    accent-color: var(--color-lantern);
-  }
   .help {
     margin: 0;
-    font-size: 15px;
-    color: var(--color-secondary-text);
-  }
-  .roll .help {
-    text-align: left;
+    font-size: 14px;
+    color: var(--color-label);
   }
   .trap {
     position: absolute;
@@ -154,43 +89,23 @@ const id = `email-${place}`;
   }
   .joined {
     display: flex;
-    align-items: center;
-    gap: 18px;
-    padding: 16px 20px;
-    text-align: left;
-  }
-  .joined[hidden],
-  form[hidden],
-  .saved[hidden] {
-    display: none;
-  }
-  .joined-hob {
-    position: relative;
-    flex-shrink: 0;
-  }
-  .joined-text {
-    display: flex;
-    min-width: 0;
     flex-direction: column;
     gap: 4px;
   }
+  .joined p {
+    margin: 0;
+  }
   .joined-title {
-    font-size: 20px;
-    color: var(--color-moonlight);
+    color: var(--color-mint);
+    font-weight: 700;
   }
   .joined-body {
     overflow-wrap: anywhere;
-    font-size: 16px;
     color: var(--color-secondary-text);
+    font-size: 15px;
   }
   .joined .quiet {
     align-self: flex-start;
-    min-height: 32px;
     padding: 4px 0;
-  }
-  .saved {
-    margin: 0;
-    font-size: 20px;
-    color: var(--color-mint);
   }
 </style>
