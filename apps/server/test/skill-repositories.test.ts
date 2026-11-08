@@ -29,8 +29,8 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
-import { RepositorySkillFinderLive, SkillRepositoriesLive } from "@hobbots/skills";
-import { Layer } from "effect";
+import { RepositorySkillFinderLive, SkillImporter, SkillRepositoriesLive } from "@hobbots/skills";
+import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -45,6 +45,25 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
+/** Runs once as a repository import starts reading the default branch, after its own checks. */
+let whileImporting: (() => Promise<void>) | null = null;
+
+/** The importer a repository import uses, which runs `whileImporting` first: another window's import, mid-way. */
+const ImporterWithAWindowBetween = Layer.effect(
+  SkillImporter,
+  Effect.map(SkillImporter, (importer) => ({
+    ...importer,
+    add: (...args: Parameters<typeof importer.add>) =>
+      Effect.flatMap(
+        Effect.promise(async () => {
+          const before = whileImporting;
+          whileImporting = null;
+          await before?.();
+        }),
+        () => importer.add(...args),
+      ),
+  })),
+);
 
 const skillMd = (name: string, description: string | null = `What ${name} is for.`) =>
   description === null
@@ -85,7 +104,9 @@ beforeEach(async () => {
         GrantService.layer,
         HobService.layer,
         PermissionSummary.layer,
-        SkillRepositoriesLive.pipe(Layer.provide(Layer.mergeAll(RepositorySkillFinderLive, PermissionSummary.layer))),
+        SkillRepositoriesLive.pipe(
+          Layer.provide(Layer.mergeAll(RepositorySkillFinderLive, PermissionSummary.layer, ImporterWithAWindowBetween)),
+        ),
       ),
     ),
     Layer.provideMerge(SkillsLive(data, null)),
@@ -363,5 +384,39 @@ describe("a repository's own skills", () => {
     const hob = await request("GET", `/api/skills/hobs/${agentId}`);
     expect(hob.body.skills.filter((one: { scope: { _tag: string } }) => one.scope._tag === "Project")).toEqual([]);
     expect((await request("GET", "/api/skill-repositories")).body.repositories[0].offered).toBe(true);
+  });
+  // covers ADR 029 (Scopes, Updates from a source), STD-UI-009, #1098
+  it("[TC-AG-1098-06] gives the project the rest of an import when another source brings in one of its skills mid-way", async () => {
+    const { agentId } = await repositoryWithSkills();
+    const [repository] = (await request("GET", "/api/skill-repositories")).body.repositories;
+    const { candidates } = (await request("POST", "/api/skill-repositories/scan", { project: repository.project })).body
+      .scan;
+    const picked = candidates
+      .filter((one: { name: string }) => one.name === "refunds" || one.name === "triage")
+      .map((one: { folder: string; hash: string }) => ({ folder: one.folder, hash: one.hash }));
+    expect(picked).toHaveLength(2);
+    // Another window imports the same refunds from a folder after the import's own check, before it writes.
+    whileImporting = async () => {
+      const copy = await realpath(await mkdtemp(join(tmpdir(), "hobbots-skill-copy-")));
+      await writeIn(copy, { "refunds/SKILL.md": skillMd("refunds") });
+      const other = await request("POST", "/api/skills", { source: { _tag: "Folder", path: join(copy, "refunds") } });
+      expect(other.status).toBe(200);
+    };
+
+    const imported = await request("POST", "/api/skill-repositories/import", {
+      project: repository.project,
+      scanned: picked,
+    });
+    expect(whileImporting).toBeNull();
+    expect(imported.status).toBe(200);
+    expect(imported.body.imported.map((one: { skill: { name: string } }) => one.skill.name)).toEqual(["triage"]);
+    expect(imported.body.elsewhere.map((one: { name: string }) => one.name)).toEqual(["refunds"]);
+    expect(imported.body.assigned).toHaveLength(1);
+    // The hob gets triage from the project, and refunds from no project of this repository.
+    const hob = await request("GET", `/api/skills/hobs/${agentId}`);
+    expect(hob.body.skills.map((one: { name: string; scope: { _tag: string } }) => [one.name, one.scope._tag])).toEqual(
+      [["triage", "Project"]],
+    );
+    expect((await request("GET", "/api/skill-repositories")).body.repositories[0].offered).toBe(false);
   });
 });

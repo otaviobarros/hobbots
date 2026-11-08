@@ -337,6 +337,8 @@ export const messages = {
     failed: "Nothing was imported. Try again in a moment.",
     elsewhere:
       "Your library already has this skill from another source, so its updates would not come from this repository. Nothing was imported.",
+    leftOut: ({ names }: { names: ReadonlyArray<string> }) =>
+      `${formatList(names)} came into your library from another source while this ran, so the project did not get ${names.length === 1 ? "it" : "them"}.`,
   },
   scope: {
     title: ({ name }: { name: string }) => `${name}'s skills`,

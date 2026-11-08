@@ -1,4 +1,11 @@
-import { MemoryProjectIdentity, SkillAssignment, SkillRepository, SkillRevisionHash } from "@hobbots/domain";
+import {
+  MemoryProjectIdentity,
+  SkillAssignment,
+  SkillId,
+  SkillName,
+  SkillRepository,
+  SkillRevisionHash,
+} from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { ImportedSkill, importErrors, SkillMissing, SkillScan, SkillSourceNotRead } from "./skills.ts";
@@ -21,10 +28,15 @@ const projectPayload = Schema.Struct({ project: MemoryProjectIdentity });
 export const SkillRepositoryScan = Schema.Struct({ repository: SkillRepository, scan: SkillScan });
 export type SkillRepositoryScan = typeof SkillRepositoryScan.Type;
 
-/** What importing a repository's skills added, and the project assignments it made or moved. */
+/**
+ * What importing a repository's skills added, and the project assignments it made or moved. `elsewhere`
+ * names a skill whose content another source brought into the library while the import ran: it is
+ * that source's skill, so the project was not given it.
+ */
 export const SkillRepositoryImported = Schema.Struct({
   imported: Schema.Array(ImportedSkill),
   assigned: Schema.Array(SkillAssignment),
+  elsewhere: Schema.Array(Schema.Struct({ name: SkillName, skillId: SkillId })),
 });
 export type SkillRepositoryImported = typeof SkillRepositoryImported.Type;
 

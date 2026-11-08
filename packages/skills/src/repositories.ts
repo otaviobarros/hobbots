@@ -21,6 +21,7 @@ import {
   type SkillAssignment,
   type SkillBy,
   type SkillId,
+  type SkillName,
   SkillNameTaken,
   SkillNotFound,
   type SkillRepository,
@@ -64,10 +65,14 @@ export const RepositorySkillFinderLive = Layer.succeed(RepositorySkillFinder, {
     }),
 });
 
-/** What an import did: the skills it added and their assignments to the project. */
+/**
+ * What an import did: the skills it gave the project and their assignments there, and those whose
+ * content another source brought into the library while it ran, which the project was not given.
+ */
 export interface SkillRepositoryImported {
   readonly imported: ReadonlyArray<SkillRevisionAdded>;
   readonly assigned: ReadonlyArray<SkillAssignment>;
+  readonly elsewhere: ReadonlyArray<{ readonly name: SkillName; readonly skillId: SkillId }>;
 }
 
 export interface SkillRepositoriesShape {
@@ -84,7 +89,8 @@ export interface SkillRepositoriesShape {
    * Imports what a scan found, bound to its hashes, from the default branch, gives each skill to the
    * project and closes the offer. A skill is followed on the default branch even when the repository's
    * `skills-lock.json` says the `skills` CLI installed it from elsewhere. Content the library already
-   * follows at another source is refused with `SkillNameTaken`, and nothing is given to the project.
+   * follows at another source is refused with `SkillNameTaken` before anything is written; content
+   * another source brings in while the import runs is listed in `elsewhere` and not given to the project.
    */
   readonly import: (
     project: MemoryProjectIdentity,
@@ -234,17 +240,21 @@ export const SkillRepositoriesLive = Layer.effect(
             followSource: true,
             by: YOU,
           });
-          // Content another source added since the check above is that source's skill: it stays unassigned here.
+          // Content another source brought in since the check above is that source's skill: the
+          // project is not given it, and the rest of the import stands.
           const kept = imported.filter((one) => !one.added).map((one) => one.skill);
-          const elsewhere = (yield* followedElsewhere(repository, kept))[0];
-          if (elsewhere !== undefined) {
-            return yield* new SkillNameTaken({ name: elsewhere.name, skillId: elsewhere.id });
-          }
-          const assigned = yield* Effect.forEach(imported, (one) =>
+          const elsewhere = new Set((yield* followedElsewhere(repository, kept)).map((skill) => skill.id));
+          const given = imported.filter((one) => !elsewhere.has(one.skill.id));
+          const assigned = yield* Effect.forEach(given, (one) =>
             giveToProject(repository.project, one.skill.id, one.revision.hash),
           );
           yield* close(repository);
-          return { imported, assigned };
+          const left = imported.filter((one) => elsewhere.has(one.skill.id));
+          return {
+            imported: given,
+            assigned,
+            elsewhere: left.map(({ skill }) => ({ name: skill.name, skillId: skill.id })),
+          };
         }),
       dismiss: (project) => Effect.flatMap(repositoryOf(project), close),
     });

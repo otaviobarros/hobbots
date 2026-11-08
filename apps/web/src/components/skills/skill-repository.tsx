@@ -66,10 +66,10 @@ function RepositoryScan({
       }),
     onSuccess: async (done) => {
       const names = done.imported.map((one) => skillTitle(one.skill.name));
-      say(
-        { tone: "done", message: copy.imported({ names, name, hob: hobName(repository, hobs) }) },
-        { _tag: "Overview" },
-      );
+      const left = done.elsewhere.map((one) => skillTitle(one.name));
+      const given = names.length === 0 ? [] : [copy.imported({ names, name, hob: hobName(repository, hobs) })];
+      const message = [...given, ...(left.length === 0 ? [] : [copy.leftOut({ names: left })])].join(" ");
+      say({ tone: given.length === 0 ? "failed" : "done", message }, { _tag: "Overview" });
       await refreshSkills(queryClient);
       void navigate({ to: "/skills", search: {} });
     },
