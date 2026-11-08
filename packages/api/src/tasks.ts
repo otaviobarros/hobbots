@@ -4,6 +4,7 @@ import {
   HistoryFilter,
   HistoryPage,
   HubQuestion,
+  HubQuestionChoiceKey,
   HubQuestionId,
   MemberWork,
   NoteId,
@@ -24,6 +25,7 @@ import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import {
   AgentNotFound,
   HobUnavailable,
+  HubChoiceNotOffered,
   HubQuestionClosed,
   HubQuestionNotFound,
   NoteRefused,
@@ -153,6 +155,21 @@ export const AnswerQuestionPayload = Schema.Struct({
 });
 export type AnswerQuestionPayload = typeof AnswerQuestionPayload.Type;
 
+/**
+ * Your answer to a question from the hub (#1045): `picked`, the key of one of its choices, or
+ * `answer`, your own words; exactly one of them.
+ */
+export const AnswerHubQuestionPayload = Schema.Struct({
+  picked: Schema.optionalKey(HubQuestionChoiceKey),
+  answer: Schema.optionalKey(Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(4000))),
+  via: Schema.optionalKey(QuestionSurface),
+}).check(
+  Schema.makeFilter((input: { readonly picked?: string; readonly answer?: string }) =>
+    (input.picked === undefined) === (input.answer === undefined) ? "Send either picked or answer." : undefined,
+  ),
+);
+export type AnswerHubQuestionPayload = typeof AnswerHubQuestionPayload.Type;
+
 export const LeaveNotePayload = Schema.Struct({
   /** The command's idempotency key, which becomes the note's id: sending it again changes nothing. */
   key: NoteId.check(Schema.isNonEmpty(), Schema.isMaxLength(100)),
@@ -179,9 +196,9 @@ export class QuestionsGroup extends HttpApiGroup.make("questions")
     HttpApiEndpoint.get("listHub", "/hub-questions", { success: HubQuestionsRead }),
     HttpApiEndpoint.post("answerHub", "/hub-questions/:hubQuestionId/answer", {
       params: { hubQuestionId: HubQuestionId },
-      payload: AnswerQuestionPayload,
+      payload: AnswerHubQuestionPayload,
       success: HubQuestion,
-      error: [HubQuestionNotFound, HubQuestionClosed],
+      error: [HubQuestionNotFound, HubQuestionClosed, HubChoiceNotOffered],
     }),
     HttpApiEndpoint.post("leaveNote", "/tasks/:taskId/notes", {
       params: { taskId: TaskId },

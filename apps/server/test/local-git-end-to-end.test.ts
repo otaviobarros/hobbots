@@ -296,7 +296,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
 
       // The user is asked who hobs commit as, in the Quest's chat, and not by any hob.
       const { body } = await request<{ readonly questions: ReadonlyArray<HubQuestion> }>("GET", "/api/hub-questions");
-      const asked = body.questions.filter((question) => question.subject.kind === "commit-identity");
+      const asked = body.questions.filter((question) => question.ask.kind === "commit-identity");
       expect(asked).toEqual([expect.objectContaining({ chat: { agentId: lead.id, threadId: thread.id } })]);
 
       // The lead's commit of Bracken's open work is refused, naming whose it is, and nothing is committed.

@@ -77,6 +77,7 @@ import milestoneReachedBy from "./0074_milestone_reached_by.ts";
 import charmCallValues from "./0075_charm_call_values.ts";
 import charmGrants from "./0076_charm_grants.ts";
 import skillUpdates from "./0077_skill_updates.ts";
+import hubQuestionCodes from "./0078_hub_question_codes.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -161,4 +162,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0075_charm_call_values": charmCallValues,
   "0076_charm_grants": charmGrants,
   "0077_skill_updates": skillUpdates,
+  "0078_hub_question_codes": hubQuestionCodes,
 };

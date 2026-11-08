@@ -15,7 +15,6 @@ import {
   HobService,
   HobTools,
   HubQuestions,
-  OWN_GIT_LABEL,
   PermissionSummary,
   UserGitIdentity,
 } from "@hobbots/agents";
@@ -197,6 +196,8 @@ const startHub = async (signedIn = true) => {
     },
     answer: (question: HubQuestion, answer: string) =>
       request("POST", `/api/hub-questions/${question.id}/answer`, { answer, via: "inbox" }),
+    pick: (question: HubQuestion, picked: string) =>
+      request("POST", `/api/hub-questions/${question.id}/answer`, { picked, via: "inbox" }),
     dispose: async () => {
       await web.dispose();
       await runtime.dispose();
@@ -242,23 +243,24 @@ describe("who a hob on your account commits as when your Git config sets no one"
     await current.access();
     const [question, ...others] = await current.open();
     expect(others).toEqual([]);
+    // It names your account and the identity its choice commits as in codes and data, not sentences (#1045).
     expect(question).toMatchObject({
-      subject: { kind: "commit-identity", key: "user", title: "Who hobs commit as" },
+      key: "user",
+      ask: {
+        kind: "commit-identity",
+        reason: "no-git-identity",
+        github: { login: "otaviobarros", identity: { name: "otaviobarros", email: NOREPLY } },
+        unread: null,
+      },
       chat: QUEST_CHAT,
-      options: [
-        {
-          label: "My GitHub account, @otaviobarros",
-          consequence: `Commits are made as otaviobarros <${NOREPLY}>, which GitHub links to your account.`,
-        },
-        { label: OWN_GIT_LABEL },
-      ],
-      recommended: 0,
+      options: ["github", "own-git"],
+      recommended: "github",
     });
     expect(githubReads).toBe(1);
 
-    // You pick your GitHub account in the Inbox; the hub keeps it.
-    const answered = await current.answer(question as HubQuestion, "My GitHub account, @otaviobarros");
-    expect(answered).toMatchObject({ status: 200, body: { picked: 0 } });
+    // You pick your GitHub account in the Inbox, by its key; the hub keeps it.
+    const answered = await current.pick(question as HubQuestion, "github");
+    expect(answered).toMatchObject({ status: 200, body: { picked: "github" } });
     await until(async () => (await current.access())?.commitsAs._tag === "UserGiven");
 
     // The hob's next turn commits under it, and asks nothing more.
@@ -277,13 +279,13 @@ describe("who a hob on your account commits as when your Git config sets no one"
     // No GitHub account is connected: the question asks you to type one, with no choices.
     const [first] = await current.open();
     expect(first?.options).toEqual([]);
-    expect(first?.text).toContain("Ada Lovelace <ada@example.com>");
+    expect(first?.ask).toEqual({ kind: "commit-identity", reason: "no-git-identity", github: null, unread: null });
 
     // Words with no name and email in them are asked about again, saying so.
     await current.answer(first as HubQuestion, "whatever you think");
     await until(async () => (await current.open()).some((question) => question.id !== first?.id));
     const [second] = await current.open();
-    expect(second?.text).toContain(`couldn't find a name and email in "whatever you think"`);
+    expect(second?.ask).toMatchObject({ reason: "unreadable-answer", unread: "whatever you think" });
     expect(second?.chat).toEqual(QUEST_CHAT);
 
     await current.answer(second as HubQuestion, "Otavio Barros <otavio@example.com>");
@@ -306,7 +308,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     gitConfig = { name: null, email: null };
     await current.access();
     const [question] = await current.open();
-    await current.answer(question as HubQuestion, OWN_GIT_LABEL);
+    await current.pick(question as HubQuestion, "own-git");
     await until(async () => (await current.open()).length === 0);
     gitConfig = { name: "Otavio Barros", email: "otavio@example.com" };
     expect((await current.access())?.commitsAs._tag).toBe("UserConfig");
