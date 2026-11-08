@@ -4,6 +4,7 @@ import {
   AgentStatus,
   Brain,
   Effort,
+  HOB_LABEL_MAX,
   HobColor,
   LookSeed,
   Message,
@@ -63,7 +64,7 @@ import { DeviceSession } from "./user-session.ts";
 import { WorkbenchGroup } from "./workbench.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
-const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(40));
+const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(HOB_LABEL_MAX));
 
 /** A new hob: who it is, how it looks and what it thinks with. */
 export const CreateAgentPayload = Schema.Struct({

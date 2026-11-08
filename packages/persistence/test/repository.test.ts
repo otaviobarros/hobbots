@@ -473,6 +473,52 @@ describe("HobbotsRepository", () => {
     expect(Option.isNone(result.v3)).toBe(true);
   });
 
+  // covers ADR 034 (Scope, The Charm), DP-003
+  it("[TC-DP-406-02] keeps a hob's Summoning scope and its withheld Charms with each configuration version", async () => {
+    const first = new Agent({
+      id: agentId,
+      name: "Aldric",
+      roleTitle: "Guide",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+      lookSeed: 1,
+      lookColor: "moss",
+      configVersion: 1,
+      createdAt: now,
+    });
+    const policy = {
+      ...first.policy,
+      charms: {
+        granted: ["github", "summoning"],
+        overrides: { "summoning.summon": "ask" as const },
+        summoning: { summoned: false, hobs: ["pip"], self: true },
+      },
+    };
+    const second = new Agent({ ...first, policy, configVersion: 2 });
+    const third = new Agent({
+      ...first,
+      policy: { ...first.policy, charms: { granted: ["github"], withheld: ["summoning"] } },
+      configVersion: 3,
+    });
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(first);
+      yield* repo.updateAgentConfig(second);
+      yield* repo.updateAgentConfig(third);
+      return {
+        v1: yield* repo.findAgentConfig(agentId, 1),
+        v2: yield* repo.findAgentConfig(agentId, 2),
+        agent: yield* repo.findAgent(agentId),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(Option.getOrThrow(result.v1).policy.charms).toEqual({ granted: ["github"] });
+    expect(Option.getOrThrow(result.v2).policy.charms).toEqual(policy.charms);
+    expect(Option.getOrThrow(result.agent).policy.charms).toEqual({ granted: ["github"], withheld: ["summoning"] });
+  });
+
   // covers AG-002, AG-006, DP-003
   it("[TC-AG-405-01] stores who made each version and who summoned the hob, and journals each change with its actor", async () => {
     const chief = AgentId.make("chief");

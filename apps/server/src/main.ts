@@ -27,6 +27,7 @@ import {
   SecretRedaction,
   SkillReviewsLive,
   SkillTrialsLive,
+  SummoningHub,
   TaskFiles,
 } from "@hobbots/agents";
 import {
@@ -148,6 +149,7 @@ import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLi
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { SkillUpdateChecks } from "./skill-updates.ts";
 import { agentsSkillsFolder, SkillsLive } from "./skills.ts";
+import { SummoningCharm } from "./summoning.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
 import { TaskFileRoute } from "./task-files.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
@@ -405,8 +407,11 @@ const ServerLive = Layer.unwrap(
     const charmFolder = join(dataDir, "charms", "github");
     // The Charm registry (ADR 031): every Charm the hub holds, registered once, with one never-twice
     // runner for all of them. It declares them to the policy too, so registering a Charm here is all
-    // it takes for a hob to be granted it. The GitHub Charm is the only one yet.
-    const HubCharms = Charms.layer([GitHubCharm]).pipe(
+    // it takes for a hob to be granted it: the GitHub Charm, and the Summoning Charm (ADR 034).
+    const HubCharms = Charms.layer<Effect.Services<typeof GitHubCharm | typeof SummoningCharm>>([
+      GitHubCharm,
+      SummoningCharm,
+    ]).pipe(
       Layer.provide(
         Layer.mergeAll(
           GitRemotes.layer,
@@ -447,7 +452,9 @@ const ServerLive = Layer.unwrap(
     const Memory = memoryEngineLayer(config, dataDir, memoryKeys);
     // The hub's own path separator, which alone divides the folders a hob may be given (STD-SEC-003).
     const separator = sep === "\\" ? "\\" : "/";
-    const App = HobLifecycle.layer
+    // The Summoning Charm's calls reach the hob use cases once they are built (ADR 034).
+    const App = SummoningHub.bound
+      .pipe(Layer.provideMerge(HobLifecycle.layer))
       .pipe(
         Layer.provideMerge(
           Layer.mergeAll(
@@ -578,6 +585,7 @@ const ServerLive = Layer.unwrap(
             WorkHoldLive.pipe(Layer.provideMerge(Persistence)),
             EventBus.layer,
             HobAdmission.layer,
+            SummoningHub.layer,
             NodeFolderChecks,
             HeldRuntime,
             identity,

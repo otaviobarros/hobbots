@@ -1,12 +1,12 @@
 import {
   CharmDeclarations,
   ChatService,
+  changePermissions,
   foundAgent,
   GrantService,
   HobbotsRepository,
   HobService,
   PermissionSummary,
-  policyLoss,
 } from "@hobbots/agents";
 import { HobbotsApi } from "@hobbots/api";
 import { Effect, Layer } from "effect";
@@ -20,20 +20,14 @@ export const PermissionsHandlers = HttpApiBuilder.group(HobbotsApi, "permissions
     const chat = yield* ChatService;
     const summary = yield* PermissionSummary;
     const grants = yield* GrantService;
-    const charms = yield* CharmDeclarations;
+    const changed = changePermissions({ repo, grants, chat, charms: yield* CharmDeclarations });
     return handlers.handleAll({
       get: ({ params }) =>
         repo.findAgent(params.agentId).pipe(Effect.flatMap(foundAgent(params.agentId)), Effect.flatMap(summary.of)),
       // The hob's grants that relied on what the new policy takes away, a Charm included, are revoked
       // (ADR 015, ADR 031), and a running turn keeps nothing it takes away (PE-008).
       update: ({ params, payload }) =>
-        Effect.gen(function* () {
-          const before = yield* repo.findAgent(params.agentId).pipe(Effect.flatMap(foundAgent(params.agentId)));
-          const after = yield* hobs.updatePolicy(params.agentId, payload);
-          yield* grants.revokeLost(params.agentId, policyLoss(before.policy, after.policy, charms));
-          yield* chat.reviewAuthority(params.agentId);
-          return yield* summary.of(after);
-        }),
+        changed(params.agentId, hobs.updatePolicy(params.agentId, payload)).pipe(Effect.flatMap(summary.of)),
     });
   }),
 );
