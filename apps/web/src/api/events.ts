@@ -24,6 +24,7 @@ import { devicesChanged } from "./devices.ts";
 import { failedTaskChanged } from "./failed-tasks.ts";
 import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
+import { applyHobChanges } from "./hob-changes.ts";
 import { hobSkillsChanged } from "./hob-skills.ts";
 import { hubQuestionChanged } from "./hub-questions.ts";
 import type { ConnectionState } from "./live.ts";
@@ -215,6 +216,7 @@ const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   applyQuestWork(queryClient, event);
   applyHistory(queryClient, event);
+  applyHobChanges(queryClient, event);
   // An open Quest room's Workbench follows its tree's records on the tree's own stream (ADR 027).
   // A running command's output is transient and kept as it comes, whichever stream brings it.
   if (isWorkbenchEvent(event)) {
