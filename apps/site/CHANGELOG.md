@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/otaviobarros/hobbots/compare/site-v0.2.0...site-v0.2.1) (2026-11-08)
+
+
+### Features
+
+* **site:** draw a share image that says what Hobbots does ([#1286](https://github.com/otaviobarros/hobbots/issues/1286)) ([09f5b4a](https://github.com/otaviobarros/hobbots/commit/09f5b4a056deb3d60da5424410df544caf9abbe4))
+
 ## [0.2.0](https://github.com/otaviobarros/hobbots/compare/site-v0.1.1...site-v0.2.0) (2026-11-08)
 
 
