@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { homedir, platform, tmpdir } from "node:os";
-import { delimiter, dirname, isAbsolute, join } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
 import { operationDecision, RuntimeError } from "@hobbots/agents";
 import type { CommitIdentity, SandboxState } from "@hobbots/domain";
@@ -563,7 +563,16 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
             new RuntimeError({
               message: `The sandbox could not start the runtime: ${error instanceof Error ? error.message : String(error)}`,
             }),
-        });
+        }).pipe(
+          // What the turn's processes may touch, in the hub's log at Debug, so a refused write in a
+          // folder can be told apart from a folder the turn was never given (#1225).
+          Effect.tap(() =>
+            Effect.logDebug(
+              `Sandbox for ${basename(scope.binary)}: folders ${JSON.stringify(scope.folders)}, ` +
+                `read ${scope.folderAccess.read}, write ${scope.folderAccess.write}`,
+            ),
+          ),
+        );
 
       return ProcessSandbox.of({
         state: "on",
