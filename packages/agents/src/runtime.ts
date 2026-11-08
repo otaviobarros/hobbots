@@ -193,6 +193,9 @@ export type RuntimeEvent =
       readonly usage?: ReplyUsage;
     };
 
+/** A search the runtime reported (ADR 036). */
+export type WebSearchedEvent = Extract<RuntimeEvent, { readonly _tag: "WebSearched" }>;
+
 export class RuntimeError extends Schema.TaggedError<RuntimeError>()("RuntimeError", {
   message: Schema.String,
 }) {}
@@ -471,6 +474,13 @@ export interface PromptRequest {
    * it starts.
    */
   readonly recordToolStart?: ((event: ToolStartedEvent) => Effect.Effect<boolean>) | null;
+  /**
+   * Records a search the runtime reported (ADR 036) before the model can act on its results: the
+   * adapter waits for it before it reports the search, and before any hub call that came after the
+   * search runs, so a result is found by the time `web_fetch` or a Task brief reads the found set.
+   * A defect is ignored. Absent or null, nothing waits.
+   */
+  readonly recordSearch?: ((event: WebSearchedEvent) => Effect.Effect<void>) | null;
   /**
    * Hobbots tools the turn offers over the runtime's control channel, for a turn that works on a
    * Task (ADR 018). Absent or null, it offers none. The hub decides each call, not the policy hook.

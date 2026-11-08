@@ -21,7 +21,8 @@ import {
   outsideDataLine,
 } from "./hub-actions.ts";
 import { HobbotsRepository } from "./repository.ts";
-import type { HubTool, RuntimeEvent, ToolAccess, TurnApprovals } from "./runtime.ts";
+import type { HubTool, ToolAccess, TurnApprovals, WebSearchedEvent } from "./runtime.ts";
+import type { Redactor } from "./secrets.ts";
 
 /**
  * Reading a web page for a hob on the hub (ADR 036): `web_fetch`, the ports the hub reads pages and
@@ -193,9 +194,7 @@ const SOURCE_QUERY_CHARS = 200;
  * The URLs a search the runtime reported makes found (ADR 036): only the hits of its own structured
  * result, never the model's text or the query, so a search that reported none adds nothing.
  */
-export const searchFound = (
-  searched: Pick<Extract<RuntimeEvent, { readonly _tag: "WebSearched" }>, "query" | "results">,
-): ReadonlyArray<FoundUrl> => {
+export const searchFound = (searched: Pick<WebSearchedEvent, "query" | "results">): ReadonlyArray<FoundUrl> => {
   const query =
     searched.query.length > SOURCE_QUERY_CHARS ? `${searched.query.slice(0, SOURCE_QUERY_CHARS)}…` : searched.query;
   const source = `a result of the search "${query}"`;
@@ -282,11 +281,12 @@ export const makeWebProvenance = Effect.gen(function* () {
     });
 
   /**
-   * Adds the results of a search the runtime reported in the session to its found set. The hub
-   * reads them from the runtime's event, the same way on every runtime, so no adapter writes here.
+   * The session's `recordSearch` (ADR 036): adds the results of each search its runtime reports to
+   * its found set, with the query redacted in their source. It is the same for every runtime, which
+   * only waits for it, so no adapter writes to the found set.
    */
-  const searched = (session: WebSession, event: Extract<RuntimeEvent, { readonly _tag: "WebSearched" }>) =>
-    add(session, searchFound(event));
+  const searched = (session: WebSession, redactor: Redactor) => (event: WebSearchedEvent) =>
+    add(session, searchFound({ results: event.results, query: redactor.text(event.query) }));
 
   return { sources, add, passOn, searched };
 });

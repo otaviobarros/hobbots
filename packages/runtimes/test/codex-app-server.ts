@@ -31,6 +31,8 @@ export const completed = (status: string, error: unknown = null) => completedTur
 export const fakeServer = (options: {
   readonly script?: ReadonlyArray<AppServerNotification>;
   readonly asks?: ReadonlyArray<{ readonly method: string; readonly params: unknown }>;
+  /** How many of `script`'s notifications go before `asks`; none by default. */
+  readonly asksAfter?: number;
   /** The notifications of each later turn the client starts, as `turn-2`, `turn-3` and on. */
   readonly followUps?: ReadonlyArray<ReadonlyArray<AppServerNotification>>;
   /** Ends the process after the script, before any `turn/completed`. */
@@ -53,7 +55,7 @@ export const fakeServer = (options: {
   const answers: Array<unknown> = [];
   const commands: Array<AppServerCommand> = [];
   let closed = 0;
-  const start: StartAppServer = (command, { handlers }) =>
+  const start: StartAppServer = (command, { handlers, beforeNotification }) =>
     Effect.gen(function* () {
       commands.push(command);
       let turns = 0;
@@ -65,9 +67,15 @@ export const fakeServer = (options: {
           ? Effect.succeed({ refused: "no handler" })
           : handler(params, method).pipe(Effect.catch((error) => Effect.succeed({ refused: error.message })));
       };
+      // Each notification is worked on before anything after it, as the App Server client does.
+      const publish = (note: AppServerNotification) =>
+        Effect.andThen(beforeNotification?.(note) ?? Effect.void, PubSub.publish(notes, note));
       const run = Effect.gen(function* () {
+        const script = options.script ?? [];
+        const before = options.asksAfter ?? 0;
+        for (const note of script.slice(0, before)) yield* publish(note);
         for (const { method, params } of options.asks ?? []) answers.push(yield* ask(method, params));
-        for (const note of options.script ?? []) yield* PubSub.publish(notes, note);
+        for (const note of script.slice(before)) yield* publish(note);
         if (options.dies) yield* PubSub.publish(notes, null);
       });
       const requestUnknown = (method: string, params: unknown) =>

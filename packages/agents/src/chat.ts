@@ -866,10 +866,6 @@ export class ChatService extends Context.Service<
                             .pipe(Effect.flatMap(announce)),
                       ),
                 );
-              // A search's results are found URLs in the chat, so web_fetch reads them under the site rules
-              // (ADR 036). Its query is already redacted, so the source names no secret.
-              case "WebSearched":
-                return Effect.andThen(web.searched({ threadId: thread.id }, event), saveStep(event));
               // Steps, a tool call's included, are saved with the reply, so they replay on reconnect.
               default:
                 return saveStep(event);
@@ -961,6 +957,8 @@ export class ChatService extends Context.Service<
                 approvals: turnApprovals?.approvals ?? null,
                 redaction: redactor,
                 recordToolStart,
+                // A search's results are found URLs in the chat before the hob can act on them (ADR 036).
+                recordSearch: web.searched({ threadId: thread.id }, redactor),
                 // Its hub tools read the revisions this turn mounted, not what a rollout moved since.
                 ...(yield* Effect.gen(function* () {
                   const messageId = (yield* Ref.get(reply.current)).id;

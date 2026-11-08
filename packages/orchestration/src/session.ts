@@ -205,6 +205,8 @@ export const runSessionTurn = (
           redaction: redactor,
           recordToolStart: (event) =>
             turn.recordToolStart(event).pipe(Effect.tap((recorded) => (recorded ? stepOf(event) : Effect.void))),
+          // A search's results are found URLs in the Task's session before the hob can act on them (ADR 036).
+          recordSearch: web.searched({ threadId: null, taskId: turn.taskId }, redactor),
           // A hub tool reads the revisions this turn mounted, not what a rollout moved since.
           ...(yield* Effect.provideService(turn.offer, TurnSkillsInUse, given)),
         },
@@ -244,13 +246,7 @@ export const runSessionTurn = (
             ending = { _tag: "Replied", text: event.text };
             usage = event.usage ?? null;
           }
-          // A search's results are found URLs in the Task's session, so web_fetch reads them under the
-          // site rules (ADR 036). The step's own record is redacted, and so is the query the source quotes.
-          const found =
-            event._tag === "WebSearched"
-              ? web.searched({ threadId: null, taskId: turn.taskId }, { ...event, query: redactor.text(event.query) })
-              : Effect.void;
-          return Effect.andThen(confirmBrief, Effect.andThen(found, stepOf(event)));
+          return Effect.andThen(confirmBrief, stepOf(event));
         }),
         Effect.catchTags({
           RuntimeError: (error) =>

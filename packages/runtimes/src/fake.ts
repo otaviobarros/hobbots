@@ -33,6 +33,7 @@ import { type HookEnd, toolFinished } from "./command-exit.ts";
 import { applyScriptedWrites } from "./fake-writes.ts";
 import { mountName } from "./skills.ts";
 import { commandOf, toolLabel, toolRequests, WEB_SEARCH_TOOL } from "./tool-calls.ts";
+import { recordSearched } from "./web-search.ts";
 
 /**
  * The fake runtime's models: a main one with every effort level, and one behind "More models"
@@ -851,11 +852,12 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     ]).pipe(
       Stream.concat(
         scriptedToolEvents({ ...request, prompt: scripted }, options.engine, sandbox, background).pipe(
-          Stream.tap((event) =>
-            Effect.sync(() => {
-              if (event._tag === "WebSearched") webSearches += 1;
-            }),
-          ),
+          // A search's results are found before its event goes on, and so before the hub calls after it (ADR 036).
+          Stream.tap((event) => {
+            if (event._tag !== "WebSearched") return Effect.void;
+            webSearches += 1;
+            return recordSearched(request.recordSearch, event);
+          }),
         ),
       ),
       Stream.concat(scriptedHubEvents({ ...request, prompt: scripted }, answers, details)),
