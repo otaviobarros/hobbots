@@ -97,6 +97,8 @@ export const CreateAgentPayload = Schema.Struct({
   /** An effort the model accepts, or null for its default. */
   effort: Schema.NullOr(Effort),
   instructions: Schema.String.check(Schema.isMaxLength(20_000)),
+  /** Whether other hobs see this hob in their directory (ADR 032); on when left out. */
+  visibleToHobs: Schema.optionalKey(Schema.Boolean),
 });
 export type CreateAgentPayload = typeof CreateAgentPayload.Type;
 
@@ -123,6 +125,8 @@ export const UpdateAgentPayload = Schema.Struct({
   model: Schema.optionalKey(Schema.NullOr(Schema.NonEmptyString)),
   effort: Schema.optionalKey(Schema.NullOr(Effort)),
   instructions: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(20_000))),
+  /** Hidden from or shown to other hobs; it applies from every other hob's next turn (ADR 032). */
+  visibleToHobs: Schema.optionalKey(Schema.Boolean),
 });
 export type UpdateAgentPayload = typeof UpdateAgentPayload.Type;
 

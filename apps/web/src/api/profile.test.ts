@@ -54,6 +54,7 @@ describe("hob profile", () => {
       voice: "default",
       length: "balanced",
       instructions: "Write short answers.",
+      visibleToHobs: true,
       runtime: "claude-code",
       model: "default",
       effort: "medium",
@@ -205,6 +206,22 @@ describe("hob profile", () => {
       length: "detailed",
       instructions: "Be brief.",
     });
+  });
+
+  it("sends hiding the hob from other hobs as one change, and keeps it when another window saves", () => {
+    const pip = hob();
+    const base = profileDraft(pip, offered);
+    const draft = { ...base, visibleToHobs: false };
+    expect(changeCount(base, draft)).toBe(1);
+    expect(profileEdit(pip, draft)).toEqual({ visibleToHobs: false });
+    const after = hob({ instructions: "Be brief.", configVersion: 2 });
+    expect(rebaseDraft(base, profileDraft(after, offered), draft)).toMatchObject({
+      visibleToHobs: false,
+      instructions: "Be brief.",
+    });
+    // Hidden from another window, the switch follows it while the user left it alone.
+    const hidden = profileDraft(hob({ visibleToHobs: false, configVersion: 2 }), offered);
+    expect(rebaseDraft(base, hidden, base).visibleToHobs).toBe(false);
   });
 
   it("sends a new name, look and color as one edit, trimmed, and keeps them when another window saves", () => {

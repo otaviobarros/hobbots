@@ -14,6 +14,9 @@ import {
 } from "@hobbots/agents";
 import {
   type Agent,
+  type AgentId,
+  findInDirectory,
+  listedForHob,
   type Message,
   RuntimeModel,
   RuntimeModels,
@@ -587,6 +590,50 @@ describe("what a hob is good at", () => {
       told("Your chores, in the user's words:\nWrite poems."),
     ]);
     expect(prompts.some((p) => p.instructions.includes("sharp"))).toBe(false);
+  });
+});
+
+describe("visible to other hobs", () => {
+  // The hobs another hob's directory finds when it reads the hub now, as the roster and read_hob do (ADR 032).
+  const directoryOf = async (reader: AgentId) => {
+    const hobs = (await request("GET", "/api/agents")).body as Array<Agent>;
+    return {
+      listed: listedForHob(hobs, reader).map((one) => one.name),
+      found: (named: string) => findInDirectory(hobs, reader, named).map((one) => one.name),
+    };
+  };
+
+  // covers AG-002
+  it("[TC-AG-1233-01] hides a hob from every other hob's next look at the hub and brings it back, as new versions", async () => {
+    const wren: Agent = (await request("POST", "/api/agents", hob)).body;
+    const ada: Agent = (await request("POST", "/api/agents", { ...hob, name: "Ada" })).body;
+    expect(wren.visibleToHobs).toBe(true);
+    expect((await directoryOf(ada.id)).listed).toEqual(["Wren"]);
+
+    const hidden = await request("PATCH", `/api/agents/${wren.id}`, { visibleToHobs: false });
+    expect([hidden.body.visibleToHobs, hidden.body.configVersion]).toEqual([false, 2]);
+    const unseen = await directoryOf(ada.id);
+    expect(unseen.listed).toEqual([]);
+    expect([unseen.found("Wren"), unseen.found(wren.id)]).toEqual([[], []]);
+    // A hidden hob still sees the others, and finds itself.
+    const own = await directoryOf(wren.id);
+    expect([own.listed, own.found("wren ")]).toEqual([["Ada"], ["Wren"]]);
+    expect((await request("PATCH", `/api/agents/${wren.id}`, { visibleToHobs: "no" })).status).toBe(400);
+
+    const shown = await request("PATCH", `/api/agents/${wren.id}`, { visibleToHobs: true });
+    expect([shown.body.visibleToHobs, shown.body.configVersion]).toEqual([true, 3]);
+    const seen = await directoryOf(ada.id);
+    expect([seen.listed, seen.found("Wren")]).toEqual([["Wren"], ["Wren"]]);
+  });
+
+  // covers AG-002
+  it("[TC-AG-1233-02] creates a hob hidden when asked, and never tells the runtime about the switch", async () => {
+    const quiet: Agent = (await request("POST", "/api/agents", { ...hob, visibleToHobs: false })).body;
+    expect(quiet.visibleToHobs).toBe(false);
+    const thread = (await request("POST", `/api/agents/${quiet.id}/threads`)).body;
+    await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
+    await waitFor(async () => prompts.length === 1);
+    expect(prompts.map((p) => p.instructions)).toEqual([told("Write short answers.")]);
   });
 });
 

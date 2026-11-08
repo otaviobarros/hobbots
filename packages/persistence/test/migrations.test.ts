@@ -21,7 +21,8 @@ import taskGrants from "../src/migrations/0035_task_grants.ts";
 import versionedName from "../src/migrations/0047_versioned_name.ts";
 import threadReads from "../src/migrations/0053_thread_reads.ts";
 import milestoneReachedBy from "../src/migrations/0074_milestone_reached_by.ts";
-import hobGoodAt from "../src/migrations/0079_hob_good_at.ts";
+import hobVisibility from "../src/migrations/0079_hob_visibility.ts";
+import hobGoodAt from "../src/migrations/0080_hob_good_at.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1182,9 +1183,87 @@ describe("0074_milestone_reached_by", () => {
   });
 });
 
-describe("0079_hob_good_at", () => {
+describe("0079_hob_visibility", () => {
+  // covers AG-002, DP-003
+  it("[TC-DP-1233-01] leaves every existing hob and version visible to other hobs, and still reads hob events journaled before it", async () => {
+    const before = {
+      _tag: "AgentUpserted",
+      agent: {
+        id: "pip",
+        name: "Pip",
+        role: null,
+        roleTitle: "Writer",
+        sigil: "writer",
+        hat: null,
+        tool: null,
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        status: "active",
+        retiredAt: null,
+        configVersion: 1,
+        createdAt: "2026-11-08T00:00:00.000Z",
+        revision: 1,
+      },
+    };
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+        agentId: "pip",
+        version: 1,
+        name: "Pip",
+        roleTitle: "Writer",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;
+      yield* sql`INSERT INTO event_journal ${sql.insert({
+        sequence: 1,
+        id: "5d1c7a2e-3b4f-4c6d-8e9f-0a1b2c3d4e5f",
+        type: "AgentUpserted",
+        schemaVersion: 1,
+        occurredAt: "2026-11-08T00:00:00.000Z",
+        agentId: "pip",
+        payload: JSON.stringify(before),
+      })}`;
+      yield* hobVisibility;
+      return {
+        agents: yield* sql`SELECT visible_to_hobs FROM agents`,
+        versions: yield* sql`SELECT visible_to_hobs FROM agent_config_versions`,
+        entries: yield* (yield* EventJournal).readAfter(0),
+      };
+    }).pipe(
+      Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(TestDatabaseAt(migrationsBefore("0079"))))),
+      Effect.scoped,
+      Effect.runPromise,
+    );
+
+    expect(result.agents.map((row) => Number(row.visibleToHobs))).toEqual([1]);
+    expect(result.versions.map((row) => Number(row.visibleToHobs))).toEqual([1]);
+    expect(result.entries.map((e) => e.payload)).toMatchObject([
+      { _tag: "AgentUpserted", agent: { id: "pip", visibleToHobs: true } },
+    ]);
+  });
+});
+
+describe("0080_hob_good_at", () => {
   const longChores = `${"Answer every letter. ".repeat(12)}Then file them.`;
-  // Each hob as the profile showed its good at before 0079: from its chores, else its starter role's note.
+  // Each hob as the profile showed its good at before 0080: from its chores, else its starter role's note.
   const hobs = [
     {
       id: "chores",
@@ -1237,7 +1316,7 @@ describe("0079_hob_good_at", () => {
         agents: yield* sql`SELECT id, good_at FROM agents ORDER BY id`,
         versions: yield* sql`SELECT agent_id, version, good_at FROM agent_config_versions ORDER BY agent_id, version`,
       };
-    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0079"))), Effect.runPromise);
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0080"))), Effect.runPromise);
 
     const note = starterRole("writer").note;
     const shortened = `${longChores.slice(0, 200).slice(0, longChores.slice(0, 200).lastIndexOf(" "))}…`;
@@ -1262,7 +1341,7 @@ describe("0079_hob_good_at", () => {
 
   // covers DP-003
   it("[TC-DP-1232-01] still reads a hob event journaled before good at was stored, with none", async () => {
-    // The AgentUpserted payload as the hub journaled it before 0079, with no good at.
+    // The AgentUpserted payload as the hub journaled it before 0080, with no good at.
     const before = {
       _tag: "AgentUpserted",
       agent: {
@@ -1288,7 +1367,7 @@ describe("0079_hob_good_at", () => {
         revision: 1,
       },
     };
-    const database = TestDatabaseAt(migrationsBefore("0079"));
+    const database = TestDatabaseAt(migrationsBefore("0080"));
     const entries = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;

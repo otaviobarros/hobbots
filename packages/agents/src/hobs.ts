@@ -249,15 +249,18 @@ const createdFields = [
   "model",
   "effort",
   "instructions",
+  "visibleToHobs",
 ] as const satisfies ReadonlyArray<keyof CreateAgentPayload & keyof Agent>;
 
 /**
  * A new hob's request with what it leaves out filled in, so a retry that leaves it out matches: the
- * default tone, and good at stored as one line, or the prefill of its chores and role when it gives none.
+ * default tone, visible to other hobs, and good at stored as one line, or the prefill of its chores
+ * and role when it gives none.
  */
 const withDefaults = (payload: CreateAgentPayload) => ({
   voice: DEFAULT_VOICE,
   length: DEFAULT_LENGTH,
+  visibleToHobs: true,
   ...payload,
   goodAt: payload.goodAt === undefined ? goodAtFromInstructions(payload) : normalizeGoodAt(payload.goodAt),
 });
@@ -273,6 +276,7 @@ const editableFields = [
   "model",
   "effort",
   "instructions",
+  "visibleToHobs",
 ] as const satisfies ReadonlyArray<keyof UpdateAgentPayload & keyof Agent>;
 
 export class HobService extends Context.Service<

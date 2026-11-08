@@ -88,6 +88,17 @@ const policySchemaFields = {
   ),
 };
 
+/**
+ * Whether other hobs see this hob in their directory (ADR 032). Hob events journaled before the
+ * switch existed carry none, so decoding them leaves the hob visible, as the migration does.
+ */
+const visibilitySchemaFields = {
+  visibleToHobs: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(true)),
+    Schema.withConstructorDefault(Effect.succeed(true)),
+  ),
+};
+
 export class Agent extends Schema.Class<Agent>("Agent")({
   id: AgentId,
   name: Schema.String,
@@ -95,6 +106,7 @@ export class Agent extends Schema.Class<Agent>("Agent")({
   ...goodAtSchemaFields,
   ...toneSchemaFields,
   ...policySchemaFields,
+  ...visibilitySchemaFields,
   runtime: RuntimeKind,
   /** A model the runtime supports, or null for the runtime's default. */
   model: Schema.NullOr(Schema.String),
@@ -126,6 +138,7 @@ export class AgentConfiguration extends Schema.Class<AgentConfiguration>("AgentC
   ...goodAtSchemaFields,
   ...toneSchemaFields,
   ...policySchemaFields,
+  ...visibilitySchemaFields,
   /** Versioned since ADR 017, so a turn keeps the runtime it started with. */
   runtime: RuntimeKind.pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(DEFAULT_RUNTIME)),
