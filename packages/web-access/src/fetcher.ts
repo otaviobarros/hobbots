@@ -7,6 +7,7 @@ import { isBlockedHost, normalizeHost } from "@hobbots/permissions";
 import { Cache, Context, DateTime, Duration, Effect, Exit, Layer, Stream } from "effect";
 import { HttpClientRequest, type HttpClientResponse } from "effect/http";
 import { Dns, NetAddress } from "effect/net";
+import { Agent } from "undici";
 import { contentTypeOf, decodeBody, pageKind, readPage } from "./page.ts";
 import { robotsAllow } from "./robots.ts";
 
@@ -67,6 +68,17 @@ const pinnedLookup =
     if (options.all) callback(null, addresses);
     else callback(null, first.address, first.family);
   };
+
+/**
+ * The undici agent a request connects through, closed with its scope. It is made here from undici's
+ * own `Agent` rather than through `NodeHttpClient.makeDispatcherOptions`, whose dynamic import of
+ * undici loses its named exports when the server is bundled (the desktop app, the server's build).
+ */
+const pinnedAgent = (target: WebTarget, dialAs: (address: string) => string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => new Agent({ connect: { lookup: pinnedLookup(target, dialAs) } })),
+    (agent) => Effect.promise(() => agent.destroy()),
+  );
 
 const failed = (reason: WebFetchFailed["reason"], message: string) => new WebFetchFailed({ reason, message });
 
@@ -151,10 +163,7 @@ export const WebAccessWith = (options: WebAccessOptions) =>
             return yield* failed("blocked-address", `${target.host} is an address web_fetch never reaches.`);
           }
           const client = yield* NodeHttpClient.makeUndici.pipe(
-            Effect.provideServiceEffect(
-              NodeHttpClient.Dispatcher,
-              NodeHttpClient.makeDispatcherOptions({ connect: { lookup: pinnedLookup(target, dialAs) } }),
-            ),
+            Effect.provideServiceEffect(NodeHttpClient.Dispatcher, pinnedAgent(target, dialAs)),
           );
           return yield* client
             .execute(
