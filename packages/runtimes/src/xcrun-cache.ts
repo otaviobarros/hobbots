@@ -12,9 +12,10 @@ import { join } from "node:path";
  *
  * The cache opens for reading only. A hob that could write it could point the user's own `git` or
  * `python3`, run later outside the sandbox, at a program in its folders, so it stays closed for
- * writing; and `xcrun_nocache` still writes it.
+ * writing; and `xcrun_nocache` still writes it. A cache that is missing or out of date, as right after
+ * an Xcode update, brings the error back until a tool runs outside the sandbox and rebuilds it.
  */
-export const XCRUN_CACHE = "xcrun_db";
+const XCRUN_CACHE = "xcrun_db";
 
 /** The user's own temporary folder on macOS, or undefined when `getconf` cannot say. */
 const userTempFolder = (): string | undefined => {
