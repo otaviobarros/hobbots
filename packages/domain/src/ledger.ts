@@ -180,7 +180,7 @@ export const describeLedgerEntry = (entry: LedgerEntry): string => {
     case "Question":
       return `question ${entry.question.id} is unanswered: "${entry.question.text}"`;
     case "Milestone":
-      return `milestone "${entry.milestone.title}" is not reached; report it with report_checkpoint, naming in reached_by the hob that did the work when it was not you`;
+      return `milestone "${entry.milestone.title}" is not reached; report it with report_checkpoint, naming in reached_by a lead above you only when its own work reached it, never a member`;
     case "Approval":
       return `a tool call waits for approval: ${entry.approval.label}`;
     case "Item":

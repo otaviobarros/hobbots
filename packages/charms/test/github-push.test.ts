@@ -353,6 +353,27 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(headOf(remote, "other")).toBeNull();
   });
 
+  // covers PE-003, PE-007 (#1219)
+  it("[TC-PE-1219-01] refuses, without a card, a push that would create a branch with no commit GitHub lacks", async () => {
+    const { folder, repository, remote } = await setUp("nothing-new");
+    // The hob's commit was refused, so its new branch is still at main's commit, which GitHub has.
+    git(folder, "branch", "feat/empty", "main");
+    const main = git(folder, "rev-parse", "main");
+    const asked: Array<ApprovalAction> = [];
+    const answer = await push(
+      folder,
+      repository,
+      { access: accessFor(folder, "trusting"), asked },
+      { branch: "feat/empty", key: "empty-1" },
+    );
+    expect(answer.refused).toBe(true);
+    expect(answer.text).toContain(`feat/empty is at ${main.slice(0, 12)}, which octo/nothing-new already has`);
+    expect(answer.text).toContain("Nothing was pushed.");
+    expect(answer.text).toContain("Commit your work first");
+    expect(asked).toHaveLength(0);
+    expect(headOf(remote, "feat/empty")).toBeNull();
+  });
+
   // covers PE-001, PE-003
   it("[TC-PE-157] pushes under Trusting without asking, and refuses a denied push or an option-shaped branch", async () => {
     const { folder, repository, remote, commit } = await setUp("trusting");
