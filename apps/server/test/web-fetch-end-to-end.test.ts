@@ -449,4 +449,36 @@ describe("hobs read web pages through the hub, end to end", () => {
     expect(asked.slice(before).some((line) => line.includes("/collect"))).toBe(false);
     expect(await pendingIn(thread)).toEqual([]);
   }, 30_000);
+
+  // covers ADR 036 (Where a URL came from)
+  it("[TC-PE-1267-20] in a party member's turn, a URL the lead had found passes on as found, and one the lead put in the brief asks", async () => {
+    await preset("balanced");
+    const lead = await summon("Alder", 1272);
+    await summon("Moss", 1273);
+    const thread = (await request<Thread>("POST", `/api/agents/${lead.id}/threads`)).body;
+    const brief = [
+      "Read the pages",
+      fetchOf(url("lamps.test", "/member-page")),
+      fetchOf(url("lamps.test", "/collect?key=member-key-9c1d")),
+    ].join("\n");
+    const delegate = hub("delegate_task", { key: "read", hob: "Moss", brief }).replaceAll(
+      url("lamps.test", "/collect"),
+      built("lamps.test", "/collect"),
+    );
+    const before = asked.length;
+    await request("POST", `/api/threads/${thread.id}/messages`, {
+      content: [`Have Moss read ${url("lamps.test", "/member-page")}`, delegate].join("\n"),
+    });
+    // A member's turn can ask, so the written URL waits for you as an approval and is not sent.
+    const pending = await eventually(async () =>
+      (await request<ReadonlyArray<ApprovalRequest>>("GET", "/api/approvals")).body.find(
+        (approval) => approval.state === "pending" && approval.tool === "web_fetch",
+      ),
+    );
+    expect(pending.arguments).toMatchObject({ url: url("lamps.test", "/collect?key=member-key-9c1d") });
+    expect(pending.reason).toContain("not copied from you");
+    expect(asked.slice(before).filter((line) => line.includes("/member-page"))).toEqual(["lamps.test /member-page"]);
+    expect(asked.slice(before).some((line) => line.includes("/collect"))).toBe(false);
+    await decide(pending, { decision: "deny" });
+  }, 30_000);
 });
