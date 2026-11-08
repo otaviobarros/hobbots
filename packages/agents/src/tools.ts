@@ -33,6 +33,13 @@ export const operationDecision = (
   );
 
 /**
+ * Whether a turn may search the web with its runtime's own search (ADR 036): only with tool access
+ * and where Search the web answers Allow. It takes no Ask, so anything else offers no search.
+ */
+export const turnWebSearch = (access: ToolAccess | null | undefined): boolean =>
+  access != null && operationDecision(access.policy, "search-web") === "allow";
+
+/**
  * Which of a hob's tools its answers open (ADR 014), whatever the runtime calls them: file reads,
  * file edits, and commands. Since a command reads and writes the folders without a call per file,
  * commands, Git's included, are open only when Read files and Edit files are both Allow, and a

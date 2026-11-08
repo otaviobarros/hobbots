@@ -6,6 +6,15 @@ import { binaryLocator, findBinary } from "../binary.ts";
 /** The Codex release ADR 024 was verified with. An older one shows as outdated; a newer one runs. */
 export const minimumCodexVersion = "0.166.0";
 
+/**
+ * The Codex releases whose cached web search the clean-runtime contract test held to OpenAI's index
+ * with Hobbots' settings (ADR 036): the first model request of a new and of a resumed thread carries
+ * `web_search` with `external_web_access: false`. Any other release, a newer one too, offers no
+ * search until the test passes on it and it is added here, so a change in Codex never turns into
+ * live search.
+ */
+export const CACHED_SEARCH_CODEX_VERSIONS: ReadonlyArray<string> = ["0.166.0", "0.167.0"];
+
 // Where Codex's installers (npm, Homebrew) put it. An app opened from Finder gets a bare PATH, so
 // these are searched before PATH and added to Codex's own PATH, where an npm install finds `node`.
 const systemDirs: ReadonlyArray<string> = ["/opt/homebrew/bin", "/usr/local/bin"];

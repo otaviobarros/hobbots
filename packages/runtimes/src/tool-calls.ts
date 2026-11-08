@@ -14,6 +14,9 @@ import { GIT_IDENTITY_VARIABLES } from "./sandbox.ts";
 /** A request a runtime tool call becomes: every kind but a Charm's, which the hub makes itself. */
 type ToolRequest = Exclude<PolicyRequest, { readonly _tag: "Charm" | "Memory" | "Skills" | "Directory" }>;
 
+/** A request a command line makes: anything on the hub or the network, never a runtime's search. */
+type CommandRequest = Exclude<ToolRequest, { readonly _tag: "Search" }>;
+
 /**
  * Claude Code's tool calls in the policy engine's terms (ADR 014). Only what the call itself says is
  * used, never the model's account of it. A tool this module does not know is refused, so a new
@@ -31,6 +34,13 @@ export const CLAUDE_CODE_TOOLS = [
   "NotebookEdit",
   "Bash",
 ] as const;
+
+/**
+ * Claude Code's own web search (ADR 036), decided as Search the web and offered only when the hub
+ * settled that the turn may search. Its `WebFetch` is never offered: it summarizes a page with a
+ * second model, so the hub would not see what the hob read, and a call to it is refused as unknown.
+ */
+export const WEB_SEARCH_TOOL = "WebSearch";
 
 /**
  * The tools offered to the runtime this turn. A tool whose operations are all denied is left out,
@@ -355,13 +365,13 @@ const refspecBranch = (refspec: string) => {
  * remotes and branches are assumed the riskiest. `exact` is false when the words do not say
  * everything the push does, so no grant answers it (ADR 015).
  */
-const pushRequests = (args: ReadonlyArray<string>, cwd: string, literal: boolean): ReadonlyArray<ToolRequest> => {
+const pushRequests = (args: ReadonlyArray<string>, cwd: string, literal: boolean): ReadonlyArray<CommandRequest> => {
   const options = args.filter((a) => a.startsWith("-"));
   const positional = args.filter((a) => !a.startsWith("-"));
   const force = options.some(isForce);
   const remote = positional[0] ?? "origin";
   const exact = literal && options.every((a) => PLAIN_PUSH_OPTIONS.has(a));
-  const push = (branch: string, forced: boolean, toDefaultBranch: boolean, exactPush: boolean): ToolRequest => ({
+  const push = (branch: string, forced: boolean, toDefaultBranch: boolean, exactPush: boolean): CommandRequest => ({
     _tag: "Push",
     remote,
     branch,
@@ -446,7 +456,7 @@ const programRequests = (
   folder: string,
   home: string,
   literal: ReadonlyArray<string> | null,
-): ReadonlyArray<ToolRequest> => {
+): ReadonlyArray<CommandRequest> => {
   const [name, ...args] = words;
   if (name === undefined) return [];
   const program = basename(name);
@@ -459,7 +469,7 @@ const programRequests = (
       ? pushRequests(args.slice(git.sub + 1), git.folders[0] as string, literal !== null && git.sub === 0)
       : git.folders.map((cwd) => ({ _tag: "Command", operation: "local-git", cwd, words: literal }));
   }
-  const run: ToolRequest = {
+  const run: CommandRequest = {
     _tag: "Command",
     operation: "run-commands",
     cwd: program === "make" ? makeFolder(args, folder, tilde) : folder,
@@ -591,9 +601,13 @@ const separatorOf = (token: CommandToken | undefined): Separator | undefined =>
  * `cd` and `pushd` move later commands, and `git -C`, `make -C` and `env -C` move their own.
  * Relative paths start from `cwd`, the folder the runtime reports for the call, and `~` from `home`.
  */
-export const commandRequests = (command: string, cwd: string, home: string = homedir()): ReadonlyArray<ToolRequest> => {
-  const requests: Array<ToolRequest> = [];
-  const add = (request: ToolRequest) => {
+export const commandRequests = (
+  command: string,
+  cwd: string,
+  home: string = homedir(),
+): ReadonlyArray<CommandRequest> => {
+  const requests: Array<CommandRequest> = [];
+  const add = (request: CommandRequest) => {
     const key = JSON.stringify(request);
     if (!requests.some((r) => JSON.stringify(r) === key)) requests.push(request);
   };
@@ -945,6 +959,8 @@ export const toolRequests = (
     }
     case "apply_patch":
       return patchRequests(input, cwd);
+    case WEB_SEARCH_TOOL:
+      return [{ _tag: "Search", operation: "search-web", query: text(input, "query") ?? "" }];
     default:
       return null;
   }
@@ -1160,6 +1176,15 @@ export const commandOf = (
     ? { line: input.command, folder, sandboxed, liveOutput }
     : undefined;
 
+/** The words for a step of each tool that works on one file, and the input that names the file. */
+const FILE_STEPS: Readonly<Record<string, { readonly verb: string; readonly key: string }>> = {
+  Read: { verb: "Reading", key: "file_path" },
+  Write: { verb: "Writing", key: "file_path" },
+  Edit: { verb: "Editing", key: "file_path" },
+  MultiEdit: { verb: "Editing", key: "file_path" },
+  NotebookEdit: { verb: "Editing", key: "notebook_path" },
+};
+
 /**
  * Short words for a tool step, from the call's own arguments. Secrets are redacted with `redact`
  * before anything is shortened, so a cut never leaves part of one behind, and a command's label is
@@ -1174,22 +1199,19 @@ export const toolLabel = (
     const path = text(input, key);
     return path === undefined ? "a file" : basename(redact(path));
   };
+  const fileStep = FILE_STEPS[tool];
+  if (fileStep !== undefined) return `${fileStep.verb} ${file(fileStep.key)}`;
   switch (tool) {
-    case "Read":
-      return `Reading ${file("file_path")}`;
-    case "Write":
-      return `Writing ${file("file_path")}`;
-    case "Edit":
-    case "MultiEdit":
-      return `Editing ${file("file_path")}`;
-    case "NotebookEdit":
-      return `Editing ${file("notebook_path")}`;
     case "Glob":
     case "Grep":
       return `Searching for ${shorten(redact(text(input, "pattern") ?? "files"))}`;
     case "Bash": {
       const command = text(input, "command");
       return `Running ${command === undefined ? "a command" : redactedCommandLabel(command, redact)}`;
+    }
+    case WEB_SEARCH_TOOL: {
+      const query = text(input, "query");
+      return query === undefined ? "Searching the web" : `Searching the web for ${shorten(redact(query))}`;
     }
     case "apply_patch": {
       const paths = patchPaths(input);

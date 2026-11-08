@@ -9,10 +9,17 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { type Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { binaryLocator } from "../src/binary.ts";
-import { codexEnforcement, makeCodex } from "../src/codex/adapter.ts";
+import { codexEnforcement, codexWebSearch, makeCodex } from "../src/codex/adapter.ts";
 import { startAppServer } from "../src/codex/app-server.ts";
 import { billingOf, chatGptTokens, signInOf } from "../src/codex/auth.ts";
-import { codexCandidates, codexPath, findCodex, minimumCodexVersion, parseCodexVersion } from "../src/codex/locate.ts";
+import {
+  CACHED_SEARCH_CODEX_VERSIONS,
+  codexCandidates,
+  codexPath,
+  findCodex,
+  minimumCodexVersion,
+  parseCodexVersion,
+} from "../src/codex/locate.ts";
 import { listModels, toCodexModels } from "../src/codex/models.ts";
 import { planFromRateLimits } from "../src/codex/plan.ts";
 import type { Model, RateLimitSnapshot } from "../src/codex/protocol.ts";
@@ -276,6 +283,18 @@ describe("Codex's provider health", () => {
     expect(policySandbox(off)).toBe("unavailable");
     const on = codexEnforcement({ state: "on", evidence: "sandbox-runtime on linux" });
     expect(on.processSandbox.status).toBe(process.platform === "darwin" ? "verified" : "unverified");
+  });
+
+  // covers ADR 036 (Search the web on Codex)
+  it("[TC-RT-1266-01] offers Codex's cached search only on a release the contract test held, and reports it with health", async () => {
+    const codex = await codexWith({}).adapter;
+    // The fake Codex is 0.166.0, a release the contract test held to the cached index.
+    expect((await Effect.runPromise(codex.enforcement)).webSearch.status).toBe("verified");
+    expect((await Effect.runPromise(codex.health)).enforcement.webSearch.status).toBe("verified");
+    for (const version of CACHED_SEARCH_CODEX_VERSIONS) expect(codexWebSearch(version).status).toBe("verified");
+    // A newer release, or none at all, is not offered until the test passes on it.
+    expect(codexWebSearch("99.0.0")).toMatchObject({ status: "unverified" });
+    expect(codexWebSearch(null)).toMatchObject({ status: "unverified" });
   });
 });
 

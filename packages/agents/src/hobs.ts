@@ -6,12 +6,14 @@ import {
   OverrideWidens,
   UndeclaredOperation,
   UnknownCharm,
+  UnofferedAnswer,
   type UpdateAgentPayload,
   type UpdateHobPermissionsPayload,
 } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  ALLOW_OR_NEVER_OPERATIONS,
   type ChangeActor,
   type CharmDeclaration,
   type CharmId,
@@ -153,6 +155,17 @@ const checkOverrides = (
       });
 };
 
+/** An override of Ask for an operation that takes Allow or Never only, which is never stored (ADR 036). */
+const checkOffered = (policy: HobPolicy): UnofferedAnswer | undefined => {
+  const asked = ALLOW_OR_NEVER_OPERATIONS.filter((operation) => policy.overrides[operation] === "ask");
+  return asked.length === 0
+    ? undefined
+    : new UnofferedAnswer({
+        operations: asked,
+        message: `${asked.join(", ")} takes Allow or Never, not Ask`,
+      });
+};
+
 /** An override for a Charm operation no Charm the hub holds declares, which is never stored (ADR 031). */
 const checkDeclared = (
   overrides: CharmOverrides,
@@ -180,14 +193,15 @@ const checkHeld = (
 
 /**
  * The answers a change gives checked, when it gives any: a Charm the hub does not hold is refused
- * first, then a Charm override no Charm declares, then any override that widens its preset.
+ * first, then a Charm override no Charm declares, then an Ask for an operation that takes none,
+ * then any override that widens its preset.
  */
 const checkAnswers = (
   payload: UpdateHobPermissionsPayload,
   preset: SafetyPreset,
   policy: HobPolicy,
   charms: ReadonlyArray<CharmDeclaration>,
-): UnknownCharm | UndeclaredOperation | OverrideWidens | undefined => {
+): UnknownCharm | UndeclaredOperation | UnofferedAnswer | OverrideWidens | undefined => {
   const granted = payload.charms?.granted;
   if (granted !== undefined) {
     const unknown = checkHeld(granted, charms);
@@ -198,6 +212,7 @@ const checkAnswers = (
   const charmOperations = declaredOperations(charms);
   return (
     (charmOverrides && checkDeclared(charmOverrides, charmOperations)) ??
+    checkOffered(policy) ??
     checkOverrides(preset, policy, charmOperations)
   );
 };
@@ -377,7 +392,10 @@ export class HobService extends Context.Service<
       id: AgentId,
       payload: UpdateHobPermissionsPayload,
       actor?: ChangeActor,
-    ) => Effect.Effect<Agent, AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm>;
+    ) => Effect.Effect<
+      Agent,
+      AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm | UnofferedAnswer
+    >;
     /**
      * `update` and `updatePolicy` as one configuration version, made by `actor`: both are checked
      * before either is stored, so a change one of them refuses stores nothing (ADR 034).
@@ -388,7 +406,7 @@ export class HobService extends Context.Service<
       actor: ChangeActor,
     ) => Effect.Effect<
       Agent,
-      InvalidHob | AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm
+      InvalidHob | AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm | UnofferedAnswer
     >;
   }
 >()("@hobbots/agents/HobService") {

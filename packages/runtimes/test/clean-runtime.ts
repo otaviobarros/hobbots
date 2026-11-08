@@ -96,7 +96,12 @@ export const cleanRuntimeFixture = (root: string): CleanRuntimeFixture => {
   write(join(home, ".claude", "CLAUDE.md"), "Marker home-claude-instructions.\n");
   write(
     join(home, ".claude", "settings.json"),
-    JSON.stringify({ ...hookSettings(marker("home-claude-hook")), enabledPlugins: { "home-plugin@local": true } }),
+    JSON.stringify({
+      ...hookSettings(marker("home-claude-hook")),
+      enabledPlugins: { "home-plugin@local": true },
+      // A web setting of the user's own, which no hob's turn reads (ADR 036).
+      permissions: { allow: ["WebFetch", "WebSearch"] },
+    }),
   );
   write(
     join(home, ".claude.json"),
@@ -125,7 +130,8 @@ export const cleanRuntimeFixture = (root: string): CleanRuntimeFixture => {
   write(join(home, ".codex", "AGENTS.md"), "Marker home-codex-instructions.\n");
   write(
     join(home, ".codex", "config.toml"),
-    `[mcp_servers.home-mcp-tool]\ncommand = "sh"\nargs = ["-c", "touch '${marker("home-codex-mcp")}'"]\n`,
+    // Live search reaches any page, which no hob's turn reads from here (ADR 036).
+    `web_search = "live"\n\n[mcp_servers.home-mcp-tool]\ncommand = "sh"\nargs = ["-c", "touch '${marker("home-codex-mcp")}'"]\n`,
   );
 
   // The shared folder, which Hobbots serves under Everyone.
@@ -140,7 +146,7 @@ export const cleanRuntimeFixture = (root: string): CleanRuntimeFixture => {
   write(join(repo, ".mcp.json"), JSON.stringify({ mcpServers: { "repo-mcp-tool": mcpServer(marker("repo-mcp")) } }));
   write(
     join(repo, ".codex", "config.toml"),
-    `[mcp_servers.repo-mcp-tool]\ncommand = "sh"\nargs = ["-c", "touch '${marker("repo-codex-mcp")}'"]\n`,
+    `web_search = "live"\n\n[mcp_servers.repo-mcp-tool]\ncommand = "sh"\nargs = ["-c", "touch '${marker("repo-codex-mcp")}'"]\n`,
   );
 
   // The library's revisions, as the hub keeps them, and the `~/.agents` skill as the hub serves it.

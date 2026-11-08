@@ -23,3 +23,10 @@ export const sandboxGap = (declaration: Declaration): "unsupported" | "unverifie
  */
 export const needsSandbox = (operation: AnyOperation, declaration: Declaration): boolean =>
   policySandbox(declaration) === "unavailable" && SANDBOX_OPERATIONS.includes(operation);
+
+/**
+ * Whether Search the web is not offered to the hob, whatever its answer: its runtime has no search
+ * the hub can hold here, such as a Codex release whose cached search is not yet checked (ADR 036).
+ */
+export const notOffered = (operation: AnyOperation, declaration: Declaration): boolean =>
+  operation === "search-web" && declaration.webSearch.status !== "verified";

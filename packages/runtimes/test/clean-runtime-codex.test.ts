@@ -130,6 +130,24 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  /** One turn under `turnConfig`, with the stand-in model saying hello. */
+  const turnWith = (turnConfig: CodexTurnConfig, overrides: Partial<PromptRequest>) => {
+    model.moves.push({ say: "Hello." });
+    return Effect.runPromise(
+      Stream.runCollect(
+        runCodexTurn(turnConfig, {
+          prompt: "Say hello.",
+          sessionId: null,
+          instructions: "You are Pip.",
+          instructionsChanged: false,
+          model: null,
+          effort: null,
+          ...overrides,
+        }),
+      ).pipe(Effect.exit),
+    );
+  };
+
   const turn = async (overrides: Partial<PromptRequest>, moves: ReadonlyArray<Move> = [{ say: "Hello." }]) => {
     const { approvals } = approvalsAnswering(approve, access);
     const asked = model.requests.length;
@@ -299,6 +317,56 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     expect(events.filter((event) => event._tag === "SkillUsed")).toEqual([
       { _tag: "SkillUsed", source: "library", name: SET_SIBLING, explicit: false, set: TEAM_SET },
     ]);
+  });
+
+  /** The web search tool each model request of the turns since `asked` carried, as Codex sent it. */
+  const searchTools = (asked: number) =>
+    model.requests
+      .slice(asked)
+      .map((request) =>
+        (request.tools ?? []).filter((tool) => tool.type === "web_search" || tool.name === "web_search"),
+      );
+
+  // covers RT-001, PE-001, ADR 036
+  it("[TC-RT-1266-09] a hob allowed to search is offered Codex's cached search only, on a new thread and a resumed one", {
+    timeout: 120_000,
+  }, async () => {
+    const searching = { ...config, cachedSearch: Effect.succeed(true) };
+    const asked = model.requests.length;
+    const first = await turnWith(searching, { tools: access, webSearch: true });
+    expect(Exit.isSuccess(first), String(first)).toBe(true);
+    const started = (Exit.isSuccess(first) ? first.value : []).find((event) => event._tag === "SessionStarted");
+    const sessionId = started?._tag === "SessionStarted" ? started.sessionId : null;
+    expect(sessionId).not.toBeNull();
+    const resumed = await turnWith(searching, { tools: access, webSearch: true, sessionId });
+    expect(Exit.isSuccess(resumed), String(resumed)).toBe(true);
+    const offered = searchTools(asked);
+    expect(offered.length).toBe(2);
+    // Cached search keeps to OpenAI's index: the model is never let fetch a page (ADR 036).
+    for (const tools of offered) expect(tools).toEqual([expect.objectContaining({ external_web_access: false })]);
+  });
+
+  // covers RT-001, PE-001, ADR 036
+  it("[TC-RT-1266-10] a hob set to Never, or a turn the hub did not let search, is offered no search", {
+    timeout: 120_000,
+  }, async () => {
+    const searching = { ...config, cachedSearch: Effect.succeed(true) };
+    const never = {
+      ...access,
+      policy: { ...access.policy, hob: { ...EMPTY_HOB_POLICY, overrides: { "search-web": "deny" } } },
+    } as const;
+    const asked = model.requests.length;
+    for (const exit of [
+      await turnWith(searching, { tools: never, webSearch: true }),
+      await turnWith(searching, { tools: access }),
+      // A Codex the contract test did not hold searches for no hob.
+      await turnWith(config, { tools: access, webSearch: true }),
+      // A chat-only turn, whatever the user's own setting says.
+      await turnWith(searching, {}),
+    ]) {
+      expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    }
+    expect(searchTools(asked)).toEqual([[], [], [], []]);
   });
 
   // covers RT-001, ADR 029

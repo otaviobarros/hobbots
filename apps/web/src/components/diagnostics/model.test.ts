@@ -31,6 +31,7 @@ const health = (availability: RuntimeHealth["availability"], version: string | n
       hubTools: enforcement,
       toolEvents: enforcement,
       toolInterruption: enforcement,
+      webSearch: enforcement,
     },
   });
 

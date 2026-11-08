@@ -112,6 +112,16 @@ export class OverrideWidens extends Schema.TaggedError<OverrideWidens>()(
   { httpApiStatus: 400 },
 ) {}
 
+/**
+ * A per-hob override of Ask for an operation that takes Allow or Never only, such as Search the web
+ * (ADR 036), which is never stored.
+ */
+export class UnofferedAnswer extends Schema.TaggedError<UnofferedAnswer>()(
+  "UnofferedAnswer",
+  { operations: Schema.Array(AnyOperation), message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
+
 /** An override for a Charm operation no Charm the hub holds declares (ADR 031). */
 export class UndeclaredOperation extends Schema.TaggedError<UndeclaredOperation>()(
   "UndeclaredOperation",

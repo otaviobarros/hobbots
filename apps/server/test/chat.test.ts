@@ -462,6 +462,12 @@ describe("tool calls in a reply", () => {
     // Given, it waits for the next turn.
     hob = EMPTY_HOB_POLICY;
     expect(await statusAfter(() => (hob = { ...EMPTY_HOB_POLICY, signCommits: true }))).toBe("streaming");
+    // Search the web set to Never stops the turn that could search (ADR 036); allowed again, it goes on.
+    hob = EMPTY_HOB_POLICY;
+    expect(await statusAfter(() => (hob = { ...EMPTY_HOB_POLICY, overrides: { "search-web": "deny" } }))).toBe(
+      "interrupted",
+    );
+    expect(await statusAfter(() => (hob = EMPTY_HOB_POLICY))).toBe("streaming");
   });
 
   // covers PE-008, ADR 031
