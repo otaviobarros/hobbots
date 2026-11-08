@@ -38,6 +38,7 @@ import {
   type TaskToolLimits,
 } from "./call-scope.ts";
 import { namedFolders, requestedFolders, withFolders } from "./default-folders.ts";
+import { type DestinationDeps, missingDestinations, notThere } from "./destinations.ts";
 import type { WrapUp, WrapUpPolicy } from "./wrap-up.ts";
 
 /**
@@ -64,6 +65,8 @@ interface Deps {
   readonly limits: TaskToolLimits;
   /** What the Task leaves uncommitted in its folders, read as it completes (#586). */
   readonly wrapUp: (task: Task, attempts: ReadonlyArray<AttemptId>, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
+  readonly missingAt: DestinationDeps["missingAt"];
+  readonly approvedRemovals: DestinationDeps["approvedRemovals"];
   /** Why the file artifacts a Task returns could not be opened once it completes, or null (see `delivery.ts`). */
   readonly delivered: (
     folders: ReadonlyArray<string>,
@@ -81,10 +84,11 @@ const isQuestTop = (scope: CallScope, task: Task) =>
 
 /**
  * Refuses a completion that would read done without the delivery: a Quest whose lead does not say
- * it delivered what the user asked for (#1181), or a file no one could open afterwards (#1180).
+ * it delivered what the user asked for (#1181), a file no one could open afterwards (#1180), or a
+ * Quest with nothing where the user asked for it (#1215).
  */
 const deliveredOrRefused = (
-  { delivered, authority }: Pick<Deps, "delivered" | "authority">,
+  deps: Pick<Deps, "delivered" | "authority" | "missingAt" | "approvedRemovals" | "folderChecks" | "separator">,
   scope: CallScope,
   task: Task,
   questTop: boolean,
@@ -94,10 +98,13 @@ const deliveredOrRefused = (
     if (questTop && input.delivered !== true) {
       return yield* refuse("not-delivered", notDelivered(task, input.delivered));
     }
-    const undelivered = yield* delivered((yield* authority(scope, task)).folders, input.artifacts ?? []);
+    const undelivered = yield* deps.delivered((yield* deps.authority(scope, task)).folders, input.artifacts ?? []);
     if (undelivered !== null) {
       return yield* refuse("artifact-unreachable", `Task ${task.id} is not complete yet. ${undelivered}`);
     }
+    if (!questTop) return;
+    const missing = yield* missingDestinations(deps, scope, task);
+    if (missing.length > 0) return yield* refuse("not-at-destination", notThere(task, missing));
   });
 
 /**
@@ -251,6 +258,8 @@ export const makePlanning = ({
   limits,
   wrapUp,
   delivered,
+  missingAt,
+  approvedRemovals,
   folderChecks,
   authority,
   separator,
@@ -390,7 +399,13 @@ export const makePlanning = ({
         return yield* refuse("no-attempt", `Task ${task.id} has not started, so it has no result yet.`);
       }
       const questTop = isQuestTop(scope, task);
-      yield* deliveredOrRefused({ delivered, authority }, scope, task, questTop, input);
+      yield* deliveredOrRefused(
+        { delivered, authority, missingAt, approvedRemovals, folderChecks, separator },
+        scope,
+        task,
+        questTop,
+        input,
+      );
       const artifacts = (input.artifacts ?? []).map((artifact) => ({ ...artifact, id: ArtifactId.make(newId()) }));
       // The Quest's own result is the user's, so its lead commits what it changed or says why not (#665).
       const attempts = scope.tree.attempts.filter((each) => each.taskId === task.id).map((each) => each.id);

@@ -84,7 +84,7 @@ export const namedFolders = (
   });
 
 /** The folder `path` sits in, on a hub whose paths divide at `separator`; none for a root. */
-const parentOf = (path: string, separator: PathSeparator): string | null => {
+export const parentOf = (path: string, separator: PathSeparator): string | null => {
   const trimmed = path.endsWith(separator) ? path.slice(0, -separator.length) : path;
   const at = trimmed.lastIndexOf(separator);
   if (at <= 0) return null;

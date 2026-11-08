@@ -29,6 +29,7 @@ import {
   EMPTY_HOB_POLICY,
   type Message,
   type RuntimeKind,
+  type SafetyPreset,
   type Task,
   type TaskTree,
   Thread,
@@ -155,6 +156,8 @@ export const partyHub = (
     readonly lead?: RuntimeKind;
     /** Whether the hub reads the hob's folders, as `complete_task` does to check the files a Task returns. */
     readonly files?: boolean;
+    /** The safety preset every hob works under: Balanced unless said. */
+    readonly preset?: SafetyPreset;
   } = {},
 ) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -173,7 +176,7 @@ export const partyHub = (
       access: (agent) =>
         Effect.succeed({
           policy: {
-            preset: "balanced",
+            preset: options.preset ?? "balanced",
             sharedFolders: [project],
             hob: EMPTY_HOB_POLICY,
             dataFolder: join(temp, "data"),

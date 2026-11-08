@@ -148,9 +148,13 @@ export const COMMIT_RULE =
 export const RESULTS_RULE =
   "A Task that comes after others starts once they have completed, and the hub gives it what they returned. Members never message each other: anything else one member made reaches another only when the lead calls hand_off.";
 
-/** What the lead of a Quest is told in each turn on its Task, after the rule itself. */
+/**
+ * What the lead of a Quest is told in each turn on its Task, after the rule itself. Where the user
+ * asked for the work to go is theirs to change (#1215).
+ */
 const LEAD_DUTY =
-  "So never hand a Task what the Tasks it comes after returned. Call hand_off when a member needs something else, or needs a result while it is already running.";
+  "So never hand a Task what the Tasks it comes after returned. Call hand_off when a member needs something else, or needs a result while it is already running. " +
+  "Where the user asked for the work to go is theirs to change: when it cannot go there, escalate a member's question about where else to put it, or ask the user, and never choose another place yourself.";
 
 /**
  * What a turn on `task` is told when that Task leads a Quest: the rule, then the lead's duty. Both
