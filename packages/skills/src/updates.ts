@@ -165,6 +165,23 @@ export const SkillUpdatesLive = Layer.effect(
         return { ...added, rolledOut: rolledOut.value };
       });
 
+    /**
+     * Upstream holds content the library has already: Updates is cleared. An Update that stopped after
+     * adding that revision and before its rollout has its rollout finished first; a `pending` rollout
+     * moves nothing once it ran, so a rollback made since stays.
+     */
+    const settleKnown = (skillId: SkillId, had: SkillRevision) =>
+      Effect.gen(function* () {
+        if ((yield* log.get(skillId))?.hash === had.hash) {
+          const finished = yield* library
+            .rollOutRevision(skillId, had.hash, had.addedBy, "pending")
+            .pipe(Effect.orElseSucceed(() => null));
+          if (finished !== null) yield* announce(finished.entries);
+        }
+        const cleared = yield* log.clear(skillId);
+        if (cleared !== null) yield* announce(cleared.entries);
+      });
+
     /** Compares one skill of `source` with what the source holds now; a problem when it cannot. */
     const checkSkill = (
       skill: Skill,
@@ -185,16 +202,7 @@ export const SkillUpdatesLive = Layer.effect(
         // Content the library has already, upstream unchanged or back to an earlier revision, is no update.
         const had = revisions.find((revision) => revision.hash === upstream.hash);
         if (had !== undefined) {
-          // An Update that stopped after adding the revision and before its rollout: the rollout is
-          // finished first. A `pending` rollout moves nothing once it ran, so a rollback made since stays.
-          if ((yield* log.get(skill.id))?.hash === upstream.hash) {
-            const finished = yield* library
-              .rollOutRevision(skill.id, upstream.hash, had.addedBy, "pending")
-              .pipe(Effect.orElseSucceed(() => null));
-            if (finished !== null) yield* announce(finished.entries);
-          }
-          const cleared = yield* log.clear(skill.id);
-          if (cleared !== null) yield* announce(cleared.entries);
+          yield* settleKnown(skill.id, had);
           return { problem: null, updated: false };
         }
         const update = yield* updateOf(skill, latest, source, upstream, { commit: read.commit, at: context.at });
