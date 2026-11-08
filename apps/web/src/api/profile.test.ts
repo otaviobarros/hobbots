@@ -4,12 +4,16 @@ import { firstHobPayload, newDraft } from "./first-hob.ts";
 import {
   changeCount,
   draftProblem,
+  handOverBlockText,
   isDirty,
   pickRole,
   profileDraft,
   profileEdit,
   rebaseDraft,
+  retireChoiceCopy,
+  retireChoices,
   retiredSummary,
+  retirePayload,
   roleProblem,
   summonerOf,
 } from "./profile.ts";
@@ -166,6 +170,30 @@ describe("hob profile", () => {
     expect(retiredSummary("Pip", "stop", false)).toBe("Pip is asleep. Its threads are kept and stay readable.");
     expect(retiredSummary("Pip", "finish", true)).toMatch(/^Pip finishes the replies/);
     expect(retiredSummary("Pip", "stop", true)).toMatch(/^Pip's running replies were stopped/);
+    expect(retiredSummary("Pip", "hand-over", true, "Rook")).toBe(
+      "Pip's open Tasks went to Rook. Its threads are kept.",
+    );
+    expect(retiredSummary("Pip", "finish-first", false)).toMatch(/^Pip finishes its open Tasks, then retires/);
+  });
+
+  // covers AG-006
+  it("[TC-AG-1247] offers handing over or finishing first only for a hob with open Tasks, and sends the choice made", () => {
+    expect(retireChoices(0, false)).toEqual(["finish", "stop"]);
+    expect(retireChoices(2, false)).toEqual(["finish-first", "hand-over", "stop"]);
+    // A hob already finishing first can still be handed over or stopped.
+    expect(retireChoices(2, true)).toEqual(["hand-over", "stop"]);
+    const rook = AgentId.make("rook");
+    expect(retirePayload("hand-over", null)).toBeNull();
+    expect(retirePayload("hand-over", rook)).toEqual({ openWork: "hand-over", handOverTo: rook });
+    expect(retirePayload("finish-first", null)).toEqual({ openWork: "finish-first" });
+    expect(retirePayload("stop", rook)).toEqual({ activeWork: "stop" });
+    expect(retireChoiceCopy("stop", "Pip", true).note).toMatch(/open Tasks fail/);
+    expect(handOverBlockText({ reason: "lineage-owner", message: "" }, "Rook")).toBe(
+      "Rook already works on the Task above this one.",
+    );
+    expect(handOverBlockText({ reason: "owner-unavailable", message: "" }, "Rook")).toBe(
+      "Rook is retiring, so it takes no new work.",
+    );
   });
 
   it("takes a starter role with its title, sigil, hat and tool, as one edit", () => {

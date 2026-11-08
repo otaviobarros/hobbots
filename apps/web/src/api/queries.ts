@@ -1,21 +1,12 @@
 import type {
   CreateAgentPayload,
   HobPermissions,
+  RetireAgentPayload,
   SetBrainPayload,
   UpdateAgentPayload,
   UpdateHobPermissionsPayload,
 } from "@hobbots/api";
-import type {
-  Agent,
-  AgentId,
-  Brain,
-  Message,
-  MessageId,
-  RetireWork,
-  RuntimeKind,
-  ThreadId,
-  UsagePeriod,
-} from "@hobbots/domain";
+import type { Agent, AgentId, Brain, Message, MessageId, RuntimeKind, ThreadId, UsagePeriod } from "@hobbots/domain";
 import { messagePreview, Thread } from "@hobbots/domain";
 import { keepPreviousData, type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { periodStart } from "../lib/usage.ts";
@@ -177,11 +168,25 @@ export const usePauseHob = (agentId: AgentId) =>
     call((c) => (pause ? c.agents.pause({ params: { agentId } }) : c.agents.wake({ params: { agentId } }))),
   );
 
-/** Retires a hob; its replies finish or stop, and nothing is deleted. */
+/**
+ * Retires a hob, or has it finish its open Tasks first (#408): its replies finish or stop, its open
+ * Tasks may go to another hob, and nothing is deleted.
+ */
 export const useRetireHob = (agentId: AgentId) =>
-  useHobChange((activeWork: RetireWork) =>
-    call((c) => c.agents.retire({ params: { agentId }, payload: { activeWork } })),
-  );
+  useHobChange((payload: RetireAgentPayload) => call((c) => c.agents.retire({ params: { agentId }, payload })));
+
+/**
+ * What the hob still has open, which Retire lists (#408), each Task checked against `handOverTo`
+ * when one is picked. Read each time Retire opens, since work moves on while it is closed.
+ */
+export const openWorkQuery = (agentId: AgentId, handOverTo: AgentId | null) =>
+  queryOptions({
+    queryKey: ["agents", agentId, "openWork", handOverTo] as const,
+    queryFn: () =>
+      call((c) => c.agents.openWork({ params: { agentId }, query: handOverTo === null ? {} : { handOverTo } })),
+    staleTime: 0,
+    placeholderData: keepPreviousData,
+  });
 
 /** Brings a retired hob back, active with all its chats. */
 export const useBringBackHob = () =>

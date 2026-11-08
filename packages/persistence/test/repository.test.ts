@@ -624,6 +624,52 @@ describe("HobbotsRepository", () => {
     expect(result.none).toEqual([]);
   });
 
+  // covers AG-006, DP-003
+  it("[TC-AG-1246] stores a hob's wait to retire, keeps it through a pause and ends it when the hob retires", async () => {
+    const hob = new Agent({
+      id: AgentId.make("wren"),
+      name: "Wren",
+      roleTitle: "Guide",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+      lookSeed: 1,
+      lookColor: "violet",
+      configVersion: 1,
+      createdAt: now,
+    });
+    const retiring = { since: "2026-11-08T12:00:00.000Z", by: YOU };
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(hob);
+      const started = yield* repo.setAgentRetiring(hob.id, retiring, YOU);
+      const again = yield* repo.setAgentRetiring(hob.id, { ...retiring, since: "2026-11-09T12:00:00.000Z" }, YOU);
+      // A pause computed from a read made before the wait began does not undo it.
+      const paused = yield* repo.setAgentStatus(new Agent({ ...hob, status: "paused" }), "active");
+      const retired = yield* repo.setAgentStatus(
+        new Agent({ ...hob, status: "retired", retiredAt: "2026-11-08T13:00:00.000Z" }),
+        "paused",
+      );
+      const afterRetired = yield* repo.setAgentRetiring(hob.id, retiring, YOU);
+      return {
+        started: Option.map(started, (each) => each.value.retiring),
+        again: Option.isSome(again),
+        paused: Option.map(paused, (each) => [each.value.status, each.value.retiring]),
+        retired: Option.map(retired, (each) => [each.value.status, each.value.retiring]),
+        afterRetired: Option.isSome(afterRetired),
+        stored: (yield* repo.findAgent(hob.id)).pipe(Option.map((each) => each.retiring)),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result.started).toEqual(Option.some(retiring));
+    expect(result.again).toBe(false);
+    expect(result.paused).toEqual(Option.some(["paused", retiring]));
+    expect(result.retired).toEqual(Option.some(["retired", null]));
+    expect(result.afterRetired).toBe(false);
+    expect(result.stored).toEqual(Option.some(null));
+  });
+
   // covers DP-003, CH-008
   it("[TC-DP-050] keeps queued messages in order, starts one with its reply after the thread's messages and removes only queued ones", async () => {
     const result = await Effect.gen(function* () {

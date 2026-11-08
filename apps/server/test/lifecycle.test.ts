@@ -230,6 +230,30 @@ describe("retiring hobs", () => {
   });
 
   // covers AG-006
+  it("[TC-AG-1244] lists a hob's open work, retires one with none open at once when asked to finish first, and refuses a hand-over to itself", async () => {
+    const { agent } = await summon();
+    expect(await request("GET", `/api/agents/${agent.id}/open-work?handOverTo=${agent.id}`)).toMatchObject({
+      status: 200,
+      body: { agentId: agent.id, tasks: [], approvals: [], backpackItems: [] },
+    });
+    expect((await request("GET", "/api/agents/hob_nobody/open-work")).status).toBe(404);
+
+    const toItself = await request("POST", `/api/agents/${agent.id}/retire`, {
+      openWork: "hand-over",
+      handOverTo: agent.id,
+    });
+    expect(toItself).toMatchObject({ status: 409, body: { _tag: "HandOverRefused", agentId: agent.id } });
+    expect((await request("GET", "/api/agents")).body).toMatchObject([{ id: agent.id, status: "active" }]);
+
+    const retired = await request("POST", `/api/agents/${agent.id}/retire`, { openWork: "finish-first" });
+    expect(retired).toMatchObject({ status: 200, body: { id: agent.id, status: "retired", retiring: null } });
+    expect((await request("POST", `/api/agents/${agent.id}/retire`, { openWork: "finish-first" })).body).toMatchObject({
+      _tag: "HobUnavailable",
+      status: "retired",
+    });
+  });
+
+  // covers AG-006
   it("[TC-AG-034] lets a running reply finish when retiring with finish, and asks which", async () => {
     const { agent, thread } = await summon();
     await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });

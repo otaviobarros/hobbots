@@ -5,6 +5,7 @@ import {
   ArtifactId,
   ancestorsOf,
   DelegationId,
+  hobStanding,
   isTerminalTask,
   MilestoneId,
   NoteId,
@@ -17,6 +18,7 @@ import {
   type TaskToolInput,
   type TaskToolRefused,
   type TaskTree,
+  takesNewWork,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { type Authority, delegatedAuthority, narrowBy, operationsOf, type PathSeparator } from "./authority.ts";
@@ -92,8 +94,8 @@ const findHob = (hobs: Deps["hobs"], named: string): Effect.Effect<Agent, TaskTo
       ? byId.value
       : (yield* hobs.listAgents).find((agent) => agent.name.trim().toLowerCase() === wanted);
     if (hob === undefined) return yield* refuse("hob-missing", `There is no hob named ${named}.`);
-    if (hob.status !== "active")
-      return yield* refuse("hob-missing", `${hob.name} is ${hob.status} and cannot take work.`);
+    if (!takesNewWork(hob))
+      return yield* refuse("hob-missing", `${hob.name} is ${hobStanding(hob)} and cannot take work.`);
     return hob;
   });
 

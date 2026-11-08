@@ -35,6 +35,13 @@ export const AgentStatus = Schema.Literals(["active", "paused", "retired"]);
 export type AgentStatus = typeof AgentStatus.Type;
 
 /**
+ * A hob asked to finish its open Tasks and then retire (#408): since when, and who asked. It takes
+ * no new work meanwhile, and retires once the last of its open Tasks has ended.
+ */
+export const Retiring = Schema.Struct({ since: Schema.String, by: ChangeActor });
+export type Retiring = typeof Retiring.Type;
+
+/**
  * A hob's role: a starter role or a title in the user's own words, with the sigil, hat and tool that
  * go with it. A label only; it grants nothing (ADR 005).
  */
@@ -145,6 +152,11 @@ export class Agent extends Schema.Class<Agent>("Agent")({
   status: AgentStatus.pipe(Schema.withConstructorDefault(Effect.succeed("active" as const))),
   /** When the hob was retired; null until then, and for hobs retired before this was recorded. */
   retiredAt: Schema.NullOr(Schema.String).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
+  /** Set while the hob finishes its open Tasks before it retires; null otherwise, and for hobs stored before it. */
+  retiring: Schema.NullOr(Retiring).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /** The configuration version the fields above belong to. */
   configVersion: ConfigVersion,
   ...summonedSchemaFields,
@@ -197,6 +209,24 @@ export const configurationFields = ({
 export const RetireWork = Schema.Literals(["finish", "stop"]);
 export type RetireWork = typeof RetireWork.Type;
 
+/**
+ * How a hob with open Tasks retires (#408): its running work stops and each open Task goes to
+ * another hob, or it finishes them first, taking no new work, and retires when the last one ends.
+ */
+export const RetireOpenWork = Schema.Literals(["hand-over", "finish-first"]);
+export type RetireOpenWork = typeof RetireOpenWork.Type;
+
+/** Whether the hob takes new work: active, and not finishing its open Tasks before it retires. */
+export const takesNewWork = (agent: Pick<Agent, "status" | "retiring">): boolean =>
+  agent.status === "active" && agent.retiring === null;
+
+/** Where a hob stands for new work: its status, or `retiring` while it finishes its open Tasks first. */
+export const HobStanding = Schema.Literals(["active", "paused", "retired", "retiring"]);
+export type HobStanding = typeof HobStanding.Type;
+
+export const hobStanding = (agent: Pick<Agent, "status" | "retiring">): HobStanding =>
+  agent.status !== "retired" && agent.retiring !== null ? "retiring" : agent.status;
+
 export class InvalidAgentTransition extends Schema.TaggedError<InvalidAgentTransition>()("InvalidAgentTransition", {
   agentId: AgentId,
   from: AgentStatus,
@@ -223,9 +253,19 @@ const move = (
 export const AgentTransitions = {
   pause: (agent: Agent): Agent | InvalidAgentTransition => move(agent, "pause", ["active"], "paused"),
   wake: (agent: Agent): Agent | InvalidAgentTransition => move(agent, "wake", ["paused"], "active"),
-  /** Records `at` (an ISO-8601 time) as when the hob retired. */
+  /** Records `at` (an ISO-8601 time) as when the hob retired; it no longer waits to retire. */
   retire: (agent: Agent, at: string): Agent | InvalidAgentTransition =>
-    move(agent, "retire", ["active", "paused"], "retired", { retiredAt: at }),
+    move(agent, "retire", ["active", "paused"], "retired", { retiredAt: at, retiring: null }),
+  /**
+   * Has the hob finish its open Tasks before it retires, as `retiring` says (#408). It keeps its
+   * status, so a paused hob works them once woken. Asking again keeps the first request.
+   */
+  retireWhenDone: (agent: Agent, retiring: Retiring): Agent | InvalidAgentTransition => {
+    if (agent.status === "retired") {
+      return new InvalidAgentTransition({ agentId: agent.id, from: agent.status, action: "retire when done" });
+    }
+    return agent.retiring === null ? new Agent({ ...agent, retiring }) : agent;
+  },
   /** Brings a retired hob back: active again, with no retirement time. */
   bringBack: (agent: Agent): Agent | InvalidAgentTransition =>
     move(agent, "bring back", ["retired"], "active", { retiredAt: null }),
