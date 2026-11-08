@@ -23,6 +23,7 @@ import threadReads from "../src/migrations/0053_thread_reads.ts";
 import milestoneReachedBy from "../src/migrations/0074_milestone_reached_by.ts";
 import hobVisibility from "../src/migrations/0079_hob_visibility.ts";
 import hobGoodAt from "../src/migrations/0080_hob_good_at.ts";
+import hobActors from "../src/migrations/0081_hob_actors.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1386,6 +1387,101 @@ describe("0080_hob_good_at", () => {
 
     expect(entries.map((e) => e.payload)).toMatchObject([
       { _tag: "AgentUpserted", agent: { id: "pip", goodAt: null } },
+    ]);
+  });
+});
+
+describe("0081_hob_actors", () => {
+  // covers AG-002, DP-003
+  it("[TC-AG-405-02] records you as the maker of every stored version and the summoner of every hob, and reads older hob events as yours", async () => {
+    // The AgentUpserted payload as the hub journaled it before 0081, with no actor and no summoner.
+    const before = {
+      _tag: "AgentUpserted",
+      agent: {
+        id: "pip",
+        name: "Pip",
+        role: "writer",
+        roleTitle: "Writer",
+        sigil: "writer",
+        hat: null,
+        tool: null,
+        goodAt: null,
+        voice: "default",
+        length: "balanced",
+        visibleToHobs: true,
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        status: "active",
+        retiredAt: null,
+        configVersion: 2,
+        createdAt: "2026-11-08T00:00:00.000Z",
+        revision: 1,
+      },
+    };
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        configVersion: 2,
+        createdAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      for (const version of [1, 2]) {
+        yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+          agentId: "pip",
+          version,
+          name: version === 1 ? "Pip" : "Quill",
+          roleTitle: "Writer",
+          instructions: "",
+          lookSeed: 1,
+          lookColor: "moss",
+          createdAt: "2026-11-08T00:00:00.000Z",
+        })}`;
+      }
+      yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;
+      yield* sql`INSERT INTO event_journal ${sql.insert({
+        sequence: 1,
+        id: "8a4e6c1d-7b2f-4e3a-9c5d-1f0e2d3c4b5a",
+        type: "AgentUpserted",
+        schemaVersion: 1,
+        occurredAt: "2026-11-08T00:00:00.000Z",
+        agentId: "pip",
+        payload: JSON.stringify(before),
+      })}`;
+      yield* hobActors;
+      return {
+        agents: yield* sql`SELECT summoned_by, summoned_for, summoned_unattended FROM agents`,
+        versions: yield* sql`SELECT version, actor FROM agent_config_versions ORDER BY version`,
+        entries: yield* (yield* EventJournal).readAfter(0),
+      };
+    }).pipe(
+      Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(TestDatabaseAt(migrationsBefore("0081"))))),
+      Effect.scoped,
+      Effect.runPromise,
+    );
+
+    expect(result.agents.map((row) => [row.summonedBy, row.summonedFor, Number(row.summonedUnattended)])).toEqual([
+      [null, null, 0],
+    ]);
+    expect(result.versions.map((row) => [row.version, JSON.parse(String(row.actor))])).toEqual([
+      [1, { _tag: "You" }],
+      [2, { _tag: "You" }],
+    ]);
+    expect(result.entries.map((e) => e.payload)).toMatchObject([
+      {
+        _tag: "AgentUpserted",
+        actor: { _tag: "You" },
+        agent: { id: "pip", summonedBy: null, summonedFor: null, summonedUnattended: false },
+      },
     ]);
   });
 });

@@ -1,5 +1,16 @@
 import { HobbotsRepository } from "@hobbots/agents";
-import { Agent, AgentId, Message, MessageId, roleFields, Thread, ThreadId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  type ChangeActor,
+  Message,
+  MessageId,
+  roleFields,
+  TaskId,
+  Thread,
+  ThreadId,
+  YOU,
+} from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
@@ -460,6 +471,59 @@ describe("HobbotsRepository", () => {
       instructions: "Be thorough.",
     });
     expect(Option.isNone(result.v3)).toBe(true);
+  });
+
+  // covers AG-002, AG-006, DP-003
+  it("[TC-AG-405-01] stores who made each version and who summoned the hob, and journals each change with its actor", async () => {
+    const chief = AgentId.make("chief");
+    const call = { scope: "task:t-hire", key: "hire-1" };
+    const byHob: ChangeActor = { _tag: "Hob", hobId: chief, call };
+    const proposed: ChangeActor = { _tag: "YouApplyingProposal", hobId: chief, proposalId: "p-1", call };
+    const first = new Agent({
+      id: agentId,
+      name: "Aldric",
+      roleTitle: "Guide",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+      lookSeed: 1,
+      lookColor: "violet",
+      configVersion: 1,
+      summonedBy: chief,
+      summonedFor: TaskId.make("t-hire"),
+      summonedUnattended: true,
+      createdAt: now,
+    });
+
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      const created = yield* repo.insertAgent(first, byHob);
+      const renamed = yield* repo.updateAgentConfig(new Agent({ ...first, name: "Bram", configVersion: 2 }), proposed);
+      const edited = yield* repo.updateAgentConfig(new Agent({ ...first, name: "Bram", configVersion: 3 }));
+      const paused = yield* repo.setAgentStatus(new Agent({ ...first, status: "paused" }), "active", byHob);
+      const woken = yield* repo.setAgentStatus(new Agent({ ...first, status: "active" }), "paused");
+      const actors = [created, renamed, edited, paused, woken].map((committed) =>
+        Option.getOrThrow(committed).entries.map((entry) => entry.payload),
+      );
+      return {
+        actors,
+        agent: Option.getOrThrow(yield* repo.findAgent(agentId)),
+        versions: yield* Effect.forEach([1, 2, 3], (version) =>
+          repo.findAgentConfig(agentId, version).pipe(Effect.map((config) => Option.getOrThrow(config).actor)),
+        ),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result.versions).toEqual([byHob, proposed, YOU]);
+    expect(result.agent).toMatchObject({ summonedBy: chief, summonedFor: "t-hire", summonedUnattended: true });
+    expect(result.actors).toMatchObject([
+      [{ _tag: "AgentUpserted", actor: byHob }],
+      [{ _tag: "AgentUpserted", actor: proposed, agent: { name: "Bram" } }],
+      [{ _tag: "AgentUpserted", actor: YOU }],
+      [{ _tag: "AgentUpserted", actor: byHob, agent: { status: "paused" } }],
+      [{ _tag: "AgentUpserted", actor: YOU, agent: { status: "active" } }],
+    ]);
   });
 
   // covers AG-006, DP-003

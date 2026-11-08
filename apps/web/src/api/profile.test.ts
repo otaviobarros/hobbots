@@ -153,8 +153,14 @@ describe("hob profile", () => {
     expect(isDirty(saved, afterAnswer)).toBe(true);
   });
 
-  it("sums up where the hob works, when it was summoned and its version", () => {
-    expect(aboutLine(hob({ configVersion: 3 }))).toMatch(/^Works on the hub · Summoned Oct \d+ · Version 3$/);
+  it("sums up where the hob works, who summoned it and when, and its version", () => {
+    const ada = { id: AgentId.make("ada"), name: "Ada" };
+    expect(aboutLine(hob({ configVersion: 3 }), [ada])).toMatch(
+      /^Works on the hub · Summoned by you on Oct \d+ · Version 3$/,
+    );
+    expect(aboutLine(hob({ summonedBy: ada.id }), [ada])).toMatch(/ · Summoned by Ada on Oct \d+ · /);
+    // A summoner deleted since is not named.
+    expect(aboutLine(hob({ summonedBy: ada.id }), [])).toMatch(/ · Summoned by another hob on Oct \d+ · /);
   });
 
   it("says what retiring did with the hob's work", () => {

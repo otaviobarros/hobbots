@@ -268,8 +268,7 @@ export const messages = {
       hat: "Hat",
       tool: "Tool",
       fromLook: "From the look",
-      note: ({ name }: { name: string }) =>
-        `A new name shows everywhere, in past chats too. ${name} hears it from its next reply.`,
+      note: "The new name shows everywhere, past chats included. Other hobs learn it from its next reply.",
     },
   },
   summon: {

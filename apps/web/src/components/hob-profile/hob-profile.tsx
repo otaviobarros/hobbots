@@ -29,6 +29,7 @@ import {
 } from "../../api/profile.ts";
 import {
   agentsQuery,
+  archivedAgentsQuery,
   modelsQuery,
   runtimesQuery,
   threadsQuery,
@@ -302,6 +303,18 @@ function ProfileHero({
   );
 }
 
+/**
+ * Where the hob works, who summoned it and when, and its version. A summoner that is not among the
+ * live hobs is looked for among the retired ones, read only then.
+ */
+function AboutLine({ hob }: { hob: Agent }) {
+  const live = useQuery(agentsQuery);
+  const summoner = hob.summonedBy;
+  const missing = summoner !== null && live.data?.some((other) => other.id === summoner) === false;
+  const retired = useQuery({ ...archivedAgentsQuery, enabled: missing });
+  return <p className="m-0 text-meta text-label">{aboutLine(hob, [...(live.data ?? []), ...(retired.data ?? [])])}</p>;
+}
+
 /** Pause or wake the hob, and the way to retire it. Both act at once, outside the save bar. */
 function TakeABreak({
   hob,
@@ -420,7 +433,7 @@ function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
 
   return (
     <form onSubmit={save} className="flex flex-col gap-4.5">
-      <NameAndLook name={name} draft={draft} disabled={update.isPending} onChange={setDraft} />
+      <NameAndLook draft={draft} disabled={update.isPending} onChange={setDraft} />
 
       <section aria-labelledby="hob-role" className={CARD}>
         <span className="flex items-center gap-2">
@@ -529,7 +542,7 @@ function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
 
       {rest}
 
-      <p className="m-0 text-meta text-label">{aboutLine(hob)}</p>
+      <AboutLine hob={hob} />
 
       <SaveBar
         name={name}

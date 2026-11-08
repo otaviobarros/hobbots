@@ -14,6 +14,7 @@ import {
   SkillRevisionHash,
   Thread,
   ThreadId,
+  YOU,
 } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
@@ -165,10 +166,10 @@ describe("applyEvent", () => {
       configVersion: 1,
       createdAt: now,
     });
-    applyEvent(client, { _tag: "AgentUpserted", agent: hob });
+    applyEvent(client, { _tag: "AgentUpserted", agent: hob, actor: YOU });
     expect(client.getQueryData(queryKeys.agents)).toBeUndefined();
     client.setQueryData(queryKeys.agents, []);
-    applyEvent(client, { _tag: "AgentUpserted", agent: hob });
+    applyEvent(client, { _tag: "AgentUpserted", agent: hob, actor: YOU });
     expect(client.getQueryData(queryKeys.agents)).toEqual([hob]);
   });
 
@@ -189,9 +190,9 @@ describe("applyEvent", () => {
     });
     client.setQueryData(queryKeys.agents, [hob]);
     const paused = new Agent({ ...hob, status: "paused" });
-    applyEvent(client, { _tag: "AgentUpserted", agent: paused });
+    applyEvent(client, { _tag: "AgentUpserted", agent: paused, actor: YOU });
     expect(client.getQueryData(queryKeys.agents)).toEqual([paused]);
-    applyEvent(client, { _tag: "AgentUpserted", agent: new Agent({ ...hob, status: "retired" }) });
+    applyEvent(client, { _tag: "AgentUpserted", agent: new Agent({ ...hob, status: "retired" }), actor: YOU });
     expect(client.getQueryData(queryKeys.agents)).toEqual([]);
   });
 
@@ -215,14 +216,14 @@ describe("applyEvent", () => {
       });
     const older = hob("fern", null);
     const wren = hob("wren", "2026-10-30T12:00:00.000Z");
-    applyEvent(client, { _tag: "AgentUpserted", agent: wren });
+    applyEvent(client, { _tag: "AgentUpserted", agent: wren, actor: YOU });
     expect(client.getQueryData(queryKeys.archivedAgents)).toBeUndefined();
     client.setQueryData(queryKeys.archivedAgents, [older]);
-    applyEvent(client, { _tag: "AgentUpserted", agent: wren });
+    applyEvent(client, { _tag: "AgentUpserted", agent: wren, actor: YOU });
     expect(client.getQueryData(queryKeys.archivedAgents)).toEqual([wren, older]);
     // Brought back elsewhere, it leaves the retired hobs.
     const back = new Agent({ ...wren, status: "active", retiredAt: null, revision: wren.revision + 1 });
-    applyEvent(client, { _tag: "AgentUpserted", agent: back });
+    applyEvent(client, { _tag: "AgentUpserted", agent: back, actor: YOU });
     expect(client.getQueryData(queryKeys.archivedAgents)).toEqual([older]);
   });
 

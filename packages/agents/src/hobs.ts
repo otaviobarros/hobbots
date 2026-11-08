@@ -12,6 +12,7 @@ import {
 import {
   Agent,
   AgentId,
+  type ChangeActor,
   type CharmDeclaration,
   type CharmId,
   type CharmOperation,
@@ -25,6 +26,7 @@ import {
   type HobPolicy,
   heldCharms,
   hobAnswers,
+  hobBehind,
   isNarrowerOrEqual,
   normalizeGoodAt,
   POLICY_OPERATIONS,
@@ -35,6 +37,8 @@ import {
   type RuntimeModels,
   type SafetyPreset,
   starterRole,
+  type TaskId,
+  YOU,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission } from "./admission.ts";
@@ -279,12 +283,34 @@ const editableFields = [
   "visibleToHobs",
 ] as const satisfies ReadonlyArray<keyof UpdateAgentPayload & keyof Agent>;
 
+/**
+ * Who summons a new hob and for what (ADR 034). The hob behind the actor, the one that summons it or
+ * proposes it, is recorded as the hob that summoned it; you summon it when the actor is you.
+ */
+export interface Summoning {
+  readonly actor: ChangeActor;
+  /** The Task it is summoned for; none when left out. */
+  readonly taskId?: TaskId | null;
+  /** Whether a hob summons it without a card for you; not when left out. */
+  readonly unattended?: boolean;
+}
+
+const BY_YOU: Summoning = { actor: YOU };
+
 export class HobService extends Context.Service<
   HobService,
   {
-    readonly create: (payload: CreateAgentPayload) => Effect.Effect<Agent, InvalidHob>;
-    /** Applies an edit as the hob's next configuration version; an edit that changes nothing adds none. */
-    readonly update: (id: AgentId, payload: UpdateAgentPayload) => Effect.Effect<Agent, InvalidHob | AgentNotFound>;
+    /** Creates the hob as summoned by `summoning`, by you when left out. */
+    readonly create: (payload: CreateAgentPayload, summoning?: Summoning) => Effect.Effect<Agent, InvalidHob>;
+    /**
+     * Applies an edit as the hob's next configuration version, made by `actor` (you when left out);
+     * an edit that changes nothing adds none.
+     */
+    readonly update: (
+      id: AgentId,
+      payload: UpdateAgentPayload,
+      actor?: ChangeActor,
+    ) => Effect.Effect<Agent, InvalidHob | AgentNotFound>;
     /**
      * `update` with `check` run first and `then` after it, all under the hob's lock, so nothing else
      * that takes the lock (a thread archived, a turn started) lands between them. A failed check
@@ -299,11 +325,12 @@ export class HobService extends Context.Service<
     /**
      * Changes the hob's own folders, hidden shared folders or overrides as its next configuration
      * version, checked against the installation's current preset and shared folders (ADR 014).
-     * A change that changes nothing adds no version.
+     * A change that changes nothing adds no version. Made by `actor`, you when left out.
      */
     readonly updatePolicy: (
       id: AgentId,
       payload: UpdateHobPermissionsPayload,
+      actor?: ChangeActor,
     ) => Effect.Effect<Agent, AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm>;
   }
 >()("@hobbots/agents/HobService") {
@@ -324,7 +351,7 @@ export class HobService extends Context.Service<
       // change may land between reading the hob and storing the next version; then `change` applies
       // again on top of that one, so both survive. `change` returns the hob unchanged for a no-op.
       // Runs under the hob's lock.
-      const storeVersion = <E>(id: AgentId, change: (agent: Agent) => Effect.Effect<Agent, E>) =>
+      const storeVersion = <E>(id: AgentId, change: (agent: Agent) => Effect.Effect<Agent, E>, actor: ChangeActor) =>
         Effect.gen(function* () {
           while (true) {
             const current = yield* repo.findAgent(id);
@@ -333,6 +360,7 @@ export class HobService extends Context.Service<
             if (next === current.value) return next;
             const updated = yield* repo.updateAgentConfig(
               new Agent({ ...next, configVersion: current.value.configVersion + 1 }),
+              actor,
             );
             if (Option.isSome(updated)) {
               yield* bus.publish(updated.value.entries);
@@ -340,8 +368,8 @@ export class HobService extends Context.Service<
             }
           }
         });
-      const nextVersion = <E>(id: AgentId, change: (agent: Agent) => Effect.Effect<Agent, E>) =>
-        admission.withHob(id, storeVersion(id, change));
+      const nextVersion = <E>(id: AgentId, change: (agent: Agent) => Effect.Effect<Agent, E>, actor: ChangeActor) =>
+        admission.withHob(id, storeVersion(id, change, actor));
 
       // A retry carries the same id and fields; the same id with other fields is another hob.
       const retried = (existing: Agent, payload: CreateAgentPayload) =>
@@ -349,7 +377,10 @@ export class HobService extends Context.Service<
           ? Effect.succeed(existing)
           : Effect.fail(new InvalidHob({ field: "id", message: "Another hob already has this id" }));
 
-      const create = Effect.fn("HobService.create")(function* (payload: CreateAgentPayload) {
+      const create = Effect.fn("HobService.create")(function* (
+        payload: CreateAgentPayload,
+        summoning: Summoning = BY_YOU,
+      ) {
         const { id = AgentId.make(crypto.randomUUID()), ...fields } = withDefaults(payload);
         // Reconcile first, so a retry succeeds even if the runtime's model list changed since.
         const earlier = Option.getOrUndefined(yield* repo.findAgent(id));
@@ -361,9 +392,12 @@ export class HobService extends Context.Service<
           ...fields,
           id,
           configVersion: 1,
+          summonedBy: hobBehind(summoning.actor),
+          summonedFor: summoning.taskId ?? null,
+          summonedUnattended: summoning.unattended ?? false,
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
-        const inserted = yield* repo.insertAgent(agent);
+        const inserted = yield* repo.insertAgent(agent, summoning.actor);
         if (Option.isNone(inserted)) {
           // A concurrent request with the same id inserted first.
           const raced = yield* repo.findAgent(id).pipe(Effect.map(Option.getOrThrow));
@@ -402,8 +436,12 @@ export class HobService extends Context.Service<
           });
       };
 
-      const update = Effect.fn("HobService.update")(function* (id: AgentId, edit: UpdateAgentPayload) {
-        return yield* nextVersion(id, applyEdit(edit));
+      const update = Effect.fn("HobService.update")(function* (
+        id: AgentId,
+        edit: UpdateAgentPayload,
+        actor: ChangeActor = YOU,
+      ) {
+        return yield* nextVersion(id, applyEdit(edit), actor);
       });
 
       const updateThen = <A, E>(
@@ -413,12 +451,13 @@ export class HobService extends Context.Service<
         then: (agent: Agent) => Effect.Effect<A, E>,
       ) =>
         admission
-          .withHob(id, check.pipe(Effect.andThen(storeVersion(id, applyEdit(edit))), Effect.flatMap(then)))
+          .withHob(id, check.pipe(Effect.andThen(storeVersion(id, applyEdit(edit), YOU)), Effect.flatMap(then)))
           .pipe(Effect.withSpan("HobService.updateThen"));
 
       const updatePolicy = Effect.fn("HobService.updatePolicy")(function* (
         id: AgentId,
         payload: UpdateHobPermissionsPayload,
+        actor: ChangeActor = YOU,
       ) {
         // Own folders are checked on the hub and stored canonical, once each, where first added.
         const ownFolders = payload.ownFolders && [
@@ -429,40 +468,43 @@ export class HobService extends Context.Service<
         const hiddenSharedFolders = payload.hiddenSharedFolders && [
           ...new Set(yield* Effect.forEach(payload.hiddenSharedFolders, folders.identity)),
         ];
-        return yield* nextVersion(id, (agent) =>
-          Effect.gen(function* () {
-            // Read inside the retry, so each attempt checks against the setup as it is then.
-            const { safetyPreset, approvedFolders } = yield* setup.get;
-            const policy = changedPolicy(agent.policy, {
-              ...payload,
-              ...(ownFolders && { ownFolders }),
-              ...(hiddenSharedFolders && { hiddenSharedFolders }),
-            });
-            if (samePolicy(policy, agent.policy)) return agent;
-            // Only what changes is checked, so a shared folder removed in setup since does not block
-            // an unrelated change, and a stricter preset does not reject an override kept as it was.
-            if (ownFolders !== undefined) {
-              const shared = ownFolders.find((folder) => approvedFolders.includes(folder));
-              if (shared !== undefined) {
-                return yield* new InvalidFolder({
-                  folder: shared,
-                  message: `${shared} is already shared with every hob`,
-                });
+        return yield* nextVersion(
+          id,
+          (agent) =>
+            Effect.gen(function* () {
+              // Read inside the retry, so each attempt checks against the setup as it is then.
+              const { safetyPreset, approvedFolders } = yield* setup.get;
+              const policy = changedPolicy(agent.policy, {
+                ...payload,
+                ...(ownFolders && { ownFolders }),
+                ...(hiddenSharedFolders && { hiddenSharedFolders }),
+              });
+              if (samePolicy(policy, agent.policy)) return agent;
+              // Only what changes is checked, so a shared folder removed in setup since does not block
+              // an unrelated change, and a stricter preset does not reject an override kept as it was.
+              if (ownFolders !== undefined) {
+                const shared = ownFolders.find((folder) => approvedFolders.includes(folder));
+                if (shared !== undefined) {
+                  return yield* new InvalidFolder({
+                    folder: shared,
+                    message: `${shared} is already shared with every hob`,
+                  });
+                }
               }
-            }
-            if (hiddenSharedFolders !== undefined) {
-              const isShared = yield* sameFolderIn(folders, approvedFolders);
-              const unknown = yield* Effect.findFirst(policy.hiddenSharedFolders, (folder) =>
-                Effect.map(isShared(folder), (shared) => !shared),
-              ).pipe(Effect.map(Option.getOrUndefined));
-              if (unknown !== undefined) {
-                return yield* new InvalidFolder({ folder: unknown, message: `${unknown} is not a shared folder` });
+              if (hiddenSharedFolders !== undefined) {
+                const isShared = yield* sameFolderIn(folders, approvedFolders);
+                const unknown = yield* Effect.findFirst(policy.hiddenSharedFolders, (folder) =>
+                  Effect.map(isShared(folder), (shared) => !shared),
+                ).pipe(Effect.map(Option.getOrUndefined));
+                if (unknown !== undefined) {
+                  return yield* new InvalidFolder({ folder: unknown, message: `${unknown} is not a shared folder` });
+                }
               }
-            }
-            const refused = checkAnswers(payload, safetyPreset, policy, charms);
-            if (refused !== undefined) return yield* refused;
-            return new Agent({ ...agent, policy });
-          }),
+              const refused = checkAnswers(payload, safetyPreset, policy, charms);
+              if (refused !== undefined) return yield* refused;
+              return new Agent({ ...agent, policy });
+            }),
+          actor,
         );
       });
 

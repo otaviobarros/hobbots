@@ -20,13 +20,10 @@ const FROM_LOOK = "look";
  * loses the way back.
  */
 export function NameAndLook({
-  name,
   draft,
   disabled,
   onChange,
 }: {
-  /** The hob's saved name, for the copy. */
-  name: string;
   draft: ProfileDraft;
   disabled: boolean;
   onChange: (update: (draft: ProfileDraft) => ProfileDraft) => void;
@@ -135,7 +132,7 @@ export function NameAndLook({
             onPick={(tool) => onChange((d) => ({ ...d, tool }))}
           />
 
-          <p className="m-0 text-detail text-label">{copy.note({ name })}</p>
+          <p className="m-0 text-detail text-label">{copy.note}</p>
         </fieldset>
       )}
     </section>

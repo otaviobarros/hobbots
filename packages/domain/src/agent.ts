@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
-import { AgentId } from "./ids.ts";
+import { ChangeActor, YOU } from "./change-actor.ts";
+import { AgentId, TaskId } from "./ids.ts";
 import { HobColor, LookSeed } from "./look.ts";
 import { EMPTY_HOB_POLICY, HobPolicy } from "./policy.ts";
 import { Revision } from "./revision.ts";
@@ -99,6 +100,28 @@ const visibilitySchemaFields = {
   ),
 };
 
+/**
+ * Who summoned the hob (ADR 034). Only you could summon a hob before this was recorded, so hob
+ * events journaled before it decode as summoned by you, as the migration leaves the hobs.
+ */
+const summonedSchemaFields = {
+  /** The hob that summoned it, or null when you did. */
+  summonedBy: Schema.NullOr(AgentId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /** The Task it was summoned for, or null when it was summoned for none. */
+  summonedFor: Schema.NullOr(TaskId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /** Whether a hob summoned it without a card for you, which counts it against the caps for those. */
+  summonedUnattended: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(false)),
+    Schema.withConstructorDefault(Effect.succeed(false)),
+  ),
+};
+
 export class Agent extends Schema.Class<Agent>("Agent")({
   id: AgentId,
   name: Schema.String,
@@ -121,6 +144,7 @@ export class Agent extends Schema.Class<Agent>("Agent")({
   retiredAt: Schema.NullOr(Schema.String).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
   /** The configuration version the fields above belong to. */
   configVersion: ConfigVersion,
+  ...summonedSchemaFields,
   createdAt: Schema.String,
   revision: Revision,
 }) {}
@@ -149,6 +173,11 @@ export class AgentConfiguration extends Schema.Class<AgentConfiguration>("AgentC
   instructions: Schema.String,
   lookSeed: LookSeed,
   lookColor: HobColor,
+  /** Who made this version (ADR 034); every version stored before it was recorded was yours. */
+  actor: ChangeActor.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(YOU)),
+    Schema.withConstructorDefault(Effect.succeed(YOU)),
+  ),
   createdAt: Schema.String,
 }) {}
 

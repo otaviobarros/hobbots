@@ -211,11 +211,23 @@ export const changeCount = (base: ProfileDraft, draft: ProfileDraft): number =>
 export const isDirty = (base: ProfileDraft, draft: ProfileDraft): boolean => changeCount(base, draft) > 0;
 
 /** Where the hob works, when it was summoned and its version, for the line under the profile. */
-export const aboutLine = (hob: Pick<Agent, "createdAt" | "configVersion">): string =>
-  `Works on the hub · ${summonedLine(hob.createdAt)} · Version ${hob.configVersion}`;
+export const aboutLine = (
+  hob: Pick<Agent, "createdAt" | "configVersion" | "summonedBy">,
+  hobs: ReadonlyArray<Pick<Agent, "id" | "name">>,
+): string => `Works on the hub · ${summonedLine(hob, hobs)} · Version ${hob.configVersion}`;
 
-/** When the hob was summoned, as "Summoned Oct 2". */
-const summonedLine = (createdAt: string): string => `Summoned ${formatMonthDay(new Date(createdAt))}`;
+/**
+ * Who summoned the hob and when, as "Summoned by you on Oct 2" or "Summoned by Ada on Oct 2" (ADR 034),
+ * the summoner looked up among `hobs`. A summoner no longer kept reads "another hob".
+ */
+const summonedLine = (
+  hob: Pick<Agent, "createdAt" | "summonedBy">,
+  hobs: ReadonlyArray<Pick<Agent, "id" | "name">>,
+): string => {
+  const by =
+    hob.summonedBy === null ? "you" : (hobs.find((other) => other.id === hob.summonedBy)?.name ?? "another hob");
+  return `Summoned by ${by} on ${formatMonthDay(new Date(hob.createdAt))}`;
+};
 
 /** The choices Retire offers for the hob's running replies, in the order shown. */
 export const RETIRE_OPTIONS: ReadonlyArray<{
