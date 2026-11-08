@@ -5,10 +5,10 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { diffLines } from "diff";
 import { skillRevisionQuery } from "../../api/skills.ts";
 import { formatDay } from "../../lib/format.ts";
 import { messages } from "./messages.ts";
+import { DiffLines } from "./skill-diff.tsx";
 import type { Say } from "./skills-flash.ts";
 import { fileChanges, type SkillsView, skillsSearchOf } from "./skills-model.ts";
 import { useSkillWrites } from "./use-skill-writes.ts";
@@ -37,15 +37,6 @@ const metaOf = (revision: SkillRevision) =>
       ...(revision.flags.length === 0 ? [] : [copy.history.flagged]),
     ],
   });
-
-/** The lines of two SKILL.md texts, each marked as added, removed or the same. */
-const linesOf = (before: string, after: string) =>
-  diffLines(before, after).flatMap((part) =>
-    part.value
-      .replace(/\n$/, "")
-      .split("\n")
-      .map((text) => ({ op: part.added ? "add" : part.removed ? "remove" : "same", text }) as const),
-  );
 
 /** What one revision changed against the one before it: its SKILL.md line by line, and how many other files moved. */
 function RevisionChanges({
@@ -77,34 +68,7 @@ function RevisionChanges({
         </div>
       )}
       {after.isSuccess && before.isSuccess && (
-        <ul className="m-0 list-none p-0 py-1">
-          {linesOf(before.data.instructions, after.data.instructions).map((line, at) => (
-            <li
-              // biome-ignore lint/suspicious/noArrayIndexKey: a diff's lines have no identity but their place (STD-REACT-020).
-              key={at}
-              className={cn(
-                // Only the lines near the viewport are laid out, however long the diff (STD-REACT-024).
-                "flex gap-2.5 px-3 py-1 font-mono text-detail [contain-intrinsic-size:auto_26px] [content-visibility:auto]",
-                line.op === "add" && "bg-[color-mix(in_srgb,var(--color-mint)_12%,transparent)] text-text-strong",
-                line.op === "remove" &&
-                  "bg-[color-mix(in_srgb,var(--color-rose)_10%,transparent)] text-text-secondary line-through",
-                line.op === "same" && "text-text-secondary",
-              )}
-            >
-              <span aria-hidden className={cn("w-2.5 flex-none", line.op === "add" ? "text-mint" : "text-rose")}>
-                {line.op === "add" ? "+" : line.op === "remove" ? "−" : " "}
-              </span>
-              <span className="sr-only">
-                {line.op === "add"
-                  ? `${copy.history.added}: `
-                  : line.op === "remove"
-                    ? `${copy.history.removed}: `
-                    : ""}
-              </span>
-              <span className="min-w-0 break-words whitespace-pre-wrap">{line.text}</span>
-            </li>
-          ))}
-        </ul>
+        <DiffLines before={before.data.instructions} after={after.data.instructions} />
       )}
     </section>
   );

@@ -10,6 +10,7 @@ import { MemoryCard } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
 import { GiveTo } from "./skill-aside.tsx";
 import { droppedLine } from "./skill-flags.tsx";
+import { SkillFollow } from "./skill-follow.tsx";
 import { ActionsCard, OriginCard, OriginRow, SkillHeader, SkillLayout } from "./skill-layout.tsx";
 import { SkillRemove } from "./skill-remove.tsx";
 import { addedByOf, ReadOnlyNote, SkillTabs, type SkillViewOf } from "./skill-tabs.tsx";
@@ -138,6 +139,7 @@ function SetAside({
         </Button>
         <SkillRemove detail={detail} hobs={hobs} say={say} label={copy.set.remove} />
       </ActionsCard>
+      <SkillFollow skill={detail.skill} list={list} say={say} />
       <OriginCard>
         <OriginRow label={copy.skill.sourceLabel}>
           {originText(originOf(detail.skill.sourceId, list.sources))}

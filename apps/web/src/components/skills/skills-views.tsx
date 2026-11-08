@@ -187,6 +187,33 @@ export function SkillsLoading() {
 }
 
 /** The library did not open: what happened, and Try again. */
+/** A list beside the library that is still being read, or could not be: the reason and Try again. */
+export function PaneNotRead({
+  failed,
+  text,
+  retry,
+  onRetry,
+}: {
+  failed: boolean;
+  text: string;
+  retry: string;
+  onRetry: () => void;
+}) {
+  return failed ? (
+    <p role="alert" className="m-0 flex items-center gap-3 rounded-card bg-notice px-4 py-3 text-ui text-text">
+      <span className="flex-1">{text}</span>
+      <Button variant="outline" size="xs" onClick={onRetry}>
+        {retry}
+      </Button>
+    </p>
+  ) : (
+    <div aria-busy="true" className="flex flex-col gap-2">
+      <Skeleton width="40ch" />
+      <Skeleton width="60%" />
+    </div>
+  );
+}
+
 export function SkillsFailed({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }) {
   return (
     <div role="alert" className="flex max-w-[680px] flex-col items-start gap-2 rounded-card bg-notice px-4 py-3">

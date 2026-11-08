@@ -34,6 +34,7 @@ export * from "./secrets.ts";
 export * from "./skill-proposals.ts";
 export * from "./skill-reviews.ts";
 export * from "./skill-turn.ts";
+export * from "./skill-updates.ts";
 export * from "./skills.ts";
 export { nextSteps } from "./steps.ts";
 export * from "./task-files.ts";

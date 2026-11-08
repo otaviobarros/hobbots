@@ -1,6 +1,8 @@
 import type { SkillsList } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { skillUpdatesQuery } from "../../api/skill-updates.ts";
 import { formatAgo, formatCount } from "../../lib/format.ts";
 import { RowList } from "../memory/memory-overview.tsx";
 import { GroupLabel, MemoryCard } from "../memory/memory-parts.tsx";
@@ -23,10 +25,26 @@ const copy = messages;
 const rowLink =
   "flex w-full items-start gap-2.5 bg-card px-3.5 py-3 text-start text-text-strong no-underline transition-colors duration-(--dur-fade) hover:bg-hover";
 
+/** Whether an update waits for the skill, and whether it takes clean ones by itself. */
+function UpdateChips({ row }: { row: SkillRow }) {
+  const updates = useQuery(skillUpdatesQuery).data;
+  if (updates === undefined || row.origin?._tag !== "Git") return null;
+  const id = row.skill.id;
+  return (
+    <>
+      {updates.updates.some((update) => update.skillId === id) && (
+        <SkillChip tone="needs">{copy.chips.updateAvailable}</SkillChip>
+      )}
+      {updates.automatic.includes(id) && <SkillChip tone="set">{copy.chips.updatesAutomatically}</SkillChip>}
+    </>
+  );
+}
+
 function RowChips({ row }: { row: SkillRow }) {
   const { assignment, origin } = row;
   return (
     <>
+      <UpdateChips row={row} />
       {row.set !== null && <SkillChip tone="set">{copy.chips.set({ count: row.set.length })}</SkillChip>}
       {origin?._tag === "AgentsFolder" && <SkillChip tone="later">{copy.chips.agents}</SkillChip>}
       {assignment?.held === true && (

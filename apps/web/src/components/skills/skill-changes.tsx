@@ -1,5 +1,5 @@
 import type { SkillChange } from "@hobbots/api";
-import { skillRevisionLabel } from "@hobbots/domain";
+import { type SkillSource, skillRevisionLabel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
@@ -27,9 +27,19 @@ const GLYPH = {
   removed: "×",
 } as const satisfies Record<SkillChange["kind"], string>;
 
-function ChangeRow({ change, hobs, say }: { change: SkillChange; hobs: HobDirectory; say: Say }) {
+function ChangeRow({
+  change,
+  hobs,
+  sources,
+  say,
+}: {
+  change: SkillChange;
+  hobs: HobDirectory;
+  sources: ReadonlyArray<SkillSource>;
+  say: Say;
+}) {
   const writes = useSkillWrites();
-  const text = changeText(change, hobs);
+  const text = changeText(change, hobs, sources);
   const back = change.previousNumber === null ? null : skillRevisionLabel({ number: change.previousNumber });
   // Roll back moves each place the change moved back to the revision it was on, one by one, as Who
   // uses it does: places that were on different revisions each go back to their own.
@@ -85,7 +95,17 @@ function ChangeRow({ change, hobs, say }: { change: SkillChange; hobs: HobDirect
  * held, each rollout and rollback, and each skill given, taken, held or turned off, newest first, with
  * Roll back where there is a way back.
  */
-export function SkillChanges({ hobs, say, now }: { hobs: HobDirectory; say: Say; now: Date }) {
+export function SkillChanges({
+  hobs,
+  sources,
+  say,
+  now,
+}: {
+  hobs: HobDirectory;
+  sources: ReadonlyArray<SkillSource>;
+  say: Say;
+  now: Date;
+}) {
   const changes = useQuery(skillChangesQuery);
   return (
     <div className="flex max-w-[860px] flex-col gap-4">
@@ -119,6 +139,7 @@ export function SkillChanges({ hobs, say, now }: { hobs: HobDirectory; say: Say;
                   key={`${change.at}-${change.skillId}-${change.kind}`}
                   change={change}
                   hobs={hobs}
+                  sources={sources}
                   say={say}
                 />
               ))}

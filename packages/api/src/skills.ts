@@ -429,7 +429,7 @@ export type CopiedSkill = typeof CopiedSkill.Type;
 const skillParams = { skillId: SkillId };
 const assignmentParams = { assignmentId: SkillAssignmentId };
 const hobParams = { agentId: AgentId };
-const importErrors = [
+export const importErrors = [
   SkillImportRefused,
   SkillSourceNotRead,
   SkillMissing,
