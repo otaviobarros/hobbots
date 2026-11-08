@@ -42,13 +42,19 @@ test.afterEach(async ({ page }, testInfo) => {
   console.log([...(notes.get(page) ?? []), `alerts: ${JSON.stringify(alerts.filter(Boolean))}`].join("\n"));
 });
 
-test("[TC-GEN-008] joins the wait-list from the hero form", async ({ page }) => {
-  // covers #182: anyone can join the wait-list
+const LABEL = "Get one email when yours is out";
+const JOINED = "You are on the list.";
+
+test("[TC-GEN-008] joins the wait-list for the apps that are not out yet", async ({ page }) => {
+  // covers #182 and #1224: anyone can join the wait-list, from the Download section
+  const email = `pip-${randomUUID()}@example.com`;
   await page.goto("/");
-  await page.getByLabel("Email address").fill("pip@example.com");
-  await page.getByRole("button", { name: "Join the wait-list" }).click();
-  await expect(page.getByText("You're on the list!")).toBeVisible();
-  await expect(page.getByText(/We'll write to pip@example.com/)).toBeVisible();
+  await page.getByLabel(LABEL).fill(email);
+  await page.getByRole("button", { name: "Tell me" }).click();
+  await expect(page.getByText(JOINED)).toBeVisible();
+  await expect(page.getByText(JOINED)).toBeFocused();
+  await expect(page.getByText(`We'll write to ${email} once, when it is out.`)).toBeVisible();
+  expect(storedRows(email)).toEqual([{ wants_more_platforms: 1, source: "hero" }]);
 });
 
 test("[TC-GEN-011] joins again with the same email in other case, shows the same message and stores it once", async ({
@@ -58,65 +64,29 @@ test("[TC-GEN-011] joins again with the same email in other case, shows the same
   const email = `pip-${randomUUID()}@example.com`;
   await page.goto("/");
   const joinWith = async (typed: string) => {
-    await page.getByLabel("Email address").fill(typed);
-    await page.getByRole("button", { name: "Join the wait-list" }).click();
-    await expect(page.getByText("You're on the list!")).toBeVisible();
+    await page.getByLabel(LABEL).fill(typed);
+    await page.getByRole("button", { name: "Tell me" }).click();
+    await expect(page.getByText(JOINED)).toBeVisible();
     return page.getByText(`We'll write to ${email}`).textContent();
   };
   const first = await joinWith(email);
   expect(storedRows(email)).toHaveLength(1);
   await page.getByRole("button", { name: "Use a different email" }).click();
-  await expect(page.getByLabel("Email address")).toBeFocused();
+  await expect(page.getByLabel(LABEL)).toBeFocused();
   expect(await joinWith(email.toUpperCase())).toBe(first);
   expect(storedRows(email)).toHaveLength(1);
-});
-
-test("[TC-GEN-012] joins from the roll form with the hero's platforms box ticked", async ({ page }) => {
-  // covers #185: the stored choice matches the success message, whichever form was used
-  const email = `pip-${randomUUID()}@example.com`;
-  await page.goto("/");
-  await page.getByLabel("Also tell me about the Windows and phone apps").check();
-  await page.getByLabel("Email for the wait-list").fill(email);
-  await page.getByRole("button", { name: /spot/ }).click();
-  await expect(page.getByText(/is saved\. See you at launch\./)).toBeVisible();
-  expect(storedRows(email)).toEqual([{ wants_more_platforms: 1, source: "roll" }]);
-});
-
-test("[TC-GEN-013] saves and confirms the platforms choice made at submit, even if it changes while saving", async ({
-  page,
-}) => {
-  // covers #185: the stored choice matches the success message
-  const email = `pip-${randomUUID()}@example.com`;
-  let release = () => {};
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await page.goto("/");
-  // Registered last, so it runs first and holds the request before it reaches the server.
-  await page.route("**/_actions/**", async (route) => {
-    await held;
-    await route.fallback();
-  });
-  await page.getByLabel("Email address").fill(email);
-  await page.getByRole("button", { name: "Join the wait-list" }).click();
-  await page.waitForRequest("**/_actions/**");
-  await page.getByLabel("Also tell me about the Windows and phone apps").check();
-  release();
-  await expect(page.getByText("You're on the list!")).toBeVisible();
-  await expect(page.getByText(`We'll write to ${email} when the lantern is lit.`)).toBeVisible();
-  expect(storedRows(email)).toEqual([{ wants_more_platforms: 0, source: "hero" }]);
 });
 
 test("[TC-GEN-009] refuses an invalid email and says why", async ({ page }) => {
   // covers #182: the form checks the email
   await page.goto("/");
-  const email = page.getByLabel("Email address");
+  const email = page.getByLabel(LABEL);
   await email.fill("pip@");
-  await page.getByRole("button", { name: "Join the wait-list" }).click();
+  await page.getByRole("button", { name: "Tell me" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "That email looks incomplete" })).toBeVisible();
   await expect(email).toHaveAttribute("aria-invalid", "true");
   await expect(email).toBeFocused();
-  await expect(page.getByText("You're on the list!")).toBeHidden();
+  await expect(page.getByText(JOINED)).toBeHidden();
 });
 
 test.describe("with Reduce motion", () => {
@@ -125,9 +95,9 @@ test.describe("with Reduce motion", () => {
   test("[TC-GEN-010] joins with every animation stopped", async ({ page }) => {
     // covers #182: every animation stops with Reduce motion
     await page.goto("/");
-    await page.getByLabel("Email address").fill("pip@example.com");
-    await page.getByRole("button", { name: "Join the wait-list" }).click();
-    await expect(page.getByText("You're on the list!")).toBeVisible();
+    await page.getByLabel(LABEL).fill("pip@example.com");
+    await page.getByRole("button", { name: "Tell me" }).click();
+    await expect(page.getByText(JOINED)).toBeVisible();
     expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
   });
 });

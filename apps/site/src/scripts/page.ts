@@ -1,13 +1,19 @@
-import { initApproval } from "./approval.ts";
-import { initCompanion } from "./companion.ts";
+import { initDownload } from "./download.ts";
+import { initMenu } from "./menu.ts";
 import { initRoll } from "./roll.ts";
-import { initSound } from "./sound.ts";
-import { initVillage } from "./village.ts";
+import { initShare } from "./share.ts";
+import { initStage } from "./stage.ts";
+import { initThemes } from "./themes.ts";
+import { initTour } from "./tour.ts";
+import { initVideo } from "./video.ts";
 import { initWaitlist } from "./waitlist.ts";
 
-initSound();
-initVillage();
-initWaitlist();
+initMenu();
+initStage();
+initTour();
+initThemes();
+initVideo();
 initRoll();
-initApproval();
-initCompanion();
+initDownload();
+initShare();
+initWaitlist();

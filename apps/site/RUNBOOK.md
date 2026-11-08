@@ -12,7 +12,7 @@ Do these in order. Staging works after step 8, and production after step 9.
 4. [The hobbots.app zone](#the-hobbotsapp-zone).
 5. [Wait-list database](#wait-list-database) for staging.
 6. [Turnstile](#turnstile): the widget.
-7. [Teaser media bucket](#teaser-media-bucket).
+7. [Media bucket](#media-bucket). [Caching](#caching) explains how every file stays fresh without purges.
 8. [API token and GitHub Environments](#api-token-and-github-environments) for `site-staging`. Push a site change to `main` to deploy staging, then set the staging Turnstile secret key.
 9. Production: the wait-list database, the Turnstile secret key, the `site-production` environment, a site release, then the [custom domain](#workers-and-environments).
 
@@ -35,7 +35,7 @@ The domain is a zone on the Cloudflare account, with Cloudflare's nameservers at
 In the zone:
 
 - **SSL/TLS › Overview:** Full (strict). The Worker and the R2 custom domain get their certificates from Cloudflare, so nothing else is needed.
-- **SSL/TLS › Edge Certificates:** Always Use HTTPS on, and Minimum TLS Version 1.2. The zone setting does not apply to R2 custom domains, so the [media bucket](#teaser-media-bucket) sets its own.
+- **SSL/TLS › Edge Certificates:** Always Use HTTPS on, and Minimum TLS Version 1.2. The zone setting does not apply to R2 custom domains, so the [media bucket](#media-bucket) sets its own.
 - **DNS:** add no records for `hobbots.app` or `media.hobbots.app` by hand. Attaching the custom domains below creates them.
 
 The zone ID is on the zone's Overview page. Only the R2 custom domain command needs it.
@@ -76,9 +76,9 @@ One widget in the Cloudflare dashboard under Turnstile, in Managed mode, with tw
 - The **site key** is public. Staging and production builds read it from `TURNSTILE_SITE_KEY` at build time, which is a variable in each GitHub Environment. Without it, the build uses Cloudflare's test key, which always passes and is refused by the real secret.
 - The **secret key** is set once for each environment and never written to a file. The Worker must exist first, so run it after that environment's first deploy: `wrangler secret put TURNSTILE_SECRET_KEY --env staging`, then `--env production`. Until then, every sign-up is refused.
 
-## Teaser media bucket
+## Media bucket
 
-The teaser video is served from the R2 bucket `hobbots-media` at `https://media.hobbots.app`. The [README](README.md#teaser-video) explains how to upload a new cut. Set the bucket up once:
+The presentation video is served from the R2 bucket `hobbots-media` at `https://media.hobbots.app`. The [README](README.md#video) explains how to upload a new cut. Set the bucket up once:
 
 ```sh
 wrangler r2 bucket create hobbots-media
@@ -90,6 +90,15 @@ wrangler r2 bucket dev-url get hobbots-media   # should report that the r2.dev U
 - `--min-tls 1.2` matters because R2 custom domains default to TLS 1.0 and ignore the zone's setting. Check it with `wrangler r2 bucket domain list hobbots-media`, and change it with `wrangler r2 bucket domain update hobbots-media --domain media.hobbots.app --min-tls 1.2`.
 - Leave the `r2.dev` URL disabled. If it was turned on, `wrangler r2 bucket dev-url disable hobbots-media` turns it off.
 - The bucket holds only public files. The deploy token has no R2 permission, so uploads always come from a maintainer's own login.
+
+## Caching
+
+Nothing on the site needs a cache purge. A file that changes gets a new URL instead:
+
+- **Pictures and scripts** under `/_astro/`: the build names each file by its content (`home-1280.Bx3k9a.webp`), and the Cloudflare adapter serves them with `Cache-Control: public, max-age=31536000, immutable`. A changed screenshot gets a new name, and the new page points at it. Screenshots and the video poster live in `src/assets` for this reason; never put a picture that will change in `public/`.
+- **The page itself** (`index.html`) keeps the Workers default, which revalidates on every visit, so a deploy shows at once.
+- **Files in `public/` that keep their name**: `public/_headers` gives `og.png` and `llms.txt` a one-hour cache. Favicons, `robots.txt` and `sitemap.xml` keep the default. Social networks keep their own copy of a share card; re-scrape it with their card tools after changing `og.png`.
+- **The video** on `media.hobbots.app`: each cut gets a new object name with `--cache-control "public, max-age=31536000, immutable"` ([README](README.md#video)), never an overwrite. If an object ever has to change in place, purge its URL under Caching › Configuration › Purge Cache › Custom Purge in the hobbots.app zone.
 
 ## API token and GitHub Environments
 
@@ -119,7 +128,7 @@ The account ID is on Account home, or in `wrangler whoami`. The release-please A
 The site should cost nothing or close to it. Cloudflare has no hard spending cap on a paid plan, so the guard is a free plan where possible, plus an alert.
 
 - **Plan.** Stay on Workers Free while it is enough. Its daily limits stop requests instead of billing for them. Moving to Workers Paid removes those limits, and usage past the included amounts is billed.
-- **R2** bills storage and operations past its free tier, and egress is free. Keep only the current teaser in the bucket.
+- **R2** bills storage and operations past its free tier, and egress is free. Keep only the current video in the bucket.
 - **Budget alert.** Under Billing › Billable Usage, add a budget alert at a small amount, such as 5 USD, sent to the maintainer's email. It warns and does not stop anything.
 - **Usage notifications.** Under Notifications › Add, add a Billable Usage notification for each product the site uses that the list offers, such as Workers and R2, at a threshold well above normal traffic.
 - If an alert fires, find the product that is billing under Billing › Billable Usage, then act on that product:
@@ -181,7 +190,7 @@ Under Turnstile › the widget › Settings, rotate the secret key, then run `wr
 | Zone settings: SSL mode, Always Use HTTPS, minimum TLS | Cloudflare › hobbots.app                                                           | No                                 |
 | Custom domain `hobbots.app` on the production Worker   | Cloudflare › Workers & Pages                                                       | No                                 |
 | Custom domain `media.hobbots.app`, minimum TLS 1.2     | Cloudflare › R2 › `hobbots-media`                                                  | No                                 |
-| Teaser video                                           | R2 bucket `hobbots-media`                                                          | No                                 |
+| Presentation video                                     | R2 bucket `hobbots-media`                                                          | No                                 |
 | D1 databases and the wait-list rows                    | Cloudflare › D1                                                                    | Rows are personal data             |
 | Turnstile widget and hostnames                         | Cloudflare › Turnstile                                                             | No                                 |
 | `TURNSTILE_SITE_KEY`                                   | Turnstile; both GitHub Environments as a variable                                  | No                                 |

@@ -1,0 +1,183 @@
+---
+import poster from "../assets/video/poster.webp";
+import { VIDEO } from "../data/copy.ts";
+import Roll from "./Roll.astro";
+
+const PLAY = "M7 4v16l13-8z";
+---
+
+<section id="video" class="section film-section" aria-labelledby="film-title">
+  <div class="wrap row">
+    <div class="intro words">
+      <p class="lbl">See it work</p>
+      <h2 id="film-title" class="h h2">Two minutes with Aldric’s team</h2>
+      <p class="lede">
+        A real Quest from start to finish: the lead plans it, the hobs share it out, one risky step waits for your OK, and
+        the work lands done.
+      </p>
+      <button type="button" class="btn2 watch" data-video-open>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={PLAY}></path></svg>
+        Watch the video
+      </button>
+    </div>
+    <button type="button" class="film cut" data-video-open aria-label={`Play the video, ${VIDEO.length}`}>
+      <img src={poster.src} alt="" width="1600" height="900" loading="lazy" decoding="async" />
+      <span class="play cut" aria-hidden="true"
+        ><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={PLAY}></path></svg></span
+      >
+      <span class="len" aria-hidden="true">{VIDEO.length}</span>
+    </button>
+  </div>
+</section>
+
+<Roll />
+
+<dialog class="overlay" aria-label="Hobbots at work, a 2 minute video" data-video>
+  <div class="box cut">
+    <!-- biome-ignore lint/a11y/useMediaCaption: the captions are part of the picture, so every player shows them. -->
+    <video controls playsinline preload="none" poster={poster.src} data-src={VIDEO.url} width="1920" height="1080"
+    ></video>
+    <div class="bar">
+      <p>Hobbots at work · {VIDEO.length} · with captions</p>
+      <div class="actions">
+        <a class="btn small" href="#download" data-video-close>Download Hobbots</a>
+        <button type="button" class="btn2 small" data-video-close autofocus>Close</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<style>
+  .film-section {
+    padding-top: 0;
+  }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 48px;
+  }
+  .words {
+    flex: 1 1 320px;
+    max-width: 420px;
+    gap: 16px;
+  }
+  .watch {
+    align-self: flex-start;
+  }
+  .film {
+    position: relative;
+    display: block;
+    flex: 999 1 560px;
+    min-width: 0;
+    padding: 0;
+    border: 2px solid var(--color-line-2);
+    background: var(--color-deep);
+    box-shadow: 0 24px 64px rgb(0 0 0 / 0.45);
+    overflow: hidden;
+  }
+  .film img {
+    display: block;
+    width: 100%;
+    height: auto;
+    transition: transform 0.5s steps(5);
+  }
+  .film:hover img {
+    transform: scale(1.03);
+  }
+  .play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 88px;
+    height: 88px;
+    margin: -44px 0 0 -44px;
+    background: var(--color-lantern);
+    color: var(--color-ground);
+    box-shadow: 0 6px 0 var(--color-lantern-shadow);
+    animation: pulse 2s steps(4) 3;
+  }
+  .film:hover .play {
+    background: var(--color-lantern-hover);
+  }
+  .len {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    padding: 2px 8px;
+    background: rgb(13 12 28 / 0.85);
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .overlay {
+    width: min(1120px, calc(100% - 2 * clamp(12px, 4vw, 48px)));
+    max-width: none;
+    max-height: 100dvh;
+    overflow-y: auto;
+    margin: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+  }
+  .overlay::backdrop {
+    background: rgb(8 7 18 / 0.88);
+    animation: hb-fade 0.3s steps(3) both;
+  }
+  .box {
+    padding: 10px;
+    border: 2px solid var(--color-line-2);
+    background: var(--color-panel);
+    mask-image: linear-gradient(#000, #000);
+    mask-position: center;
+  }
+  .overlay[open] .box {
+    animation: hb-pixels 0.5s steps(5) both;
+  }
+  video {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: var(--color-deep);
+  }
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 4px 0;
+  }
+  .bar p {
+    margin: 0;
+    color: var(--color-secondary-text);
+    font-size: 15px;
+  }
+  .actions {
+    display: flex;
+    gap: 10px;
+  }
+  @media (max-width: 640px) {
+    .overlay {
+      width: 100%;
+    }
+    .box {
+      padding: 0;
+      border-inline: 0;
+    }
+    .bar {
+      padding: 12px 16px 16px;
+    }
+  }
+  @keyframes pulse {
+    50% {
+      box-shadow:
+        0 6px 0 var(--color-lantern-shadow),
+        0 0 0 12px rgb(242 165 65 / 0.25);
+    }
+  }
+</style>

@@ -1,0 +1,6 @@
+# Files that keep their name when they change are cached briefly, so an update shows within the hour.
+# Built files under /_astro/ have hashed names; the Cloudflare adapter adds their year-long cache above these lines.
+/og.png
+  Cache-Control: public, max-age=3600
+/llms.txt
+  Cache-Control: public, max-age=3600
