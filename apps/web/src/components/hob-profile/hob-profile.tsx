@@ -1,9 +1,10 @@
 import { HOB_COLORS } from "@hobbots/art/look";
-import { type Agent, type AgentId, type RetireWork, starterRole } from "@hobbots/domain";
+import { type Agent, type AgentId, GOOD_AT_MAX, type RetireWork, starterRole } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
+import { Switch } from "@hobbots/ui/components/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -17,7 +18,6 @@ import {
   aboutLine,
   changeCount,
   draftProblem,
-  goodAt,
   INSTRUCTIONS_MAX,
   type ProfileDraft,
   pickRole,
@@ -259,7 +259,7 @@ function ProfileHero({
   onExport: () => void;
 }) {
   const tag = stateTag(state);
-  const good = goodAt(hob);
+  const good = hob.goodAt;
   return (
     <header
       className="flex flex-wrap items-end gap-4 rounded-card px-5 pt-5 pb-6"
@@ -438,6 +438,23 @@ function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
           </button>
         </span>
         <RoleLine draft={draft} />
+        <label htmlFor="hob-good-at" className="lbl pt-1 text-label">
+          {copy.goodAt}
+        </label>
+        <input
+          id="hob-good-at"
+          aria-describedby="hob-good-at-note"
+          value={draft.goodAt}
+          maxLength={GOOD_AT_MAX}
+          onChange={(e) => {
+            const goodAt = e.target.value;
+            setDraft((d) => ({ ...d, goodAt }));
+          }}
+          className="rounded-control border-(length:--edge) border-control bg-deep px-2.5 py-2 text-text-strong"
+        />
+        <span id="hob-good-at-note" className="text-detail text-label">
+          {copy.goodAtNote({ name })}
+        </span>
         <label htmlFor="hob-instructions" className="lbl pt-1 text-label">
           {copy.shouldDo({ name })}
         </label>
@@ -503,6 +520,13 @@ function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
         </fieldset>
       </section>
 
+      <Visibility
+        name={name}
+        visible={draft.visibleToHobs}
+        disabled={update.isPending}
+        onChange={(visibleToHobs) => setDraft((d) => ({ ...d, visibleToHobs }))}
+      />
+
       {rest}
 
       <p className="m-0 text-meta text-label">{aboutLine(hob)}</p>
@@ -541,6 +565,44 @@ const CARD = "flex flex-col gap-2.5 rounded-card bg-card p-4";
 // A small text button in a card's label row, such as Change role.
 const QUIET_LINK =
   "cursor-pointer rounded-control border-0 bg-transparent px-1.5 py-0.5 text-detail text-link hover:bg-hover hover:text-text-strong disabled:cursor-default disabled:opacity-50";
+
+/** Whether other hobs see this hob, with what they see when they do. */
+function Visibility({
+  name,
+  visible,
+  disabled,
+  onChange,
+}: {
+  name: string;
+  visible: boolean;
+  disabled: boolean;
+  onChange: (visible: boolean) => void;
+}) {
+  const copy = messages.profile.visibility;
+  const id = useId();
+  return (
+    <section aria-labelledby="hob-visibility" className={CARD}>
+      <h2 id="hob-visibility" className="lbl m-0 text-label">
+        {copy.heading}
+      </h2>
+      <span className="flex items-center gap-2.5">
+        <Switch
+          id={id}
+          checked={visible}
+          disabled={disabled}
+          aria-describedby={`${id}-line`}
+          onCheckedChange={onChange}
+        />
+        <label htmlFor={id} className="flex-1 text-ui font-semibold text-text-strong">
+          {copy.label}
+        </label>
+      </span>
+      <span id={`${id}-line`} className="text-detail text-text-secondary">
+        {visible ? copy.on({ name }) : copy.off({ name })}
+      </span>
+    </section>
+  );
+}
 
 /** The role the draft has: its sigil, title and note. */
 function RoleLine({ draft }: { draft: ProfileDraft }) {

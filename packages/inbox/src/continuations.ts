@@ -91,11 +91,18 @@ const DESTINATION_RULE =
   "Where the user asked for the work to go is theirs to change: a question about putting it anywhere else, because it cannot go where they asked, is never yours to answer. Pass it up with escalate.";
 
 /**
+ * A member's approvals are the user's to decide (PE-006, #1216): a lead that answered "may I run
+ * rm?" let the user read that a lead approved what the policy gave them to decide.
+ */
+const PERMISSION_RULE =
+  "Only the user approves a tool call: answer a question asking permission for one by telling the hob to make the call, and never tell the user a lead approved one.";
+
+/**
  * A question for a lead, with what it can do about it: answer it, or pass it up when only a lead
  * above it, or the user, can decide (ADR 018).
  */
 const describeQuestion = (question: Question) =>
-  `Hob ${question.askerId} asks, as question ${question.id} about Task ${question.taskId}: "${question.text}"${choicesText(question)} Answer it with answer if you can${question.options.length === 0 ? "" : ", giving a choice's label to pick it"}; if only someone above you can decide, pass it up with escalate. ${DESTINATION_RULE}`;
+  `Hob ${question.askerId} asks, as question ${question.id} about Task ${question.taskId}: "${question.text}"${choicesText(question)} Answer it with answer if you can${question.options.length === 0 ? "" : ", giving a choice's label to pick it"}; if only someone above you can decide, pass it up with escalate. ${DESTINATION_RULE} ${PERMISSION_RULE}`;
 
 /** A message: your note on a Task, or a hob's, with the Task it is about. */
 const describeMessage = (
@@ -115,6 +122,15 @@ const answeredBy = (question: Question) =>
       ? ` by hob ${question.answeredBy.agentId}`
       : "";
 
+/**
+ * What a hob hears after a lead's answer: it approves no tool call, which the user still decides when
+ * the policy asks first (#1216). The user's own answer needs no note.
+ */
+const leadAnswerNote = (question: Question) =>
+  question.answeredBy?._tag === "Lead"
+    ? " A lead's answer approves no tool call: when your policy asks first, Hobbots asks the user and the call waits for their decision."
+    : "";
+
 /** One item, as the continuation's prompt lists it: what arrived, and from where. */
 const describeArrival = (item: BackpackItem, results: ResultsIn): string => {
   const payload = item.payload;
@@ -128,7 +144,7 @@ const describeArrival = (item: BackpackItem, results: ResultsIn): string => {
     case "question":
       return describeQuestion(payload.question);
     case "answer":
-      return `Your question ${payload.question.id} was answered${answeredBy(payload.question)}: "${payload.question.answer ?? ""}"${answerHow(payload.question)}`;
+      return `Your question ${payload.question.id} was answered${answeredBy(payload.question)}: "${payload.question.answer ?? ""}"${answerHow(payload.question)}${leadAnswerNote(payload.question)}`;
     case "hand-off":
       return `"${payload.artifact.label}" was handed to Task ${payload.handOff.toTaskId}: ${payload.artifact.value}`;
     case "message":
