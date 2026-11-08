@@ -1,5 +1,5 @@
 import { HubQuestionRefused, HubQuestionRepository } from "@hobbots/agents";
-import { HubQuestion, type HubQuestionId, optionNamed } from "@hobbots/domain";
+import { HubQuestion, type HubQuestionId } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
@@ -10,17 +10,18 @@ type Row = Record<string, unknown>;
 const int = (value: unknown) => (value === null || value === undefined ? null : Number(value));
 const decodeQuestions = Schema.decodeUnknownEffect(Schema.Array(HubQuestion));
 
-// The subject is three columns and the chat two, both columns or neither; the choices are JSON text.
+// The chat is two columns, both or neither; what it asks and the keys of its choices are JSON text.
+// The kind is kept in its own column too, to find a kind's questions.
 const fromRow = (row: Row) => ({
   id: row.id,
-  subject: { kind: row.subjectKind, key: row.subjectKey, title: row.subjectTitle },
+  key: row.subjectKey,
   chat: row.agentId === null || row.threadId === null ? null : { agentId: row.agentId, threadId: row.threadId },
-  text: row.text,
+  ask: JSON.parse(String(row.ask)),
   options: JSON.parse(String(row.options)),
-  recommended: int(row.recommended),
+  recommended: row.recommended,
   state: row.state,
   answer: row.answer,
-  picked: int(row.picked),
+  picked: row.picked,
   createdAt: row.createdAt,
   answeredAt: row.answeredAt,
   answeredByDeviceId: row.answeredByDeviceId,
@@ -41,16 +42,16 @@ export const HubQuestionRepositoryLive = Layer.effect(
       change((revision) =>
         Effect.gen(function* () {
           // The hub asks about each thing once: while a question about it is open, that one stands.
-          const [open] = yield* sql<Row>`SELECT * FROM hub_questions WHERE subject_kind = ${input.subject.kind}
-            AND subject_key = ${input.subject.key} AND state = 'open' ORDER BY ${oldestFirst(sql)} LIMIT 1`.pipe(
+          const [open] = yield* sql<Row>`SELECT * FROM hub_questions WHERE subject_kind = ${input.ask.kind}
+            AND subject_key = ${input.key} AND state = 'open' ORDER BY ${oldestFirst(sql)} LIMIT 1`.pipe(
             Effect.flatMap(decode),
           );
           if (open !== undefined) return { value: open, events: [] };
           const question = new HubQuestion({
             id: input.id,
-            subject: input.subject,
+            key: input.key,
             chat: input.chat ?? null,
-            text: input.text,
+            ask: input.ask,
             options: input.options ?? [],
             recommended: input.recommended ?? null,
             state: "open",
@@ -64,12 +65,11 @@ export const HubQuestionRepositoryLive = Layer.effect(
           });
           yield* sql`INSERT INTO hub_questions ${sql.insert({
             id: question.id,
-            subject_kind: question.subject.kind,
-            subject_key: question.subject.key,
-            subject_title: question.subject.title,
+            subject_kind: question.ask.kind,
+            subject_key: question.key,
             agent_id: question.chat?.agentId ?? null,
             thread_id: question.chat?.threadId ?? null,
-            text: question.text,
+            ask: JSON.stringify(question.ask),
             options: JSON.stringify(question.options),
             recommended: question.recommended,
             state: question.state,
@@ -80,18 +80,20 @@ export const HubQuestionRepositoryLive = Layer.effect(
         }),
       );
 
-    const answer: HubQuestionRepository["Service"]["answer"] = (id, words, at, from) =>
+    const answer: HubQuestionRepository["Service"]["answer"] = (id, given, at, from) =>
       change((revision) =>
         Effect.gen(function* () {
           const [before] = yield* select(id);
           if (before === undefined) return yield* new HubQuestionRefused({ reason: "missing" });
           if (before.state !== "open") return yield* new HubQuestionRefused({ reason: "closed" });
-          // An answer that names one of its choices picked that choice, in the choice's own words (#740).
-          const picked = optionNamed(before.options, words);
+          // A choice is picked by its key, and only one the question offers (#1045).
+          const picked = "picked" in given ? given.picked : null;
+          if (picked !== null && !before.options.includes(picked))
+            return yield* new HubQuestionRefused({ reason: "unknown-choice" });
           const question = new HubQuestion({
             ...before,
             state: "answered",
-            answer: picked === null ? words : (before.options[picked]?.label ?? words),
+            answer: "words" in given ? given.words : null,
             picked,
             answeredAt: at,
             answeredByDeviceId: from.deviceId,

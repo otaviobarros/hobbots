@@ -20,6 +20,7 @@ export * from "./repositories.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./skill-proposals.ts";
+export * from "./skill-updates.ts";
 export * from "./skills.ts";
 export * from "./sqlite.ts";
 export * from "./task-tool-calls.ts";

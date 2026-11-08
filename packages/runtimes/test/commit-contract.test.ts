@@ -14,7 +14,7 @@ import { codexTurnEvents } from "../src/codex/events.ts";
 import { type PolicyRequest, policyGate } from "../src/codex/policy.ts";
 import { CODEX_MODEL_HOSTS, type CodexTurnConfig, runCodexTurn } from "../src/codex/turn.ts";
 import { scriptedToolEvents } from "../src/fake.ts";
-import { commitIdentityNow, NO_GIT_IDENTITY_NOTE } from "../src/git-config.ts";
+import { commitIdentityNow, NO_GIT_IDENTITY_NOTE, SETS_COMMIT_IDENTITY_NOTE } from "../src/git-config.ts";
 import type { ProcessSandboxShape } from "../src/sandbox.ts";
 import { completed, fakeServer, THREAD, TURN } from "./codex-app-server.ts";
 
@@ -243,6 +243,18 @@ const CASES: ReadonlyArray<{
   },
 ];
 
+const BOT = { name: "frodo-hobbots[bot]", email: "90001000+frodo-hobbots[bot]@users.noreply.github.com" };
+/** Every way a turn's commits can be made, by who the hub settles they are made as. */
+const EVERY_IDENTITY: ReadonlyArray<{ readonly why: string; readonly as: CommitsAs }> = [
+  { why: "no identity set yet", as: settleCommitsAs(null, NONE, null) },
+  { why: "the identity the user gave Hobbots", as: settleCommitsAs(null, NONE, GIVEN) },
+  {
+    why: "the user's own Git config",
+    as: settleCommitsAs(null, { name: "Ada Lovelace", email: "ada@example.com" }, null),
+  },
+  { why: "the hob's own bot", as: settleCommitsAs(BOT, NONE, GIVEN) },
+];
+
 describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
   // covers OR-004
   it.skipIf(runtime.start === null).each(CASES)(
@@ -259,6 +271,25 @@ describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
       // A resumed session keeps its first instructions, so its prompt says who it commits as now.
       const resumed = await runtime.start(request(each.as, THREAD));
       expect(resumed.prompt).toContain(`<commit-identity>\n${commitIdentityNow(each.as)}\n</commit-identity>`);
+    },
+  );
+
+  // covers OR-004 (#1213)
+  it.skipIf(runtime.start === null).each(EVERY_IDENTITY)(
+    "[TC-OR-1213-02] tells the hob up front that Hobbots sets who commits, for $why, in new and resumed sessions",
+    async (each) => {
+      if (runtime.start === null) throw new Error("skipped");
+      const turn = (sessionId: string | null) => {
+        const asked = request(each.as, sessionId);
+        // The hub hands a hob with its own app its bot, which the runtime commits as (ADR 022).
+        return each.as._tag === "Bot" && asked.tools
+          ? { ...asked, tools: { ...asked.tools, commitAs: each.as.identity } }
+          : asked;
+      };
+      const fresh = await runtime.start(turn(null));
+      expect(fresh.instructions).toContain(SETS_COMMIT_IDENTITY_NOTE);
+      const resumed = await runtime.start(turn(THREAD));
+      expect(resumed.prompt).toContain(SETS_COMMIT_IDENTITY_NOTE);
     },
   );
 

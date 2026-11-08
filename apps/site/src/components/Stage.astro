@@ -1,0 +1,441 @@
+---
+import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
+import { CREW, STAGE_STARS } from "../data/scene.ts";
+import Hob from "./Hob.astro";
+import PixelArt from "./PixelArt.astro";
+
+const ada = CREW.find((hob) => hob.name === "Ada") ?? CREW[0];
+---
+
+<section class="stage cut" data-stage data-phase="ask" aria-label="Try it: a Quest that needs one answer from you">
+  {
+    STAGE_STARS.map((star) => (
+      <span
+        class="hb-star star"
+        style={`left: ${star.x}%; top: ${star.y}%; animation-delay: ${star.delay}s`}
+        aria-hidden="true"
+      />
+    ))
+  }
+  <PixelArt rows={MOON} palette={MOON_PALETTE} size={56} class="moon" />
+  <div class="sun" aria-hidden="true"></div>
+  <div class="house" aria-hidden="true"><b></b><b></b><b></b></div>
+
+  <div class="ui">
+    <div class="quest cut">
+      <p class="small-label"><span class="dot"></span>Aldric’s Quest</p>
+      <p class="h quest-title">Plan the Black Friday campaign</p>
+      <div class="segs" aria-hidden="true"><i></i><i></i><i></i><i></i><i class="last"></i></div>
+      <p class="status">
+        <span data-done>4 of 5 done</span>
+        <span class="tag needs" data-needs>1 needs you</span>
+        <span class="tag done" data-finished hidden>✓ Done</span>
+      </p>
+    </div>
+
+    <section class="ask cut" aria-labelledby="ask-title" data-show="ask">
+      <div class="who">
+        {ada && <Hob seed={ada.seed} color={ada.color} size={32} class="avatar" />}
+        <div>
+          <p class="lbl ask-lbl">● Needs you</p>
+          <p id="ask-title" class="h ask-title">Ada asks you</p>
+        </div>
+      </div>
+      <p class="question">Carriers stop international deliveries on Dec 10. Should international orders get an earlier cutoff?</p>
+      <button type="button" class="opt rec" data-answer="early">
+        <span>Dec 12 for international</span><span class="tag rec-tag">★ Recommended</span>
+      </button>
+      <button type="button" class="opt" data-answer="late"><span>Dec 18 for everyone</span></button>
+      <p class="try">Try it: pick one.</p>
+    </section>
+
+    <p class="say cut" tabindex="-1" data-show="working" data-say hidden></p>
+
+    <div class="morning cut" data-show="dawn" hidden>
+      <p class="h morning-title" tabindex="-1" data-morning>Good morning. It’s done.</p>
+      <p>Landing copy, a launch email and shipping cutoffs, planned overnight by six hobs. You answered one question.</p>
+      <div class="actions">
+        <a class="btn" href="#download">Download Hobbots</a>
+        <button type="button" class="btn2" data-replay>Play again</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crew" aria-hidden="true">
+    {
+      CREW.map((hob, i) => (
+        <span class:list={["hob", { ada: hob === ada }]} style={`--d: ${i * 0.25}s`}>
+          <Hob seed={hob.seed} color={hob.color} size={64} class="sprite" />
+          <em>{hob.name}</em>
+        </span>
+      ))
+    }
+  </div>
+  <div class="ground floor" aria-hidden="true"></div>
+</section>
+
+<style>
+  .stage {
+    position: relative;
+    overflow: hidden;
+    min-height: 540px;
+    border: 2px solid var(--color-line-2);
+    background: #0f0e1e;
+    text-align: left;
+    transition: background-color 1.6s steps(8);
+  }
+  .stage[data-phase="working"] {
+    background: #1d1832;
+  }
+  .stage[data-phase="dawn"] {
+    background: #5b3d58;
+  }
+  .star {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: var(--color-moonlight);
+    transition: opacity 1.2s steps(6);
+  }
+  [data-phase="dawn"] .star {
+    opacity: 0;
+  }
+  :global(.stage .moon) {
+    position: absolute;
+    top: 10%;
+    right: 7%;
+    transition:
+      transform 1.6s steps(8),
+      opacity 1.6s steps(8);
+  }
+  :global([data-phase="dawn"] .moon) {
+    transform: translateY(-140px);
+    opacity: 0;
+  }
+  .sun {
+    position: absolute;
+    left: 12%;
+    bottom: -80px;
+    width: 72px;
+    height: 72px;
+    background: var(--color-lantern-hover);
+    box-shadow:
+      0 0 0 8px rgb(242 182 101 / 0.25),
+      0 0 0 18px rgb(242 182 101 / 0.12);
+    clip-path: polygon(
+      16px 0,
+      56px 0,
+      56px 8px,
+      64px 8px,
+      64px 16px,
+      72px 16px,
+      72px 56px,
+      64px 56px,
+      64px 64px,
+      56px 64px,
+      56px 72px,
+      16px 72px,
+      16px 64px,
+      8px 64px,
+      8px 56px,
+      0 56px,
+      0 16px,
+      8px 16px,
+      8px 8px,
+      16px 8px
+    );
+    transition: bottom 2s steps(10);
+  }
+  [data-phase="dawn"] .sun {
+    bottom: 96px;
+  }
+  .house {
+    position: absolute;
+    right: 5%;
+    bottom: 24px;
+    width: 170px;
+    height: 104px;
+    background: #2a2342;
+    clip-path: polygon(0 36px, 85px 0, 170px 36px, 170px 104px, 0 104px);
+  }
+  .house b {
+    position: absolute;
+    bottom: 22px;
+    width: 22px;
+    height: 22px;
+    background: var(--color-lantern);
+    transition: opacity 1s steps(4);
+  }
+  .house b:nth-child(1) {
+    left: 24px;
+  }
+  .house b:nth-child(2) {
+    left: 74px;
+    bottom: 44px;
+  }
+  .house b:nth-child(3) {
+    left: 124px;
+  }
+  [data-phase="dawn"] .house b {
+    opacity: 0.35;
+  }
+  .ui {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: clamp(16px, 3vw, 32px);
+    padding-bottom: 170px;
+  }
+  .ui p {
+    margin: 0;
+  }
+  .ui [hidden],
+  .status [hidden] {
+    display: none;
+  }
+  .quest {
+    display: flex;
+    flex: 0 1 340px;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px 18px;
+    background: rgb(23 22 31 / 0.82);
+    border: 2px solid var(--color-line-2);
+    backdrop-filter: blur(6px);
+  }
+  .small-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--color-label);
+  }
+  .quest-title,
+  .ask-title {
+    font-size: 18px;
+  }
+  .segs {
+    display: flex;
+    gap: 4px;
+  }
+  .segs i {
+    flex: 1;
+    height: 6px;
+    background: var(--color-mint);
+  }
+  .segs i.last {
+    background: var(--color-lantern);
+  }
+  .stage:not([data-phase="ask"]) .segs i.last {
+    background: var(--color-mint);
+    transform-origin: left;
+    animation: fill 0.9s steps(6);
+  }
+  .status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--color-secondary-text);
+  }
+  .needs {
+    background: var(--color-lantern);
+    color: var(--color-ground);
+  }
+  .done,
+  .rec-tag {
+    color: var(--color-mint);
+  }
+  .ask {
+    display: flex;
+    flex: 0 1 380px;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px;
+    background: var(--color-card);
+    border: 2px solid var(--color-lantern);
+    box-shadow: 0 18px 48px rgb(0 0 0 / 0.45);
+    animation: hb-in 0.6s steps(6) 1.9s both;
+  }
+  .who {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  :global(.stage .avatar) {
+    padding: 2px;
+    background: var(--color-line);
+  }
+  .ask-lbl {
+    font-size: 12px;
+  }
+  .question {
+    font-size: 15px;
+  }
+  .opt {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+    padding: 10px 14px;
+    border: 2px solid var(--color-line-2);
+    background: transparent;
+    color: var(--color-text);
+    font-size: 15px;
+    font-weight: 700;
+    text-align: left;
+  }
+  .opt.rec {
+    border-color: var(--color-mint);
+  }
+  .opt:hover {
+    background: var(--color-hover);
+  }
+  .try {
+    font-size: 13px;
+    color: var(--color-label);
+  }
+  .say {
+    display: flex;
+    flex: 0 1 380px;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--color-card);
+    color: var(--color-text);
+    font-weight: 600;
+    animation: hb-in 0.4s steps(4) both;
+  }
+  .morning {
+    display: flex;
+    flex: 0 1 420px;
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px;
+    background: rgb(23 22 31 / 0.86);
+    border: 2px solid var(--color-line-2);
+    animation: hb-in 0.6s steps(6) both;
+  }
+  .morning-title {
+    font-size: clamp(22px, 3vw, 30px);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .crew {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 20px;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    gap: clamp(8px, 2.4vw, 28px);
+    padding-right: clamp(0px, 14vw, 200px);
+  }
+  .hob {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    animation: walk 1.4s steps(10) var(--d) both;
+  }
+  :global(.stage .sprite) {
+    width: clamp(40px, 5vw, 64px);
+    height: auto;
+  }
+  .hob:hover :global(.sprite) {
+    animation: hb-hop 0.7s steps(6) 1;
+  }
+  [data-phase="working"] .hob :global(.sprite) {
+    animation: hb-bob 0.5s steps(2) 4;
+  }
+  [data-phase="working"] .hob.ada :global(.sprite) {
+    animation: hb-hop 0.7s steps(6) 2;
+  }
+  .stage[data-phase="dawn"] .hob :global(.sprite) {
+    animation: hb-hop 0.7s steps(6) 2;
+  }
+  .hob em {
+    padding: 1px 6px;
+    background: rgb(15 14 30 / 0.7);
+    color: var(--color-text);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 700;
+  }
+  .floor {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  @keyframes walk {
+    from {
+      transform: translateX(-70vw);
+    }
+    to {
+      transform: none;
+    }
+  }
+  @keyframes fill {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  @media (max-width: 640px) {
+    .stage {
+      min-height: 620px;
+    }
+    .ui {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
+      padding: 14px;
+      padding-bottom: 130px;
+    }
+    .quest,
+    .ask,
+    .say,
+    .morning {
+      flex: 0 0 auto;
+      box-sizing: border-box;
+      width: 100%;
+    }
+    .crew {
+      justify-content: flex-start;
+      gap: 10px;
+      padding-right: 0;
+      padding-left: 12px;
+    }
+    .hob:nth-child(n + 5) {
+      display: none;
+    }
+    .house {
+      right: 3%;
+      width: 120px;
+      height: 74px;
+      clip-path: polygon(0 26px, 60px 0, 120px 26px, 120px 74px, 0 74px);
+    }
+    .house b {
+      bottom: 16px;
+      width: 16px;
+      height: 16px;
+    }
+    .house b:nth-child(2) {
+      left: 52px;
+      bottom: 34px;
+    }
+    .house b:nth-child(3) {
+      left: 88px;
+    }
+  }
+</style>

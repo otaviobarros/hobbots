@@ -1,0 +1,39 @@
+---
+import { SAFETY } from "../data/copy.ts";
+import Screen from "./Screen.astro";
+---
+
+<section id="safety" class="section tint" aria-labelledby="safety-title">
+  <div class="wrap row">
+    <div class="intro words">
+      <p class="lbl">Safety</p>
+      <h2 id="safety-title" class="h h2">Risky steps wait for your OK</h2>
+      <p class="lede">
+        Every tool a hob uses is Allow, Ask or Never, and you choose which. An Ask pauses the hob until you answer, in the chat or the Inbox.
+        Answer once, for the task, or always.
+      </p>
+      <ul class="ticks">{SAFETY.ticks.map((tick) => <li>{tick}</li>)}</ul>
+    </div>
+    <div class="pic">
+      <Screen shot={SAFETY.shot} class="shot" sizes="(max-width: 760px) 100vw, 700px" />
+    </div>
+  </div>
+</section>
+
+<style>
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 48px;
+  }
+  .words {
+    flex: 1 1 340px;
+    max-width: 440px;
+    gap: 16px;
+  }
+  .pic {
+    flex: 999 1 560px;
+    min-width: 0;
+  }
+</style>

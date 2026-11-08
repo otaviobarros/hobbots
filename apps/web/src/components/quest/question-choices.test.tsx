@@ -108,14 +108,16 @@ describe("a question the hub itself asks (#976)", () => {
   it("[TC-UX-910] offers its choices on the same card, the recommended one marked, and keeps the box", () => {
     const question = new HubQuestion({
       id: HubQuestionId.make("h1"),
-      subject: { kind: "commit-identity", key: "default", title: "Commit identity" },
+      key: "default",
       chat: null,
-      text: "Who should hobs commit as?",
-      options: [
-        { label: "My GitHub account", consequence: "Commits show as you on GitHub." },
-        { label: "A name and email I type", consequence: "" },
-      ],
-      recommended: 0,
+      ask: {
+        kind: "commit-identity",
+        reason: "no-git-identity",
+        github: { login: "ada", identity: { name: "Ada", email: "1+ada@users.noreply.github.com" } },
+        unread: null,
+      },
+      options: ["github", "own-git"],
+      recommended: "github",
       state: "open",
       answer: null,
       picked: null,
@@ -137,7 +139,11 @@ describe("a question the hub itself asks (#976)", () => {
     );
     expect(html).toContain('aria-label="your hub&#x27;s choices"');
     expect(html.match(/data-recommended="true"/g)).toHaveLength(1);
-    expect(textOf(html)).toContain("1 My GitHub account ★ Recommended Commits show as you on GitHub.");
+    // The hub sent keys and data (#1045): the card words them.
+    expect(textOf(html)).toContain(
+      "1 My GitHub account, @ada ★ Recommended Commits are made as Ada &lt;1+ada@users.noreply.github.com&gt;, which GitHub links to your account.",
+    );
+    expect(textOf(html)).toContain("2 I&#x27;ll set it in Git myself");
     expect(textOf(html)).toContain("or answer in your own words");
     expect(html).toContain('aria-label="Your answer to your hub"');
     expect(textOf(html)).toContain("Goes to your hub, which applies it.");

@@ -3,7 +3,7 @@ import { safeUrl, shownUrl, showsItsUrl } from "./links.ts";
 
 describe("safeUrl", () => {
   it("keeps web addresses and drops every other kind", () => {
-    expect(safeUrl("https://hobbots.ai/docs")).toBe("https://hobbots.ai/docs");
+    expect(safeUrl("https://hobbots.app/docs")).toBe("https://hobbots.app/docs");
     expect(safeUrl("http://localhost:3000")).toBe("http://localhost:3000");
     expect(safeUrl("javascript:alert(1)")).toBe("");
     expect(safeUrl("file:///etc/passwd")).toBe("");
@@ -14,7 +14,7 @@ describe("safeUrl", () => {
 
 describe("shownUrl", () => {
   it("shows the host and path, without https or a trailing slash", () => {
-    expect(shownUrl("https://hobbots.ai/")).toBe("hobbots.ai");
+    expect(shownUrl("https://hobbots.app/")).toBe("hobbots.app");
     expect(shownUrl("https://example.com/guide")).toBe("example.com/guide");
     expect(shownUrl("http://example.com/guide")).toBe("http://example.com/guide");
   });
@@ -34,10 +34,10 @@ describe("shownUrl", () => {
 
 describe("showsItsUrl", () => {
   it("tells an autolink from a named link", () => {
-    expect(showsItsUrl("https://hobbots.ai", "https://hobbots.ai/")).toBe(true);
-    expect(showsItsUrl("HTTPS://Hobbots.ai", "https://hobbots.ai")).toBe(true);
-    expect(showsItsUrl("hobbots.ai", "https://hobbots.ai")).toBe(true);
-    expect(showsItsUrl("the docs", "https://hobbots.ai")).toBe(false);
+    expect(showsItsUrl("https://hobbots.app", "https://hobbots.app/")).toBe(true);
+    expect(showsItsUrl("HTTPS://Hobbots.app", "https://hobbots.app")).toBe(true);
+    expect(showsItsUrl("hobbots.app", "https://hobbots.app")).toBe(true);
+    expect(showsItsUrl("the docs", "https://hobbots.app")).toBe(false);
   });
 
   it("shows the address when the text names another scheme", () => {

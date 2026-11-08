@@ -1,0 +1,65 @@
+---
+import { STEPS } from "../data/copy.ts";
+---
+
+<section id="how" class="section how" aria-labelledby="how-title">
+  <div class="wrap body">
+    <div class="intro">
+      <p class="lbl">How it works</p>
+      <h2 id="how-title" class="h h2">From a goal to finished work in three steps</h2>
+    </div>
+    <ol class="grid3">
+      {
+        STEPS.map((step, i) => (
+          <li class="card step">
+            <span class="num pxf" aria-hidden="true">
+              {i + 1}
+            </span>
+            <h3 class="h">{step.title}</h3>
+            <p>{step.body}</p>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>
+
+<style>
+  .how {
+    padding-top: 0;
+  }
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+  ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .step {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 28px;
+  }
+  .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--color-line);
+    color: var(--color-moonlight);
+    font-size: 17px;
+    font-weight: 700;
+  }
+  h3 {
+    font-size: 22px;
+  }
+  p {
+    margin: 0;
+    color: var(--color-secondary-text);
+  }
+</style>

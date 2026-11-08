@@ -15,22 +15,19 @@ export type ChoicesLook = "rows" | "chips";
 
 /**
  * A question's choices as buttons (#740), in the order the hob gave them, the recommended one
- * marked, then the line that leads to the answer box. Clicking one answers with its label at once;
- * the box stays for anything else.
+ * marked, then the line that leads to the answer box. Clicking one answers with it at once, its
+ * label and its place in the list; the box stays for anything else.
  */
-export function QuestionChoices({
-  question,
-  askerName,
-  look,
-  disabled,
-  onPick,
-}: {
+/** What the choices show and do; `onPick` gets the choice's label and its place in the list. */
+interface ChoicesProps {
   question: Choices;
   askerName: string;
   look: ChoicesLook;
   disabled: boolean;
-  onPick: (label: string) => void;
-}) {
+  onPick: (label: string, index: number) => void;
+}
+
+export function QuestionChoices({ question, askerName, look, disabled, onPick }: ChoicesProps) {
   return (
     <>
       <ChoiceList question={question} askerName={askerName} look={look} disabled={disabled} onPick={onPick} />
@@ -41,19 +38,7 @@ export function QuestionChoices({
   );
 }
 
-function ChoiceList({
-  question,
-  askerName,
-  look,
-  disabled,
-  onPick,
-}: {
-  question: Choices;
-  askerName: string;
-  look: ChoicesLook;
-  disabled: boolean;
-  onPick: (label: string) => void;
-}) {
+function ChoiceList({ question, askerName, look, disabled, onPick }: ChoicesProps) {
   return (
     <ul
       aria-label={copy.choices({ name: askerName })}
@@ -73,7 +58,7 @@ function ChoiceList({
               aria-keyshortcuts={key}
               title={look === "chips" && option.consequence !== "" ? option.consequence : undefined}
               disabled={disabled}
-              onClick={() => onPick(option.label)}
+              onClick={() => onPick(option.label, index)}
             >
               <kbd
                 aria-hidden

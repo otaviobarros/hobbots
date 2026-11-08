@@ -1,0 +1,71 @@
+---
+import { FAQ } from "../data/copy.ts";
+---
+
+<section id="faq" class="section" aria-labelledby="faq-title">
+  <div class="wrap row">
+    <h2 id="faq-title" class="h h2">Good to know</h2>
+    <div class="list">
+      {
+        FAQ.map((item, i) => (
+          <details open={i === 0}>
+            <summary>{item.q}</summary>
+            <p>{item.a}</p>
+          </details>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+  }
+  h2 {
+    flex: 1 1 280px;
+  }
+  .list {
+    flex: 999 1 560px;
+    min-width: 0;
+    border-bottom: 2px solid var(--color-line);
+  }
+  details {
+    padding: 4px 0;
+    border-top: 2px solid var(--color-line);
+  }
+  summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 0;
+    color: var(--color-text);
+    font-size: 18px;
+    font-weight: 700;
+    list-style: none;
+    cursor: pointer;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  summary::after {
+    content: "+";
+    color: var(--color-label);
+    font-weight: 400;
+  }
+  details[open] summary::after {
+    content: "−";
+  }
+  p {
+    max-width: 70ch;
+    margin: 0 0 18px;
+    color: var(--color-secondary-text);
+  }
+  @media (max-width: 640px) {
+    summary {
+      font-size: 17px;
+    }
+  }
+</style>

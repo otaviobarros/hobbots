@@ -1,6 +1,6 @@
 # ADR 014 — Tool policy and enforcement
 
-Status: **Accepted.** Refines the [permissions contract](../architecture/permissions.md) and the [runtime adapters](../architecture/runtime-adapters.md) for Slice 7, and closes the open preset mapping of [ADR 003](003-autonomy.md). [ADR 020](020-github-charm.md) extends its Charms section for the GitHub Charm. Amended by [ADR 031](031-charm-actions-and-registry.md): Charm operations are declared by their Charm, every hub tool call runs through one pipeline and is recorded before it runs, and Read GitHub can ask.
+Status: **Accepted.** Refines the [permissions contract](../architecture/permissions.md) and the [runtime adapters](../architecture/runtime-adapters.md) for Slice 7, and closes the open preset mapping of [ADR 003](003-autonomy.md). [ADR 020](020-github-charm.md) extends its Charms section for the GitHub Charm. Amended by [ADR 031](031-charm-actions-and-registry.md): Charm operations are declared by their Charm, every hub tool call runs through one pipeline and is recorded before it runs, and Read GitHub can ask. [ADR 032](032-hob-directory.md) adds Read other hobs.
 
 ## Context
 
@@ -33,6 +33,7 @@ The policy engine decides these operations for the MVP. Every runtime tool call 
 | Anything outside the hob's folders | Reading or writing any other path on the hub | Sandbox (deny); policy hook |
 | Search memory, Save to memory | The Memory group: `memory_search` and `memory_save` ([ADR 028](028-memory.md)) | The hub, which alone holds memory's credentials; a share to a project or About you is decided by the preset as ADR 028 says |
 | Search skills, Ask for a skill, Propose a skill, Note a skill problem | The Skills group: `skill_search`, `skill_request`, `skill_propose` and `skill_feedback` ([ADR 029](029-skills.md)) | The hub, which alone writes the library; a proposal always waits for your review, whatever the preset |
+| Read other hobs | The other hobs' public cards: the roster in each turn and `read_hob` ([ADR 032](032-hob-directory.md)) | The hub, which builds each card from the hob's configuration; it never returns instructions, memory, threads or Tasks |
 
 A rule is **enforced** when a runtime or OS boundary holds it whatever the hob does, and **checked** when Hobbots recognizes the operation and decides it but a determined command could perform it another way. Three rules can be checked. **Delete files:** a command allowed to run can delete files inside the hob's folders without saying so. **Push to a remote that needs no credentials:** where Run commands and Use the web are both Allow, a command can push to a host that accepts anonymous pushes (Git's `http.receivepack`), bypassing the Push Charm and its once-only approvals; the sandbox's proxy sees only the host, not the Git request. Pushes to remotes that need credentials stay enforced, because only the Charm holds them, and under Careful a new host still asks first. **Local Git narrower than Run commands:** where a hob's Local Git answer is narrower than its Run commands answer (Local Git Never with Run commands Allow, say), any permitted command can still run Git (`sh -c 'git commit'`), so Local Git is checked there and enforced otherwise (#209). The sandbox still guarantees nothing outside the folders is touched, and the Permissions tab marks these rules as checked. Every other rule in the table is enforced.
 
@@ -57,6 +58,7 @@ Allow proceeds without asking, Ask pauses the turn for an approval, Deny refuses
 | Save to memory (the hob's own scope) | Allow | Allow | Allow |
 | Search skills, Propose a skill, Note a skill problem | Allow | Allow | Allow |
 | Ask for a skill in the library | Ask | Ask | Allow |
+| Read other hobs | Allow | Allow | Allow |
 | Anything outside the hob's folders | Deny | Deny | Deny |
 
 - Under Careful, Local Git asks because it is a command; reading needs no approval so investigation stays automatic, as the contract requires.
