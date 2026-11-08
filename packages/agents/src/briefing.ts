@@ -61,6 +61,16 @@ const ENDINGS: Partial<Record<Message["status"], string>> = {
 };
 
 export const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+/**
+ * A turn's context block (ADR 017, ADR 028, ADR 032): the sections a turn sends, such as the memory
+ * brief and the roster of other hobs, then any other parts, in order, or null when none has text.
+ */
+export const contextBlock = (
+  sections: ReadonlyArray<{ readonly text: string | null } | null>,
+  ...rest: ReadonlyArray<string | null>
+): string | null =>
+  [...sections.map((section) => section?.text ?? null), ...rest].filter((part) => part !== null).join("\n\n") || null;
+
 /** `text` cut to `max` characters, marked with an ellipsis when it was cut. */
 export const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 

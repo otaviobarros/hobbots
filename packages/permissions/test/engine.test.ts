@@ -42,6 +42,7 @@ const requests = (h: Home): Record<PolicyOperation | GitHubOperation, PolicyRequ
   "github.comment": comment(h.project),
   "outside-folders": files("read-files", h.project, "../secret.txt"),
   "search-memory": { _tag: "Memory", operation: "search-memory", scope: "your memory" },
+  "read-hobs": { _tag: "Directory", operation: "read-hobs", hob: "Ada" },
   "save-memory": { _tag: "Memory", operation: "save-memory", scope: "your memory" },
   "search-skills": { _tag: "Skills", operation: "search-skills", skill: "release" },
   "request-skill": { _tag: "Skills", operation: "request-skill", skill: "release-steps" },
@@ -73,6 +74,8 @@ const ADR_014: Record<PolicyOperation | GitHubOperation, readonly [PolicyDecisio
   "request-skill": ["ask", "ask", "allow"],
   "propose-skill": ["allow", "allow", "allow"],
   "skill-feedback": ["allow", "allow", "allow"],
+  // ADR 032's Read other hobs.
+  "read-hobs": ["allow", "allow", "allow"],
 };
 
 /** Ways a path can name something outside the hob's folders. */
@@ -683,6 +686,29 @@ describe("GitHub reads", () => {
         decision: answer,
         reason: { code: "override" },
         grantable: false,
+      });
+    }
+  });
+});
+
+describe("the hob directory", () => {
+  // covers ADR 032 (Read other hobs, in the policy)
+  it("[TC-PE-1234-02] decides read_hob on the hob's answers alone, and an Ask is answered once only, never by a rule", async () => {
+    const request: PolicyRequest = { _tag: "Directory", operation: "read-hobs", hob: "Pip" };
+    expect(await decide(contextFor(home, "careful"), request)).toMatchObject({
+      decision: "allow",
+      operation: "read-hobs",
+      targets: ["Pip"],
+    });
+    for (const answer of ["ask", "deny"] as const) {
+      const narrowed = contextFor(home, "trusting", {
+        hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { "read-hobs": answer } },
+      });
+      expect(await decide(narrowed, request)).toMatchObject({
+        decision: answer,
+        reason: { code: "override" },
+        grantable: false,
+        rules: [],
       });
     }
   });

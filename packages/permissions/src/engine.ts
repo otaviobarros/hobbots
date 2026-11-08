@@ -6,6 +6,7 @@ import {
   type CharmOperation,
   CharmOperationId,
   charmOfOperation,
+  DirectoryOperation,
   type Grant,
   GrantId,
   GrantRule,
@@ -156,6 +157,12 @@ export const PolicyRequest = Schema.TaggedUnion({
    * the search, for the approval card. No grant answers an Ask, as for memory.
    */
   Skills: { operation: SkillOperation, skill: Schema.String },
+  /**
+   * A directory call (ADR 032), `read_hob`, which the hub serves over the public cards of the hobs,
+   * never inside the sandbox, so it is decided on the hob's answers alone. `hob` names the hob asked
+   * for, for the approval card. No grant answers an Ask, as for memory.
+   */
+  Directory: { operation: DirectoryOperation, hob: Schema.String },
 });
 export type PolicyRequest = typeof PolicyRequest.Type;
 
@@ -253,7 +260,8 @@ export type ResolvedRequest =
   | Extract<PolicyRequest, { readonly _tag: "Web" }>
   | (Omit<Extract<PolicyRequest, { readonly _tag: "Charm" }>, "folder"> & { readonly folder?: ResolvedTarget })
   | Extract<PolicyRequest, { readonly _tag: "Memory" }>
-  | Extract<PolicyRequest, { readonly _tag: "Skills" }>;
+  | Extract<PolicyRequest, { readonly _tag: "Skills" }>
+  | Extract<PolicyRequest, { readonly _tag: "Directory" }>;
 
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
@@ -313,6 +321,7 @@ const OPERATION_WORDS: Record<PolicyOperation, string> = {
   "request-skill": "asking for a skill",
   "propose-skill": "suggesting a skill",
   "skill-feedback": "reporting a skill problem",
+  "read-hobs": "reading other hobs",
 };
 
 /** The words for an operation in a reason: a built-in one's own, or the ones its Charm declares. */
@@ -716,6 +725,8 @@ const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: Re
       return { targets: [request.scope], answers: [fromLayers(context, request.operation)] };
     case "Skills":
       return { targets: [request.skill], answers: [fromLayers(context, request.operation)] };
+    case "Directory":
+      return { targets: [request.hob], answers: [fromLayers(context, request.operation)] };
   }
 };
 
@@ -871,6 +882,7 @@ export class PolicyEngine extends Context.Service<
           case "Web":
           case "Memory":
           case "Skills":
+          case "Directory":
             return Effect.succeed(request);
           case "Charm": {
             const { folder, ...call } = request;

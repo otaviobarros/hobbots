@@ -26,6 +26,7 @@ export const PolicyOperation = Schema.Literals([
   "request-skill",
   "propose-skill",
   "skill-feedback",
+  "read-hobs",
 ]);
 export type PolicyOperation = typeof PolicyOperation.Type;
 
@@ -42,6 +43,14 @@ export type MemoryOperation = typeof MemoryOperation.Type;
  */
 export const SkillOperation = Schema.Literals(["search-skills", "request-skill", "propose-skill", "skill-feedback"]);
 export type SkillOperation = typeof SkillOperation.Type;
+
+/**
+ * The Directory group (ADR 032): `read-hobs`, shown as Read other hobs. Allow gives a turn the
+ * roster of the other visible hobs and offers `read_hob`; Ask leaves the roster out and asks on each
+ * `read_hob` call; Never offers neither.
+ */
+export const DirectoryOperation = Schema.Literals(["read-hobs"]);
+export type DirectoryOperation = typeof DirectoryOperation.Type;
 
 /** Allow proceeds, Ask pauses the turn for an approval, Deny refuses (the UI says Never). */
 export const PolicyDecision = Schema.Literals(["allow", "ask", "deny"]);
@@ -74,6 +83,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "request-skill": "ask",
     "propose-skill": "allow",
     "skill-feedback": "allow",
+    "read-hobs": "allow",
   },
   balanced: {
     "read-files": "allow",
@@ -90,6 +100,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "request-skill": "ask",
     "propose-skill": "allow",
     "skill-feedback": "allow",
+    "read-hobs": "allow",
   },
   trusting: {
     "read-files": "allow",
@@ -106,6 +117,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "request-skill": "allow",
     "propose-skill": "allow",
     "skill-feedback": "allow",
+    "read-hobs": "allow",
   },
 };
 
@@ -252,6 +264,7 @@ export const PolicyOverrides = Schema.Struct({
   "request-skill": Schema.optionalKey(PolicyDecision),
   "propose-skill": Schema.optionalKey(PolicyDecision),
   "skill-feedback": Schema.optionalKey(PolicyDecision),
+  "read-hobs": Schema.optionalKey(PolicyDecision),
 });
 export type PolicyOverrides = typeof PolicyOverrides.Type;
 

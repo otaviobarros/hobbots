@@ -159,6 +159,11 @@ export const RULES: ReadonlyArray<RuleInfo> = [
     label: "Report a skill problem",
     note: "Note that a skill is wrong, outdated or unclear. You see the notes on the skill.",
   },
+  {
+    operation: "read-hobs",
+    label: "Read other hobs",
+    note: "See their names, roles, what they are good at, the AI they think with and their Charms. Never their instructions or work.",
+  },
 ];
 
 /** The operations the GitHub Charm card sets, in its order. Permissions lists the others. */

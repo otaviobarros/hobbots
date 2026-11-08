@@ -58,6 +58,7 @@ describe("per-hob rules", () => {
       "propose-skill",
       "push",
       "read-files",
+      "read-hobs",
       "request-skill",
       "run-commands",
       "save-memory",
@@ -125,6 +126,7 @@ describe("per-hob rules", () => {
       "request-skill": "ask",
       "propose-skill": "allow",
       "skill-feedback": "allow",
+      "read-hobs": "allow",
     } as const;
     expect(enforcement("delete-files", balanced)).toBe("checked");
     expect(enforcement("push", balanced)).toBe("checked");
@@ -152,6 +154,7 @@ describe("per-hob rules", () => {
       "request-skill": "ask",
       "propose-skill": "allow",
       "skill-feedback": "allow",
+      "read-hobs": "allow",
     } as const;
     expect(enforcement("local-git", balanced)).toBe("enforced");
     expect(enforcement("local-git", { ...balanced, "local-git": "deny" })).toBe("checked");

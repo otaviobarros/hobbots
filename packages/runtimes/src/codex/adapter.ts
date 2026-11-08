@@ -152,6 +152,8 @@ export const makeCodex = (config: CodexConfig) =>
       models,
       enforcement: Effect.succeed(declared),
       planUsage,
+      // `thread/resume` takes no dynamic tools, so a resumed thread keeps the ones it started with.
+      resumeKeepsHubTools: true,
       sendPrompt: (request) => runCodexTurn(turnConfig, request),
     });
   });
