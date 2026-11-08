@@ -12,6 +12,7 @@ import { proposalFoot, proposalWhat } from "../skill-review/proposal-model.ts";
 import { messages } from "./messages.ts";
 import { type HobDirectory, skillsSearchOf } from "./skills-model.ts";
 import { PaneNotRead } from "./skills-views.tsx";
+import { TrialDraft } from "./trial-draft.tsx";
 
 const copy = messages.review;
 
@@ -49,7 +50,18 @@ function ReviewRow({ view, hobs, open }: { view: SkillProposalView; hobs: HobDir
 }
 
 /** One proposal as it is decided: why, what it adds or changes, who suggested it, then the decision. */
-function ReviewDetail({ view, hobs, now }: { view: SkillProposalView; hobs: HobDirectory; now: Date }) {
+function ReviewDetail({
+  view,
+  hobs,
+  now,
+  tried,
+}: {
+  view: SkillProposalView;
+  hobs: HobDirectory;
+  now: Date;
+  /** Your edit of this proposal as you tried it in a chat, which Edit then add opens on. */
+  tried: string | null;
+}) {
   const { proposal } = view;
   const who = whoOf(view, hobs);
   const stale =
@@ -90,7 +102,7 @@ function ReviewDetail({ view, hobs, now }: { view: SkillProposalView; hobs: HobD
           {copy.openChat}
         </Link>
       )}
-      <ProposalDecision key={proposal.id} view={view} who={who} />
+      <ProposalDecision key={proposal.id} view={view} who={who} tried={tried} />
       {skillProposalOpen(proposal) && <p className="m-0 text-meta text-label">{proposalFoot(view)}</p>}
     </article>
   );
@@ -101,7 +113,43 @@ function ReviewDetail({ view, hobs, now }: { view: SkillProposalView; hobs: HobD
  * which wait for you whatever the safety level, with the one open beside the list. They show in the
  * Inbox too, and a decision in either place closes both.
  */
-export function SkillReview({ item, hobs, now }: { item: string | null; hobs: HobDirectory; now: Date }) {
+export function SkillReview({
+  item,
+  hobs,
+  now,
+  trial = null,
+}: {
+  item: string | null;
+  hobs: HobDirectory;
+  now: Date;
+  /** The chat whose tried proposal opens on the text you tried there (ADR 029, Try in a chat). */
+  trial?: string | null;
+}) {
+  return (
+    <TrialDraft key={trial ?? "none"} trial={trial}>
+      {(draft) => (
+        <ReviewList
+          item={item}
+          hobs={hobs}
+          now={now}
+          tried={draft !== null && draft.trial.proposalId === item ? draft.text : null}
+        />
+      )}
+    </TrialDraft>
+  );
+}
+
+function ReviewList({
+  item,
+  hobs,
+  now,
+  tried,
+}: {
+  item: string | null;
+  hobs: HobDirectory;
+  now: Date;
+  tried: string | null;
+}) {
   const proposals = useQuery(skillProposalsQuery);
   // With none picked, the first that waits opens, and stays open once you decide it.
   const [first, setFirst] = useState<string | null>(null);
@@ -132,7 +180,13 @@ export function SkillReview({ item, hobs, now }: { item: string | null; hobs: Ho
               ))}
             </RowList>
           </div>
-          <ReviewDetail key={open.proposal.id} view={open} hobs={hobs} now={now} />
+          <ReviewDetail
+            key={open.proposal.id}
+            view={open}
+            hobs={hobs}
+            now={now}
+            tried={open.proposal.id === item ? tried : null}
+          />
         </div>
       )}
     </div>

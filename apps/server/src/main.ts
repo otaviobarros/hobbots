@@ -26,6 +26,7 @@ import {
   RosterReceipts,
   SecretRedaction,
   SkillReviewsLive,
+  SkillTrialsLive,
   SummoningHub,
   TaskFiles,
 } from "@hobbots/agents";
@@ -463,6 +464,8 @@ const ServerLive = Layer.unwrap(
             JournalCompaction,
             // Skills from Git are checked for updates once a day (ADR 029).
             SkillUpdateChecks,
+            // Try in a chat: a draft loaded alone in a new chat, outside the library (ADR 029).
+            SkillTrialsLive,
             // What happens in each thread goes to its hob's memory (ADR 028).
             memoryCaptureLayer(config),
             // The Workbench's heavy details are cleared past their retention window (ADR 023).

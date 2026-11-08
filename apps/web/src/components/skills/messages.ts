@@ -44,6 +44,67 @@ export const messages = {
     updated: ({ when }: { when: string }) => `Changed ${when}`,
     export: "Export…",
   },
+  trial: {
+    button: "Try in a chat",
+    starting: "Opening a chat…",
+    menu: "Try it with",
+    hint: "Opens a new chat where only this draft is loaded. Nothing reaches the library.",
+    noHobs: "No hob is awake to try it with.",
+    loadingHobs: "Reading your hobs…",
+    hobsFailed: "Hobbots could not read your hobs.",
+    tryAgain: "Try again",
+    refused: ({ message }: { message: string }) => `This draft cannot load as it is: ${message}`,
+    gone: "That proposal or revision is no longer here.",
+    hobGone: "That hob cannot take a new chat now.",
+    failed: "Hobbots could not open the chat. Try again.",
+    notice: ({ name }: { name: string }) => `Trying the draft of ${name}.`,
+    noticeHint: "Only this draft is loaded in this chat, and nothing here reaches the library or counts as a use.",
+    backToDraft: "Back to the draft",
+    draftGone:
+      "The draft this chat tries is no longer on this hub, as after a restore, so nothing runs here. Try in a chat again from where you wrote it.",
+    editorGone: "The draft you tried is no longer on this hub, as after a restore, so this opens without it.",
+    loadingDraft: "Opening the draft you tried…",
+    draftFailed: "Hobbots could not open the draft you tried.",
+  },
+  health: {
+    aHob: "A hob",
+    unused: ({ name, days }: { name: string; days: number }) => `${name} was not used in ${formatCount(days)} days`,
+    neverUsed: ({ name }: { name: string }) => `${name} was never used`,
+    unusedHint: ({ count }: { count: number }) =>
+      `${formatCount(count)} ${plural(count, { one: "place gets", other: "places get" })} it, so those hobs read its description before each chat. Take it off where nobody needs it.`,
+    behind: ({ who, name, rev }: { who: string; name: string; rev: string }) => `${who} is on ${name} ${rev}`,
+    behindHint: ({ latest, held }: { latest: string; held: boolean }) =>
+      held
+        ? `Kept there while ${latest} is the newest. Move it when you are ready.`
+        : `${latest} is the newest. Move it there.`,
+    behindLost: ({ who, name }: { who: string; name: string }) => `${who} is on a revision of ${name} the library lost`,
+    clashProjects: ({ hob, name }: { hob: string; name: string }) => `Two of ${hob}'s projects have a “${name}”`,
+    clashProjectsHint: "Neither loads for it until you keep one.",
+    clashReplaced: ({ hob, name }: { hob: string; name: string }) => `${hob} gets two skills named “${name}”`,
+    clashReplacedHint: "The narrower one replaces the other for it. Keep both, or remove one.",
+    clashSame: ({ hob, name }: { hob: string; name: string }) => `${hob} loads two skills named “${name}”`,
+    clashSameHint: "Both load, so /name picks neither. Rename one, or give only one.",
+    vague: ({ name }: { name: string }) => `${name}'s description may not trigger`,
+    vagueHint: "Say which requests it is for, such as “Use when…”, so a hob picks it on its own.",
+    long: ({ name, length }: { name: string; length: number }) =>
+      `${name}'s description is long (${formatCount(length)} characters)`,
+    longHint: "Every hob that has it reads it before each chat. Keep it to when to use it.",
+    allGood: "Nothing needs a look.",
+    loading: "Checking your skills…",
+    failed: "Hobbots could not check your skills.",
+    retry: "Try again",
+    carries: "What each hob carries",
+    load: ({ count, percent }: { count: number; percent: number }) =>
+      `${formatCount(count)} · ${formatCount(percent)}%`,
+    /** Read after the hob's name, in place of the bar and the figures. */
+    loadLabel: ({ count, percent }: { count: number; percent: number }) =>
+      ` carries ${skills(count)}, ${formatCount(percent)}% of its listing`,
+    loadHint:
+      "A hob reads every skill's name and description before each chat, within about 8,000 characters. Past that, or past about 30 skills, it picks the right one less often.",
+    noHobs: "No hob has skills yet.",
+    more: ({ count }: { count: number }) => `Show ${formatCount(count)} more`,
+    fewer: "Show fewer",
+  },
   export: {
     title: "Export skills",
     intro:

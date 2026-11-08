@@ -17,6 +17,7 @@ import {
   proposalRevision,
   skillTitle,
 } from "./proposal-model.ts";
+import { TryProposal, useProposalEdit } from "./try-proposal.tsx";
 
 const copy = messages;
 
@@ -128,11 +129,20 @@ const errorText = (error: unknown) => {
  * Your decision on a proposal while it waits: Add it (for the hob, or rolled out), Edit then add, or
  * Not now. Once decided, what happened.
  */
-export function ProposalDecision({ view, who }: { view: SkillProposalView; who: string }) {
+export function ProposalDecision({
+  view,
+  who,
+  tried = null,
+}: {
+  view: SkillProposalView;
+  who: string;
+  /** Your edit as you tried it in a chat: Edit then add opens on it (ADR 029, Try in a chat). */
+  tried?: string | null;
+}) {
   const { proposal } = view;
   const decide = useDecideProposal(proposal);
   const checking = useCheckProposal(proposal);
-  const [editing, setEditing] = useState(false);
+  const { editing, setEditing, edited, setEdited, opening, setOpening } = useProposalEdit(proposal, tried);
   // Your edit as the checks last found it: it is added only once you have seen what they found.
   const [checked, setChecked] = useState<{ readonly draft: string; readonly check: SkillProposalCheck } | null>(null);
   const waiting = proposal.state === "waiting";
@@ -157,25 +167,33 @@ export function ProposalDecision({ view, who }: { view: SkillProposalView; who: 
     <div className="flex flex-col gap-3">
       {waiting && <ProposalFlags view={view} check={editing && checked !== null ? checked.check : view.check} />}
       {waiting && editing && (
-        <DraftForm
-          initial={proposal.instructions}
-          label={copy.editLabel}
-          hint={copy.editHint}
-          submit={checked === null ? copy.addEdited : copy.addAnyway}
-          back={copy.cancelEdit}
-          rows={12}
-          code
-          busy={busy}
-          onSubmit={addEdit}
-          onChange={() => {
-            setChecked(null);
-            checking.reset();
-          }}
-          onBack={() => {
-            setEditing(false);
-            setChecked(null);
-          }}
-        />
+        <>
+          <DraftForm
+            initial={opening}
+            label={copy.editLabel}
+            hint={copy.editHint}
+            submit={checked === null ? copy.addEdited : copy.addAnyway}
+            back={copy.cancelEdit}
+            rows={12}
+            code
+            busy={busy}
+            onSubmit={addEdit}
+            onChange={(draft) => {
+              setEdited(draft);
+              setChecked(null);
+              checking.reset();
+            }}
+            onBack={() => {
+              setEditing(false);
+              setOpening(proposal.instructions);
+              setEdited(proposal.instructions);
+              setChecked(null);
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <TryProposal proposal={proposal} instructions={edited} disabled={busy} />
+          </div>
+        </>
       )}
       {waiting && !editing && (
         <div className="flex flex-wrap gap-2">
@@ -185,6 +203,7 @@ export function ProposalDecision({ view, who }: { view: SkillProposalView; who: 
           <Button variant="outline" onClick={() => setEditing(true)} disabled={busy}>
             {copy.editThenAdd}
           </Button>
+          <TryProposal proposal={proposal} instructions={null} disabled={busy} />
           <Button variant="quiet" onClick={() => decide.mutate({ _tag: "decline" })} disabled={busy}>
             {copy.notNow}
           </Button>
