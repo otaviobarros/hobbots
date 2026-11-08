@@ -17,9 +17,11 @@ import {
   type MemoryProjectIdentity,
   REPOSITORY_SKILL_ROOTS,
   repositoryOffered,
+  type Skill,
   type SkillAssignment,
   type SkillBy,
   type SkillId,
+  SkillNameTaken,
   SkillNotFound,
   type SkillRepository,
   type SkillRevisionHash,
@@ -81,7 +83,8 @@ export interface SkillRepositoriesShape {
   /**
    * Imports what a scan found, bound to its hashes, from the default branch, gives each skill to the
    * project and closes the offer. A skill is followed on the default branch even when the repository's
-   * `skills-lock.json` says the `skills` CLI installed it from elsewhere.
+   * `skills-lock.json` says the `skills` CLI installed it from elsewhere. Content the library already
+   * follows at another source is refused with `SkillNameTaken`, and nothing is given to the project.
    */
   readonly import: (
     project: MemoryProjectIdentity,
@@ -181,6 +184,35 @@ export const SkillRepositoriesLive = Layer.effect(
         return committed.value;
       });
 
+    /** The skills that are not followed on this repository's default branch: from another source, or none. */
+    const followedElsewhere = (repository: SkillRepository, skills: ReadonlyArray<Skill>) =>
+      Effect.map(library.sources, (sources) => {
+        const ours = new Set(
+          sources
+            .filter(({ origin }) => origin._tag === "Git" && origin.url === repository.url && origin.ref === null)
+            .map((source) => source.id),
+        );
+        return skills.filter((skill) => skill.sourceId === null || !ours.has(skill.sourceId));
+      });
+
+    /**
+     * Refuses content the library already holds as a skill followed elsewhere: importing it would only
+     * give the project that skill, whose updates come from its own source, not this default branch.
+     */
+    const refuseFollowedElsewhere = (
+      repository: SkillRepository,
+      scanned: ReadonlyArray<{ readonly hash: SkillRevisionHash }>,
+    ) =>
+      Effect.gen(function* () {
+        const hashes = new Set(scanned.map((one) => one.hash));
+        for (const skill of yield* followedElsewhere(repository, yield* library.list)) {
+          const revisions = yield* library.revisions(skill.id);
+          if (revisions.some((revision) => hashes.has(revision.hash))) {
+            return yield* new SkillNameTaken({ name: skill.name, skillId: skill.id });
+          }
+        }
+      });
+
     return SkillRepositories.of({
       list,
       scan: (project) =>
@@ -194,6 +226,7 @@ export const SkillRepositoriesLive = Layer.effect(
           const repository = yield* repositoryOf(project);
           const outside = scanned.find((one) => !isRepositorySkill(one.folder));
           if (outside !== undefined) return yield* new SkillNotFound({ id: outside.folder });
+          yield* refuseFollowedElsewhere(repository, scanned);
           // Bound to what the scan found: a default branch that moved on since imports nothing.
           const imported = yield* importer.add(sourceOf(repository), {
             folders: scanned.map((one) => one.folder),
@@ -201,6 +234,12 @@ export const SkillRepositoriesLive = Layer.effect(
             followSource: true,
             by: YOU,
           });
+          // Content another source added since the check above is that source's skill: it stays unassigned here.
+          const kept = imported.filter((one) => !one.added).map((one) => one.skill);
+          const elsewhere = (yield* followedElsewhere(repository, kept))[0];
+          if (elsewhere !== undefined) {
+            return yield* new SkillNameTaken({ name: elsewhere.name, skillId: elsewhere.id });
+          }
           const assigned = yield* Effect.forEach(imported, (one) =>
             giveToProject(repository.project, one.skill.id, one.revision.hash),
           );

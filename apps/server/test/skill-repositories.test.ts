@@ -337,4 +337,31 @@ describe("a repository's own skills", () => {
       ["refunds", ".agents/skills/refunds"],
     ]);
   });
+  // covers ADR 029 (Scopes, Updates from a source), #1098
+  it("[TC-AG-1098-05] refuses content the library already follows at another source, before and after the scan", async () => {
+    const { agentId } = await repositoryWithSkills();
+    const [repository] = (await request("GET", "/api/skill-repositories")).body.repositories;
+    const { candidates } = (await request("POST", "/api/skill-repositories/scan", { project: repository.project })).body
+      .scan;
+    const refunds = candidates.find((one: { name: string }) => one.name === "refunds");
+    // Between the scan and Import, the same content comes in from a folder: that skill follows the folder.
+    const copy = await realpath(await mkdtemp(join(tmpdir(), "hobbots-skill-copy-")));
+    await writeIn(copy, { "refunds/SKILL.md": skillMd("refunds") });
+    const fromFolder = await request("POST", "/api/skills", {
+      source: { _tag: "Folder", path: join(copy, "refunds") },
+    });
+    expect(fromFolder.status).toBe(200);
+    expect(fromFolder.body.imported[0].revision.hash).toBe(refunds.hash);
+
+    const imported = await request("POST", "/api/skill-repositories/import", {
+      project: repository.project,
+      scanned: [{ folder: refunds.folder, hash: refunds.hash }],
+    });
+    expect(imported.status).toBe(409);
+    expect(imported.body).toMatchObject({ _tag: "SkillNameConflict", name: "refunds" });
+    // Nothing given to the project, and the offer stays open.
+    const hob = await request("GET", `/api/skills/hobs/${agentId}`);
+    expect(hob.body.skills.filter((one: { scope: { _tag: string } }) => one.scope._tag === "Project")).toEqual([]);
+    expect((await request("GET", "/api/skill-repositories")).body.repositories[0].offered).toBe(true);
+  });
 });

@@ -335,6 +335,8 @@ export const messages = {
       `Imported ${formatList(names)} for the ${name} project. ${hob} uses them from its next chat.`,
     moved: "The default branch changed since you looked. Look again to see what it holds now.",
     failed: "Nothing was imported. Try again in a moment.",
+    elsewhere:
+      "Your library already has this skill from another source, so its updates would not come from this repository. Nothing was imported.",
   },
   scope: {
     title: ({ name }: { name: string }) => `${name}'s skills`,

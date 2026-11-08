@@ -32,6 +32,12 @@ const firstOfEach = (candidates: ReadonlyArray<SkillCandidate>): ReadonlySet<str
   return picked;
 };
 
+/** Why an import did not happen, as the page says it. */
+const failureOf = (tag: string | null) => {
+  if (tag === "SkillScanOutdated") return copy.moved;
+  return tag === "SkillNameConflict" ? copy.elsewhere : copy.failed;
+};
+
 /** What the default branch holds: the skills to pick, Import for the project, and Not now. */
 function RepositoryScan({
   repository,
@@ -67,7 +73,7 @@ function RepositoryScan({
       await refreshSkills(queryClient);
       void navigate({ to: "/skills", search: {} });
     },
-    onError: (error) => setFailure(skillsErrorTag(error) === "SkillScanOutdated" ? copy.moved : copy.failed),
+    onError: (error) => setFailure(failureOf(skillsErrorTag(error))),
   });
   if (scan.candidates.length === 0) return <p className="m-0 text-ui text-text-secondary">{copy.nothing}</p>;
   // Only one skill of a name can come in: picking one leaves out any other of its name.
