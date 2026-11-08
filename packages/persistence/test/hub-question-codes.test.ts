@@ -139,6 +139,17 @@ describe("0078_hub_question_codes", () => {
         },
         4,
       );
+      // Words typed before that name a property every object has are still words, not a choice.
+      yield* stored(
+        {
+          id: "prototype",
+          kind: "fake-check",
+          key: "applied",
+          title: "What the hub applied",
+          text: "The hub applied: constructor",
+        },
+        5,
+      );
       yield* hubQuestionCodes;
 
       const questions = yield* HubQuestionRepository;
@@ -178,7 +189,12 @@ describe("0078_hub_question_codes", () => {
       answer: null,
     });
     const open = new Map<string, (typeof result.open)[number]>(result.open.map((question) => [question.id, question]));
-    expect([...open.keys()].sort()).toEqual(["applied", "backups", "unread"]);
+    expect([...open.keys()].sort()).toEqual(["applied", "backups", "prototype", "unread"]);
+    expect(open.get("prototype")?.ask).toEqual({
+      kind: "fake-check",
+      check: "applied",
+      applied: { picked: null, answer: "constructor" },
+    });
     expect(open.get("unread")?.ask).toEqual({
       kind: "commit-identity",
       reason: "unreadable-answer",
@@ -197,7 +213,10 @@ describe("0078_hub_question_codes", () => {
 
     // Every journaled entry reads back in the new shape, at version 2.
     const raised = result.events.filter((event) => event.type === "HubQuestionRaised");
-    expect(raised.map((event) => event.schemaVersion)).toEqual([2, 2, 2, 2]);
+    expect(raised.map((event) => event.schemaVersion)).toEqual([2, 2, 2, 2, 2]);
+    expect(raised[4]?.payload).toMatchObject({
+      hubQuestion: { id: "prototype", ask: { applied: { picked: null, answer: "constructor" } } },
+    });
     expect(raised[0]?.payload).toMatchObject({
       hubQuestion: { id: "picked", picked: "github", options: ["github", "own-git"] },
     });

@@ -24,7 +24,11 @@ const GITHUB_PREFIX = "Commits are made as ";
 const GITHUB_SUFFIX = ", which GitHub links to your account.";
 const OWN_GIT_LABEL = "I'll set it in Git myself";
 const APPLIED = "The hub applied: ";
-const BACKUPS: Record<string, "nightly" | "weekly"> = { "Every night": "nightly", "Every week": "weekly" };
+// A Map, not an object: a typed answer such as "constructor" must not find a choice on Object's prototype.
+const BACKUPS = new Map<string, "nightly" | "weekly">([
+  ["Every night", "nightly"],
+  ["Every week", "weekly"],
+]);
 
 /** The GitHub account and identity a commit identity question's GitHub choice named, if it offered one. */
 const githubIn = (options: ReadonlyArray<OldOption>) => {
@@ -54,13 +58,13 @@ const commitIdentityAsk = (text: string, options: ReadonlyArray<OldOption>) => {
 const fakeCheckAsk = (key: string, text: string) => {
   if (key !== "applied") return { kind: "fake-check", check: key, applied: null };
   const said = text.startsWith(APPLIED) ? text.slice(APPLIED.length) : text;
-  const picked = BACKUPS[said] ?? null;
+  const picked = BACKUPS.get(said) ?? null;
   return { kind: "fake-check", check: "applied", applied: { picked, answer: picked === null ? said : null } };
 };
 
 /** A choice's key, from the label the hub gave it. */
 const keyOf = (label: string) =>
-  label.startsWith(GITHUB_LABEL) ? "github" : label === OWN_GIT_LABEL ? "own-git" : (BACKUPS[label] ?? null);
+  label.startsWith(GITHUB_LABEL) ? "github" : label === OWN_GIT_LABEL ? "own-git" : (BACKUPS.get(label) ?? null);
 
 /** A hub question as the hub keeps it now, from one as it kept it before, in the shape of `HubQuestion`. */
 const questionWithCodes = (old: Stored): Stored => {
