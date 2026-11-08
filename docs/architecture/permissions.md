@@ -27,9 +27,10 @@ Trusted Workspace is the default. The [design](../decisions/008-design.md) names
 | Ask for a skill in the library | Ask | Ask | Allow |
 | Propose a skill (always waits for you) | Allow | Allow | Allow |
 | Note a problem with a skill | Allow | Allow | Allow |
+| Read other hobs | Allow | Allow | Allow |
 | Anything outside the hob's folders | Deny | Deny | Deny |
 
-The skill rows are Hobbots' own tools ([ADR 029](../decisions/029-skills.md)): a proposal is let through to your Inbox under every preset, but nothing it holds reaches the library until you add it.
+The skill rows are Hobbots' own tools ([ADR 029](../decisions/029-skills.md)): a proposal is let through to your Inbox under every preset, but nothing it holds reaches the library until you add it. Read other hobs is the hob directory ([ADR 032](../decisions/032-hob-directory.md)): the roster each turn carries and `read_hob`. Under an override of Ask the roster is left out and `read_hob` asks once each time; under Never neither is offered.
 
 Careful keeps investigation automatic and asks before modifications and consequential work. Trusting is deliberately broad inside the hob's folders and the sandbox, with clear disclosure of actual runtime privileges; it never grants self-approval or Hobbots administration. Per-hob overrides only narrow the table; a widening needs a separately recorded user grant. The UI says **Never** for Deny.
 
@@ -99,6 +100,14 @@ Credentials remain scoped to the hub's execution environment or secrets provider
 
 Verify denial, grant scoping/expiry, policy changes during waits, child privilege escalation attempts, duplicate decisions, changed arguments after approval, unsupported enforcement and separate computer opt-in. Full Access does not remove application-level authentication or create administrative agent APIs.
 
+
+## The hob directory
+
+[ADR 032](../decisions/032-hob-directory.md) decides what a hob sees of the others:
+
+- **Public cards only.** Another hob sees a hob's name, role, good at, status, brain and the connected Charms it holds, and who summoned it once that is recorded. Never its instructions, memory, threads, Tasks, folders, overrides, grants, credentials or GitHub app.
+- **A display setting, not authority.** "Visible to other hobs" keeps a hob out of other hobs' rosters and `read_hob`, but delegation by name still reaches it. Seeing a hob's Charms grants nothing: a hob that lacks a Charm forwards the work.
+- **Outside data.** Good at, names and role titles reach other hobs quoted, labeled as data and never instructions, and redacted with the reading turn's redactor, best effort like all redaction below. Good at is public to every hob, so nothing private belongs in it.
 
 ## Secrets in tool activity
 

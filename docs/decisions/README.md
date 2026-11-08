@@ -32,3 +32,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [028 — Memory](028-memory.md)
 - [029 — Skills](029-skills.md)
 - [031 — Charm actions and the Charm registry](031-charm-actions-and-registry.md)
+- [032 — The hob directory](032-hob-directory.md)

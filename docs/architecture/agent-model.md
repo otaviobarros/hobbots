@@ -43,4 +43,12 @@ On every turn the hub tells the runtime who the hob is, from the configuration v
 
 A hob also has a tone: one voice and one length, picked apart so a hob can be both brief and friendly. The domain fixes the line each choice adds, so the wording can be tested and evaluated. When either differs from its default (Default voice, Balanced length), a "How you talk" section sits between "About you" and the user's instructions, holding the voice line, then the length line, then, for a themed voice, a guard that keeps facts, code, commands, links and warnings plain. At the defaults the section is left out. The user's instructions come last, so a voice they describe themselves takes precedence.
 
+### The hob directory
+
+Every hob has a public card that other hobs read ([ADR 032](../decisions/032-hob-directory.md)): name, role title and sigil, good at, status (active or paused), brain (runtime, model and effort), the connected Charms it holds, and who summoned it once that is recorded. It is built from the hob's current configuration, never from its instructions.
+
+- **Good at** is a stored, versioned field of the configuration: one line of up to 200 characters, prefilled in Summon from the chores or the starter role's note, and editable in Summon and the profile. It tells other hobs when to come to this hob and is never part of the hob's own prompt.
+- **Visible to other hobs** is a configuration switch, on by default. A hidden hob is absent from other hobs' rosters and unknown to `read_hob`, but can still be given work by name.
+- **The roster** of the other visible hobs rides in each turn's context block, not in the instructions, and is sent again only when it changed. `read_hob` returns one hob's full card. Retired hobs are on neither.
+
 Retain the original execution snapshot for audit, while enforcing current applicable authority before new effects; see [permissions](permissions.md). This resolves the difference between reproducible execution provenance and a permission that can expire or be revoked.
