@@ -25,7 +25,7 @@ describe("a window's page", () => {
 
 describe("where a window may go (STD-DESKTOP-004)", () => {
   it("opens only http and https links in the browser, as parsed", () => {
-    expect(browserUrl("https://hobbots.ai/docs")).toBe("https://hobbots.ai/docs");
+    expect(browserUrl("https://hobbots.app/docs")).toBe("https://hobbots.app/docs");
     expect(browserUrl("http://studio.example.ts.net:4317/")).toBe("http://studio.example.ts.net:4317/");
     expect(browserUrl("HTTPS://Example.com/a b")).toBe("https://example.com/a%20b");
     for (const url of [
@@ -44,12 +44,12 @@ describe("where a window may go (STD-DESKTOP-004)", () => {
   it("never opens a new window, and hands a web link to the browser", async () => {
     const opened: string[] = [];
     const handler = windowOpenHandler(async (url) => void opened.push(url));
-    expect(handler({ url: "https://hobbots.ai/" })).toEqual({ action: "deny" });
+    expect(handler({ url: "https://hobbots.app/" })).toEqual({ action: "deny" });
     expect(handler({ url: "file:///Applications/Calculator.app" })).toEqual({ action: "deny" });
-    expect(opened).toEqual(["https://hobbots.ai/"]);
+    expect(opened).toEqual(["https://hobbots.app/"]);
     // A browser that cannot be opened leaves nothing unhandled.
     const failing = windowOpenHandler(() => Promise.reject(new Error("no browser")));
-    expect(failing({ url: "https://hobbots.ai/" })).toEqual({ action: "deny" });
+    expect(failing({ url: "https://hobbots.app/" })).toEqual({ action: "deny" });
   });
 
   it("stops a navigation or a redirect to any page the window may not show", () => {

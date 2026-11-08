@@ -121,7 +121,7 @@ const activity = new AttemptActivity({
     artifact("made-report", "The report", join(project, "report.md")),
     artifact("made-relative", "Summary", "summary.txt"),
     artifact("made-outside", "Elsewhere", join(outside, "secret.txt")),
-    artifact("made-link", "A link", "https://hobbots.ai", "link"),
+    artifact("made-link", "A link", "https://hobbots.app", "link"),
   ],
   sharedWithHobs: [],
   detailsClearedAt: null,
