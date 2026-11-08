@@ -9,6 +9,7 @@ import type { PolicyContext } from "@hobbots/permissions";
 import { Context, Effect, Layer } from "effect";
 import { gitConfigAccess } from "./git-config.ts";
 import { SKILL_MOUNTS } from "./skills.ts";
+import { xcrunCacheFiles } from "./xcrun-cache.ts";
 
 /**
  * The OS sandbox a runtime with tools starts in (ADR 014). Commands, and the runtime itself, run
@@ -78,6 +79,8 @@ export interface SandboxScope {
   readonly decideHost?: HostDecider;
   /** The user's own Git config files, opened read-only so Git runs (see `gitConfigAccess`). */
   readonly gitConfigFiles?: ReadonlyArray<string>;
+  /** Apple's xcrun cache, opened read-only so the developer tool shims stay quiet (see `xcrunCacheFiles`). */
+  readonly xcrunCache?: ReadonlyArray<string>;
   /**
    * The Unix socket of the user's signing agent, such as 1Password's, that the turn's processes may
    * connect to, so Git signs commits as the user's config asks. Without one, signing is turned off.
@@ -192,6 +195,7 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
         ...(scope.skillFolder ? [scope.skillFolder] : []),
         ...homeTools,
         ...(scope.gitConfigFiles ?? []),
+        ...(scope.xcrunCache ?? []),
         ...(scope.signingAgent ? [scope.signingAgent] : []),
       ]),
     ],
@@ -431,6 +435,8 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
           prepare: () => Effect.fail(new RuntimeError({ message: evidence })),
         });
       }
+      // Where Apple's developer tool shims cache their lookups, found once for the hub (#1219).
+      const xcrunCache = xcrunCacheFiles();
       // The live turns' host rules, by the id their processes present to the proxy.
       const liveTurns = new Map<string, HostDecider>();
       const started = yield* Effect.acquireRelease(
@@ -503,6 +509,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                       ...scope,
                       tempFolder,
                       gitConfigFiles: gitConfigFilesFor(gitConfigAccess(scope.home ?? homedir())),
+                      xcrunCache,
                       roots: USER_DATA_ROOTS.filter((root) => existsSync(root)),
                     }),
                   },

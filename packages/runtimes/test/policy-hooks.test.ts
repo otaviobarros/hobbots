@@ -44,6 +44,7 @@ import { adoptSession, parseKeychainLogin, policyHooks, toolTurn } from "../src/
 import { makeFakeRuntime } from "../src/fake.ts";
 import { applyScriptedWrites } from "../src/fake-writes.ts";
 import { decideForLiveTurns, ProcessSandbox, sandboxEnv, sandboxFilesystem } from "../src/sandbox.ts";
+import { xcrunCacheFiles } from "../src/xcrun-cache.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hooks-")));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -921,6 +922,37 @@ describe("the process sandbox", () => {
       "/private/var/folders/xy/T/turn",
     ]);
     expect(rules.denyWrite).toEqual(expect.arrayContaining(["/Users/me/Library/Hobbots"]));
+  });
+
+  // covers PE-005, #1219
+  it("[TC-RT-1219-01] opens Apple's xcrun cache for reading only, so the developer tool shims stay quiet", () => {
+    const cache = ["/var/folders/xy/T/xcrun_db", "/private/var/folders/xy/T/xcrun_db"];
+    const rules = sandboxFilesystem({
+      folders: ["/Volumes/Work/app"],
+      folderAccess: { read: true, write: true },
+      dataFolder: "/Users/me/Library/Hobbots",
+      binary: "/usr/bin/codex",
+      runtimeFolder: "/Users/me/Library/Hobbots-runtimes/hob-1",
+      tempFolder: "/private/tmp/hb-turn",
+      allowedHosts: [],
+      home: "/Users/me",
+      path: "/usr/bin",
+      xcrunCache: cache,
+    });
+    expect(rules.allowRead).toEqual(expect.arrayContaining(cache));
+    // A hob that wrote it could point the user's own git or python3 at a program of its own.
+    for (const path of cache) {
+      expect(rules.allowWrite?.some((writable) => typeof writable === "string" && path.startsWith(writable))).toBe(
+        false,
+      );
+    }
+    expect(rules.denyRead).toEqual(expect.arrayContaining(["/private/var/folders"]));
+  });
+
+  it("finds the xcrun cache in the user's temporary folder on macOS, and nowhere else", () => {
+    expect(xcrunCacheFiles(true, () => "/nonexistent/xy/T/")).toEqual(["/nonexistent/xy/T/xcrun_db"]);
+    expect(xcrunCacheFiles(true, () => undefined)).toEqual([]);
+    expect(xcrunCacheFiles(false, () => "/var/folders/xy/T/")).toEqual([]);
   });
 
   it("closes the folders to processes where the policy denies reading or editing them", () => {
